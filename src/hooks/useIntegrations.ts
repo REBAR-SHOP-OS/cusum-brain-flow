@@ -255,7 +255,8 @@ export function useIntegrations() {
         );
 
         if (error) throw new Error(error.message);
-        window.location.href = data.authUrl;
+        // Open in new tab to avoid iframe restrictions
+        window.open(data.authUrl, "_blank");
         return;
       }
 
