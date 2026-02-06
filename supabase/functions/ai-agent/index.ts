@@ -16,6 +16,80 @@ interface AgentRequest {
   message: string;
   history?: ChatMessage[];
   context?: Record<string, unknown>;
+  attachedFiles?: { name: string; url: string }[];
+}
+
+// OCR function for estimation agent
+async function performOCR(imageUrl: string): Promise<{ fullText: string; error?: string }> {
+  try {
+    const response = await fetch(
+      `${Deno.env.get("SUPABASE_URL")}/functions/v1/google-vision-ocr`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
+        },
+        body: JSON.stringify({ imageUrl }),
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("OCR error:", errorText);
+      return { fullText: "", error: `OCR failed: ${response.status}` };
+    }
+
+    const data = await response.json();
+    return { fullText: data.fullText || "" };
+  } catch (error) {
+    console.error("OCR error:", error);
+    return { fullText: "", error: error instanceof Error ? error.message : "OCR failed" };
+  }
+}
+
+// Multi-pass OCR with cross-reference (as per estimation agent protocol)
+async function performMultiPassOCR(imageUrl: string): Promise<{ 
+  mergedText: string; 
+  passes: string[]; 
+  confidence: number;
+  discrepancies: string[];
+}> {
+  const passes: string[] = [];
+  const discrepancies: string[] = [];
+  
+  // Perform 3 OCR passes
+  for (let i = 0; i < 3; i++) {
+    const result = await performOCR(imageUrl);
+    if (result.fullText) {
+      passes.push(result.fullText);
+    }
+  }
+  
+  if (passes.length === 0) {
+    return { mergedText: "", passes: [], confidence: 0, discrepancies: ["No OCR results obtained"] };
+  }
+  
+  // Simple merge: use the longest result as primary
+  // In production, this would do proper text comparison
+  const sortedByLength = [...passes].sort((a, b) => b.length - a.length);
+  const mergedText = sortedByLength[0];
+  
+  // Calculate confidence based on consistency
+  const confidence = passes.length >= 2 ? 
+    (passes.filter(p => p.length > mergedText.length * 0.8).length / passes.length) * 100 : 50;
+  
+  // Check for major discrepancies
+  if (passes.length >= 2) {
+    const lengths = passes.map(p => p.length);
+    const avgLength = lengths.reduce((a, b) => a + b, 0) / lengths.length;
+    const variance = lengths.some(l => Math.abs(l - avgLength) > avgLength * 0.3);
+    if (variance) {
+      discrepancies.push("Significant variance in OCR results detected - manual review recommended");
+    }
+  }
+  
+  return { mergedText, passes, confidence, discrepancies };
 }
 
 // Agent system prompts
@@ -280,7 +354,7 @@ serve(async (req) => {
       );
     }
 
-    const { agent, message, history = [], context: userContext }: AgentRequest = await req.json();
+    const { agent, message, history = [], context: userContext, attachedFiles = [] }: AgentRequest = await req.json();
 
     if (!agent || !message) {
       return new Response(
@@ -311,11 +385,52 @@ serve(async (req) => {
     const dbContext = await fetchContext(supabase, agent);
     const mergedContext = { ...dbContext, ...userContext };
 
+    // For estimation agent, perform OCR on attached files
+    let ocrResults: { fileName: string; text: string; confidence: number; discrepancies: string[] }[] = [];
+    if (agent === "estimation" && attachedFiles.length > 0) {
+      console.log(`Processing ${attachedFiles.length} files for OCR...`);
+      
+      for (const file of attachedFiles) {
+        // Check if it's an image file
+        const isImage = /\.(jpg|jpeg|png|gif|bmp|webp|tiff?)$/i.test(file.name);
+        if (isImage) {
+          console.log(`Performing multi-pass OCR on: ${file.name}`);
+          const ocrResult = await performMultiPassOCR(file.url);
+          ocrResults.push({
+            fileName: file.name,
+            text: ocrResult.mergedText,
+            confidence: ocrResult.confidence,
+            discrepancies: ocrResult.discrepancies,
+          });
+        }
+      }
+      
+      // Add OCR results to context
+      if (ocrResults.length > 0) {
+        mergedContext.ocrResults = ocrResults;
+      }
+    }
+
     // Build prompt
     const systemPrompt = agentPrompts[agent] || agentPrompts.sales;
-    const contextStr = Object.keys(mergedContext).length > 0
-      ? `\n\nCurrent data context:\n${JSON.stringify(mergedContext, null, 2)}`
-      : "";
+    
+    // Build context string with OCR results for estimation
+    let contextStr = "";
+    if (Object.keys(mergedContext).length > 0) {
+      contextStr = `\n\nCurrent data context:\n${JSON.stringify(mergedContext, null, 2)}`;
+    }
+    
+    // Add OCR summary for estimation agent
+    if (agent === "estimation" && ocrResults.length > 0) {
+      contextStr += "\n\n📋 OCR RESULTS FROM ATTACHED DRAWINGS:\n";
+      for (const ocr of ocrResults) {
+        contextStr += `\n--- ${ocr.fileName} (Confidence: ${ocr.confidence.toFixed(0)}%) ---\n`;
+        if (ocr.discrepancies.length > 0) {
+          contextStr += `⚠️ Discrepancies: ${ocr.discrepancies.join(", ")}\n`;
+        }
+        contextStr += `${ocr.text}\n`;
+      }
+    }
 
     // Build messages array with history
     const messages: ChatMessage[] = [
@@ -334,8 +449,8 @@ serve(async (req) => {
       body: JSON.stringify({
         model: "google/gemini-3-flash-preview",
         messages,
-        max_tokens: 1000,
-        temperature: 0.7,
+        max_tokens: agent === "estimation" ? 4000 : 1000, // More tokens for detailed estimation analysis
+        temperature: agent === "estimation" ? 0.3 : 0.7, // Lower temperature for precision
       }),
     });
 
