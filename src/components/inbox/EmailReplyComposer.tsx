@@ -111,9 +111,9 @@ export function EmailReplyComposer({ email, mode, onClose }: EmailReplyComposerP
   };
 
   return (
-    <div className="border-t bg-muted/10">
+    <div className="border-t bg-muted/10 shrink-0 max-h-[45vh] overflow-y-auto">
       {/* Composer Header */}
-      <div className="flex items-center justify-between px-4 pt-3 pb-1">
+      <div className="flex items-center justify-between px-4 pt-2 pb-1">
         <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
           {mode === "reply" ? "Reply" : mode === "reply-all" ? "Reply All" : "Forward"}
         </span>
@@ -141,17 +141,17 @@ export function EmailReplyComposer({ email, mode, onClose }: EmailReplyComposerP
       </div>
 
       {/* Text Area */}
-      <div className="px-4 py-2">
+      <div className="px-4 py-1">
         <Textarea
           value={replyText}
           onChange={(e) => setReplyText(e.target.value)}
           placeholder={isForward ? "Add a message..." : "Write your reply..."}
-          className="min-h-[120px] bg-card/50 border-border/50 resize-none text-sm"
+          className="min-h-[80px] max-h-[140px] bg-card/50 border-border/50 resize-none text-sm"
         />
       </div>
 
       {/* Toolbar */}
-      <div className="flex items-center justify-between px-4 pb-3">
+      <div className="flex items-center justify-between px-4 pb-2">
         <div className="flex items-center gap-1">
           <Button variant="ghost" size="icon" className="h-7 w-7">
             <Bold className="w-3.5 h-3.5 text-muted-foreground" />

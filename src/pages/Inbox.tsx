@@ -196,7 +196,7 @@ export default function Inbox() {
               onSearchChange={setSearch}
             />
           </div>
-          <div className={`${selectedComm ? 'flex' : 'hidden md:flex'} flex-1 flex-col`}>
+          <div className={`${selectedComm ? 'flex' : 'hidden md:flex'} flex-1 flex-col min-h-0 overflow-hidden`}>
             <CommunicationViewer communication={selectedComm} />
           </div>
         </div>
