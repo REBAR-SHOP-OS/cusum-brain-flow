@@ -55,6 +55,7 @@ const defaultAutomations: Automation[] = [
     color: "blue",
     icon: "comment",
     beta: true,
+    route: "/facebook-commenter",
   },
 ];
 

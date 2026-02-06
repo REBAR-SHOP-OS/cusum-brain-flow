@@ -19,6 +19,7 @@ import Integrations from "./pages/Integrations";
 import SocialMediaManager from "./pages/SocialMediaManager";
 import InboxManager from "./pages/InboxManager";
 import DailySummarizer from "./pages/DailySummarizer";
+import FacebookCommenter from "./pages/FacebookCommenter";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
@@ -153,6 +154,16 @@ const App = () => (
                 <ProtectedRoute>
                   <AppLayout>
                     <DailySummarizer />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/facebook-commenter"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <FacebookCommenter />
                   </AppLayout>
                 </ProtectedRoute>
               }
