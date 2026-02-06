@@ -1,40 +1,31 @@
 import { useState } from "react";
 import { 
   Search, Plus, MoreHorizontal, Brain as BrainIcon, 
-  Image, Video, Globe, FileText, Check, ChevronRight,
-  Linkedin, Facebook, Calendar, Mail
+  Image, Video, Globe, FileText, Filter, Play
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 interface ContentFilter {
   id: string;
   label: string;
   icon: React.ElementType;
-  active?: boolean;
-}
-
-interface Integration {
-  id: string;
-  name: string;
-  description: string;
-  icon: React.ElementType;
-  iconBg: string;
-  connected: boolean;
 }
 
 interface KnowledgeItem {
   id: string;
   title: string;
-  type: string;
+  description?: string;
+  type: "memory" | "image" | "video" | "webpage" | "document";
   thumbnail?: string;
+  url?: string;
+  fileType?: string;
 }
 
 const contentFilters: ContentFilter[] = [
   { id: "search", label: "Search", icon: Search },
-  { id: "all", label: "All", icon: Globe, active: true },
+  { id: "all", label: "All", icon: Globe },
   { id: "memories", label: "Memories", icon: BrainIcon },
   { id: "images", label: "Images", icon: Image },
   { id: "videos", label: "Videos", icon: Video },
@@ -42,23 +33,213 @@ const contentFilters: ContentFilter[] = [
   { id: "documents", label: "Documents", icon: FileText },
 ];
 
-const integrations: Integration[] = [
-  { id: "linkedin-personal", name: "LinkedIn (Personal)", description: "Create and share posts with your...", icon: Linkedin, iconBg: "bg-[#0077B5]", connected: true },
-  { id: "linkedin-org", name: "LinkedIn (Organization)", description: "Create and share posts on your...", icon: Linkedin, iconBg: "bg-[#0077B5]", connected: true },
-  { id: "facebook", name: "Facebook", description: "Manage Facebook and Instagram...", icon: Facebook, iconBg: "bg-[#1877F2]", connected: true },
-  { id: "gmail", name: "Gmail", description: "Let helpers send emails and read...", icon: Mail, iconBg: "bg-[#EA4335]", connected: true },
-  { id: "google-calendar", name: "Google Calendar", description: "Allow helpers to see and schedule...", icon: Calendar, iconBg: "bg-[#4285F4]", connected: true },
-  { id: "outlook", name: "Outlook", description: "Handle your Outlook emails", icon: Mail, iconBg: "bg-[#0078D4]", connected: true },
+// Mock data for different content types
+const mockMemories: KnowledgeItem[] = [
+  { id: "m1", title: "Language Preference", description: "Bilingual (Persian/Farsi and English); uses Persian for detailed technical instructions and English for responses", type: "memory" },
+  { id: "m2", title: "2025 HST & ITC Summary and Critical Gaps", description: "For 2025, I owe CRA $121,434 in HST (up from $33,480 in 2024) due to revenue increasing 185% ($1.01M to $2.87M) and HST liability rising 263%. ITC eligibility also rose 159% ($97,281 to $251,764). Key issues: 1) Consulting ($78,479): Ensure all vendors are HST-registered or risk $10,202 in unrecoverable ITC. 2) Meals ($10,249): Only 50% ITC recoverable; miscoding may overstate ITC by $666. 3) Rent ($146,425): Should be 100% recoverable with 13% HST ($19,035 ITC). 4) Bank Fees...", type: "memory" },
+  { id: "m3", title: "2025 HST & ITC Position and Action Steps", description: "For 2025, HST owed to CRA is $121,434 (up 263% from $33,480 in 2024), driven by a 185% revenue increase ($1.01M to $2.87M). ITC eligibility rose 159% ($97,281 to $251,764). Key issues: 1) Consulting ($78,479): Confirm all vendors are HST-registered or risk $10,202 in unrecoverable ITC; 2) Meals ($10,249): Only 50% is recoverable, potential $666 ITC overstatement; 3) Rent ($146,425): ensure HST 13% coding to claim $19,035 ITC; 4) Bank Fees...", type: "memory" },
+  { id: "m4", title: "Social Media Audit & Action Plan", description: "Current strengths: posting 3-4x daily across multiple platforms (Facebook, Instagram, LinkedIn), professional branded captions, consistent use of relevant hashtags. Critical issues: content is generic/repetitive (mostly inspirational, product showcase, off-brand wellness, vague social proof), lacks engagement strategy and strong CTAs, uses only generic AI-generated images (no real product/facility/team visuals), fails to highlight competitive advantages (same-day delivery, AI automation), content lacks...", type: "memory" },
+  { id: "m5", title: "Content Format Preference", description: "Reels/video content outperforms static posts on Instagram - best performing content is short-form video", type: "memory" },
+  { id: "m6", title: "Target Customers", description: "Target Customers: Contractors, builders, engineers, procurement managers, project managers,", type: "memory" },
+  { id: "m7", title: "Current Social Media Presence", description: "Multiple accounts across Instagram (@rebar.shop,", type: "memory" },
+  { id: "m8", title: "Rebar Shop Customer Source Analysis & Recommendations (Last 90 Days)", description: "", type: "memory" },
+  { id: "m9", title: "Communication Style", description: "Prefers brevity and directness; wants to test quality/capabilities quickly with minimal back-and-forth; communication style is", type: "memory" },
 ];
 
-const mockKnowledge: KnowledgeItem[] = [
-  { id: "1", title: "Start your day with purpose...", type: "memory" },
-  { id: "2", title: "Rebar specifications guide", type: "document" },
-  { id: "3", title: "Language Preference", type: "setting" },
+const mockImages: KnowledgeItem[] = [
+  { id: "i1", title: "Construction Morning Motivation...", type: "image", thumbnail: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=300&h=300&fit=crop" },
+  { id: "i2", title: "Rebar.shop Logo", type: "image", thumbnail: "https://images.unsplash.com/photo-1599305445671-ac291c95aaa9?w=300&h=300&fit=crop" },
+  { id: "i3", title: "Perfect Rebar Detailing Shop Dr...", type: "image", thumbnail: "https://images.unsplash.com/photo-1581094794329-c8112a89af12?w=300&h=300&fit=crop" },
+  { id: "i4", title: "Basant Panchami 2026 Celebra...", type: "image", thumbnail: "https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?w=300&h=300&fit=crop" },
+  { id: "i5", title: "Basant Panchami Festival 2025", type: "image", thumbnail: "https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?w=300&h=300&fit=crop" },
+  { id: "i6", title: "Basant Panchami Celebration", type: "image", thumbnail: "https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?w=300&h=300&fit=crop" },
+  { id: "i7", title: "Rebar.Shop Facility Header", type: "image", thumbnail: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=300&h=200&fit=crop" },
+  { id: "i8", title: "Urban Construction - Building ...", type: "image", thumbnail: "https://images.unsplash.com/photo-1541888946425-d81bb19240f5?w=300&h=300&fit=crop" },
 ];
+
+const mockVideos: KnowledgeItem[] = [
+  { id: "v1", title: "Strong Rebar Solid Foundations ...", type: "video", thumbnail: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=400&h=300&fit=crop" },
+  { id: "v2", title: "IMG_1392.mov", type: "video", thumbnail: "https://images.unsplash.com/photo-1581094794329-c8112a89af12?w=400&h=500&fit=crop" },
+  { id: "v3", title: "IMG_1219.mov", type: "video", thumbnail: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=400&h=250&fit=crop" },
+  { id: "v4", title: "IMG_9250.MP4", type: "video", thumbnail: "https://images.unsplash.com/photo-1541888946425-d81bb19240f5?w=400&h=500&fit=crop" },
+];
+
+const mockWebpages: KnowledgeItem[] = [
+  { id: "w1", title: "webpage", type: "webpage", url: "https://laws-lois.justice.gc.ca/e..." },
+  { id: "w2", title: "webpage", type: "webpage", url: "https://www.ontario.ca/laws/st..." },
+  { id: "w3", title: "webpage", type: "webpage", url: "https://laws-lois.justice.gc.ca/e..." },
+  { id: "w4", title: "webpage", type: "webpage", url: "https://www.cpaontario.ca/prot..." },
+  { id: "w5", title: "webpage", type: "webpage", url: "https://www.rebar.shop/" },
+];
+
+const mockDocuments: KnowledgeItem[] = [
+  { id: "d1", title: "Document (7).pdf", type: "document", fileType: "pdf" },
+  { id: "d2", title: "L2B_Guide_to_Construction_A...", type: "document", fileType: "pdf" },
+  { id: "d3", title: "PPO - Trade Contractors Guide ...", type: "document", fileType: "pdf" },
+  { id: "d4", title: "C-44.pdf", type: "document", fileType: "pdf" },
+  { id: "d5", title: "RebarShop_Nucor_Playbook.docx", type: "document", fileType: "docx" },
+  { id: "d6", title: "Rebar_shop_30_Year_Strategic...", type: "document", fileType: "pdf" },
+  { id: "d7", title: "Manual-Standard-Practice-201...", type: "document", fileType: "pdf" },
+];
+
+function MemoryCard({ item }: { item: KnowledgeItem }) {
+  return (
+    <div className="rounded-xl bg-card border border-border p-4 hover:border-primary/30 transition-colors cursor-pointer">
+      <h3 className="font-semibold text-sm mb-2">{item.title}</h3>
+      {item.description && (
+        <p className="text-xs text-muted-foreground line-clamp-6 mb-4">
+          {item.description}
+        </p>
+      )}
+      <div className="pt-3 border-t border-border">
+        <p className="text-xs text-muted-foreground truncate">{item.title}</p>
+      </div>
+    </div>
+  );
+}
+
+function ImageCard({ item }: { item: KnowledgeItem }) {
+  return (
+    <div className="rounded-xl overflow-hidden bg-card border border-border hover:border-primary/30 transition-colors cursor-pointer">
+      <div className="aspect-square relative">
+        <img 
+          src={item.thumbnail} 
+          alt={item.title}
+          className="w-full h-full object-cover"
+        />
+      </div>
+      <div className="p-3">
+        <p className="text-sm font-medium truncate">{item.title}</p>
+      </div>
+    </div>
+  );
+}
+
+function VideoCard({ item }: { item: KnowledgeItem }) {
+  return (
+    <div className="rounded-xl overflow-hidden bg-card border border-border hover:border-primary/30 transition-colors cursor-pointer">
+      <div className="relative">
+        <img 
+          src={item.thumbnail} 
+          alt={item.title}
+          className="w-full h-auto object-cover"
+        />
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="w-12 h-12 rounded-full bg-black/50 flex items-center justify-center">
+            <Play className="w-5 h-5 text-white fill-white ml-1" />
+          </div>
+        </div>
+      </div>
+      <div className="p-3">
+        <p className="text-sm font-medium truncate">{item.title}</p>
+      </div>
+    </div>
+  );
+}
+
+function WebpageCard({ item }: { item: KnowledgeItem }) {
+  return (
+    <div className="rounded-xl bg-card border border-border hover:border-primary/30 transition-colors cursor-pointer">
+      <div className="h-32 flex flex-col items-center justify-center gap-2">
+        <Globe className="w-8 h-8 text-purple-500" />
+        <span className="text-sm text-muted-foreground">webpage</span>
+      </div>
+      <div className="p-3 border-t border-border">
+        <p className="text-sm truncate">{item.url}</p>
+      </div>
+    </div>
+  );
+}
+
+function DocumentCard({ item }: { item: KnowledgeItem }) {
+  const isPdf = item.fileType === "pdf";
+  const iconColor = isPdf ? "text-orange-500" : "text-blue-500";
+  
+  return (
+    <div className="rounded-xl bg-card border border-border hover:border-primary/30 transition-colors cursor-pointer">
+      <div className="h-32 flex flex-col items-center justify-center gap-2">
+        <FileText className={cn("w-8 h-8", iconColor)} />
+        <span className="text-sm text-muted-foreground">{item.fileType}</span>
+      </div>
+      <div className="p-3 border-t border-border">
+        <p className="text-sm truncate">{item.title}</p>
+      </div>
+    </div>
+  );
+}
 
 export default function Brain() {
   const [activeFilter, setActiveFilter] = useState("all");
+
+  const getFilteredContent = () => {
+    switch (activeFilter) {
+      case "memories":
+        return mockMemories;
+      case "images":
+        return mockImages;
+      case "videos":
+        return mockVideos;
+      case "webpages":
+        return mockWebpages;
+      case "documents":
+        return mockDocuments;
+      case "all":
+      default:
+        return mockMemories; // Default to memories view
+    }
+  };
+
+  const renderContent = () => {
+    const content = getFilteredContent();
+    
+    switch (activeFilter) {
+      case "memories":
+      case "all":
+        return (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {(content as KnowledgeItem[]).map((item) => (
+              <MemoryCard key={item.id} item={item} />
+            ))}
+          </div>
+        );
+      case "images":
+        return (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {(content as KnowledgeItem[]).map((item) => (
+              <ImageCard key={item.id} item={item} />
+            ))}
+          </div>
+        );
+      case "videos":
+        return (
+          <div className="columns-1 md:columns-2 lg:columns-4 gap-4 space-y-4">
+            {(content as KnowledgeItem[]).map((item) => (
+              <div key={item.id} className="break-inside-avoid">
+                <VideoCard item={item} />
+              </div>
+            ))}
+          </div>
+        );
+      case "webpages":
+        return (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {(content as KnowledgeItem[]).map((item) => (
+              <WebpageCard key={item.id} item={item} />
+            ))}
+          </div>
+        );
+      case "documents":
+        return (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {(content as KnowledgeItem[]).map((item) => (
+              <DocumentCard key={item.id} item={item} />
+            ))}
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
 
   return (
     <div className="flex flex-col h-full">
@@ -76,11 +257,11 @@ export default function Brain() {
         </div>
       </header>
 
-      <div className="flex-1 overflow-auto p-6 space-y-8">
+      <div className="flex-1 overflow-auto p-6 space-y-6">
         {/* How Brain AI Works Banner */}
         <div className="bg-[hsl(142,71%,45%,0.1)] border border-[hsl(142,71%,45%,0.3)] rounded-xl p-6 flex items-start gap-4">
-          <div className="w-16 h-16 rounded-full bg-[hsl(142,71%,45%,0.2)] flex items-center justify-center flex-shrink-0">
-            <BrainIcon className="w-8 h-8 text-success" />
+          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-400 to-pink-400 flex items-center justify-center flex-shrink-0">
+            <BrainIcon className="w-8 h-8 text-white" />
           </div>
           <div className="flex-1">
             <h3 className="font-semibold text-lg mb-1">How Brain AI works</h3>
@@ -98,91 +279,39 @@ export default function Brain() {
 
         {/* Content Filters */}
         <div className="flex items-center gap-2 flex-wrap">
-          {contentFilters.map((filter) => (
-            <Button
-              key={filter.id}
-              variant={activeFilter === filter.id ? "default" : "outline"}
-              size="sm"
-              className={cn(
-                "gap-2",
-                activeFilter === filter.id 
-                  ? "bg-primary text-primary-foreground" 
-                  : "bg-card"
+          {contentFilters.map((filter, index) => (
+            <>
+              <Button
+                key={filter.id}
+                variant={activeFilter === filter.id ? "default" : "outline"}
+                size="sm"
+                className={cn(
+                  "gap-2",
+                  activeFilter === filter.id 
+                    ? "bg-primary text-primary-foreground" 
+                    : "bg-card"
+                )}
+                onClick={() => setActiveFilter(filter.id)}
+              >
+                <filter.icon className="w-4 h-4" />
+                {filter.label}
+              </Button>
+              {index === 0 && (
+                <Button
+                  key="filter-btn"
+                  variant="outline"
+                  size="sm"
+                  className="bg-card px-2"
+                >
+                  <Filter className="w-4 h-4" />
+                </Button>
               )}
-              onClick={() => setActiveFilter(filter.id)}
-            >
-              <filter.icon className="w-4 h-4" />
-              {filter.label}
-            </Button>
+            </>
           ))}
         </div>
 
-        {/* Help AI Get Smarter */}
-        <div className="bg-card border border-border rounded-xl p-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-warning/20 flex items-center justify-center">
-              <span className="text-warning font-semibold">10</span>
-            </div>
-            <div>
-              <p className="font-medium">Help your AI get smarter</p>
-              <p className="text-sm text-muted-foreground">Answer 10 quick questions to make it work better for you</p>
-            </div>
-          </div>
-          <Button variant="default" className="gap-2">
-            Answer Questions
-            <ChevronRight className="w-4 h-4" />
-          </Button>
-        </div>
-
-        {/* Integrations */}
-        <section>
-          <h2 className="text-sm font-medium text-muted-foreground mb-4">Integrations</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {integrations.map((integration) => (
-              <div
-                key={integration.id}
-                className="flex items-center gap-3 p-4 rounded-xl bg-card border border-border hover:border-primary/30 transition-colors cursor-pointer"
-              >
-                <div className={cn("w-10 h-10 rounded-lg flex items-center justify-center", integration.iconBg)}>
-                  <integration.icon className="w-5 h-5 text-white" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-sm">{integration.name}</p>
-                  <p className="text-xs text-muted-foreground truncate">{integration.description}</p>
-                </div>
-                {integration.connected && (
-                  <Badge variant="outline" className="gap-1 text-success border-success/30 bg-success/10">
-                    Connected
-                    <Check className="w-3 h-3" />
-                  </Badge>
-                )}
-              </div>
-            ))}
-          </div>
-          <button className="w-full text-center text-sm text-muted-foreground hover:text-foreground mt-4 py-2">
-            Show all apps
-          </button>
-        </section>
-
-        {/* Knowledge */}
-        <section>
-          <h2 className="text-sm font-medium text-muted-foreground mb-4">Knowledge</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {mockKnowledge.map((item) => (
-              <div
-                key={item.id}
-                className="rounded-xl bg-card border border-border overflow-hidden hover:border-primary/30 transition-colors cursor-pointer"
-              >
-                <div className="h-24 bg-gradient-to-br from-primary/20 to-accent/10 flex items-center justify-center">
-                  <BrainIcon className="w-8 h-8 text-primary/50" />
-                </div>
-                <div className="p-3">
-                  <p className="text-sm font-medium truncate">{item.title}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
+        {/* Content Grid */}
+        {renderContent()}
       </div>
     </div>
   );
