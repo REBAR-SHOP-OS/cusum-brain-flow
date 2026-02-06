@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Plus, Save, Loader2, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import brandLogo from "@/assets/brand-logo.png";
 
 interface BrandKitDialogProps {
   open: boolean;
@@ -18,7 +19,7 @@ export function BrandKitDialog({ open, onOpenChange }: BrandKitDialogProps) {
   const logoInputRef = useRef<HTMLInputElement>(null);
 
   const [businessName, setBusinessName] = useState("Rebar.shop");
-  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [logoUrl, setLogoUrl] = useState<string | null>(brandLogo);
   const [brandVoice, setBrandVoice] = useState(
     "Write social media content for Rebar.shop using a professional, strong, and trustworthy tone. The language must be clear, simple, and direct, delivering the message within seconds. Focus on being inspirational and motivating."
   );
