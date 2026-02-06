@@ -1,4 +1,5 @@
 import { useState } from "react";
+import DOMPurify from "dompurify";
 import { Reply, Forward, Trash2, Archive, MoreHorizontal, CheckSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { GmailMessage, parseEmailAddress, formatDate } from "@/lib/gmail";
@@ -66,7 +67,14 @@ export function EmailViewer({ email, onRefresh }: EmailViewerProps) {
       <div className="flex-1 overflow-y-auto scrollbar-thin p-6">
         <div
           className="prose prose-invert prose-sm max-w-none"
-          dangerouslySetInnerHTML={{ __html: email.body }}
+          dangerouslySetInnerHTML={{ 
+            __html: DOMPurify.sanitize(email.body, {
+              ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'u', 'a', 'ul', 'ol', 'li', 'blockquote', 'div', 'span', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'img', 'table', 'thead', 'tbody', 'tr', 'td', 'th'],
+              ALLOWED_ATTR: ['href', 'target', 'rel', 'src', 'alt', 'class', 'style'],
+              FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form'],
+              FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover']
+            })
+          }}
         />
       </div>
 
