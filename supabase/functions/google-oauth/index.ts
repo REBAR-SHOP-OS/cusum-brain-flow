@@ -42,10 +42,10 @@ async function verifyAuth(req: Request): Promise<string | null> {
   );
 
   const token = authHeader.replace("Bearer ", "");
-  const { data, error } = await supabase.auth.getUser(token);
-  if (error || !data.user) return null;
+  const { data, error } = await supabase.auth.getClaims(token);
+  if (error || !data?.claims) return null;
 
-  return data.user.id;
+  return data.claims.sub as string;
 }
 
 serve(async (req) => {
