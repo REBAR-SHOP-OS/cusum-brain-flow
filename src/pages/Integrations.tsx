@@ -14,13 +14,14 @@ export default function Integrations() {
   const { toast } = useToast();
 
   useEffect(() => {
-    checkIntegrationStatuses();
+    // Don't auto-check on mount to avoid errors when credentials aren't configured
+    // Users can manually click Refresh or the integration card to test
   }, []);
 
   const checkIntegrationStatuses = async () => {
-    // Check Gmail
+    // Check Gmail - wrapped in try/catch to prevent page crashes
     try {
-      const { error } = await supabase.functions.invoke("gmail-sync", {
+      const { data, error } = await supabase.functions.invoke("gmail-sync", {
         body: { maxResults: 1 },
       });
 
@@ -36,13 +37,14 @@ export default function Integrations() {
             : i
         )
       );
-    } catch {
-      // Keep as available if no response
+    } catch (err) {
+      // Keep as available if function doesn't exist or fails completely
+      console.log("Gmail check skipped:", err);
     }
 
-    // Check RingCentral
+    // Check RingCentral - wrapped in try/catch to prevent page crashes
     try {
-      const { error } = await supabase.functions.invoke("ringcentral-sync", {
+      const { data, error } = await supabase.functions.invoke("ringcentral-sync", {
         body: { limit: 1 },
       });
 
@@ -58,8 +60,9 @@ export default function Integrations() {
             : i
         )
       );
-    } catch {
-      // Keep as available if no response
+    } catch (err) {
+      // Keep as available if function doesn't exist or fails completely
+      console.log("RingCentral check skipped:", err);
     }
   };
 
