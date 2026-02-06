@@ -36,9 +36,10 @@ export default function IntegrationCallback() {
       const redirectUri = `${window.location.origin}/integrations/callback`;
 
       const { data, error } = await supabase.functions.invoke(
-        "google-oauth?action=exchange-code",
+        "google-oauth",
         {
           body: {
+            action: "exchange-code",
             code,
             redirectUri,
             integration,
