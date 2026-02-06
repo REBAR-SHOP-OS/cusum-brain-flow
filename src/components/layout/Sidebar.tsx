@@ -1,11 +1,12 @@
 import { Link, useLocation } from "react-router-dom";
-import { Inbox, Brain, Settings, Plug, MessageSquare, CheckSquare } from "lucide-react";
+import { Inbox, Brain, Settings, Plug, MessageSquare, CheckSquare, Factory } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { UserMenu } from "./UserMenu";
 
 const navigation = [
   { name: "Inbox", href: "/", icon: Inbox },
   { name: "Tasks", href: "/tasks", icon: CheckSquare },
+  { name: "Shop Floor", href: "/shop-floor", icon: Factory },
   { name: "Brain", href: "/brain", icon: Brain },
   { name: "Integrations", href: "/integrations", icon: Plug },
 ];

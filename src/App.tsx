@@ -10,6 +10,7 @@ import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Inbox from "./pages/Inbox";
 import Tasks from "./pages/Tasks";
+import ShopFloor from "./pages/ShopFloor";
 import Brain from "./pages/Brain";
 import Integrations from "./pages/Integrations";
 import Settings from "./pages/Settings";
@@ -46,6 +47,16 @@ const App = () => (
                 <ProtectedRoute>
                   <AppLayout>
                     <Tasks />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/shop-floor"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <ShopFloor />
                   </AppLayout>
                 </ProtectedRoute>
               }
