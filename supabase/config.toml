@@ -14,3 +14,6 @@ verify_jwt = false
 
 [functions.google-oauth]
 verify_jwt = false
+
+[functions.summarize-call]
+verify_jwt = false
