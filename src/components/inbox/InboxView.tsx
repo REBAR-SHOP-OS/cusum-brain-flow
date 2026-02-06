@@ -93,6 +93,8 @@ export function InboxView({ connectedEmail = "sattar@rebar.shop" }: InboxViewPro
       label: category.label,
       labelColor: category.labelColor,
       isUnread: comm.status === "unread",
+      threadId: comm.threadId || undefined,
+      sourceId: comm.sourceId,
     };
   });
 

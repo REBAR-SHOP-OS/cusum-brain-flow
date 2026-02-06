@@ -15,6 +15,7 @@ interface InboxEmailViewerProps {
 export function InboxEmailViewer({ email, onClose }: InboxEmailViewerProps) {
   const [replyText, setReplyText] = useState("");
   const [drafting, setDrafting] = useState(false);
+  const [sending, setSending] = useState(false);
   const [hasDrafted, setHasDrafted] = useState(false);
   const { toast } = useToast();
 
@@ -53,6 +54,42 @@ export function InboxEmailViewer({ email, onClose }: InboxEmailViewerProps) {
       });
     } finally {
       setDrafting(false);
+    }
+  };
+
+  const handleSend = async () => {
+    if (!email || !replyText.trim()) return;
+    setSending(true);
+
+    try {
+      const { data, error } = await supabase.functions.invoke("gmail-send", {
+        body: {
+          to: email.senderEmail,
+          subject: email.subject.startsWith("Re:") ? email.subject : `Re: ${email.subject}`,
+          body: replyText.replace(/\n/g, "<br>"),
+          threadId: email.threadId || undefined,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data?.error) {
+        toast({ title: "Send failed", description: data.error, variant: "destructive" });
+        return;
+      }
+
+      toast({ title: "Email sent", description: `Reply sent to ${email.sender}` });
+      setReplyText("");
+      setHasDrafted(false);
+    } catch (err) {
+      console.error("Send email error:", err);
+      toast({
+        title: "Failed to send",
+        description: err instanceof Error ? err.message : "Please try again",
+        variant: "destructive",
+      });
+    } finally {
+      setSending(false);
     }
   };
 
@@ -112,7 +149,7 @@ export function InboxEmailViewer({ email, onClose }: InboxEmailViewerProps) {
             </div>
             <button
               onClick={handleAiDraft}
-              disabled={drafting}
+              disabled={drafting || sending}
               className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground disabled:opacity-50"
             >
               {drafting ? (
@@ -141,9 +178,22 @@ export function InboxEmailViewer({ email, onClose }: InboxEmailViewerProps) {
           <Trash2 className="w-4 h-4 mr-2" />
           Cancel
         </Button>
-        <Button className="bg-[#4FC3F7] hover:bg-[#4FC3F7]/90 text-white" disabled={!replyText.trim()}>
-          Send
-          <Send className="w-4 h-4 ml-2" />
+        <Button 
+          className="bg-[#4FC3F7] hover:bg-[#4FC3F7]/90 text-white" 
+          disabled={!replyText.trim() || sending}
+          onClick={handleSend}
+        >
+          {sending ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              Sending...
+            </>
+          ) : (
+            <>
+              Send
+              <Send className="w-4 h-4 ml-2" />
+            </>
+          )}
         </Button>
       </div>
     </div>
