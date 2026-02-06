@@ -107,10 +107,20 @@ export function useIntegrations() {
       // For other integrations, use their specific sync functions
       if (integrationId === "ringcentral") {
         const { data, error } = await supabase.functions.invoke("ringcentral-sync", {
-          body: { limit: 1 },
+          body: { syncType: "calls", daysBack: 1 },
         });
 
         const status = error ? "error" : "connected";
+        
+        // Persist status to database
+        await supabase.from("integration_connections").upsert({
+          integration_id: integrationId,
+          status,
+          error_message: error?.message || null,
+          last_checked_at: new Date().toISOString(),
+          last_sync_at: error ? null : new Date().toISOString(),
+        }, { onConflict: "integration_id" });
+
         setIntegrations((prev) =>
           prev.map((i) =>
             i.id === integrationId
@@ -175,15 +185,25 @@ export function useIntegrations() {
     // Check RingCentral
     try {
       const { error } = await supabase.functions.invoke("ringcentral-sync", {
-        body: { limit: 1 },
+        body: { syncType: "calls", daysBack: 1 },
       });
+
+      const rcStatus = error ? "error" : "connected";
+
+      await supabase.from("integration_connections").upsert({
+        integration_id: "ringcentral",
+        status: rcStatus,
+        error_message: error?.message || null,
+        last_checked_at: new Date().toISOString(),
+        last_sync_at: error ? null : new Date().toISOString(),
+      }, { onConflict: "integration_id" });
 
       setIntegrations((prev) =>
         prev.map((i) =>
           i.id === "ringcentral"
             ? {
                 ...i,
-                status: error ? "error" : "connected",
+                status: rcStatus,
                 error: error?.message,
                 lastSync: error ? undefined : new Date().toLocaleTimeString(),
               }
