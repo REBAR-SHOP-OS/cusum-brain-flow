@@ -1,4 +1,5 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AgentSelector, AgentType } from "@/components/chat/AgentSelector";
 import { ChatThread } from "@/components/chat/ChatThread";
@@ -8,6 +9,7 @@ import { Message } from "@/components/chat/ChatMessage";
 import { UnifiedInboxList } from "@/components/inbox/UnifiedInboxList";
 import { CommunicationViewer } from "@/components/inbox/CommunicationViewer";
 import { useCommunications, Communication } from "@/hooks/useCommunications";
+import { useChatSessions, getAgentName } from "@/hooks/useChatSessions";
 import { sendAgentMessage } from "@/lib/agent";
 import { Mail, Phone, MessageSquare, Bot, ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -16,24 +18,54 @@ import { Button } from "@/components/ui/button";
 type InboxTab = "email" | "calls" | "sms" | "agents";
 
 export default function Inbox() {
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState<InboxTab>("email");
   const [selectedAgent, setSelectedAgent] = useState<AgentType>("sales");
   const [messages, setMessages] = useState<Message[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const [selectedComm, setSelectedComm] = useState<Communication | null>(null);
   const [search, setSearch] = useState("");
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const { toast } = useToast();
+  const { createSession, addMessage: saveMessage, getSessionMessages } = useChatSessions();
 
   const typeFilter = activeTab === "calls" ? "call" : activeTab === "sms" ? "sms" : activeTab === "email" ? "email" : undefined;
+  const { communications, loading, error, sync } = useCommunications({ search: search || undefined, typeFilter });
 
-  const { communications, loading, error, refresh, sync } = useCommunications({ search: search || undefined, typeFilter });
+  // Handle loading a session from History panel
+  useEffect(() => {
+    const sessionId = (location.state as any)?.sessionId;
+    if (sessionId) {
+      setActiveTab("agents");
+      loadSession(sessionId);
+    }
+  }, [location.state]);
+
+  const loadSession = useCallback(async (sessionId: string) => {
+    const msgs = await getSessionMessages(sessionId);
+    const loaded: Message[] = msgs.map((m) => ({
+      id: m.id,
+      role: m.role === "user" ? "user" : "agent",
+      content: m.content,
+      agent: m.agent_type as AgentType | undefined,
+      timestamp: new Date(m.created_at),
+      status: "sent" as const,
+    }));
+    setMessages(loaded);
+    setCurrentSessionId(sessionId);
+
+    // Set the agent type from the first agent message
+    const agentMsg = msgs.find((m) => m.agent_type);
+    if (agentMsg?.agent_type) {
+      setSelectedAgent(agentMsg.agent_type as AgentType);
+    }
+  }, [getSessionMessages]);
 
   const handleSend = useCallback(async (content: string, files?: UploadedFile[]) => {
-    // Build message content with file references for all agents
     let messageContent = content;
     if (files && files.length > 0) {
       const filesList = files.map(f => `- ${f.name} (${f.url})`).join('\n');
-      messageContent = content 
+      messageContent = content
         ? `${content}\n\n📎 Attached files:\n${filesList}`
         : `📎 Attached files:\n${filesList}`;
     }
@@ -49,28 +81,36 @@ export default function Inbox() {
     setMessages((prev) => [...prev, userMessage]);
     setIsTyping(true);
 
+    // Create or reuse session
+    let sessionId = currentSessionId;
+    if (!sessionId) {
+      const title = content.slice(0, 80) || "New conversation";
+      const agentName = getAgentName(selectedAgent);
+      sessionId = await createSession(title, agentName);
+      setCurrentSessionId(sessionId);
+    }
+
+    // Persist user message
+    if (sessionId) {
+      saveMessage(sessionId, "user", messageContent);
+    }
+
     try {
       const history = messages.map((m) => ({
         role: m.role === "user" ? "user" as const : "assistant" as const,
         content: m.content,
       }));
 
-      // Include file context
       const contextData = files && files.length > 0 ? {
-        uploadedFiles: files.map(f => ({
-          name: f.name,
-          type: f.type,
-          url: f.url,
-        }))
+        uploadedFiles: files.map(f => ({ name: f.name, type: f.type, url: f.url }))
       } : undefined;
 
-      // Prepare attached files for OCR (for estimation agent)
-      const attachedFiles = files && files.length > 0 
+      const attachedFiles = files && files.length > 0
         ? files.map(f => ({ name: f.name, url: f.url }))
         : undefined;
 
       const response = await sendAgentMessage(selectedAgent, messageContent, history, contextData, attachedFiles);
-      
+
       const agentMessage: Message = {
         id: crypto.randomUUID(),
         role: "agent",
@@ -80,6 +120,11 @@ export default function Inbox() {
         status: content.toLowerCase().includes("draft") ? "draft" : "sent",
       };
       setMessages((prev) => [...prev, agentMessage]);
+
+      // Persist agent message
+      if (sessionId) {
+        saveMessage(sessionId, "agent", response.reply, selectedAgent);
+      }
     } catch (error) {
       console.error("Agent error:", error);
       toast({
@@ -90,11 +135,12 @@ export default function Inbox() {
     } finally {
       setIsTyping(false);
     }
-  }, [selectedAgent, messages, toast]);
+  }, [selectedAgent, messages, toast, currentSessionId, createSession, saveMessage]);
 
   const handleAgentChange = (agent: AgentType) => {
     setSelectedAgent(agent);
     setMessages([]);
+    setCurrentSessionId(null);
   };
 
   const showCommsList = activeTab !== "agents";
@@ -104,14 +150,8 @@ export default function Inbox() {
       {/* Header with Tabs */}
       <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-border gap-3 sm:gap-0">
         <div className="flex items-center gap-2">
-          {/* Back button on mobile when viewing detail */}
           {selectedComm && showCommsList && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="md:hidden mr-1"
-              onClick={() => setSelectedComm(null)}
-            >
+            <Button variant="ghost" size="icon" className="md:hidden mr-1" onClick={() => setSelectedComm(null)}>
               <ArrowLeft className="w-4 h-4" />
             </Button>
           )}
@@ -145,7 +185,6 @@ export default function Inbox() {
       {/* Content */}
       {showCommsList ? (
         <div className="flex-1 flex overflow-hidden">
-          {/* Communication List - full width on mobile, fixed on desktop */}
           <div className={`${selectedComm ? 'hidden md:flex' : 'flex'} w-full md:w-96 flex-shrink-0 flex-col`}>
             <UnifiedInboxList
               communications={communications}
@@ -157,8 +196,6 @@ export default function Inbox() {
               onSearchChange={setSearch}
             />
           </div>
-
-          {/* Communication Viewer - full width on mobile */}
           <div className={`${selectedComm ? 'flex' : 'hidden md:flex'} flex-1 flex-col`}>
             <CommunicationViewer communication={selectedComm} />
           </div>
@@ -166,8 +203,6 @@ export default function Inbox() {
       ) : (
         <div className="flex-1 flex flex-col overflow-hidden">
           <AgentSelector selected={selectedAgent} onSelect={handleAgentChange} />
-          
-          {/* Use specialized Cal UI for estimation agent */}
           {selectedAgent === "estimation" ? (
             <CalChatInterface />
           ) : (

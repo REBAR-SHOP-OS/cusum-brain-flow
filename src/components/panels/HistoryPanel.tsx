@@ -1,69 +1,65 @@
 import { useState } from "react";
-import { X, Search } from "lucide-react";
+import { X, Search, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
+import { useChatSessions, type ChatSession } from "@/hooks/useChatSessions";
+import { formatDistanceToNow, isToday, isThisWeek, differenceInDays } from "date-fns";
 
 interface HistoryPanelProps {
   isOpen: boolean;
   onClose: () => void;
-}
-
-interface ChatHistoryItem {
-  id: string;
-  title: string;
-  agent: string;
-  agentColor: string;
-  time: string;
+  onSelectSession?: (sessionId: string) => void;
 }
 
 interface HistoryGroup {
   label: string;
-  items: ChatHistoryItem[];
+  items: ChatSession[];
 }
 
-const mockHistory: HistoryGroup[] = [
-  {
-    label: "Today",
-    items: [
-      { id: "1", title: "New social media post", agent: "Soshie", agentColor: "bg-pink-500", time: "20 minute" },
-      { id: "2", title: "Confirm Consulting Vendo...", agent: "Cal", agentColor: "bg-sky-500", time: "1 hour" },
-    ]
-  },
-  {
-    label: "Last 7 days",
-    items: [
-      { id: "3", title: "Monthly HST/ITC Leakage ...", agent: "Penny", agentColor: "bg-purple-500", time: "4 day" },
-    ]
-  },
-  {
-    label: "Last 30 days",
-    items: [
-      { id: "4", title: "Reviewing external conten...", agent: "Soshie", agentColor: "bg-pink-500", time: "1 week" },
-      { id: "5", title: "Full-year Profit & Loss anal...", agent: "Penny", agentColor: "bg-purple-500", time: "1 week" },
-      { id: "6", title: "Set Up Social Media Mana...", agent: "Soshie", agentColor: "bg-pink-500", time: "1 week" },
-      { id: "7", title: "Social media strategy and ...", agent: "Soshie", agentColor: "bg-pink-500", time: "1 week" },
-      { id: "8", title: "Platform-specific social m...", agent: "Soshie", agentColor: "bg-pink-500", time: "1 week" },
-      { id: "9", title: "Social media profile optimi...", agent: "Rex", agentColor: "bg-teal-500", time: "2 week" },
-      { id: "10", title: "Creating a YouTube video ...", agent: "Soshie", agentColor: "bg-pink-500", time: "2 week" },
-      { id: "11", title: "Create Social Media Post", agent: "Soshie", agentColor: "bg-pink-500", time: "2 week" },
-    ]
-  }
-];
+function groupSessions(sessions: ChatSession[]): HistoryGroup[] {
+  const today: ChatSession[] = [];
+  const last7: ChatSession[] = [];
+  const last30: ChatSession[] = [];
+  const older: ChatSession[] = [];
 
-export function HistoryPanel({ isOpen, onClose }: HistoryPanelProps) {
+  for (const session of sessions) {
+    const date = new Date(session.updated_at);
+    if (isToday(date)) {
+      today.push(session);
+    } else if (isThisWeek(date)) {
+      last7.push(session);
+    } else if (differenceInDays(new Date(), date) <= 30) {
+      last30.push(session);
+    } else {
+      older.push(session);
+    }
+  }
+
+  const groups: HistoryGroup[] = [];
+  if (today.length > 0) groups.push({ label: "Today", items: today });
+  if (last7.length > 0) groups.push({ label: "Last 7 days", items: last7 });
+  if (last30.length > 0) groups.push({ label: "Last 30 days", items: last30 });
+  if (older.length > 0) groups.push({ label: "Older", items: older });
+  return groups;
+}
+
+export function HistoryPanel({ isOpen, onClose, onSelectSession }: HistoryPanelProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const { sessions, loading, deleteSession } = useChatSessions();
 
   if (!isOpen) return null;
 
-  const filteredHistory = mockHistory.map(group => ({
-    ...group,
-    items: group.items.filter(item => 
-      item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.agent.toLowerCase().includes(searchQuery.toLowerCase())
-    )
-  })).filter(group => group.items.length > 0);
+  const filtered = searchQuery
+    ? sessions.filter(
+        (s) =>
+          s.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          s.agent_name.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : sessions;
+
+  const groups = groupSessions(filtered);
 
   return (
     <div className="fixed inset-y-0 left-16 w-80 bg-card border-r border-border z-40 flex flex-col shadow-xl">
@@ -90,27 +86,54 @@ export function HistoryPanel({ isOpen, onClose }: HistoryPanelProps) {
 
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-6">
-          {filteredHistory.map((group) => (
-            <section key={group.label}>
-              <h3 className="text-xs font-medium text-muted-foreground mb-3">{group.label}</h3>
-              <div className="space-y-1">
-                {group.items.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex items-center gap-3 p-2 rounded-lg hover:bg-secondary cursor-pointer transition-colors"
-                  >
-                    <div className={cn("w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-medium flex-shrink-0", item.agentColor)}>
-                      {item.agent[0]}
+          {loading ? (
+            <div className="text-center text-sm text-muted-foreground py-8">Loading...</div>
+          ) : groups.length === 0 ? (
+            <div className="text-center text-sm text-muted-foreground py-8">
+              {searchQuery ? "No matching conversations" : "No conversations yet"}
+            </div>
+          ) : (
+            groups.map((group) => (
+              <section key={group.label}>
+                <h3 className="text-xs font-medium text-primary mb-3">{group.label}</h3>
+                <div className="space-y-1">
+                  {group.items.map((session) => (
+                    <div
+                      key={session.id}
+                      className="flex items-center gap-3 p-2 rounded-lg hover:bg-secondary cursor-pointer transition-colors group"
+                      onClick={() => onSelectSession?.(session.id)}
+                    >
+                      <div
+                        className={cn(
+                          "w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-medium flex-shrink-0",
+                          session.agent_color
+                        )}
+                      >
+                        {session.agent_name[0]}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm truncate">{session.title}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {formatDistanceToNow(new Date(session.updated_at), { addSuffix: false })}
+                        </p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteSession(session.id);
+                        }}
+                      >
+                        <Trash2 className="w-3 h-3 text-muted-foreground" />
+                      </Button>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm truncate">{item.title}</p>
-                      <p className="text-xs text-muted-foreground">{item.time}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          ))}
+                  ))}
+                </div>
+              </section>
+            ))
+          )}
         </div>
       </ScrollArea>
     </div>

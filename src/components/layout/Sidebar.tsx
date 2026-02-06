@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Inbox, Brain, Settings, Plug, MessageSquare, CheckSquare, Factory, Truck, Users, Kanban, History, Bell, Home, Phone } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { UserMenu } from "./UserMenu";
@@ -26,6 +26,7 @@ const bottomNav = [
 
 export function Sidebar() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [inboxPanelOpen, setInboxPanelOpen] = useState(false);
   const [historyPanelOpen, setHistoryPanelOpen] = useState(false);
   const { unreadCount } = useNotifications();
@@ -38,6 +39,11 @@ export function Sidebar() {
       setHistoryPanelOpen(!historyPanelOpen);
       setInboxPanelOpen(false);
     }
+  };
+
+  const handleSelectSession = (sessionId: string) => {
+    setHistoryPanelOpen(false);
+    navigate("/inbox", { state: { sessionId } });
   };
 
   return (
@@ -137,7 +143,11 @@ export function Sidebar() {
 
       {/* Slide-out Panels */}
       <InboxPanel isOpen={inboxPanelOpen} onClose={() => setInboxPanelOpen(false)} />
-      <HistoryPanel isOpen={historyPanelOpen} onClose={() => setHistoryPanelOpen(false)} />
+      <HistoryPanel
+        isOpen={historyPanelOpen}
+        onClose={() => setHistoryPanelOpen(false)}
+        onSelectSession={handleSelectSession}
+      />
     </>
   );
 }
