@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AgentSelector, AgentType } from "@/components/chat/AgentSelector";
 import { ChatThread } from "@/components/chat/ChatThread";
 import { ChatInput } from "@/components/chat/ChatInput";
@@ -7,36 +7,9 @@ import { Message } from "@/components/chat/ChatMessage";
 import { EmailList } from "@/components/email/EmailList";
 import { EmailViewer } from "@/components/email/EmailViewer";
 import { GmailMessage } from "@/lib/gmail";
+import { sendAgentMessage } from "@/lib/agent";
 import { MessageSquare, Mail } from "lucide-react";
-
-// Demo responses for different agents
-const agentResponses: Record<AgentType, string[]> = {
-  sales: [
-    "I found 3 open quotes that need follow-up. Want me to draft reminder emails?",
-    "Looking at the margin on this quote — it's at 18%. Your guardrail is 22%. Should I adjust pricing?",
-    "Draft quote ready for ABC Corp. Total: $12,450. Margin: 24%. Ready for your approval.",
-  ],
-  accounting: [
-    "QuickBooks sync complete. 2 invoices pending, 1 payment received today.",
-    "Customer XYZ has a balance of $3,200 — 45 days overdue. Want me to check their order history?",
-    "I see a mismatch: QB shows $15,000 AR for this customer, but our records show $14,500. Investigating...",
-  ],
-  support: [
-    "New support request from customer: 'Delivery was late.' Related order: #4521. Want me to pull the timeline?",
-    "I've drafted a response acknowledging the delay and offering a credit. Needs your approval before sending.",
-    "3 open tickets today. 1 urgent (delivery issue), 2 standard (product questions).",
-  ],
-  collections: [
-    "AR aging report: $45K total. $12K is 60+ days. Want me to prioritize the list?",
-    "Customer ABC hasn't responded to 2 emails. Last order was 90 days ago. Draft a final notice?",
-    "Payment of $5,000 just posted from XYZ Corp. Their balance is now $0.",
-  ],
-  estimation: [
-    "New estimation request: Custom cabinets, 12 units. Similar job last month was $8,200. Want me to start?",
-    "Material costs updated. Plywood is up 8% from last quote. Should I recalculate open estimates?",
-    "Estimate ready: Job #E-2024-15. Labor: $4,500, Materials: $3,200, Total: $7,700 at 26% margin.",
-  ],
-};
+import { useToast } from "@/hooks/use-toast";
 
 export default function Inbox() {
   const [activeTab, setActiveTab] = useState<"email" | "agents">("email");
@@ -44,8 +17,9 @@ export default function Inbox() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const [selectedEmail, setSelectedEmail] = useState<GmailMessage | null>(null);
+  const { toast } = useToast();
 
-  const handleSend = useCallback((content: string) => {
+  const handleSend = useCallback(async (content: string) => {
     const userMessage: Message = {
       id: crypto.randomUUID(),
       role: "user",
@@ -54,24 +28,31 @@ export default function Inbox() {
       status: "sent",
     };
     setMessages((prev) => [...prev, userMessage]);
-
     setIsTyping(true);
-    setTimeout(() => {
-      const responses = agentResponses[selectedAgent];
-      const randomResponse = responses[Math.floor(Math.random() * responses.length)];
+
+    try {
+      const response = await sendAgentMessage(selectedAgent, content);
       
       const agentMessage: Message = {
         id: crypto.randomUUID(),
         role: "agent",
-        content: randomResponse,
+        content: response.reply,
         agent: selectedAgent,
         timestamp: new Date(),
         status: content.toLowerCase().includes("draft") ? "draft" : "sent",
       };
       setMessages((prev) => [...prev, agentMessage]);
+    } catch (error) {
+      console.error("Agent error:", error);
+      toast({
+        title: "Agent error",
+        description: error instanceof Error ? error.message : "Failed to get response",
+        variant: "destructive",
+      });
+    } finally {
       setIsTyping(false);
-    }, 800 + Math.random() * 800);
-  }, [selectedAgent]);
+    }
+  }, [selectedAgent, toast]);
 
   const handleAgentChange = (agent: AgentType) => {
     setSelectedAgent(agent);
