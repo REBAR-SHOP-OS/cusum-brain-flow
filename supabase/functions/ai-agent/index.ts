@@ -6,9 +6,15 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+interface ChatMessage {
+  role: "user" | "assistant" | "system";
+  content: string;
+}
+
 interface AgentRequest {
   agent: "sales" | "accounting" | "support" | "collections" | "estimation";
   message: string;
+  history?: ChatMessage[];
   context?: Record<string, unknown>;
 }
 
@@ -97,7 +103,7 @@ async function fetchContext(supabase: ReturnType<typeof createClient>, agent: st
       const { data: tasks } = await supabase
         .from("tasks")
         .select("id, title, status, priority, source")
-        .eq("status", "open")
+        .neq("status", "done")
         .limit(10);
       context.openTasks = tasks;
 
@@ -105,10 +111,25 @@ async function fetchContext(supabase: ReturnType<typeof createClient>, agent: st
       const { data: comms } = await supabase
         .from("communications")
         .select("id, subject, from_address, status, received_at")
-        .eq("status", "unread")
         .order("received_at", { ascending: false })
+        .limit(10);
+      context.recentEmails = comms;
+
+      // Get active deliveries
+      const { data: deliveries } = await supabase
+        .from("deliveries")
+        .select("id, delivery_number, driver_name, status, scheduled_date")
+        .in("status", ["scheduled", "in-transit"])
         .limit(5);
-      context.unreadEmails = comms;
+      context.activeDeliveries = deliveries;
+
+      // Get in-progress work orders
+      const { data: workOrders } = await supabase
+        .from("work_orders")
+        .select("id, work_order_number, status, scheduled_start")
+        .in("status", ["pending", "in-progress"])
+        .limit(5);
+      context.activeWorkOrders = workOrders;
     }
 
     if (agent === "estimation") {
@@ -142,7 +163,7 @@ serve(async (req) => {
       );
     }
 
-    const { agent, message, context: userContext }: AgentRequest = await req.json();
+    const { agent, message, history = [], context: userContext }: AgentRequest = await req.json();
 
     if (!agent || !message) {
       return new Response(
@@ -177,6 +198,13 @@ serve(async (req) => {
       ? `\n\nCurrent data context:\n${JSON.stringify(mergedContext, null, 2)}`
       : "";
 
+    // Build messages array with history
+    const messages: ChatMessage[] = [
+      { role: "system", content: systemPrompt + contextStr },
+      ...history.slice(-10), // Keep last 10 messages for context
+      { role: "user", content: message },
+    ];
+
     // Call Lovable AI Gateway
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -186,11 +214,8 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: systemPrompt + contextStr },
-          { role: "user", content: message },
-        ],
-        max_tokens: 500,
+        messages,
+        max_tokens: 800,
         temperature: 0.7,
       }),
     });
