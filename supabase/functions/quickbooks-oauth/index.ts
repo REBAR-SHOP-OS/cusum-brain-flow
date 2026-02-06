@@ -319,6 +319,221 @@ serve(async (req) => {
       });
     }
 
+    // Create Estimate (Quotation) in QuickBooks
+    if (body.action === "create-estimate") {
+      const { data: connection } = await supabase
+        .from("integration_connections")
+        .select("*")
+        .eq("integration_id", "quickbooks")
+        .single();
+
+      if (!connection || connection.status !== "connected") {
+        throw new Error("QuickBooks not connected");
+      }
+
+      const config = connection.config as { 
+        realm_id: string; 
+        access_token: string;
+      };
+
+      const { customerId, customerName, lineItems, expirationDate, memo } = body;
+
+      if (!customerId || !lineItems || lineItems.length === 0) {
+        throw new Error("Customer ID and line items are required");
+      }
+
+      // Build the estimate payload
+      const estimatePayload = {
+        CustomerRef: { value: customerId, name: customerName },
+        Line: lineItems.map((item: { description: string; amount: number; quantity?: number }) => ({
+          DetailType: "SalesItemLineDetail",
+          Amount: item.amount * (item.quantity || 1),
+          Description: item.description,
+          SalesItemLineDetail: {
+            Qty: item.quantity || 1,
+            UnitPrice: item.amount,
+          },
+        })),
+        ...(expirationDate && { ExpirationDate: expirationDate }),
+        ...(memo && { CustomerMemo: { value: memo } }),
+      };
+
+      const qbResponse = await fetch(
+        `${QUICKBOOKS_API_BASE}/v3/company/${config.realm_id}/estimate`,
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${config.access_token}`,
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(estimatePayload),
+        }
+      );
+
+      if (!qbResponse.ok) {
+        const errorText = await qbResponse.text();
+        console.error("QuickBooks create estimate error:", errorText);
+        throw new Error(`Failed to create estimate: ${qbResponse.status}`);
+      }
+
+      const estimateData = await qbResponse.json();
+      return new Response(JSON.stringify({ 
+        success: true, 
+        estimate: estimateData.Estimate,
+        docNumber: estimateData.Estimate?.DocNumber,
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Create Invoice in QuickBooks
+    if (body.action === "create-invoice") {
+      const { data: connection } = await supabase
+        .from("integration_connections")
+        .select("*")
+        .eq("integration_id", "quickbooks")
+        .single();
+
+      if (!connection || connection.status !== "connected") {
+        throw new Error("QuickBooks not connected");
+      }
+
+      const config = connection.config as { 
+        realm_id: string; 
+        access_token: string;
+      };
+
+      const { customerId, customerName, lineItems, dueDate, memo } = body;
+
+      if (!customerId || !lineItems || lineItems.length === 0) {
+        throw new Error("Customer ID and line items are required");
+      }
+
+      // Build the invoice payload
+      const invoicePayload = {
+        CustomerRef: { value: customerId, name: customerName },
+        Line: lineItems.map((item: { description: string; amount: number; quantity?: number; serviceId?: string }) => ({
+          DetailType: "SalesItemLineDetail",
+          Amount: item.amount * (item.quantity || 1),
+          Description: item.description,
+          SalesItemLineDetail: {
+            Qty: item.quantity || 1,
+            UnitPrice: item.amount,
+            ...(item.serviceId && { ItemRef: { value: item.serviceId } }),
+          },
+        })),
+        ...(dueDate && { DueDate: dueDate }),
+        ...(memo && { CustomerMemo: { value: memo } }),
+      };
+
+      const qbResponse = await fetch(
+        `${QUICKBOOKS_API_BASE}/v3/company/${config.realm_id}/invoice`,
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${config.access_token}`,
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(invoicePayload),
+        }
+      );
+
+      if (!qbResponse.ok) {
+        const errorText = await qbResponse.text();
+        console.error("QuickBooks create invoice error:", errorText);
+        throw new Error(`Failed to create invoice: ${qbResponse.status}`);
+      }
+
+      const invoiceData = await qbResponse.json();
+      return new Response(JSON.stringify({ 
+        success: true, 
+        invoice: invoiceData.Invoice,
+        docNumber: invoiceData.Invoice?.DocNumber,
+        totalAmount: invoiceData.Invoice?.TotalAmt,
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Convert Estimate to Invoice
+    if (body.action === "convert-estimate-to-invoice") {
+      const { data: connection } = await supabase
+        .from("integration_connections")
+        .select("*")
+        .eq("integration_id", "quickbooks")
+        .single();
+
+      if (!connection || connection.status !== "connected") {
+        throw new Error("QuickBooks not connected");
+      }
+
+      const config = connection.config as { 
+        realm_id: string; 
+        access_token: string;
+      };
+
+      const { estimateId } = body;
+
+      if (!estimateId) {
+        throw new Error("Estimate ID is required");
+      }
+
+      // First, fetch the estimate
+      const estimateRes = await fetch(
+        `${QUICKBOOKS_API_BASE}/v3/company/${config.realm_id}/estimate/${estimateId}`,
+        {
+          headers: {
+            "Authorization": `Bearer ${config.access_token}`,
+            "Accept": "application/json",
+          },
+        }
+      );
+
+      if (!estimateRes.ok) {
+        throw new Error("Failed to fetch estimate");
+      }
+
+      const estimateData = await estimateRes.json();
+      const estimate = estimateData.Estimate;
+
+      // Create invoice from estimate data
+      const invoicePayload = {
+        CustomerRef: estimate.CustomerRef,
+        Line: estimate.Line,
+        LinkedTxn: [{ TxnId: estimateId, TxnType: "Estimate" }],
+      };
+
+      const invoiceRes = await fetch(
+        `${QUICKBOOKS_API_BASE}/v3/company/${config.realm_id}/invoice`,
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${config.access_token}`,
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(invoicePayload),
+        }
+      );
+
+      if (!invoiceRes.ok) {
+        const errorText = await invoiceRes.text();
+        console.error("Convert estimate error:", errorText);
+        throw new Error("Failed to convert estimate to invoice");
+      }
+
+      const invoiceData = await invoiceRes.json();
+      return new Response(JSON.stringify({ 
+        success: true, 
+        invoice: invoiceData.Invoice,
+        docNumber: invoiceData.Invoice?.DocNumber,
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     return new Response(JSON.stringify({ error: "Unknown action" }), {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
