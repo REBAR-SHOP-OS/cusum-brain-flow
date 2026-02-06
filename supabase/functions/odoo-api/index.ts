@@ -40,8 +40,8 @@ async function odooJsonRpc(
     id: Math.floor(Math.random() * 1000000),
   };
 
-  // Clean URL - remove trailing slash if present
-  const cleanUrl = url.replace(/\/+$/, "");
+  // Clean URL - remove trailing paths like /web/login, /web, /jsonrpc and trailing slashes
+  const cleanUrl = url.replace(/\/(web(\/login)?|jsonrpc)\/?$/i, "").replace(/\/+$/, "");
   const endpoint = `${cleanUrl}/jsonrpc`;
   
   console.log(`Odoo request to: ${endpoint}`);
