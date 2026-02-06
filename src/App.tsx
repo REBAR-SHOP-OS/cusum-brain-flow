@@ -17,6 +17,7 @@ import ShopFloor from "./pages/ShopFloor";
 import Deliveries from "./pages/Deliveries";
 import Brain from "./pages/Brain";
 import Integrations from "./pages/Integrations";
+import IntegrationCallback from "./pages/IntegrationCallback";
 import SocialMediaManager from "./pages/SocialMediaManager";
 import InboxManager from "./pages/InboxManager";
 import DailySummarizer from "./pages/DailySummarizer";
@@ -126,6 +127,14 @@ const App = () => (
                   <AppLayout>
                     <Integrations />
                   </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/integrations/callback"
+              element={
+                <ProtectedRoute>
+                  <IntegrationCallback />
                 </ProtectedRoute>
               }
             />

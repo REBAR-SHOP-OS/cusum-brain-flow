@@ -1,149 +1,54 @@
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
 import { IntegrationCard, type Integration } from "@/components/integrations/IntegrationCard";
 import { IntegrationSetupDialog } from "@/components/integrations/IntegrationSetupDialog";
-import { defaultIntegrations } from "@/components/integrations/integrationsList";
 import { AutomationsSection } from "@/components/integrations/AutomationsSection";
+import { useIntegrations } from "@/hooks/useIntegrations";
+import { useState } from "react";
 
 export default function Integrations() {
-  const [integrations, setIntegrations] = useState<Integration[]>(defaultIntegrations);
-  const [testing, setTesting] = useState<string | null>(null);
-  const [selectedIntegration, setSelectedIntegration] = useState<Integration | null>(null);
-  const { toast } = useToast();
+  const {
+    integrations,
+    loading,
+    testing,
+    checkIntegrationStatus,
+    checkAllStatuses,
+    startOAuth,
+    refreshStatuses,
+  } = useIntegrations();
 
+  const [selectedIntegration, setSelectedIntegration] = useState<Integration | null>(null);
+
+  // Listen for OAuth success messages from popup
   useEffect(() => {
-    // Don't auto-check on mount to avoid errors when credentials aren't configured
-    // Users can manually click Refresh or the integration card to test
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === "oauth-success") {
+        // Refresh statuses after OAuth completes
+        refreshStatuses();
+      }
+    };
+
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, [refreshStatuses]);
+
+  // Check statuses on mount
+  useEffect(() => {
+    checkAllStatuses();
   }, []);
 
-  const checkIntegrationStatuses = async () => {
-    // Check Gmail - wrapped in try/catch to prevent page crashes
-    try {
-      const { data, error } = await supabase.functions.invoke("gmail-sync", {
-        body: { maxResults: 1 },
-      });
-
-      setIntegrations((prev) =>
-        prev.map((i) =>
-          i.id === "gmail"
-            ? {
-                ...i,
-                status: error ? "error" : "connected",
-                error: error ? extractErrorMessage(error.message) : undefined,
-                lastSync: error ? undefined : new Date().toLocaleTimeString(),
-              }
-            : i
-        )
-      );
-    } catch (err) {
-      // Keep as available if function doesn't exist or fails completely
-      console.log("Gmail check skipped:", err);
-    }
-
-    // Check RingCentral - wrapped in try/catch to prevent page crashes
-    try {
-      const { data, error } = await supabase.functions.invoke("ringcentral-sync", {
-        body: { limit: 1 },
-      });
-
-      setIntegrations((prev) =>
-        prev.map((i) =>
-          i.id === "ringcentral"
-            ? {
-                ...i,
-                status: error ? "error" : "connected",
-                error: error ? extractErrorMessage(error.message) : undefined,
-                lastSync: error ? undefined : new Date().toLocaleTimeString(),
-              }
-            : i
-        )
-      );
-    } catch (err) {
-      // Keep as available if function doesn't exist or fails completely
-      console.log("RingCentral check skipped:", err);
-    }
-  };
-
-  const extractErrorMessage = (msg: string): string => {
-    if (msg.includes("Token has been expired")) return "Token expired";
-    if (msg.includes("invalid_grant")) return "Token revoked";
-    if (msg.includes("invalid_client")) return "Invalid credentials";
-    if (msg.includes("not configured")) return "Not configured";
-    return msg.slice(0, 40);
-  };
-
-  const testIntegration = async (id: string) => {
-    setTesting(id);
-    try {
-      if (id === "gmail") {
-        const { data, error } = await supabase.functions.invoke("gmail-sync", {
-          body: { maxResults: 5 },
-        });
-
-        if (error) throw new Error(error.message);
-
-        toast({
-          title: "Gmail connected",
-          description: `Synced ${data?.messages?.length || 0} emails`,
-        });
-
-        setIntegrations((prev) =>
-          prev.map((i) =>
-            i.id === "gmail"
-              ? { ...i, status: "connected", error: undefined, lastSync: new Date().toLocaleTimeString() }
-              : i
-          )
-        );
-      } else if (id === "ringcentral") {
-        const { data, error } = await supabase.functions.invoke("ringcentral-sync", {
-          body: { limit: 5 },
-        });
-
-        if (error) throw new Error(error.message);
-
-        toast({
-          title: "RingCentral connected",
-          description: `Synced ${data?.calls?.length || 0} calls`,
-        });
-
-        setIntegrations((prev) =>
-          prev.map((i) =>
-            i.id === "ringcentral"
-              ? { ...i, status: "connected", error: undefined, lastSync: new Date().toLocaleTimeString() }
-              : i
-          )
-        );
-      } else {
-        toast({
-          title: "Test not available",
-          description: "This integration doesn't have a test endpoint yet",
-        });
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Connection failed";
-      toast({
-        title: "Connection failed",
-        description: extractErrorMessage(message),
-        variant: "destructive",
-      });
-
-      setIntegrations((prev) =>
-        prev.map((i) =>
-          i.id === id ? { ...i, status: "error", error: extractErrorMessage(message) } : i
-        )
-      );
-    } finally {
-      setTesting(null);
-    }
-  };
-
   const handleCardClick = (integration: Integration) => {
+    const googleIntegrations = ["gmail", "google-calendar", "google-drive", "youtube", "google-analytics"];
+    
     if (integration.status === "connected") {
-      testIntegration(integration.id);
+      // Test the connection
+      checkIntegrationStatus(integration.id);
+    } else if (googleIntegrations.includes(integration.id)) {
+      // Start OAuth flow for Google integrations
+      startOAuth(integration.id);
     } else {
+      // Show manual setup dialog for other integrations
       setSelectedIntegration(integration);
     }
   };
@@ -160,8 +65,8 @@ export default function Integrations() {
           <h1 className="text-xl font-semibold">Integrations</h1>
           <p className="text-sm text-muted-foreground">Connect your tools & services</p>
         </div>
-        <Button variant="outline" size="sm" onClick={checkIntegrationStatuses}>
-          <RefreshCw className="w-4 h-4 mr-2" />
+        <Button variant="outline" size="sm" onClick={checkAllStatuses} disabled={loading}>
+          <RefreshCw className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`} />
           Refresh
         </Button>
       </header>
@@ -226,7 +131,7 @@ export default function Integrations() {
         </section>
       </div>
 
-      {/* Setup Dialog */}
+      {/* Setup Dialog for non-OAuth integrations */}
       <IntegrationSetupDialog
         integration={selectedIntegration}
         open={!!selectedIntegration}
