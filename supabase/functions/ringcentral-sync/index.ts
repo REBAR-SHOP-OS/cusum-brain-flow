@@ -193,6 +193,7 @@ serve(async (req) => {
               action: call.action,
               result: call.result,
             },
+            user_id: userId,
           }, {
             onConflict: "source,source_id",
             ignoreDuplicates: false,
@@ -225,6 +226,7 @@ serve(async (req) => {
             metadata: {
               type: "sms",
             },
+            user_id: userId,
           }, {
             onConflict: "source,source_id",
             ignoreDuplicates: false,

@@ -216,6 +216,7 @@ serve(async (req) => {
           direction: "inbound",
           status: msg.isUnread ? "unread" : "read",
           metadata: { body: msg.body, date: msg.date },
+          user_id: userId,
         }, { 
           onConflict: "source,source_id",
           ignoreDuplicates: false 
