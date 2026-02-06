@@ -1,12 +1,14 @@
 import { useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Maximize2, Minimize2 } from "lucide-react";
+import { ArrowLeft, Maximize2, Minimize2, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ChatThread } from "@/components/chat/ChatThread";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { Message } from "@/components/chat/ChatMessage";
 import { sendAgentMessage, AgentType, ChatMessage as AgentChatMessage } from "@/lib/agent";
 import { AgentDataPanel } from "@/components/agent/AgentDataPanel";
+import { AgentSuggestions } from "@/components/agent/AgentSuggestions";
+import { agentSuggestions } from "@/components/agent/agentSuggestionsData";
 import { cn } from "@/lib/utils";
 
 // Agent helper images
@@ -119,17 +121,12 @@ export default function AgentWorkspace() {
   const navigate = useNavigate();
   const config = agentConfigs[agentId || ""] || agentConfigs.sales;
   
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "greeting",
-      role: "agent",
-      content: config.greeting,
-      agent: config.agentType as any,
-      timestamp: new Date(),
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [dataPanelExpanded, setDataPanelExpanded] = useState(true);
+
+  const hasConversation = messages.length > 0;
+  const suggestions = agentSuggestions[agentId || "sales"] || agentSuggestions.sales;
 
   const handleSend = useCallback(async (content: string) => {
     const userMsg: Message = {
@@ -143,7 +140,6 @@ export default function AgentWorkspace() {
 
     try {
       const history: AgentChatMessage[] = messages
-        .filter((m) => m.id !== "greeting")
         .map((m) => ({
           role: m.role === "user" ? "user" as const : "assistant" as const,
           content: m.content,
@@ -237,26 +233,53 @@ export default function AgentWorkspace() {
           )}
         </div>
 
-        {/* Capability pills */}
-        <div className="flex gap-2 px-4 py-2 overflow-x-auto border-b border-border">
-          {config.capabilities.map((cap) => (
-            <button
-              key={cap}
-              onClick={() => handleSend(cap)}
-              className="text-xs px-3 py-1.5 rounded-full bg-secondary hover:bg-secondary/80 text-secondary-foreground whitespace-nowrap transition-colors"
-            >
-              {cap}
-            </button>
-          ))}
-        </div>
+        {/* Chat area: hero greeting or conversation */}
+        {!hasConversation ? (
+          <div className="flex-1 flex flex-col items-center justify-center overflow-y-auto">
+            {/* Hero greeting */}
+            <div className="text-center mb-8 px-4">
+              <h1 className="text-2xl sm:text-3xl font-bold leading-tight">
+                Hey, it's <span className="text-primary">{config.name}</span>.
+              </h1>
+              <p className="text-xl sm:text-2xl font-semibold text-foreground mt-1">
+                What can I help you with?
+              </p>
+            </div>
 
-        <ChatThread messages={messages} />
-        <ChatInput
-          onSend={handleSend}
-          placeholder={config.placeholder}
-          disabled={isLoading}
-          showFileUpload={agentId === "estimating"}
-        />
+            {/* Chat input in center */}
+            <div className="w-full max-w-xl px-4 mb-6">
+              <ChatInput
+                onSend={handleSend}
+                placeholder={config.placeholder}
+                disabled={isLoading}
+                showFileUpload={agentId === "estimating"}
+              />
+            </div>
+
+            {/* Scroll-down divider */}
+            <div className="flex justify-center mb-4">
+              <ChevronDown className="w-5 h-5 text-muted-foreground animate-bounce" />
+            </div>
+
+            {/* Suggestion cards */}
+            <AgentSuggestions
+              suggestions={suggestions}
+              agentName={config.name}
+              agentImage={config.image}
+              onSelect={handleSend}
+            />
+          </div>
+        ) : (
+          <>
+            <ChatThread messages={messages} />
+            <ChatInput
+              onSend={handleSend}
+              placeholder={config.placeholder}
+              disabled={isLoading}
+              showFileUpload={agentId === "estimating"}
+            />
+          </>
+        )}
       </div>
     </div>
   );
