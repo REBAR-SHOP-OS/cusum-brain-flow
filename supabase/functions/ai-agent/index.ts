@@ -55,28 +55,37 @@ async function fetchContext(supabase: ReturnType<typeof createClient>, agent: st
   const context: Record<string, unknown> = {};
 
   try {
-    if (agent === "sales" || agent === "support") {
-      // Get recent customers
-      const { data: customers } = await supabase
-        .from("customers")
-        .select("id, name, company_name, status")
-        .limit(10);
-      context.customers = customers;
+    // ALL agents get access to recent communications/emails
+    const { data: comms } = await supabase
+      .from("communications")
+      .select("id, subject, from_address, to_address, body_preview, status, source, received_at, customer_id")
+      .order("received_at", { ascending: false })
+      .limit(15);
+    context.recentEmails = comms;
 
+    // ALL agents get access to customers
+    const { data: customers } = await supabase
+      .from("customers")
+      .select("id, name, company_name, status, payment_terms, credit_limit")
+      .limit(15);
+    context.customers = customers;
+
+    if (agent === "sales" || agent === "support" || agent === "estimation") {
       // Get open quotes
       const { data: quotes } = await supabase
         .from("quotes")
         .select("id, quote_number, customer_id, total_amount, status, margin_percent")
-        .eq("status", "draft")
-        .limit(5);
+        .in("status", ["draft", "sent"])
+        .order("created_at", { ascending: false })
+        .limit(10);
       context.openQuotes = quotes;
 
       // Get recent orders
       const { data: orders } = await supabase
         .from("orders")
-        .select("id, order_number, customer_id, total_amount, status")
+        .select("id, order_number, customer_id, total_amount, status, order_date")
         .order("created_at", { ascending: false })
-        .limit(5);
+        .limit(10);
       context.recentOrders = orders;
     }
 
@@ -84,62 +93,59 @@ async function fetchContext(supabase: ReturnType<typeof createClient>, agent: st
       // Get AR data
       const { data: arData } = await supabase
         .from("accounting_mirror")
-        .select("id, entity_type, balance, customer_id, last_synced_at")
+        .select("id, entity_type, balance, customer_id, last_synced_at, data")
         .eq("entity_type", "invoice")
         .gt("balance", 0)
-        .limit(10);
+        .limit(15);
       context.outstandingAR = arData;
-
-      // Get customer info
-      const { data: customers } = await supabase
-        .from("customers")
-        .select("id, name, company_name, payment_terms, credit_limit")
-        .limit(10);
-      context.customers = customers;
     }
 
     if (agent === "support") {
       // Get open tasks
       const { data: tasks } = await supabase
         .from("tasks")
-        .select("id, title, status, priority, source")
+        .select("id, title, status, priority, source, customer_id, due_date")
         .neq("status", "done")
+        .order("created_at", { ascending: false })
         .limit(10);
       context.openTasks = tasks;
-
-      // Get recent communications
-      const { data: comms } = await supabase
-        .from("communications")
-        .select("id, subject, from_address, status, received_at")
-        .order("received_at", { ascending: false })
-        .limit(10);
-      context.recentEmails = comms;
 
       // Get active deliveries
       const { data: deliveries } = await supabase
         .from("deliveries")
         .select("id, delivery_number, driver_name, status, scheduled_date")
-        .in("status", ["scheduled", "in-transit"])
-        .limit(5);
+        .in("status", ["planned", "scheduled", "in-transit"])
+        .limit(10);
       context.activeDeliveries = deliveries;
 
       // Get in-progress work orders
       const { data: workOrders } = await supabase
         .from("work_orders")
-        .select("id, work_order_number, status, scheduled_start")
-        .in("status", ["pending", "in-progress"])
-        .limit(5);
+        .select("id, work_order_number, status, scheduled_start, order_id")
+        .in("status", ["queued", "pending", "in-progress"])
+        .limit(10);
       context.activeWorkOrders = workOrders;
     }
 
     if (agent === "estimation") {
-      // Get recent quotes for reference
-      const { data: quotes } = await supabase
+      // Get historical quotes for pricing reference
+      const { data: historicalQuotes } = await supabase
         .from("quotes")
-        .select("id, quote_number, total_amount, margin_percent, status")
+        .select("id, quote_number, total_amount, margin_percent, status, created_at")
+        .eq("status", "accepted")
         .order("created_at", { ascending: false })
         .limit(10);
-      context.recentQuotes = quotes;
+      context.historicalQuotes = historicalQuotes;
+    }
+
+    // Get pipeline leads for sales context
+    if (agent === "sales") {
+      const { data: leads } = await supabase
+        .from("leads")
+        .select("id, title, stage, expected_value, probability, customer_id")
+        .order("updated_at", { ascending: false })
+        .limit(10);
+      context.pipelineLeads = leads;
     }
 
   } catch (error) {
