@@ -608,11 +608,39 @@ You can query customers, quotes, orders, and communications.
 Always draft actions for human approval - never send emails or approve quotes directly.
 Be concise and action-oriented.`,
 
-  accounting: `You are the Accounting Agent for REBAR SHOP OS.
-You help track AR/AP, QuickBooks sync status, and payment issues.
-You can query the accounting_mirror table and customer balances.
-Flag discrepancies and draft collection notices for approval.
-Be precise with numbers.`,
+  accounting: `You are **Penny**, the Accounting Agent for REBAR SHOP OS.
+You are directly integrated with QuickBooks Online and can access real-time financial data.
+
+## Your Capabilities:
+1. **Customer Data**: View all customers synced from QuickBooks (see qbCustomers in context)
+2. **Invoice Tracking**: Monitor outstanding invoices and AR aging (see qbInvoices in context)  
+3. **Payment Tracking**: Track recent payments and credits (see qbPayments in context)
+4. **Company Info**: Access QuickBooks company details (see qbCompanyInfo in context)
+5. **Sync Operations**: Request customer/invoice sync from QuickBooks
+
+## QuickBooks Connection Status:
+Check "qbConnectionStatus" in your context - if "connected", you have live QB access.
+If not connected, inform the user they need to connect QB first via Integrations page.
+
+## When Answering Questions:
+- For customer balances: Check accounting_mirror table AND qbInvoices for most current data
+- For overdue invoices: Calculate days overdue from due dates in qbInvoices
+- For sync requests: Advise that you'll trigger a sync (draft action for approval)
+- For discrepancies: Compare local customers table with qbCustomers data
+
+## Available Actions (Draft for approval):
+- Draft collection emails for overdue accounts
+- Request QB data sync
+- Flag accounts for credit hold
+- Generate AR aging reports
+
+## Formatting:
+- Always show amounts with $ and 2 decimal places
+- Show dates in readable format
+- Use tables for multiple items
+- Highlight overdue amounts in your response
+
+Be precise with numbers. Never modify financial data directly - always draft for human approval.`,
 
   support: `You are the Support Agent for REBAR SHOP OS.
 You help resolve customer issues, track delivery problems, and draft responses.
@@ -943,6 +971,136 @@ async function fetchContext(supabase: ReturnType<typeof createClient>, agent: st
         .gt("balance", 0)
         .limit(15);
       context.outstandingAR = arData;
+
+      // Fetch QuickBooks connection status and data for accounting agent
+      try {
+        const { data: qbConnection } = await supabase
+          .from("integration_connections")
+          .select("status, config, last_sync_at, error_message")
+          .eq("integration_id", "quickbooks")
+          .single();
+
+        if (qbConnection && qbConnection.status === "connected") {
+          context.qbConnectionStatus = "connected";
+          context.qbLastSync = qbConnection.last_sync_at;
+          
+          const config = qbConnection.config as { 
+            realm_id?: string; 
+            access_token?: string;
+          };
+          
+          if (config?.access_token && config?.realm_id) {
+            const qbApiBase = "https://sandbox-quickbooks.api.intuit.com";
+            
+            // Fetch customers from QuickBooks
+            try {
+              const customersRes = await fetch(
+                `${qbApiBase}/v3/company/${config.realm_id}/query?query=SELECT * FROM Customer MAXRESULTS 50`,
+                {
+                  headers: {
+                    "Authorization": `Bearer ${config.access_token}`,
+                    "Accept": "application/json",
+                  },
+                }
+              );
+              if (customersRes.ok) {
+                const customersData = await customersRes.json();
+                context.qbCustomers = (customersData.QueryResponse?.Customer || []).map((c: Record<string, unknown>) => ({
+                  id: c.Id,
+                  name: c.DisplayName,
+                  company: c.CompanyName,
+                  balance: c.Balance,
+                  email: (c.PrimaryEmailAddr as Record<string, unknown>)?.Address,
+                }));
+              }
+            } catch (e) {
+              console.error("Failed to fetch QB customers:", e);
+            }
+
+            // Fetch open invoices from QuickBooks
+            try {
+              const invoicesRes = await fetch(
+                `${qbApiBase}/v3/company/${config.realm_id}/query?query=SELECT * FROM Invoice WHERE Balance > '0' MAXRESULTS 30`,
+                {
+                  headers: {
+                    "Authorization": `Bearer ${config.access_token}`,
+                    "Accept": "application/json",
+                  },
+                }
+              );
+              if (invoicesRes.ok) {
+                const invoicesData = await invoicesRes.json();
+                context.qbInvoices = (invoicesData.QueryResponse?.Invoice || []).map((inv: Record<string, unknown>) => ({
+                  id: inv.Id,
+                  docNumber: inv.DocNumber,
+                  customerName: (inv.CustomerRef as Record<string, unknown>)?.name,
+                  customerId: (inv.CustomerRef as Record<string, unknown>)?.value,
+                  totalAmount: inv.TotalAmt,
+                  balance: inv.Balance,
+                  dueDate: inv.DueDate,
+                  txnDate: inv.TxnDate,
+                }));
+              }
+            } catch (e) {
+              console.error("Failed to fetch QB invoices:", e);
+            }
+
+            // Fetch recent payments
+            try {
+              const paymentsRes = await fetch(
+                `${qbApiBase}/v3/company/${config.realm_id}/query?query=SELECT * FROM Payment ORDERBY TxnDate DESC MAXRESULTS 20`,
+                {
+                  headers: {
+                    "Authorization": `Bearer ${config.access_token}`,
+                    "Accept": "application/json",
+                  },
+                }
+              );
+              if (paymentsRes.ok) {
+                const paymentsData = await paymentsRes.json();
+                context.qbPayments = (paymentsData.QueryResponse?.Payment || []).map((pmt: Record<string, unknown>) => ({
+                  id: pmt.Id,
+                  customerName: (pmt.CustomerRef as Record<string, unknown>)?.name,
+                  amount: pmt.TotalAmt,
+                  date: pmt.TxnDate,
+                }));
+              }
+            } catch (e) {
+              console.error("Failed to fetch QB payments:", e);
+            }
+
+            // Fetch company info
+            try {
+              const companyRes = await fetch(
+                `${qbApiBase}/v3/company/${config.realm_id}/companyinfo/${config.realm_id}`,
+                {
+                  headers: {
+                    "Authorization": `Bearer ${config.access_token}`,
+                    "Accept": "application/json",
+                  },
+                }
+              );
+              if (companyRes.ok) {
+                const companyData = await companyRes.json();
+                const info = companyData.CompanyInfo;
+                context.qbCompanyInfo = {
+                  name: info?.CompanyName,
+                  country: info?.Country,
+                  fiscalYearStart: info?.FiscalYearStartMonth,
+                };
+              }
+            } catch (e) {
+              console.error("Failed to fetch QB company info:", e);
+            }
+          }
+        } else {
+          context.qbConnectionStatus = qbConnection?.status || "not_connected";
+          context.qbError = qbConnection?.error_message;
+        }
+      } catch (e) {
+        console.error("Failed to check QB connection:", e);
+        context.qbConnectionStatus = "error";
+      }
     }
 
     if (agent === "support") {
