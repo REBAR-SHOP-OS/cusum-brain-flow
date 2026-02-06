@@ -196,42 +196,6 @@ export function useIntegrations() {
   }, []);
 
   const startOAuth = useCallback(async (integrationId: string) => {
-    // Open popup immediately to avoid browser blocking
-    // (browsers block popups opened after async calls)
-    const width = 600;
-    const height = 700;
-    const left = window.screenX + (window.innerWidth - width) / 2;
-    const top = window.screenY + (window.innerHeight - height) / 2;
-
-    const popup = window.open(
-      "about:blank",
-      "Google OAuth",
-      `width=${width},height=${height},left=${left},top=${top}`
-    );
-
-    if (!popup) {
-      toast({
-        title: "Popup Blocked",
-        description: "Please allow popups for this site and try again",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Show loading state in popup
-    popup.document.write(`
-      <html>
-        <head><title>Connecting...</title></head>
-        <body style="display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:system-ui;background:#0a0a0a;color:#fff;">
-          <div style="text-align:center;">
-            <div style="margin-bottom:16px;">Connecting to Google...</div>
-            <div style="width:32px;height:32px;border:3px solid #333;border-top-color:#fff;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto;"></div>
-          </div>
-          <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
-        </body>
-      </html>
-    `);
-
     try {
       const redirectUri = `${window.location.origin}/integrations/callback`;
       
@@ -248,10 +212,9 @@ export function useIntegrations() {
 
       if (error) throw new Error(error.message);
 
-      // Navigate popup to OAuth URL
-      popup.location.href = data.authUrl;
+      // Redirect full page to OAuth URL (popups get blocked by Google)
+      window.location.href = data.authUrl;
     } catch (error) {
-      popup.close();
       const message = error instanceof Error ? error.message : "Failed to start OAuth";
       toast({ title: "OAuth Error", description: message, variant: "destructive" });
     }
