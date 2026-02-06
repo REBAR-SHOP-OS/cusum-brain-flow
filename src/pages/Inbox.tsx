@@ -2,7 +2,7 @@ import { useState, useCallback } from "react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AgentSelector, AgentType } from "@/components/chat/AgentSelector";
 import { ChatThread } from "@/components/chat/ChatThread";
-import { CalChatThread } from "@/components/chat/CalChatThread";
+import { CalChatInterface } from "@/components/chat/CalChatInterface";
 import { ChatInput, UploadedFile } from "@/components/chat/ChatInput";
 import { Message } from "@/components/chat/ChatMessage";
 import { UnifiedInboxList } from "@/components/inbox/UnifiedInboxList";
@@ -169,25 +169,26 @@ export default function Inbox() {
           
           {/* Use specialized Cal UI for estimation agent */}
           {selectedAgent === "estimation" ? (
-            <CalChatThread messages={messages} />
+            <CalChatInterface />
           ) : (
-            <ChatThread messages={messages} />
+            <>
+              <ChatThread messages={messages} />
+              {isTyping && (
+                <div className="px-4 pb-2">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground animate-pulse-subtle">
+                    <span className="w-2 h-2 rounded-full bg-primary" />
+                    Agent is thinking...
+                  </div>
+                </div>
+              )}
+              <ChatInput
+                onSend={handleSend}
+                placeholder={`Ask ${selectedAgent} agent...`}
+                disabled={isTyping}
+                showFileUpload={true}
+              />
+            </>
           )}
-          
-          {isTyping && (
-            <div className="px-4 pb-2">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground animate-pulse-subtle">
-                <span className="w-2 h-2 rounded-full bg-primary" />
-                {selectedAgent === "estimation" ? "Cal is analyzing..." : "Agent is thinking..."}
-              </div>
-            </div>
-          )}
-          <ChatInput
-            onSend={handleSend}
-            placeholder={selectedAgent === "estimation" ? "Describe your estimation task or upload drawings..." : `Ask ${selectedAgent} agent...`}
-            disabled={isTyping}
-            showFileUpload={true}
-          />
         </div>
       )}
     </div>
