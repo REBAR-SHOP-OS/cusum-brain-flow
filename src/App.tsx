@@ -17,6 +17,7 @@ import Deliveries from "./pages/Deliveries";
 import Brain from "./pages/Brain";
 import Integrations from "./pages/Integrations";
 import SocialMediaManager from "./pages/SocialMediaManager";
+import InboxManager from "./pages/InboxManager";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
@@ -131,6 +132,16 @@ const App = () => (
                 <ProtectedRoute>
                   <AppLayout>
                     <SocialMediaManager />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/inbox-manager"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <InboxManager />
                   </AppLayout>
                 </ProtectedRoute>
               }
