@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.ai-agent]
 verify_jwt = false
+
+[functions.google-oauth]
+verify_jwt = false
