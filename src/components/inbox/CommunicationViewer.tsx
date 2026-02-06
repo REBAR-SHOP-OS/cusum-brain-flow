@@ -1,6 +1,12 @@
+import { useState } from "react";
 import { Phone, MessageSquare, Mail, PhoneIncoming, PhoneOutgoing, Clock } from "lucide-react";
 import { Communication } from "@/hooks/useCommunications";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import { EmailActionBar, type ReplyMode } from "./EmailActionBar";
+import { EmailReplyComposer } from "./EmailReplyComposer";
+import type { InboxEmail } from "./InboxEmailList";
 
 interface CommunicationViewerProps {
   communication: Communication | null;
@@ -22,7 +28,69 @@ function formatFullDate(dateStr: string): string {
   });
 }
 
+/** Convert a Communication to InboxEmail shape for the reply composer */
+function toInboxEmail(comm: Communication): InboxEmail {
+  const sender = parseDisplayName(comm.from);
+  const meta = comm.metadata as Record<string, unknown> | null;
+  const fullBody = (meta?.body as string) || comm.preview || "";
+
+  return {
+    id: comm.id,
+    sender: sender.name,
+    senderEmail: sender.address,
+    toAddress: comm.to,
+    subject: comm.subject || "(no subject)",
+    preview: comm.preview || "",
+    body: fullBody,
+    time: "",
+    fullDate: formatFullDate(comm.receivedAt),
+    label: "",
+    labelColor: "",
+    isUnread: comm.status === "unread",
+    threadId: comm.threadId || undefined,
+    sourceId: comm.sourceId,
+  };
+}
+
 export function CommunicationViewer({ communication }: CommunicationViewerProps) {
+  const [replyMode, setReplyMode] = useState<ReplyMode>(null);
+  const [drafting, setDrafting] = useState(false);
+  const { toast } = useToast();
+
+  const handleSmartReply = async () => {
+    if (!communication) return;
+    setReplyMode("reply");
+    setDrafting(true);
+
+    try {
+      const sender = parseDisplayName(communication.from);
+      const meta = communication.metadata as Record<string, unknown> | null;
+      const body = (meta?.body as string) || communication.preview || "";
+
+      const { data, error } = await supabase.functions.invoke("draft-email", {
+        body: {
+          emailSubject: communication.subject,
+          emailBody: body,
+          senderName: sender.name,
+          senderEmail: sender.address,
+        },
+      });
+      if (error) throw error;
+      if (data?.draft) {
+        toast({ title: "Smart Reply ready", description: "AI draft generated — review before sending." });
+      }
+    } catch (err) {
+      console.error("Smart reply error:", err);
+      toast({
+        title: "Failed to generate smart reply",
+        description: err instanceof Error ? err.message : "Please try again",
+        variant: "destructive",
+      });
+    } finally {
+      setDrafting(false);
+    }
+  };
+
   if (!communication) {
     return (
       <div className="flex items-center justify-center h-full text-muted-foreground">
@@ -145,34 +213,62 @@ export function CommunicationViewer({ communication }: CommunicationViewerProps)
     );
   }
 
-  // Gmail email view (basic — full body requires fetching from Gmail API)
+  // Gmail email view with reply/forward/smart reply
+  const inboxEmail = toInboxEmail(communication);
+  const meta = communication.metadata as Record<string, unknown> | null;
+  const fullBody = (meta?.body as string) || communication.preview || "";
+
   return (
-    <div className="flex flex-col h-full">
-      <div className="p-6 border-b border-border">
-        <h2 className="text-xl font-semibold mb-4">{communication.subject || "(no subject)"}</h2>
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
-            <span className="text-sm font-medium text-primary">
-              {sender.name.charAt(0).toUpperCase()}
+    <div className="flex flex-col h-full min-h-0 bg-background">
+      {/* Action Bar */}
+      <EmailActionBar
+        activeMode={replyMode}
+        onModeChange={setReplyMode}
+        onSmartReply={handleSmartReply}
+        drafting={drafting}
+      />
+
+      {/* Email Content - scrollable */}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="p-6 max-w-3xl">
+          {/* Subject */}
+          <h2 className="text-lg font-semibold mb-4">{communication.subject || "(no subject)"}</h2>
+
+          {/* Sender Info */}
+          <div className="flex items-start justify-between mb-1">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-full bg-primary/20 flex items-center justify-center text-primary text-sm font-medium shrink-0">
+                {sender.name.charAt(0).toUpperCase()}
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-sm">{sender.name}</span>
+                  <span className="text-xs text-muted-foreground">&lt;{sender.address}&gt;</span>
+                </div>
+                <p className="text-xs text-muted-foreground">To: {recipient.name}</p>
+              </div>
+            </div>
+            <span className="text-xs text-muted-foreground shrink-0">
+              {formatFullDate(communication.receivedAt)}
             </span>
           </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-baseline gap-2">
-              <span className="font-medium">{sender.name}</span>
-              <span className="text-xs text-muted-foreground">&lt;{sender.address}&gt;</span>
-            </div>
-            <div className="text-xs text-muted-foreground">
-              to {recipient.name} • {formatFullDate(communication.receivedAt)}
-            </div>
+
+          {/* Divider */}
+          <div className="border-b my-4" />
+
+          {/* Email Body */}
+          <div className="text-sm whitespace-pre-wrap leading-relaxed text-foreground/90">
+            {fullBody}
           </div>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto scrollbar-thin p-6">
-        <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-          {communication.preview || "(No preview available)"}
-        </p>
-      </div>
+      {/* Reply Composer */}
+      <EmailReplyComposer
+        email={inboxEmail}
+        mode={replyMode}
+        onClose={() => setReplyMode(null)}
+      />
     </div>
   );
 }
