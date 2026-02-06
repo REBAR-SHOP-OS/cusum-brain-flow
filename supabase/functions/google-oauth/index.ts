@@ -66,18 +66,27 @@ serve(async (req) => {
     const url = new URL(req.url);
     let action = url.searchParams.get("action");
 
-    // Parse body once for all actions
+    // Parse body once for all actions - clone request first to avoid stream issues
     let body: Record<string, unknown> = {};
     try {
-      body = await req.json();
-    } catch {
-      // No body or invalid JSON
+      const text = await req.text();
+      if (text) {
+        body = JSON.parse(text);
+      }
+    } catch (e) {
+      console.log("Body parsing error or empty body:", e);
     }
 
-    // Also check for action in body (supabase.functions.invoke doesn't pass query params well)
+    console.log("Request URL:", req.url);
+    console.log("Query action:", action);
+    console.log("Body:", JSON.stringify(body));
+
+    // Also check for action in body (supabase.functions.invoke passes in body)
     if (!action && body.action) {
       action = body.action as string;
     }
+
+    console.log("Final action:", action);
 
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
