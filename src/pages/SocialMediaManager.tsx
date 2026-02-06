@@ -2,12 +2,12 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Plus, Settings, ChevronLeft, ChevronRight, ThumbsUp, Palette, Users, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { format, addDays, startOfWeek, isSameDay } from "date-fns";
+import { format, addDays, startOfWeek } from "date-fns";
 import { PostReviewPanel } from "@/components/social/PostReviewPanel";
 import { BrandKitDialog } from "@/components/social/BrandKitDialog";
 import { CreateContentDialog } from "@/components/social/CreateContentDialog";
 import { SocialCalendar } from "@/components/social/SocialCalendar";
+import { SettingsSheet } from "@/components/social/SettingsSheet";
 
 export interface SocialPost {
   id: string;
@@ -58,6 +58,7 @@ export default function SocialMediaManager() {
   const [selectedPost, setSelectedPost] = useState<SocialPost | null>(null);
   const [showBrandKit, setShowBrandKit] = useState(false);
   const [showCreateContent, setShowCreateContent] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
   const postsToReview = posts.filter(p => p.status === "scheduled").length;
   const weekEnd = addDays(weekStart, 6);
@@ -80,7 +81,7 @@ export default function SocialMediaManager() {
             <Plus className="w-4 h-4 mr-2" />
             Create content
           </Button>
-          <Button variant="ghost" size="icon">
+          <Button variant="ghost" size="icon" onClick={() => setShowSettings(true)}>
             <Settings className="w-5 h-5" />
           </Button>
         </div>
@@ -165,6 +166,9 @@ export default function SocialMediaManager() {
 
       {/* Create Content Dialog */}
       <CreateContentDialog open={showCreateContent} onOpenChange={setShowCreateContent} />
+
+      {/* Settings Sheet */}
+      <SettingsSheet open={showSettings} onOpenChange={setShowSettings} />
     </div>
   );
 }
