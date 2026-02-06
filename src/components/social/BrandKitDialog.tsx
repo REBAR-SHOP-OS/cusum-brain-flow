@@ -1,10 +1,10 @@
 import { useState, useRef } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Plus, Save, Loader2 } from "lucide-react";
+import { Plus, Save, Loader2, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface BrandKitDialogProps {
@@ -15,8 +15,10 @@ interface BrandKitDialogProps {
 export function BrandKitDialog({ open, onOpenChange }: BrandKitDialogProps) {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
 
   const [businessName, setBusinessName] = useState("Rebar.shop");
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [brandVoice, setBrandVoice] = useState(
     "Write social media content for Rebar.shop using a professional, strong, and trustworthy tone. The language must be clear, simple, and direct, delivering the message within seconds. Focus on being inspirational and motivating."
   );
@@ -40,21 +42,44 @@ export function BrandKitDialog({ open, onOpenChange }: BrandKitDialogProps) {
   ]);
   const [saving, setSaving] = useState(false);
 
+  const colorRefs = {
+    primary: useRef<HTMLInputElement>(null),
+    secondary: useRef<HTMLInputElement>(null),
+    tertiary: useRef<HTMLInputElement>(null),
+  };
+
   const handleAddMedia = () => {
     fileInputRef.current?.click();
+  };
+
+  const handleLogoClick = () => {
+    logoInputRef.current?.click();
+  };
+
+  const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: "File too large", description: "Logo must be under 5MB.", variant: "destructive" });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const url = ev.target?.result as string;
+      if (url) setLogoUrl(url);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
-
     Array.from(files).forEach((file) => {
       const reader = new FileReader();
       reader.onload = (ev) => {
         const url = ev.target?.result as string;
-        if (url) {
-          setMediaImages((prev) => [...prev, url]);
-        }
+        if (url) setMediaImages((prev) => [...prev, url]);
       };
       reader.readAsDataURL(file);
     });
@@ -67,7 +92,6 @@ export function BrandKitDialog({ open, onOpenChange }: BrandKitDialogProps) {
 
   const handleSave = async () => {
     setSaving(true);
-    // Simulate saving (replace with actual persistence later)
     await new Promise((r) => setTimeout(r, 600));
     setSaving(false);
     toast({ title: "Brand Kit saved", description: "Your brand kit has been updated." });
@@ -79,13 +103,15 @@ export function BrandKitDialog({ open, onOpenChange }: BrandKitDialogProps) {
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Brand Kit</DialogTitle>
+          <DialogDescription className="sr-only">Edit your brand identity settings</DialogDescription>
         </DialogHeader>
 
         <div className="grid grid-cols-2 gap-6">
           {/* Business Name */}
           <div className="space-y-2">
-            <Label className="text-sm font-medium">Your business</Label>
+            <Label htmlFor="brand-business-name" className="text-sm font-medium">Your business</Label>
             <Input
+              id="brand-business-name"
               value={businessName}
               onChange={(e) => setBusinessName(e.target.value)}
               placeholder="Your business name"
@@ -98,13 +124,36 @@ export function BrandKitDialog({ open, onOpenChange }: BrandKitDialogProps) {
             <Label className="text-sm font-medium">
               Logo <span className="text-muted-foreground font-normal">- Keeps your posts visually consistent.</span>
             </Label>
-            <div className="p-6 rounded-lg border bg-muted/30 flex items-center justify-center h-[120px] cursor-pointer hover:bg-muted/50 transition-colors"
-              onClick={() => toast({ title: "Coming soon", description: "Logo upload will be available soon." })}
+            <div
+              className="p-6 rounded-lg border bg-muted/30 flex items-center justify-center h-[120px] cursor-pointer hover:bg-muted/50 transition-colors relative"
+              onClick={handleLogoClick}
             >
-              <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center text-white text-2xl font-bold">
-                {businessName.charAt(0).toUpperCase()}
-              </div>
+              {logoUrl ? (
+                <>
+                  <img src={logoUrl} alt="Brand logo" className="max-h-full max-w-full object-contain rounded" />
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setLogoUrl(null); }}
+                    className="absolute top-2 right-2 w-6 h-6 rounded-full bg-destructive/80 text-destructive-foreground flex items-center justify-center hover:bg-destructive"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </>
+              ) : (
+                <div className="flex flex-col items-center gap-2">
+                  <div className="w-16 h-16 bg-gradient-to-br from-primary to-primary/80 rounded-lg flex items-center justify-center text-primary-foreground text-2xl font-bold">
+                    {businessName.charAt(0).toUpperCase()}
+                  </div>
+                  <span className="text-xs text-muted-foreground">Click to upload</span>
+                </div>
+              )}
             </div>
+            <input
+              ref={logoInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleLogoChange}
+            />
           </div>
 
           {/* Color Palette */}
@@ -114,29 +163,32 @@ export function BrandKitDialog({ open, onOpenChange }: BrandKitDialogProps) {
             </Label>
             <div className="p-4 rounded-lg border bg-muted/30 flex items-center justify-around">
               {(["primary", "secondary", "tertiary"] as const).map((key) => (
-                <label key={key} className="text-center cursor-pointer">
+                <div key={key} className="text-center">
+                  <div
+                    className="w-12 h-12 rounded-full mx-auto mb-1 ring-2 ring-transparent hover:ring-primary/50 transition-all cursor-pointer"
+                    style={{ backgroundColor: colors[key] }}
+                    onClick={() => colorRefs[key].current?.click()}
+                  />
                   <input
+                    ref={colorRefs[key]}
                     type="color"
                     value={colors[key]}
                     onChange={(e) => setColors((prev) => ({ ...prev, [key]: e.target.value }))}
-                    className="sr-only"
-                  />
-                  <div
-                    className="w-12 h-12 rounded-full mx-auto mb-1 ring-2 ring-transparent hover:ring-primary/50 transition-all"
-                    style={{ backgroundColor: colors[key] }}
+                    className="absolute w-0 h-0 opacity-0 pointer-events-none"
                   />
                   <span className="text-xs text-muted-foreground capitalize">{key}</span>
-                </label>
+                </div>
               ))}
             </div>
           </div>
 
           {/* Brand Voice */}
           <div className="space-y-2">
-            <Label className="text-sm font-medium">
+            <Label htmlFor="brand-voice" className="text-sm font-medium">
               Brand voice <span className="text-muted-foreground font-normal">- Sets your post's tone.</span>
             </Label>
             <Textarea
+              id="brand-voice"
               value={brandVoice}
               onChange={(e) => setBrandVoice(e.target.value)}
               placeholder="Describe your brand's tone of voice..."
@@ -146,10 +198,11 @@ export function BrandKitDialog({ open, onOpenChange }: BrandKitDialogProps) {
 
           {/* Description */}
           <div className="space-y-2">
-            <Label className="text-sm font-medium">
+            <Label htmlFor="brand-description" className="text-sm font-medium">
               Description <span className="text-muted-foreground font-normal">- What your business does.</span>
             </Label>
             <Textarea
+              id="brand-description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Describe what your business does..."
@@ -159,10 +212,11 @@ export function BrandKitDialog({ open, onOpenChange }: BrandKitDialogProps) {
 
           {/* Value Proposition */}
           <div className="space-y-2">
-            <Label className="text-sm font-medium">
+            <Label htmlFor="brand-value-prop" className="text-sm font-medium">
               Value proposition <span className="text-muted-foreground font-normal">- What makes business unique.</span>
             </Label>
             <Textarea
+              id="brand-value-prop"
               value={valueProp}
               onChange={(e) => setValueProp(e.target.value)}
               placeholder="What makes your business unique..."
@@ -184,11 +238,7 @@ export function BrandKitDialog({ open, onOpenChange }: BrandKitDialogProps) {
                   className="w-20 h-20 rounded-lg flex-shrink-0 overflow-hidden relative group cursor-pointer"
                   onClick={() => handleRemoveMedia(i)}
                 >
-                  <img
-                    src={src}
-                    alt={`Media ${i + 1}`}
-                    className="w-full h-full object-cover"
-                  />
+                  <img src={src} alt={`Media ${i + 1}`} className="w-full h-full object-cover" />
                   <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                     <span className="text-white text-xs">Remove</span>
                   </div>
