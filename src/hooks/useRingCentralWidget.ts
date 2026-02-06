@@ -97,22 +97,6 @@ export function useRingCentralWidget(): UseRingCentralWidgetReturn {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.access_token) {
-          const res = await supabase.functions.invoke("ringcentral-recording", {
-            headers: { Authorization: `Bearer ${session.access_token}` },
-            body: null,
-            method: "GET",
-          });
-          // Use query params workaround — invoke doesn't support query params natively
-          // Fallback: call directly
-        }
-      } catch {
-        // Ignore — will use default
-      }
-
-      // Direct fetch to get client ID
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.access_token) {
           const projectUrl = import.meta.env.VITE_SUPABASE_URL;
           const resp = await fetch(
             `${projectUrl}/functions/v1/ringcentral-recording?action=client-id`,
