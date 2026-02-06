@@ -4,10 +4,11 @@ import {
   Calculator, 
   HeadphonesIcon, 
   Receipt, 
-  Ruler 
+  Ruler,
+  Share2
 } from "lucide-react";
 
-export type AgentType = "sales" | "accounting" | "support" | "collections" | "estimation";
+export type AgentType = "sales" | "accounting" | "support" | "collections" | "estimation" | "social";
 
 interface Agent {
   id: AgentType;
@@ -22,6 +23,7 @@ const agents: Agent[] = [
   { id: "support", name: "Ally", icon: HeadphonesIcon, description: "Customer Care" },
   { id: "collections", name: "Chase", icon: Receipt, description: "AR & Payments" },
   { id: "estimation", name: "Cal", icon: Ruler, description: "Job Costing" },
+  { id: "social", name: "Sushie", icon: Share2, description: "Social Media" },
 ];
 
 interface AgentSelectorProps {

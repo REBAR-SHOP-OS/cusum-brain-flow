@@ -49,6 +49,7 @@ const agentTypeNameMap: Record<string, string> = {
   support: "Ally",
   collections: "Chase",
   estimation: "Cal",
+  social: "Sushie",
 };
 
 export function getAgentName(agentType: string): string {
