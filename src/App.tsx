@@ -26,6 +26,7 @@ import Settings from "./pages/Settings";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import TermsOfService from "./pages/TermsOfService";
 import Landing from "./pages/Landing";
+import Install from "./pages/Install";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -193,9 +194,10 @@ const App = () => (
               }
             />
 
-            {/* Public policy pages */}
+            {/* Public pages */}
             <Route path="/privacy" element={<PrivacyPolicy />} />
             <Route path="/terms" element={<TermsOfService />} />
+            <Route path="/install" element={<Install />} />
 
             <Route path="*" element={<NotFound />} />
           </Routes>
