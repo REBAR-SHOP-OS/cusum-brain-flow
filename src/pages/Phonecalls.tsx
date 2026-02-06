@@ -12,6 +12,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { useCommunications } from "@/hooks/useCommunications";
 import { useRingCentralWidget } from "@/hooks/useRingCentralWidget";
@@ -132,14 +133,12 @@ export default function Phonecalls() {
   }, [refresh]);
 
   const handlePlayRecording = useCallback(async (callId: string, recordingUri: string) => {
-    // If already playing this recording, pause it
     if (playingId === callId && audioRef.current) {
       audioRef.current.pause();
       setPlayingId(null);
       return;
     }
 
-    // Stop any currently playing audio
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current = null;
@@ -160,7 +159,6 @@ export default function Phonecalls() {
       const audio = new Audio();
       audio.crossOrigin = "anonymous";
 
-      // Fetch the audio as a blob with auth headers
       const resp = await fetch(audioUrl, {
         headers: {
           Authorization: `Bearer ${session.access_token}`,
@@ -205,32 +203,32 @@ export default function Phonecalls() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <header className="border-b border-border p-4 space-y-4">
+      <header className="border-b border-border p-3 sm:p-4 space-y-3 sm:space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
               <Phone className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <h1 className="text-xl font-semibold">Phonecalls</h1>
-              <p className="text-sm text-muted-foreground">RingCentral call log & live transcription</p>
+              <h1 className="text-lg sm:text-xl font-semibold">Phonecalls</h1>
+              <p className="text-xs sm:text-sm text-muted-foreground hidden sm:block">RingCentral call log & live transcription</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
             {isLoaded && (
-              <Button variant="default" size="sm" onClick={showWidget} className="gap-2">
+              <Button variant="default" size="sm" onClick={showWidget} className="gap-2 hidden sm:flex">
                 <PhoneCall className="w-4 h-4" />
                 Open Dialer
               </Button>
             )}
             <Button variant="outline" size="sm" onClick={handleSync} disabled={syncing}>
-              <RefreshCw className={cn("w-4 h-4 mr-2", syncing && "animate-spin")} />
-              Sync RingCentral
+              <RefreshCw className={cn("w-4 h-4 sm:mr-2", syncing && "animate-spin")} />
+              <span className="hidden sm:inline">Sync RingCentral</span>
             </Button>
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 sm:gap-4">
           <Tabs value={filter} onValueChange={(v) => setFilter(v as CallFilter)}>
             <TabsList>
               <TabsTrigger value="all">All</TabsTrigger>
@@ -254,7 +252,7 @@ export default function Phonecalls() {
 
       {/* Active Call Panel */}
       {(isCallActive || lastTranscript) && (
-        <div className="p-4 border-b border-border">
+        <div className="p-3 sm:p-4 border-b border-border">
           <LiveCallPanel
             fromNumber={activeCall?.fromNumber}
             toNumber={activeCall?.toNumber}
@@ -266,7 +264,7 @@ export default function Phonecalls() {
         </div>
       )}
 
-      {/* Call Log Table */}
+      {/* Call Log */}
       <div className="flex-1 overflow-auto">
         {loading && calls.length === 0 ? (
           <div className="flex items-center justify-center p-12 text-muted-foreground">
@@ -279,13 +277,13 @@ export default function Phonecalls() {
             <Button variant="outline" size="sm" onClick={refresh}>Retry</Button>
           </div>
         ) : calls.length === 0 ? (
-          <div className="flex flex-col items-center justify-center p-12 text-center">
+          <div className="flex flex-col items-center justify-center p-8 sm:p-12 text-center">
             <Phone className="w-12 h-12 text-muted-foreground/40 mb-4" />
             <h3 className="font-semibold mb-1">No calls found</h3>
             <p className="text-sm text-muted-foreground mb-4">
               {filter === "missed"
                 ? "No missed calls."
-                : "Click Sync RingCentral to fetch your call history, or use the Dialer to make a call."}
+                : "Click Sync to fetch your call history."}
             </p>
             <div className="flex gap-2">
               {isLoaded && (
@@ -301,115 +299,190 @@ export default function Phonecalls() {
             </div>
           </div>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-10"></TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>From</TableHead>
-                <TableHead>To</TableHead>
-                <TableHead>Direction</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Duration</TableHead>
-                <TableHead>Summary</TableHead>
-                <TableHead className="w-12">Recording</TableHead>
-                <TableHead className="w-12">AI</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+          <>
+            {/* Desktop table */}
+            <div className="hidden md:block">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-10"></TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>From</TableHead>
+                    <TableHead>To</TableHead>
+                    <TableHead>Direction</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Duration</TableHead>
+                    <TableHead>Summary</TableHead>
+                    <TableHead className="w-12">Recording</TableHead>
+                    <TableHead className="w-12">AI</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {calls.map((call) => {
+                    const meta = call.metadata ?? {};
+                    const duration = meta.duration as number | undefined;
+                    const result = meta.result as string | undefined;
+                    const action = meta.action as string | undefined;
+                    const hasRecording = !!meta.recording_id;
+                    const recordingUri = meta.recording_uri as string | undefined;
+                    const isPlaying = playingId === call.id;
+                    const isLoadingThis = loadingRecording === call.id;
+
+                    return (
+                      <TableRow
+                        key={call.id}
+                        className={cn(result === "Missed" && "bg-destructive/5")}
+                      >
+                        <TableCell>
+                          <DirectionIcon direction={call.direction} result={result} />
+                        </TableCell>
+                        <TableCell className="text-sm whitespace-nowrap">
+                          {formatDate(call.receivedAt)}
+                        </TableCell>
+                        <TableCell className="text-sm font-medium">
+                          {call.from || "Unknown"}
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {call.to || "Unknown"}
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm capitalize">{call.direction}</span>
+                        </TableCell>
+                        <TableCell>
+                          <ResultBadge result={result} />
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                            <Clock className="w-3.5 h-3.5" />
+                            {formatDuration(duration)}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">
+                          {action || "—"}
+                        </TableCell>
+                        <TableCell>
+                          {hasRecording && recordingUri ? (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              title={isPlaying ? "Pause recording" : "Play recording"}
+                              onClick={() => handlePlayRecording(call.id, recordingUri)}
+                              disabled={isLoadingThis}
+                            >
+                              {isLoadingThis ? (
+                                <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                              ) : isPlaying ? (
+                                <Pause className="w-4 h-4 text-primary" />
+                              ) : (
+                                <Play className="w-4 h-4 text-primary" />
+                              )}
+                            </Button>
+                          ) : hasRecording ? (
+                            <Play className="w-4 h-4 text-muted-foreground/40" />
+                          ) : null}
+                        </TableCell>
+                        <TableCell>
+                          {hasRecording && recordingUri ? (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              title="AI Analysis"
+                              onClick={() =>
+                                setAnalysisCall({
+                                  id: call.id,
+                                  recordingUri,
+                                  from: call.from,
+                                  to: call.to,
+                                })
+                              }
+                            >
+                              <Brain className="w-4 h-4 text-primary" />
+                            </Button>
+                          ) : null}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+
+            {/* Mobile card list */}
+            <div className="md:hidden divide-y divide-border">
               {calls.map((call) => {
                 const meta = call.metadata ?? {};
                 const duration = meta.duration as number | undefined;
                 const result = meta.result as string | undefined;
-                const action = meta.action as string | undefined;
                 const hasRecording = !!meta.recording_id;
                 const recordingUri = meta.recording_uri as string | undefined;
                 const isPlaying = playingId === call.id;
                 const isLoadingThis = loadingRecording === call.id;
 
                 return (
-                  <TableRow
-                    key={call.id}
-                    className={cn(result === "Missed" && "bg-destructive/5")}
-                  >
-                    <TableCell>
-                      <DirectionIcon direction={call.direction} result={result} />
-                    </TableCell>
-                    <TableCell className="text-sm whitespace-nowrap">
-                      {formatDate(call.receivedAt)}
-                    </TableCell>
-                    <TableCell className="text-sm font-medium">
-                      {call.from || "Unknown"}
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {call.to || "Unknown"}
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-sm capitalize">{call.direction}</span>
-                    </TableCell>
-                    <TableCell>
-                      <ResultBadge result={result} />
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                        <Clock className="w-3.5 h-3.5" />
-                        {formatDuration(duration)}
+                  <div key={call.id} className={cn("p-3 space-y-2", result === "Missed" && "bg-destructive/5")}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <DirectionIcon direction={call.direction} result={result} />
+                        <span className="text-sm font-medium">{call.from || "Unknown"}</span>
                       </div>
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">
-                      {action || "—"}
-                    </TableCell>
-                    <TableCell>
-                      {hasRecording && recordingUri ? (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          title={isPlaying ? "Pause recording" : "Play recording"}
-                          onClick={() => handlePlayRecording(call.id, recordingUri)}
-                          disabled={isLoadingThis}
-                        >
-                          {isLoadingThis ? (
-                            <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                          ) : isPlaying ? (
-                            <Pause className="w-4 h-4 text-primary" />
-                          ) : (
-                            <Play className="w-4 h-4 text-primary" />
-                          )}
-                        </Button>
-                      ) : hasRecording ? (
-                        <Play className="w-4 h-4 text-muted-foreground/40" />
-                      ) : null}
-                    </TableCell>
-                    <TableCell>
-                      {hasRecording && recordingUri ? (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          title="AI Analysis"
-                          onClick={() =>
-                            setAnalysisCall({
-                              id: call.id,
-                              recordingUri,
-                              from: call.from,
-                              to: call.to,
-                            })
-                          }
-                        >
-                          <Brain className="w-4 h-4 text-primary" />
-                        </Button>
-                      ) : null}
-                    </TableCell>
-                  </TableRow>
+                      <span className="text-xs text-muted-foreground">{formatDate(call.receivedAt)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <ResultBadge result={result} />
+                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          {formatDuration(duration)}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {hasRecording && recordingUri && (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => handlePlayRecording(call.id, recordingUri)}
+                              disabled={isLoadingThis}
+                            >
+                              {isLoadingThis ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+                              ) : isPlaying ? (
+                                <Pause className="w-3.5 h-3.5 text-primary" />
+                              ) : (
+                                <Play className="w-3.5 h-3.5 text-primary" />
+                              )}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() =>
+                                setAnalysisCall({
+                                  id: call.id,
+                                  recordingUri,
+                                  from: call.from,
+                                  to: call.to,
+                                })
+                              }
+                            >
+                              <Brain className="w-3.5 h-3.5 text-primary" />
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 );
               })}
-            </TableBody>
-          </Table>
+            </div>
+          </>
         )}
       </div>
 
-      {/* Call Summary Dialog (live calls) */}
+      {/* Call Summary Dialog */}
       <CallSummaryDialog
         open={showSummary}
         onOpenChange={setShowSummary}
@@ -418,7 +491,7 @@ export default function Phonecalls() {
         toNumber={activeCall?.toNumber}
       />
 
-      {/* AI Analysis Dialog (recorded calls) */}
+      {/* AI Analysis Dialog */}
       {analysisCall && (
         <CallAnalysisDialog
           open={!!analysisCall}

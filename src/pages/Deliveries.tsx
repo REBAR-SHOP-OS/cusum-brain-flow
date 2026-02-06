@@ -15,7 +15,8 @@ import {
   Loader2,
   Plus,
   Calendar,
-  User
+  User,
+  ArrowLeft
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -128,29 +129,29 @@ export default function Deliveries() {
   }
 
   return (
-    <div className="flex h-full">
+    <div className="flex flex-col md:flex-row h-full">
       {/* Delivery List */}
-      <div className="flex-1 flex flex-col border-r border-border">
+      <div className={`${selectedDelivery ? 'hidden md:flex' : 'flex'} flex-1 flex-col border-r border-border`}>
         {/* Header */}
-        <header className="flex items-center justify-between px-6 py-4 border-b border-border">
+        <header className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-border">
           <div>
             <h1 className="text-xl font-semibold flex items-center gap-2">
               <Truck className="w-5 h-5" />
               Deliveries
             </h1>
             <p className="text-sm text-muted-foreground">
-              {activeDeliveries.length} in transit • {todayDeliveries.length} scheduled today
+              {activeDeliveries.length} in transit • {todayDeliveries.length} today
             </p>
           </div>
           <Button size="sm" className="gap-2">
             <Plus className="w-4 h-4" />
-            New Delivery
+            <span className="hidden sm:inline">New Delivery</span>
           </Button>
         </header>
 
         {/* Stats Bar */}
-        <div className="px-6 py-4 border-b border-border bg-muted/30">
-          <div className="grid grid-cols-4 gap-4">
+        <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-border bg-muted/30">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
             <StatCard 
               label="In Transit" 
               value={activeDeliveries.length} 
@@ -177,7 +178,7 @@ export default function Deliveries() {
         {/* Content */}
         <div className="flex-1 overflow-hidden">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
-            <div className="px-6 pt-4">
+            <div className="px-4 sm:px-6 pt-4">
               <TabsList>
                 <TabsTrigger value="today">Today ({todayDeliveries.length})</TabsTrigger>
                 <TabsTrigger value="upcoming">Upcoming ({upcomingDeliveries.length})</TabsTrigger>
@@ -185,7 +186,7 @@ export default function Deliveries() {
               </TabsList>
             </div>
 
-            <TabsContent value="today" className="flex-1 overflow-hidden px-6 pb-6">
+            <TabsContent value="today" className="flex-1 overflow-hidden px-4 sm:px-6 pb-6">
               <DeliveryList 
                 deliveries={todayDeliveries} 
                 isLoading={isLoading}
@@ -195,7 +196,7 @@ export default function Deliveries() {
               />
             </TabsContent>
 
-            <TabsContent value="upcoming" className="flex-1 overflow-hidden px-6 pb-6">
+            <TabsContent value="upcoming" className="flex-1 overflow-hidden px-4 sm:px-6 pb-6">
               <DeliveryList 
                 deliveries={upcomingDeliveries} 
                 isLoading={isLoading}
@@ -205,7 +206,7 @@ export default function Deliveries() {
               />
             </TabsContent>
 
-            <TabsContent value="all" className="flex-1 overflow-hidden px-6 pb-6">
+            <TabsContent value="all" className="flex-1 overflow-hidden px-4 sm:px-6 pb-6">
               <DeliveryList 
                 deliveries={deliveries} 
                 isLoading={isLoading}
@@ -219,12 +220,20 @@ export default function Deliveries() {
       </div>
 
       {/* Delivery Detail Panel */}
-      <div className="w-96 flex flex-col bg-muted/20">
+      <div className={`${selectedDelivery ? 'flex' : 'hidden md:flex'} w-full md:w-96 flex-col bg-muted/20`}>
         {selectedDelivery ? (
           <>
-            <header className="px-6 py-4 border-b border-border">
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="text-lg font-semibold">{selectedDelivery.delivery_number}</h2>
+            <header className="px-4 sm:px-6 py-4 border-b border-border">
+              <div className="flex items-center gap-2 mb-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="md:hidden"
+                  onClick={() => setSelectedDelivery(null)}
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                </Button>
+                <h2 className="text-lg font-semibold flex-1">{selectedDelivery.delivery_number}</h2>
                 <Badge className={statusColors[selectedDelivery.status || "pending"]}>
                   {selectedDelivery.status || "pending"}
                 </Badge>
@@ -252,7 +261,7 @@ export default function Deliveries() {
             </header>
 
             <div className="flex-1 overflow-hidden">
-              <div className="px-6 py-4">
+              <div className="px-4 sm:px-6 py-4">
                 <h3 className="text-sm font-medium mb-3">Stops ({stops.length})</h3>
                 <ScrollArea className="h-[calc(100vh-320px)]">
                   <div className="space-y-3 pr-4">
@@ -269,7 +278,7 @@ export default function Deliveries() {
               </div>
             </div>
 
-            <div className="px-6 py-4 border-t border-border">
+            <div className="px-4 sm:px-6 py-4 border-t border-border">
               <Button className="w-full gap-2">
                 <MapPin className="w-4 h-4" />
                 View Route
@@ -291,7 +300,7 @@ function StatCard({ label, value, icon }: { label: string; value: number; icon: 
     <div className="flex items-center gap-3 p-3 rounded-lg bg-background border border-border">
       <div className="p-2 rounded-md bg-muted">{icon}</div>
       <div>
-        <p className="text-2xl font-semibold">{value}</p>
+        <p className="text-xl sm:text-2xl font-semibold">{value}</p>
         <p className="text-xs text-muted-foreground">{label}</p>
       </div>
     </div>

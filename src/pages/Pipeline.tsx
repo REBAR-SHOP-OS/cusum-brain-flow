@@ -121,18 +121,18 @@ export default function Pipeline() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <header className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
+      <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-border shrink-0 gap-3 sm:gap-0">
         <div>
           <h1 className="text-xl font-semibold">Pipeline</h1>
           <p className="text-sm text-muted-foreground flex items-center gap-2">
             {leads.length} lead{leads.length !== 1 ? "s" : ""}
-            <span className="mx-2">•</span>
+            <span className="mx-1">•</span>
             <DollarSign className="w-3 h-3" />
-            {pipelineTotal.toLocaleString()} expected value
+            {pipelineTotal.toLocaleString()}
           </p>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="relative w-64">
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+          <div className="relative flex-1 sm:flex-initial sm:w-48 lg:w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               placeholder="Search leads..."
@@ -141,9 +141,9 @@ export default function Pipeline() {
               className="pl-9"
             />
           </div>
-          <Button onClick={() => setIsFormOpen(true)} className="gap-2">
+          <Button onClick={() => setIsFormOpen(true)} size="sm" className="gap-2">
             <Plus className="w-4 h-4" />
-            Add Lead
+            <span className="hidden sm:inline">Add Lead</span>
           </Button>
         </div>
       </header>

@@ -130,7 +130,7 @@ export default function Tasks() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <header className="flex items-center justify-between px-6 py-4 border-b border-border">
+      <header className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-border">
         <div>
           <h1 className="text-xl font-semibold">Tasks</h1>
           <p className="text-sm text-muted-foreground">
@@ -145,10 +145,10 @@ export default function Tasks() {
       </header>
 
       {/* Filters */}
-      <div className="flex items-center gap-3 px-6 py-3 border-b border-border bg-secondary/30">
-        <Filter className="w-4 h-4 text-muted-foreground" />
+      <div className="flex items-center gap-2 sm:gap-3 px-4 sm:px-6 py-3 border-b border-border bg-secondary/30 overflow-x-auto">
+        <Filter className="w-4 h-4 text-muted-foreground flex-shrink-0" />
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[140px] h-8">
+          <SelectTrigger className="w-[110px] sm:w-[140px] h-8 text-xs sm:text-sm">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -160,7 +160,7 @@ export default function Tasks() {
           </SelectContent>
         </Select>
         <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-          <SelectTrigger className="w-[140px] h-8">
+          <SelectTrigger className="w-[110px] sm:w-[140px] h-8 text-xs sm:text-sm">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -172,7 +172,7 @@ export default function Tasks() {
           </SelectContent>
         </Select>
         <Select value={agentFilter} onValueChange={setAgentFilter}>
-          <SelectTrigger className="w-[140px] h-8">
+          <SelectTrigger className="w-[110px] sm:w-[140px] h-8 text-xs sm:text-sm">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -203,7 +203,7 @@ export default function Tasks() {
             {tasks.map((task) => (
               <div
                 key={task.id}
-                className="p-4 hover:bg-secondary/30 transition-colors"
+                className="p-3 sm:p-4 hover:bg-secondary/30 transition-colors"
               >
                 <div className="flex items-start gap-3">
                   {/* Status checkbox */}
@@ -230,7 +230,7 @@ export default function Tasks() {
                     <div className="flex items-center gap-2 flex-wrap mb-1">
                       <span
                         className={cn(
-                          "font-medium",
+                          "font-medium text-sm sm:text-base",
                           task.status === "completed" && "line-through text-muted-foreground"
                         )}
                       >
@@ -277,7 +277,7 @@ export default function Tasks() {
                     value={task.status || "open"}
                     onValueChange={(value) => updateTaskStatus(task.id, value)}
                   >
-                    <SelectTrigger className="w-[120px] h-7 text-xs">
+                    <SelectTrigger className="w-[90px] sm:w-[120px] h-7 text-xs">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
