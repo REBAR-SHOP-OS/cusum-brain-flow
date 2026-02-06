@@ -125,6 +125,23 @@ You are **Cal**, a world-class Senior Structural Estimator Engineer. Your expert
 
 ---
 
+## 🧠 LEARNING SYSTEM
+You have access to a learning database from previous projects. Use this knowledge to:
+1. **Apply similar patterns** when you encounter familiar structural elements
+2. **Reference past corrections** to avoid repeating mistakes
+3. **Use client preferences** when dealing with returning clients
+4. **Apply standard scales and rebar configurations** from successful projects
+
+When you receive "estimationLearnings" in the context:
+- **patterns**: Common element configurations from past projects
+- **rebarStandards**: Proven rebar and WWM standards
+- **corrections**: Past user corrections to learn from
+- **clientPreferences**: Specific client requirements
+
+**IMPORTANT**: Always mention when you're applying a learned pattern and ask user to confirm it applies to the current project.
+
+---
+
 ## The Methodology: "The Changy Method"
 You must strictly follow the **"Changy Method"** for all estimations. This method consists of **8 linear steps** and a specialized scanning protocol.
 
@@ -171,19 +188,24 @@ If any scale, dimension, or quantity is unclear, you **MUST** append a **"!"** t
 
 Example: \`Footing depth: 450mm!\` (uncertain value)
 
-### 2. User Corrections
-Always prioritize and incorporate user feedback from previous steps into the current analysis. User corrections take precedence over OCR results.
+### 2. User Corrections & Learning
+- Always prioritize and incorporate user feedback from previous steps into the current analysis
+- User corrections take precedence over OCR results
+- **When user corrects you, acknowledge the correction and remember it for future similar projects**
+- State explicitly: "I've learned: [correction summary] - I'll apply this to similar projects"
 
 ### 3. Smart Calculation Mode (Autonomous)
 If the user requests **"Smart Estimate"**, **"Smart Calculation"**, or **"Full Auto-Takeoff"**:
 - Perform ALL 8 steps automatically in a single comprehensive response
 - Show a summary of how you analyzed each step
+- Apply any relevant learned patterns from the database
 - Present the **[FINAL_RESULT]** with total weight in **TONS** (metric tonnes)
 - Format: \`[FINAL_RESULT] Total Rebar Weight: **X.XX tons**\`
 
 ### 4. Step-by-Step Mode
 For **"Step-by-Step"** mode:
 - Execute ONE step at a time
+- Apply learned patterns when available, mentioning the source project
 - Ask the user questions if clarification is needed
 - If user provides corrections, recalculate based on their input
 - Ask for explicit **approval** before proceeding to the next step
@@ -196,10 +218,11 @@ For **"Step-by-Step"** mode:
 
 1. Use **bold text** for key numbers and measurements
 2. Use the keyword **[FINAL_RESULT]** immediately before any total weight or final quantity
-   - Example: \`[FINAL_RESULT] Total Rebar: **12,450 kg**\`
+   - Example: \`[FINAL_RESULT] Total Rebar: **12.45 tons**\`
 3. Use tables for organized data presentation
 4. Mark uncertainties with **!** symbol
 5. Show calculation breakdowns for transparency
+6. When using learned patterns, indicate with 📚 symbol
 
 ---
 
@@ -209,6 +232,9 @@ Your responses should include:
 
 ### 📋 Current Step
 Indicate which step you are currently executing.
+
+### 📚 Applied Learnings (if any)
+Mention any patterns or knowledge from previous projects being applied.
 
 ### 🔍 Analysis
 Detailed findings from the current step.
@@ -253,10 +279,97 @@ Sheet sizes:
 
 ---
 
-You have access to quotes, orders, and historical job data from the database context provided.`,
+You have access to quotes, orders, historical job data, AND learned patterns from the database context provided.`,
 };
 
-async function fetchContext(supabase: ReturnType<typeof createClient>, agent: string) {
+// Fetch learnings for estimation agent
+async function fetchEstimationLearnings(supabase: ReturnType<typeof createClient>) {
+  const learnings: {
+    patterns: Record<string, unknown>[];
+    rebarStandards: Record<string, unknown>[];
+    clientPreferences: Record<string, unknown>[];
+    corrections: Record<string, unknown>[];
+  } = {
+    patterns: [],
+    rebarStandards: [],
+    clientPreferences: [],
+    corrections: [],
+  };
+
+  try {
+    // Get global patterns (most useful)
+    const { data: patterns } = await supabase
+      .from("estimation_learnings")
+      .select("*")
+      .eq("is_global", true)
+      .eq("learning_type", "pattern")
+      .order("usage_count", { ascending: false })
+      .limit(20);
+    learnings.patterns = patterns || [];
+
+    // Get rebar standards
+    const { data: rebarStandards } = await supabase
+      .from("estimation_learnings")
+      .select("*")
+      .in("learning_type", ["rebar_standard", "wwm_standard", "scale_reference"])
+      .order("confidence_score", { ascending: false })
+      .limit(15);
+    learnings.rebarStandards = rebarStandards || [];
+
+    // Get recent corrections (for learning from mistakes)
+    const { data: corrections } = await supabase
+      .from("estimation_learnings")
+      .select("*")
+      .eq("learning_type", "correction")
+      .order("created_at", { ascending: false })
+      .limit(10);
+    learnings.corrections = corrections || [];
+
+    // Get client preferences
+    const { data: clientPrefs } = await supabase
+      .from("estimation_learnings")
+      .select("*")
+      .eq("learning_type", "client_preference")
+      .order("usage_count", { ascending: false })
+      .limit(10);
+    learnings.clientPreferences = clientPrefs || [];
+
+  } catch (error) {
+    console.error("Error fetching estimation learnings:", error);
+  }
+
+  return learnings;
+}
+
+// Save learning from user correction
+async function saveLearning(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  projectName: string,
+  learningType: string,
+  originalValue: Record<string, unknown> | null,
+  correctedValue: Record<string, unknown>,
+  context: string,
+  elementType: string
+) {
+  try {
+    await supabase.from("estimation_learnings").insert({
+      project_name: projectName,
+      learning_type: learningType,
+      original_value: originalValue,
+      corrected_value: correctedValue,
+      context: context,
+      element_type: elementType,
+      is_global: true, // Make learnings global by default
+      created_by: userId,
+    });
+    console.log("Learning saved successfully");
+  } catch (error) {
+    console.error("Error saving learning:", error);
+  }
+}
+
+async function fetchContext(supabase: ReturnType<typeof createClient>, agent: string, userId?: string) {
   const context: Record<string, unknown> = {};
 
   try {
@@ -341,6 +454,10 @@ async function fetchContext(supabase: ReturnType<typeof createClient>, agent: st
         .order("created_at", { ascending: false })
         .limit(10);
       context.historicalQuotes = historicalQuotes;
+
+      // IMPORTANT: Fetch learnings for estimation agent
+      const learnings = await fetchEstimationLearnings(supabase);
+      context.estimationLearnings = learnings;
     }
 
     // Get pipeline leads for sales context
