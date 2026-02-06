@@ -1,6 +1,7 @@
-import { CheckCircle2, Loader2, Phone, Mail } from "lucide-react";
+import { CheckCircle2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { IntegrationIcon } from "./IntegrationIcons";
 
 export interface IntegrationField {
   key: string;
@@ -28,44 +29,6 @@ interface IntegrationCardProps {
   testing?: boolean;
 }
 
-// Inline SVG icons for integrations that couldn't be downloaded
-function RingCentralIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="w-8 h-8">
-      <circle cx="12" cy="12" r="10" fill="#FF8200" />
-      <path d="M8 12a4 4 0 1 1 8 0 4 4 0 0 1-8 0z" fill="white" />
-    </svg>
-  );
-}
-
-function OutlookIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="w-8 h-8">
-      <rect x="2" y="4" width="20" height="16" rx="2" fill="#0078D4" />
-      <path d="M2 8l10 6 10-6" stroke="white" strokeWidth="1.5" fill="none" />
-    </svg>
-  );
-}
-
-function IntegrationIcon({ icon, name }: { icon: string; name: string }) {
-  // Handle special cases for inline SVG icons
-  if (icon === "ringcentral") {
-    return <RingCentralIcon />;
-  }
-  if (icon === "outlook") {
-    return <OutlookIcon />;
-  }
-
-  // For imported image assets
-  return (
-    <img 
-      src={icon} 
-      alt={`${name} logo`} 
-      className="w-8 h-8 object-contain"
-    />
-  );
-}
-
 export function IntegrationCard({ integration, onClick, testing }: IntegrationCardProps) {
   const isConnected = integration.status === "connected";
   const isError = integration.status === "error";
@@ -81,8 +44,8 @@ export function IntegrationCard({ integration, onClick, testing }: IntegrationCa
       )}
     >
       {/* Icon */}
-      <div className="w-12 h-12 rounded-xl bg-secondary/30 flex items-center justify-center shrink-0">
-        <IntegrationIcon icon={integration.icon} name={integration.name} />
+      <div className="w-12 h-12 rounded-xl bg-muted/50 flex items-center justify-center shrink-0">
+        <IntegrationIcon id={integration.id} />
       </div>
 
       {/* Content */}
