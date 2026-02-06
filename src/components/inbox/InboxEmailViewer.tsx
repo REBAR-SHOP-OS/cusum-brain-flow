@@ -11,11 +11,15 @@ interface InboxEmailViewerProps {
 }
 
 export function InboxEmailViewer({ email, onClose }: InboxEmailViewerProps) {
-  const [replyText, setReplyText] = useState(
-    "Hey Cassie, thanks for getting set up - let's test this out. Can you draft a quick outreach to a contractor about our ready-stock rebar bundles and prefab stirrups? Want to see how you handle our voice before we scale this up."
-  );
+  const [replyText, setReplyText] = useState("");
 
-  if (!email) return null;
+  if (!email) {
+    return (
+      <div className="flex items-center justify-center h-full text-muted-foreground">
+        <p>Select an email to read</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full bg-background border-l">
@@ -50,26 +54,8 @@ export function InboxEmailViewer({ email, onClose }: InboxEmailViewerProps) {
         </div>
 
         {/* Email Body */}
-        <div className="space-y-4 text-sm mb-8">
-          <p>Hi there!</p>
-          <p>
-            I'm Cassie, and I'm here to help you with your emails (and hopefully other sources of
-            communication in the future)! I just got connected to this inbox and I'm ready to start helping
-            you stay on top of things.
-          </p>
-          <p>Here's what I'll do:</p>
-          <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-            <li>Read through your incoming messages</li>
-            <li>Categorize them into different categories</li>
-            <li>Figure out which ones need responses</li>
-            <li>Draft replies that sound like you</li>
-          </ul>
-          <p>
-            Everything is set up and running smoothly. Feel free to reply to this email if you want to test
-            things out!
-          </p>
-          <p>Cheers,</p>
-          <p className="font-medium">Cassie from sintra.ai</p>
+        <div className="space-y-4 text-sm mb-8 whitespace-pre-wrap">
+          {email.preview}
         </div>
 
         {/* Reply Section */}
@@ -77,17 +63,18 @@ export function InboxEmailViewer({ email, onClose }: InboxEmailViewerProps) {
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <span>↩</span>
-              <span>cassie@sintra.ai</span>
+              <span>{email.senderEmail}</span>
             </div>
             <button className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
               <Sparkles className="w-4 h-4" />
-              <span>Regenerate</span>
+              <span>AI Draft</span>
             </button>
           </div>
           
           <Textarea
             value={replyText}
             onChange={(e) => setReplyText(e.target.value)}
+            placeholder="Write your reply..."
             className="min-h-[100px] bg-transparent border-0 p-0 resize-none focus-visible:ring-0"
           />
         </div>
@@ -99,7 +86,7 @@ export function InboxEmailViewer({ email, onClose }: InboxEmailViewerProps) {
           <Trash2 className="w-4 h-4 mr-2" />
           Cancel
         </Button>
-        <Button className="bg-[#4FC3F7] hover:bg-[#4FC3F7]/90 text-white">
+        <Button className="bg-[#4FC3F7] hover:bg-[#4FC3F7]/90 text-white" disabled={!replyText.trim()}>
           Send
           <Send className="w-4 h-4 ml-2" />
         </Button>
