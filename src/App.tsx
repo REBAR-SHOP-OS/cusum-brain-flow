@@ -135,14 +135,8 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
-            <Route
-              path="/integrations/callback"
-              element={
-                <ProtectedRoute>
-                  <IntegrationCallback />
-                </ProtectedRoute>
-              }
-            />
+            {/* OAuth callback - must be public since user redirects from Google */}
+            <Route path="/integrations/callback" element={<IntegrationCallback />} />
             <Route
               path="/settings"
               element={
