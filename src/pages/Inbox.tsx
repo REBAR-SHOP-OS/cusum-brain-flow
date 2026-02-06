@@ -28,9 +28,9 @@ export default function Inbox() {
   const { communications, loading, error, refresh, sync } = useCommunications({ search: search || undefined, typeFilter });
 
   const handleSend = useCallback(async (content: string, files?: UploadedFile[]) => {
-    // Build message content with file references for Cal agent
+    // Build message content with file references for all agents
     let messageContent = content;
-    if (files && files.length > 0 && selectedAgent === "estimation") {
+    if (files && files.length > 0) {
       const filesList = files.map(f => `- ${f.name} (${f.url})`).join('\n');
       messageContent = content 
         ? `${content}\n\n📎 Attached files:\n${filesList}`
