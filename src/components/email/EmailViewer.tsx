@@ -96,6 +96,7 @@ export function EmailViewer({ email, onRefresh }: EmailViewerProps) {
             subject: email.subject,
             threadId: email.threadId,
             messageId: email.id,
+            originalBody: email.body,
           }}
         />
       )}
