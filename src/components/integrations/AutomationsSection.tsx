@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Bot, Mail, FileText, MessageCircle, Sparkles } from "lucide-react";
@@ -12,6 +13,7 @@ export interface Automation {
   color: "purple" | "blue" | "gold" | "teal";
   icon: "social" | "inbox" | "summary" | "comment";
   beta?: boolean;
+  route?: string;
 }
 
 const defaultAutomations: Automation[] = [
@@ -23,6 +25,7 @@ const defaultAutomations: Automation[] = [
     color: "purple",
     icon: "social",
     beta: true,
+    route: "/social-media-manager",
   },
   {
     id: "inbox-manager",
@@ -70,15 +73,17 @@ const iconComponents = {
 interface AutomationCardProps {
   automation: Automation;
   onToggle: (id: string, enabled: boolean) => void;
+  onClick?: () => void;
 }
 
-function AutomationCard({ automation, onToggle }: AutomationCardProps) {
+function AutomationCard({ automation, onToggle, onClick }: AutomationCardProps) {
   const Icon = iconComponents[automation.icon];
 
   return (
     <div
+      onClick={onClick}
       className={cn(
-        "relative overflow-hidden rounded-2xl p-5 text-white transition-transform hover:scale-[1.02]",
+        "relative overflow-hidden rounded-2xl p-5 text-white transition-transform hover:scale-[1.02] cursor-pointer",
         colorGradients[automation.color]
       )}
     >
@@ -96,7 +101,11 @@ function AutomationCard({ automation, onToggle }: AutomationCardProps) {
         <div className="flex items-center gap-3">
           <Switch
             checked={automation.enabled}
-            onCheckedChange={(checked) => onToggle(automation.id, checked)}
+            onCheckedChange={(checked) => {
+              // Prevent navigation when clicking the switch
+              onToggle(automation.id, checked);
+            }}
+            onClick={(e) => e.stopPropagation()}
             className="data-[state=checked]:bg-white/30 data-[state=unchecked]:bg-white/20"
           />
           {automation.beta && (
@@ -122,12 +131,19 @@ function AutomationCard({ automation, onToggle }: AutomationCardProps) {
 }
 
 export function AutomationsSection() {
+  const navigate = useNavigate();
   const [automations, setAutomations] = useState(defaultAutomations);
 
   const handleToggle = (id: string, enabled: boolean) => {
     setAutomations((prev) =>
       prev.map((a) => (a.id === id ? { ...a, enabled } : a))
     );
+  };
+
+  const handleCardClick = (automation: Automation) => {
+    if (automation.route) {
+      navigate(automation.route);
+    }
   };
 
   return (
@@ -146,6 +162,7 @@ export function AutomationsSection() {
             key={automation.id}
             automation={automation}
             onToggle={handleToggle}
+            onClick={() => handleCardClick(automation)}
           />
         ))}
       </div>

@@ -16,6 +16,7 @@ import ShopFloor from "./pages/ShopFloor";
 import Deliveries from "./pages/Deliveries";
 import Brain from "./pages/Brain";
 import Integrations from "./pages/Integrations";
+import SocialMediaManager from "./pages/SocialMediaManager";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
@@ -120,6 +121,16 @@ const App = () => (
                 <ProtectedRoute>
                   <AppLayout>
                     <Settings />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/social-media-manager"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <SocialMediaManager />
                   </AppLayout>
                 </ProtectedRoute>
               }
