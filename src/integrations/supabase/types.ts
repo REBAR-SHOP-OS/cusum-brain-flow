@@ -379,6 +379,51 @@ export type Database = {
         }
         Relationships: []
       }
+      estimation_validation_rules: {
+        Row: {
+          created_at: string
+          element_type: string | null
+          error_message: string
+          id: string
+          is_active: boolean | null
+          max_value: number | null
+          min_value: number | null
+          rule_name: string
+          rule_type: string
+          severity: string | null
+          unit: string | null
+          warning_message: string | null
+        }
+        Insert: {
+          created_at?: string
+          element_type?: string | null
+          error_message: string
+          id?: string
+          is_active?: boolean | null
+          max_value?: number | null
+          min_value?: number | null
+          rule_name: string
+          rule_type: string
+          severity?: string | null
+          unit?: string | null
+          warning_message?: string | null
+        }
+        Update: {
+          created_at?: string
+          element_type?: string | null
+          error_message?: string
+          id?: string
+          is_active?: boolean | null
+          max_value?: number | null
+          min_value?: number | null
+          rule_name?: string
+          rule_type?: string
+          severity?: string | null
+          unit?: string | null
+          warning_message?: string | null
+        }
+        Relationships: []
+      }
       events: {
         Row: {
           actor_id: string | null
@@ -764,6 +809,66 @@ export type Database = {
           },
         ]
       }
+      rebar_standards: {
+        Row: {
+          area_mm2: number | null
+          bar_size: string
+          bar_size_mm: number | null
+          bend_radius_mult: number | null
+          created_at: string
+          development_length_mult: number | null
+          grade: string | null
+          hook_180_deduction: number | null
+          hook_180_extension_mult: number | null
+          hook_90_deduction: number | null
+          hook_90_extension_mult: number | null
+          id: string
+          lap_compression_mult: number | null
+          lap_tension_mult: number | null
+          standard_code: string
+          updated_at: string
+          weight_per_meter: number
+        }
+        Insert: {
+          area_mm2?: number | null
+          bar_size: string
+          bar_size_mm?: number | null
+          bend_radius_mult?: number | null
+          created_at?: string
+          development_length_mult?: number | null
+          grade?: string | null
+          hook_180_deduction?: number | null
+          hook_180_extension_mult?: number | null
+          hook_90_deduction?: number | null
+          hook_90_extension_mult?: number | null
+          id?: string
+          lap_compression_mult?: number | null
+          lap_tension_mult?: number | null
+          standard_code?: string
+          updated_at?: string
+          weight_per_meter: number
+        }
+        Update: {
+          area_mm2?: number | null
+          bar_size?: string
+          bar_size_mm?: number | null
+          bend_radius_mult?: number | null
+          created_at?: string
+          development_length_mult?: number | null
+          grade?: string | null
+          hook_180_deduction?: number | null
+          hook_180_extension_mult?: number | null
+          hook_90_deduction?: number | null
+          hook_90_extension_mult?: number | null
+          id?: string
+          lap_compression_mult?: number | null
+          lap_tension_mult?: number | null
+          standard_code?: string
+          updated_at?: string
+          weight_per_meter?: number
+        }
+        Relationships: []
+      }
       tasks: {
         Row: {
           agent_type: string | null
@@ -902,6 +1007,48 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      wwm_standards: {
+        Row: {
+          created_at: string
+          designation: string
+          id: string
+          overlap_mm: number | null
+          sheet_length_mm: number | null
+          sheet_width_mm: number | null
+          spacing_mm: number
+          standard_code: string
+          updated_at: string
+          weight_per_m2: number
+          wire_diameter_mm: number
+        }
+        Insert: {
+          created_at?: string
+          designation: string
+          id?: string
+          overlap_mm?: number | null
+          sheet_length_mm?: number | null
+          sheet_width_mm?: number | null
+          spacing_mm: number
+          standard_code?: string
+          updated_at?: string
+          weight_per_m2: number
+          wire_diameter_mm: number
+        }
+        Update: {
+          created_at?: string
+          designation?: string
+          id?: string
+          overlap_mm?: number | null
+          sheet_length_mm?: number | null
+          sheet_width_mm?: number | null
+          spacing_mm?: number
+          standard_code?: string
+          updated_at?: string
+          weight_per_m2?: number
+          wire_diameter_mm?: number
+        }
+        Relationships: []
       }
     }
     Views: {
