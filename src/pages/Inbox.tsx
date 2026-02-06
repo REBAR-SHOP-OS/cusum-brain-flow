@@ -4,9 +4,9 @@ import { AgentSelector, AgentType } from "@/components/chat/AgentSelector";
 import { ChatThread } from "@/components/chat/ChatThread";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { Message } from "@/components/chat/ChatMessage";
-import { EmailList } from "@/components/email/EmailList";
-import { EmailViewer } from "@/components/email/EmailViewer";
-import { GmailMessage } from "@/lib/gmail";
+import { UnifiedInboxList } from "@/components/inbox/UnifiedInboxList";
+import { CommunicationViewer } from "@/components/inbox/CommunicationViewer";
+import { useCommunications, Communication } from "@/hooks/useCommunications";
 import { sendAgentMessage } from "@/lib/agent";
 import { MessageSquare, Mail } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -16,8 +16,11 @@ export default function Inbox() {
   const [selectedAgent, setSelectedAgent] = useState<AgentType>("sales");
   const [messages, setMessages] = useState<Message[]>([]);
   const [isTyping, setIsTyping] = useState(false);
-  const [selectedEmail, setSelectedEmail] = useState<GmailMessage | null>(null);
+  const [selectedComm, setSelectedComm] = useState<Communication | null>(null);
+  const [search, setSearch] = useState("");
   const { toast } = useToast();
+
+  const { communications, loading, error, refresh } = useCommunications({ search: search || undefined });
 
   const handleSend = useCallback(async (content: string) => {
     const userMessage: Message = {
@@ -31,7 +34,6 @@ export default function Inbox() {
     setIsTyping(true);
 
     try {
-      // Build history from previous messages
       const history = messages.map((m) => ({
         role: m.role === "user" ? "user" as const : "assistant" as const,
         content: m.content,
@@ -65,23 +67,19 @@ export default function Inbox() {
     setMessages([]);
   };
 
-  const handleRefreshEmails = () => {
-    // EmailList handles its own refresh
-  };
-
   return (
     <div className="flex flex-col h-full">
       {/* Header with Tabs */}
       <header className="flex items-center justify-between px-6 py-4 border-b border-border">
         <div>
           <h1 className="text-xl font-semibold">Inbox</h1>
-          <p className="text-sm text-muted-foreground">Emails and agent conversations</p>
+          <p className="text-sm text-muted-foreground">Emails, calls, SMS & agent conversations</p>
         </div>
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "email" | "agents")}>
           <TabsList>
             <TabsTrigger value="email" className="gap-2">
               <Mail className="w-4 h-4" />
-              Email
+              All
             </TabsTrigger>
             <TabsTrigger value="agents" className="gap-2">
               <MessageSquare className="w-4 h-4" />
@@ -94,26 +92,22 @@ export default function Inbox() {
       {/* Content */}
       {activeTab === "email" ? (
         <div className="flex-1 flex overflow-hidden">
-          {/* Email List */}
+          {/* Unified Communication List */}
           <div className="w-96 flex-shrink-0">
-            <EmailList
-              onSelectEmail={setSelectedEmail}
-              selectedId={selectedEmail?.id}
+            <UnifiedInboxList
+              communications={communications}
+              loading={loading}
+              error={error}
+              selectedId={selectedComm?.id}
+              onSelect={setSelectedComm}
+              onRefresh={refresh}
+              onSearchChange={setSearch}
             />
           </div>
 
-          {/* Email Viewer */}
+          {/* Communication Viewer */}
           <div className="flex-1">
-            {selectedEmail ? (
-              <EmailViewer email={selectedEmail} onRefresh={handleRefreshEmails} />
-            ) : (
-              <div className="flex items-center justify-center h-full text-muted-foreground">
-                <div className="text-center">
-                  <Mail className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                  <p>Select an email to read</p>
-                </div>
-              </div>
-            )}
+            <CommunicationViewer communication={selectedComm} />
           </div>
         </div>
       ) : (
