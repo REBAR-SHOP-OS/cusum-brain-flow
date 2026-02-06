@@ -1,27 +1,12 @@
 import type { Integration } from "./IntegrationCard";
 
-// Import logos
-import gmailLogo from "@/assets/integrations/gmail.png";
-import googleCalendarLogo from "@/assets/integrations/google-calendar.png";
-import googleDriveLogo from "@/assets/integrations/google-drive.png";
-import googleAnalyticsLogo from "@/assets/integrations/google-analytics.png";
-import youtubeLogo from "@/assets/integrations/youtube.png";
-import linkedinLogo from "@/assets/integrations/linkedin.png";
-import facebookLogo from "@/assets/integrations/facebook.png";
-import notionLogo from "@/assets/integrations/notion.png";
-import stripeLogo from "@/assets/integrations/stripe.png";
-import twilioLogo from "@/assets/integrations/twilio.png";
-import dropboxLogo from "@/assets/integrations/dropbox.png";
-import slackLogo from "@/assets/integrations/slack.svg";
-import quickbooksLogo from "@/assets/integrations/quickbooks.svg";
-
 export const defaultIntegrations: Integration[] = [
   {
     id: "gmail",
     name: "Gmail",
     description: "Let helpers send emails and read your inbox.",
     status: "available",
-    icon: gmailLogo,
+    icon: "gmail",
     docsUrl: "https://developers.google.com/oauthplayground/",
     fields: [
       { key: "GMAIL_CLIENT_ID", label: "Client ID", type: "text", placeholder: "xxx.apps.googleusercontent.com", helpText: "From Google Cloud Console → Credentials" },
@@ -34,7 +19,7 @@ export const defaultIntegrations: Integration[] = [
     name: "Google Calendar",
     description: "Allow helpers to see and schedule events.",
     status: "available",
-    icon: googleCalendarLogo,
+    icon: "google-calendar",
     docsUrl: "https://console.cloud.google.com/apis/credentials",
     fields: [
       { key: "GOOGLE_CALENDAR_CLIENT_ID", label: "Client ID", type: "text", placeholder: "xxx.apps.googleusercontent.com", helpText: "From Google Cloud Console" },
@@ -47,7 +32,7 @@ export const defaultIntegrations: Integration[] = [
     name: "Google Drive",
     description: "Create and read docs, sheets, and other files.",
     status: "available",
-    icon: googleDriveLogo,
+    icon: "google-drive",
     docsUrl: "https://console.cloud.google.com/apis/credentials",
     fields: [
       { key: "GOOGLE_DRIVE_CLIENT_ID", label: "Client ID", type: "text", placeholder: "xxx.apps.googleusercontent.com", helpText: "From Google Cloud Console" },
@@ -60,7 +45,7 @@ export const defaultIntegrations: Integration[] = [
     name: "QuickBooks",
     description: "Read and update your QuickBooks data.",
     status: "available",
-    icon: quickbooksLogo,
+    icon: "quickbooks",
     docsUrl: "https://developer.intuit.com/app/developer/homepage",
     fields: [
       { key: "QUICKBOOKS_CLIENT_ID", label: "Client ID", type: "text", placeholder: "ABxxx", helpText: "From Intuit Developer Portal" },
@@ -87,7 +72,7 @@ export const defaultIntegrations: Integration[] = [
     name: "Slack",
     description: "Send messages, manage channels, and communicate.",
     status: "available",
-    icon: slackLogo,
+    icon: "slack",
     docsUrl: "https://api.slack.com/apps",
     fields: [
       { key: "SLACK_BOT_TOKEN", label: "Bot Token", type: "password", placeholder: "xoxb-xxx", helpText: "From Slack App → OAuth & Permissions" },
@@ -99,7 +84,7 @@ export const defaultIntegrations: Integration[] = [
     name: "Notion",
     description: "Read and update your Notion data.",
     status: "available",
-    icon: notionLogo,
+    icon: "notion",
     docsUrl: "https://developers.notion.com/",
     fields: [
       { key: "NOTION_API_KEY", label: "Integration Token", type: "password", placeholder: "secret_xxx", helpText: "From Notion → Settings → Integrations" },
@@ -110,7 +95,7 @@ export const defaultIntegrations: Integration[] = [
     name: "Stripe",
     description: "Process payments and manage subscriptions.",
     status: "available",
-    icon: stripeLogo,
+    icon: "stripe",
     docsUrl: "https://dashboard.stripe.com/apikeys",
     fields: [
       { key: "STRIPE_SECRET_KEY", label: "Secret Key", type: "password", placeholder: "sk_live_xxx or sk_test_xxx", helpText: "From Stripe Dashboard → Developers → API keys" },
@@ -122,7 +107,7 @@ export const defaultIntegrations: Integration[] = [
     name: "Twilio",
     description: "Send SMS and make voice calls.",
     status: "available",
-    icon: twilioLogo,
+    icon: "twilio",
     docsUrl: "https://console.twilio.com/",
     fields: [
       { key: "TWILIO_ACCOUNT_SID", label: "Account SID", type: "text", placeholder: "ACxxx", helpText: "From Twilio Console" },
@@ -135,7 +120,7 @@ export const defaultIntegrations: Integration[] = [
     name: "Dropbox",
     description: "Read and update your Dropbox data.",
     status: "available",
-    icon: dropboxLogo,
+    icon: "dropbox",
     docsUrl: "https://www.dropbox.com/developers/apps",
     fields: [
       { key: "DROPBOX_ACCESS_TOKEN", label: "Access Token", type: "password", placeholder: "sl.xxx", helpText: "From Dropbox App Console" },
@@ -146,7 +131,7 @@ export const defaultIntegrations: Integration[] = [
     name: "Google Analytics",
     description: "Access your Google Analytics data and insights.",
     status: "available",
-    icon: googleAnalyticsLogo,
+    icon: "google-analytics",
     docsUrl: "https://console.cloud.google.com/apis/credentials",
     fields: [
       { key: "GA_CLIENT_ID", label: "Client ID", type: "text", placeholder: "xxx.apps.googleusercontent.com", helpText: "From Google Cloud Console" },
@@ -159,7 +144,7 @@ export const defaultIntegrations: Integration[] = [
     name: "LinkedIn",
     description: "Create and share posts with your network.",
     status: "available",
-    icon: linkedinLogo,
+    icon: "linkedin",
     docsUrl: "https://www.linkedin.com/developers/apps",
     fields: [
       { key: "LINKEDIN_CLIENT_ID", label: "Client ID", type: "text", placeholder: "xxx", helpText: "From LinkedIn Developer Portal" },
@@ -172,7 +157,7 @@ export const defaultIntegrations: Integration[] = [
     name: "Facebook",
     description: "Manage Facebook and Instagram pages and posts.",
     status: "available",
-    icon: facebookLogo,
+    icon: "facebook",
     docsUrl: "https://developers.facebook.com/apps/",
     fields: [
       { key: "FACEBOOK_APP_ID", label: "App ID", type: "text", placeholder: "xxx", helpText: "From Facebook Developer Console" },
@@ -198,7 +183,7 @@ export const defaultIntegrations: Integration[] = [
     name: "YouTube",
     description: "Upload and manage videos on your channel.",
     status: "available",
-    icon: youtubeLogo,
+    icon: "youtube",
     docsUrl: "https://console.cloud.google.com/apis/credentials",
     fields: [
       { key: "YOUTUBE_CLIENT_ID", label: "Client ID", type: "text", placeholder: "xxx.apps.googleusercontent.com", helpText: "From Google Cloud Console" },
