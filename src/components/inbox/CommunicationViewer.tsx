@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { Phone, MessageSquare, Mail, PhoneIncoming, PhoneOutgoing, Clock } from "lucide-react";
+import { Phone, MessageSquare, Mail, PhoneIncoming, PhoneOutgoing, Clock, Brain, Loader2 } from "lucide-react";
 import { Communication } from "@/hooks/useCommunications";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { Button } from "@/components/ui/button";
 import { EmailActionBar, type ReplyMode } from "./EmailActionBar";
 import { EmailReplyComposer } from "./EmailReplyComposer";
 import type { InboxEmail } from "./InboxEmailList";
@@ -50,6 +51,81 @@ function toInboxEmail(comm: Communication): InboxEmail {
     threadId: comm.threadId || undefined,
     sourceId: comm.sourceId,
   };
+}
+
+/** Shared "Add to Brain" button */
+function AddToBrainButton({ communication }: { communication: Communication }) {
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const { toast } = useToast();
+
+  const handleAddToBrain = async () => {
+    setSaving(true);
+    try {
+      const sender = parseDisplayName(communication.from);
+      const meta = communication.metadata as Record<string, unknown> | null;
+      const body = (meta?.body as string) || communication.preview || "";
+
+      const title = communication.type === "email"
+        ? communication.subject || "(no subject)"
+        : communication.type === "call"
+          ? `${communication.direction === "inbound" ? "Incoming" : "Outgoing"} call – ${sender.name}`
+          : `SMS – ${sender.name}`;
+
+      const content = communication.type === "email"
+        ? `From: ${sender.name} <${sender.address}>\nTo: ${communication.to}\nDate: ${formatFullDate(communication.receivedAt)}\nSubject: ${communication.subject || "(no subject)"}\n\n${body}`
+        : communication.type === "call"
+          ? `${communication.direction === "inbound" ? "Incoming" : "Outgoing"} call from ${sender.name} on ${formatFullDate(communication.receivedAt)}${(meta?.duration as number) ? ` (${Math.floor((meta.duration as number) / 60)}m ${(meta.duration as number) % 60}s)` : ""}${(meta?.result as string) ? ` - ${meta.result}` : ""}`
+          : `SMS from ${sender.name} on ${formatFullDate(communication.receivedAt)}\n\n${communication.preview || ""}`;
+
+      const { error } = await supabase.from("knowledge").insert({
+        title,
+        content,
+        category: "memory",
+        source_url: null,
+        metadata: {
+          source_type: communication.type,
+          source_id: communication.sourceId,
+          from: communication.from,
+          to: communication.to,
+          date: communication.receivedAt,
+        },
+      });
+
+      if (error) throw error;
+
+      setSaved(true);
+      toast({ title: "Added to Brain", description: "This conversation has been saved to your Brain AI knowledge." });
+    } catch (err) {
+      console.error("Add to Brain error:", err);
+      toast({
+        title: "Failed to save",
+        description: err instanceof Error ? err.message : "Please try again",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="shrink-0 border-t border-border px-4 py-3">
+      <Button
+        variant="outline"
+        size="sm"
+        className="gap-2 w-full"
+        onClick={handleAddToBrain}
+        disabled={saving || saved}
+      >
+        {saving ? (
+          <Loader2 className="w-4 h-4 animate-spin" />
+        ) : (
+          <Brain className="w-4 h-4 text-primary" />
+        )}
+        {saved ? "Added to Brain" : saving ? "Saving..." : "Add to Brain"}
+      </Button>
+    </div>
+  );
 }
 
 export function CommunicationViewer({ communication }: CommunicationViewerProps) {
@@ -133,7 +209,7 @@ export function CommunicationViewer({ communication }: CommunicationViewerProps)
           </div>
         </div>
 
-        <div className="flex-1 p-6 space-y-6">
+        <div className="flex-1 p-6 space-y-6 overflow-y-auto">
           <div className="grid grid-cols-2 gap-4">
             <div className="p-4 rounded-lg bg-secondary/50">
               <p className="text-xs text-muted-foreground mb-1">From</p>
@@ -175,6 +251,8 @@ export function CommunicationViewer({ communication }: CommunicationViewerProps)
             </div>
           )}
         </div>
+
+        <AddToBrainButton communication={communication} />
       </div>
     );
   }
@@ -195,7 +273,7 @@ export function CommunicationViewer({ communication }: CommunicationViewerProps)
           </div>
         </div>
 
-        <div className="flex-1 p-6 space-y-4">
+        <div className="flex-1 p-6 space-y-4 overflow-y-auto">
           <div className="flex items-center justify-between text-sm text-muted-foreground">
             <span>From: {sender.name}</span>
             <span>{formatFullDate(communication.receivedAt)}</span>
@@ -209,6 +287,8 @@ export function CommunicationViewer({ communication }: CommunicationViewerProps)
             </p>
           </div>
         </div>
+
+        <AddToBrainButton communication={communication} />
       </div>
     );
   }
@@ -262,6 +342,9 @@ export function CommunicationViewer({ communication }: CommunicationViewerProps)
           </div>
         </div>
       </div>
+
+      {/* Add to Brain (shown when no reply composer) */}
+      {!replyMode && <AddToBrainButton communication={communication} />}
 
       {/* Reply Composer */}
       <EmailReplyComposer
