@@ -29,7 +29,7 @@ export default function Landing() {
       <section className="py-20 px-6">
         <div className="max-w-4xl mx-auto text-center">
           <h1 className="text-4xl md:text-5xl font-bold text-foreground mb-6">
-            AI-Powered Operations Management
+            CUSUM - AI-Powered Operations Management
           </h1>
           <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
             CUSUM streamlines your business operations by integrating email, sales pipeline, 
@@ -96,14 +96,14 @@ export default function Landing() {
             </div>
             <span className="font-semibold text-foreground">CUSUM</span>
           </div>
-          <div className="flex items-center gap-6 text-sm text-muted-foreground">
-            <Link to="/privacy" className="hover:text-foreground transition-colors">
+          <nav className="flex items-center gap-6 text-sm text-muted-foreground">
+            <a href="https://cusum-brain-flow.lovable.app/privacy" className="hover:text-foreground transition-colors">
               Privacy Policy
-            </Link>
-            <Link to="/terms" className="hover:text-foreground transition-colors">
+            </a>
+            <a href="https://cusum-brain-flow.lovable.app/terms" className="hover:text-foreground transition-colors">
               Terms of Service
-            </Link>
-          </div>
+            </a>
+          </nav>
           <p className="text-sm text-muted-foreground">
             © {new Date().getFullYear()} CUSUM. All rights reserved.
           </p>
