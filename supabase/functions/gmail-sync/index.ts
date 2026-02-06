@@ -121,10 +121,17 @@ serve(async (req) => {
       );
     }
 
-    const url = new URL(req.url);
-    const maxResults = url.searchParams.get("maxResults") || "20";
-    const pageToken = url.searchParams.get("pageToken") || "";
-    const query = url.searchParams.get("q") || "";
+    // Parse body for parameters
+    let body: { maxResults?: number; pageToken?: string; query?: string } = {};
+    try {
+      body = await req.json();
+    } catch {
+      // No body or invalid JSON, use defaults
+    }
+
+    const maxResults = String(body.maxResults ?? 20);
+    const pageToken = body.pageToken ?? "";
+    const query = body.query ?? "";
 
     const accessToken = await getAccessToken();
 

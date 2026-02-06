@@ -23,25 +23,19 @@ export async function fetchGmailMessages(options?: {
   pageToken?: string;
   query?: string;
 }): Promise<GmailSyncResponse> {
-  const params = new URLSearchParams();
-  if (options?.maxResults) params.set("maxResults", String(options.maxResults));
-  if (options?.pageToken) params.set("pageToken", options.pageToken);
-  if (options?.query) params.set("q", options.query);
-
   const { data, error } = await supabase.functions.invoke("gmail-sync", {
-    body: null,
-    headers: {},
+    body: {
+      maxResults: options?.maxResults ?? 20,
+      pageToken: options?.pageToken,
+      query: options?.query,
+    },
   });
 
-  // Re-invoke with query params
-  const queryString = params.toString();
-  const response = await supabase.functions.invoke(`gmail-sync${queryString ? `?${queryString}` : ""}`, {});
-
-  if (response.error) {
-    throw new Error(response.error.message || "Failed to fetch emails");
+  if (error) {
+    throw new Error(error.message || "Failed to fetch emails");
   }
 
-  return response.data as GmailSyncResponse;
+  return data as GmailSyncResponse;
 }
 
 export async function sendGmailMessage(options: {
