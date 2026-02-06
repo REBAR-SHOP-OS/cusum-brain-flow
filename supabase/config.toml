@@ -23,3 +23,6 @@ verify_jwt = false
 
 [functions.ringcentral-ai]
 verify_jwt = false
+
+[functions.google-vision-ocr]
+verify_jwt = false
