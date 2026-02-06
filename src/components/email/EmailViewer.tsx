@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { Reply, Forward, Trash2, Archive, MoreHorizontal } from "lucide-react";
+import { Reply, Forward, Trash2, Archive, MoreHorizontal, CheckSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { GmailMessage, parseEmailAddress, formatDate } from "@/lib/gmail";
 import { ComposeEmail } from "./ComposeEmail";
+import { CreateTaskModal } from "./CreateTaskModal";
 
 interface EmailViewerProps {
   email: GmailMessage;
@@ -11,6 +12,7 @@ interface EmailViewerProps {
 
 export function EmailViewer({ email, onRefresh }: EmailViewerProps) {
   const [showReply, setShowReply] = useState(false);
+  const [showCreateTask, setShowCreateTask] = useState(false);
   const sender = parseEmailAddress(email.from);
   const recipient = parseEmailAddress(email.to);
 
@@ -21,6 +23,9 @@ export function EmailViewer({ email, onRefresh }: EmailViewerProps) {
         <div className="flex items-start justify-between gap-4 mb-4">
           <h2 className="text-xl font-semibold">{email.subject || "(no subject)"}</h2>
           <div className="flex items-center gap-1 flex-shrink-0">
+            <Button variant="ghost" size="icon" onClick={() => setShowCreateTask(true)} title="Create Task">
+              <CheckSquare className="w-4 h-4" />
+            </Button>
             <Button variant="ghost" size="icon" onClick={() => setShowReply(true)}>
               <Reply className="w-4 h-4" />
             </Button>
@@ -84,6 +89,15 @@ export function EmailViewer({ email, onRefresh }: EmailViewerProps) {
             threadId: email.threadId,
             messageId: email.id,
           }}
+        />
+      )}
+
+      {/* Create Task Modal */}
+      {showCreateTask && (
+        <CreateTaskModal
+          email={email}
+          onClose={() => setShowCreateTask(false)}
+          onCreated={() => {}}
         />
       )}
     </div>
