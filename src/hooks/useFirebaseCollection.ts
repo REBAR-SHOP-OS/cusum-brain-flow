@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { collection, onSnapshot, query, QueryConstraint, DocumentData } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
-const COMPANY_PATH = "companies/rebar-shopbrain";
+const COMPANY_PATH = "companies/rebar-shop";
 
 export function useFirebaseCollection<T = DocumentData>(
   collectionName: string,
