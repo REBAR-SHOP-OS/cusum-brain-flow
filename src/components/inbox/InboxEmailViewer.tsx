@@ -102,7 +102,7 @@ export function InboxEmailViewer({ email, onClose }: InboxEmailViewerProps) {
   }
 
   return (
-    <div className="flex flex-col h-full bg-background border-l">
+    <div className="flex flex-col h-full min-h-0 bg-background border-l">
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b">
         <button onClick={onClose} className="text-muted-foreground hover:text-foreground">

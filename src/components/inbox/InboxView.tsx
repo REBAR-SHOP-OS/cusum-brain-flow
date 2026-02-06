@@ -107,7 +107,7 @@ export function InboxView({ connectedEmail = "sattar@rebar.shop" }: InboxViewPro
   return (
     <div className="flex h-full bg-muted/30">
       {/* Email List Panel */}
-      <div className="w-[400px] bg-background border-r flex flex-col">
+      <div className="w-[400px] bg-background border-r flex flex-col min-h-0">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b">
           <div className="flex items-center gap-3">
