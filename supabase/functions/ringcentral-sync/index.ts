@@ -63,12 +63,13 @@ async function verifyAuth(req: Request): Promise<string | null> {
 }
 
 async function getAccessToken(): Promise<string> {
-  const clientId = Deno.env.get("RINGCENTRAL_CLIENT_ID");
-  const clientSecret = Deno.env.get("RINGCENTRAL_CLIENT_SECRET");
+  // Use dedicated JWT app credentials (separate from widget OAuth app)
+  const clientId = Deno.env.get("RINGCENTRAL_JWT_CLIENT_ID");
+  const clientSecret = Deno.env.get("RINGCENTRAL_JWT_CLIENT_SECRET");
   const jwt = Deno.env.get("RINGCENTRAL_JWT");
 
   if (!clientId || !clientSecret || !jwt) {
-    throw new Error("RingCentral credentials not configured");
+    throw new Error("RingCentral JWT app credentials not configured");
   }
 
   const credentials = btoa(`${clientId}:${clientSecret}`);
