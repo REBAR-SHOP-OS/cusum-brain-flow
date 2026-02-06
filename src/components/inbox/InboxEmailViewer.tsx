@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { X, ExternalLink, Sparkles, Trash2, Send, Loader2, RefreshCw } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import { Mail } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import { EmailActionBar, type ReplyMode } from "./EmailActionBar";
+import { EmailReplyComposer } from "./EmailReplyComposer";
 import type { InboxEmail } from "./InboxEmailList";
 
 interface InboxEmailViewerProps {
@@ -13,14 +13,13 @@ interface InboxEmailViewerProps {
 }
 
 export function InboxEmailViewer({ email, onClose }: InboxEmailViewerProps) {
-  const [replyText, setReplyText] = useState("");
+  const [replyMode, setReplyMode] = useState<ReplyMode>(null);
   const [drafting, setDrafting] = useState(false);
-  const [sending, setSending] = useState(false);
-  const [hasDrafted, setHasDrafted] = useState(false);
   const { toast } = useToast();
 
-  const handleAiDraft = async () => {
+  const handleSmartReply = async () => {
     if (!email) return;
+    setReplyMode("reply");
     setDrafting(true);
 
     try {
@@ -32,23 +31,14 @@ export function InboxEmailViewer({ email, onClose }: InboxEmailViewerProps) {
           senderEmail: email.senderEmail,
         },
       });
-
       if (error) throw error;
-
-      if (data?.error) {
-        toast({ title: "AI Draft Error", description: data.error, variant: "destructive" });
-        return;
-      }
-
       if (data?.draft) {
-        setReplyText(data.draft);
-        setHasDrafted(true);
-        toast({ title: "Draft ready", description: "AI draft generated — review before sending." });
+        toast({ title: "Smart Reply ready", description: "AI draft generated — review before sending." });
       }
     } catch (err) {
-      console.error("AI Draft error:", err);
+      console.error("Smart reply error:", err);
       toast({
-        title: "Failed to generate draft",
+        title: "Failed to generate smart reply",
         description: err instanceof Error ? err.message : "Please try again",
         variant: "destructive",
       });
@@ -57,145 +47,75 @@ export function InboxEmailViewer({ email, onClose }: InboxEmailViewerProps) {
     }
   };
 
-  const handleSend = async () => {
-    if (!email || !replyText.trim()) return;
-    setSending(true);
-
-    try {
-      const { data, error } = await supabase.functions.invoke("gmail-send", {
-        body: {
-          to: email.senderEmail,
-          subject: email.subject.startsWith("Re:") ? email.subject : `Re: ${email.subject}`,
-          body: replyText.replace(/\n/g, "<br>"),
-          threadId: email.threadId || undefined,
-        },
-      });
-
-      if (error) throw error;
-
-      if (data?.error) {
-        toast({ title: "Send failed", description: data.error, variant: "destructive" });
-        return;
-      }
-
-      toast({ title: "Email sent", description: `Reply sent to ${email.sender}` });
-      setReplyText("");
-      setHasDrafted(false);
-    } catch (err) {
-      console.error("Send email error:", err);
-      toast({
-        title: "Failed to send",
-        description: err instanceof Error ? err.message : "Please try again",
-        variant: "destructive",
-      });
-    } finally {
-      setSending(false);
-    }
-  };
-
   if (!email) {
     return (
-      <div className="flex items-center justify-center h-full text-muted-foreground">
-        <p>Select an email to read</p>
+      <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-3">
+        <Mail className="w-10 h-10 opacity-30" />
+        <p className="text-sm">Select an email to read</p>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-full min-h-0 bg-background border-l">
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b">
-        <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
-          <X className="w-5 h-5" />
-        </button>
-        <button className="text-muted-foreground hover:text-foreground">
-          <ExternalLink className="w-5 h-5" />
-        </button>
-      </div>
+    <div className="flex flex-col h-full min-h-0 bg-background">
+      {/* Action Bar */}
+      <EmailActionBar
+        activeMode={replyMode}
+        onModeChange={setReplyMode}
+        onSmartReply={handleSmartReply}
+        drafting={drafting}
+      />
 
-      {/* Email Content */}
-      <div className="flex-1 overflow-y-auto p-6">
-        {/* Label */}
-        <span className={cn(
-          "inline-block px-2 py-0.5 rounded text-xs text-white mb-4",
-          email.labelColor
-        )}>
-          {email.label}
-        </span>
+      {/* Email Content - scrollable */}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="p-6 max-w-3xl">
+          {/* Subject */}
+          <h2 className="text-lg font-semibold mb-4">{email.subject}</h2>
 
-        {/* Sender Info */}
-        <div className="flex items-center justify-between mb-1">
-          <div>
-            <span className="font-medium">{email.sender}</span>
-            <span className="text-muted-foreground"> | {email.senderEmail}</span>
-          </div>
-          <span className="text-sm text-muted-foreground">{email.fullDate}</span>
-        </div>
-        
-        {/* To address */}
-        <p className="text-sm text-muted-foreground mb-6">To {email.toAddress}</p>
+          {/* Label */}
+          <span className={cn(
+            "inline-block px-2 py-0.5 rounded text-xs text-white mb-4",
+            email.labelColor
+          )}>
+            {email.label}
+          </span>
 
-        {/* Email Body */}
-        <div className="text-sm mb-8 whitespace-pre-wrap leading-relaxed">
-          {email.body || email.preview}
-        </div>
-
-        {/* Reply Section */}
-        <div className="border rounded-lg p-4 bg-muted/30">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <span>↩</span>
-              <span>{email.senderEmail}</span>
+          {/* Sender Info */}
+          <div className="flex items-start justify-between mb-1">
+            <div className="flex items-center gap-3">
+              <div className={cn(
+                "w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-medium shrink-0",
+                email.isUnread ? "bg-green-500" : "bg-muted-foreground/50"
+              )}>
+                {email.sender.charAt(0)}
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-sm">{email.sender}</span>
+                  <span className="text-xs text-muted-foreground">&lt;{email.senderEmail}&gt;</span>
+                </div>
+                <p className="text-xs text-muted-foreground">To: {email.toAddress}</p>
+              </div>
             </div>
-            <button
-              onClick={handleAiDraft}
-              disabled={drafting || sending}
-              className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground disabled:opacity-50"
-            >
-              {drafting ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : hasDrafted ? (
-                <RefreshCw className="w-4 h-4" />
-              ) : (
-                <Sparkles className="w-4 h-4" />
-              )}
-              <span>{drafting ? "Drafting..." : hasDrafted ? "Regenerate" : "AI Draft"}</span>
-            </button>
+            <span className="text-xs text-muted-foreground shrink-0">{email.fullDate}</span>
           </div>
-          
-          <Textarea
-            value={replyText}
-            onChange={(e) => setReplyText(e.target.value)}
-            placeholder="Write your reply..."
-            className="min-h-[100px] bg-transparent border-0 p-0 resize-none focus-visible:ring-0"
-          />
+
+          {/* Divider */}
+          <div className="border-b my-4" />
+
+          {/* Email Body */}
+          <div className="text-sm whitespace-pre-wrap leading-relaxed text-foreground/90">
+            {email.body || email.preview}
+          </div>
         </div>
       </div>
 
-      {/* Footer Actions */}
-      <div className="flex items-center justify-between p-4 border-t">
-        <Button variant="ghost" className="text-muted-foreground" onClick={() => { setReplyText(""); setHasDrafted(false); }}>
-          <Trash2 className="w-4 h-4 mr-2" />
-          Cancel
-        </Button>
-        <Button 
-          className="bg-[#4FC3F7] hover:bg-[#4FC3F7]/90 text-white" 
-          disabled={!replyText.trim() || sending}
-          onClick={handleSend}
-        >
-          {sending ? (
-            <>
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              Sending...
-            </>
-          ) : (
-            <>
-              Send
-              <Send className="w-4 h-4 ml-2" />
-            </>
-          )}
-        </Button>
-      </div>
+      {/* Reply Composer */}
+      <EmailReplyComposer
+        email={email}
+        mode={replyMode}
+        onClose={() => setReplyMode(null)}
+      />
     </div>
   );
 }

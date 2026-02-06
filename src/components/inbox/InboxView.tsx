@@ -152,7 +152,7 @@ export function InboxView({ connectedEmail = "sattar@rebar.shop" }: InboxViewPro
       </div>
 
       {/* Email Viewer */}
-      <div className="flex-1">
+      <div className="flex-1 min-h-0">
         <InboxEmailViewer 
           email={selectedEmail} 
           onClose={() => setSelectedEmail(null)} 
