@@ -173,7 +173,7 @@ export default function Inbox() {
             onSend={handleSend}
             placeholder={`Ask ${selectedAgent} agent...`}
             disabled={isTyping}
-            showFileUpload={selectedAgent === "estimation"}
+            showFileUpload={true}
           />
         </div>
       )}
