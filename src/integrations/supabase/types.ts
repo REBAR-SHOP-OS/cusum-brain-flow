@@ -72,6 +72,7 @@ export type Database = {
           subject: string | null
           thread_id: string | null
           to_address: string | null
+          user_id: string | null
         }
         Insert: {
           body_preview?: string | null
@@ -89,6 +90,7 @@ export type Database = {
           subject?: string | null
           thread_id?: string | null
           to_address?: string | null
+          user_id?: string | null
         }
         Update: {
           body_preview?: string | null
@@ -106,6 +108,7 @@ export type Database = {
           subject?: string | null
           thread_id?: string | null
           to_address?: string | null
+          user_id?: string | null
         }
         Relationships: [
           {

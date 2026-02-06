@@ -15,12 +15,15 @@ import {
 } from "@/components/ui/select";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/lib/auth";
 
 export default function Settings() {
+  const { user, signOut } = useAuth();
+  const userEmail = user?.email ?? "";
   const [formData, setFormData] = useState({
-    name: "Sattar",
-    surname: "Esmaeili",
-    email: "sattar@rebar.shop",
+    name: "",
+    surname: "",
+    email: userEmail,
     jobTitle: "",
     helpersLanguage: "en",
     interfaceLanguage: "en",
@@ -40,7 +43,7 @@ export default function Settings() {
               <Avatar className="w-24 h-24 border-4 border-primary/20">
                 <AvatarImage src="" />
                 <AvatarFallback className="text-2xl bg-gradient-to-br from-primary to-accent">
-                  SE
+                  {userEmail.charAt(0).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
               <button className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-secondary border border-border flex items-center justify-center hover:bg-secondary/80 transition-colors">
@@ -215,7 +218,10 @@ export default function Settings() {
 
           {/* Sign Out */}
           <div className="pt-4 pb-8">
-            <button className="flex items-center gap-3 p-4 w-full rounded-xl hover:bg-secondary transition-colors text-destructive">
+            <button 
+              onClick={signOut}
+              className="flex items-center gap-3 p-4 w-full rounded-xl hover:bg-secondary transition-colors text-destructive"
+            >
               <div className="w-10 h-10 rounded-lg bg-destructive/10 flex items-center justify-center">
                 <LogOut className="w-5 h-5" />
               </div>
