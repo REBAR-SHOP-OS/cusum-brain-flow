@@ -98,13 +98,7 @@ export default function InboxManager() {
 
   // Show the inbox view after setup is complete or if emails already exist
   if (currentStep === "inbox") {
-    return (
-      <div className="flex flex-col h-full bg-background">
-        <div className="flex-1">
-          <InboxView />
-        </div>
-      </div>
-    );
+    return <InboxView />;
   }
 
   return (
