@@ -228,9 +228,9 @@ export function CommunicationViewer({ communication }: CommunicationViewerProps)
         drafting={drafting}
       />
 
-      {/* Email Content - scrollable */}
-      <div className="flex-1 overflow-y-auto min-h-0">
-        <div className="p-6 max-w-3xl">
+      {/* Email Content - scrollable, shrinks when composer is open */}
+      <div className="flex-1 overflow-y-auto min-h-0 shrink">
+        <div className="p-4 sm:p-6 max-w-3xl">
           {/* Subject */}
           <h2 className="text-lg font-semibold mb-4">{communication.subject || "(no subject)"}</h2>
 
