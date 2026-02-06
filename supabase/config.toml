@@ -32,3 +32,6 @@ verify_jwt = false
 
 [functions.odoo-api]
 verify_jwt = false
+
+[functions.import-crm-data]
+verify_jwt = false
