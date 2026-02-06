@@ -54,7 +54,7 @@ export default function Inbox() {
         content: m.content,
       }));
 
-      // Include file context for Cal agent
+      // Include file context
       const contextData = files && files.length > 0 ? {
         uploadedFiles: files.map(f => ({
           name: f.name,
@@ -63,7 +63,12 @@ export default function Inbox() {
         }))
       } : undefined;
 
-      const response = await sendAgentMessage(selectedAgent, messageContent, history, contextData);
+      // Prepare attached files for OCR (for estimation agent)
+      const attachedFiles = files && files.length > 0 
+        ? files.map(f => ({ name: f.name, url: f.url }))
+        : undefined;
+
+      const response = await sendAgentMessage(selectedAgent, messageContent, history, contextData, attachedFiles);
       
       const agentMessage: Message = {
         id: crypto.randomUUID(),
