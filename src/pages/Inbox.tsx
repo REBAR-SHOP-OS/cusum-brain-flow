@@ -31,7 +31,13 @@ export default function Inbox() {
     setIsTyping(true);
 
     try {
-      const response = await sendAgentMessage(selectedAgent, content);
+      // Build history from previous messages
+      const history = messages.map((m) => ({
+        role: m.role === "user" ? "user" as const : "assistant" as const,
+        content: m.content,
+      }));
+
+      const response = await sendAgentMessage(selectedAgent, content, history);
       
       const agentMessage: Message = {
         id: crypto.randomUUID(),
@@ -52,7 +58,7 @@ export default function Inbox() {
     } finally {
       setIsTyping(false);
     }
-  }, [selectedAgent, toast]);
+  }, [selectedAgent, messages, toast]);
 
   const handleAgentChange = (agent: AgentType) => {
     setSelectedAgent(agent);
