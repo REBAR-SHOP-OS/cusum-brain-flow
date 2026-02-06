@@ -1,5 +1,5 @@
-import { useState, useCallback } from "react";
-import { Phone, RefreshCw, Search, PhoneIncoming, PhoneOutgoing, PhoneMissed, Play, Clock, PhoneCall } from "lucide-react";
+import { useState, useCallback, useRef } from "react";
+import { Phone, RefreshCw, Search, PhoneIncoming, PhoneOutgoing, PhoneMissed, Play, Pause, Clock, PhoneCall, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -62,6 +62,9 @@ export default function Phonecalls() {
   const [syncing, setSyncing] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
   const [lastTranscript, setLastTranscript] = useState("");
+  const [playingId, setPlayingId] = useState<string | null>(null);
+  const [loadingRecording, setLoadingRecording] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const { toast } = useToast();
 
   const { communications: allCalls, loading, error, refresh } = useCommunications({
@@ -71,7 +74,6 @@ export default function Phonecalls() {
 
   const { isLoaded, isCallActive, activeCall, showWidget } = useRingCentralWidget();
 
-  // Apply missed filter client-side
   const calls = filter === "missed"
     ? allCalls.filter((c) => (c.metadata?.result as string) === "Missed")
     : allCalls;
@@ -119,9 +121,79 @@ export default function Phonecalls() {
       setLastTranscript(transcript);
       setShowSummary(true);
     }
-    // Refresh call log after a delay to pick up the new call
     setTimeout(() => refresh(), 5000);
   }, [refresh]);
+
+  const handlePlayRecording = useCallback(async (callId: string, recordingUri: string) => {
+    // If already playing this recording, pause it
+    if (playingId === callId && audioRef.current) {
+      audioRef.current.pause();
+      setPlayingId(null);
+      return;
+    }
+
+    // Stop any currently playing audio
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+
+    setLoadingRecording(callId);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        toast({ title: "Error", description: "Please log in first", variant: "destructive" });
+        return;
+      }
+
+      const projectUrl = import.meta.env.VITE_SUPABASE_URL;
+      const audioUrl = `${projectUrl}/functions/v1/ringcentral-recording?action=recording&uri=${encodeURIComponent(recordingUri)}`;
+
+      const audio = new Audio();
+      audio.crossOrigin = "anonymous";
+
+      // Fetch the audio as a blob with auth headers
+      const resp = await fetch(audioUrl, {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+        },
+      });
+
+      if (!resp.ok) {
+        const errData = await resp.json().catch(() => ({ error: "Failed to fetch recording" }));
+        throw new Error(errData.error || `HTTP ${resp.status}`);
+      }
+
+      const blob = await resp.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      audio.src = blobUrl;
+
+      audio.onended = () => {
+        setPlayingId(null);
+        URL.revokeObjectURL(blobUrl);
+      };
+
+      audio.onerror = () => {
+        setPlayingId(null);
+        URL.revokeObjectURL(blobUrl);
+        toast({ title: "Playback Error", description: "Could not play the recording", variant: "destructive" });
+      };
+
+      await audio.play();
+      audioRef.current = audio;
+      setPlayingId(callId);
+    } catch (err) {
+      toast({
+        title: "Recording Error",
+        description: err instanceof Error ? err.message : "Failed to load recording",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingRecording(null);
+    }
+  }, [playingId, toast]);
 
   return (
     <div className="flex flex-col h-full">
@@ -243,6 +315,9 @@ export default function Phonecalls() {
                 const result = meta.result as string | undefined;
                 const action = meta.action as string | undefined;
                 const hasRecording = !!meta.recording_id;
+                const recordingUri = meta.recording_uri as string | undefined;
+                const isPlaying = playingId === call.id;
+                const isLoadingThis = loadingRecording === call.id;
 
                 return (
                   <TableRow
@@ -277,16 +352,26 @@ export default function Phonecalls() {
                       {action || "—"}
                     </TableCell>
                     <TableCell>
-                      {hasRecording && (
+                      {hasRecording && recordingUri ? (
                         <Button
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8"
-                          title="Call recording available"
+                          title={isPlaying ? "Pause recording" : "Play recording"}
+                          onClick={() => handlePlayRecording(call.id, recordingUri)}
+                          disabled={isLoadingThis}
                         >
-                          <Play className="w-4 h-4 text-primary" />
+                          {isLoadingThis ? (
+                            <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                          ) : isPlaying ? (
+                            <Pause className="w-4 h-4 text-primary" />
+                          ) : (
+                            <Play className="w-4 h-4 text-primary" />
+                          )}
                         </Button>
-                      )}
+                      ) : hasRecording ? (
+                        <Play className="w-4 h-4 text-muted-foreground/40" />
+                      ) : null}
                     </TableCell>
                   </TableRow>
                 );

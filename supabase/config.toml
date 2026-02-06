@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.summarize-call]
 verify_jwt = false
+
+[functions.ringcentral-recording]
+verify_jwt = false
