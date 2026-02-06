@@ -1,6 +1,7 @@
 import { Link, useLocation } from "react-router-dom";
 import { Inbox, Brain, Settings, Plug, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { UserMenu } from "./UserMenu";
 
 const navigation = [
   { name: "Inbox", href: "/", icon: Inbox },
@@ -68,6 +69,9 @@ export function Sidebar() {
             </Link>
           );
         })}
+        
+        {/* User Menu */}
+        <UserMenu />
       </div>
     </aside>
   );
