@@ -153,6 +153,8 @@ export function useIntegrations() {
   }, [toast]);
 
   const checkAllStatuses = useCallback(async () => {
+    setLoading(true);
+    
     // Check Google integrations
     const googleIntegrations = ["gmail", "google-calendar", "google-drive"];
     
@@ -180,6 +182,30 @@ export function useIntegrations() {
       } catch (err) {
         console.log(`${id} check skipped:`, err);
       }
+    }
+
+    // Check QuickBooks
+    try {
+      const { data: qbStatus, error } = await supabase.functions.invoke("quickbooks-oauth", {
+        body: { action: "check-status" },
+      });
+
+      if (qbStatus && !error) {
+        setIntegrations((prev) =>
+          prev.map((i) =>
+            i.id === "quickbooks"
+              ? {
+                  ...i,
+                  status: qbStatus.status,
+                  error: qbStatus.error,
+                  lastSync: qbStatus.status === "connected" ? new Date().toLocaleTimeString() : undefined,
+                }
+              : i
+          )
+        );
+      }
+    } catch (err) {
+      console.log("QuickBooks check skipped:", err);
     }
 
     // Check RingCentral
@@ -213,10 +239,27 @@ export function useIntegrations() {
     } catch (err) {
       console.log("RingCentral check skipped:", err);
     }
+
+    setLoading(false);
   }, []);
 
   const startOAuth = useCallback(async (integrationId: string) => {
     try {
+      const returnUrl = window.location.href;
+      
+      // QuickBooks uses different OAuth endpoint
+      if (integrationId === "quickbooks") {
+        const { data, error } = await supabase.functions.invoke(
+          "quickbooks-oauth",
+          { body: { action: "get-auth-url", returnUrl } }
+        );
+
+        if (error) throw new Error(error.message);
+        window.location.href = data.authUrl;
+        return;
+      }
+
+      // Google integrations
       const redirectUri = `${window.location.origin}/integrations/callback`;
       
       const { data, error } = await supabase.functions.invoke(
