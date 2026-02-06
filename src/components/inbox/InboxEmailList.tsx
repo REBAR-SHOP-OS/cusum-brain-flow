@@ -13,6 +13,8 @@ export interface InboxEmail {
   label: string;
   labelColor: string;
   isUnread?: boolean;
+  threadId?: string;
+  sourceId?: string;
 }
 
 interface InboxEmailListProps {
