@@ -328,6 +328,57 @@ export type Database = {
           },
         ]
       }
+      estimation_learnings: {
+        Row: {
+          confidence_score: number | null
+          context: string | null
+          corrected_value: Json | null
+          created_at: string
+          created_by: string | null
+          element_type: string | null
+          id: string
+          is_global: boolean | null
+          learning_type: string
+          original_value: Json | null
+          project_name: string
+          source_files: string[] | null
+          updated_at: string
+          usage_count: number | null
+        }
+        Insert: {
+          confidence_score?: number | null
+          context?: string | null
+          corrected_value?: Json | null
+          created_at?: string
+          created_by?: string | null
+          element_type?: string | null
+          id?: string
+          is_global?: boolean | null
+          learning_type: string
+          original_value?: Json | null
+          project_name: string
+          source_files?: string[] | null
+          updated_at?: string
+          usage_count?: number | null
+        }
+        Update: {
+          confidence_score?: number | null
+          context?: string | null
+          corrected_value?: Json | null
+          created_at?: string
+          created_by?: string | null
+          element_type?: string | null
+          id?: string
+          is_global?: boolean | null
+          learning_type?: string
+          original_value?: Json | null
+          project_name?: string
+          source_files?: string[] | null
+          updated_at?: string
+          usage_count?: number | null
+        }
+        Relationships: []
+      }
       events: {
         Row: {
           actor_id: string | null
