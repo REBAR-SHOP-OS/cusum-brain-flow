@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { X, Check, Loader2, Mail, Tag, Edit3 } from "lucide-react";
+import { X, Check, Loader2, Tag, Edit3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { InboxView } from "@/components/inbox/InboxView";
 
-type Step = "intro" | "labels" | "drafts" | "connect" | "setup";
+type Step = "intro" | "labels" | "drafts" | "connect" | "setup" | "inbox";
 
 interface EmailPreview {
   sender: string;
@@ -56,8 +57,8 @@ export default function InboxManager() {
       step++;
       if (step >= setupSteps.length) {
         clearInterval(interval);
-        // Navigate to inbox after setup
-        setTimeout(() => navigate("/"), 1500);
+        // Show inbox view after setup
+        setTimeout(() => setCurrentStep("inbox"), 1500);
         return;
       }
       setSetupProgress(prev => 
@@ -68,6 +69,27 @@ export default function InboxManager() {
       );
     }, 1500);
   };
+
+  // Show the inbox view after setup is complete
+  if (currentStep === "inbox") {
+    return (
+      <div className="flex flex-col h-full bg-background">
+        {/* Beta Banner */}
+        <div className="bg-[#4FC3F7] text-white py-2 px-4 flex items-center justify-center gap-2 text-sm">
+          <span className="text-lg">🎉</span>
+          <span>Cassie Inbox Manager is free while in beta - no credits used. We'll let you know before that changes.</span>
+          <button className="ml-auto">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Inbox View */}
+        <div className="flex-1">
+          <InboxView />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full bg-background">
