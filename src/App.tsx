@@ -18,6 +18,7 @@ import Brain from "./pages/Brain";
 import Integrations from "./pages/Integrations";
 import SocialMediaManager from "./pages/SocialMediaManager";
 import InboxManager from "./pages/InboxManager";
+import DailySummarizer from "./pages/DailySummarizer";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
@@ -142,6 +143,16 @@ const App = () => (
                 <ProtectedRoute>
                   <AppLayout>
                     <InboxManager />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/daily-summarizer"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <DailySummarizer />
                   </AppLayout>
                 </ProtectedRoute>
               }
