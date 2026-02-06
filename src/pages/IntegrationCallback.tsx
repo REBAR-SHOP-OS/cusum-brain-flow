@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { CheckCircle2, XCircle, Loader2, Copy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default function IntegrationCallback() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
   const [message, setMessage] = useState("");
   const [refreshToken, setRefreshToken] = useState<string | null>(null);
@@ -28,7 +29,30 @@ export default function IntegrationCallback() {
       return;
     }
 
-    exchangeCode(code, state);
+    // Wait for auth session to be available before exchanging code
+    const waitForAuthAndExchange = async () => {
+      // Give Supabase a moment to restore the session from localStorage
+      let retries = 0;
+      let session = null;
+      
+      while (retries < 5) {
+        const { data } = await supabase.auth.getSession();
+        session = data.session;
+        if (session) break;
+        retries++;
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
+      if (!session) {
+        setStatus("error");
+        setMessage("Session expired. Please log in and try connecting again.");
+        return;
+      }
+
+      await exchangeCode(code, state);
+    };
+
+    waitForAuthAndExchange();
   }, [searchParams]);
 
   const exchangeCode = async (code: string, integration: string) => {
@@ -54,11 +78,9 @@ export default function IntegrationCallback() {
       
       if (data.refreshToken) {
         setRefreshToken(data.refreshToken);
-      }
-
-      // Notify the parent window
-      if (window.opener) {
-        window.opener.postMessage({ type: "oauth-success", integration }, "*");
+      } else {
+        // No refresh token to display, redirect to integrations after a brief delay
+        setTimeout(() => navigate("/integrations"), 2000);
       }
     } catch (err) {
       setStatus("error");
@@ -74,10 +96,8 @@ export default function IntegrationCallback() {
     }
   };
 
-  const closeWindow = () => {
-    if (window.opener) {
-      window.close();
-    }
+  const goToIntegrations = () => {
+    navigate("/integrations");
   };
 
   return (
@@ -114,8 +134,8 @@ export default function IntegrationCallback() {
               </div>
             )}
 
-            <Button onClick={closeWindow} className="w-full">
-              Close Window
+            <Button onClick={goToIntegrations} className="w-full">
+              Go to Integrations
             </Button>
           </>
         )}
@@ -125,8 +145,8 @@ export default function IntegrationCallback() {
             <XCircle className="w-16 h-16 mx-auto text-destructive" />
             <h1 className="text-xl font-semibold text-destructive">Connection Failed</h1>
             <p className="text-muted-foreground">{message}</p>
-            <Button variant="outline" onClick={closeWindow}>
-              Close Window
+            <Button variant="outline" onClick={goToIntegrations}>
+              Back to Integrations
             </Button>
           </>
         )}
