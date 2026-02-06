@@ -22,6 +22,7 @@ import SocialMediaManager from "./pages/SocialMediaManager";
 import InboxManager from "./pages/InboxManager";
 import DailySummarizer from "./pages/DailySummarizer";
 import FacebookCommenter from "./pages/FacebookCommenter";
+import Phonecalls from "./pages/Phonecalls";
 import Settings from "./pages/Settings";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import TermsOfService from "./pages/TermsOfService";
@@ -183,6 +184,16 @@ const App = () => (
                 <ProtectedRoute>
                   <AppLayout>
                     <FacebookCommenter />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/phonecalls"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <Phonecalls />
                   </AppLayout>
                 </ProtectedRoute>
               }
