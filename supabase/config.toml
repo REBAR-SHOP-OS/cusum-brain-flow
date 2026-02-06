@@ -26,3 +26,6 @@ verify_jwt = false
 
 [functions.google-vision-ocr]
 verify_jwt = false
+
+[functions.pdf-to-images]
+verify_jwt = false
