@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
+import { supabase } from "@/integrations/supabase/client";
 
 interface ActiveCallInfo {
   telephonySessionId?: string;
@@ -33,7 +34,6 @@ export function useRingCentralWidget(): UseRingCentralWidgetReturn {
 
       switch (type) {
         case "rc-login-status-notify":
-          // Widget login status changed
           break;
 
         case "rc-active-call-notify":
@@ -58,12 +58,10 @@ export function useRingCentralWidget(): UseRingCentralWidgetReturn {
           break;
 
         case "rc-ringout-call-notify":
-          // RingOut call started
           setIsCallActive(true);
           break;
 
         case "rc-webphone-call-notify":
-          // WebRTC call event
           if (event.data.call?.telephonyStatus === "Ringing" || event.data.call?.telephonyStatus === "CallConnected") {
             setIsCallActive(true);
             setActiveCall({
@@ -89,36 +87,81 @@ export function useRingCentralWidget(): UseRingCentralWidgetReturn {
     return () => window.removeEventListener("message", handleMessage);
   }, [activeCall]);
 
-  // Load the RingCentral Embeddable adapter script
+  // Fetch the real client ID, then load the Embeddable widget with it
   useEffect(() => {
     if (scriptRef.current) return;
 
-    const script = document.createElement("script");
-    script.src =
-      "https://ringcentral.github.io/ringcentral-embeddable/adapter.js?newAdapterUI=1&enableAnalytics=0";
-    script.async = true;
-    script.onload = () => setIsLoaded(true);
-    document.head.appendChild(script);
-    scriptRef.current = script;
+    async function loadWidget() {
+      let clientId: string | null = null;
 
-    return () => {
-      // Don't remove on unmount — the widget persists across navigations
-    };
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          const res = await supabase.functions.invoke("ringcentral-recording", {
+            headers: { Authorization: `Bearer ${session.access_token}` },
+            body: null,
+            method: "GET",
+          });
+          // Use query params workaround — invoke doesn't support query params natively
+          // Fallback: call directly
+        }
+      } catch {
+        // Ignore — will use default
+      }
+
+      // Direct fetch to get client ID
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          const projectUrl = import.meta.env.VITE_SUPABASE_URL;
+          const resp = await fetch(
+            `${projectUrl}/functions/v1/ringcentral-recording?action=client-id`,
+            {
+              headers: {
+                Authorization: `Bearer ${session.access_token}`,
+                apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+              },
+            }
+          );
+          if (resp.ok) {
+            const data = await resp.json();
+            clientId = data.clientId;
+          }
+        }
+      } catch {
+        // Fallback to demo mode
+      }
+
+      const script = document.createElement("script");
+      const baseUrl = "https://apps.ringcentral.com/integration/ringcentral-embeddable/latest/adapter.js";
+      const params = new URLSearchParams({
+        newAdapterUI: "1",
+        enableAnalytics: "0",
+      });
+
+      if (clientId) {
+        params.set("clientId", clientId);
+        params.set("appServer", "https://platform.ringcentral.com");
+      }
+
+      script.src = `${baseUrl}?${params.toString()}`;
+      script.async = true;
+      script.onload = () => setIsLoaded(true);
+      document.head.appendChild(script);
+      scriptRef.current = script;
+    }
+
+    loadWidget();
   }, []);
 
   const makeCall = useCallback((phoneNumber: string) => {
     if (!isLoaded) return;
-    // Send a message to the Embeddable widget to initiate a call
     const widgetIframe = document.querySelector<HTMLIFrameElement>(
       'iframe[id^="rc-widget"]'
     );
     if (widgetIframe?.contentWindow) {
       widgetIframe.contentWindow.postMessage(
-        {
-          type: "rc-adapter-new-call",
-          phoneNumber,
-          toCall: true,
-        },
+        { type: "rc-adapter-new-call", phoneNumber, toCall: true },
         "*"
       );
     }
