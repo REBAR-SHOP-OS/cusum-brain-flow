@@ -39,13 +39,13 @@ export default function Integrations() {
   }, []);
 
   const handleCardClick = (integration: Integration) => {
-    const googleIntegrations = ["gmail", "google-calendar", "google-drive", "youtube", "google-analytics"];
+    const oauthIntegrations = ["gmail", "google-calendar", "google-drive", "youtube", "google-analytics", "quickbooks"];
     
     if (integration.status === "connected") {
       // Test the connection
       checkIntegrationStatus(integration.id);
-    } else if (googleIntegrations.includes(integration.id)) {
-      // Start OAuth flow for Google integrations
+    } else if (oauthIntegrations.includes(integration.id)) {
+      // Start OAuth flow for OAuth integrations
       startOAuth(integration.id);
     } else {
       // Show manual setup dialog for other integrations
