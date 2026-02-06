@@ -129,19 +129,87 @@ async function performOCR(imageUrl: string): Promise<{ fullText: string; error?:
   }
 }
 
-// Multi-pass document analysis for estimation (3+3 protocol)
-async function performMultiPassAnalysis(
-  fileUrl: string, 
-  fileName: string,
-  isPdf: boolean
-): Promise<{ 
-  mergedText: string; 
-  confidence: number;
-  discrepancies: string[];
+// Convert PDF to images using the pdf-to-images edge function
+async function convertPdfToImages(pdfUrl: string, maxPages: number = 20): Promise<{ 
+  pages: string[]; 
+  pageCount: number;
+  error?: string;
 }> {
-  const discrepancies: string[] = [];
-  
-  const extractionPrompt = `You are a Senior Structural Estimator Engineer analyzing construction drawings.
+  try {
+    console.log(`Converting PDF to images: ${pdfUrl}`);
+    
+    const response = await fetch(
+      `${Deno.env.get("SUPABASE_URL")}/functions/v1/pdf-to-images`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
+        },
+        body: JSON.stringify({ pdfUrl, maxPages, dpi: 200 }),
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("PDF conversion error:", errorText);
+      return { pages: [], pageCount: 0, error: `PDF conversion failed: ${response.status}` };
+    }
+
+    const data = await response.json();
+    
+    if (!data.success) {
+      return { pages: [], pageCount: 0, error: data.error || "PDF conversion failed" };
+    }
+    
+    console.log(`PDF converted: ${data.processedPages} pages`);
+    return { 
+      pages: data.pages || [], 
+      pageCount: data.pageCount || 0 
+    };
+  } catch (error) {
+    console.error("PDF conversion error:", error);
+    return { 
+      pages: [], 
+      pageCount: 0, 
+      error: error instanceof Error ? error.message : "PDF conversion failed" 
+    };
+  }
+}
+
+// Perform OCR on base64 image data
+async function performOCROnBase64(base64Image: string): Promise<{ fullText: string; error?: string }> {
+  try {
+    // Extract base64 data (remove data:image/png;base64, prefix)
+    const base64Data = base64Image.replace(/^data:image\/\w+;base64,/, "");
+    
+    const response = await fetch(
+      `${Deno.env.get("SUPABASE_URL")}/functions/v1/google-vision-ocr`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
+        },
+        body: JSON.stringify({ imageBase64: base64Data }),
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("OCR error:", errorText);
+      return { fullText: "", error: `OCR failed: ${response.status}` };
+    }
+
+    const data = await response.json();
+    return { fullText: data.fullText || "" };
+  } catch (error) {
+    console.error("OCR error:", error);
+    return { fullText: "", error: error instanceof Error ? error.message : "OCR failed" };
+  }
+}
+
+const extractionPrompt = `You are a Senior Structural Estimator Engineer analyzing construction drawings.
 
 TASK: Extract ALL text, dimensions, schedules, notes, and specifications from this document with 100% accuracy.
 
@@ -164,18 +232,66 @@ OUTPUT FORMAT:
 
 Be EXTREMELY thorough - missing data causes estimation errors.`;
 
-  // For PDFs, use Gemini Vision which handles multi-page documents
+// Multi-pass document analysis for estimation (3+3 protocol with Google Vision for PDFs)
+async function performMultiPassAnalysis(
+  fileUrl: string, 
+  fileName: string,
+  isPdf: boolean
+): Promise<{ 
+  mergedText: string; 
+  confidence: number;
+  discrepancies: string[];
+}> {
+  const discrepancies: string[] = [];
+
+  // For PDFs: Convert to images first, then use Google Vision OCR on each page
   if (isPdf) {
-    console.log(`Analyzing PDF: ${fileName}`);
-    const result = await analyzeDocumentWithGemini(fileUrl, fileName, extractionPrompt);
+    console.log(`Processing PDF with Google Vision OCR: ${fileName}`);
     
-    if (result.error) {
-      discrepancies.push(`PDF analysis warning: ${result.error}`);
+    // Step 1: Convert PDF to images
+    const conversionResult = await convertPdfToImages(fileUrl, 20);
+    
+    if (conversionResult.error || conversionResult.pages.length === 0) {
+      // Fallback to Gemini Vision if PDF conversion fails
+      console.log(`PDF conversion failed, falling back to Gemini Vision: ${conversionResult.error}`);
+      const result = await analyzeDocumentWithGemini(fileUrl, fileName, extractionPrompt);
+      
+      if (result.error) {
+        discrepancies.push(`PDF analysis warning: ${result.error}`);
+      }
+      
+      return {
+        mergedText: result.text,
+        confidence: result.text.length > 500 ? 75 : 40,
+        discrepancies: [...discrepancies, "Used Gemini Vision fallback (PDF conversion unavailable)"],
+      };
     }
     
+    // Step 2: Run Google Vision OCR on each page
+    const pageResults: string[] = [];
+    let successfulPages = 0;
+    
+    for (let i = 0; i < conversionResult.pages.length; i++) {
+      console.log(`Running OCR on page ${i + 1}/${conversionResult.pages.length}`);
+      const ocrResult = await performOCROnBase64(conversionResult.pages[i]);
+      
+      if (ocrResult.fullText && ocrResult.fullText.length > 20) {
+        pageResults.push(`\n=== PAGE ${i + 1} ===\n${ocrResult.fullText}`);
+        successfulPages++;
+      } else if (ocrResult.error) {
+        discrepancies.push(`Page ${i + 1} OCR warning: ${ocrResult.error}`);
+      }
+    }
+    
+    const mergedText = pageResults.join("\n");
+    const confidence = successfulPages > 0 ? 
+      Math.min(95, 60 + (successfulPages / conversionResult.pages.length) * 35) : 30;
+    
+    console.log(`PDF OCR complete: ${successfulPages}/${conversionResult.pages.length} pages successful`);
+    
     return {
-      mergedText: result.text,
-      confidence: result.text.length > 500 ? 85 : 50,
+      mergedText,
+      confidence,
       discrepancies,
     };
   }
