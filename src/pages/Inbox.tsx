@@ -8,11 +8,13 @@ import { UnifiedInboxList } from "@/components/inbox/UnifiedInboxList";
 import { CommunicationViewer } from "@/components/inbox/CommunicationViewer";
 import { useCommunications, Communication } from "@/hooks/useCommunications";
 import { sendAgentMessage } from "@/lib/agent";
-import { MessageSquare, Mail } from "lucide-react";
+import { Mail, Phone, MessageSquare, Bot } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
+type InboxTab = "email" | "calls" | "sms" | "agents";
+
 export default function Inbox() {
-  const [activeTab, setActiveTab] = useState<"email" | "agents">("email");
+  const [activeTab, setActiveTab] = useState<InboxTab>("email");
   const [selectedAgent, setSelectedAgent] = useState<AgentType>("sales");
   const [messages, setMessages] = useState<Message[]>([]);
   const [isTyping, setIsTyping] = useState(false);
@@ -20,7 +22,10 @@ export default function Inbox() {
   const [search, setSearch] = useState("");
   const { toast } = useToast();
 
-  const { communications, loading, error, refresh } = useCommunications({ search: search || undefined });
+  // Filter communications by type based on active tab
+  const typeFilter = activeTab === "calls" ? "call" : activeTab === "sms" ? "sms" : activeTab === "email" ? "email" : undefined;
+
+  const { communications, loading, error, refresh } = useCommunications({ search: search || undefined, typeFilter });
 
   const handleSend = useCallback(async (content: string) => {
     const userMessage: Message = {
@@ -67,6 +72,8 @@ export default function Inbox() {
     setMessages([]);
   };
 
+  const showCommsList = activeTab !== "agents";
+
   return (
     <div className="flex flex-col h-full">
       {/* Header with Tabs */}
@@ -75,14 +82,22 @@ export default function Inbox() {
           <h1 className="text-xl font-semibold">Inbox</h1>
           <p className="text-sm text-muted-foreground">Emails, calls, SMS & agent conversations</p>
         </div>
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "email" | "agents")}>
+        <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v as InboxTab); setSelectedComm(null); }}>
           <TabsList>
             <TabsTrigger value="email" className="gap-2">
               <Mail className="w-4 h-4" />
-              All
+              Email
+            </TabsTrigger>
+            <TabsTrigger value="calls" className="gap-2">
+              <Phone className="w-4 h-4" />
+              Calls
+            </TabsTrigger>
+            <TabsTrigger value="sms" className="gap-2">
+              <MessageSquare className="w-4 h-4" />
+              SMS
             </TabsTrigger>
             <TabsTrigger value="agents" className="gap-2">
-              <MessageSquare className="w-4 h-4" />
+              <Bot className="w-4 h-4" />
               Agents
             </TabsTrigger>
           </TabsList>
@@ -90,9 +105,9 @@ export default function Inbox() {
       </header>
 
       {/* Content */}
-      {activeTab === "email" ? (
+      {showCommsList ? (
         <div className="flex-1 flex overflow-hidden">
-          {/* Unified Communication List */}
+          {/* Communication List */}
           <div className="w-96 flex-shrink-0">
             <UnifiedInboxList
               communications={communications}

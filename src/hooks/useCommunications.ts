@@ -18,7 +18,7 @@ export interface Communication {
   metadata: Record<string, unknown> | null;
 }
 
-export function useCommunications(options?: { search?: string }) {
+export function useCommunications(options?: { search?: string; typeFilter?: string }) {
   const [communications, setCommunications] = useState<Communication[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -38,6 +38,15 @@ export function useCommunications(options?: { search?: string }) {
         query = query.or(
           `subject.ilike.%${options.search}%,from_address.ilike.%${options.search}%,body_preview.ilike.%${options.search}%`
         );
+      }
+
+      // Filter by source/type
+      if (options?.typeFilter === "email") {
+        query = query.eq("source", "gmail");
+      } else if (options?.typeFilter === "call") {
+        query = query.eq("source", "ringcentral").contains("metadata", { type: "call" });
+      } else if (options?.typeFilter === "sms") {
+        query = query.eq("source", "ringcentral").contains("metadata", { type: "sms" });
       }
 
       const { data, error: queryError } = await query;
@@ -76,7 +85,7 @@ export function useCommunications(options?: { search?: string }) {
     } finally {
       setLoading(false);
     }
-  }, [options?.search, toast]);
+  }, [options?.search, options?.typeFilter, toast]);
 
   useEffect(() => {
     load();
