@@ -7,8 +7,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-// Use sandbox server — switch to https://platform.ringcentral.com when app is promoted to production
-const RC_SERVER = "https://platform.devtest.ringcentral.com";
+const RC_SERVER = "https://platform.ringcentral.com";
 
 async function verifyAuth(req: Request): Promise<string | null> {
   const authHeader = req.headers.get("Authorization");
@@ -99,7 +98,7 @@ serve(async (req) => {
       }
 
       // Validate the URI is actually a RingCentral media URL
-      if (!recordingUri.includes("media.ringcentral.com") && !recordingUri.includes("platform.ringcentral.com") && !recordingUri.includes("media.devtest.ringcentral.com") && !recordingUri.includes("platform.devtest.ringcentral.com")) {
+      if (!recordingUri.includes("media.ringcentral.com") && !recordingUri.includes("platform.ringcentral.com")) {
         return new Response(
           JSON.stringify({ error: "Invalid recording URI" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
