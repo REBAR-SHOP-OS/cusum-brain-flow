@@ -64,7 +64,20 @@ serve(async (req) => {
     }
 
     const url = new URL(req.url);
-    const action = url.searchParams.get("action");
+    let action = url.searchParams.get("action");
+
+    // Parse body once for all actions
+    let body: Record<string, unknown> = {};
+    try {
+      body = await req.json();
+    } catch {
+      // No body or invalid JSON
+    }
+
+    // Also check for action in body (supabase.functions.invoke doesn't pass query params well)
+    if (!action && body.action) {
+      action = body.action as string;
+    }
 
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -74,7 +87,6 @@ serve(async (req) => {
     // Handle different actions
     if (action === "get-auth-url") {
       // Generate OAuth authorization URL
-      const body = await req.json();
       const integration = body.integration as string;
       const redirectUri = body.redirectUri as string;
 
@@ -101,7 +113,6 @@ serve(async (req) => {
 
     if (action === "exchange-code") {
       // Exchange authorization code for tokens
-      const body = await req.json();
       const code = body.code as string;
       const redirectUri = body.redirectUri as string;
       const integration = body.integration as string;
@@ -155,7 +166,6 @@ serve(async (req) => {
 
     if (action === "check-status") {
       // Check if an integration is connected
-      const body = await req.json();
       const integration = body.integration as string;
 
       // Try to verify the connection by refreshing the token

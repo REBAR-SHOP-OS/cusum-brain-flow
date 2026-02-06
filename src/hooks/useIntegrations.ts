@@ -76,8 +76,8 @@ export function useIntegrations() {
 
         // Add query param for action
         const { data: statusData, error: statusError } = await supabase.functions.invoke(
-          "google-oauth?action=check-status",
-          { body: { integration: integrationId } }
+          "google-oauth",
+          { body: { action: "check-status", integration: integrationId } }
         );
 
         if (statusError) throw new Error(statusError.message);
@@ -149,8 +149,8 @@ export function useIntegrations() {
     for (const id of googleIntegrations) {
       try {
         const { data: statusData } = await supabase.functions.invoke(
-          "google-oauth?action=check-status",
-          { body: { integration: id } }
+          "google-oauth",
+          { body: { action: "check-status", integration: id } }
         );
 
         if (statusData) {
@@ -236,9 +236,10 @@ export function useIntegrations() {
       const redirectUri = `${window.location.origin}/integrations/callback`;
       
       const { data, error } = await supabase.functions.invoke(
-        "google-oauth?action=get-auth-url",
+        "google-oauth",
         {
           body: {
+            action: "get-auth-url",
             integration: integrationId,
             redirectUri,
           },
