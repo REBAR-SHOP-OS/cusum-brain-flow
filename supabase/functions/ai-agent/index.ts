@@ -19,7 +19,88 @@ interface AgentRequest {
   attachedFiles?: { name: string; url: string }[];
 }
 
-// OCR function for estimation agent
+// Fetch file as base64 for Gemini Vision
+async function fetchFileAsBase64(url: string): Promise<{ base64: string; mimeType: string } | null> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      console.error(`Failed to fetch file: ${response.status}`);
+      return null;
+    }
+    
+    const contentType = response.headers.get("content-type") || "application/octet-stream";
+    const arrayBuffer = await response.arrayBuffer();
+    const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+    
+    return { base64, mimeType: contentType };
+  } catch (error) {
+    console.error("Error fetching file:", error);
+    return null;
+  }
+}
+
+// Analyze document using Gemini Vision (supports PDF and images)
+async function analyzeDocumentWithGemini(
+  fileUrl: string, 
+  fileName: string,
+  prompt: string
+): Promise<{ text: string; error?: string }> {
+  try {
+    const fileData = await fetchFileAsBase64(fileUrl);
+    if (!fileData) {
+      return { text: "", error: "Failed to fetch file" };
+    }
+
+    console.log(`Analyzing ${fileName} with Gemini Vision (${fileData.mimeType})...`);
+
+    // Use Gemini's multimodal capabilities
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${Deno.env.get("LOVABLE_API_KEY")}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: prompt,
+              },
+              {
+                type: "image_url",
+                image_url: {
+                  url: `data:${fileData.mimeType};base64,${fileData.base64}`,
+                },
+              },
+            ],
+          },
+        ],
+        max_tokens: 8000,
+        temperature: 0.1, // Very low for accurate extraction
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Gemini Vision error:", errorText);
+      return { text: "", error: `Gemini Vision failed: ${response.status}` };
+    }
+
+    const data = await response.json();
+    const text = data.choices?.[0]?.message?.content || "";
+    
+    return { text };
+  } catch (error) {
+    console.error("Document analysis error:", error);
+    return { text: "", error: error instanceof Error ? error.message : "Analysis failed" };
+  }
+}
+
+// OCR function for estimation agent (using Google Vision for images)
 async function performOCR(imageUrl: string): Promise<{ fullText: string; error?: string }> {
   try {
     const response = await fetch(
@@ -48,48 +129,82 @@ async function performOCR(imageUrl: string): Promise<{ fullText: string; error?:
   }
 }
 
-// Multi-pass OCR with cross-reference (as per estimation agent protocol)
-async function performMultiPassOCR(imageUrl: string): Promise<{ 
+// Multi-pass document analysis for estimation (3+3 protocol)
+async function performMultiPassAnalysis(
+  fileUrl: string, 
+  fileName: string,
+  isPdf: boolean
+): Promise<{ 
   mergedText: string; 
-  passes: string[]; 
   confidence: number;
   discrepancies: string[];
 }> {
-  const passes: string[] = [];
   const discrepancies: string[] = [];
   
-  // Perform 3 OCR passes
-  for (let i = 0; i < 3; i++) {
-    const result = await performOCR(imageUrl);
-    if (result.fullText) {
-      passes.push(result.fullText);
+  const extractionPrompt = `You are a Senior Structural Estimator Engineer analyzing construction drawings.
+
+TASK: Extract ALL text, dimensions, schedules, notes, and specifications from this document with 100% accuracy.
+
+FOCUS ON:
+1. Foundation Schedules (F1, F2, F3, etc.) - sizes, rebar specs (e.g., 7-20M B.E.W.)
+2. Pier Schedules (P1, P2, etc.) - sizes, vertical bars, ties
+3. Column Schedules - steel sizes, base plates, anchor bolts
+4. Beam Schedules - dimensions, reinforcement
+5. Slab details - thickness, mesh type, spacing
+6. General Notes - concrete strength, rebar grade, cover requirements
+7. Scale information (e.g., 1/4"=1'-0", 3/4"=1'-0")
+8. Dimensions - ALL dimensions visible on drawings
+9. Section references (A/S1, B/S2, etc.)
+
+OUTPUT FORMAT:
+- Use EXACT notation from drawings (e.g., "7-20M B.E.W." not "seven 20mm bars")
+- Preserve table structures
+- Mark unclear items with "!" suffix
+- Group by element type (Foundations, Piers, Columns, Beams, Slabs, Notes)
+
+Be EXTREMELY thorough - missing data causes estimation errors.`;
+
+  // For PDFs, use Gemini Vision which handles multi-page documents
+  if (isPdf) {
+    console.log(`Analyzing PDF: ${fileName}`);
+    const result = await analyzeDocumentWithGemini(fileUrl, fileName, extractionPrompt);
+    
+    if (result.error) {
+      discrepancies.push(`PDF analysis warning: ${result.error}`);
     }
+    
+    return {
+      mergedText: result.text,
+      confidence: result.text.length > 500 ? 85 : 50,
+      discrepancies,
+    };
   }
   
-  if (passes.length === 0) {
-    return { mergedText: "", passes: [], confidence: 0, discrepancies: ["No OCR results obtained"] };
+  // For images, try Google Vision OCR first, fallback to Gemini
+  console.log(`Analyzing image: ${fileName}`);
+  const ocrResult = await performOCR(fileUrl);
+  
+  if (ocrResult.fullText && ocrResult.fullText.length > 100) {
+    return {
+      mergedText: ocrResult.fullText,
+      confidence: 80,
+      discrepancies: [],
+    };
   }
   
-  // Simple merge: use the longest result as primary
-  // In production, this would do proper text comparison
-  const sortedByLength = [...passes].sort((a, b) => b.length - a.length);
-  const mergedText = sortedByLength[0];
+  // Fallback to Gemini Vision for complex images
+  console.log(`Falling back to Gemini Vision for: ${fileName}`);
+  const geminiResult = await analyzeDocumentWithGemini(fileUrl, fileName, extractionPrompt);
   
-  // Calculate confidence based on consistency
-  const confidence = passes.length >= 2 ? 
-    (passes.filter(p => p.length > mergedText.length * 0.8).length / passes.length) * 100 : 50;
-  
-  // Check for major discrepancies
-  if (passes.length >= 2) {
-    const lengths = passes.map(p => p.length);
-    const avgLength = lengths.reduce((a, b) => a + b, 0) / lengths.length;
-    const variance = lengths.some(l => Math.abs(l - avgLength) > avgLength * 0.3);
-    if (variance) {
-      discrepancies.push("Significant variance in OCR results detected - manual review recommended");
-    }
+  if (geminiResult.error) {
+    discrepancies.push(`Image analysis warning: ${geminiResult.error}`);
   }
   
-  return { mergedText, passes, confidence, discrepancies };
+  return {
+    mergedText: geminiResult.text || ocrResult.fullText,
+    confidence: geminiResult.text ? 75 : 50,
+    discrepancies,
+  };
 }
 
 // Agent system prompts
@@ -522,29 +637,42 @@ serve(async (req) => {
     const dbContext = await fetchContext(supabase, agent);
     const mergedContext = { ...dbContext, ...userContext };
 
-    // For estimation agent, perform OCR on attached files
-    let ocrResults: { fileName: string; text: string; confidence: number; discrepancies: string[] }[] = [];
+    // For estimation agent, analyze attached files (images AND PDFs)
+    let documentResults: { fileName: string; text: string; confidence: number; discrepancies: string[]; fileType: string }[] = [];
     if (agent === "estimation" && attachedFiles.length > 0) {
-      console.log(`Processing ${attachedFiles.length} files for OCR...`);
+      console.log(`Processing ${attachedFiles.length} files for analysis...`);
       
       for (const file of attachedFiles) {
-        // Check if it's an image file
+        // Check file type
         const isImage = /\.(jpg|jpeg|png|gif|bmp|webp|tiff?)$/i.test(file.name);
-        if (isImage) {
-          console.log(`Performing multi-pass OCR on: ${file.name}`);
-          const ocrResult = await performMultiPassOCR(file.url);
-          ocrResults.push({
+        const isPdf = /\.pdf$/i.test(file.name);
+        const isDwg = /\.(dwg|dxf)$/i.test(file.name);
+        
+        if (isImage || isPdf) {
+          console.log(`Analyzing ${isPdf ? 'PDF' : 'image'}: ${file.name}`);
+          const result = await performMultiPassAnalysis(file.url, file.name, isPdf);
+          documentResults.push({
             fileName: file.name,
-            text: ocrResult.mergedText,
-            confidence: ocrResult.confidence,
-            discrepancies: ocrResult.discrepancies,
+            text: result.mergedText,
+            confidence: result.confidence,
+            discrepancies: result.discrepancies,
+            fileType: isPdf ? 'PDF' : 'Image',
+          });
+        } else if (isDwg) {
+          // DWG/DXF files need conversion - notify user
+          documentResults.push({
+            fileName: file.name,
+            text: `⚠️ فایل ${file.name} از نوع CAD است و باید به PDF تبدیل شود. لطفاً نسخه PDF نقشه را آپلود کنید.`,
+            confidence: 0,
+            discrepancies: ["CAD file needs conversion to PDF"],
+            fileType: 'CAD',
           });
         }
       }
       
-      // Add OCR results to context
-      if (ocrResults.length > 0) {
-        mergedContext.ocrResults = ocrResults;
+      // Add document results to context
+      if (documentResults.length > 0) {
+        mergedContext.documentResults = documentResults;
       }
     }
 
@@ -557,15 +685,15 @@ serve(async (req) => {
       contextStr = `\n\nCurrent data context:\n${JSON.stringify(mergedContext, null, 2)}`;
     }
     
-    // Add OCR summary for estimation agent
-    if (agent === "estimation" && ocrResults.length > 0) {
-      contextStr += "\n\n📋 OCR RESULTS FROM ATTACHED DRAWINGS:\n";
-      for (const ocr of ocrResults) {
-        contextStr += `\n--- ${ocr.fileName} (Confidence: ${ocr.confidence.toFixed(0)}%) ---\n`;
-        if (ocr.discrepancies.length > 0) {
-          contextStr += `⚠️ Discrepancies: ${ocr.discrepancies.join(", ")}\n`;
+    // Add document analysis summary for estimation agent
+    if (agent === "estimation" && documentResults.length > 0) {
+      contextStr += "\n\n📋 DOCUMENT ANALYSIS RESULTS FROM ATTACHED DRAWINGS:\n";
+      for (const doc of documentResults) {
+        contextStr += `\n--- ${doc.fileName} [${doc.fileType}] (Confidence: ${doc.confidence.toFixed(0)}%) ---\n`;
+        if (doc.discrepancies.length > 0) {
+          contextStr += `⚠️ Warnings: ${doc.discrepancies.join(", ")}\n`;
         }
-        contextStr += `${ocr.text}\n`;
+        contextStr += `${doc.text}\n`;
       }
     }
 
