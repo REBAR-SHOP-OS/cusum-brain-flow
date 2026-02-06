@@ -225,7 +225,7 @@ export default function Home() {
 function HelperCard({ helper, onClick }: { helper: Helper; onClick: () => void }) {
   return (
     <Card
-      className="overflow-hidden cursor-pointer group hover:scale-[1.02] transition-transform"
+      className="overflow-hidden cursor-pointer group hover:scale-[1.03] transition-transform duration-150 ease-out"
       onClick={onClick}
     >
       <div className="relative aspect-[4/5]">
@@ -236,13 +236,10 @@ function HelperCard({ helper, onClick }: { helper: Helper; onClick: () => void }
           className="w-full h-full object-cover"
         />
         
-        {/* Gradient Overlay */}
-        <div className={`absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t ${helper.gradient} to-transparent`} />
-        
-        {/* Text Overlay */}
-        <div className="absolute inset-x-0 bottom-0 p-3 text-white">
-          <h3 className="font-bold text-lg leading-tight">{helper.name}</h3>
-          <p className="text-sm opacity-90">{helper.role}</p>
+        {/* Solid bottom bar instead of blurry gradient */}
+        <div className="absolute inset-x-0 bottom-0 bg-black/70 backdrop-blur-none p-3">
+          <h3 className="font-bold text-lg leading-tight text-white">{helper.name}</h3>
+          <p className="text-sm text-white/80">{helper.role}</p>
         </div>
       </div>
     </Card>
