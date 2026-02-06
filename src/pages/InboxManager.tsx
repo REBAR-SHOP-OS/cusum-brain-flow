@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { X, Check, Loader2, Tag, Edit3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { InboxView } from "@/components/inbox/InboxView";
+import { supabase } from "@/integrations/supabase/client";
 
-type Step = "intro" | "labels" | "drafts" | "connect" | "setup" | "inbox";
+type Step = "loading" | "intro" | "labels" | "drafts" | "connect" | "setup" | "inbox";
 
 interface EmailPreview {
   sender: string;
@@ -42,8 +43,26 @@ const setupSteps = [
 
 export default function InboxManager() {
   const navigate = useNavigate();
-  const [currentStep, setCurrentStep] = useState<Step>("intro");
+  const [currentStep, setCurrentStep] = useState<Step>("loading");
   const [setupProgress, setSetupProgress] = useState(setupSteps);
+
+  // Check if emails already exist — skip tour if so
+  useEffect(() => {
+    async function checkExistingEmails() {
+      const { count } = await supabase
+        .from("communications")
+        .select("id", { count: "exact", head: true })
+        .eq("source", "gmail")
+        .limit(1);
+
+      if (count && count > 0) {
+        setCurrentStep("inbox");
+      } else {
+        setCurrentStep("intro");
+      }
+    }
+    checkExistingEmails();
+  }, []);
 
   const handleGetStarted = () => setCurrentStep("labels");
   const handleContinueToLabels = () => setCurrentStep("drafts");
@@ -51,13 +70,11 @@ export default function InboxManager() {
   
   const handleConnect = (provider: "gmail" | "outlook") => {
     setCurrentStep("setup");
-    // Simulate setup progress
     let step = 0;
     const interval = setInterval(() => {
       step++;
       if (step >= setupSteps.length) {
         clearInterval(interval);
-        // Show inbox view after setup
         setTimeout(() => setCurrentStep("inbox"), 1500);
         return;
       }
@@ -70,20 +87,19 @@ export default function InboxManager() {
     }, 1500);
   };
 
-  // Show the inbox view after setup is complete
+  // Loading state
+  if (currentStep === "loading") {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  // Show the inbox view after setup is complete or if emails already exist
   if (currentStep === "inbox") {
     return (
       <div className="flex flex-col h-full bg-background">
-        {/* Beta Banner */}
-        <div className="bg-[#4FC3F7] text-white py-2 px-4 flex items-center justify-center gap-2 text-sm">
-          <span className="text-lg">🎉</span>
-          <span>Cassie Inbox Manager is free while in beta - no credits used. We'll let you know before that changes.</span>
-          <button className="ml-auto">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* Inbox View */}
         <div className="flex-1">
           <InboxView />
         </div>
@@ -93,7 +109,7 @@ export default function InboxManager() {
 
   return (
     <div className="relative flex flex-col h-full bg-background">
-      {/* Close button - fixed position within content area */}
+      {/* Close button */}
       <button 
         onClick={() => navigate("/integrations")}
         className="absolute top-4 right-4 z-50 p-2 rounded-lg hover:bg-muted transition-colors"
@@ -120,7 +136,6 @@ export default function InboxManager() {
               </p>
 
               <div className="flex gap-8 justify-center items-start">
-                {/* Category Labels */}
                 <div className="space-y-2 text-left">
                   <div className="flex items-center gap-2">
                     <span className="w-3 h-3 rounded-full bg-red-400" />
@@ -140,7 +155,6 @@ export default function InboxManager() {
                   </div>
                 </div>
 
-                {/* Email Preview */}
                 <div className="space-y-2 text-left">
                   {sampleEmails.slice(0, 6).map((email, i) => (
                     <div key={i} className="flex items-center gap-3 text-sm">
@@ -167,8 +181,6 @@ export default function InboxManager() {
               <p className="text-muted-foreground">
                 Cassie adds labels so you instantly can see what needs your attention — without digging through clutter.
               </p>
-
-              {/* Label chips */}
               <div className="flex flex-wrap justify-center gap-3">
                 {labelTypes.map((label) => (
                   <div key={label.name} className="flex items-center gap-2">
@@ -177,8 +189,6 @@ export default function InboxManager() {
                   </div>
                 ))}
               </div>
-
-              {/* Sample emails with labels */}
               <div className="space-y-2 max-w-md mx-auto">
                 {sampleEmails.slice(0, 3).map((email, i) => (
                   <div key={i} className="flex items-center gap-3 text-sm opacity-70">
@@ -190,8 +200,6 @@ export default function InboxManager() {
                   </div>
                 ))}
               </div>
-
-              {/* Feature callout */}
               <div className="flex items-center gap-3 justify-center text-left">
                 <Tag className="w-5 h-5 text-[#4FC3F7]" />
                 <div>
@@ -199,7 +207,6 @@ export default function InboxManager() {
                   <p className="text-sm text-muted-foreground">Cassie will automatically categorize incoming emails</p>
                 </div>
               </div>
-
               <Button onClick={handleContinueToLabels} className="bg-[#4FC3F7] hover:bg-[#4FC3F7]/90 text-white px-8">
                 Continue
               </Button>
@@ -213,8 +220,6 @@ export default function InboxManager() {
               <p className="text-muted-foreground">
                 Cassie uses your Brain AI context to write draft replies in your tone. You'll review and send them — nothing leaves your inbox without your approval.
               </p>
-
-              {/* Email compose preview */}
               <div className="border rounded-lg p-4 max-w-lg mx-auto text-left bg-card">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
                   <span>To: carles@sintra.ai</span>
@@ -232,8 +237,6 @@ export default function InboxManager() {
                   <span className="text-xs text-muted-foreground">Aa</span>
                 </div>
               </div>
-
-              {/* Feature callout */}
               <div className="flex items-center gap-3 justify-center text-left">
                 <Edit3 className="w-5 h-5 text-[#4FC3F7]" />
                 <div>
@@ -241,7 +244,6 @@ export default function InboxManager() {
                   <p className="text-sm text-muted-foreground">Draft replies appear in both Sintra and your inbox</p>
                 </div>
               </div>
-
               <Button onClick={handleContinueToDrafts} className="bg-[#4FC3F7] hover:bg-[#4FC3F7]/90 text-white px-8">
                 Continue
               </Button>
@@ -252,32 +254,18 @@ export default function InboxManager() {
           {currentStep === "connect" && (
             <div className="space-y-8">
               <h1 className="text-3xl font-bold">Connect your account</h1>
-              <p className="text-muted-foreground">
-                Choose your email provider to get started
-              </p>
-
+              <p className="text-muted-foreground">Choose your email provider to get started</p>
               <div className="space-y-3 max-w-sm mx-auto">
-                <button
-                  onClick={() => handleConnect("gmail")}
-                  className="w-full flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
-                >
+                <button onClick={() => handleConnect("gmail")} className="w-full flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors">
                   <div className="flex items-center gap-3">
-                    <svg className="w-6 h-6" viewBox="0 0 24 24">
-                      <path fill="#EA4335" d="M24 5.457v13.909c0 .904-.732 1.636-1.636 1.636h-3.819V11.73L12 16.64l-6.545-4.91v9.273H1.636A1.636 1.636 0 0 1 0 19.366V5.457c0-2.023 2.309-3.178 3.927-1.964L5.455 4.64 12 9.548l6.545-4.91 1.528-1.145C21.69 2.28 24 3.434 24 5.457z"/>
-                    </svg>
+                    <svg className="w-6 h-6" viewBox="0 0 24 24"><path fill="#EA4335" d="M24 5.457v13.909c0 .904-.732 1.636-1.636 1.636h-3.819V11.73L12 16.64l-6.545-4.91v9.273H1.636A1.636 1.636 0 0 1 0 19.366V5.457c0-2.023 2.309-3.178 3.927-1.964L5.455 4.64 12 9.548l6.545-4.91 1.528-1.145C21.69 2.28 24 3.434 24 5.457z"/></svg>
                     <span className="font-medium">Connect with Gmail</span>
                   </div>
                   <span className="text-muted-foreground">Connect</span>
                 </button>
-
-                <button
-                  onClick={() => handleConnect("outlook")}
-                  className="w-full flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
-                >
+                <button onClick={() => handleConnect("outlook")} className="w-full flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors">
                   <div className="flex items-center gap-3">
-                    <svg className="w-6 h-6" viewBox="0 0 24 24">
-                      <path fill="#0078D4" d="M24 7.387v10.478c0 .23-.08.424-.238.576-.159.152-.362.228-.61.228h-8.456V6.545h8.456c.248 0 .451.076.61.228.158.152.238.345.238.576zm-9.304-1.3v12.074L0 15.876V3.49l14.696 2.597zm-.912 9.063V8.65l-3.435.356v6.788l3.435-.644zm-4.347.85V8.15L6.545 8.5v7.15l2.892-.65zm-3.804.85V7.8l-2.741.3v8.45l2.741-.6z"/>
-                    </svg>
+                    <svg className="w-6 h-6" viewBox="0 0 24 24"><path fill="#0078D4" d="M24 7.387v10.478c0 .23-.08.424-.238.576-.159.152-.362.228-.61.228h-8.456V6.545h8.456c.248 0 .451.076.61.228.158.152.238.345.238.576zm-9.304-1.3v12.074L0 15.876V3.49l14.696 2.597zm-.912 9.063V8.65l-3.435.356v6.788l3.435-.644zm-4.347.85V8.15L6.545 8.5v7.15l2.892-.65zm-3.804.85V7.8l-2.741.3v8.45l2.741-.6z"/></svg>
                     <span className="font-medium">Connect with Outlook</span>
                   </div>
                   <span className="text-muted-foreground">Connect</span>
@@ -290,22 +278,15 @@ export default function InboxManager() {
           {currentStep === "setup" && (
             <div className="space-y-8">
               <h1 className="text-3xl font-bold">Cassie is setting up<br />your inbox</h1>
-
               <div className="space-y-4 max-w-sm mx-auto text-left">
                 {setupProgress.map((step) => (
                   <div key={step.id} className="flex items-center justify-between">
                     <span className={cn(
                       step.status === "pending" && "text-muted-foreground",
                       step.status === "done" && "text-foreground"
-                    )}>
-                      {step.label}
-                    </span>
-                    {step.status === "done" && (
-                      <Check className="w-5 h-5 text-[#4FC3F7]" />
-                    )}
-                    {step.status === "loading" && (
-                      <Loader2 className="w-5 h-5 text-[#4FC3F7] animate-spin" />
-                    )}
+                    )}>{step.label}</span>
+                    {step.status === "done" && <Check className="w-5 h-5 text-[#4FC3F7]" />}
+                    {step.status === "loading" && <Loader2 className="w-5 h-5 text-[#4FC3F7] animate-spin" />}
                   </div>
                 ))}
               </div>
