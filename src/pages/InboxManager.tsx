@@ -92,14 +92,19 @@ export default function InboxManager() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-background">
+    <div className="relative flex flex-col h-full bg-background">
+      {/* Close button - fixed position within content area */}
+      <button 
+        onClick={() => navigate("/integrations")}
+        className="absolute top-4 right-4 z-50 p-2 rounded-lg hover:bg-muted transition-colors"
+      >
+        <X className="w-5 h-5 text-muted-foreground hover:text-foreground" />
+      </button>
+
       {/* Beta Banner */}
       <div className="bg-[#4FC3F7] text-white py-2 px-4 flex items-center justify-center gap-2 text-sm">
         <span className="text-lg">🎉</span>
         <span>Cassie Inbox Manager is free while in beta - no credits used. We'll let you know before that changes.</span>
-        <button className="ml-auto">
-          <X className="w-4 h-4" />
-        </button>
       </div>
 
       {/* Main Content */}
@@ -308,14 +313,6 @@ export default function InboxManager() {
           )}
         </div>
       </div>
-
-      {/* Close button */}
-      <button 
-        onClick={() => navigate("/integrations")}
-        className="absolute top-16 left-6"
-      >
-        <X className="w-6 h-6 text-muted-foreground hover:text-foreground" />
-      </button>
     </div>
   );
 }
