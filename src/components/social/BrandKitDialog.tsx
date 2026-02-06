@@ -4,9 +4,39 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Plus, Save, Loader2, X } from "lucide-react";
+import { Plus, Save, Loader2, X, Camera } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import brandLogo from "@/assets/brand-logo.png";
+
+// Helper images
+import salesHelper from "@/assets/helpers/sales-helper.png";
+import supportHelper from "@/assets/helpers/support-helper.png";
+import accountingHelper from "@/assets/helpers/accounting-helper.png";
+import estimatingHelper from "@/assets/helpers/estimating-helper.png";
+import shopfloorHelper from "@/assets/helpers/shopfloor-helper.png";
+import deliveryHelper from "@/assets/helpers/delivery-helper.png";
+import emailHelper from "@/assets/helpers/email-helper.png";
+import dataHelper from "@/assets/helpers/data-helper.png";
+import socialHelper from "@/assets/helpers/social-helper.png";
+
+interface HelperAvatar {
+  id: string;
+  name: string;
+  role: string;
+  defaultImage: string;
+}
+
+const defaultHelpers: HelperAvatar[] = [
+  { id: "sales", name: "Salesy", role: "Sales & Pipeline", defaultImage: salesHelper },
+  { id: "support", name: "Sasha", role: "Customer Support", defaultImage: supportHelper },
+  { id: "accounting", name: "Archie", role: "Accounting", defaultImage: accountingHelper },
+  { id: "estimating", name: "Eddie", role: "Estimating", defaultImage: estimatingHelper },
+  { id: "shopfloor", name: "Steely", role: "Shop Floor", defaultImage: shopfloorHelper },
+  { id: "delivery", name: "Danny", role: "Deliveries", defaultImage: deliveryHelper },
+  { id: "email", name: "Emmy", role: "Email & Inbox", defaultImage: emailHelper },
+  { id: "social", name: "Sushie", role: "Social Media", defaultImage: socialHelper },
+  { id: "data", name: "Dexter", role: "Data & Insights", defaultImage: dataHelper },
+];
 
 interface BrandKitDialogProps {
   open: boolean;
@@ -42,6 +72,11 @@ export function BrandKitDialog({ open, onOpenChange }: BrandKitDialogProps) {
     "https://images.unsplash.com/photo-1581094794329-c8112c4e5190?w=100",
   ]);
   const [saving, setSaving] = useState(false);
+  const [helperImages, setHelperImages] = useState<Record<string, string>>(
+    () => Object.fromEntries(defaultHelpers.map((h) => [h.id, h.defaultImage]))
+  );
+  const helperInputRef = useRef<HTMLInputElement>(null);
+  const [activeHelperId, setActiveHelperId] = useState<string | null>(null);
 
   const colorRefs = {
     primary: useRef<HTMLInputElement>(null),
@@ -89,6 +124,37 @@ export function BrandKitDialog({ open, onOpenChange }: BrandKitDialogProps) {
 
   const handleRemoveMedia = (index: number) => {
     setMediaImages((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleHelperImageClick = (helperId: string) => {
+    setActiveHelperId(helperId);
+    helperInputRef.current?.click();
+  };
+
+  const handleHelperImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !activeHelperId) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: "File too large", description: "Image must be under 5MB.", variant: "destructive" });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const url = ev.target?.result as string;
+      if (url && activeHelperId) {
+        setHelperImages((prev) => ({ ...prev, [activeHelperId]: url }));
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+    setActiveHelperId(null);
+  };
+
+  const handleResetHelper = (helperId: string) => {
+    const original = defaultHelpers.find((h) => h.id === helperId);
+    if (original) {
+      setHelperImages((prev) => ({ ...prev, [helperId]: original.defaultImage }));
+    }
   };
 
   const handleSave = async () => {
@@ -259,6 +325,43 @@ export function BrandKitDialog({ open, onOpenChange }: BrandKitDialogProps) {
               multiple
               className="hidden"
               onChange={handleFileChange}
+            />
+          </div>
+        </div>
+
+        {/* Helper Avatars */}
+        <div className="space-y-2 mt-4">
+          <Label className="text-sm font-medium">
+            Helper avatars <span className="text-muted-foreground font-normal">- Click to replace any helper image.</span>
+          </Label>
+          <div className="p-4 rounded-lg border bg-muted/30">
+            <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
+              {defaultHelpers.map((helper) => (
+                <div key={helper.id} className="text-center group">
+                  <div
+                    className="relative w-16 h-16 mx-auto rounded-lg overflow-hidden cursor-pointer ring-2 ring-transparent hover:ring-primary/50 transition-all"
+                    onClick={() => handleHelperImageClick(helper.id)}
+                  >
+                    <img
+                      src={helperImages[helper.id]}
+                      alt={helper.name}
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <Camera className="w-4 h-4 text-white" />
+                    </div>
+                  </div>
+                  <p className="text-[10px] font-medium mt-1 truncate">{helper.name}</p>
+                  <p className="text-[9px] text-muted-foreground truncate">{helper.role}</p>
+                </div>
+              ))}
+            </div>
+            <input
+              ref={helperInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleHelperImageChange}
             />
           </div>
         </div>
