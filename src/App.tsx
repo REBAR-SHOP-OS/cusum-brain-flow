@@ -44,17 +44,17 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <AppLayout>
-                    <Home />
+                    <Inbox />
                   </AppLayout>
                 </ProtectedRoute>
               }
             />
             <Route
-              path="/inbox"
+              path="/home"
               element={
                 <ProtectedRoute>
                   <AppLayout>
-                    <Inbox />
+                    <Home />
                   </AppLayout>
                 </ProtectedRoute>
               }
