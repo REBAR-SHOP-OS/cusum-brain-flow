@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { IntegrationCard, type Integration } from "@/components/integrations/IntegrationCard";
 import { IntegrationSetupDialog } from "@/components/integrations/IntegrationSetupDialog";
 import { defaultIntegrations } from "@/components/integrations/integrationsList";
+import { AutomationsSection } from "@/components/integrations/AutomationsSection";
 
 export default function Integrations() {
   const [integrations, setIntegrations] = useState<Integration[]>(defaultIntegrations);
@@ -166,6 +167,9 @@ export default function Integrations() {
       </header>
 
       <div className="flex-1 overflow-y-auto scrollbar-thin p-6">
+        {/* Automations */}
+        <AutomationsSection />
+
         {/* Needs Attention */}
         {needsAttention.length > 0 && (
           <section className="mb-8">
