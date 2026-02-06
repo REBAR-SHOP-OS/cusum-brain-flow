@@ -1,8 +1,10 @@
 import { useState } from "react";
-import { X, ExternalLink, Sparkles, Trash2, Send } from "lucide-react";
+import { X, ExternalLink, Sparkles, Trash2, Send, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 import type { InboxEmail } from "./InboxEmailList";
 
 interface InboxEmailViewerProps {
@@ -12,6 +14,45 @@ interface InboxEmailViewerProps {
 
 export function InboxEmailViewer({ email, onClose }: InboxEmailViewerProps) {
   const [replyText, setReplyText] = useState("");
+  const [drafting, setDrafting] = useState(false);
+  const { toast } = useToast();
+
+  const handleAiDraft = async () => {
+    if (!email) return;
+    setDrafting(true);
+
+    try {
+      const { data, error } = await supabase.functions.invoke("draft-email", {
+        body: {
+          emailSubject: email.subject,
+          emailBody: email.preview,
+          senderName: email.sender,
+          senderEmail: email.senderEmail,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data?.error) {
+        toast({ title: "AI Draft Error", description: data.error, variant: "destructive" });
+        return;
+      }
+
+      if (data?.draft) {
+        setReplyText(data.draft);
+        toast({ title: "Draft ready", description: "AI draft generated — review before sending." });
+      }
+    } catch (err) {
+      console.error("AI Draft error:", err);
+      toast({
+        title: "Failed to generate draft",
+        description: err instanceof Error ? err.message : "Please try again",
+        variant: "destructive",
+      });
+    } finally {
+      setDrafting(false);
+    }
+  };
 
   if (!email) {
     return (
@@ -65,9 +106,17 @@ export function InboxEmailViewer({ email, onClose }: InboxEmailViewerProps) {
               <span>↩</span>
               <span>{email.senderEmail}</span>
             </div>
-            <button className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-              <Sparkles className="w-4 h-4" />
-              <span>AI Draft</span>
+            <button
+              onClick={handleAiDraft}
+              disabled={drafting}
+              className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground disabled:opacity-50"
+            >
+              {drafting ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Sparkles className="w-4 h-4" />
+              )}
+              <span>{drafting ? "Drafting..." : "AI Draft"}</span>
             </button>
           </div>
           
@@ -82,7 +131,7 @@ export function InboxEmailViewer({ email, onClose }: InboxEmailViewerProps) {
 
       {/* Footer Actions */}
       <div className="flex items-center justify-between p-4 border-t">
-        <Button variant="ghost" className="text-muted-foreground">
+        <Button variant="ghost" className="text-muted-foreground" onClick={() => setReplyText("")}>
           <Trash2 className="w-4 h-4 mr-2" />
           Cancel
         </Button>
