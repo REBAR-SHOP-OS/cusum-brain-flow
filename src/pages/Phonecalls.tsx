@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from "react";
-import { Phone, RefreshCw, Search, PhoneIncoming, PhoneOutgoing, PhoneMissed, Play, Pause, Clock, PhoneCall, Loader2 } from "lucide-react";
+import { Phone, RefreshCw, Search, PhoneIncoming, PhoneOutgoing, PhoneMissed, Play, Pause, Clock, PhoneCall, Loader2, Brain } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -17,6 +17,7 @@ import { useCommunications } from "@/hooks/useCommunications";
 import { useRingCentralWidget } from "@/hooks/useRingCentralWidget";
 import { LiveCallPanel } from "@/components/phonecalls/LiveCallPanel";
 import { CallSummaryDialog } from "@/components/phonecalls/CallSummaryDialog";
+import { CallAnalysisDialog } from "@/components/phonecalls/CallAnalysisDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -64,6 +65,12 @@ export default function Phonecalls() {
   const [lastTranscript, setLastTranscript] = useState("");
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [loadingRecording, setLoadingRecording] = useState<string | null>(null);
+  const [analysisCall, setAnalysisCall] = useState<{
+    id: string;
+    recordingUri: string;
+    from: string;
+    to: string;
+  } | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const { toast } = useToast();
 
@@ -306,6 +313,7 @@ export default function Phonecalls() {
                 <TableHead>Duration</TableHead>
                 <TableHead>Summary</TableHead>
                 <TableHead className="w-12">Recording</TableHead>
+                <TableHead className="w-12">AI</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -373,6 +381,26 @@ export default function Phonecalls() {
                         <Play className="w-4 h-4 text-muted-foreground/40" />
                       ) : null}
                     </TableCell>
+                    <TableCell>
+                      {hasRecording && recordingUri ? (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          title="AI Analysis"
+                          onClick={() =>
+                            setAnalysisCall({
+                              id: call.id,
+                              recordingUri,
+                              from: call.from,
+                              to: call.to,
+                            })
+                          }
+                        >
+                          <Brain className="w-4 h-4 text-primary" />
+                        </Button>
+                      ) : null}
+                    </TableCell>
                   </TableRow>
                 );
               })}
@@ -381,7 +409,7 @@ export default function Phonecalls() {
         )}
       </div>
 
-      {/* Call Summary Dialog */}
+      {/* Call Summary Dialog (live calls) */}
       <CallSummaryDialog
         open={showSummary}
         onOpenChange={setShowSummary}
@@ -389,6 +417,18 @@ export default function Phonecalls() {
         fromNumber={activeCall?.fromNumber}
         toNumber={activeCall?.toNumber}
       />
+
+      {/* AI Analysis Dialog (recorded calls) */}
+      {analysisCall && (
+        <CallAnalysisDialog
+          open={!!analysisCall}
+          onOpenChange={(open) => !open && setAnalysisCall(null)}
+          recordingUri={analysisCall.recordingUri}
+          fromNumber={analysisCall.from}
+          toNumber={analysisCall.to}
+          callId={analysisCall.id}
+        />
+      )}
     </div>
   );
 }

@@ -20,3 +20,6 @@ verify_jwt = false
 
 [functions.ringcentral-recording]
 verify_jwt = false
+
+[functions.ringcentral-ai]
+verify_jwt = false
