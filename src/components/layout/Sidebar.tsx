@@ -1,11 +1,12 @@
 import { Link, useLocation } from "react-router-dom";
-import { Inbox, Brain, Settings, Plug, MessageSquare, CheckSquare, Factory, Truck, Users } from "lucide-react";
+import { Inbox, Brain, Settings, Plug, MessageSquare, CheckSquare, Factory, Truck, Users, Kanban } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { UserMenu } from "./UserMenu";
 
 const navigation = [
   { name: "Inbox", href: "/", icon: Inbox },
   { name: "Tasks", href: "/tasks", icon: CheckSquare },
+  { name: "Pipeline", href: "/pipeline", icon: Kanban },
   { name: "Customers", href: "/customers", icon: Users },
   { name: "Shop Floor", href: "/shop-floor", icon: Factory },
   { name: "Deliveries", href: "/deliveries", icon: Truck },

@@ -424,6 +424,85 @@ export type Database = {
         }
         Relationships: []
       }
+      leads: {
+        Row: {
+          assigned_to: string | null
+          contact_id: string | null
+          created_at: string
+          customer_id: string | null
+          description: string | null
+          expected_close_date: string | null
+          expected_value: number | null
+          id: string
+          notes: string | null
+          priority: string | null
+          probability: number | null
+          quote_id: string | null
+          source: string | null
+          stage: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          contact_id?: string | null
+          created_at?: string
+          customer_id?: string | null
+          description?: string | null
+          expected_close_date?: string | null
+          expected_value?: number | null
+          id?: string
+          notes?: string | null
+          priority?: string | null
+          probability?: number | null
+          quote_id?: string | null
+          source?: string | null
+          stage?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          assigned_to?: string | null
+          contact_id?: string | null
+          created_at?: string
+          customer_id?: string | null
+          description?: string | null
+          expected_close_date?: string | null
+          expected_value?: number | null
+          id?: string
+          notes?: string | null
+          priority?: string | null
+          probability?: number | null
+          quote_id?: string | null
+          source?: string | null
+          stage?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leads_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leads_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leads_quote_id_fkey"
+            columns: ["quote_id"]
+            isOneToOne: false
+            referencedRelation: "quotes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       orders: {
         Row: {
           created_at: string
