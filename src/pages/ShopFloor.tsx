@@ -72,7 +72,6 @@ export default function ShopFloor() {
   const typedMachines = machines as Machine[];
   const typedQueues = queues as Queue[];
 
-  // Group jobs by status
   const jobsByStatus = typedJobs.reduce((acc, job) => {
     const status = (job.status || "pending").toLowerCase();
     if (!acc[status]) acc[status] = [];
@@ -99,25 +98,25 @@ export default function ShopFloor() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <header className="flex items-center justify-between px-6 py-4 border-b border-border">
+      <header className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-border">
         <div>
           <h1 className="text-xl font-semibold flex items-center gap-2">
             <Factory className="w-5 h-5" />
             Shop Floor
           </h1>
           <p className="text-sm text-muted-foreground">
-            {activeJobs.length} active jobs • {typedMachines.length} machines
+            {activeJobs.length} active • {typedMachines.length} machines
           </p>
         </div>
         <Button variant="outline" size="sm" className="gap-2">
           <RefreshCw className="w-4 h-4" />
-          Refresh
+          <span className="hidden sm:inline">Refresh</span>
         </Button>
       </header>
 
       {/* Stats Bar */}
-      <div className="px-6 py-4 border-b border-border bg-muted/30">
-        <div className="grid grid-cols-4 gap-4">
+      <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-border bg-muted/30">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
           <StatCard 
             label="In Progress" 
             value={activeJobs.length} 
@@ -129,12 +128,12 @@ export default function ShopFloor() {
             icon={<Clock className="w-4 h-4 text-yellow-500" />}
           />
           <StatCard 
-            label="Completed Today" 
+            label="Completed" 
             value={jobsByStatus["complete"]?.length || jobsByStatus["completed"]?.length || 0} 
             icon={<CheckCircle2 className="w-4 h-4 text-green-500" />}
           />
           <StatCard 
-            label="Machines Online" 
+            label="Online" 
             value={typedMachines.filter(m => m.status !== "offline").length} 
             icon={<Factory className="w-4 h-4 text-primary" />}
           />
@@ -144,7 +143,7 @@ export default function ShopFloor() {
       {/* Content */}
       <div className="flex-1 overflow-hidden">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
-          <div className="px-6 pt-4">
+          <div className="px-4 sm:px-6 pt-4">
             <TabsList>
               <TabsTrigger value="jobs">Jobs</TabsTrigger>
               <TabsTrigger value="machines">Machines</TabsTrigger>
@@ -152,7 +151,7 @@ export default function ShopFloor() {
             </TabsList>
           </div>
 
-          <TabsContent value="jobs" className="flex-1 overflow-hidden px-6 pb-6">
+          <TabsContent value="jobs" className="flex-1 overflow-hidden px-4 sm:px-6 pb-6">
             {isLoading ? (
               <LoadingState />
             ) : typedJobs.length === 0 ? (
@@ -168,14 +167,14 @@ export default function ShopFloor() {
             )}
           </TabsContent>
 
-          <TabsContent value="machines" className="flex-1 overflow-hidden px-6 pb-6">
+          <TabsContent value="machines" className="flex-1 overflow-hidden px-4 sm:px-6 pb-6">
             {isLoading ? (
               <LoadingState />
             ) : typedMachines.length === 0 ? (
               <EmptyState message="No machines found in Firebase" />
             ) : (
               <ScrollArea className="h-full">
-                <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 pr-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pr-4">
                   {typedMachines.map((machine) => (
                     <MachineCard key={machine.id} machine={machine} />
                   ))}
@@ -184,7 +183,7 @@ export default function ShopFloor() {
             )}
           </TabsContent>
 
-          <TabsContent value="queues" className="flex-1 overflow-hidden px-6 pb-6">
+          <TabsContent value="queues" className="flex-1 overflow-hidden px-4 sm:px-6 pb-6">
             {isLoading ? (
               <LoadingState />
             ) : typedQueues.length === 0 ? (
@@ -210,7 +209,7 @@ function StatCard({ label, value, icon }: { label: string; value: number; icon: 
     <div className="flex items-center gap-3 p-3 rounded-lg bg-background border border-border">
       <div className="p-2 rounded-md bg-muted">{icon}</div>
       <div>
-        <p className="text-2xl font-semibold">{value}</p>
+        <p className="text-xl sm:text-2xl font-semibold">{value}</p>
         <p className="text-xs text-muted-foreground">{label}</p>
       </div>
     </div>
@@ -221,10 +220,10 @@ function JobCard({ job }: { job: Job }) {
   const status = (job.status || "pending").toLowerCase();
   return (
     <Card className="hover:bg-muted/30 transition-colors">
-      <CardContent className="p-4 flex items-center justify-between">
+      <CardContent className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex-1">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="font-medium">{job.name || job.id}</span>
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
+            <span className="font-medium text-sm sm:text-base">{job.name || job.id}</span>
             <Badge className={statusColors[status] || statusColors.pending}>
               {status}
             </Badge>
@@ -239,7 +238,7 @@ function JobCard({ job }: { job: Job }) {
             {job.machine && <span>Machine: {job.machine}</span>}
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 self-end sm:self-auto">
           {status === "queued" && (
             <Button size="sm" className="gap-1">
               <Play className="w-3 h-3" /> Start

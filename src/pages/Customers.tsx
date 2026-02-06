@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, Users } from "lucide-react";
+import { Plus, Search, Users, ArrowLeft } from "lucide-react";
 import { CustomerList } from "@/components/customers/CustomerList";
 import { CustomerDetail } from "@/components/customers/CustomerDetail";
 import { CustomerFormModal } from "@/components/customers/CustomerFormModal";
@@ -74,23 +74,35 @@ export default function Customers() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <header className="flex items-center justify-between px-6 py-4 border-b border-border">
-        <div>
-          <h1 className="text-xl font-semibold">Customers</h1>
-          <p className="text-sm text-muted-foreground">
-            {customers.length} customer{customers.length !== 1 ? "s" : ""}
-          </p>
+      <header className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-border">
+        <div className="flex items-center gap-2">
+          {selectedCustomerId && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="md:hidden mr-1"
+              onClick={() => setSelectedCustomerId(null)}
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </Button>
+          )}
+          <div>
+            <h1 className="text-xl font-semibold">Customers</h1>
+            <p className="text-sm text-muted-foreground">
+              {customers.length} customer{customers.length !== 1 ? "s" : ""}
+            </p>
+          </div>
         </div>
-        <Button onClick={() => setIsFormOpen(true)} className="gap-2">
+        <Button onClick={() => setIsFormOpen(true)} size="sm" className="gap-2">
           <Plus className="w-4 h-4" />
-          Add Customer
+          <span className="hidden sm:inline">Add Customer</span>
         </Button>
       </header>
 
       {/* Content */}
       <div className="flex-1 flex overflow-hidden">
         {/* List Panel */}
-        <div className="w-96 flex-shrink-0 border-r border-border flex flex-col">
+        <div className={`${selectedCustomerId ? 'hidden md:flex' : 'flex'} w-full md:w-96 flex-shrink-0 border-r border-border flex-col`}>
           {/* Search */}
           <div className="p-4 border-b border-border">
             <div className="relative">
@@ -114,7 +126,7 @@ export default function Customers() {
         </div>
 
         {/* Detail Panel */}
-        <div className="flex-1 overflow-hidden">
+        <div className={`${selectedCustomerId ? 'flex' : 'hidden md:flex'} flex-1 flex-col overflow-hidden`}>
           {selectedCustomer ? (
             <CustomerDetail
               customer={selectedCustomer}

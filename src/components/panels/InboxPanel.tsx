@@ -56,7 +56,7 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
   };
 
   return (
-    <div className="fixed inset-y-0 left-16 w-80 bg-card border-r border-border z-40 flex flex-col shadow-xl">
+    <div className="fixed inset-y-0 left-0 md:left-16 w-full sm:w-80 bg-card border-r border-border z-40 flex flex-col shadow-xl">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-4 border-b border-border">
         <h2 className="text-lg font-semibold">Inbox</h2>

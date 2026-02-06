@@ -8,8 +8,9 @@ import { UnifiedInboxList } from "@/components/inbox/UnifiedInboxList";
 import { CommunicationViewer } from "@/components/inbox/CommunicationViewer";
 import { useCommunications, Communication } from "@/hooks/useCommunications";
 import { sendAgentMessage } from "@/lib/agent";
-import { Mail, Phone, MessageSquare, Bot } from "lucide-react";
+import { Mail, Phone, MessageSquare, Bot, ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { Button } from "@/components/ui/button";
 
 type InboxTab = "email" | "calls" | "sms" | "agents";
 
@@ -22,7 +23,6 @@ export default function Inbox() {
   const [search, setSearch] = useState("");
   const { toast } = useToast();
 
-  // Filter communications by type based on active tab
   const typeFilter = activeTab === "calls" ? "call" : activeTab === "sms" ? "sms" : activeTab === "email" ? "email" : undefined;
 
   const { communications, loading, error, refresh, sync } = useCommunications({ search: search || undefined, typeFilter });
@@ -77,28 +77,41 @@ export default function Inbox() {
   return (
     <div className="flex flex-col h-full">
       {/* Header with Tabs */}
-      <header className="flex items-center justify-between px-6 py-4 border-b border-border">
-        <div>
-          <h1 className="text-xl font-semibold">Inbox</h1>
-          <p className="text-sm text-muted-foreground">Emails, calls, SMS & agent conversations</p>
+      <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-border gap-3 sm:gap-0">
+        <div className="flex items-center gap-2">
+          {/* Back button on mobile when viewing detail */}
+          {selectedComm && showCommsList && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="md:hidden mr-1"
+              onClick={() => setSelectedComm(null)}
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </Button>
+          )}
+          <div>
+            <h1 className="text-xl font-semibold">Inbox</h1>
+            <p className="text-sm text-muted-foreground hidden sm:block">Emails, calls, SMS & agent conversations</p>
+          </div>
         </div>
         <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v as InboxTab); setSelectedComm(null); }}>
-          <TabsList>
-            <TabsTrigger value="email" className="gap-2">
-              <Mail className="w-4 h-4" />
-              Email
+          <TabsList className="h-9">
+            <TabsTrigger value="email" className="gap-1.5 text-xs sm:text-sm px-2 sm:px-3">
+              <Mail className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Email</span>
             </TabsTrigger>
-            <TabsTrigger value="calls" className="gap-2">
-              <Phone className="w-4 h-4" />
-              Calls
+            <TabsTrigger value="calls" className="gap-1.5 text-xs sm:text-sm px-2 sm:px-3">
+              <Phone className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Calls</span>
             </TabsTrigger>
-            <TabsTrigger value="sms" className="gap-2">
-              <MessageSquare className="w-4 h-4" />
-              SMS
+            <TabsTrigger value="sms" className="gap-1.5 text-xs sm:text-sm px-2 sm:px-3">
+              <MessageSquare className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">SMS</span>
             </TabsTrigger>
-            <TabsTrigger value="agents" className="gap-2">
-              <Bot className="w-4 h-4" />
-              Agents
+            <TabsTrigger value="agents" className="gap-1.5 text-xs sm:text-sm px-2 sm:px-3">
+              <Bot className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Agents</span>
             </TabsTrigger>
           </TabsList>
         </Tabs>
@@ -107,8 +120,8 @@ export default function Inbox() {
       {/* Content */}
       {showCommsList ? (
         <div className="flex-1 flex overflow-hidden">
-          {/* Communication List */}
-          <div className="w-96 flex-shrink-0">
+          {/* Communication List - full width on mobile, fixed on desktop */}
+          <div className={`${selectedComm ? 'hidden md:flex' : 'flex'} w-full md:w-96 flex-shrink-0 flex-col`}>
             <UnifiedInboxList
               communications={communications}
               loading={loading}
@@ -120,8 +133,8 @@ export default function Inbox() {
             />
           </div>
 
-          {/* Communication Viewer */}
-          <div className="flex-1">
+          {/* Communication Viewer - full width on mobile */}
+          <div className={`${selectedComm ? 'flex' : 'hidden md:flex'} flex-1 flex-col`}>
             <CommunicationViewer communication={selectedComm} />
           </div>
         </div>
