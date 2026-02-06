@@ -40,45 +40,23 @@ export function useFirebaseCollection<T = DocumentData>(
 }
 
 // Typed hooks for specific collections
-export interface FirebaseJob {
+export interface FirebaseDocument {
   id: string;
   [key: string]: unknown;
 }
 
-export interface FirebaseLocation {
-  id: string;
-  [key: string]: unknown;
-}
-
-export interface FirebaseMachine {
-  id: string;
-  [key: string]: unknown;
-}
-
-export interface FirebaseProject {
-  id: string;
-  [key: string]: unknown;
-}
-
-export interface FirebaseQueue {
-  id: string;
-  [key: string]: unknown;
-}
-
-export interface FirebaseRole {
-  id: string;
-  [key: string]: unknown;
-}
-
-export interface FirebaseUser {
-  id: string;
-  [key: string]: unknown;
-}
-
-export const useJobs = () => useFirebaseCollection<FirebaseJob>("jobs");
-export const useLocations = () => useFirebaseCollection<FirebaseLocation>("locations");
-export const useMachines = () => useFirebaseCollection<FirebaseMachine>("machines");
-export const useProjects = () => useFirebaseCollection<FirebaseProject>("projects");
-export const useQueues = () => useFirebaseCollection<FirebaseQueue>("queues");
-export const useRoles = () => useFirebaseCollection<FirebaseRole>("roles");
-export const useFirebaseUsers = () => useFirebaseCollection<FirebaseUser>("users");
+// All Firebase collections under companies/rebar-shop/
+export const useBrain = () => useFirebaseCollection<FirebaseDocument>("brain");
+export const useFirebaseCommunications = () => useFirebaseCollection<FirebaseDocument>("communications");
+export const useFirebaseCustomers = () => useFirebaseCollection<FirebaseDocument>("customers");
+export const useFirebaseEvents = () => useFirebaseCollection<FirebaseDocument>("events");
+export const useFirebaseIntegrations = () => useFirebaseCollection<FirebaseDocument>("integrations");
+export const useJobs = () => useFirebaseCollection<FirebaseDocument>("jobs");
+export const useKnowledge = () => useFirebaseCollection<FirebaseDocument>("knowledge");
+export const useLocations = () => useFirebaseCollection<FirebaseDocument>("locations");
+export const useMachines = () => useFirebaseCollection<FirebaseDocument>("machines");
+export const useProjects = () => useFirebaseCollection<FirebaseDocument>("projects");
+export const useQueues = () => useFirebaseCollection<FirebaseDocument>("queues");
+export const useRoles = () => useFirebaseCollection<FirebaseDocument>("roles");
+export const useTasks = () => useFirebaseCollection<FirebaseDocument>("tasks");
+export const useFirebaseUsers = () => useFirebaseCollection<FirebaseDocument>("users");
