@@ -246,6 +246,7 @@ serve(async (req) => {
       const customers = qbData.QueryResponse?.Customer || [];
 
       let synced = 0;
+      const errors: string[] = [];
       for (const customer of customers) {
         const { error } = await supabase
           .from("customers")
@@ -258,7 +259,12 @@ serve(async (req) => {
             payment_terms: customer.SalesTermRef?.name || null,
           }, { onConflict: "quickbooks_id" });
 
-        if (!error) synced++;
+        if (error) {
+          console.error("Upsert error for customer", customer.Id, error);
+          errors.push(`${customer.Id}: ${error.message}`);
+        } else {
+          synced++;
+        }
       }
 
       // Update last sync time
