@@ -188,7 +188,7 @@ export function CallAnalysisDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Brain className="w-5 h-5 text-primary" />
-            RingCentral AI Analysis
+            AI Call Analysis
           </DialogTitle>
           <p className="text-sm text-muted-foreground">
             {fromNumber} → {toNumber}
@@ -204,7 +204,7 @@ export function CallAnalysisDialog({
             <div className="text-center">
               <h3 className="font-semibold mb-1">AI-Powered Call Analysis</h3>
               <p className="text-sm text-muted-foreground max-w-md">
-                RingCentral AI will transcribe the recording with speaker identification,
+                AI will transcribe the recording with speaker identification,
                 analyze sentiment & interaction patterns, generate a summary, and extract action items.
               </p>
             </div>
