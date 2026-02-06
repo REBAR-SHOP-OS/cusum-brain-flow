@@ -178,22 +178,20 @@ serve(async (req) => {
       const integration = body.integration as string;
 
       // Try to verify the connection by refreshing the token
-      let clientId: string | undefined;
-      let clientSecret: string | undefined;
+      // Use integration-specific credentials, falling back to shared Gmail/Google credentials
+      const clientId = Deno.env.get("GOOGLE_CLIENT_ID") || Deno.env.get("GMAIL_CLIENT_ID");
+      const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET") || Deno.env.get("GMAIL_CLIENT_SECRET");
+      
+      // Check for integration-specific refresh token, then fall back to shared one
       let refreshToken: string | undefined;
-
       if (integration === "gmail") {
-        clientId = Deno.env.get("GMAIL_CLIENT_ID");
-        clientSecret = Deno.env.get("GMAIL_CLIENT_SECRET");
         refreshToken = Deno.env.get("GMAIL_REFRESH_TOKEN");
       } else if (integration === "google-calendar") {
-        clientId = Deno.env.get("GOOGLE_CALENDAR_CLIENT_ID");
-        clientSecret = Deno.env.get("GOOGLE_CALENDAR_CLIENT_SECRET");
-        refreshToken = Deno.env.get("GOOGLE_CALENDAR_REFRESH_TOKEN");
+        refreshToken = Deno.env.get("GOOGLE_CALENDAR_REFRESH_TOKEN") || Deno.env.get("GMAIL_REFRESH_TOKEN");
       } else if (integration === "google-drive") {
-        clientId = Deno.env.get("GOOGLE_DRIVE_CLIENT_ID");
-        clientSecret = Deno.env.get("GOOGLE_DRIVE_CLIENT_SECRET");
-        refreshToken = Deno.env.get("GOOGLE_DRIVE_REFRESH_TOKEN");
+        refreshToken = Deno.env.get("GOOGLE_DRIVE_REFRESH_TOKEN") || Deno.env.get("GMAIL_REFRESH_TOKEN");
+      } else {
+        refreshToken = Deno.env.get("GMAIL_REFRESH_TOKEN");
       }
 
       if (!clientId || !clientSecret || !refreshToken) {
