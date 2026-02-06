@@ -45,6 +45,7 @@ const defaultAutomations: Automation[] = [
     color: "gold",
     icon: "summary",
     beta: true,
+    route: "/daily-summarizer",
   },
   {
     id: "facebook-commenter",
