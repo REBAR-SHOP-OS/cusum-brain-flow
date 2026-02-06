@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -87,9 +87,41 @@ export function useCommunications(options?: { search?: string; typeFilter?: stri
     }
   }, [options?.search, options?.typeFilter, toast]);
 
+  // Trigger actual sync from Gmail + RingCentral, then reload
+  const syncingRef = useRef(false);
+  const sync = useCallback(async () => {
+    if (syncingRef.current) return;
+    syncingRef.current = true;
+    try {
+      // Call both sync edge functions in parallel
+      const [gmailRes, rcRes] = await Promise.allSettled([
+        supabase.functions.invoke("gmail-sync", { body: { maxResults: 30 } }),
+        supabase.functions.invoke("ringcentral-sync", { body: {} }),
+      ]);
+
+      const errors: string[] = [];
+      if (gmailRes.status === "rejected") errors.push("Gmail sync failed");
+      else if (gmailRes.value.error) errors.push(`Gmail: ${gmailRes.value.error.message}`);
+      if (rcRes.status === "rejected") errors.push("RingCentral sync failed");
+      else if (rcRes.value.error) errors.push(`RingCentral: ${rcRes.value.error.message}`);
+
+      if (errors.length > 0) {
+        toast({ title: "Sync warnings", description: errors.join("; "), variant: "destructive" });
+      } else {
+        toast({ title: "Synced", description: "Emails & calls refreshed" });
+      }
+    } catch (err) {
+      console.error("Sync error:", err);
+    } finally {
+      syncingRef.current = false;
+      // Reload from DB after sync
+      await load();
+    }
+  }, [load, toast]);
+
   useEffect(() => {
     load();
   }, [load]);
 
-  return { communications, loading, error, refresh: load };
+  return { communications, loading, error, refresh: load, sync };
 }

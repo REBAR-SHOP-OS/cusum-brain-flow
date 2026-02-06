@@ -25,7 +25,7 @@ export default function Inbox() {
   // Filter communications by type based on active tab
   const typeFilter = activeTab === "calls" ? "call" : activeTab === "sms" ? "sms" : activeTab === "email" ? "email" : undefined;
 
-  const { communications, loading, error, refresh } = useCommunications({ search: search || undefined, typeFilter });
+  const { communications, loading, error, refresh, sync } = useCommunications({ search: search || undefined, typeFilter });
 
   const handleSend = useCallback(async (content: string) => {
     const userMessage: Message = {
@@ -115,7 +115,7 @@ export default function Inbox() {
               error={error}
               selectedId={selectedComm?.id}
               onSelect={setSelectedComm}
-              onRefresh={refresh}
+              onRefresh={sync}
               onSearchChange={setSearch}
             />
           </div>
