@@ -39,13 +39,13 @@ const App = () => (
         <AuthProvider>
           <Routes>
           {/* Public routes */}
+            <Route path="/" element={<Landing />} />
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
-            <Route path="/welcome" element={<Landing />} />
 
             {/* Protected routes */}
             <Route
-              path="/"
+              path="/inbox"
               element={
                 <ProtectedRoute>
                   <AppLayout>

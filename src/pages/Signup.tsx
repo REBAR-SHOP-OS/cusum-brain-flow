@@ -43,7 +43,7 @@ export default function Signup() {
     setGoogleLoading(true);
     
     const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: window.location.origin,
+      redirect_uri: window.location.origin + "/inbox",
     });
 
     if (result.error) {
@@ -54,7 +54,7 @@ export default function Signup() {
       });
       setGoogleLoading(false);
     } else if (!result.redirected) {
-      navigate("/");
+      navigate("/inbox");
     }
   };
 

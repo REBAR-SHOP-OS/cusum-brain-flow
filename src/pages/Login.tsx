@@ -31,7 +31,7 @@ export default function Login() {
         variant: "destructive",
       });
     } else {
-      navigate("/");
+      navigate("/inbox");
     }
 
     setLoading(false);
@@ -41,7 +41,7 @@ export default function Login() {
     setGoogleLoading(true);
     
     const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: window.location.origin,
+      redirect_uri: window.location.origin + "/inbox",
     });
 
     if (result.error) {
@@ -52,7 +52,7 @@ export default function Login() {
       });
       setGoogleLoading(false);
     } else if (!result.redirected) {
-      navigate("/");
+      navigate("/inbox");
     }
   };
 
