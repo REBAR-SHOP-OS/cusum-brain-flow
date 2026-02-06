@@ -38,7 +38,7 @@ const helpers: Helper[] = [
     role: "Sales & Pipeline",
     image: salesHelper,
     gradient: "from-blue-500 to-blue-600",
-    route: "/pipeline",
+    route: "/agent/sales",
   },
   {
     id: "support",
@@ -46,7 +46,7 @@ const helpers: Helper[] = [
     role: "Customer Support",
     image: supportHelper,
     gradient: "from-purple-500 to-purple-600",
-    route: "/customers",
+    route: "/agent/support",
   },
   {
     id: "accounting",
@@ -54,7 +54,7 @@ const helpers: Helper[] = [
     role: "Accounting",
     image: accountingHelper,
     gradient: "from-green-500 to-green-600",
-    route: "/tasks",
+    route: "/agent/accounting",
   },
   {
     id: "estimating",
@@ -62,7 +62,7 @@ const helpers: Helper[] = [
     role: "Estimating",
     image: estimatingHelper,
     gradient: "from-orange-500 to-orange-600",
-    route: "/tasks",
+    route: "/agent/estimating",
   },
   {
     id: "shopfloor",
@@ -70,7 +70,7 @@ const helpers: Helper[] = [
     role: "Shop Floor",
     image: shopfloorHelper,
     gradient: "from-slate-500 to-slate-600",
-    route: "/shop-floor",
+    route: "/agent/shopfloor",
   },
   {
     id: "delivery",
@@ -78,7 +78,7 @@ const helpers: Helper[] = [
     role: "Deliveries",
     image: deliveryHelper,
     gradient: "from-yellow-500 to-yellow-600",
-    route: "/deliveries",
+    route: "/agent/delivery",
   },
   {
     id: "email",
@@ -86,7 +86,7 @@ const helpers: Helper[] = [
     role: "Email & Inbox",
     image: emailHelper,
     gradient: "from-pink-500 to-pink-600",
-    route: "/inbox-manager",
+    route: "/agent/email",
   },
   {
     id: "social",
@@ -94,7 +94,7 @@ const helpers: Helper[] = [
     role: "Social Media",
     image: socialHelper,
     gradient: "from-purple-500 to-pink-500",
-    route: "/social-media-manager",
+    route: "/agent/social",
   },
   {
     id: "data",
@@ -102,7 +102,7 @@ const helpers: Helper[] = [
     role: "Data & Insights",
     image: dataHelper,
     gradient: "from-teal-500 to-teal-600",
-    route: "/brain",
+    route: "/agent/data",
   },
 ];
 

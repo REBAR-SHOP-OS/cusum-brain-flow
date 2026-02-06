@@ -9,6 +9,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Home from "./pages/Home";
+import AgentWorkspace from "./pages/AgentWorkspace";
 import Inbox from "./pages/Inbox";
 import Tasks from "./pages/Tasks";
 import Pipeline from "./pages/Pipeline";
@@ -62,6 +63,16 @@ const App = () => (
                 <ProtectedRoute>
                   <AppLayout>
                     <Home />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/agent/:agentId"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <AgentWorkspace />
                   </AppLayout>
                 </ProtectedRoute>
               }
