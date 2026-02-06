@@ -10,6 +10,7 @@ import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Inbox from "./pages/Inbox";
 import Tasks from "./pages/Tasks";
+import Pipeline from "./pages/Pipeline";
 import Customers from "./pages/Customers";
 import ShopFloor from "./pages/ShopFloor";
 import Deliveries from "./pages/Deliveries";
@@ -49,6 +50,16 @@ const App = () => (
                 <ProtectedRoute>
                   <AppLayout>
                     <Tasks />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/pipeline"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <Pipeline />
                   </AppLayout>
                 </ProtectedRoute>
               }
