@@ -145,6 +145,16 @@ export function IntegrationIcon({ id, className }: IntegrationIconProps) {
         </svg>
       );
 
+    case "odoo":
+      return (
+        <svg viewBox="0 0 24 24" className={iconClass}>
+          <rect width="24" height="24" rx="4" fill="#714B67"/>
+          <circle cx="8" cy="12" r="3" fill="white"/>
+          <circle cx="16" cy="12" r="3" fill="white"/>
+          <path d="M11 12H13" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+        </svg>
+      );
+
     default:
       return (
         <div className={cn("rounded-lg bg-muted flex items-center justify-center text-muted-foreground", iconClass)}>

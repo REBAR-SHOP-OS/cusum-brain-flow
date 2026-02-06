@@ -29,3 +29,6 @@ verify_jwt = false
 
 [functions.pdf-to-images]
 verify_jwt = false
+
+[functions.odoo-api]
+verify_jwt = false

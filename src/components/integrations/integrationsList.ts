@@ -191,4 +191,18 @@ export const defaultIntegrations: Integration[] = [
       { key: "YOUTUBE_REFRESH_TOKEN", label: "Refresh Token", type: "textarea", placeholder: "1//xxx", helpText: "From OAuth Playground" },
     ],
   },
+  {
+    id: "odoo",
+    name: "Odoo",
+    description: "Connect to Odoo CRM - leads, opportunities, contacts.",
+    status: "available",
+    icon: "odoo",
+    docsUrl: "https://www.odoo.com/documentation/17.0/developer/api/external_api.html",
+    fields: [
+      { key: "ODOO_URL", label: "Odoo URL", type: "text", placeholder: "https://yourcompany.odoo.com", helpText: "Your Odoo instance URL" },
+      { key: "ODOO_DATABASE", label: "Database Name", type: "text", placeholder: "yourcompany", helpText: "Your Odoo database name" },
+      { key: "ODOO_USERNAME", label: "Username (Email)", type: "text", placeholder: "user@company.com", helpText: "Your Odoo login email" },
+      { key: "ODOO_API_KEY", label: "API Key", type: "password", placeholder: "xxx", helpText: "Settings → Users → API Keys → New API Key" },
+    ],
+  },
 ];
