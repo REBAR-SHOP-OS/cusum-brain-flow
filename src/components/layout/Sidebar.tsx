@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Inbox, Brain, Settings, Plug, MessageSquare, CheckSquare, Factory, Truck, Users, Kanban, History, Bell } from "lucide-react";
+import { Inbox, Brain, Settings, Plug, MessageSquare, CheckSquare, Factory, Truck, Users, Kanban, History, Bell, Home } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { UserMenu } from "./UserMenu";
 import { InboxPanel } from "@/components/panels/InboxPanel";
 import { HistoryPanel } from "@/components/panels/HistoryPanel";
 
 const navigation = [
+  { name: "Home", href: "/home", icon: Home },
   { name: "Inbox", href: "/", icon: Inbox },
   { name: "Tasks", href: "/tasks", icon: CheckSquare },
   { name: "Pipeline", href: "/pipeline", icon: Kanban },
