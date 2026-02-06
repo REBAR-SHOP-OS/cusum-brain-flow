@@ -1,7 +1,7 @@
 project_id = "uavzziigfnqpfdkczbdo"
 
 [functions.gmail-sync]
-verify_jwt = true
+verify_jwt = false
 
 [functions.gmail-send]
-verify_jwt = true
+verify_jwt = false

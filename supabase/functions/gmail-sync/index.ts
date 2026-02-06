@@ -1,9 +1,27 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
+
+async function verifyAuth(req: Request): Promise<string | null> {
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) return null;
+
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_ANON_KEY")!,
+    { global: { headers: { Authorization: authHeader } } }
+  );
+
+  const token = authHeader.replace("Bearer ", "");
+  const { data, error } = await supabase.auth.getUser(token);
+  if (error || !data.user) return null;
+  
+  return data.user.id;
+}
 
 interface TokenResponse {
   access_token: string;
@@ -43,6 +61,7 @@ interface GmailMessage {
   id: string;
   threadId: string;
   snippet: string;
+  labelIds?: string[];
   payload: {
     headers: Array<{ name: string; value: string }>;
     body?: { data?: string };
@@ -93,6 +112,15 @@ serve(async (req) => {
   }
 
   try {
+    // Verify authentication
+    const userId = await verifyAuth(req);
+    if (!userId) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const url = new URL(req.url);
     const maxResults = url.searchParams.get("maxResults") || "20";
     const pageToken = url.searchParams.get("pageToken") || "";
@@ -150,6 +178,7 @@ serve(async (req) => {
           snippet: msgData.snippet,
           body: getBodyContent(msgData),
           internalDate: parseInt(msgData.internalDate),
+          isUnread: msgData.labelIds?.includes("UNREAD") || false,
         };
       })
     );
