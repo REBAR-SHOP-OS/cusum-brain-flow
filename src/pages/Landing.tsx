@@ -12,7 +12,7 @@ export default function Landing() {
             <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
               <Brain className="w-5 h-5 text-primary-foreground" />
             </div>
-            <span className="text-xl font-bold text-foreground">CUSUM</span>
+            <span className="text-xl font-bold text-foreground">REBAR SHOP OS</span>
           </div>
           <div className="flex items-center gap-4">
             <Link to="/login">
@@ -29,10 +29,10 @@ export default function Landing() {
       <section className="py-20 px-6">
         <div className="max-w-4xl mx-auto text-center">
           <h1 className="text-4xl md:text-5xl font-bold text-foreground mb-6">
-            CUSUM - AI-Powered Operations Management
+            REBAR SHOP OS - AI-Powered Operations Management
           </h1>
           <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
-            CUSUM streamlines your business operations by integrating email, sales pipeline, 
+            REBAR SHOP OS streamlines your business operations by integrating email, sales pipeline, 
             shop floor management, and deliveries into one intelligent platform.
           </p>
           <div className="flex items-center justify-center gap-4">
@@ -94,7 +94,7 @@ export default function Landing() {
             <div className="w-6 h-6 bg-primary rounded flex items-center justify-center">
               <Brain className="w-4 h-4 text-primary-foreground" />
             </div>
-            <span className="font-semibold text-foreground">CUSUM</span>
+            <span className="font-semibold text-foreground">REBAR SHOP OS</span>
           </div>
           <nav className="flex items-center gap-6 text-sm text-muted-foreground">
             <a href="https://cusum-brain-flow.lovable.app/privacy" className="hover:text-foreground transition-colors">
@@ -105,7 +105,7 @@ export default function Landing() {
             </a>
           </nav>
           <p className="text-sm text-muted-foreground">
-            © {new Date().getFullYear()} CUSUM. All rights reserved.
+            © {new Date().getFullYear()} REBAR SHOP OS. All rights reserved.
           </p>
         </div>
       </footer>

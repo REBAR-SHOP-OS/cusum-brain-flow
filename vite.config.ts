@@ -20,8 +20,8 @@ export default defineConfig(({ mode }) => ({
       registerType: "autoUpdate",
       includeAssets: ["favicon.png", "pwa-icon-192.png", "pwa-icon-512.png"],
       manifest: {
-        name: "CUSUM - AI Operations Management",
-        short_name: "CUSUM",
+        name: "REBAR SHOP OS",
+        short_name: "REBAR SHOP OS",
         description: "AI-Powered Operations Management Platform",
         theme_color: "#1a1a2e",
         background_color: "#1a1a2e",

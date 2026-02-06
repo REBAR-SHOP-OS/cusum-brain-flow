@@ -179,7 +179,7 @@ export default function Settings() {
                 </div>
                 <div>
                   <p className="font-medium">Plan</p>
-                  <p className="text-sm text-muted-foreground">CUSUM Pro • Annual</p>
+                  <p className="text-sm text-muted-foreground">REBAR SHOP OS Pro • Annual</p>
                 </div>
               </div>
 

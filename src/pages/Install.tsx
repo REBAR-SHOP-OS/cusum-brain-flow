@@ -66,7 +66,7 @@ export default function Install() {
             </div>
             <CardTitle className="text-2xl">App Installed!</CardTitle>
             <CardDescription>
-              CUSUM is now installed on your device. You can access it from your home screen.
+              REBAR SHOP OS is now installed on your device. You can access it from your home screen.
             </CardDescription>
           </CardHeader>
           <CardContent className="text-center">
@@ -86,11 +86,11 @@ export default function Install() {
           <div className="mx-auto w-20 h-20 mb-4">
             <img 
               src="/pwa-icon-192.png" 
-              alt="CUSUM" 
+              alt="REBAR SHOP OS" 
               className="w-full h-full rounded-2xl shadow-lg"
             />
           </div>
-          <CardTitle className="text-2xl">Install CUSUM</CardTitle>
+          <CardTitle className="text-2xl">Install REBAR SHOP OS</CardTitle>
           <CardDescription>
             Get quick access to AI-powered operations management from your home screen
           </CardDescription>
