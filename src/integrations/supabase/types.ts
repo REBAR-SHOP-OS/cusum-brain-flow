@@ -542,6 +542,57 @@ export type Database = {
           },
         ]
       }
+      notifications: {
+        Row: {
+          agent_color: string | null
+          agent_name: string | null
+          created_at: string
+          description: string | null
+          expires_at: string | null
+          id: string
+          link_to: string | null
+          metadata: Json | null
+          priority: string | null
+          status: string | null
+          title: string
+          type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          agent_color?: string | null
+          agent_name?: string | null
+          created_at?: string
+          description?: string | null
+          expires_at?: string | null
+          id?: string
+          link_to?: string | null
+          metadata?: Json | null
+          priority?: string | null
+          status?: string | null
+          title: string
+          type: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          agent_color?: string | null
+          agent_name?: string | null
+          created_at?: string
+          description?: string | null
+          expires_at?: string | null
+          id?: string
+          link_to?: string | null
+          metadata?: Json | null
+          priority?: string | null
+          status?: string | null
+          title?: string
+          type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       orders: {
         Row: {
           created_at: string
