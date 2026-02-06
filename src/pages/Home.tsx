@@ -20,6 +20,7 @@ import shopfloorHelper from "@/assets/helpers/shopfloor-helper.png";
 import deliveryHelper from "@/assets/helpers/delivery-helper.png";
 import emailHelper from "@/assets/helpers/email-helper.png";
 import dataHelper from "@/assets/helpers/data-helper.png";
+import socialHelper from "@/assets/helpers/social-helper.png";
 
 interface Helper {
   id: string;
@@ -86,6 +87,14 @@ const helpers: Helper[] = [
     image: emailHelper,
     gradient: "from-pink-500 to-pink-600",
     route: "/inbox-manager",
+  },
+  {
+    id: "social",
+    name: "Sushie",
+    role: "Social Media",
+    image: socialHelper,
+    gradient: "from-purple-500 to-pink-500",
+    route: "/social-media-manager",
   },
   {
     id: "data",
