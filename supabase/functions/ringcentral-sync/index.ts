@@ -26,6 +26,11 @@ interface CallLogRecord {
   result: string;
   from: { phoneNumber?: string; name?: string };
   to: { phoneNumber?: string; name?: string };
+  recording?: {
+    id: string;
+    contentUri: string;
+    type: string;
+  };
 }
 
 interface MessageRecord {
@@ -93,7 +98,7 @@ async function fetchCallLog(accessToken: string, dateFrom: string): Promise<Call
   const params = new URLSearchParams({
     dateFrom,
     perPage: "100",
-    view: "Simple",
+    view: "Detailed",
   });
 
   const response = await fetch(
@@ -192,6 +197,11 @@ serve(async (req) => {
               duration: call.duration,
               action: call.action,
               result: call.result,
+              ...(call.recording ? {
+                recording_id: call.recording.id,
+                recording_uri: call.recording.contentUri,
+                recording_type: call.recording.type,
+              } : {}),
             },
             user_id: userId,
           }, {
