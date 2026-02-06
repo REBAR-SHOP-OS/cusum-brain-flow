@@ -7,8 +7,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Use sandbox server — switch to https://platform.ringcentral.com when app is promoted to production
-const RC_SERVER = "https://platform.devtest.ringcentral.com";
+const RC_SERVER = "https://platform.ringcentral.com";
 
 interface TokenResponse {
   access_token: string;

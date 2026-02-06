@@ -125,8 +125,7 @@ export function useRingCentralWidget(): UseRingCentralWidgetReturn {
 
       if (clientId) {
         params.set("clientId", clientId);
-        // Use sandbox server — switch to platform.ringcentral.com when app is promoted to production
-        params.set("appServer", "https://platform.devtest.ringcentral.com");
+        params.set("appServer", "https://platform.ringcentral.com");
       }
 
       script.src = `${baseUrl}?${params.toString()}`;
