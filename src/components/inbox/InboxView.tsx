@@ -76,13 +76,20 @@ export function InboxView({ connectedEmail = "sattar@rebar.shop" }: InboxViewPro
   // Map real communications to InboxEmail format
   const emails: InboxEmail[] = communications.map((comm) => {
     const category = categorizeEmail(comm.from, comm.subject || "", comm.preview || "");
+    const meta = comm.metadata as Record<string, unknown> | null;
+    const fullBody = (meta?.body as string) || comm.preview || "";
+    const receivedDate = comm.receivedAt ? new Date(comm.receivedAt) : null;
+
     return {
       id: comm.id,
       sender: extractSenderName(comm.from),
       senderEmail: extractEmail(comm.from),
+      toAddress: comm.to,
       subject: comm.subject || "(no subject)",
       preview: comm.preview || "",
-      time: comm.receivedAt ? format(new Date(comm.receivedAt), "h:mm a") : "",
+      body: fullBody,
+      time: receivedDate ? format(receivedDate, "h:mm a") : "",
+      fullDate: receivedDate ? format(receivedDate, "MMM d, h:mm a") : "",
       label: category.label,
       labelColor: category.labelColor,
       isUnread: comm.status === "unread",

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, ExternalLink, Sparkles, Trash2, Send, Loader2 } from "lucide-react";
+import { X, ExternalLink, Sparkles, Trash2, Send, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -15,6 +15,7 @@ interface InboxEmailViewerProps {
 export function InboxEmailViewer({ email, onClose }: InboxEmailViewerProps) {
   const [replyText, setReplyText] = useState("");
   const [drafting, setDrafting] = useState(false);
+  const [hasDrafted, setHasDrafted] = useState(false);
   const { toast } = useToast();
 
   const handleAiDraft = async () => {
@@ -25,7 +26,7 @@ export function InboxEmailViewer({ email, onClose }: InboxEmailViewerProps) {
       const { data, error } = await supabase.functions.invoke("draft-email", {
         body: {
           emailSubject: email.subject,
-          emailBody: email.preview,
+          emailBody: email.body || email.preview,
           senderName: email.sender,
           senderEmail: email.senderEmail,
         },
@@ -40,6 +41,7 @@ export function InboxEmailViewer({ email, onClose }: InboxEmailViewerProps) {
 
       if (data?.draft) {
         setReplyText(data.draft);
+        setHasDrafted(true);
         toast({ title: "Draft ready", description: "AI draft generated — review before sending." });
       }
     } catch (err) {
@@ -76,27 +78,29 @@ export function InboxEmailViewer({ email, onClose }: InboxEmailViewerProps) {
 
       {/* Email Content */}
       <div className="flex-1 overflow-y-auto p-6">
-        {/* Subject & Label */}
-        <h2 className="text-xl font-semibold mb-2">{email.subject}</h2>
+        {/* Label */}
         <span className={cn(
-          "inline-block px-2 py-0.5 rounded text-xs text-white mb-6",
+          "inline-block px-2 py-0.5 rounded text-xs text-white mb-4",
           email.labelColor
         )}>
           {email.label}
         </span>
 
         {/* Sender Info */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-1">
           <div>
             <span className="font-medium">{email.sender}</span>
             <span className="text-muted-foreground"> | {email.senderEmail}</span>
           </div>
-          <span className="text-sm text-muted-foreground">{email.time}</span>
+          <span className="text-sm text-muted-foreground">{email.fullDate}</span>
         </div>
+        
+        {/* To address */}
+        <p className="text-sm text-muted-foreground mb-6">To {email.toAddress}</p>
 
         {/* Email Body */}
-        <div className="space-y-4 text-sm mb-8 whitespace-pre-wrap">
-          {email.preview}
+        <div className="text-sm mb-8 whitespace-pre-wrap leading-relaxed">
+          {email.body || email.preview}
         </div>
 
         {/* Reply Section */}
@@ -113,10 +117,12 @@ export function InboxEmailViewer({ email, onClose }: InboxEmailViewerProps) {
             >
               {drafting ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
+              ) : hasDrafted ? (
+                <RefreshCw className="w-4 h-4" />
               ) : (
                 <Sparkles className="w-4 h-4" />
               )}
-              <span>{drafting ? "Drafting..." : "AI Draft"}</span>
+              <span>{drafting ? "Drafting..." : hasDrafted ? "Regenerate" : "AI Draft"}</span>
             </button>
           </div>
           
@@ -131,7 +137,7 @@ export function InboxEmailViewer({ email, onClose }: InboxEmailViewerProps) {
 
       {/* Footer Actions */}
       <div className="flex items-center justify-between p-4 border-t">
-        <Button variant="ghost" className="text-muted-foreground" onClick={() => setReplyText("")}>
+        <Button variant="ghost" className="text-muted-foreground" onClick={() => { setReplyText(""); setHasDrafted(false); }}>
           <Trash2 className="w-4 h-4 mr-2" />
           Cancel
         </Button>

@@ -4,9 +4,12 @@ export interface InboxEmail {
   id: string;
   sender: string;
   senderEmail: string;
+  toAddress: string;
   subject: string;
   preview: string;
+  body: string;
   time: string;
+  fullDate: string;
   label: string;
   labelColor: string;
   isUnread?: boolean;
