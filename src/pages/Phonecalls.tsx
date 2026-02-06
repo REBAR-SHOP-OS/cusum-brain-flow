@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { Phone, RefreshCw, Search, PhoneIncoming, PhoneOutgoing, PhoneMissed, Play, Clock, Filter } from "lucide-react";
+import { Phone, RefreshCw, Search, PhoneIncoming, PhoneOutgoing, PhoneMissed, Play, Clock, PhoneCall } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -13,7 +13,10 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { useCommunications, Communication } from "@/hooks/useCommunications";
+import { useCommunications } from "@/hooks/useCommunications";
+import { useRingCentralWidget } from "@/hooks/useRingCentralWidget";
+import { LiveCallPanel } from "@/components/phonecalls/LiveCallPanel";
+import { CallSummaryDialog } from "@/components/phonecalls/CallSummaryDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -57,12 +60,16 @@ export default function Phonecalls() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filter, setFilter] = useState<CallFilter>("all");
   const [syncing, setSyncing] = useState(false);
+  const [showSummary, setShowSummary] = useState(false);
+  const [lastTranscript, setLastTranscript] = useState("");
   const { toast } = useToast();
 
   const { communications: allCalls, loading, error, refresh } = useCommunications({
     search: searchQuery || undefined,
     typeFilter: "call",
   });
+
+  const { isLoaded, isCallActive, activeCall, showWidget } = useRingCentralWidget();
 
   // Apply missed filter client-side
   const calls = filter === "missed"
@@ -107,6 +114,15 @@ export default function Phonecalls() {
     }
   }, [refresh, toast]);
 
+  const handleCallEnd = useCallback((transcript: string) => {
+    if (transcript.trim()) {
+      setLastTranscript(transcript);
+      setShowSummary(true);
+    }
+    // Refresh call log after a delay to pick up the new call
+    setTimeout(() => refresh(), 5000);
+  }, [refresh]);
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -118,10 +134,16 @@ export default function Phonecalls() {
             </div>
             <div>
               <h1 className="text-xl font-semibold">Phonecalls</h1>
-              <p className="text-sm text-muted-foreground">RingCentral call log</p>
+              <p className="text-sm text-muted-foreground">RingCentral call log & live transcription</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {isLoaded && (
+              <Button variant="default" size="sm" onClick={showWidget} className="gap-2">
+                <PhoneCall className="w-4 h-4" />
+                Open Dialer
+              </Button>
+            )}
             <Button variant="outline" size="sm" onClick={handleSync} disabled={syncing}>
               <RefreshCw className={cn("w-4 h-4 mr-2", syncing && "animate-spin")} />
               Sync RingCentral
@@ -151,7 +173,21 @@ export default function Phonecalls() {
         </div>
       </header>
 
-      {/* Table */}
+      {/* Active Call Panel */}
+      {(isCallActive || lastTranscript) && (
+        <div className="p-4 border-b border-border">
+          <LiveCallPanel
+            fromNumber={activeCall?.fromNumber}
+            toNumber={activeCall?.toNumber}
+            direction={activeCall?.direction}
+            startTime={activeCall?.startTime}
+            onCallEnd={handleCallEnd}
+            isActive={isCallActive}
+          />
+        </div>
+      )}
+
+      {/* Call Log Table */}
       <div className="flex-1 overflow-auto">
         {loading && calls.length === 0 ? (
           <div className="flex items-center justify-center p-12 text-muted-foreground">
@@ -168,12 +204,22 @@ export default function Phonecalls() {
             <Phone className="w-12 h-12 text-muted-foreground/40 mb-4" />
             <h3 className="font-semibold mb-1">No calls found</h3>
             <p className="text-sm text-muted-foreground mb-4">
-              {filter === "missed" ? "No missed calls." : "Click Sync RingCentral to fetch your call history."}
+              {filter === "missed"
+                ? "No missed calls."
+                : "Click Sync RingCentral to fetch your call history, or use the Dialer to make a call."}
             </p>
-            <Button variant="outline" size="sm" onClick={handleSync} disabled={syncing}>
-              <RefreshCw className={cn("w-4 h-4 mr-2", syncing && "animate-spin")} />
-              Sync Now
-            </Button>
+            <div className="flex gap-2">
+              {isLoaded && (
+                <Button variant="default" size="sm" onClick={showWidget} className="gap-2">
+                  <PhoneCall className="w-4 h-4" />
+                  Open Dialer
+                </Button>
+              )}
+              <Button variant="outline" size="sm" onClick={handleSync} disabled={syncing}>
+                <RefreshCw className={cn("w-4 h-4 mr-2", syncing && "animate-spin")} />
+                Sync Now
+              </Button>
+            </div>
           </div>
         ) : (
           <Table>
@@ -201,9 +247,7 @@ export default function Phonecalls() {
                 return (
                   <TableRow
                     key={call.id}
-                    className={cn(
-                      result === "Missed" && "bg-destructive/5"
-                    )}
+                    className={cn(result === "Missed" && "bg-destructive/5")}
                   >
                     <TableCell>
                       <DirectionIcon direction={call.direction} result={result} />
@@ -251,6 +295,15 @@ export default function Phonecalls() {
           </Table>
         )}
       </div>
+
+      {/* Call Summary Dialog */}
+      <CallSummaryDialog
+        open={showSummary}
+        onOpenChange={setShowSummary}
+        transcript={lastTranscript}
+        fromNumber={activeCall?.fromNumber}
+        toNumber={activeCall?.toNumber}
+      />
     </div>
   );
 }
