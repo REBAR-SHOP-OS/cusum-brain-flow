@@ -65,7 +65,7 @@ export default function Login() {
             <MessageSquare className="w-6 h-6 text-primary-foreground" />
           </div>
           <div className="text-center">
-            <h1 className="text-2xl font-semibold">CUSUM</h1>
+            <h1 className="text-2xl font-semibold">REBAR SHOP OS</h1>
             <p className="text-sm text-muted-foreground">Sign in to continue</p>
           </div>
         </div>

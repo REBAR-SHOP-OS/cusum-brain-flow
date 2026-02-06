@@ -154,7 +154,7 @@ export default function Home() {
         {/* Hero Section */}
         <div className="w-full max-w-2xl text-center mb-12">
           <h1 className="text-3xl font-bold mb-2">
-            How can CUSUM help you today?
+            How can REBAR SHOP OS help you today?
           </h1>
           <p className="text-muted-foreground mb-8">
             Your AI-powered operations assistant

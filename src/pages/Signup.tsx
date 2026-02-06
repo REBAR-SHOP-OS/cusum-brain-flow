@@ -91,7 +91,7 @@ export default function Signup() {
           </div>
           <div className="text-center">
             <h1 className="text-2xl font-semibold">Create account</h1>
-            <p className="text-sm text-muted-foreground">Get started with CUSUM</p>
+            <p className="text-sm text-muted-foreground">Get started with REBAR SHOP OS</p>
           </div>
         </div>
 
