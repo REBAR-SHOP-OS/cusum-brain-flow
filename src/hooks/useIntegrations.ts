@@ -208,29 +208,6 @@ export function useIntegrations() {
       console.log("QuickBooks check skipped:", err);
     }
 
-    // Check Odoo
-    try {
-      const { data: odooStatus, error } = await supabase.functions.invoke("odoo-api", {
-        body: { action: "check-status" },
-      });
-
-      if (odooStatus && !error) {
-        setIntegrations((prev) =>
-          prev.map((i) =>
-            i.id === "odoo"
-              ? {
-                  ...i,
-                  status: odooStatus.status || "connected",
-                  error: odooStatus.error,
-                  lastSync: odooStatus.status === "connected" ? new Date().toLocaleTimeString() : undefined,
-                }
-              : i
-          )
-        );
-      }
-    } catch (err) {
-      console.log("Odoo check skipped:", err);
-    }
 
     // Check RingCentral
     try {
