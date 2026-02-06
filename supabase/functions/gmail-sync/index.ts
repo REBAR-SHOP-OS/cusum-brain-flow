@@ -183,9 +183,45 @@ serve(async (req) => {
       })
     );
 
+    const validMessages = messages.filter(Boolean);
+
+    // Store emails in communications table using service role
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
+    // Upsert each message into communications
+    for (const msg of validMessages) {
+      if (!msg) continue;
+      
+      const { error: upsertError } = await supabaseAdmin
+        .from("communications")
+        .upsert({
+          source: "gmail",
+          source_id: msg.id,
+          thread_id: msg.threadId,
+          from_address: msg.from,
+          to_address: msg.to,
+          subject: msg.subject,
+          body_preview: msg.snippet,
+          received_at: new Date(msg.internalDate).toISOString(),
+          direction: "inbound",
+          status: msg.isUnread ? "unread" : "read",
+          metadata: { body: msg.body, date: msg.date },
+        }, { 
+          onConflict: "source,source_id",
+          ignoreDuplicates: false 
+        });
+
+      if (upsertError) {
+        console.error("Failed to upsert communication:", upsertError);
+      }
+    }
+
     return new Response(
       JSON.stringify({
-        messages: messages.filter(Boolean),
+        messages: validMessages,
         nextPageToken: listData.nextPageToken || null,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }

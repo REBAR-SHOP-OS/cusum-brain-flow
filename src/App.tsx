@@ -9,6 +9,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Inbox from "./pages/Inbox";
+import Tasks from "./pages/Tasks";
 import Brain from "./pages/Brain";
 import Integrations from "./pages/Integrations";
 import Settings from "./pages/Settings";
@@ -35,6 +36,16 @@ const App = () => (
                 <ProtectedRoute>
                   <AppLayout>
                     <Inbox />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/tasks"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <Tasks />
                   </AppLayout>
                 </ProtectedRoute>
               }
