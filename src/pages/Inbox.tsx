@@ -2,7 +2,7 @@ import { useState, useCallback } from "react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AgentSelector, AgentType } from "@/components/chat/AgentSelector";
 import { ChatThread } from "@/components/chat/ChatThread";
-import { ChatInput } from "@/components/chat/ChatInput";
+import { ChatInput, UploadedFile } from "@/components/chat/ChatInput";
 import { Message } from "@/components/chat/ChatMessage";
 import { UnifiedInboxList } from "@/components/inbox/UnifiedInboxList";
 import { CommunicationViewer } from "@/components/inbox/CommunicationViewer";
@@ -27,13 +27,23 @@ export default function Inbox() {
 
   const { communications, loading, error, refresh, sync } = useCommunications({ search: search || undefined, typeFilter });
 
-  const handleSend = useCallback(async (content: string) => {
+  const handleSend = useCallback(async (content: string, files?: UploadedFile[]) => {
+    // Build message content with file references for Cal agent
+    let messageContent = content;
+    if (files && files.length > 0 && selectedAgent === "estimation") {
+      const filesList = files.map(f => `- ${f.name} (${f.url})`).join('\n');
+      messageContent = content 
+        ? `${content}\n\n📎 Attached files:\n${filesList}`
+        : `📎 Attached files:\n${filesList}`;
+    }
+
     const userMessage: Message = {
       id: crypto.randomUUID(),
       role: "user",
-      content,
+      content: messageContent,
       timestamp: new Date(),
       status: "sent",
+      files: files,
     };
     setMessages((prev) => [...prev, userMessage]);
     setIsTyping(true);
@@ -44,7 +54,16 @@ export default function Inbox() {
         content: m.content,
       }));
 
-      const response = await sendAgentMessage(selectedAgent, content, history);
+      // Include file context for Cal agent
+      const contextData = files && files.length > 0 ? {
+        uploadedFiles: files.map(f => ({
+          name: f.name,
+          type: f.type,
+          url: f.url,
+        }))
+      } : undefined;
+
+      const response = await sendAgentMessage(selectedAgent, messageContent, history, contextData);
       
       const agentMessage: Message = {
         id: crypto.randomUUID(),
@@ -154,6 +173,7 @@ export default function Inbox() {
             onSend={handleSend}
             placeholder={`Ask ${selectedAgent} agent...`}
             disabled={isTyping}
+            showFileUpload={selectedAgent === "estimation"}
           />
         </div>
       )}

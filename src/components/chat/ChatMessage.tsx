@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils";
 import { AgentBadge, AgentType } from "./AgentSelector";
-import { User, Bot } from "lucide-react";
+import { User, Bot, FileIcon, Download } from "lucide-react";
+import { UploadedFile } from "./ChatInput";
 
 export interface Message {
   id: string;
@@ -9,6 +10,7 @@ export interface Message {
   agent?: AgentType;
   timestamp: Date;
   status?: "sending" | "sent" | "draft";
+  files?: UploadedFile[];
 }
 
 interface ChatMessageProps {
@@ -46,6 +48,25 @@ export function ChatMessage({ message }: ChatMessageProps) {
           <AgentBadge agent={message.agent} />
         )}
 
+        {/* Files attached */}
+        {message.files && message.files.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-2">
+            {message.files.map((file, index) => (
+              <a
+                key={index}
+                href={file.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 bg-secondary/70 hover:bg-secondary rounded-lg px-3 py-2 text-xs transition-colors"
+              >
+                <FileIcon className="w-4 h-4" />
+                <span className="max-w-[120px] truncate">{file.name}</span>
+                <Download className="w-3 h-3 opacity-60" />
+              </a>
+            ))}
+          </div>
+        )}
+
         {/* Bubble */}
         <div
           className={cn(
@@ -54,7 +75,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
           )}
         >
           <p className="text-sm leading-relaxed whitespace-pre-wrap">
-            {message.content}
+            {message.content || (message.files?.length ? "📎 Files attached" : "")}
           </p>
         </div>
 
