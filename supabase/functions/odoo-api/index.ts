@@ -40,16 +40,40 @@ async function odooJsonRpc(
     id: Math.floor(Math.random() * 1000000),
   };
 
-  const response = await fetch(`${url}/jsonrpc`, {
+  // Clean URL - remove trailing slash if present
+  const cleanUrl = url.replace(/\/+$/, "");
+  const endpoint = `${cleanUrl}/jsonrpc`;
+  
+  console.log(`Odoo request to: ${endpoint}`);
+
+  const response = await fetch(endpoint, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
 
-  const result = await response.json();
+  const responseText = await response.text();
+  
+  // Check if response is HTML (error page)
+  if (responseText.startsWith("<!DOCTYPE") || responseText.startsWith("<html")) {
+    console.error(`Odoo returned HTML instead of JSON. Status: ${response.status}`);
+    console.error(`URL used: ${endpoint}`);
+    console.error(`Response preview: ${responseText.substring(0, 200)}`);
+    throw new Error(`Odoo URL is incorrect or not reachable. Make sure the URL points to your Odoo instance (e.g., https://yourcompany.odoo.com). Status: ${response.status}`);
+  }
+
+  let result;
+  try {
+    result = JSON.parse(responseText);
+  } catch (e) {
+    console.error(`Failed to parse Odoo response: ${responseText.substring(0, 500)}`);
+    throw new Error(`Invalid response from Odoo: not valid JSON`);
+  }
   
   if (result.error) {
-    throw new Error(result.error.data?.message || result.error.message || "Odoo API error");
+    const errorMsg = result.error.data?.message || result.error.message || JSON.stringify(result.error);
+    console.error(`Odoo API error: ${errorMsg}`);
+    throw new Error(errorMsg);
   }
 
   return result.result;
