@@ -8,7 +8,7 @@ import { HistoryPanel } from "@/components/panels/HistoryPanel";
 
 const navigation = [
   { name: "Home", href: "/home", icon: Home },
-  { name: "Inbox", href: "/", icon: Inbox },
+  { name: "Inbox", href: "/inbox", icon: Inbox },
   { name: "Tasks", href: "/tasks", icon: CheckSquare },
   { name: "Pipeline", href: "/pipeline", icon: Kanban },
   { name: "Customers", href: "/customers", icon: Users },
