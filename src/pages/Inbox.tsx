@@ -1,8 +1,13 @@
 import { useState, useCallback } from "react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AgentSelector, AgentType } from "@/components/chat/AgentSelector";
 import { ChatThread } from "@/components/chat/ChatThread";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { Message } from "@/components/chat/ChatMessage";
+import { EmailList } from "@/components/email/EmailList";
+import { EmailViewer } from "@/components/email/EmailViewer";
+import { GmailMessage } from "@/lib/gmail";
+import { MessageSquare, Mail } from "lucide-react";
 
 // Demo responses for different agents
 const agentResponses: Record<AgentType, string[]> = {
@@ -34,12 +39,13 @@ const agentResponses: Record<AgentType, string[]> = {
 };
 
 export default function Inbox() {
+  const [activeTab, setActiveTab] = useState<"email" | "agents">("email");
   const [selectedAgent, setSelectedAgent] = useState<AgentType>("sales");
   const [messages, setMessages] = useState<Message[]>([]);
   const [isTyping, setIsTyping] = useState(false);
+  const [selectedEmail, setSelectedEmail] = useState<GmailMessage | null>(null);
 
   const handleSend = useCallback((content: string) => {
-    // Add user message
     const userMessage: Message = {
       id: crypto.randomUUID(),
       role: "user",
@@ -49,7 +55,6 @@ export default function Inbox() {
     };
     setMessages((prev) => [...prev, userMessage]);
 
-    // Simulate agent typing
     setIsTyping(true);
     setTimeout(() => {
       const responses = agentResponses[selectedAgent];
@@ -70,42 +75,79 @@ export default function Inbox() {
 
   const handleAgentChange = (agent: AgentType) => {
     setSelectedAgent(agent);
-    // Clear messages when switching agents
     setMessages([]);
+  };
+
+  const handleRefreshEmails = () => {
+    // EmailList handles its own refresh
   };
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
+      {/* Header with Tabs */}
       <header className="flex items-center justify-between px-6 py-4 border-b border-border">
         <div>
           <h1 className="text-xl font-semibold">Inbox</h1>
-          <p className="text-sm text-muted-foreground">Chat with agents to get work done</p>
+          <p className="text-sm text-muted-foreground">Emails and agent conversations</p>
         </div>
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "email" | "agents")}>
+          <TabsList>
+            <TabsTrigger value="email" className="gap-2">
+              <Mail className="w-4 h-4" />
+              Email
+            </TabsTrigger>
+            <TabsTrigger value="agents" className="gap-2">
+              <MessageSquare className="w-4 h-4" />
+              Agents
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
       </header>
 
-      {/* Agent Selector */}
-      <AgentSelector selected={selectedAgent} onSelect={handleAgentChange} />
+      {/* Content */}
+      {activeTab === "email" ? (
+        <div className="flex-1 flex overflow-hidden">
+          {/* Email List */}
+          <div className="w-96 flex-shrink-0">
+            <EmailList
+              onSelectEmail={setSelectedEmail}
+              selectedId={selectedEmail?.id}
+            />
+          </div>
 
-      {/* Chat Thread */}
-      <ChatThread messages={messages} />
-
-      {/* Typing Indicator */}
-      {isTyping && (
-        <div className="px-4 pb-2">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground animate-pulse-subtle">
-            <span className="w-2 h-2 rounded-full bg-primary" />
-            Agent is thinking...
+          {/* Email Viewer */}
+          <div className="flex-1">
+            {selectedEmail ? (
+              <EmailViewer email={selectedEmail} onRefresh={handleRefreshEmails} />
+            ) : (
+              <div className="flex items-center justify-center h-full text-muted-foreground">
+                <div className="text-center">
+                  <Mail className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                  <p>Select an email to read</p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
+      ) : (
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <AgentSelector selected={selectedAgent} onSelect={handleAgentChange} />
+          <ChatThread messages={messages} />
+          {isTyping && (
+            <div className="px-4 pb-2">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground animate-pulse-subtle">
+                <span className="w-2 h-2 rounded-full bg-primary" />
+                Agent is thinking...
+              </div>
+            </div>
+          )}
+          <ChatInput
+            onSend={handleSend}
+            placeholder={`Ask ${selectedAgent} agent...`}
+            disabled={isTyping}
+          />
+        </div>
       )}
-
-      {/* Input */}
-      <ChatInput
-        onSend={handleSend}
-        placeholder={`Ask ${selectedAgent} agent...`}
-        disabled={isTyping}
-      />
     </div>
   );
 }
