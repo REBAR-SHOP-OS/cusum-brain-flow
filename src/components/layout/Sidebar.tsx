@@ -6,6 +6,7 @@ import { UserMenu } from "./UserMenu";
 import { InboxPanel } from "@/components/panels/InboxPanel";
 import { HistoryPanel } from "@/components/panels/HistoryPanel";
 import { useNotifications } from "@/hooks/useNotifications";
+import brandLogo from "@/assets/brand-logo.png";
 
 const navigation = [
   { name: "Home", href: "/home", icon: Home },
@@ -51,9 +52,7 @@ export function Sidebar() {
       <aside className="flex flex-col w-16 bg-sidebar border-r border-sidebar-border">
         {/* Logo */}
         <div className="flex items-center justify-center h-16 border-b border-sidebar-border">
-          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-            <MessageSquare className="w-4 h-4 text-primary-foreground" />
-          </div>
+          <img src={brandLogo} alt="Rebar Shop OS" className="w-9 h-9 rounded-lg object-contain" />
         </div>
 
         {/* Panel Toggles */}
