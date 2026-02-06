@@ -11,6 +11,7 @@ import Signup from "./pages/Signup";
 import Inbox from "./pages/Inbox";
 import Tasks from "./pages/Tasks";
 import ShopFloor from "./pages/ShopFloor";
+import Deliveries from "./pages/Deliveries";
 import Brain from "./pages/Brain";
 import Integrations from "./pages/Integrations";
 import Settings from "./pages/Settings";
@@ -57,6 +58,16 @@ const App = () => (
                 <ProtectedRoute>
                   <AppLayout>
                     <ShopFloor />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/deliveries"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <Deliveries />
                   </AppLayout>
                 </ProtectedRoute>
               }
