@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { UserMenu } from "./UserMenu";
 import { InboxPanel } from "@/components/panels/InboxPanel";
 import { HistoryPanel } from "@/components/panels/HistoryPanel";
+import { useNotifications } from "@/hooks/useNotifications";
 
 const navigation = [
   { name: "Home", href: "/home", icon: Home },
@@ -27,6 +28,7 @@ export function Sidebar() {
   const location = useLocation();
   const [inboxPanelOpen, setInboxPanelOpen] = useState(false);
   const [historyPanelOpen, setHistoryPanelOpen] = useState(false);
+  const { unreadCount } = useNotifications();
 
   const handlePanelToggle = (panel: "inbox" | "history") => {
     if (panel === "inbox") {
@@ -62,9 +64,11 @@ export function Sidebar() {
             title="Inbox"
           >
             <Bell className="w-5 h-5" />
-            <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-destructive text-destructive-foreground text-[10px] font-medium rounded-full flex items-center justify-center">
-              8
-            </span>
+            {unreadCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-destructive text-destructive-foreground text-[10px] font-medium rounded-full flex items-center justify-center">
+                {unreadCount > 99 ? "99+" : unreadCount}
+              </span>
+            )}
           </button>
           <button
             onClick={() => handlePanelToggle("history")}
