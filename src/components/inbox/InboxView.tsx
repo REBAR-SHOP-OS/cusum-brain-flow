@@ -1,5 +1,5 @@
-import { useState, useMemo } from "react";
-import { RefreshCw, Settings, Loader2, Search, Filter } from "lucide-react";
+import { useState, useMemo, useCallback } from "react";
+import { RefreshCw, Settings, Loader2, Search, CheckSquare, Trash2, Archive, X } from "lucide-react";
 import { InboxEmailList, type InboxEmail } from "./InboxEmailList";
 import { InboxEmailViewer } from "./InboxEmailViewer";
 import { InboxManagerSettings } from "./InboxManagerSettings";
@@ -10,12 +10,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 
@@ -89,6 +85,9 @@ export function InboxView({ connectedEmail = "sattar@rebar.shop" }: InboxViewPro
   const [sortByPriority, setSortByPriority] = useState(false);
   const [summary, setSummary] = useState<InboxSummary | null>(null);
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const { toast } = useToast();
 
   // Map communications to InboxEmail format
   const allEmails: (InboxEmail & { priority: number })[] = useMemo(() => {
@@ -158,6 +157,73 @@ export function InboxView({ connectedEmail = "sattar@rebar.shop" }: InboxViewPro
     setSyncing(false);
   };
 
+  // ─── Selection handlers ────────────────────────────────────────────
+  const toggleSelectMode = useCallback(() => {
+    setSelectionMode((prev) => !prev);
+    setSelectedIds(new Set());
+  }, []);
+
+  const toggleSelectId = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const selectAll = useCallback(() => {
+    if (selectedIds.size === emails.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(emails.map((e) => e.id)));
+    }
+  }, [emails, selectedIds.size]);
+
+  const handleDeleteEmail = useCallback((id: string) => {
+    setHiddenIds((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+    if (selectedEmail?.id === id) setSelectedEmail(null);
+    toast({ title: "Email deleted", description: "Email has been removed from your inbox." });
+  }, [selectedEmail, toast]);
+
+  const handleArchiveEmail = useCallback((id: string) => {
+    setHiddenIds((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+    if (selectedEmail?.id === id) setSelectedEmail(null);
+    toast({ title: "Email archived", description: "Email has been archived." });
+  }, [selectedEmail, toast]);
+
+  const handleBulkDelete = useCallback(() => {
+    setHiddenIds((prev) => {
+      const next = new Set(prev);
+      selectedIds.forEach((id) => next.add(id));
+      return next;
+    });
+    if (selectedEmail && selectedIds.has(selectedEmail.id)) setSelectedEmail(null);
+    toast({ title: "Bulk delete", description: `${selectedIds.size} email(s) deleted.` });
+    setSelectedIds(new Set());
+    setSelectionMode(false);
+  }, [selectedIds, selectedEmail, toast]);
+
+  const handleBulkArchive = useCallback(() => {
+    setHiddenIds((prev) => {
+      const next = new Set(prev);
+      selectedIds.forEach((id) => next.add(id));
+      return next;
+    });
+    if (selectedEmail && selectedIds.has(selectedEmail.id)) setSelectedEmail(null);
+    toast({ title: "Bulk archive", description: `${selectedIds.size} email(s) archived.` });
+    setSelectedIds(new Set());
+    setSelectionMode(false);
+  }, [selectedIds, selectedEmail, toast]);
+
   // AI Actions handler
   const handleAIAction = async (action: AIAction) => {
     switch (action) {
@@ -189,10 +255,8 @@ export function InboxView({ connectedEmail = "sattar@rebar.shop" }: InboxViewPro
       }
 
       case "detect-spam": {
-        // Mark obvious spam via categorization
         const spamCount = allEmails.filter((e) => e.label === "Spam").length;
         if (spamCount === 0) {
-          // Re-scan subjects for spam keywords
           const spamKeywords = ["alibaba", "unsubscribe", "free trial", "act now", "limited time", "congratulations", "winner"];
           const detected = allEmails.filter((e) =>
             spamKeywords.some((kw) =>
@@ -208,7 +272,6 @@ export function InboxView({ connectedEmail = "sattar@rebar.shop" }: InboxViewPro
       }
 
       case "clean": {
-        // Hide marketing + spam
         const clutter = allEmails.filter((e) => e.label === "Marketing" || e.label === "Spam");
         setHiddenIds(new Set(clutter.map((e) => e.id)));
         break;
@@ -219,7 +282,6 @@ export function InboxView({ connectedEmail = "sattar@rebar.shop" }: InboxViewPro
         break;
 
       case "label-all":
-        // Already auto-labeled — just show all
         setActiveFilter("all");
         setSortByPriority(false);
         setHiddenIds(new Set());
@@ -256,6 +318,15 @@ export function InboxView({ connectedEmail = "sattar@rebar.shop" }: InboxViewPro
             {loading && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
           </div>
           <div className="flex items-center gap-1">
+            <Button
+              variant={selectionMode ? "secondary" : "ghost"}
+              size="icon"
+              className="h-8 w-8"
+              onClick={toggleSelectMode}
+              title={selectionMode ? "Exit selection" : "Select emails"}
+            >
+              {selectionMode ? <X className="w-4 h-4" /> : <CheckSquare className="w-4 h-4" />}
+            </Button>
             <Button
               variant="ghost"
               size="icon"
@@ -341,16 +412,54 @@ export function InboxView({ connectedEmail = "sattar@rebar.shop" }: InboxViewPro
 
         {/* Email Count */}
         <div className="px-3 py-1.5 text-[11px] text-muted-foreground border-b flex items-center justify-between">
-          <span>{emails.length} email{emails.length !== 1 ? "s" : ""}</span>
-          {sortByPriority && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-[11px] h-5 px-1.5"
-              onClick={() => setSortByPriority(false)}
-            >
-              Clear sort
-            </Button>
+          {selectionMode ? (
+            <div className="flex items-center gap-2 w-full">
+              <Checkbox
+                checked={emails.length > 0 && selectedIds.size === emails.length}
+                onCheckedChange={selectAll}
+              />
+              <span className="text-xs font-medium">
+                {selectedIds.size > 0
+                  ? `${selectedIds.size} selected`
+                  : "Select all"}
+              </span>
+              {selectedIds.size > 0 && (
+                <div className="flex items-center gap-1 ml-auto">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs gap-1 text-destructive hover:text-destructive"
+                    onClick={handleBulkDelete}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Delete
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs gap-1"
+                    onClick={handleBulkArchive}
+                  >
+                    <Archive className="w-3.5 h-3.5" />
+                    Archive
+                  </Button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              <span>{emails.length} email{emails.length !== 1 ? "s" : ""}</span>
+              {sortByPriority && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-[11px] h-5 px-1.5"
+                  onClick={() => setSortByPriority(false)}
+                >
+                  Clear sort
+                </Button>
+              )}
+            </>
           )}
         </div>
 
@@ -359,6 +468,11 @@ export function InboxView({ connectedEmail = "sattar@rebar.shop" }: InboxViewPro
           emails={emails}
           selectedId={selectedEmail?.id ?? null}
           onSelect={setSelectedEmail}
+          selectionMode={selectionMode}
+          selectedIds={selectedIds}
+          onToggleSelect={toggleSelectId}
+          onDelete={handleDeleteEmail}
+          onArchive={handleArchiveEmail}
         />
       </div>
 
