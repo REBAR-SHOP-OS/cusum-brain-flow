@@ -71,3 +71,9 @@ verify_jwt = false
 
 [functions.diagnostic-logs]
 verify_jwt = false
+
+[functions.ringcentral-video]
+verify_jwt = false
+
+[functions.summarize-meeting]
+verify_jwt = false
