@@ -55,7 +55,10 @@ export default function IntegrationCallback() {
     try {
       const redirectUri = `${window.location.origin}/integrations/callback`;
 
-      const { data, error } = await supabase.functions.invoke("google-oauth", {
+      // Route to the correct edge function based on integration
+      const edgeFunction = integration === "ringcentral" ? "ringcentral-oauth" : "google-oauth";
+
+      const { data, error } = await supabase.functions.invoke(edgeFunction, {
         body: {
           action: "exchange-code",
           code,
@@ -71,7 +74,7 @@ export default function IntegrationCallback() {
 
       // Auto-redirect to inbox after success
       setTimeout(() => {
-        if (integration === "gmail") {
+        if (integration === "gmail" || integration === "ringcentral") {
           navigate("/inbox");
         } else {
           navigate("/integrations");
@@ -93,7 +96,7 @@ export default function IntegrationCallback() {
         {status === "loading" && (
           <>
             <Loader2 className="w-16 h-16 mx-auto text-primary animate-spin" />
-            <h1 className="text-xl font-semibold">Connecting your Gmail...</h1>
+            <h1 className="text-xl font-semibold">Connecting your account...</h1>
             <p className="text-muted-foreground">Please wait while we link your account.</p>
           </>
         )}
@@ -101,7 +104,7 @@ export default function IntegrationCallback() {
         {status === "success" && (
           <>
             <CheckCircle2 className="w-16 h-16 mx-auto text-green-500" />
-            <h1 className="text-xl font-semibold text-green-500">Gmail Connected!</h1>
+            <h1 className="text-xl font-semibold text-green-500">Account Connected!</h1>
             <p className="text-muted-foreground">{message}</p>
             <p className="text-sm text-muted-foreground">Redirecting to your inbox...</p>
           </>

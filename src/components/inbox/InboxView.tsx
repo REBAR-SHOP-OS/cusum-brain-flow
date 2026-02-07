@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
-import { RefreshCw, Settings, Loader2, Search, CheckSquare, Trash2, Archive, X, Mail, LogOut } from "lucide-react";
+import { RefreshCw, Settings, Loader2, Search, CheckSquare, Trash2, Archive, X, Mail, LogOut, Phone } from "lucide-react";
 import { InboxEmailList, type InboxEmail } from "./InboxEmailList";
 import { InboxEmailViewer } from "./InboxEmailViewer";
 import { InboxManagerSettings } from "./InboxManagerSettings";
@@ -97,7 +97,12 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
   const [gmailEmail, setGmailEmail] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
 
-  // Check if current user has Gmail connected
+  // RingCentral connection state
+  const [rcStatus, setRcStatus] = useState<"loading" | "connected" | "not_connected">("loading");
+  const [rcEmail, setRcEmail] = useState<string | null>(null);
+  const [rcConnecting, setRcConnecting] = useState(false);
+
+  // Check if current user has Gmail & RingCentral connected
   useEffect(() => {
     const checkGmailStatus = async () => {
       try {
@@ -118,7 +123,29 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
         setGmailStatus("not_connected");
       }
     };
+
+    const checkRcStatus = async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke("ringcentral-oauth", {
+          body: { action: "check-status" },
+        });
+        if (error) {
+          setRcStatus("not_connected");
+          return;
+        }
+        if (data?.status === "connected") {
+          setRcStatus("connected");
+          setRcEmail(data.email || null);
+        } else {
+          setRcStatus("not_connected");
+        }
+      } catch {
+        setRcStatus("not_connected");
+      }
+    };
+
     checkGmailStatus();
+    checkRcStatus();
   }, [userEmail]);
 
   const handleConnectGmail = async () => {
@@ -148,6 +175,38 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
       setGmailStatus("not_connected");
       setGmailEmail(null);
       toast({ title: "Gmail disconnected" });
+    } catch {
+      toast({ title: "Failed to disconnect", variant: "destructive" });
+    }
+  };
+
+  const handleConnectRC = async () => {
+    setRcConnecting(true);
+    try {
+      const redirectUri = `${window.location.origin}/integrations/callback`;
+      const { data, error } = await supabase.functions.invoke("ringcentral-oauth", {
+        body: { action: "get-auth-url", redirectUri },
+      });
+      if (error) throw new Error(error.message);
+      window.location.href = data.authUrl;
+    } catch (err) {
+      toast({
+        title: "Connection failed",
+        description: err instanceof Error ? err.message : "Could not start RingCentral connection",
+        variant: "destructive",
+      });
+      setRcConnecting(false);
+    }
+  };
+
+  const handleDisconnectRC = async () => {
+    try {
+      await supabase.functions.invoke("ringcentral-oauth", {
+        body: { action: "disconnect" },
+      });
+      setRcStatus("not_connected");
+      setRcEmail(null);
+      toast({ title: "RingCentral disconnected" });
     } catch {
       toast({ title: "Failed to disconnect", variant: "destructive" });
     }
@@ -439,6 +498,40 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
               className="h-6 px-1.5 text-xs text-muted-foreground hover:text-destructive"
               onClick={handleDisconnectGmail}
               title="Disconnect Gmail"
+            >
+              <LogOut className="w-3 h-3" />
+            </Button>
+          </div>
+        )}
+
+        {/* RingCentral connection banner */}
+        {rcStatus === "not_connected" && (
+          <div className="px-3 py-3 border-b bg-muted/50">
+            <div className="flex items-center gap-3">
+              <Phone className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium">Connect RingCentral</p>
+                <p className="text-xs text-muted-foreground">Sign in to sync calls & SMS</p>
+              </div>
+              <Button size="sm" onClick={handleConnectRC} disabled={rcConnecting}>
+                {rcConnecting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Connect"}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {rcStatus === "connected" && rcEmail && (
+          <div className="px-3 py-1.5 border-b bg-muted/30 flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">
+              <Phone className="w-3 h-3 inline mr-1" />
+              {rcEmail}
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-1.5 text-xs text-muted-foreground hover:text-destructive"
+              onClick={handleDisconnectRC}
+              title="Disconnect RingCentral"
             >
               <LogOut className="w-3 h-3" />
             </Button>

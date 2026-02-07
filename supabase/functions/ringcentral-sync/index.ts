@@ -9,12 +9,6 @@ const corsHeaders = {
 
 const RC_SERVER = "https://platform.ringcentral.com";
 
-interface TokenResponse {
-  access_token: string;
-  token_type: string;
-  expires_in: number;
-}
-
 interface CallLogRecord {
   id: string;
   sessionId: string;
@@ -62,13 +56,126 @@ async function verifyAuth(req: Request): Promise<string | null> {
   return data.claims.sub as string;
 }
 
-async function getAccessToken(): Promise<string> {
-  // Use dedicated JWT app credentials (separate from widget OAuth app)
+/**
+ * Get an access token for the given user.
+ * Priority:
+ *   1. Per-user OAuth token from user_ringcentral_tokens
+ *   2. Fallback to shared JWT credentials (for backward compat / auto-migration)
+ */
+async function getAccessTokenForUser(
+  userId: string,
+  supabaseAdmin: ReturnType<typeof createClient>
+): Promise<string> {
+  // 1. Check per-user tokens
+  const { data: tokenRow } = await supabaseAdmin
+    .from("user_ringcentral_tokens")
+    .select("refresh_token, access_token, token_expires_at")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (tokenRow) {
+    // Check if it's a JWT-migrated token
+    if (tokenRow.refresh_token.startsWith("jwt:")) {
+      const jwt = tokenRow.refresh_token.replace("jwt:", "");
+      return await exchangeJwtToken(jwt);
+    }
+
+    // Check if current access token is still valid
+    if (tokenRow.access_token && tokenRow.token_expires_at) {
+      const expiresAt = new Date(tokenRow.token_expires_at);
+      if (expiresAt > new Date(Date.now() + 60_000)) {
+        return tokenRow.access_token;
+      }
+    }
+
+    // Refresh using OAuth refresh token
+    const clientId = Deno.env.get("RINGCENTRAL_CLIENT_ID");
+    const clientSecret = Deno.env.get("RINGCENTRAL_CLIENT_SECRET");
+    if (!clientId || !clientSecret) {
+      throw new Error("RingCentral OAuth client credentials not configured");
+    }
+
+    const credentials = btoa(`${clientId}:${clientSecret}`);
+    const response = await fetch(`${RC_SERVER}/restapi/oauth/token`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Basic ${credentials}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: tokenRow.refresh_token,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`RingCentral token refresh failed: ${error}`);
+    }
+
+    const tokens = await response.json();
+
+    // Update stored tokens
+    await supabaseAdmin
+      .from("user_ringcentral_tokens")
+      .update({
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token || tokenRow.refresh_token,
+        token_expires_at: new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString(),
+      })
+      .eq("user_id", userId);
+
+    return tokens.access_token;
+  }
+
+  // 2. Fallback: shared JWT credentials (auto-migrate if email matches)
+  const jwt = Deno.env.get("RINGCENTRAL_JWT");
+  if (!jwt) {
+    throw new Error("not_connected");
+  }
+
+  const accessToken = await exchangeJwtToken(jwt);
+
+  // Check if this JWT matches the user's email
+  const { data: userData } = await supabaseAdmin.auth.admin.getUserById(userId);
+  const userEmail = userData?.user?.email?.toLowerCase();
+
+  let rcEmail = "";
+  try {
+    const extRes = await fetch(`${RC_SERVER}/restapi/v1.0/account/~/extension/~`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (extRes.ok) {
+      const extData = await extRes.json();
+      rcEmail = (extData.contact?.email || "").toLowerCase();
+    }
+  } catch {
+    // continue
+  }
+
+  if (rcEmail && userEmail && rcEmail !== userEmail) {
+    throw new Error("not_connected");
+  }
+
+  // Auto-migrate: store for this user
+  if (rcEmail && userEmail && rcEmail === userEmail) {
+    await supabaseAdmin.from("user_ringcentral_tokens").upsert({
+      user_id: userId,
+      rc_email: rcEmail,
+      refresh_token: `jwt:${jwt}`,
+      access_token: accessToken,
+      token_expires_at: new Date(Date.now() + 3600 * 1000).toISOString(),
+    }, { onConflict: "user_id" });
+  }
+
+  return accessToken;
+}
+
+async function exchangeJwtToken(jwt: string): Promise<string> {
   const clientId = Deno.env.get("RINGCENTRAL_JWT_CLIENT_ID");
   const clientSecret = Deno.env.get("RINGCENTRAL_JWT_CLIENT_SECRET");
-  const jwt = Deno.env.get("RINGCENTRAL_JWT");
 
-  if (!clientId || !clientSecret || !jwt) {
+  if (!clientId || !clientSecret) {
     throw new Error("RingCentral JWT app credentials not configured");
   }
 
@@ -88,10 +195,10 @@ async function getAccessToken(): Promise<string> {
 
   if (!response.ok) {
     const error = await response.text();
-    throw new Error(`RingCentral token exchange failed: ${error}`);
+    throw new Error(`RingCentral JWT token exchange failed: ${error}`);
   }
 
-  const data: TokenResponse = await response.json();
+  const data = await response.json();
   return data.access_token;
 }
 
@@ -104,9 +211,7 @@ async function fetchCallLog(accessToken: string, dateFrom: string): Promise<Call
 
   const response = await fetch(
     `${RC_SERVER}/restapi/v1.0/account/~/extension/~/call-log?${params}`,
-    {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    }
+    { headers: { Authorization: `Bearer ${accessToken}` } }
   );
 
   if (!response.ok) {
@@ -126,9 +231,7 @@ async function fetchMessages(accessToken: string, dateFrom: string): Promise<Mes
 
   const response = await fetch(
     `${RC_SERVER}/restapi/v1.0/account/~/extension/~/message-store?${params}`,
-    {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    }
+    { headers: { Authorization: `Bearer ${accessToken}` } }
   );
 
   if (!response.ok) {
@@ -153,7 +256,6 @@ serve(async (req) => {
       );
     }
 
-    // Parse body for parameters
     let body: { syncType?: string; daysBack?: number } = {};
     try {
       body = await req.json();
@@ -161,47 +263,33 @@ serve(async (req) => {
       // Use defaults
     }
 
-    const syncType = body.syncType || "all"; // "calls", "sms", or "all"
+    const syncType = body.syncType || "all";
     const daysBack = body.daysBack || 7;
-
     const dateFrom = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000).toISOString();
-    const accessToken = await getAccessToken();
 
-    // Get the RingCentral extension's email to verify ownership
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const { data: userData } = await supabaseAdmin.auth.admin.getUserById(userId);
-    const userEmail = userData?.user?.email?.toLowerCase();
-
-    // Get RingCentral extension info
-    let rcEmail = "";
+    // Get access token for this specific user
+    let accessToken: string;
     try {
-      const extRes = await fetch(`${RC_SERVER}/restapi/v1.0/account/~/extension/~`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      if (extRes.ok) {
-        const extData = await extRes.json();
-        rcEmail = (extData.contact?.email || "").toLowerCase();
+      accessToken = await getAccessTokenForUser(userId, supabaseAdmin);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      if (msg === "not_connected") {
+        return new Response(
+          JSON.stringify({
+            error: "not_connected",
+            message: "RingCentral is not connected for your account. Please connect it in Inbox settings.",
+            callsUpserted: 0,
+            smsUpserted: 0,
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
-    } catch {
-      // If we can't get extension info, continue but log
-      console.warn("Could not fetch RC extension info for ownership check");
-    }
-
-    // Block sync if emails don't match (only if we could resolve the RC email)
-    if (rcEmail && userEmail && rcEmail !== userEmail) {
-      return new Response(
-        JSON.stringify({
-          error: "RingCentral account mismatch",
-          message: `This RingCentral integration is connected to ${rcEmail}. You are logged in as ${userEmail}.`,
-          callsUpserted: 0,
-          smsUpserted: 0,
-        }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      throw err;
     }
 
     let callsUpserted = 0;
