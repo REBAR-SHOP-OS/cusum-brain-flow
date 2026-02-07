@@ -744,6 +744,91 @@ export type Database = {
           },
         ]
       }
+      machine_runs: {
+        Row: {
+          company_id: string
+          created_at: string
+          created_by: string | null
+          duration_seconds: number | null
+          ended_at: string | null
+          id: string
+          input_qty: number | null
+          machine_id: string
+          notes: string | null
+          operator_profile_id: string | null
+          output_qty: number | null
+          process: string
+          scrap_qty: number | null
+          started_at: string | null
+          status: string
+          supervisor_profile_id: string | null
+          updated_at: string
+          work_order_id: string | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          duration_seconds?: number | null
+          ended_at?: string | null
+          id?: string
+          input_qty?: number | null
+          machine_id: string
+          notes?: string | null
+          operator_profile_id?: string | null
+          output_qty?: number | null
+          process: string
+          scrap_qty?: number | null
+          started_at?: string | null
+          status?: string
+          supervisor_profile_id?: string | null
+          updated_at?: string
+          work_order_id?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          duration_seconds?: number | null
+          ended_at?: string | null
+          id?: string
+          input_qty?: number | null
+          machine_id?: string
+          notes?: string | null
+          operator_profile_id?: string | null
+          output_qty?: number | null
+          process?: string
+          scrap_qty?: number | null
+          started_at?: string | null
+          status?: string
+          supervisor_profile_id?: string | null
+          updated_at?: string
+          work_order_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "machine_runs_operator_profile_id_fkey"
+            columns: ["operator_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "machine_runs_supervisor_profile_id_fkey"
+            columns: ["supervisor_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "machine_runs_work_order_id_fkey"
+            columns: ["work_order_id"]
+            isOneToOne: false
+            referencedRelation: "work_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           agent_color: string | null
@@ -858,6 +943,7 @@ export type Database = {
       profiles: {
         Row: {
           avatar_url: string | null
+          company_id: string | null
           created_at: string
           department: string | null
           duties: string[] | null
@@ -872,6 +958,7 @@ export type Database = {
         }
         Insert: {
           avatar_url?: string | null
+          company_id?: string | null
           created_at?: string
           department?: string | null
           duties?: string[] | null
@@ -886,6 +973,7 @@ export type Database = {
         }
         Update: {
           avatar_url?: string | null
+          company_id?: string | null
           created_at?: string
           department?: string | null
           duties?: string[] | null
@@ -1257,6 +1345,7 @@ export type Database = {
           table_name: string
         }[]
       }
+      get_user_company_id: { Args: { _user_id: string }; Returns: string }
       has_any_role: {
         Args: {
           _roles: Database["public"]["Enums"]["app_role"][]
