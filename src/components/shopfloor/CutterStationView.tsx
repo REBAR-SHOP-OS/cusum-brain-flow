@@ -486,7 +486,7 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
             isRunning={machineIsRunning}
             canWrite={canWrite}
             darkMode
-            strokesDone={slotTracker.slots.length > 0 ? slotTracker.slots[0].cutsDone : 0}
+            strokesDone={slotTracker.slots.length > 0 ? Math.max(...slotTracker.slots.map(s => s.cutsDone)) : 0}
             totalStrokesNeeded={computedPiecesPerBar}
             totalPiecesDone={slotTracker.totalCutsDone}
             totalPiecesPlanned={slotTracker.slots.reduce((s, sl) => s + sl.plannedCuts, 0)}

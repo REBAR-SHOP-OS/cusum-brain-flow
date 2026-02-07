@@ -11,7 +11,6 @@ import { useToast } from "@/hooks/use-toast";
 import { useInventoryData } from "@/hooks/useInventoryData";
 import { useMachineCapabilities } from "@/hooks/useCutPlans";
 import { useForemanBrain } from "@/hooks/useForemanBrain";
-import { manageInventory } from "@/lib/inventoryService";
 import { recordCompletion } from "@/lib/foremanLearningService";
 import { Check, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import type { ForemanContext } from "@/lib/foremanBrain";
@@ -64,8 +63,10 @@ export function BenderStationView({ machine, items, canWrite }: BenderStationVie
 
   const foreman = useForemanBrain({ context: foremanContext });
 
+  const isMarkComplete = currentItem ? currentItem.completed_pieces >= currentItem.total_pieces : false;
+
   const handleDone = async () => {
-    if (!currentItem || submitting) return;
+    if (!currentItem || submitting || isMarkComplete) return;
     setSubmitting(true);
     try {
       const newCount = currentItem.completed_pieces + 1;
@@ -87,7 +88,7 @@ export function BenderStationView({ machine, items, canWrite }: BenderStationVie
         });
         // Auto-advance
         if (currentIndex < items.length - 1) {
-          setCurrentIndex((i) => i + 1);
+          setTimeout(() => setCurrentIndex((i) => i + 1), 800);
         }
       }
     } catch (err: any) {
@@ -97,29 +98,8 @@ export function BenderStationView({ machine, items, canWrite }: BenderStationVie
     }
   };
 
-  // Consume WIP or raw stock when bender starts
-  const handleConsumeOnBendStart = async () => {
-    if (!currentItem) return;
-    const wipSource = wipBatches.find(
-      (w) => w.bar_code === currentItem.bar_code && w.qty_available > 0
-    );
-    if (wipSource) {
-      try {
-        await manageInventory({
-          action: "consume-on-start",
-          machineRunId: machine.current_run_id || undefined,
-          cutPlanItemId: currentItem.id,
-          barCode: currentItem.bar_code,
-          qty: 1,
-          sourceType: "wip",
-          sourceId: wipSource.id,
-        });
-        toast({ title: "WIP consumed", description: "1 piece from cut output" });
-      } catch {
-        // WIP consumption is best-effort
-      }
-    }
-  };
+  // NOTE: handleConsumeOnBendStart is reserved for future WIP consumption
+  // integration when bender machine runs are tracked via manage-machine.
 
   if (!currentItem) {
     return (
@@ -225,11 +205,11 @@ export function BenderStationView({ machine, items, canWrite }: BenderStationVie
             <span className="text-[9px] text-muted-foreground tracking-wider uppercase">Batch</span>
             <span className="text-[9px] text-muted-foreground tracking-wider uppercase">Unit {currentIndex + 1}</span>
           </div>
-          <Button variant="outline" size="icon" className="h-8 w-8" disabled={currentIndex <= 0} onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}>
+          <Button variant="outline" size="icon" className="h-8 w-8" disabled={currentIndex <= 0 || submitting} onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}>
             <ChevronLeft className="w-4 h-4" />
           </Button>
           <span className="text-xl font-bold text-foreground min-w-[40px] text-center">{currentIndex + 1}</span>
-          <Button variant="outline" size="icon" className="h-8 w-8" disabled={currentIndex >= items.length - 1} onClick={() => setCurrentIndex((i) => Math.min(items.length - 1, i + 1))}>
+          <Button variant="outline" size="icon" className="h-8 w-8" disabled={currentIndex >= items.length - 1 || submitting} onClick={() => setCurrentIndex((i) => Math.min(items.length - 1, i + 1))}>
             <ChevronRight className="w-4 h-4" />
           </Button>
         </div>
@@ -237,15 +217,20 @@ export function BenderStationView({ machine, items, canWrite }: BenderStationVie
         <Button
           size="lg"
           className="flex-1 ml-4 h-14 gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-lg rounded-lg"
-          disabled={!canWrite || submitting}
+          disabled={!canWrite || submitting || isMarkComplete}
           onClick={handleDone}
         >
           {submitting ? (
             <Loader2 className="w-5 h-5 animate-spin" />
+          ) : isMarkComplete ? (
+            <>
+              <Check className="w-5 h-5" />
+              <span className="text-xl font-black">COMPLETE</span>
+            </>
           ) : (
             <>
               <span className="text-xl font-black">DONE</span>
-              <span className="text-xs opacity-80">CONFIRMED +1 BARS</span>
+              <span className="text-xs opacity-80">CONFIRMED +1 PIECE</span>
             </>
           )}
         </Button>

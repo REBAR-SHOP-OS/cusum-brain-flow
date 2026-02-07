@@ -63,10 +63,11 @@ export function SlotTracker({
   const totalCutsDone = slots.reduce((s, sl) => s + sl.cutsDone, 0);
   const totalPlanned = slots.reduce((s, sl) => s + sl.plannedCuts, 0);
 
-  // Stroke tracking: all active bars share the same stroke count
-  const strokesDone = slots.length > 0 ? slots[0].cutsDone : 0;
+  // Stroke tracking: use MAX across all slots (not slots[0]) because
+  // slot 0 could be a partial bar that finishes early in the extra-bar scenario
+  const strokesDone = slots.length > 0 ? Math.max(...slots.map(s => s.cutsDone)) : 0;
   const maxStrokes = slots.length > 0 ? Math.max(...slots.map(s => s.plannedCuts)) : 0;
-  const nextStroke = activeSlots.length > 0 ? activeSlots[0].cutsDone + 1 : 0;
+  const nextStroke = activeSlots.length > 0 ? strokesDone + 1 : 0;
 
   // Pieces per stroke = number of bars being cut simultaneously
   const piecesPerStroke = activeSlots.length;
