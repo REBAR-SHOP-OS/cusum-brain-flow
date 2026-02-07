@@ -2,11 +2,14 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { AuthProvider } from "@/lib/auth";
+import { WorkspaceProvider } from "@/contexts/WorkspaceContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { AppLayout } from "@/components/layout/AppLayout";
+
+// Pages
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Home from "./pages/Home";
@@ -26,12 +29,10 @@ import Brain from "./pages/Brain";
 import Integrations from "./pages/Integrations";
 import IntegrationCallback from "./pages/IntegrationCallback";
 import SocialMediaManager from "./pages/SocialMediaManager";
-
 import DailySummarizer from "./pages/DailySummarizer";
 import FacebookCommenter from "./pages/FacebookCommenter";
 import Phonecalls from "./pages/Phonecalls";
 import Settings from "./pages/Settings";
-
 import AdminPanel from "./pages/AdminPanel";
 import AdminMachines from "./pages/AdminMachines";
 import AdminDbAudit from "./pages/AdminDbAudit";
@@ -46,301 +47,86 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
+/** Helper to wrap protected routes with layout */
+function P({ children }: { children: React.ReactNode }) {
+  return (
+    <ProtectedRoute>
+      <AppLayout>{children}</AppLayout>
+    </ProtectedRoute>
+  );
+}
+
 const App = () => (
   <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
         <Sonner />
-      <BrowserRouter>
-        <AuthProvider>
-          <Routes>
-          {/* Public routes */}
-            <Route path="/" element={<Landing />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/signup" element={<Signup />} />
+        <BrowserRouter>
+          <AuthProvider>
+            <WorkspaceProvider>
+              <Routes>
+                {/* Public routes */}
+                <Route path="/" element={<Landing />} />
+                <Route path="/login" element={<Login />} />
+                <Route path="/signup" element={<Signup />} />
 
-            {/* Protected routes */}
-            <Route
-              path="/inbox"
-              element={
-                <ProtectedRoute>
-                  <AppLayout>
-                    <Inbox />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/home"
-              element={
-                <ProtectedRoute>
-                  <AppLayout>
-                    <Home />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/agent/:agentId"
-              element={
-                <ProtectedRoute>
-                  <AppLayout>
-                    <AgentWorkspace />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/tasks"
-              element={
-                <ProtectedRoute>
-                  <AppLayout>
-                    <Tasks />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/pipeline"
-              element={
-                <ProtectedRoute>
-                  <AppLayout>
-                    <Pipeline />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/customers"
-              element={
-                <ProtectedRoute>
-                  <AppLayout>
-                    <Customers />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/shop-floor"
-              element={
-                <ProtectedRoute>
-                  <AppLayout>
-                    <ShopFloor />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/shopfloor/cutter"
-              element={
-                <ProtectedRoute>
-                  <AppLayout>
-                    <CutterPlanning />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/shopfloor/station"
-              element={
-                <ProtectedRoute>
-                  <AppLayout>
-                    <StationDashboard />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/shopfloor/station/:machineId"
-              element={
-                <ProtectedRoute>
-                  <AppLayout>
-                    <StationView />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/shopfloor/pickup"
-              element={
-                <ProtectedRoute>
-                  <AppLayout>
-                    <PickupStation />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/shopfloor/live-monitor"
-              element={
-                <ProtectedRoute>
-                  <AppLayout>
-                    <LiveMonitor />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/deliveries"
-              element={
-                <ProtectedRoute>
-                  <AppLayout>
-                    <Deliveries />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/brain"
-              element={
-                <ProtectedRoute>
-                  <AppLayout>
-                    <Brain />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/integrations"
-              element={
-                <ProtectedRoute>
-                  <AppLayout>
-                    <Integrations />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            {/* OAuth callback - must be public since user redirects from Google */}
-            <Route path="/integrations/callback" element={<IntegrationCallback />} />
-            <Route
-              path="/settings"
-              element={
-                <ProtectedRoute>
-                  <AppLayout>
-                    <Settings />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/social-media-manager"
-              element={
-                <ProtectedRoute>
-                  <AppLayout>
-                    <SocialMediaManager />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            {/* Legacy route redirect */}
-            <Route path="/inbox-manager" element={
-              <ProtectedRoute>
-                <AppLayout>
-                  <Inbox />
-                </AppLayout>
-              </ProtectedRoute>
-            } />
-            <Route
-              path="/daily-summarizer"
-              element={
-                <ProtectedRoute>
-                  <AppLayout>
-                    <DailySummarizer />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/facebook-commenter"
-              element={
-                <ProtectedRoute>
-                  <AppLayout>
-                    <FacebookCommenter />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/phonecalls"
-              element={
-                <ProtectedRoute>
-                  <AppLayout>
-                    <Phonecalls />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin"
-              element={
-                <ProtectedRoute>
-                  <AppLayout>
-                    <AdminPanel />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin/db-audit"
-              element={
-                <ProtectedRoute>
-                  <AppLayout>
-                    <AdminDbAudit />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin/machines"
-              element={
-                <ProtectedRoute>
-                  <AppLayout>
-                    <AdminMachines />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin/cleanup"
-              element={
-                <ProtectedRoute>
-                  <AppLayout>
-                    <CleanupReport />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin/data-audit"
-              element={
-                <ProtectedRoute>
-                  <AppLayout>
-                    <DataStoresAudit />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
+                {/* Core */}
+                <Route path="/home" element={<P><Home /></P>} />
+                <Route path="/inbox" element={<P><Inbox /></P>} />
+                <Route path="/tasks" element={<P><Tasks /></P>} />
+                <Route path="/phonecalls" element={<P><Phonecalls /></P>} />
 
-            {/* Office Portal - standalone layout */}
-            <Route
-              path="/office"
-              element={
-                <ProtectedRoute>
-                  <OfficePortal />
-                </ProtectedRoute>
-              }
-            />
+                {/* Sales */}
+                <Route path="/pipeline" element={<P><Pipeline /></P>} />
+                <Route path="/customers" element={<P><Customers /></P>} />
 
-            {/* Public pages */}
-            <Route path="/privacy" element={<PrivacyPolicy />} />
-            <Route path="/terms" element={<TermsOfService />} />
-            <Route path="/install" element={<Install />} />
+                {/* AI Agents */}
+                <Route path="/agent/:agentId" element={<P><AgentWorkspace /></P>} />
 
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </AuthProvider>
-      </BrowserRouter>
+                {/* Operations */}
+                <Route path="/shop-floor" element={<P><ShopFloor /></P>} />
+                <Route path="/shopfloor/cutter" element={<P><CutterPlanning /></P>} />
+                <Route path="/shopfloor/station" element={<P><StationDashboard /></P>} />
+                <Route path="/shopfloor/station/:machineId" element={<P><StationView /></P>} />
+                <Route path="/shopfloor/pickup" element={<P><PickupStation /></P>} />
+                <Route path="/shopfloor/live-monitor" element={<P><LiveMonitor /></P>} />
+                <Route path="/deliveries" element={<P><Deliveries /></P>} />
+
+                {/* Office Portal - standalone layout but wrapped in workspace */}
+                <Route path="/office" element={<ProtectedRoute><OfficePortal /></ProtectedRoute>} />
+
+                {/* System */}
+                <Route path="/brain" element={<P><Brain /></P>} />
+                <Route path="/integrations" element={<P><Integrations /></P>} />
+                <Route path="/integrations/callback" element={<IntegrationCallback />} />
+                <Route path="/settings" element={<P><Settings /></P>} />
+
+                {/* Social / Comms */}
+                <Route path="/social-media-manager" element={<P><SocialMediaManager /></P>} />
+                <Route path="/daily-summarizer" element={<P><DailySummarizer /></P>} />
+                <Route path="/facebook-commenter" element={<P><FacebookCommenter /></P>} />
+
+                {/* Admin */}
+                <Route path="/admin" element={<P><AdminPanel /></P>} />
+                <Route path="/admin/db-audit" element={<P><AdminDbAudit /></P>} />
+                <Route path="/admin/machines" element={<P><AdminMachines /></P>} />
+                <Route path="/admin/cleanup" element={<P><CleanupReport /></P>} />
+                <Route path="/admin/data-audit" element={<P><DataStoresAudit /></P>} />
+
+                {/* Legacy redirects */}
+                <Route path="/inbox-manager" element={<Navigate to="/inbox" replace />} />
+
+                {/* Public pages */}
+                <Route path="/privacy" element={<PrivacyPolicy />} />
+                <Route path="/terms" element={<TermsOfService />} />
+                <Route path="/install" element={<Install />} />
+
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </WorkspaceProvider>
+          </AuthProvider>
+        </BrowserRouter>
       </TooltipProvider>
     </QueryClientProvider>
   </ThemeProvider>
