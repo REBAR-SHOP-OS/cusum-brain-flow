@@ -55,6 +55,149 @@ export type Database = {
           },
         ]
       }
+      barlist_items: {
+        Row: {
+          bar_code: string | null
+          barlist_id: string
+          created_at: string
+          cut_length_mm: number | null
+          dims_json: Json | null
+          drawing_ref: string | null
+          grade: string | null
+          id: string
+          mark: string | null
+          notes: string | null
+          qty: number
+          shape_code: string | null
+          source_row_id: string | null
+          status: string
+          weight_kg: number | null
+        }
+        Insert: {
+          bar_code?: string | null
+          barlist_id: string
+          created_at?: string
+          cut_length_mm?: number | null
+          dims_json?: Json | null
+          drawing_ref?: string | null
+          grade?: string | null
+          id?: string
+          mark?: string | null
+          notes?: string | null
+          qty?: number
+          shape_code?: string | null
+          source_row_id?: string | null
+          status?: string
+          weight_kg?: number | null
+        }
+        Update: {
+          bar_code?: string | null
+          barlist_id?: string
+          created_at?: string
+          cut_length_mm?: number | null
+          dims_json?: Json | null
+          drawing_ref?: string | null
+          grade?: string | null
+          id?: string
+          mark?: string | null
+          notes?: string | null
+          qty?: number
+          shape_code?: string | null
+          source_row_id?: string | null
+          status?: string
+          weight_kg?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "barlist_items_bar_code_fkey"
+            columns: ["bar_code"]
+            isOneToOne: false
+            referencedRelation: "rebar_sizes"
+            referencedColumns: ["bar_code"]
+          },
+          {
+            foreignKeyName: "barlist_items_barlist_id_fkey"
+            columns: ["barlist_id"]
+            isOneToOne: false
+            referencedRelation: "barlists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "barlist_items_source_row_id_fkey"
+            columns: ["source_row_id"]
+            isOneToOne: false
+            referencedRelation: "extract_rows"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      barlists: {
+        Row: {
+          company_id: string
+          created_at: string
+          created_by: string | null
+          extract_session_id: string | null
+          id: string
+          name: string
+          parent_barlist_id: string | null
+          project_id: string
+          revision_no: number
+          source_type: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          extract_session_id?: string | null
+          id?: string
+          name: string
+          parent_barlist_id?: string | null
+          project_id: string
+          revision_no?: number
+          source_type?: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          extract_session_id?: string | null
+          id?: string
+          name?: string
+          parent_barlist_id?: string | null
+          project_id?: string
+          revision_no?: number
+          source_type?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "barlists_extract_session_id_fkey"
+            columns: ["extract_session_id"]
+            isOneToOne: false
+            referencedRelation: "extract_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "barlists_parent_barlist_id_fkey"
+            columns: ["parent_barlist_id"]
+            isOneToOne: false
+            referencedRelation: "barlists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "barlists_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chat_messages: {
         Row: {
           agent_type: string | null
@@ -498,6 +641,7 @@ export type Database = {
           id: string
           machine_id: string | null
           name: string
+          project_id: string | null
           project_name: string | null
           status: string
           updated_at: string
@@ -509,6 +653,7 @@ export type Database = {
           id?: string
           machine_id?: string | null
           name: string
+          project_id?: string | null
           project_name?: string | null
           status?: string
           updated_at?: string
@@ -520,6 +665,7 @@ export type Database = {
           id?: string
           machine_id?: string | null
           name?: string
+          project_id?: string | null
           project_name?: string | null
           status?: string
           updated_at?: string
@@ -530,6 +676,13 @@ export type Database = {
             columns: ["machine_id"]
             isOneToOne: false
             referencedRelation: "machines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cut_plans_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
             referencedColumns: ["id"]
           },
         ]
@@ -1556,6 +1709,7 @@ export type Database = {
       }
       machine_queue_items: {
         Row: {
+          barlist_id: string | null
           company_id: string
           created_at: string
           id: string
@@ -1568,6 +1722,7 @@ export type Database = {
           work_order_id: string | null
         }
         Insert: {
+          barlist_id?: string | null
           company_id: string
           created_at?: string
           id?: string
@@ -1580,6 +1735,7 @@ export type Database = {
           work_order_id?: string | null
         }
         Update: {
+          barlist_id?: string | null
           company_id?: string
           created_at?: string
           id?: string
@@ -1592,6 +1748,13 @@ export type Database = {
           work_order_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "machine_queue_items_barlist_id_fkey"
+            columns: ["barlist_id"]
+            isOneToOne: false
+            referencedRelation: "barlists"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "machine_queue_items_machine_id_fkey"
             columns: ["machine_id"]
@@ -1967,6 +2130,7 @@ export type Database = {
         Row: {
           asa_shape_code: string | null
           bar_code: string
+          barlist_id: string | null
           bend_dimensions: Json | null
           company_id: string
           created_at: string
@@ -1993,6 +2157,7 @@ export type Database = {
         Insert: {
           asa_shape_code?: string | null
           bar_code: string
+          barlist_id?: string | null
           bend_dimensions?: Json | null
           company_id: string
           created_at?: string
@@ -2019,6 +2184,7 @@ export type Database = {
         Update: {
           asa_shape_code?: string | null
           bar_code?: string
+          barlist_id?: string | null
           bend_dimensions?: Json | null
           company_id?: string
           created_at?: string
@@ -2049,6 +2215,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "rebar_sizes"
             referencedColumns: ["bar_code"]
+          },
+          {
+            foreignKeyName: "production_tasks_barlist_id_fkey"
+            columns: ["barlist_id"]
+            isOneToOne: false
+            referencedRelation: "barlists"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "production_tasks_cut_plan_id_fkey"
@@ -2134,6 +2307,53 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: []
+      }
+      projects: {
+        Row: {
+          company_id: string
+          created_at: string
+          created_by: string | null
+          customer_id: string | null
+          id: string
+          name: string
+          notes: string | null
+          site_address: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          customer_id?: string | null
+          id?: string
+          name: string
+          notes?: string | null
+          site_address?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          customer_id?: string | null
+          id?: string
+          name?: string
+          notes?: string | null
+          site_address?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "projects_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       purchase_order_lines: {
         Row: {
@@ -2562,11 +2782,13 @@ export type Database = {
           actual_end: string | null
           actual_start: string | null
           assigned_to: string | null
+          barlist_id: string | null
           created_at: string
           id: string
           notes: string | null
           order_id: string
           priority: number | null
+          project_id: string | null
           scheduled_end: string | null
           scheduled_start: string | null
           status: string | null
@@ -2578,11 +2800,13 @@ export type Database = {
           actual_end?: string | null
           actual_start?: string | null
           assigned_to?: string | null
+          barlist_id?: string | null
           created_at?: string
           id?: string
           notes?: string | null
           order_id: string
           priority?: number | null
+          project_id?: string | null
           scheduled_end?: string | null
           scheduled_start?: string | null
           status?: string | null
@@ -2594,11 +2818,13 @@ export type Database = {
           actual_end?: string | null
           actual_start?: string | null
           assigned_to?: string | null
+          barlist_id?: string | null
           created_at?: string
           id?: string
           notes?: string | null
           order_id?: string
           priority?: number | null
+          project_id?: string | null
           scheduled_end?: string | null
           scheduled_start?: string | null
           status?: string | null
@@ -2608,10 +2834,24 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "work_orders_barlist_id_fkey"
+            columns: ["barlist_id"]
+            isOneToOne: false
+            referencedRelation: "barlists"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "work_orders_order_id_fkey"
             columns: ["order_id"]
             isOneToOne: false
             referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_orders_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
             referencedColumns: ["id"]
           },
         ]
