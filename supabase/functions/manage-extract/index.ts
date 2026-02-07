@@ -364,11 +364,115 @@ async function approveExtract(sb: any, sessionId: string, userId: string) {
   if (!rows?.length)
     return jsonResponse({ error: "No rows to approve" }, 400);
 
-  // Create order
+  // ── Resolve or create Project ─────────────────────────────
+  let projectId: string | null = null;
+
+  // Check if session has a linked barlist with a project already
+  const { data: existingBarlist } = await sb
+    .from("barlists")
+    .select("id, project_id")
+    .eq("extract_session_id", sessionId)
+    .maybeSingle();
+
+  if (existingBarlist?.project_id) {
+    projectId = existingBarlist.project_id;
+  } else {
+    // Create project
+    const projectName = session.name || session.customer || "Unnamed Project";
+    const { data: project } = await sb
+      .from("projects")
+      .insert({
+        company_id: session.company_id,
+        name: projectName,
+        site_address: session.site_address || null,
+        created_by: userId,
+      })
+      .select("id")
+      .single();
+    projectId = project?.id || null;
+
+    // Log project event
+    if (projectId) {
+      await sb.from("events").insert({
+        entity_type: "project",
+        entity_id: projectId,
+        event_type: "project_created",
+        actor_id: userId,
+        actor_type: "user",
+        description: `Project "${projectName}" created from extract session`,
+      });
+    }
+  }
+
+  // ── Create or update Barlist ──────────────────────────────
+  let barlistId: string | null = existingBarlist?.id || null;
+
+  if (!barlistId && projectId) {
+    const { data: barlist } = await sb
+      .from("barlists")
+      .insert({
+        company_id: session.company_id,
+        project_id: projectId,
+        name: session.name || "Barlist",
+        source_type: "ai_extract",
+        extract_session_id: sessionId,
+        created_by: userId,
+        status: "approved",
+      })
+      .select("id")
+      .single();
+    barlistId = barlist?.id || null;
+
+    // Log barlist_created event
+    if (barlistId) {
+      await sb.from("events").insert({
+        entity_type: "barlist",
+        entity_id: barlistId,
+        event_type: "barlist_created",
+        actor_id: userId,
+        actor_type: "user",
+        description: `Barlist created from AI extraction: ${session.name}`,
+        metadata: { session_id: sessionId, item_count: rows.length },
+      });
+    }
+  } else if (barlistId) {
+    await sb.from("barlists").update({ status: "approved" }).eq("id", barlistId);
+  }
+
+  // ── Create barlist_items from extract_rows ────────────────
+  if (barlistId) {
+    const barlistItems = rows.map((row: any) => ({
+      barlist_id: barlistId,
+      mark: row.mark,
+      qty: row.quantity || 0,
+      bar_code: row.bar_size_mapped || row.bar_size || null,
+      grade: row.grade_mapped || row.grade || null,
+      shape_code: row.shape_code_mapped || row.shape_type || null,
+      cut_length_mm: row.total_length_mm || null,
+      dims_json: buildDimensions(row),
+      weight_kg: row.weight_kg || null,
+      drawing_ref: row.dwg || null,
+      source_row_id: row.id,
+      status: "approved",
+    }));
+    await sb.from("barlist_items").insert(barlistItems);
+
+    // Log barlist_approved event
+    await sb.from("events").insert({
+      entity_type: "barlist",
+      entity_id: barlistId,
+      event_type: "barlist_approved",
+      actor_id: userId,
+      actor_type: "user",
+      description: `Barlist approved with ${rows.length} items`,
+      metadata: { session_id: sessionId, item_count: rows.length },
+    });
+  }
+
+  // ── Create order + customer (existing logic) ──────────────
   const orderNumber = `ORD-${Date.now().toString(36).toUpperCase()}`;
   let customerId: string | null = null;
 
-  // Try to find or create customer
   const customerName = session.customer || rows[0]?.customer;
   if (customerName) {
     const { data: existingCust } = await sb
@@ -376,7 +480,6 @@ async function approveExtract(sb: any, sessionId: string, userId: string) {
       .select("id")
       .ilike("name", customerName)
       .maybeSingle();
-
     if (existingCust) {
       customerId = existingCust.id;
     } else {
@@ -388,16 +491,18 @@ async function approveExtract(sb: any, sessionId: string, userId: string) {
       customerId = newCust?.id || null;
     }
   }
-
-  // Create order if customer found
   if (!customerId) {
-    // Create a placeholder customer
     const { data: placeholderCust } = await sb
       .from("customers")
       .insert({ name: session.name || "Unknown" })
       .select("id")
       .single();
     customerId = placeholderCust?.id;
+  }
+
+  // Link customer to project
+  if (projectId && customerId) {
+    await sb.from("projects").update({ customer_id: customerId }).eq("id", projectId);
   }
 
   const { data: order } = await sb
@@ -413,7 +518,7 @@ async function approveExtract(sb: any, sessionId: string, userId: string) {
 
   if (!order) return jsonResponse({ error: "Failed to create order" }, 500);
 
-  // Create work order
+  // ── Create work order linked to barlist + project ─────────
   const woNumber = `WO-${Date.now().toString(36).toUpperCase()}`;
   const { data: workOrder } = await sb
     .from("work_orders")
@@ -422,6 +527,8 @@ async function approveExtract(sb: any, sessionId: string, userId: string) {
       order_id: order.id,
       status: "pending",
       notes: `Extract session: ${session.name} · ${rows.length} items`,
+      barlist_id: barlistId,
+      project_id: projectId,
     })
     .select("id")
     .single();
@@ -429,7 +536,7 @@ async function approveExtract(sb: any, sessionId: string, userId: string) {
   if (!workOrder)
     return jsonResponse({ error: "Failed to create work order" }, 500);
 
-  // Create cut plan
+  // ── Create cut plan linked to project ─────────────────────
   const { data: cutPlan } = await sb
     .from("cut_plans")
     .insert({
@@ -437,12 +544,13 @@ async function approveExtract(sb: any, sessionId: string, userId: string) {
       company_id: session.company_id,
       created_by: userId,
       project_name: session.name,
+      project_id: projectId,
       status: "draft",
     })
     .select("id")
     .single();
 
-  // Create cut_plan_items from extract_rows
+  // ── Create cut_plan_items + production_tasks ──────────────
   if (cutPlan) {
     const cutItems = rows.map((row: any) => ({
       cut_plan_id: cutPlan.id,
@@ -460,7 +568,7 @@ async function approveExtract(sb: any, sessionId: string, userId: string) {
 
     await sb.from("cut_plan_items").insert(cutItems);
 
-    // ── Generate production_tasks from cut_plan_items ──────────
+    // Generate production_tasks
     const { data: savedItems } = await sb
       .from("cut_plan_items")
       .select("id, bar_code, cut_length_mm, mark_number, drawing_ref, bend_type, asa_shape_code, total_pieces, bend_dimensions, work_order_id")
@@ -471,6 +579,7 @@ async function approveExtract(sb: any, sessionId: string, userId: string) {
         company_id: session.company_id,
         project_id: workOrder.id,
         work_order_id: item.work_order_id || workOrder.id,
+        barlist_id: barlistId,
         cut_plan_id: cutPlan.id,
         cut_plan_item_id: item.id,
         task_type: item.bend_type === "bend" ? "bend" : "cut",
@@ -496,17 +605,34 @@ async function approveExtract(sb: any, sessionId: string, userId: string) {
       if (taskErr) {
         console.error("Failed to create production tasks:", taskErr);
       } else {
-        // Auto-dispatch: queue each task to the best machine
+        // Auto-dispatch with barlist_id
         for (const task of (createdTasks || [])) {
           try {
-            await autoDispatchTask(sb, task.id, session.company_id);
+            await autoDispatchTask(sb, task.id, session.company_id, barlistId);
           } catch (dispatchErr) {
             console.error(`Auto-dispatch failed for task ${task.id}:`, dispatchErr);
-            // Non-fatal: task stays in "pending" status
           }
         }
       }
     }
+  }
+
+  // ── Log barlist_sent_to_production event ───────────────────
+  if (barlistId) {
+    await sb.from("barlists").update({ status: "in_production" }).eq("id", barlistId);
+    await sb.from("events").insert({
+      entity_type: "barlist",
+      entity_id: barlistId,
+      event_type: "barlist_sent_to_production",
+      actor_id: userId,
+      actor_type: "user",
+      description: `Barlist sent to production → WO ${woNumber}`,
+      metadata: {
+        work_order_id: workOrder.id,
+        cut_plan_id: cutPlan?.id,
+        work_order_number: woNumber,
+      },
+    });
   }
 
   // Update session status
@@ -515,13 +641,12 @@ async function approveExtract(sb: any, sessionId: string, userId: string) {
     .update({ status: "approved" })
     .eq("id", sessionId);
 
-  // Update all rows to approved
   await sb
     .from("extract_rows")
     .update({ status: "approved" })
     .eq("session_id", sessionId);
 
-  // Log event
+  // Log session event
   await sb.from("events").insert({
     entity_type: "extract_session",
     entity_id: sessionId,
@@ -533,6 +658,8 @@ async function approveExtract(sb: any, sessionId: string, userId: string) {
       order_id: order.id,
       work_order_id: workOrder.id,
       cut_plan_id: cutPlan?.id,
+      barlist_id: barlistId,
+      project_id: projectId,
       item_count: rows.length,
     },
   });
@@ -542,6 +669,8 @@ async function approveExtract(sb: any, sessionId: string, userId: string) {
     order_id: order.id,
     work_order_id: workOrder.id,
     cut_plan_id: cutPlan?.id,
+    barlist_id: barlistId,
+    project_id: projectId,
     work_order_number: woNumber,
     items_approved: rows.length,
   });
@@ -585,7 +714,7 @@ async function rejectExtract(sb: any, sessionId: string, userId: string, reason?
 }
 
 // ─── Auto-Dispatch a task to best available machine ─────────
-async function autoDispatchTask(sb: any, taskId: string, companyId: string) {
+async function autoDispatchTask(sb: any, taskId: string, companyId: string, barlistId?: string | null) {
   const { data: task } = await sb
     .from("production_tasks")
     .select("*")
@@ -603,7 +732,7 @@ async function autoDispatchTask(sb: any, taskId: string, companyId: string) {
     .eq("bar_code", task.bar_code)
     .eq("process", machineProcess);
 
-  if (!capabilities?.length) return; // No machine can handle this
+  if (!capabilities?.length) return;
 
   const capableMachineIds = capabilities.map((c: any) => c.machine_id);
 
@@ -650,13 +779,14 @@ async function autoDispatchTask(sb: any, taskId: string, companyId: string) {
     .limit(1);
   const nextPos = posData?.length ? (posData[0] as any).position + 1 : 0;
 
-  // Insert queue item
+  // Insert queue item with barlist_id
   const { error: qiErr } = await sb.from("machine_queue_items").insert({
     company_id: companyId,
     task_id: taskId,
     machine_id: bestMachine.id,
     project_id: task.project_id,
     work_order_id: task.work_order_id,
+    barlist_id: barlistId || task.barlist_id || null,
     position: nextPos,
     status: "queued",
   });

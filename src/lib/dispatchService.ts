@@ -16,6 +16,7 @@ export interface QueueItemWithTask {
   machine_id: string;
   project_id: string | null;
   work_order_id: string | null;
+  barlist_id: string | null;
   position: number;
   status: string;
   created_at: string;
@@ -35,6 +36,7 @@ export interface QueueItemWithTask {
     qty_completed: number;
     project_id: string | null;
     work_order_id: string | null;
+    barlist_id: string | null;
   } | null;
 }
 

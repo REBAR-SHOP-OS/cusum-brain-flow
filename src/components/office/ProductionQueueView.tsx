@@ -1,18 +1,40 @@
-import { useCutPlans, useCutPlanItems } from "@/hooks/useCutPlans";
-import { useRebarSizes } from "@/hooks/useCutPlans";
+import { useCutPlans } from "@/hooks/useCutPlans";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { 
   Pencil, Settings, RotateCcw, Barcode, Star, CheckCircle2, Trash2, 
-  Clock, Package, Activity 
+  Clock, Package, Activity, FolderOpen, FileText 
 } from "lucide-react";
-import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/lib/auth";
 
 export function ProductionQueueView() {
   const { plans, loading } = useCutPlans();
-  const rebarSizes = useRebarSizes();
+  const { user } = useAuth();
 
   const activePlans = plans.filter(p => ["draft", "ready", "in_progress", "queued"].includes(p.status));
+
+  // Fetch barlist + project names for plans that have project_id
+  const planIds = plans.map(p => p.id);
+  const { data: planProjects } = useQuery({
+    queryKey: ["plan-project-info", planIds],
+    enabled: !!user && planIds.length > 0,
+    queryFn: async () => {
+      // Get barlists linked to work orders that reference these cut plans
+      const { data: barlists } = await (supabase as any)
+        .from("barlists")
+        .select("id, name, revision_no, project:projects(id, name)")
+        .order("created_at", { ascending: false })
+        .limit(100);
+      return (barlists || []) as Array<{
+        id: string;
+        name: string;
+        revision_no: number;
+        project: { id: string; name: string } | null;
+      }>;
+    },
+  });
 
   return (
     <div className="p-6 space-y-6">
@@ -35,9 +57,18 @@ export function ProductionQueueView() {
         <p className="text-sm text-muted-foreground">No manifests in queue.</p>
       ) : (
         <div className="space-y-3">
-          {plans.map(plan => (
-            <QueueCard key={plan.id} plan={plan} />
-          ))}
+          {plans.map(plan => {
+            // Try to match a barlist for this plan
+            const matchedBarlist = planProjects?.find(b => b.name === plan.name);
+            return (
+              <QueueCard
+                key={plan.id}
+                plan={plan}
+                projectName={matchedBarlist?.project?.name || null}
+                barlistName={matchedBarlist ? `${matchedBarlist.name} (Rev ${matchedBarlist.revision_no})` : null}
+              />
+            );
+          })}
         </div>
       )}
 
@@ -56,7 +87,11 @@ export function ProductionQueueView() {
   );
 }
 
-function QueueCard({ plan }: { plan: { id: string; name: string; status: string; project_name: string | null } }) {
+function QueueCard({ plan, projectName, barlistName }: {
+  plan: { id: string; name: string; status: string; project_name: string | null };
+  projectName: string | null;
+  barlistName: string | null;
+}) {
   const statusMap: Record<string, { label: string; color: string }> = {
     draft: { label: "DRAFT", color: "bg-muted text-muted-foreground" },
     ready: { label: "READY_FOR_SHIPPING", color: "bg-yellow-500/20 text-yellow-500" },
@@ -75,8 +110,24 @@ function QueueCard({ plan }: { plan: { id: string; name: string; status: string;
         <div>
           <h3 className="text-sm font-bold text-foreground">{plan.name}</h3>
           <div className="flex items-center gap-3 text-[10px] text-muted-foreground mt-0.5">
-            <span className="flex items-center gap-1"><Package className="w-3 h-3" /> Mark IDs</span>
-            <span>· Unassigned</span>
+            {projectName && (
+              <span className="flex items-center gap-1">
+                <FolderOpen className="w-3 h-3" />
+                {projectName}
+              </span>
+            )}
+            {barlistName && (
+              <span className="flex items-center gap-1">
+                <FileText className="w-3 h-3" />
+                {barlistName}
+              </span>
+            )}
+            {!projectName && !barlistName && (
+              <>
+                <span className="flex items-center gap-1"><Package className="w-3 h-3" /> Mark IDs</span>
+                <span>· Unassigned</span>
+              </>
+            )}
           </div>
         </div>
       </div>

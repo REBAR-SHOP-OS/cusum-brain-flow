@@ -23,8 +23,8 @@ export function useProductionQueues() {
       const { data: queueItems, error: qErr } = await (supabase as any)
         .from("machine_queue_items")
         .select(`
-          id, task_id, machine_id, project_id, work_order_id, position, status, created_at,
-          task:production_tasks(id, task_type, bar_code, grade, setup_key, priority, status, mark_number, drawing_ref, cut_length_mm, asa_shape_code, qty_required, qty_completed, project_id, work_order_id)
+          id, task_id, machine_id, project_id, work_order_id, barlist_id, position, status, created_at,
+          task:production_tasks(id, task_type, bar_code, grade, setup_key, priority, status, mark_number, drawing_ref, cut_length_mm, asa_shape_code, qty_required, qty_completed, project_id, work_order_id, barlist_id)
         `)
         .in("status", ["queued", "running"])
         .order("position", { ascending: true });

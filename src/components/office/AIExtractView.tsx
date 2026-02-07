@@ -3,6 +3,7 @@ import {
   Upload, Globe, FileText, Loader2, Truck, Package,
   CheckCircle2, AlertCircle, Sparkles, X, ArrowRight,
   Shield, TriangleAlert, Clock, ChevronRight, History, XCircle,
+  FolderOpen, Plus, GitBranch,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,9 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
@@ -32,6 +36,9 @@ import {
 } from "@/lib/extractService";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
+import { useProjects } from "@/hooks/useProjects";
+import { useBarlists } from "@/hooks/useBarlists";
+import { createProject, createBarlist } from "@/lib/barlistService";
 
 type ManifestType = "delivery" | "pickup";
 
@@ -60,6 +67,14 @@ export function AIExtractView() {
   const [targetEta, setTargetEta] = useState("");
   const [manifestType, setManifestType] = useState<ManifestType>("delivery");
 
+  // Project & Barlist selection
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("");
+  const [selectedBarlistId, setSelectedBarlistId] = useState<string>("");
+  const [createNewProject, setCreateNewProject] = useState(false);
+  const [newProjectName, setNewProjectName] = useState("");
+  const [createNewBarlist, setCreateNewBarlist] = useState(false);
+  const [newRevision, setNewRevision] = useState(false);
+
   // File & processing
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [processing, setProcessing] = useState(false);
@@ -77,9 +92,6 @@ export function AIExtractView() {
   const { rows, refresh: refreshRows } = useExtractRows(activeSessionId);
   const { errors, refresh: refreshErrors } = useExtractErrors(activeSessionId);
 
-  const activeSession = sessions.find((s) => s.id === activeSessionId);
-  const currentStepIndex = activeSession ? getStepIndex(activeSession.status) : -1;
-
   // Get company_id
   const { data: profile } = useQuery({
     queryKey: ["profile_company", user?.id],
@@ -93,6 +105,13 @@ export function AIExtractView() {
       return data;
     },
   });
+
+  // Project & Barlist data
+  const { projects } = useProjects(profile?.company_id || undefined);
+  const { barlists } = useBarlists(selectedProjectId || undefined);
+
+  const activeSession = sessions.find((s) => s.id === activeSessionId);
+  const currentStepIndex = activeSession ? getStepIndex(activeSession.status) : -1;
 
   // Stats
   const stats = useMemo(() => {
@@ -130,6 +149,44 @@ export function AIExtractView() {
     setProcessing(true);
 
     try {
+      // Resolve project
+      let projectId = selectedProjectId;
+      if (createNewProject && newProjectName) {
+        setProcessingStep("Creating project...");
+        const project = await createProject({
+          companyId: profile.company_id,
+          name: newProjectName,
+          siteAddress,
+          createdBy: user?.id,
+        });
+        projectId = project.id;
+        setSelectedProjectId(project.id);
+        setCreateNewProject(false);
+      }
+
+      // Resolve barlist
+      let barlistId: string | null = null;
+      if (projectId) {
+        if (createNewBarlist || !selectedBarlistId) {
+          setProcessingStep("Creating barlist...");
+          const parentId = newRevision && selectedBarlistId ? selectedBarlistId : undefined;
+          const barlist = await createBarlist({
+            companyId: profile.company_id,
+            projectId,
+            name: manifestName || uploadedFile.name,
+            sourceType: "ai_extract",
+            parentBarlistId: parentId,
+            createdBy: user?.id,
+          });
+          barlistId = barlist.id;
+          setSelectedBarlistId(barlist.id);
+          setCreateNewBarlist(false);
+          setNewRevision(false);
+        } else {
+          barlistId = selectedBarlistId;
+        }
+      }
+
       // 1. Create session
       setProcessingStep("Creating session...");
       const session = await createExtractSession({
@@ -142,6 +199,14 @@ export function AIExtractView() {
         createdBy: user?.id,
       });
       setActiveSessionId(session.id);
+
+      // Link barlist to session
+      if (barlistId) {
+        await supabase
+          .from("barlists")
+          .update({ extract_session_id: session.id } as any)
+          .eq("id", barlistId);
+      }
 
       // 2. Upload file
       setProcessingStep("Uploading file...");
@@ -160,7 +225,6 @@ export function AIExtractView() {
         manifestContext: { name: manifestName, customer, address: siteAddress, type: manifestType },
       });
 
-      // Auto-fill from extraction
       if (result.summary) {
         if (!customer && result.summary.customer) setCustomer(result.summary.customer);
         if (!manifestName && result.summary.project) setManifestName(result.summary.project);
@@ -271,6 +335,11 @@ export function AIExtractView() {
     setCustomer("");
     setSiteAddress("");
     setTargetEta("");
+    setSelectedProjectId("");
+    setSelectedBarlistId("");
+    setCreateNewProject(false);
+    setCreateNewBarlist(false);
+    setNewRevision(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -372,15 +441,12 @@ export function AIExtractView() {
               const isActive = idx === currentStepIndex;
               const isDone = idx < currentStepIndex;
               const isFuture = idx > currentStepIndex;
-
               return (
                 <div key={step.key} className="flex items-center gap-1">
                   <div
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-colors ${
-                      isActive
-                        ? "bg-primary text-primary-foreground"
-                        : isDone
-                        ? "bg-primary/20 text-primary"
+                      isActive ? "bg-primary text-primary-foreground"
+                        : isDone ? "bg-primary/20 text-primary"
                         : "bg-muted text-muted-foreground"
                     }`}
                   >
@@ -399,6 +465,114 @@ export function AIExtractView() {
         {/* Form fields (only when no active session) */}
         {!activeSession && (
           <>
+            {/* ── Project & Barlist Selection ── */}
+            <Card className="border-primary/20 bg-primary/5">
+              <CardContent className="p-4 space-y-4">
+                <div className="flex items-center gap-2">
+                  <FolderOpen className="w-4 h-4 text-primary" />
+                  <h3 className="text-xs font-bold tracking-widest text-primary uppercase">
+                    Project & Barlist Assignment
+                  </h3>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Project selector */}
+                  <div>
+                    <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase mb-1.5 block">
+                      Project
+                    </label>
+                    {!createNewProject ? (
+                      <div className="flex items-center gap-2">
+                        <Select value={selectedProjectId} onValueChange={(v) => {
+                          setSelectedProjectId(v);
+                          setSelectedBarlistId("");
+                        }}>
+                          <SelectTrigger className="bg-card border-border flex-1">
+                            <SelectValue placeholder="Select project..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {projects.map((p) => (
+                              <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button variant="outline" size="icon" className="h-9 w-9 shrink-0"
+                          onClick={() => setCreateNewProject(true)}>
+                          <Plus className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <Input
+                          value={newProjectName}
+                          onChange={(e) => setNewProjectName(e.target.value)}
+                          placeholder="New project name..."
+                          className="bg-card border-border"
+                        />
+                        <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0"
+                          onClick={() => { setCreateNewProject(false); setNewProjectName(""); }}>
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Barlist selector */}
+                  <div>
+                    <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase mb-1.5 block">
+                      Barlist
+                    </label>
+                    {!createNewBarlist ? (
+                      <div className="flex items-center gap-2">
+                        <Select
+                          value={selectedBarlistId}
+                          onValueChange={setSelectedBarlistId}
+                          disabled={!selectedProjectId && !createNewProject}
+                        >
+                          <SelectTrigger className="bg-card border-border flex-1">
+                            <SelectValue placeholder={selectedProjectId ? "Select barlist..." : "Pick project first"} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {barlists.map((b) => (
+                              <SelectItem key={b.id} value={b.id}>
+                                {b.name} (Rev {b.revision_no})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button variant="outline" size="icon" className="h-9 w-9 shrink-0"
+                          onClick={() => setCreateNewBarlist(true)}
+                          disabled={!selectedProjectId && !createNewProject}>
+                          <Plus className="w-4 h-4" />
+                        </Button>
+                        {selectedBarlistId && (
+                          <Button
+                            variant="outline" size="sm" className="h-9 gap-1 text-xs shrink-0"
+                            onClick={() => { setNewRevision(true); setCreateNewBarlist(true); }}
+                          >
+                            <GitBranch className="w-3 h-3" /> New Rev
+                          </Button>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary" className="text-xs shrink-0">
+                          {newRevision ? "New Revision" : "New Barlist"}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">
+                          Will be created from manifest name
+                        </span>
+                        <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0"
+                          onClick={() => { setCreateNewBarlist(false); setNewRevision(false); }}>
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
                 <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase mb-1.5 block">
@@ -510,7 +684,6 @@ export function AIExtractView() {
               </Badge>
             )}
 
-            {/* Decline button — available at every step */}
             <AlertDialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
               <AlertDialogTrigger asChild>
                 <Button variant="outline" className="gap-1.5 ml-auto border-destructive/40 text-destructive hover:bg-destructive/10">
@@ -634,7 +807,7 @@ export function AIExtractView() {
           </div>
         )}
 
-        {/* Results Table with both scrollbars */}
+        {/* Results Table */}
         {rows.length > 0 && (
           <Card>
             <CardContent className="p-0">
