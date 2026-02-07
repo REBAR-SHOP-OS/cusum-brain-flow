@@ -716,6 +716,296 @@ export type Database = {
         }
         Relationships: []
       }
+      extract_errors: {
+        Row: {
+          created_at: string
+          error_type: string
+          field: string
+          id: string
+          message: string
+          row_id: string | null
+          session_id: string
+        }
+        Insert: {
+          created_at?: string
+          error_type?: string
+          field: string
+          id?: string
+          message: string
+          row_id?: string | null
+          session_id: string
+        }
+        Update: {
+          created_at?: string
+          error_type?: string
+          field?: string
+          id?: string
+          message?: string
+          row_id?: string | null
+          session_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "extract_errors_row_id_fkey"
+            columns: ["row_id"]
+            isOneToOne: false
+            referencedRelation: "extract_rows"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "extract_errors_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "extract_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      extract_mapping: {
+        Row: {
+          company_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          is_auto: boolean | null
+          mapped_value: string
+          source_field: string
+          source_value: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_auto?: boolean | null
+          mapped_value: string
+          source_field: string
+          source_value: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_auto?: boolean | null
+          mapped_value?: string
+          source_field?: string
+          source_value?: string
+        }
+        Relationships: []
+      }
+      extract_raw_files: {
+        Row: {
+          company_id: string
+          created_at: string
+          file_name: string
+          file_size_bytes: number | null
+          file_type: string | null
+          file_url: string
+          id: string
+          session_id: string
+          status: string
+          storage_path: string | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          file_name: string
+          file_size_bytes?: number | null
+          file_type?: string | null
+          file_url: string
+          id?: string
+          session_id: string
+          status?: string
+          storage_path?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          file_name?: string
+          file_size_bytes?: number | null
+          file_type?: string | null
+          file_url?: string
+          id?: string
+          session_id?: string
+          status?: string
+          storage_path?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "extract_raw_files_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "extract_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      extract_rows: {
+        Row: {
+          address: string | null
+          bar_size: string | null
+          bar_size_mapped: string | null
+          created_at: string
+          customer: string | null
+          dim_a: number | null
+          dim_b: number | null
+          dim_c: number | null
+          dim_d: number | null
+          dim_e: number | null
+          dim_f: number | null
+          dim_g: number | null
+          dim_h: number | null
+          dim_j: number | null
+          dim_k: number | null
+          dim_o: number | null
+          dim_r: number | null
+          dwg: string | null
+          file_id: string | null
+          grade: string | null
+          grade_mapped: string | null
+          id: string
+          item_number: string | null
+          mark: string | null
+          quantity: number | null
+          reference: string | null
+          row_index: number
+          session_id: string
+          shape_code_mapped: string | null
+          shape_type: string | null
+          status: string
+          total_length_mm: number | null
+          weight_kg: number | null
+        }
+        Insert: {
+          address?: string | null
+          bar_size?: string | null
+          bar_size_mapped?: string | null
+          created_at?: string
+          customer?: string | null
+          dim_a?: number | null
+          dim_b?: number | null
+          dim_c?: number | null
+          dim_d?: number | null
+          dim_e?: number | null
+          dim_f?: number | null
+          dim_g?: number | null
+          dim_h?: number | null
+          dim_j?: number | null
+          dim_k?: number | null
+          dim_o?: number | null
+          dim_r?: number | null
+          dwg?: string | null
+          file_id?: string | null
+          grade?: string | null
+          grade_mapped?: string | null
+          id?: string
+          item_number?: string | null
+          mark?: string | null
+          quantity?: number | null
+          reference?: string | null
+          row_index?: number
+          session_id: string
+          shape_code_mapped?: string | null
+          shape_type?: string | null
+          status?: string
+          total_length_mm?: number | null
+          weight_kg?: number | null
+        }
+        Update: {
+          address?: string | null
+          bar_size?: string | null
+          bar_size_mapped?: string | null
+          created_at?: string
+          customer?: string | null
+          dim_a?: number | null
+          dim_b?: number | null
+          dim_c?: number | null
+          dim_d?: number | null
+          dim_e?: number | null
+          dim_f?: number | null
+          dim_g?: number | null
+          dim_h?: number | null
+          dim_j?: number | null
+          dim_k?: number | null
+          dim_o?: number | null
+          dim_r?: number | null
+          dwg?: string | null
+          file_id?: string | null
+          grade?: string | null
+          grade_mapped?: string | null
+          id?: string
+          item_number?: string | null
+          mark?: string | null
+          quantity?: number | null
+          reference?: string | null
+          row_index?: number
+          session_id?: string
+          shape_code_mapped?: string | null
+          shape_type?: string | null
+          status?: string
+          total_length_mm?: number | null
+          weight_kg?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "extract_rows_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "extract_raw_files"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "extract_rows_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "extract_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      extract_sessions: {
+        Row: {
+          company_id: string
+          created_at: string
+          created_by: string | null
+          customer: string | null
+          id: string
+          manifest_type: string
+          name: string
+          site_address: string | null
+          status: string
+          target_eta: string | null
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          customer?: string | null
+          id?: string
+          manifest_type?: string
+          name: string
+          site_address?: string | null
+          status?: string
+          target_eta?: string | null
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          customer?: string | null
+          id?: string
+          manifest_type?: string
+          name?: string
+          site_address?: string | null
+          status?: string
+          target_eta?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       integration_connections: {
         Row: {
           config: Json | null
