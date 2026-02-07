@@ -123,6 +123,39 @@ export type Database = {
         }
         Relationships: []
       }
+      command_log: {
+        Row: {
+          created_at: string
+          id: string
+          parsed_intent: string | null
+          parsed_params: Json | null
+          raw_input: string
+          result: string | null
+          result_message: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          parsed_intent?: string | null
+          parsed_params?: Json | null
+          raw_input: string
+          result?: string | null
+          result_message?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          parsed_intent?: string | null
+          parsed_params?: Json | null
+          raw_input?: string
+          result?: string | null
+          result_message?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       communications: {
         Row: {
           body_preview: string | null
@@ -2390,6 +2423,57 @@ export type Database = {
           title?: string
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      suggestions: {
+        Row: {
+          category: string
+          company_id: string
+          context: Json | null
+          created_at: string
+          description: string | null
+          id: string
+          priority: number | null
+          resolved_at: string | null
+          shown_at: string | null
+          shown_to: string | null
+          status: string
+          suggestion_type: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          category: string
+          company_id?: string
+          context?: Json | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          priority?: number | null
+          resolved_at?: string | null
+          shown_at?: string | null
+          shown_to?: string | null
+          status?: string
+          suggestion_type: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          company_id?: string
+          context?: Json | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          priority?: number | null
+          resolved_at?: string | null
+          shown_at?: string | null
+          shown_to?: string | null
+          status?: string
+          suggestion_type?: string
+          title?: string
+          updated_at?: string
         }
         Relationships: []
       }
