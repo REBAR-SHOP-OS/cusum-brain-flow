@@ -37,7 +37,7 @@ export interface ManageMachineParams {
  */
 export async function manageMachine(
   params: ManageMachineParams
-): Promise<{ success: boolean; machineId: string; action: string }> {
+): Promise<{ success: boolean; machineId: string; action: string; machineRunId?: string }> {
   const { data, error } = await supabase.functions.invoke("manage-machine", {
     body: params,
   });
@@ -45,5 +45,5 @@ export async function manageMachine(
   if (error) throw new Error(error.message || "Failed to manage machine");
   if (data?.error) throw new Error(data.error);
 
-  return data;
+  return data as { success: boolean; machineId: string; action: string; machineRunId?: string };
 }
