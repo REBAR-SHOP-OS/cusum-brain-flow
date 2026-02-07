@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useJobs, useMachines, useQueues } from "@/hooks/useFirebaseCollection";
+import { useSupabaseWorkOrders, SupabaseWorkOrder } from "@/hooks/useSupabaseWorkOrders";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,7 +14,8 @@ import {
   Clock, 
   AlertTriangle,
   Loader2,
-  RefreshCw
+  RefreshCw,
+  Database
 } from "lucide-react";
 
 interface Job {
@@ -61,16 +63,34 @@ const machineStatusColors: Record<string, string> = {
 };
 
 export default function ShopFloor() {
-  const { data: jobs, loading: jobsLoading, error: jobsError } = useJobs();
-  const { data: machines, loading: machinesLoading } = useMachines();
+  const { data: firebaseJobs, loading: fbJobsLoading, error: fbJobsError } = useJobs();
+  const { data: machines, loading: machinesLoading, error: fbMachinesError } = useMachines();
   const { data: queues, loading: queuesLoading } = useQueues();
+  const { data: supabaseWO, loading: sbLoading, error: sbError, refetch: sbRefetch } = useSupabaseWorkOrders();
   const [activeTab, setActiveTab] = useState("jobs");
 
-  const isLoading = jobsLoading || machinesLoading || queuesLoading;
+  // Determine data source: Firebase first, Supabase fallback
+  const firebaseFailed = !!fbJobsError;
+  const usingSupabase = firebaseFailed;
 
-  const typedJobs = jobs as Job[];
-  const typedMachines = machines as Machine[];
-  const typedQueues = queues as Queue[];
+  // Normalize Supabase work orders to Job shape for unified rendering
+  const supabaseJobs: Job[] = supabaseWO.map(wo => ({
+    id: wo.id,
+    name: wo.work_order_number,
+    status: wo.status || "queued",
+    priority: wo.priority || 0,
+    machine: wo.workstation || undefined,
+    customer: undefined,
+    dueDate: wo.scheduled_end || undefined,
+  }));
+
+  const jobs = usingSupabase ? supabaseJobs : (firebaseJobs as Job[]);
+  const jobsLoading = usingSupabase ? sbLoading : fbJobsLoading;
+  const isLoading = jobsLoading || (!usingSupabase && (machinesLoading || queuesLoading));
+
+  const typedJobs = jobs;
+  const typedMachines = (usingSupabase ? [] : machines) as Machine[];
+  const typedQueues = (usingSupabase ? [] : queues) as Queue[];
 
   const jobsByStatus = typedJobs.reduce((acc, job) => {
     const status = (job.status || "pending").toLowerCase();
@@ -83,17 +103,13 @@ export default function ShopFloor() {
     ["in-progress", "running"].includes((j.status || "").toLowerCase())
   );
 
-  if (jobsError) {
-    return (
-      <div className="flex items-center justify-center h-full p-8">
-        <div className="text-center">
-          <AlertTriangle className="w-12 h-12 mx-auto mb-4 text-destructive" />
-          <h2 className="text-lg font-semibold mb-2">Failed to load shop floor data</h2>
-          <p className="text-muted-foreground text-sm">{jobsError.message}</p>
-        </div>
-      </div>
-    );
-  }
+  const handleRefresh = () => {
+    if (usingSupabase) {
+      sbRefetch();
+    } else {
+      window.location.reload();
+    }
+  };
 
   return (
     <div className="flex flex-col h-full">
@@ -108,11 +124,29 @@ export default function ShopFloor() {
             {activeJobs.length} active • {typedMachines.length} machines
           </p>
         </div>
-        <Button variant="outline" size="sm" className="gap-2">
-          <RefreshCw className="w-4 h-4" />
-          <span className="hidden sm:inline">Refresh</span>
-        </Button>
+        <div className="flex items-center gap-2">
+          {usingSupabase && (
+            <Badge variant="outline" className="gap-1 text-xs">
+              <Database className="w-3 h-3" />
+              Cloud Data
+            </Badge>
+          )}
+          <Button variant="outline" size="sm" className="gap-2" onClick={handleRefresh}>
+            <RefreshCw className="w-4 h-4" />
+            <span className="hidden sm:inline">Refresh</span>
+          </Button>
+        </div>
       </header>
+
+      {/* Firebase error banner */}
+      {firebaseFailed && (
+        <div className="px-4 sm:px-6 py-2 bg-yellow-500/10 border-b border-yellow-500/20 flex items-center gap-2 text-sm">
+          <AlertTriangle className="w-4 h-4 text-yellow-500 shrink-0" />
+          <span className="text-yellow-600 dark:text-yellow-400">
+            Firebase unavailable — showing work orders from database.
+          </span>
+        </div>
+      )}
 
       {/* Stats Bar */}
       <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-border bg-muted/30">
@@ -133,8 +167,8 @@ export default function ShopFloor() {
             icon={<CheckCircle2 className="w-4 h-4 text-green-500" />}
           />
           <StatCard 
-            label="Online" 
-            value={typedMachines.filter(m => m.status !== "offline").length} 
+            label={usingSupabase ? "Work Orders" : "Online"}
+            value={usingSupabase ? typedJobs.length : typedMachines.filter(m => m.status !== "offline").length} 
             icon={<Factory className="w-4 h-4 text-primary" />}
           />
         </div>
@@ -145,9 +179,9 @@ export default function ShopFloor() {
         <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
           <div className="px-4 sm:px-6 pt-4">
             <TabsList>
-              <TabsTrigger value="jobs">Jobs</TabsTrigger>
-              <TabsTrigger value="machines">Machines</TabsTrigger>
-              <TabsTrigger value="queues">Queues</TabsTrigger>
+              <TabsTrigger value="jobs">{usingSupabase ? "Work Orders" : "Jobs"}</TabsTrigger>
+              {!usingSupabase && <TabsTrigger value="machines">Machines</TabsTrigger>}
+              {!usingSupabase && <TabsTrigger value="queues">Queues</TabsTrigger>}
             </TabsList>
           </div>
 
@@ -155,7 +189,7 @@ export default function ShopFloor() {
             {isLoading ? (
               <LoadingState />
             ) : typedJobs.length === 0 ? (
-              <EmptyState message="No jobs found in Firebase" />
+              <EmptyState message={usingSupabase ? "No work orders found in database" : "No jobs found"} />
             ) : (
               <ScrollArea className="h-full">
                 <div className="grid gap-3 pr-4">
@@ -167,37 +201,41 @@ export default function ShopFloor() {
             )}
           </TabsContent>
 
-          <TabsContent value="machines" className="flex-1 overflow-hidden px-4 sm:px-6 pb-6">
-            {isLoading ? (
-              <LoadingState />
-            ) : typedMachines.length === 0 ? (
-              <EmptyState message="No machines found in Firebase" />
-            ) : (
-              <ScrollArea className="h-full">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pr-4">
-                  {typedMachines.map((machine) => (
-                    <MachineCard key={machine.id} machine={machine} />
-                  ))}
-                </div>
-              </ScrollArea>
-            )}
-          </TabsContent>
+          {!usingSupabase && (
+            <TabsContent value="machines" className="flex-1 overflow-hidden px-4 sm:px-6 pb-6">
+              {isLoading ? (
+                <LoadingState />
+              ) : typedMachines.length === 0 ? (
+                <EmptyState message="No machines found" />
+              ) : (
+                <ScrollArea className="h-full">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pr-4">
+                    {typedMachines.map((machine) => (
+                      <MachineCard key={machine.id} machine={machine} />
+                    ))}
+                  </div>
+                </ScrollArea>
+              )}
+            </TabsContent>
+          )}
 
-          <TabsContent value="queues" className="flex-1 overflow-hidden px-4 sm:px-6 pb-6">
-            {isLoading ? (
-              <LoadingState />
-            ) : typedQueues.length === 0 ? (
-              <EmptyState message="No queues found in Firebase" />
-            ) : (
-              <ScrollArea className="h-full">
-                <div className="grid gap-4 pr-4">
-                  {typedQueues.map((queue) => (
-                    <QueueCard key={queue.id} queue={queue} />
-                  ))}
-                </div>
-              </ScrollArea>
-            )}
-          </TabsContent>
+          {!usingSupabase && (
+            <TabsContent value="queues" className="flex-1 overflow-hidden px-4 sm:px-6 pb-6">
+              {isLoading ? (
+                <LoadingState />
+              ) : typedQueues.length === 0 ? (
+                <EmptyState message="No queues found" />
+              ) : (
+                <ScrollArea className="h-full">
+                  <div className="grid gap-4 pr-4">
+                    {typedQueues.map((queue) => (
+                      <QueueCard key={queue.id} queue={queue} />
+                    ))}
+                  </div>
+                </ScrollArea>
+              )}
+            </TabsContent>
+          )}
         </Tabs>
       </div>
     </div>
