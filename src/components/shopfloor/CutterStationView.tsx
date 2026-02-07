@@ -120,7 +120,7 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
     try {
       setIsRunning(true);
 
-      await manageMachine({
+      const result = await manageMachine({
         action: "start-run",
         machineId: machine.id,
         process: "cut",
@@ -129,13 +129,15 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
         notes: `Stock: ${stockLength}mm | Mark: ${currentItem.mark_number || "—"} | Length: ${currentItem.cut_length_mm}mm | Pcs/bar: ${computedPiecesPerBar}`,
       });
 
+      const runId = result.machineRunId;
+
       // Try to consume from best available source
       const bestLot = lots.find((l) => l.qty_on_hand - l.qty_reserved >= bars);
-      if (bestLot) {
+      if (bestLot && runId) {
         try {
           await manageInventory({
             action: "consume-on-start",
-            machineRunId: machine.current_run_id || undefined,
+            machineRunId: runId,
             cutPlanItemId: currentItem.id,
             barCode: currentItem.bar_code,
             qty: bars,

@@ -78,6 +78,7 @@ serve(async (req) => {
 
     const now = new Date().toISOString();
     const events: Record<string, unknown>[] = [];
+    let machineRunId: string | null = null;
 
     // ── Action handlers ──────────────────────────────────────────────
     switch (action) {
@@ -275,6 +276,7 @@ serve(async (req) => {
           .select()
           .single();
         if (runError) throw runError;
+        machineRunId = newRun.id;
 
         const { error: mErr } = await supabaseUser
           .from("machines")
@@ -400,6 +402,7 @@ serve(async (req) => {
           .update({ status: "running", started_at: now })
           .eq("id", runId);
         if (updateRunErr) throw updateRunErr;
+        machineRunId = runId;
 
         // Update machine
         const { error: updateMachineErr } = await supabaseUser
@@ -535,7 +538,7 @@ serve(async (req) => {
       if (evtErr) console.error("Failed to log events:", evtErr);
     }
 
-    return json({ success: true, machineId, action });
+    return json({ success: true, machineId, action, machineRunId: machineRunId ?? undefined });
   } catch (error) {
     console.error("manage-machine error:", error);
     const message = error instanceof Error ? error.message : "Unknown error";
