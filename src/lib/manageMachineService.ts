@@ -4,6 +4,7 @@ export type ManageMachineAction =
   | "update-status"
   | "assign-operator"
   | "start-run"
+  | "start-queued-run"
   | "pause-run"
   | "block-run"
   | "complete-run";
@@ -22,6 +23,8 @@ export interface ManageMachineParams {
   barCode?: string;
   /** Number of bars to process. Validated against machine_capabilities.max_bars. */
   qty?: number;
+  /** ID of an existing queued run to start */
+  runId?: string;
 }
 
 /**

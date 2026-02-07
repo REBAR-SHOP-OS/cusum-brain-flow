@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useEffect } from "react";
 import { useAuth } from "@/lib/auth";
-import type { LiveMachine } from "@/types/machine";
+import type { LiveMachine, QueuedRun } from "@/types/machine";
 
 export function useLiveMonitorData() {
   const { user } = useAuth();
@@ -22,11 +22,44 @@ export function useLiveMonitorData() {
         .select(
           `*,
            operator:profiles!current_operator_profile_id(id, full_name),
-           current_run:machine_runs!current_run_id(id, status, process, started_at)`
+           current_run:machine_runs!current_run_id(id, status, process, started_at, notes)`
         )
         .order("name");
       if (error) throw error;
-      return (data || []) as LiveMachine[];
+
+      const machineList = (data || []) as LiveMachine[];
+
+      // Fetch queued runs for all machines in one query
+      const machineIds = machineList.map(m => m.id);
+      if (machineIds.length > 0) {
+        const { data: queuedRuns } = await supabase
+          .from("machine_runs")
+          .select("id, machine_id, process, status, input_qty, notes, created_at")
+          .in("machine_id", machineIds)
+          .eq("status", "queued")
+          .order("created_at", { ascending: true });
+
+        if (queuedRuns) {
+          const runsByMachine = new Map<string, QueuedRun[]>();
+          for (const run of queuedRuns) {
+            const machineId = (run as any).machine_id as string;
+            if (!runsByMachine.has(machineId)) runsByMachine.set(machineId, []);
+            runsByMachine.get(machineId)!.push({
+              id: run.id,
+              process: run.process,
+              status: run.status,
+              input_qty: run.input_qty,
+              notes: run.notes,
+              created_at: run.created_at,
+            });
+          }
+          for (const machine of machineList) {
+            machine.queued_runs = runsByMachine.get(machine.id) || [];
+          }
+        }
+      }
+
+      return machineList;
     },
   });
 

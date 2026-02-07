@@ -20,9 +20,11 @@ import {
   AlertTriangle,
   User,
   Clock,
+  CheckCircle2,
+  ListOrdered,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
-import type { LiveMachine, MachineStatus } from "@/types/machine";
+import type { LiveMachine, MachineStatus, QueuedRun } from "@/types/machine";
 
 interface LiveMachineCardProps {
   machine: LiveMachine;
@@ -48,25 +50,35 @@ const statusConfig: Record<
 > = {
   idle: {
     label: "Idle",
-    className:
-      "bg-muted text-muted-foreground",
+    className: "bg-muted text-muted-foreground",
   },
   running: {
     label: "Running",
-    className:
-      "bg-[hsl(var(--success)/0.15)] text-[hsl(var(--success))]",
+    className: "bg-[hsl(var(--success)/0.15)] text-[hsl(var(--success))]",
   },
   blocked: {
     label: "Blocked",
-    className:
-      "bg-[hsl(var(--warning)/0.15)] text-[hsl(var(--warning))]",
+    className: "bg-[hsl(var(--warning)/0.15)] text-[hsl(var(--warning))]",
   },
   down: {
     label: "Down",
-    className:
-      "bg-destructive/15 text-destructive",
+    className: "bg-destructive/15 text-destructive",
   },
 };
+
+/** Parse bar_code from cut plan notes like "cut_plan_id:xxx | 25M x4 @ 3000mm" */
+function parseBarCodeFromNotes(notes: string | null): string | null {
+  if (!notes) return null;
+  const match = notes.match(/\b(\d{1,2}M)\b/);
+  return match ? match[1] : null;
+}
+
+/** Parse input_qty from notes or run */
+function parseQtyFromNotes(notes: string | null): number | null {
+  if (!notes) return null;
+  const match = notes.match(/x(\d+)/);
+  return match ? parseInt(match[1], 10) : null;
+}
 
 export function LiveMachineCard({
   machine,
@@ -80,10 +92,26 @@ export function LiveMachineCard({
   const TypeIcon = typeIcons[machine.type] || Wrench;
   const status = statusConfig[machine.status] || statusConfig.idle;
   const hasActiveRun = !!machine.current_run_id;
+  const queuedRuns = machine.queued_runs || [];
+  const hasQueuedRuns = queuedRuns.length > 0;
 
   const handleStartRun = () => {
     onAction(machine.id, "start-run", { process: selectedProcess });
     setShowStartRun(false);
+  };
+
+  const handleStartQueuedRun = (run: QueuedRun) => {
+    const barCode = parseBarCodeFromNotes(run.notes);
+    const qty = run.input_qty || parseQtyFromNotes(run.notes);
+    onAction(machine.id, "start-queued-run", {
+      runId: run.id,
+      ...(barCode ? { barCode } : {}),
+      ...(qty ? { qty } : {}),
+    });
+  };
+
+  const handleCompleteRun = () => {
+    onAction(machine.id, "complete-run");
   };
 
   return (
@@ -111,6 +139,7 @@ export function LiveMachineCard({
         </div>
         <p className="text-xs text-muted-foreground capitalize">
           {machine.type}
+          {machine.model && <span className="ml-1">• {machine.model}</span>}
         </p>
       </CardHeader>
 
@@ -155,6 +184,11 @@ export function LiveMachineCard({
                 {machine.current_run.status}
               </span>
             </div>
+            {machine.current_run.notes && (
+              <p className="text-muted-foreground truncate">
+                {machine.current_run.notes}
+              </p>
+            )}
             {machine.current_run.started_at && (
               <div className="flex items-center gap-1 text-muted-foreground">
                 <Clock className="w-3 h-3" />
@@ -164,6 +198,54 @@ export function LiveMachineCard({
                   { addSuffix: true }
                 )}
               </div>
+            )}
+          </div>
+        )}
+
+        {/* Queued Runs (visible to all, actionable only for canWrite) */}
+        {hasQueuedRuns && !hasActiveRun && (
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              <ListOrdered className="w-3.5 h-3.5" />
+              {queuedRuns.length} queued run{queuedRuns.length !== 1 ? "s" : ""}
+            </div>
+            {queuedRuns.slice(0, 3).map((run) => {
+              const barCode = parseBarCodeFromNotes(run.notes);
+              return (
+                <div
+                  key={run.id}
+                  className="rounded-md border border-border bg-muted/30 p-2 text-xs flex items-center justify-between gap-2"
+                >
+                  <div className="flex-1 min-w-0">
+                    <span className="font-medium capitalize">{run.process}</span>
+                    {barCode && (
+                      <Badge variant="outline" className="ml-1.5 text-[10px] font-mono">
+                        {barCode}
+                      </Badge>
+                    )}
+                    {run.input_qty && (
+                      <span className="text-muted-foreground ml-1">×{run.input_qty}</span>
+                    )}
+                    {run.notes && (
+                      <p className="text-muted-foreground truncate mt-0.5">{run.notes}</p>
+                    )}
+                  </div>
+                  {canWrite && (
+                    <Button
+                      size="sm"
+                      className="h-6 text-[11px] gap-1 shrink-0"
+                      onClick={() => handleStartQueuedRun(run)}
+                    >
+                      <Play className="w-3 h-3" /> Start
+                    </Button>
+                  )}
+                </div>
+              );
+            })}
+            {queuedRuns.length > 3 && (
+              <p className="text-[11px] text-muted-foreground">
+                +{queuedRuns.length - 3} more queued
+              </p>
             )}
           </div>
         )}
@@ -181,7 +263,7 @@ export function LiveMachineCard({
         {/* Controls — hidden for office */}
         {canWrite && (
           <div className="flex flex-wrap gap-2 pt-1 border-t border-border">
-            {!hasActiveRun && !showStartRun && (
+            {!hasActiveRun && !showStartRun && !hasQueuedRuns && (
               <>
                 <Button
                   size="sm"
@@ -207,6 +289,24 @@ export function LiveMachineCard({
                   </SelectContent>
                 </Select>
               </>
+            )}
+
+            {!hasActiveRun && !showStartRun && hasQueuedRuns && (
+              <Select
+                value={machine.status}
+                onValueChange={(val) =>
+                  onAction(machine.id, "update-status", { status: val })
+                }
+              >
+                <SelectTrigger className="h-7 text-xs w-[100px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="idle">Idle</SelectItem>
+                  <SelectItem value="blocked">Blocked</SelectItem>
+                  <SelectItem value="down">Down</SelectItem>
+                </SelectContent>
+              </Select>
             )}
 
             {showStartRun && !hasActiveRun && (
@@ -274,9 +374,9 @@ export function LiveMachineCard({
                   size="sm"
                   variant="default"
                   className="h-7 text-xs gap-1"
-                  onClick={() => onAction(machine.id, "complete-run")}
+                  onClick={handleCompleteRun}
                 >
-                  <Square className="w-3 h-3" /> Complete
+                  <CheckCircle2 className="w-3 h-3" /> Complete
                 </Button>
               </>
             )}

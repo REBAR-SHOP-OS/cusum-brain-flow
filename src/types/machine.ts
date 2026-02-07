@@ -25,7 +25,20 @@ export interface LiveMachine extends Machine {
     status: string;
     process: string;
     started_at: string | null;
+    notes: string | null;
   } | null;
+  /** Queued machine_runs waiting to be started on this machine */
+  queued_runs?: QueuedRun[];
+}
+
+/** A queued run waiting to start */
+export interface QueuedRun {
+  id: string;
+  process: string;
+  status: string;
+  input_qty: number | null;
+  notes: string | null;
+  created_at: string;
 }
 
 /** Canonical RSIC Canada rebar size reference */
