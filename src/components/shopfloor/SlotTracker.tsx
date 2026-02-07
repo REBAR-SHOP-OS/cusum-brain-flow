@@ -56,6 +56,7 @@ export function SlotTracker({
   const activeSlots = slots.filter((s) => s.status === "active");
   const removableSlots = slots.filter((s) => s.status === "removable");
   const completedSlots = slots.filter((s) => s.status === "completed" || s.status === "removed");
+  const partialSlots = slots.filter((s) => s.isPartial && s.status === "active");
   const allDone = slots.length > 0 && slots.every(
     (s) => s.status === "completed" || s.status === "removed"
   );
@@ -73,6 +74,10 @@ export function SlotTracker({
 
   // Progress
   const progressPct = totalPlanned > 0 ? (totalCutsDone / totalPlanned) * 100 : 0;
+
+  // Pre-warning: upcoming partial bar removal
+  const upcomingRemoval = partialSlots.length > 0 ? partialSlots[0] : null;
+  const strokesUntilRemoval = upcomingRemoval ? (upcomingRemoval.plannedCuts - upcomingRemoval.cutsDone) : null;
 
   return (
     <div className="space-y-3">
@@ -166,31 +171,54 @@ export function SlotTracker({
         </CardContent>
       </Card>
 
-      {/* ── REMOVABLE BARS (only show individual cards when action needed) ── */}
+      {/* ── PRE-WARNING: Partial bar coming up ── */}
+      {upcomingRemoval && strokesUntilRemoval !== null && strokesUntilRemoval > 0 && (
+        <Card className="border-accent/60 bg-accent/10">
+          <CardContent className="p-3 flex items-center gap-3">
+            <AlertTriangle className="w-5 h-5 text-accent-foreground shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-bold text-accent-foreground">
+                ⚠ Bar {upcomingRemoval.index + 1} is partial — only {upcomingRemoval.plannedCuts} cut{upcomingRemoval.plannedCuts > 1 ? "s" : ""}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                After stroke {upcomingRemoval.plannedCuts}, REMOVE bar {upcomingRemoval.index + 1} and put in remnant bank.
+                {strokesUntilRemoval === 1 && " (NEXT STROKE!)"}
+                {strokesUntilRemoval > 1 && ` (${strokesUntilRemoval} strokes away)`}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── REMOVABLE BARS — Action needed NOW ── */}
       {removableSlots.map((slot) => {
         const leftover = computeLeftover(stockLengthMm, slot.cutsDone, cutLengthMm);
         const isRemnant = leftover >= REMNANT_THRESHOLD_MM;
 
         return (
-          <Card key={slot.index} className="border-accent bg-accent/20">
+          <Card key={slot.index} className="border-destructive bg-destructive/10 animate-pulse">
             <CardContent className="p-3 flex items-center gap-3">
-              <AlertTriangle className="w-5 h-5 text-accent-foreground shrink-0" />
+              <AlertTriangle className="w-6 h-6 text-destructive shrink-0" />
               <div className="flex-1">
-                <p className="text-sm font-bold font-mono">Bar {slot.index + 1}</p>
-                <p className="text-xs text-accent-foreground">
+                <p className="text-sm font-bold text-destructive">
+                  🛑 REMOVE BAR {slot.index + 1} NOW
+                </p>
+                <p className="text-xs text-muted-foreground">
                   {slot.cutsDone}/{slot.plannedCuts} cuts done — 
-                  {isRemnant ? ` Remnant: ${leftover}mm` : ` Scrap: ${leftover}mm`}
+                  {isRemnant
+                    ? ` set aside as remnant (${leftover}mm)`
+                    : ` scrap (${leftover}mm < ${REMNANT_THRESHOLD_MM}mm threshold)`}
                 </p>
               </div>
               {canWrite && (
                 <Button
                   size="sm"
-                  variant="outline"
-                  className="shrink-0 gap-1.5 text-xs border-accent text-accent-foreground hover:bg-accent/30"
+                  variant="destructive"
+                  className="shrink-0 gap-1.5 text-xs font-bold"
                   onClick={() => onRemoveBar(slot.index)}
                 >
                   <Trash2 className="w-3.5 h-3.5" />
-                  Remove Bar
+                  Confirm Removed
                 </Button>
               )}
             </CardContent>
