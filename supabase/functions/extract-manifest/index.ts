@@ -1,0 +1,167 @@
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+const LABEL_COLUMNS = [
+  "DWG#", "ITEM", "GRADE", "MARK", "QUANTITY", "SIZE", "TYPE",
+  "TOTAL_LENGTH", "A", "B", "C", "D", "E", "F", "G", "H", "J", "K",
+  "O", "R", "WEIGHT", "PICTURE", "CUSTOMER", "REF", "ADD",
+];
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) {
+      throw new Error("LOVABLE_API_KEY not configured");
+    }
+
+    const { fileUrl, fileName, manifestContext } = await req.json();
+    if (!fileUrl) {
+      return new Response(
+        JSON.stringify({ error: "fileUrl is required" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const isImage = /\.(png|jpg|jpeg|gif|webp|bmp|tiff?)$/i.test(fileName || fileUrl);
+    const isPdf = /\.pdf$/i.test(fileName || fileUrl);
+
+    // Build the prompt for AI extraction
+    const systemPrompt = `You are a rebar schedule extraction engine. Your job is to parse uploaded documents (PDFs, spreadsheets, images of drawings) and extract rebar bar-bending schedule data.
+
+Output ONLY a valid JSON object with this structure:
+{
+  "items": [
+    {
+      "dwg": "drawing number",
+      "item": "item number",
+      "grade": "steel grade e.g. 400W",
+      "mark": "mark number e.g. A1014",
+      "quantity": number,
+      "size": "bar size e.g. 10M, 15M, 20M",
+      "type": "ASA shape type number e.g. 17, 21, 3, S13, or empty for straight",
+      "total_length": number in mm,
+      "A": number or null,
+      "B": number or null,
+      "C": number or null,
+      "D": number or null,
+      "E": number or null,
+      "F": number or null,
+      "G": number or null,
+      "H": number or null,
+      "J": number or null,
+      "K": number or null,
+      "O": number or null,
+      "R": number or null,
+      "weight": number or null,
+      "customer": "customer name",
+      "ref": "reference code",
+      "address": "site address"
+    }
+  ],
+  "summary": {
+    "total_items": number,
+    "total_pieces": number,
+    "bar_sizes_found": ["10M","15M",...],
+    "shape_types_found": ["17","21",...],
+    "customer": "detected customer name",
+    "project": "detected project name"
+  }
+}
+
+Rules:
+- Extract ALL rows/items from the document
+- Dimensions (A,B,C,...) are in millimeters
+- If a dimension column is empty, use null
+- "type" is the ASA shape code (1-32, S1-S15, T1-T17, COIL, X, Y, etc.)
+- Items with no shape type are straight bars
+- Always try to detect customer name, project reference, and site address from the document context
+- If the document is a rebar bending schedule, bar list, or cut list, map ALL columns to the template above`;
+
+    const contextInfo = manifestContext
+      ? `\n\nManifest context provided by user:\n- Manifest Name: ${manifestContext.name}\n- Customer: ${manifestContext.customer}\n- Site Address: ${manifestContext.address}\n- Type: ${manifestContext.type}`
+      : "";
+
+    // Build message content
+    const userContent: any[] = [
+      {
+        type: "text",
+        text: `Extract all rebar schedule data from this uploaded file "${fileName || "document"}" and map to our label template.${contextInfo}\n\nReturn ONLY the JSON object, no markdown formatting.`,
+      },
+    ];
+
+    if (isImage || isPdf) {
+      userContent.push({
+        type: "image_url",
+        image_url: { url: fileUrl },
+      });
+    }
+
+    // Use Gemini Pro for vision + complex extraction
+    const model = (isImage || isPdf) ? "google/gemini-2.5-pro" : "google/gemini-2.5-flash";
+
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userContent },
+        ],
+        temperature: 0.1,
+        max_tokens: 16000,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("AI API error:", errorText);
+      throw new Error(`AI API error: ${response.status}`);
+    }
+
+    const aiData = await response.json();
+    const rawContent = aiData.choices?.[0]?.message?.content || "";
+
+    // Parse the JSON from the response
+    let extractedData;
+    try {
+      // Remove markdown code fences if present
+      const jsonStr = rawContent
+        .replace(/^```json?\s*/i, "")
+        .replace(/```\s*$/, "")
+        .trim();
+      extractedData = JSON.parse(jsonStr);
+    } catch (parseErr) {
+      console.error("Failed to parse AI response:", rawContent);
+      return new Response(
+        JSON.stringify({
+          error: "Failed to parse extraction results",
+          rawContent,
+        }),
+        { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    return new Response(
+      JSON.stringify(extractedData),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  } catch (error) {
+    console.error("Extract manifest error:", error);
+    return new Response(
+      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+});
