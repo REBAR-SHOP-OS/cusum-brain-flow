@@ -20,7 +20,6 @@ const navigation = [
   { name: "Deliveries", href: "/deliveries", icon: Truck },
   { name: "Brain", href: "/brain", icon: Brain },
   { name: "Integrations", href: "/integrations", icon: Plug },
-  { name: "Team", href: "/team", icon: Users },
 ];
 
 const bottomNav = [

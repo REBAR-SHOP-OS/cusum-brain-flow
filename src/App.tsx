@@ -26,7 +26,7 @@ import DailySummarizer from "./pages/DailySummarizer";
 import FacebookCommenter from "./pages/FacebookCommenter";
 import Phonecalls from "./pages/Phonecalls";
 import Settings from "./pages/Settings";
-import Team from "./pages/Team";
+
 import AdminPanel from "./pages/AdminPanel";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import TermsOfService from "./pages/TermsOfService";
@@ -209,16 +209,6 @@ const App = () => (
                 <ProtectedRoute>
                   <AppLayout>
                     <Phonecalls />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/team"
-              element={
-                <ProtectedRoute>
-                  <AppLayout>
-                    <Team />
                   </AppLayout>
                 </ProtectedRoute>
               }
