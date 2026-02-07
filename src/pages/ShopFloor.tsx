@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { 
   Factory, 
   LayoutGrid, 
@@ -17,13 +17,15 @@ interface HubCard {
   subtitle?: string;
   icon: React.ReactNode;
   to: string;
+  state?: Record<string, any>;
 }
 
 const hubCards: HubCard[] = [
   {
     label: "CEO COMMAND",
     icon: <Crown className="w-7 h-7" />,
-    to: "/home",
+    to: "/office",
+    state: { section: "ceo-dashboard" },
   },
   {
     label: "OFFICE",
@@ -38,12 +40,12 @@ const hubCards: HubCard[] = [
   {
     label: "TIME CLOCK",
     icon: <Clock className="w-7 h-7" />,
-    to: "/shop-floor",
+    to: "/timeclock",
   },
   {
     label: "TEAM HUB",
     icon: <MessageSquare className="w-7 h-7" />,
-    to: "/shop-floor",
+    to: "/team-hub",
   },
   {
     label: "CLEARANCE",
@@ -107,6 +109,7 @@ export default function ShopFloor() {
             <Link
               key={card.label}
               to={card.to}
+              state={card.state}
               className="group relative flex flex-col items-center justify-center gap-3 p-6 sm:p-8 rounded-xl border border-border/60 bg-card/50 backdrop-blur-sm hover:bg-card/80 hover:border-primary/40 transition-all duration-200 hover:shadow-[0_0_30px_-10px_hsl(var(--primary)/0.3)]"
             >
               <div className="text-muted-foreground group-hover:text-foreground transition-colors">

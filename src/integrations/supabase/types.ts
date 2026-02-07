@@ -2812,6 +2812,44 @@ export type Database = {
           },
         ]
       }
+      time_clock_entries: {
+        Row: {
+          break_minutes: number | null
+          clock_in: string
+          clock_out: string | null
+          created_at: string
+          id: string
+          notes: string | null
+          profile_id: string
+        }
+        Insert: {
+          break_minutes?: number | null
+          clock_in?: string
+          clock_out?: string | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          profile_id: string
+        }
+        Update: {
+          break_minutes?: number | null
+          clock_in?: string
+          clock_out?: string | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          profile_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "time_clock_entries_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string

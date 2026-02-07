@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import { OfficeSidebar, OfficeSection } from "@/components/office/OfficeSidebar";
 import { CEODashboardView } from "@/components/office/CEODashboardView";
 import { AIExtractView } from "@/components/office/AIExtractView";
@@ -29,7 +30,9 @@ const sectionComponents: Record<OfficeSection, React.ComponentType> = {
 };
 
 export default function OfficePortal() {
-  const [activeSection, setActiveSection] = useState<OfficeSection>("ai-extract");
+  const location = useLocation();
+  const initialSection = (location.state as any)?.section || "ai-extract";
+  const [activeSection, setActiveSection] = useState<OfficeSection>(initialSection);
 
   const ActiveComponent = sectionComponents[activeSection];
 
