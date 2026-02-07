@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -13,6 +13,9 @@ import {
   Minimize2,
   Users,
   X,
+  ExternalLink,
+  Copy,
+  Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { TeamMeeting } from "@/hooks/useTeamMeetings";
@@ -50,16 +53,15 @@ export function MeetingRoom({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const { provider, joinUrl } = useMemo(() => parseMeetingMeta(meeting), [meeting]);
 
-  // Build the meeting URL based on provider
-  const meetingUrl = useMemo(() => {
-    if (provider === "ringcentral" && joinUrl) {
-      return joinUrl;
-    }
+  // For RingCentral, we can't iframe — open in new tab automatically on mount
+  const isRingCentral = provider === "ringcentral" && !!joinUrl;
 
-    // Fallback to Jitsi
+  // Build Jitsi URL for iframe fallback
+  const jitsiUrl = useMemo(() => {
     const jitsiDomain = "meet.jit.si";
     const configHash = [
       `config.startWithAudioMuted=${isMuted}`,
@@ -76,9 +78,19 @@ export function MeetingRoom({
       `interfaceConfig.SHOW_WATERMARK_FOR_GUESTS=false`,
       `interfaceConfig.DEFAULT_BACKGROUND="#0f172a"`,
     ].join("&");
-
     return `https://${jitsiDomain}/${meeting.room_code}#${configHash}`;
-  }, [provider, joinUrl, meeting, isMuted, isVideoOff]);
+  }, [meeting, isMuted, isVideoOff]);
+
+  const handleOpenMeeting = () => {
+    if (joinUrl) window.open(joinUrl, "_blank", "noopener,noreferrer");
+  };
+
+  const handleCopyLink = async () => {
+    if (!joinUrl) return;
+    await navigator.clipboard.writeText(joinUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   const meetingTypeLabel = {
     video: "Video Call",
@@ -121,18 +133,20 @@ export function MeetingRoom({
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 hidden md:inline-flex"
-            onClick={() => setIsFullscreen(!isFullscreen)}
-          >
-            {isFullscreen ? (
-              <Minimize2 className="w-3.5 h-3.5 text-muted-foreground" />
-            ) : (
-              <Maximize2 className="w-3.5 h-3.5 text-muted-foreground" />
-            )}
-          </Button>
+          {!isRingCentral && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 hidden md:inline-flex"
+              onClick={() => setIsFullscreen(!isFullscreen)}
+            >
+              {isFullscreen ? (
+                <Minimize2 className="w-3.5 h-3.5 text-muted-foreground" />
+              ) : (
+                <Maximize2 className="w-3.5 h-3.5 text-muted-foreground" />
+              )}
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="icon"
@@ -144,19 +158,48 @@ export function MeetingRoom({
         </div>
       </div>
 
-      {/* Meeting Iframe */}
+      {/* Meeting Content */}
       <div className="flex-1 bg-black relative">
-        <iframe
-          src={meetingUrl}
-          className="w-full h-full border-0"
-          allow="camera; microphone; display-capture; autoplay; clipboard-write"
-          allowFullScreen
-        />
+        {isRingCentral ? (
+          /* RingCentral: can't iframe, show join panel */
+          <div className="flex flex-col items-center justify-center h-full gap-6 px-6 text-center bg-gradient-to-b from-card to-background">
+            <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center">
+              <Video className="w-10 h-10 text-primary" />
+            </div>
+            <div className="space-y-2">
+              <h2 className="text-lg font-bold text-foreground">RingCentral Video Meeting</h2>
+              <p className="text-sm text-muted-foreground max-w-sm">
+                This meeting opens in RingCentral. Click below to join in a new tab.
+              </p>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Button onClick={handleOpenMeeting} className="gap-2">
+                <ExternalLink className="w-4 h-4" />
+                Join Meeting
+              </Button>
+              <Button variant="outline" onClick={handleCopyLink} className="gap-2">
+                {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                {copied ? "Copied!" : "Copy Link"}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground/60 font-mono break-all max-w-md">
+              {joinUrl}
+            </p>
+          </div>
+        ) : (
+          /* Jitsi: embeddable via iframe */
+          <iframe
+            src={jitsiUrl}
+            className="w-full h-full border-0"
+            allow="camera; microphone; display-capture; autoplay; clipboard-write"
+            allowFullScreen
+          />
+        )}
       </div>
 
       {/* Bottom Controls */}
       <div className="flex items-center justify-center gap-2 md:gap-3 px-3 md:px-4 py-2 md:py-3 border-t border-border bg-card/80 backdrop-blur-sm safe-area-bottom">
-        {provider !== "ringcentral" && (
+        {!isRingCentral && (
           <>
             <Button
               variant={isMuted ? "destructive" : "outline"}
