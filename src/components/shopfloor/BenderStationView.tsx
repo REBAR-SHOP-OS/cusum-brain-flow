@@ -21,11 +21,12 @@ interface BenderStationViewProps {
   machine: LiveMachine;
   items: StationItem[];
   canWrite: boolean;
+  initialIndex?: number;
 }
 
-export function BenderStationView({ machine, items, canWrite }: BenderStationViewProps) {
+export function BenderStationView({ machine, items, canWrite, initialIndex = 0 }: BenderStationViewProps) {
   const { toast } = useToast();
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [submitting, setSubmitting] = useState(false);
 
   const currentItem = items[currentIndex] || null;
