@@ -16,11 +16,11 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  User, Users, Settings, Upload, CheckCircle2,
+  User, Users, Settings,
   Sparkles, Tag, LayoutGrid, UserPlus, MoreHorizontal,
-  Crown, Briefcase, HardHat, Truck as TruckIcon, Camera, ImagePlus, Loader2,
+  Crown, Briefcase, HardHat, Truck as TruckIcon, Camera, ImagePlus, Loader2, CheckCircle2,
 } from "lucide-react";
-import { AsaShapeDiagram } from "@/components/shopfloor/AsaShapeDiagram";
+
 import { useProfiles } from "@/hooks/useProfiles";
 import { useAuth } from "@/lib/auth";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -32,25 +32,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import brandLogo from "@/assets/brand-logo.png";
 
-// ── ASA Shape data ──
-const asaStandardShapes = [
-  { code: "STR", num: "S", name: "STRAIGHT BAR" },
-  { code: "1", num: "1", name: "HOOKED (ONE END)" },
-  { code: "2", num: "2", name: "U-SHAPE (ASA TYPE 2)" },
-  { code: "3", num: "3", name: "OFFSET / CRANE" },
-  { code: "4", num: "4", name: "T1 STIRRUP / TIE" },
-  { code: "5", num: "5", name: "DOUBLE CRANE" },
-  { code: "17", num: "17", name: "L-SHAPE (ASA 17)" },
-  { code: "T3", num: "T3", name: "HOOP / SPIRAL" },
-];
-
-const allShapeCodes = [
-  "1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16",
-  "17","18","19","20","21","22","23","24","25","26","27","28","29","30","31","32",
-  "S2","S12","S11","S14","S4","S13","T9","T8","T3","T4","S6","T17","S8","S3","T8","T16",
-  "COIL","X","T2","Y","T7","S7","T12","S15","T14","S9","T5","T15","T10","T1","S1","S5",
-  "T13","T11","S",
-];
+// (ASA shape data removed – real shapes come from DB)
 
 // ── Helpers ──
 const departmentConfig: Record<string, { label: string; icon: React.ElementType; color: string }> = {
@@ -81,7 +63,6 @@ export function MemberAreaView() {
   const [configTab, setConfigTab] = useState("general");
   const [companyName, setCompanyName] = useState("REBAR.SHOP AI");
   const [measurement, setMeasurement] = useState<"metric" | "imperial">("metric");
-  const [customCode, setCustomCode] = useState("");
 
   return (
     <div className="flex flex-col h-full">
@@ -123,8 +104,6 @@ export function MemberAreaView() {
             setCompanyName={setCompanyName}
             measurement={measurement}
             setMeasurement={setMeasurement}
-            customCode={customCode}
-            setCustomCode={setCustomCode}
           />
         )}
       </ScrollArea>
@@ -382,20 +361,15 @@ interface SystemConfigProps {
   setCompanyName: (v: string) => void;
   measurement: "metric" | "imperial";
   setMeasurement: (v: "metric" | "imperial") => void;
-  customCode: string;
-  setCustomCode: (v: string) => void;
 }
 
 function SystemConfigTab({
   configTab, setConfigTab, companyName, setCompanyName,
-  measurement, setMeasurement, customCode, setCustomCode,
+  measurement, setMeasurement,
 }: SystemConfigProps) {
-  const [uploadingSchematic, setUploadingSchematic] = useState(false);
   const [aiVisionOpen, setAiVisionOpen] = useState(false);
   const [savedSchematics, setSavedSchematics] = useState<UploadedSchematic[]>([]);
   const [loadingSchematics, setLoadingSchematics] = useState(false);
-  const schematicFileRef = useRef<HTMLInputElement>(null);
-  const { toast } = useToast();
 
   // Load existing schematics from DB
   const loadSchematics = async () => {
@@ -421,58 +395,8 @@ function SystemConfigTab({
     }
   }, [configTab]);
 
-  const handleUploadSchematic = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !customCode.trim()) {
-      toast({ title: "Enter a shape code first", variant: "destructive" });
-      return;
-    }
-
-    setUploadingSchematic(true);
-    try {
-      const ext = file.name.split(".").pop()?.toLowerCase() || "png";
-      const path = `${customCode.trim().toUpperCase()}_${Date.now()}.${ext}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from("shape-schematics")
-        .upload(path, file, { upsert: true, contentType: file.type });
-
-      if (uploadError) throw uploadError;
-
-      const publicUrl = `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/shape-schematics/${path}`;
-
-      const { data: analysisData, error: analysisError } = await supabase.functions.invoke("shape-vision", {
-        body: { imageUrl: publicUrl, action: "analyze" },
-      });
-
-      const analysis = analysisError ? null : analysisData;
-
-      await supabase.from("custom_shape_schematics").insert({
-        shape_code: customCode.trim().toUpperCase(),
-        image_url: publicUrl,
-        ai_analysis: analysis ? JSON.stringify(analysis) : null,
-        uploaded_by: "system",
-      });
-
-      toast({
-        title: "Schematic uploaded",
-        description: analysis?.shape_code
-          ? `AI detected: ${analysis.shape_code} (${Math.round((analysis.confidence || 0) * 100)}% confidence)`
-          : "Upload successful, AI analysis pending.",
-      });
-      setCustomCode("");
-      loadSchematics(); // Refresh the list
-    } catch (err: any) {
-      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
-    } finally {
-      setUploadingSchematic(false);
-      if (schematicFileRef.current) schematicFileRef.current.value = "";
-    }
-  };
-
   return (
     <div className="p-8 max-w-4xl mx-auto space-y-6">
-      <input ref={schematicFileRef} type="file" accept="image/*" className="hidden" onChange={handleUploadSchematic} />
 
       {/* Config sub-tabs */}
       <div className="flex bg-card border border-border rounded-lg overflow-hidden">
@@ -569,49 +493,16 @@ function SystemConfigTab({
             onUploadsComplete={loadSchematics}
           />
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {asaStandardShapes.map((shape) => (
-              <Card key={shape.code} className="border-border hover:border-primary/40 transition-colors cursor-pointer">
-                <CardContent className="p-4 flex flex-col items-center gap-2">
-                  <div className="flex items-start justify-between w-full">
-                    <span className="w-7 h-7 rounded-full border-2 border-foreground flex items-center justify-center text-xs font-bold">{shape.num}</span>
-                  </div>
-                  <AsaShapeDiagram shapeCode={shape.code === "STR" ? "1" : shape.code} size="sm" />
-                  <div className="text-center">
-                    <p className="text-sm font-black text-primary">{shape.code}</p>
-                    <p className="text-[9px] tracking-widest text-muted-foreground uppercase">{shape.name}</p>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-
-          {/* Custom Mapping Override */}
-          <section>
-            <div className="flex items-center gap-2 mb-3">
-              <Sparkles className="w-4 h-4 text-muted-foreground" />
-              <h3 className="text-[10px] font-bold tracking-[0.2em] text-muted-foreground uppercase">Custom Mapping Override</h3>
-            </div>
-            <div className="flex gap-3">
-              <Input
-                placeholder="Type Code (E.G. S1)"
-                value={customCode}
-                onChange={(e) => setCustomCode(e.target.value)}
-                className="flex-1 h-11"
-              />
-              <Button
-                className="gap-1.5 h-11 px-5"
-                onClick={() => schematicFileRef.current?.click()}
-                disabled={uploadingSchematic || !customCode.trim()}
-              >
-                {uploadingSchematic ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                {uploadingSchematic ? "Uploading..." : "Upload Schematic"}
-              </Button>
-            </div>
-            {!customCode.trim() && (
-              <p className="text-[10px] text-muted-foreground mt-1.5">Enter a shape code before uploading</p>
-            )}
-          </section>
+          {/* Uploaded shapes from DB — or empty state */}
+          {!loadingSchematics && savedSchematics.length === 0 && (
+            <Card className="border-dashed border-2 border-border">
+              <CardContent className="p-10 flex flex-col items-center gap-3 text-center">
+                <ImagePlus className="w-10 h-10 text-muted-foreground" />
+                <p className="text-sm font-medium text-muted-foreground">No shapes uploaded yet</p>
+                <p className="text-xs text-muted-foreground">Click "AI Vision Assign" to upload and tag your shape schematics</p>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Saved schematics from DB */}
           {savedSchematics.length > 0 && (
@@ -648,23 +539,6 @@ function SystemConfigTab({
             </div>
           )}
 
-          {/* Full shape grid */}
-          <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-3">
-            {allShapeCodes.map((code, i) => (
-              <div key={`${code}-${i}`} className="aspect-square rounded-lg border border-border bg-card hover:border-primary/40 transition-colors cursor-pointer flex flex-col items-center justify-center gap-1 p-2">
-                <div className="flex-1 flex items-center justify-center w-full">
-                  <AsaShapeDiagram shapeCode={code} size="sm" />
-                </div>
-                <span className="text-[10px] font-bold text-primary">{code}</span>
-              </div>
-            ))}
-          </div>
-
-          <div className="flex justify-center pt-4">
-            <Button size="lg" className="gap-2 px-12 h-12 text-sm font-bold">
-              <CheckCircle2 className="w-4 h-4" /> Authorize System Global Change
-            </Button>
-          </div>
         </div>
       )}
     </div>
