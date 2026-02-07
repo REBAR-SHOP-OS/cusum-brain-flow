@@ -3,6 +3,7 @@ import { useExtractSessions, useExtractRows } from "@/hooks/useExtractSessions";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { RebarTagCard } from "@/components/office/RebarTagCard";
 import {
   LayoutGrid, Table as TableIcon, Download, Printer,
   Zap, Sparkles, ChevronRight,
@@ -273,9 +274,9 @@ export function TagsExportView() {
           <ScrollBar orientation="horizontal" />
         </ScrollArea>
       ) : (
-        /* Cards view */
+        /* Cards view — physical tag layout */
         <ScrollArea className="flex-1">
-          <div className="p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div className="p-6 grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
             {rowsLoading ? (
               <div className="col-span-full text-center text-muted-foreground text-sm p-8">Loading...</div>
             ) : sortedRows.length === 0 ? (
@@ -285,63 +286,30 @@ export function TagsExportView() {
                 const size = row.bar_size_mapped || row.bar_size || "";
                 const shapeType = row.shape_code_mapped || row.shape_type || "";
                 const weight = getWeight(size, row.total_length_mm, row.quantity);
-                const activeDims = DIM_COLS.filter((d) => {
+                const dims: Record<string, number | null> = {};
+                DIM_COLS.forEach((d) => {
                   const key = `dim_${d.toLowerCase()}` as keyof typeof row;
-                  return row[key] != null && row[key] !== 0;
+                  const v = row[key];
+                  dims[d] = typeof v === "number" ? v : null;
                 });
 
                 return (
-                  <div
+                  <RebarTagCard
                     key={row.id}
-                    className="border border-border rounded-lg bg-card p-4 space-y-3 hover:border-primary/40 transition-colors"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-lg font-black text-foreground">{row.mark || "—"}</span>
-                      <Badge variant="secondary" className="text-[10px] font-bold">{size}</Badge>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2 text-xs">
-                      <div>
-                        <span className="text-muted-foreground block text-[10px] uppercase tracking-wider">Qty</span>
-                        <span className="font-bold">{row.quantity ?? "—"}</span>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground block text-[10px] uppercase tracking-wider">Length</span>
-                        <span className="font-bold text-primary">{row.total_length_mm ?? "—"}</span>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground block text-[10px] uppercase tracking-wider">Weight</span>
-                        <span className="font-bold">{weight || "—"}</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                      <span>{row.dwg || "—"}</span>
-                      <span>·</span>
-                      <span>{row.grade_mapped || row.grade || "—"}</span>
-                      {shapeType && (
-                        <>
-                          <span>·</span>
-                          <Badge variant="outline" className="text-[9px] px-1">{shapeType}</Badge>
-                        </>
-                      )}
-                    </div>
-                    {activeDims.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5">
-                        {activeDims.map((d) => {
-                          const key = `dim_${d.toLowerCase()}` as keyof typeof row;
-                          return (
-                            <span key={d} className="text-[10px] bg-muted rounded px-1.5 py-0.5">
-                              {d}: {String(row[key])}
-                            </span>
-                          );
-                        })}
-                      </div>
-                    )}
-                    {row.customer && (
-                      <div className="text-[10px] text-muted-foreground truncate">
-                        {row.customer}{row.reference ? ` · ${row.reference}` : ""}
-                      </div>
-                    )}
-                  </div>
+                    mark={row.mark || ""}
+                    size={size}
+                    grade={row.grade_mapped || row.grade || ""}
+                    qty={row.quantity}
+                    length={row.total_length_mm}
+                    weight={weight}
+                    shapeType={shapeType}
+                    dwg={row.dwg || ""}
+                    item={row.row_index}
+                    customer={row.customer || ""}
+                    reference={row.reference || ""}
+                    address={row.address || ""}
+                    dims={dims}
+                  />
                 );
               })
             )}
