@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { StationHeader } from "./StationHeader";
 import { AsaShapeDiagram } from "./AsaShapeDiagram";
@@ -48,6 +48,12 @@ export function BenderStationView({ machine, items, canWrite, initialIndex = 0 }
   };
 
   const batchSize = currentItem ? getBatchSize(currentItem.bar_code) : 1;
+
+  // Reset unitCount to max (batchSize) when item changes
+  useEffect(() => {
+    setUnitCount(batchSize);
+  }, [currentIndex, batchSize]);
+
   const bendCompleted = currentItem?.bend_completed_pieces ?? currentItem?.completed_pieces ?? 0;
   const progress = currentItem
     ? Math.round((bendCompleted / currentItem.total_pieces) * 100)
@@ -82,7 +88,7 @@ export function BenderStationView({ machine, items, canWrite, initialIndex = 0 }
     if (!currentItem || submitting || isMarkComplete) return;
     setSubmitting(true);
     try {
-      const piecesToAdd = batchSize * unitCount;
+      const piecesToAdd = unitCount;
       const newCount = Math.min(bendCompleted + piecesToAdd, currentItem.total_pieces);
       // Update bend_completed_pieces and set phase to 'bending'
       const { error } = await supabase
@@ -243,7 +249,7 @@ export function BenderStationView({ machine, items, canWrite, initialIndex = 0 }
           ) : (
             <>
               <span className="text-xl font-black">DONE</span>
-              <span className="text-xs opacity-80">CONFIRMED +{batchSize * unitCount} {batchSize * unitCount === 1 ? "PIECE" : "PIECES"}</span>
+              <span className="text-xs opacity-80">CONFIRMED +{unitCount} {unitCount === 1 ? "PIECE" : "PIECES"}</span>
             </>
           )}
         </Button>
