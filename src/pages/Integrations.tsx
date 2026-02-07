@@ -3,7 +3,7 @@ import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { IntegrationCard, type Integration } from "@/components/integrations/IntegrationCard";
 import { IntegrationSetupDialog } from "@/components/integrations/IntegrationSetupDialog";
-import { AutomationsSection } from "@/components/integrations/AutomationsSection";
+
 import { useIntegrations } from "@/hooks/useIntegrations";
 import { useState } from "react";
 
@@ -72,9 +72,6 @@ export default function Integrations() {
       </header>
 
       <div className="flex-1 overflow-y-auto scrollbar-thin p-6">
-        {/* Automations */}
-        <AutomationsSection />
-
         {/* Needs Attention */}
         {needsAttention.length > 0 && (
           <section className="mb-8">
