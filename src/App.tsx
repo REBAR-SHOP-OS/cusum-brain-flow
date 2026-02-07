@@ -18,6 +18,9 @@ import Customers from "./pages/Customers";
 import ShopFloor from "./pages/ShopFloor";
 import LiveMonitor from "./pages/LiveMonitor";
 import CutterPlanning from "./pages/CutterPlanning";
+import StationDashboard from "./pages/StationDashboard";
+import StationView from "./pages/StationView";
+import PickupStation from "./pages/PickupStation";
 import Deliveries from "./pages/Deliveries";
 import Brain from "./pages/Brain";
 import Integrations from "./pages/Integrations";
@@ -131,6 +134,36 @@ const App = () => (
                 <ProtectedRoute>
                   <AppLayout>
                     <CutterPlanning />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/shopfloor/station"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <StationDashboard />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/shopfloor/station/:machineId"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <StationView />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/shopfloor/pickup"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <PickupStation />
                   </AppLayout>
                 </ProtectedRoute>
               }

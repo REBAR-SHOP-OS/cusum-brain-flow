@@ -44,6 +44,15 @@ export function CutPlanDetails({
       cut_length_mm: cutLengthMm,
       pieces_per_bar: piecesPerBar,
       notes: null,
+      mark_number: null,
+      drawing_ref: null,
+      bend_type: "straight",
+      asa_shape_code: null,
+      total_pieces: qtyBars * piecesPerBar,
+      completed_pieces: 0,
+      needs_fix: false,
+      bend_dimensions: null,
+      work_order_id: null,
     });
   };
 

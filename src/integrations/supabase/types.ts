@@ -286,31 +286,58 @@ export type Database = {
       }
       cut_plan_items: {
         Row: {
+          asa_shape_code: string | null
           bar_code: string
+          bend_dimensions: Json | null
+          bend_type: string
+          completed_pieces: number
           cut_length_mm: number
           cut_plan_id: string
+          drawing_ref: string | null
           id: string
+          mark_number: string | null
+          needs_fix: boolean
           notes: string | null
           pieces_per_bar: number
           qty_bars: number
+          total_pieces: number
+          work_order_id: string | null
         }
         Insert: {
+          asa_shape_code?: string | null
           bar_code: string
+          bend_dimensions?: Json | null
+          bend_type?: string
+          completed_pieces?: number
           cut_length_mm: number
           cut_plan_id: string
+          drawing_ref?: string | null
           id?: string
+          mark_number?: string | null
+          needs_fix?: boolean
           notes?: string | null
           pieces_per_bar?: number
           qty_bars: number
+          total_pieces?: number
+          work_order_id?: string | null
         }
         Update: {
+          asa_shape_code?: string | null
           bar_code?: string
+          bend_dimensions?: Json | null
+          bend_type?: string
+          completed_pieces?: number
           cut_length_mm?: number
           cut_plan_id?: string
+          drawing_ref?: string | null
           id?: string
+          mark_number?: string | null
+          needs_fix?: boolean
           notes?: string | null
           pieces_per_bar?: number
           qty_bars?: number
+          total_pieces?: number
+          work_order_id?: string | null
         }
         Relationships: [
           {
@@ -327,6 +354,13 @@ export type Database = {
             referencedRelation: "cut_plans"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "cut_plan_items_work_order_id_fkey"
+            columns: ["work_order_id"]
+            isOneToOne: false
+            referencedRelation: "work_orders"
+            referencedColumns: ["id"]
+          },
         ]
       }
       cut_plans: {
@@ -335,7 +369,9 @@ export type Database = {
           created_at: string
           created_by: string | null
           id: string
+          machine_id: string | null
           name: string
+          project_name: string | null
           status: string
           updated_at: string
         }
@@ -344,7 +380,9 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          machine_id?: string | null
           name: string
+          project_name?: string | null
           status?: string
           updated_at?: string
         }
@@ -353,11 +391,21 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          machine_id?: string | null
           name?: string
+          project_name?: string | null
           status?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "cut_plans_machine_id_fkey"
+            columns: ["machine_id"]
+            isOneToOne: false
+            referencedRelation: "machines"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       deliveries: {
         Row: {
@@ -1125,6 +1173,91 @@ export type Database = {
             columns: ["quote_id"]
             isOneToOne: false
             referencedRelation: "quotes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pickup_order_items: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          mark_number: string
+          pickup_order_id: string
+          verified: boolean
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          mark_number: string
+          pickup_order_id: string
+          verified?: boolean
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          mark_number?: string
+          pickup_order_id?: string
+          verified?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pickup_order_items_pickup_order_id_fkey"
+            columns: ["pickup_order_id"]
+            isOneToOne: false
+            referencedRelation: "pickup_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pickup_orders: {
+        Row: {
+          authorized_at: string | null
+          authorized_by: string | null
+          bundle_count: number
+          company_id: string
+          created_at: string
+          customer_id: string | null
+          id: string
+          signature_data: string | null
+          site_address: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          authorized_at?: string | null
+          authorized_by?: string | null
+          bundle_count?: number
+          company_id: string
+          created_at?: string
+          customer_id?: string | null
+          id?: string
+          signature_data?: string | null
+          site_address: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          authorized_at?: string | null
+          authorized_by?: string | null
+          bundle_count?: number
+          company_id?: string
+          created_at?: string
+          customer_id?: string | null
+          id?: string
+          signature_data?: string | null
+          site_address?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pickup_orders_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
             referencedColumns: ["id"]
           },
         ]
