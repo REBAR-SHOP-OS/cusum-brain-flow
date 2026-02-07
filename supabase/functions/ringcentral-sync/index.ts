@@ -167,10 +167,42 @@ serve(async (req) => {
     const dateFrom = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000).toISOString();
     const accessToken = await getAccessToken();
 
+    // Get the RingCentral extension's email to verify ownership
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
+
+    const { data: userData } = await supabaseAdmin.auth.admin.getUserById(userId);
+    const userEmail = userData?.user?.email?.toLowerCase();
+
+    // Get RingCentral extension info
+    let rcEmail = "";
+    try {
+      const extRes = await fetch(`${RC_SERVER}/restapi/v1.0/account/~/extension/~`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (extRes.ok) {
+        const extData = await extRes.json();
+        rcEmail = (extData.contact?.email || "").toLowerCase();
+      }
+    } catch {
+      // If we can't get extension info, continue but log
+      console.warn("Could not fetch RC extension info for ownership check");
+    }
+
+    // Block sync if emails don't match (only if we could resolve the RC email)
+    if (rcEmail && userEmail && rcEmail !== userEmail) {
+      return new Response(
+        JSON.stringify({
+          error: "RingCentral account mismatch",
+          message: `This RingCentral integration is connected to ${rcEmail}. You are logged in as ${userEmail}.`,
+          callsUpserted: 0,
+          smsUpserted: 0,
+        }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     let callsUpserted = 0;
     let smsUpserted = 0;
