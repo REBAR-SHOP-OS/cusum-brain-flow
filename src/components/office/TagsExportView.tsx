@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { useExtractSessions, useExtractRows } from "@/hooks/useExtractSessions";
+import { useShapeSchematics } from "@/hooks/useShapeSchematics";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +29,7 @@ export function TagsExportView() {
   const { sessions, loading: sessionsLoading } = useExtractSessions();
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const { rows, loading: rowsLoading } = useExtractRows(selectedSessionId);
+  const { getShapeImageUrl } = useShapeSchematics();
   const [viewMode, setViewMode] = useState<"table" | "cards">("table");
   const [sortMode, setSortMode] = useState<"standard" | "optimized">("standard");
 
@@ -309,6 +311,7 @@ export function TagsExportView() {
                     reference={row.reference || ""}
                     address={row.address || ""}
                     dims={dims}
+                    shapeImageUrl={getShapeImageUrl(shapeType)}
                   />
                 );
               })

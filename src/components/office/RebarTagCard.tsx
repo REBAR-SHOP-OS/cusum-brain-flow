@@ -1,5 +1,3 @@
-import { AsaShapeDiagram } from "@/components/shopfloor/AsaShapeDiagram";
-
 const DIM_LEFT = ["A", "B", "C", "D", "E", "F"] as const;
 const DIM_RIGHT = ["G", "H", "J", "K", "O", "R"] as const;
 
@@ -17,18 +15,13 @@ interface RebarTagCardProps {
   reference: string;
   address: string;
   dims: Record<string, number | null>;
+  shapeImageUrl?: string | null;
 }
 
 export function RebarTagCard({
   mark, size, grade, qty, length, weight, shapeType,
-  dwg, item, customer, reference, address, dims,
+  dwg, item, customer, reference, address, dims, shapeImageUrl,
 }: RebarTagCardProps) {
-  // Build dimension record for AsaShapeDiagram (needs Record<string, number>)
-  const shapeDims: Record<string, number> = {};
-  Object.entries(dims).forEach(([k, v]) => {
-    if (v != null && v !== 0) shapeDims[k] = v;
-  });
-
   return (
     <div className="rebar-tag border-2 border-foreground/80 bg-white text-black overflow-hidden font-mono print:break-inside-avoid print:page-break-inside-avoid">
       {/* === TOP HEADER ROW === */}
@@ -56,7 +49,7 @@ export function RebarTagCard({
       </div>
 
       {/* === MAIN BODY === */}
-      <div className="grid grid-cols-[100px_1fr_1fr]" style={{ minHeight: 140 }}>
+      <div className="grid grid-cols-[100px_1fr_1.2fr]" style={{ minHeight: 140 }}>
         {/* LEFT: summary fields */}
         <div className="border-r border-foreground/60 px-2 py-1.5 text-[10px] space-y-px">
           <div className="flex justify-between"><span className="font-bold">Qty:</span><span className="font-black">{qty ?? ""}</span></div>
@@ -75,7 +68,7 @@ export function RebarTagCard({
           {/* Shape code badge */}
           <div className="flex justify-center mb-1">
             <div className="w-7 h-7 rounded-full border-2 border-black flex items-center justify-center">
-              <span className="text-xs font-black">{shapeType || "S"}</span>
+              <span className="text-[10px] font-black leading-none">{shapeType || "S"}</span>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-x-3 gap-y-0 text-[10px]">
@@ -94,20 +87,22 @@ export function RebarTagCard({
           </div>
         </div>
 
-        {/* RIGHT: ASA shape diagram */}
-        <div className="px-1 py-1 flex flex-col items-center justify-center">
-          {shapeType ? (
-            <AsaShapeDiagram
-              shapeCode={shapeType}
-              dimensions={Object.keys(shapeDims).length > 0 ? shapeDims : undefined}
-              size="sm"
-              className="print:brightness-0"
+        {/* RIGHT: ASA shape image from database */}
+        <div className="px-1 py-1 flex flex-col items-center justify-center bg-white">
+          {shapeImageUrl ? (
+            <img
+              src={shapeImageUrl}
+              alt={`Shape ${shapeType}`}
+              className="max-w-full max-h-[120px] object-contain print:max-h-[110px]"
+              crossOrigin="anonymous"
             />
-          ) : (
-            <div className="flex flex-col items-center gap-1">
-              <div className="w-full h-8 border-b-2 border-black/40" />
-              <span className="text-lg font-black text-black/30">A</span>
+          ) : shapeType ? (
+            <div className="flex flex-col items-center justify-center gap-1 text-black/40">
+              <div className="w-16 h-10 border-b-2 border-black/30" />
+              <span className="text-base font-black">{shapeType}</span>
             </div>
+          ) : (
+            <span className="text-[10px] text-black/30 italic">No shape</span>
           )}
         </div>
       </div>
@@ -140,7 +135,6 @@ export function RebarTagCard({
       <div className="border-t-2 border-foreground/80 px-2 py-1 flex items-center justify-between">
         <span className="text-xs font-black tracking-wider">R.S</span>
         <span className="text-[8px] font-bold tracking-widest uppercase">REBAR.SHOP</span>
-        {/* Barcode placeholder */}
         <div className="flex gap-[1px]">
           {Array.from({ length: 24 }).map((_, i) => (
             <div
