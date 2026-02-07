@@ -13,7 +13,7 @@ export function ProductionQueueView() {
   const { plans, loading } = useCutPlans();
   const { user } = useAuth();
 
-  const activePlans = plans.filter(p => ["draft", "ready", "in_progress", "queued"].includes(p.status));
+  const activePlans = plans.filter(p => ["draft", "ready", "running", "queued"].includes(p.status));
 
   // Fetch barlist + project names for plans that have project_id
   const planIds = plans.map(p => p.id);
@@ -97,7 +97,7 @@ function QueueCard({ plan, projectName, barlistName }: {
     ready: { label: "READY_FOR_SHIPPING", color: "bg-yellow-500/20 text-yellow-500" },
     queued: { label: "QUEUED", color: "bg-blue-500/20 text-blue-500" },
     in_progress: { label: "ACTIVE", color: "bg-green-500/20 text-green-500" },
-    completed: { label: "COMPLETED", color: "bg-green-500/20 text-green-500" },
+    running: { label: "RUNNING", color: "bg-green-500/20 text-green-500" },
   };
 
   const st = statusMap[plan.status] || statusMap.draft;

@@ -22,7 +22,7 @@ export function ActiveProductionHub({ machines, activePlans = [] }: ActiveProduc
   // Also include machines that have cut plans assigned but aren't in the working list yet
   const machinesWithPlans = new Set(
     activePlans
-      .filter(p => p.machine_id && ["queued", "in_progress"].includes(p.status))
+      .filter(p => p.machine_id && ["queued", "running"].includes(p.status))
       .map(p => p.machine_id!)
   );
 
