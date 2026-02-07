@@ -120,7 +120,7 @@ Rules:
           { role: "user", content: userContent },
         ],
         temperature: 0.1,
-        max_tokens: 16000,
+        max_tokens: 32000,
       }),
     });
 
@@ -137,20 +137,52 @@ Rules:
     let extractedData;
     try {
       // Remove markdown code fences if present
-      const jsonStr = rawContent
+      let jsonStr = rawContent
         .replace(/^```json?\s*/i, "")
         .replace(/```\s*$/, "")
         .trim();
-      extractedData = JSON.parse(jsonStr);
+
+      // Attempt to repair truncated JSON (token limit cut-off)
+      try {
+        extractedData = JSON.parse(jsonStr);
+      } catch {
+        console.warn("Initial JSON parse failed, attempting truncation repair...");
+        // Find the last complete item in the array by finding last "},"
+        const lastCompleteItem = jsonStr.lastIndexOf("},");
+        if (lastCompleteItem > 0) {
+          // Close the array and object after the last complete item
+          jsonStr = jsonStr.substring(0, lastCompleteItem + 1) + "]}";
+          // Try to parse the repaired JSON
+          extractedData = JSON.parse(jsonStr);
+          console.log(`Repaired truncated JSON: recovered ${extractedData.items?.length || 0} items`);
+        } else {
+          throw new Error("Cannot repair truncated JSON");
+        }
+      }
     } catch (parseErr) {
-      console.error("Failed to parse AI response:", rawContent);
+      console.error("Failed to parse AI response:", rawContent.substring(0, 500));
       return new Response(
         JSON.stringify({
           error: "Failed to parse extraction results",
-          rawContent,
+          rawContent: rawContent.substring(0, 1000),
         }),
         { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // Rebuild summary if it was lost due to truncation
+    if (extractedData.items && !extractedData.summary) {
+      const items = extractedData.items;
+      const barSizes = [...new Set(items.map((i: any) => i.size).filter(Boolean))];
+      const shapeTypes = [...new Set(items.map((i: any) => i.type).filter(Boolean))];
+      extractedData.summary = {
+        total_items: items.length,
+        total_pieces: items.reduce((sum: number, i: any) => sum + (i.quantity || 0), 0),
+        bar_sizes_found: barSizes,
+        shape_types_found: shapeTypes,
+        customer: items[0]?.customer || null,
+        project: items[0]?.ref || null,
+      };
     }
 
     return new Response(
