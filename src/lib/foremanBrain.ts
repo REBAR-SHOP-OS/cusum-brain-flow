@@ -2,7 +2,7 @@
  * Foreman Brain — Deterministic decision engine for shop floor operator guidance.
  *
  * Input:  ForemanContext (module, task, machine, stock, inventory, progress)
- * Output: ForemanDecision (instructions, recommendation, alternatives, blockers)
+ * Output: ForemanDecision (instructions, recommendation, alternatives, blockers, runPlan)
  *
  * Rules are deterministic. Capability / RLS / inventory invariants always override.
  */
@@ -10,9 +10,15 @@
 import type { StationItem } from "@/hooks/useStationData";
 import type { InventoryLot, FloorStockItem, CutOutputBatch } from "@/hooks/useInventoryData";
 
+// ── Constants ──────────────────────────────────────────────────────────────
+
+const REMNANT_THRESHOLD_MM = 300;
+
 // ── Types ──────────────────────────────────────────────────────────────────
 
 export type ForemanModule = "cut" | "bend" | "spiral" | "inventory" | "queue";
+
+export type StockSourceType = "lot" | "remnant" | "floor" | "manual";
 
 export interface ForemanContext {
   module: ForemanModule;
@@ -32,6 +38,8 @@ export interface ForemanContext {
   /** Current index in item list */
   currentIndex: number;
   canWrite: boolean;
+  /** Supervisor override for manual floor stock */
+  manualFloorStockConfirmed?: boolean;
 }
 
 export interface ForemanInstruction {
@@ -41,15 +49,57 @@ export interface ForemanInstruction {
 }
 
 export interface ForemanAlternative {
+  id: string; // for action buttons
   label: string;
   description: string;
   reason: string;
+  actionType?: "use_floor" | "use_remnant" | "adjust_plan" | "partial_run";
 }
 
 export interface ForemanBlocker {
   code: string;
   title: string;
   fixSteps: string[];
+}
+
+/** Slot-based run plan for a single cut run */
+export interface RunSlot {
+  index: number;
+  plannedCuts: number;
+  status: "active" | "partial" | "removed" | "completed";
+  /** true if this bar should be removed after its cuts (partial bar) */
+  removeAfterCuts: boolean;
+}
+
+export interface RunPlan {
+  /** Computed pieces per bar for the selected stock length */
+  piecesPerBar: number;
+  /** Total bars needed to complete remaining pieces */
+  totalBarsNeeded: number;
+  /** Full bars (each producing piecesPerBar pieces) */
+  fullBars: number;
+  /** Pieces on the last partial bar (0 = no partial) */
+  lastBarPieces: number;
+  /** Remnant per full bar in mm */
+  remnantPerFullBar: number;
+  /** Remnant on the last (partial) bar in mm (0 if no partial) */
+  lastBarRemnant: number;
+  /** Expected scrap pieces (remnant < REMNANT_THRESHOLD) */
+  expectedScrapBars: number;
+  /** Expected remnant bars (remnant >= REMNANT_THRESHOLD) */
+  expectedRemnantBars: number;
+  /** Stock source that will be used */
+  stockSource: StockSourceType;
+  /** Is this an adjusted plan due to shortage? */
+  isAdjusted: boolean;
+  /** Adjustment reason if adjusted */
+  adjustmentReason: string;
+  /** Slot breakdown for the run */
+  slots: RunSlot[];
+  /** Is any feasible run possible? */
+  feasible: boolean;
+  /** Bars capped to machine capacity */
+  barsThisRun: number;
 }
 
 export interface ForemanDecision {
@@ -61,6 +111,8 @@ export interface ForemanDecision {
   warnings: string[];
   /** Edge case ID if one was detected */
   edgeCaseId: string | null;
+  /** Computed run plan for CUT module */
+  runPlan: RunPlan | null;
 }
 
 // ── Engine ─────────────────────────────────────────────────────────────────
@@ -74,6 +126,7 @@ export function computeForemanDecision(ctx: ForemanContext): ForemanDecision {
     blockers: [],
     warnings: [],
     edgeCaseId: null,
+    runPlan: null,
   };
 
   if (!ctx.currentItem) {
@@ -82,7 +135,6 @@ export function computeForemanDecision(ctx: ForemanContext): ForemanDecision {
     return decision;
   }
 
-  // Dispatch to module-specific engine
   switch (ctx.module) {
     case "cut":
       return computeCutDecision(ctx, decision);
@@ -95,17 +147,153 @@ export function computeForemanDecision(ctx: ForemanContext): ForemanDecision {
   }
 }
 
+// ── RUN PLAN COMPUTATION ───────────────────────────────────────────────────
+
+function computeRunPlan(
+  stockLengthMm: number,
+  cutLengthMm: number,
+  remainingPieces: number,
+  maxBars: number,
+  availableLots: InventoryLot[],
+  floorStock: FloorStockItem[],
+  manualConfirmed: boolean
+): RunPlan {
+  const piecesPerBar = Math.floor(stockLengthMm / cutLengthMm);
+
+  if (piecesPerBar <= 0) {
+    return {
+      piecesPerBar: 0, totalBarsNeeded: 0, fullBars: 0, lastBarPieces: 0,
+      remnantPerFullBar: 0, lastBarRemnant: 0, expectedScrapBars: 0,
+      expectedRemnantBars: 0, stockSource: "lot", isAdjusted: false,
+      adjustmentReason: "", slots: [], feasible: false, barsThisRun: 0,
+    };
+  }
+
+  const totalBarsNeeded = Math.ceil(remainingPieces / piecesPerBar);
+  const fullBars = Math.floor(remainingPieces / piecesPerBar);
+  const lastBarPieces = remainingPieces % piecesPerBar;
+
+  const remnantPerFullBar = stockLengthMm - (piecesPerBar * cutLengthMm);
+  const lastBarRemnant = lastBarPieces > 0 ? stockLengthMm - (lastBarPieces * cutLengthMm) : 0;
+
+  // Count expected remnants vs scrap
+  let expectedRemnantBars = 0;
+  let expectedScrapBars = 0;
+
+  if (remnantPerFullBar >= REMNANT_THRESHOLD_MM) {
+    expectedRemnantBars += fullBars;
+  } else if (remnantPerFullBar > 0) {
+    expectedScrapBars += fullBars;
+  }
+
+  if (lastBarPieces > 0) {
+    if (lastBarRemnant >= REMNANT_THRESHOLD_MM) {
+      expectedRemnantBars += 1;
+    } else if (lastBarRemnant > 0) {
+      expectedScrapBars += 1;
+    }
+  }
+
+  // ── Stock source resolution ──
+  const lotAvailable = availableLots
+    .filter(l => l.source !== "remnant")
+    .reduce((s, l) => s + (l.qty_on_hand - l.qty_reserved), 0);
+
+  const remnantAvailable = availableLots
+    .filter(l => l.source === "remnant" && l.standard_length_mm >= cutLengthMm)
+    .reduce((s, l) => s + (l.qty_on_hand - l.qty_reserved), 0);
+
+  const floorAvailable = floorStock
+    .filter(f => f.length_mm >= cutLengthMm)
+    .reduce((s, f) => s + (f.qty_on_hand - f.qty_reserved), 0);
+
+  const totalInventory = lotAvailable + remnantAvailable + floorAvailable;
+
+  let stockSource: StockSourceType = "lot";
+  let isAdjusted = false;
+  let adjustmentReason = "";
+  let barsThisRun = Math.min(totalBarsNeeded, maxBars);
+
+  if (lotAvailable >= barsThisRun) {
+    stockSource = "lot";
+  } else if (floorAvailable > 0) {
+    stockSource = "floor";
+    isAdjusted = lotAvailable < barsThisRun;
+    if (isAdjusted) {
+      adjustmentReason = `Lot inventory insufficient (${lotAvailable}). Using floor stock (${floorAvailable} available).`;
+    }
+    barsThisRun = Math.min(barsThisRun, lotAvailable + floorAvailable);
+  } else if (remnantAvailable > 0) {
+    stockSource = "remnant";
+    isAdjusted = true;
+    adjustmentReason = `Using remnant stock (${remnantAvailable} usable pieces).`;
+    barsThisRun = Math.min(barsThisRun, lotAvailable + remnantAvailable);
+  } else if (manualConfirmed) {
+    stockSource = "manual";
+    isAdjusted = true;
+    adjustmentReason = "Supervisor confirmed manual floor stock will be used.";
+  } else if (totalInventory > 0) {
+    // Partial run possible with whatever we have
+    barsThisRun = Math.min(barsThisRun, totalInventory);
+    isAdjusted = true;
+    adjustmentReason = `Partial run: only ${totalInventory} bars available of ${totalBarsNeeded} needed.`;
+    stockSource = lotAvailable > 0 ? "lot" : floorAvailable > 0 ? "floor" : "remnant";
+  } else {
+    // Zero inventory — still feasible if supervisor confirms
+    barsThisRun = Math.min(totalBarsNeeded, maxBars);
+    isAdjusted = true;
+    adjustmentReason = "No tracked inventory. Supervisor can confirm manual floor stock.";
+    stockSource = "manual";
+  }
+
+  // ── Build slots ──
+  const slots: RunSlot[] = [];
+  let piecesAssigned = 0;
+  const piecesThisRun = Math.min(remainingPieces, barsThisRun * piecesPerBar);
+
+  for (let i = 0; i < barsThisRun; i++) {
+    const piecesLeft = piecesThisRun - piecesAssigned;
+    if (piecesLeft <= 0) break;
+
+    const cutsThisSlot = Math.min(piecesPerBar, piecesLeft);
+    const isPartial = cutsThisSlot < piecesPerBar;
+
+    slots.push({
+      index: i,
+      plannedCuts: cutsThisSlot,
+      status: isPartial ? "partial" : "active",
+      removeAfterCuts: isPartial,
+    });
+
+    piecesAssigned += cutsThisSlot;
+  }
+
+  return {
+    piecesPerBar,
+    totalBarsNeeded,
+    fullBars,
+    lastBarPieces,
+    remnantPerFullBar,
+    lastBarRemnant,
+    expectedScrapBars,
+    expectedRemnantBars,
+    stockSource,
+    isAdjusted,
+    adjustmentReason,
+    slots,
+    feasible: barsThisRun > 0 && piecesPerBar > 0,
+    barsThisRun,
+  };
+}
+
 // ── CUT MODULE ─────────────────────────────────────────────────────────────
 
 function computeCutDecision(ctx: ForemanContext, d: ForemanDecision): ForemanDecision {
   const item = ctx.currentItem!;
-  const piecesPerBar = item.pieces_per_bar || 1;
   const remaining = item.total_pieces - item.completed_pieces;
-  const barsNeeded = Math.ceil(remaining / piecesPerBar);
   const maxBars = ctx.maxBars || 10;
-  const barsThisRun = Math.min(barsNeeded, maxBars);
 
-  // ─ Blockers ─
+  // ─ Hard blockers (machine state + role) ─
   if (ctx.machineStatus === "down") {
     d.blockers.push({
       code: "MACHINE_DOWN",
@@ -138,63 +326,97 @@ function computeCutDecision(ctx: ForemanContext, d: ForemanDecision): ForemanDec
     });
   }
 
-  // ─ Inventory analysis ─
+  // ─ Compute run plan ─
   const availableLots = ctx.lots.filter(l => l.qty_on_hand - l.qty_reserved > 0);
-  const totalAvailable = availableLots.reduce((s, l) => s + (l.qty_on_hand - l.qty_reserved), 0);
-  const remnants = availableLots.filter(l => l.source === "remnant");
-  const floorAvailable = ctx.floorStock.filter(f => f.qty_on_hand - f.qty_reserved > 0);
+  const floorAvailable = ctx.floorStock.filter(f => f.qty_on_hand - f.qty_reserved > 0 && f.length_mm >= item.cut_length_mm);
 
-  if (totalAvailable < barsThisRun && floorAvailable.length === 0) {
+  const runPlan = computeRunPlan(
+    ctx.selectedStockLength,
+    item.cut_length_mm,
+    remaining,
+    maxBars,
+    availableLots,
+    floorAvailable as any,
+    ctx.manualFloorStockConfirmed || false,
+  );
+  d.runPlan = runPlan;
+
+  // ─ Stock length validation ─
+  if (runPlan.piecesPerBar <= 0) {
     d.blockers.push({
-      code: "SHORTAGE",
-      title: `Only ${totalAvailable} bars available — need ${barsThisRun}`,
+      code: "STOCK_TOO_SHORT",
+      title: `${ctx.selectedStockLength}mm stock cannot produce even 1 piece at ${item.cut_length_mm}mm`,
       fixSteps: [
-        `Check floor stock near the machine.`,
-        `Check remnant bins for usable offcuts.`,
-        `Reduce bars-to-load or contact purchasing.`,
+        "Select a longer stock length.",
+        `Minimum stock: ${item.cut_length_mm}mm.`,
       ],
     });
-    d.edgeCaseId = "shortage_mid_run";
+    return d;
   }
 
-  // ─ Remnant substitution opportunity ─
-  if (remnants.length > 0) {
-    const bestRemnant = remnants.find(r => r.standard_length_mm >= item.cut_length_mm);
-    if (bestRemnant) {
+  // ─ Inventory analysis — SMART RECOVERY MODE ─
+  const lotCount = availableLots.filter(l => l.source !== "remnant").reduce((s, l) => s + (l.qty_on_hand - l.qty_reserved), 0);
+  const remnants = availableLots.filter(l => l.source === "remnant" && l.standard_length_mm >= item.cut_length_mm);
+  const remnantCount = remnants.reduce((s, l) => s + (l.qty_on_hand - l.qty_reserved), 0);
+  const floorCount = floorAvailable.reduce((s, f) => s + (f.qty_on_hand - f.qty_reserved), 0);
+  const totalTracked = lotCount + remnantCount + floorCount;
+
+  if (lotCount < runPlan.barsThisRun) {
+    // Not enough lot stock — but we have alternatives?
+    if (floorCount > 0) {
       d.alternatives.push({
-        label: "Use remnant",
-        description: `Remnant ${bestRemnant.lot_number || bestRemnant.id.slice(0, 8)} — ${bestRemnant.standard_length_mm}mm, qty ${bestRemnant.qty_on_hand - bestRemnant.qty_reserved}`,
-        reason: "Reduces waste by using existing offcuts before new stock.",
+        id: "use_floor",
+        label: "Use Floor Stock",
+        description: `${floorCount} bars on floor near machine`,
+        reason: "Floor stock is staged and ready. Avoids waiting for warehouse pull.",
+        actionType: "use_floor",
       });
-      d.edgeCaseId = d.edgeCaseId || "remnant_substitution";
     }
-  }
 
-  // ─ Floor stock suggestion ─
-  if (floorAvailable.length > 0) {
-    const best = floorAvailable[0];
-    d.alternatives.push({
-      label: "Use floor stock",
-      description: `${best.qty_on_hand - best.qty_reserved} bars at machine ${best.machine_id ? "nearby" : "yard"}`,
-      reason: "Floor stock is already staged and faster to access.",
-    });
-  }
+    if (remnantCount > 0) {
+      const bestRemnant = remnants[0];
+      d.alternatives.push({
+        id: "use_remnant",
+        label: "Use Remnants",
+        description: `${remnantCount} usable remnants (${bestRemnant.standard_length_mm}mm+)`,
+        reason: "Reduces waste by consuming existing offcuts before new stock.",
+        actionType: "use_remnant",
+      });
+    }
 
-  // ─ Wrong stock length detection ─
-  const optimalPieces = Math.floor(ctx.selectedStockLength / item.cut_length_mm);
-  if (optimalPieces < piecesPerBar) {
-    d.warnings.push(
-      `Selected stock (${ctx.selectedStockLength}mm) only yields ${optimalPieces} pieces — item expects ${piecesPerBar}/bar. Consider longer stock.`
-    );
-    d.edgeCaseId = d.edgeCaseId || "wrong_stock_length";
-  }
+    if (totalTracked > 0 && totalTracked < runPlan.totalBarsNeeded) {
+      d.alternatives.push({
+        id: "partial_run",
+        label: "Partial Run",
+        description: `Run ${Math.min(totalTracked, maxBars)} bars now (${Math.min(totalTracked, maxBars) * runPlan.piecesPerBar} pieces)`,
+        reason: "Partial progress is better than waiting. Complete remaining when stock arrives.",
+        actionType: "partial_run",
+      });
+    }
 
-  // ─ Extra bars detection ─
-  if (barsThisRun > barsNeeded) {
-    d.warnings.push(
-      `Loading ${barsThisRun} bars but only ${barsNeeded} needed to finish. Extra material will go to remnant/scrap.`
-    );
-    d.edgeCaseId = d.edgeCaseId || "extra_bars_loaded";
+    if (totalTracked === 0 && !ctx.manualFloorStockConfirmed) {
+      // No tracked inventory at all — downgrade to warning with manual override option
+      d.alternatives.push({
+        id: "manual_floor",
+        label: "Confirm Manual Floor Stock",
+        description: "Supervisor confirms physical bars are available at machine",
+        reason: "Inventory may not reflect floor reality. Manual confirmation enables the run.",
+        actionType: "use_floor",
+      });
+
+      d.warnings.push(
+        `No tracked inventory for ${item.bar_code}. ${runPlan.totalBarsNeeded} bars needed. Supervisor can confirm floor stock to proceed.`
+      );
+      d.edgeCaseId = "shortage_mid_run";
+    } else if (totalTracked < runPlan.barsThisRun) {
+      d.warnings.push(
+        `Stock shortage: ${totalTracked} tracked vs ${runPlan.barsThisRun} needed. Adjusted plan available.`
+      );
+      d.edgeCaseId = "shortage_mid_run";
+    }
+
+    // NEVER hard-block if supervisor confirmed or any alternative exists
+    // Only hard block if truly nothing + no manual confirmation
   }
 
   // ─ Instructions ─
@@ -205,17 +427,63 @@ function computeCutDecision(ctx: ForemanContext, d: ForemanDecision): ForemanDec
     ];
     d.recommendation = "Mark complete — advance to next item.";
     d.recommendationReason = `All ${item.total_pieces} pieces are done.`;
-  } else {
-    d.instructions = [
-      { step: 1, text: `Set stopper to`, emphasis: `${item.cut_length_mm}mm` },
-      { step: 2, text: `Load`, emphasis: `${item.bar_code} bar` },
-      { step: 3, text: `You get`, emphasis: `${piecesPerBar} piece${piecesPerBar > 1 ? "s" : ""} per bar` },
-      { step: 4, text: `Cut`, emphasis: `${barsThisRun} bar${barsThisRun > 1 ? "s" : ""} this run` },
-      { step: 5, text: `${remaining} piece${remaining > 1 ? "s" : ""} remaining to complete this mark.` },
-    ];
-    d.recommendation = `Load ${barsThisRun} × ${item.bar_code} from ${ctx.selectedStockLength / 1000}M stock → cut at ${item.cut_length_mm}mm`;
-    d.recommendationReason = `Produces ${barsThisRun * piecesPerBar} pieces, leaving ${Math.max(0, remaining - barsThisRun * piecesPerBar)} remaining.`;
+    return d;
   }
+
+  // Deterministic shop-language instructions
+  const { piecesPerBar, totalBarsNeeded, lastBarPieces, slots, barsThisRun } = runPlan;
+  const hasPartialBar = lastBarPieces > 0;
+  const fullSlots = slots.filter(s => !s.removeAfterCuts);
+  const partialSlot = slots.find(s => s.removeAfterCuts);
+
+  d.instructions = [
+    {
+      step: 1,
+      text: "Set stopper to",
+      emphasis: `${item.cut_length_mm} mm`,
+    },
+    {
+      step: 2,
+      text: `Load`,
+      emphasis: `${barsThisRun} × ${item.bar_code} bars (${ctx.selectedStockLength / 1000}M stock)`,
+    },
+    {
+      step: 3,
+      text: "Cut",
+      emphasis: `${piecesPerBar} pieces per bar`,
+    },
+  ];
+
+  if (hasPartialBar && partialSlot) {
+    d.instructions.push({
+      step: 4,
+      text: `After ${partialSlot.plannedCuts} cut${partialSlot.plannedCuts > 1 ? "s" : ""}, REMOVE 1 bar and set aside`,
+      emphasis: "(remnant)",
+    });
+
+    if (fullSlots.length > 0) {
+      d.instructions.push({
+        step: 5,
+        text: `Continue with remaining`,
+        emphasis: `${fullSlots.length} bar${fullSlots.length > 1 ? "s" : ""}`,
+      });
+    }
+  }
+
+  // Result summary
+  const totalPiecesThisRun = slots.reduce((s, sl) => s + sl.plannedCuts, 0);
+  const piecesAfter = remaining - totalPiecesThisRun;
+
+  d.recommendation = `Load ${barsThisRun} × ${item.bar_code} → cut at ${item.cut_length_mm}mm → ${totalPiecesThisRun} pieces`;
+  d.recommendationReason = [
+    `${piecesPerBar} pcs/bar × ${fullSlots.length} full bar${fullSlots.length !== 1 ? "s" : ""}`,
+    hasPartialBar ? ` + ${lastBarPieces} pcs on partial bar` : "",
+    ` = ${totalPiecesThisRun} pieces.`,
+    piecesAfter > 0 ? ` ${piecesAfter} remaining after this run.` : " Completes this mark.",
+    runPlan.expectedRemnantBars > 0 ? ` ${runPlan.expectedRemnantBars} remnant${runPlan.expectedRemnantBars > 1 ? "s" : ""} kept (≥${REMNANT_THRESHOLD_MM}mm).` : "",
+    runPlan.expectedScrapBars > 0 ? ` ${runPlan.expectedScrapBars} scrap piece${runPlan.expectedScrapBars > 1 ? "s" : ""} (<${REMNANT_THRESHOLD_MM}mm).` : "",
+    runPlan.isAdjusted ? ` [ADJUSTED: ${runPlan.adjustmentReason}]` : "",
+  ].join("");
 
   return d;
 }
@@ -226,7 +494,6 @@ function computeBendDecision(ctx: ForemanContext, d: ForemanDecision): ForemanDe
   const item = ctx.currentItem!;
   const remaining = item.total_pieces - item.completed_pieces;
 
-  // ─ Blockers ─
   if (!item.asa_shape_code) {
     d.blockers.push({
       code: "MISSING_SHAPE",
@@ -248,7 +515,6 @@ function computeBendDecision(ctx: ForemanContext, d: ForemanDecision): ForemanDe
     });
   }
 
-  // ─ WIP availability ─
   const wipAvailable = ctx.wipBatches.filter(w => w.bar_code === item.bar_code && w.qty_available > 0);
   const wipTotal = wipAvailable.reduce((s, w) => s + w.qty_available, 0);
 
@@ -259,7 +525,6 @@ function computeBendDecision(ctx: ForemanContext, d: ForemanDecision): ForemanDe
     d.edgeCaseId = d.edgeCaseId || "wip_missing";
   }
 
-  // ─ Setup mismatch ─
   if (ctx.maxBars !== null && ctx.maxBars === 0) {
     d.blockers.push({
       code: "CAPABILITY_VIOLATION",
@@ -272,7 +537,6 @@ function computeBendDecision(ctx: ForemanContext, d: ForemanDecision): ForemanDe
     d.edgeCaseId = d.edgeCaseId || "setup_mismatch";
   }
 
-  // ─ Instructions ─
   if (remaining <= 0) {
     d.instructions = [
       { step: 1, text: "This mark is COMPLETE.", emphasis: "✓" },
