@@ -28,6 +28,7 @@ export function BenderStationView({ machine, items, canWrite, initialIndex = 0 }
   const { toast } = useToast();
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [submitting, setSubmitting] = useState(false);
+  const [unitCount, setUnitCount] = useState(1);
 
   const currentItem = items[currentIndex] || null;
   const cutPlanId = currentItem?.cut_plan_id || null;
@@ -81,7 +82,8 @@ export function BenderStationView({ machine, items, canWrite, initialIndex = 0 }
     if (!currentItem || submitting || isMarkComplete) return;
     setSubmitting(true);
     try {
-      const newCount = Math.min(bendCompleted + batchSize, currentItem.total_pieces);
+      const piecesToAdd = batchSize * unitCount;
+      const newCount = Math.min(bendCompleted + piecesToAdd, currentItem.total_pieces);
       // Update bend_completed_pieces and set phase to 'bending'
       const { error } = await supabase
         .from("cut_plan_items")
@@ -215,25 +217,14 @@ export function BenderStationView({ machine, items, canWrite, initialIndex = 0 }
       {/* Bottom bar */}
       <div className="border-t border-border p-4 flex items-center justify-between bg-card">
         <div className="flex items-center gap-2">
-          {(() => {
-            const totalBatches = Math.ceil((currentItem?.total_pieces || 1) / batchSize);
-            const currentBatch = Math.min(Math.floor(bendCompleted / batchSize) + 1, totalBatches);
-            return (
-              <>
-                <div className="flex flex-col items-start mr-3">
-                  <span className="text-[9px] text-muted-foreground tracking-wider uppercase">Batch ×{batchSize}</span>
-                  <span className="text-[9px] text-muted-foreground tracking-wider uppercase">Unit {currentBatch} / {totalBatches}</span>
-                </div>
-                <Button variant="outline" size="icon" className="h-8 w-8" disabled={currentIndex <= 0 || submitting} onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}>
-                  <ChevronLeft className="w-4 h-4" />
-                </Button>
-                <span className="text-xl font-bold text-foreground min-w-[40px] text-center">{currentBatch}</span>
-                <Button variant="outline" size="icon" className="h-8 w-8" disabled={currentIndex >= items.length - 1 || submitting} onClick={() => setCurrentIndex((i) => Math.min(items.length - 1, i + 1))}>
-                  <ChevronRight className="w-4 h-4" />
-                </Button>
-              </>
-            );
-          })()}
+          <span className="text-[9px] text-muted-foreground tracking-wider uppercase mr-2">Unit</span>
+          <Button variant="outline" size="icon" className="h-8 w-8" disabled={unitCount <= 1 || submitting} onClick={() => setUnitCount((u) => Math.max(1, u - 1))}>
+            <ChevronLeft className="w-4 h-4" />
+          </Button>
+          <span className="text-xl font-bold text-foreground min-w-[40px] text-center">{unitCount}</span>
+          <Button variant="outline" size="icon" className="h-8 w-8" disabled={submitting || isMarkComplete} onClick={() => setUnitCount((u) => u + 1)}>
+            <ChevronRight className="w-4 h-4" />
+          </Button>
         </div>
 
         <Button
@@ -252,7 +243,7 @@ export function BenderStationView({ machine, items, canWrite, initialIndex = 0 }
           ) : (
             <>
               <span className="text-xl font-black">DONE</span>
-              <span className="text-xs opacity-80">CONFIRMED +{batchSize} {batchSize === 1 ? "PIECE" : "PIECES"}</span>
+              <span className="text-xs opacity-80">CONFIRMED +{batchSize * unitCount} {batchSize * unitCount === 1 ? "PIECE" : "PIECES"}</span>
             </>
           )}
         </Button>
