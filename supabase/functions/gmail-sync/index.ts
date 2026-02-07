@@ -121,6 +121,38 @@ serve(async (req) => {
       );
     }
 
+    // Get user's email to verify they own this Gmail account
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+    const { data: userData } = await supabaseAdmin.auth.admin.getUserById(userId);
+    const userEmail = userData?.user?.email?.toLowerCase();
+
+    // Get the Gmail account email by checking the token's profile
+    const accessToken = await getAccessToken();
+    const profileRes = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/profile", {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    
+    let gmailAccountEmail = "";
+    if (profileRes.ok) {
+      const profile = await profileRes.json();
+      gmailAccountEmail = (profile.emailAddress || "").toLowerCase();
+    }
+
+    // Only allow sync if user's email matches the Gmail account
+    if (gmailAccountEmail && userEmail && gmailAccountEmail !== userEmail) {
+      return new Response(
+        JSON.stringify({ 
+          error: "Gmail account mismatch", 
+          message: `This Gmail integration is connected to ${gmailAccountEmail}. You are logged in as ${userEmail}.`,
+          synced: 0 
+        }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Parse body for parameters
     let body: { maxResults?: number; pageToken?: string; query?: string } = {};
     try {

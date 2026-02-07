@@ -6,6 +6,7 @@ import { InboxManagerSettings } from "./InboxManagerSettings";
 import { InboxAIToolbar, type AIAction } from "./InboxAIToolbar";
 import { InboxSummaryPanel, type InboxSummary } from "./InboxSummaryPanel";
 import { useCommunications } from "@/hooks/useCommunications";
+import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -75,7 +76,9 @@ interface InboxViewProps {
   connectedEmail?: string;
 }
 
-export function InboxView({ connectedEmail = "sattar@rebar.shop" }: InboxViewProps) {
+export function InboxView({ connectedEmail }: InboxViewProps) {
+  const { user } = useAuth();
+  const userEmail = connectedEmail || user?.email || "unknown";
   const { communications, loading, sync } = useCommunications({ typeFilter: "email" });
   const [selectedEmail, setSelectedEmail] = useState<InboxEmail | null>(null);
   const [showSettings, setShowSettings] = useState(false);
@@ -491,7 +494,7 @@ export function InboxView({ connectedEmail = "sattar@rebar.shop" }: InboxViewPro
       <InboxManagerSettings
         open={showSettings}
         onOpenChange={setShowSettings}
-        connectedEmail={connectedEmail}
+        connectedEmail={userEmail}
       />
     </div>
   );
