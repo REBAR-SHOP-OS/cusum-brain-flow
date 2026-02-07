@@ -744,6 +744,57 @@ export type Database = {
           },
         ]
       }
+      machine_capabilities: {
+        Row: {
+          bar_code: string
+          bar_mm: number | null
+          created_at: string
+          id: string
+          machine_id: string
+          max_length_mm: number | null
+          notes: string | null
+          process: string
+          updated_at: string
+        }
+        Insert: {
+          bar_code: string
+          bar_mm?: number | null
+          created_at?: string
+          id?: string
+          machine_id: string
+          max_length_mm?: number | null
+          notes?: string | null
+          process: string
+          updated_at?: string
+        }
+        Update: {
+          bar_code?: string
+          bar_mm?: number | null
+          created_at?: string
+          id?: string
+          machine_id?: string
+          max_length_mm?: number | null
+          notes?: string | null
+          process?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "machine_capabilities_bar_code_fkey"
+            columns: ["bar_code"]
+            isOneToOne: false
+            referencedRelation: "rebar_sizes"
+            referencedColumns: ["bar_code"]
+          },
+          {
+            foreignKeyName: "machine_capabilities_machine_id_fkey"
+            columns: ["machine_id"]
+            isOneToOne: false
+            referencedRelation: "machines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       machine_runs: {
         Row: {
           company_id: string
