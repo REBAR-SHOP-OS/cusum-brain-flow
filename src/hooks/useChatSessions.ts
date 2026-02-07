@@ -22,20 +22,20 @@ export interface ChatMsg {
 
 // Agent name → color mapping
 const agentColorMap: Record<string, string> = {
+  Blitz: "bg-blue-500",
+  Haven: "bg-purple-400",
+  Tally: "bg-green-500",
+  Gauge: "bg-orange-500",
+  Forge: "bg-slate-500",
+  Atlas: "bg-yellow-500",
+  Relay: "bg-pink-400",
+  Pixel: "bg-pink-500",
+  Prism: "bg-teal-400",
   Rex: "bg-teal-500",
   Penny: "bg-purple-500",
   Ally: "bg-amber-500",
   Chase: "bg-red-500",
   Cal: "bg-sky-500",
-  Soshie: "bg-pink-500",
-  Emmy: "bg-pink-400",
-  Dexter: "bg-teal-400",
-  Salesy: "bg-blue-500",
-  Sasha: "bg-purple-400",
-  Archie: "bg-green-500",
-  Eddie: "bg-orange-500",
-  Steely: "bg-slate-500",
-  Danny: "bg-yellow-500",
 };
 
 export function getAgentColor(agentName: string): string {
@@ -44,12 +44,12 @@ export function getAgentColor(agentName: string): string {
 
 // Agent type → display name mapping
 const agentTypeNameMap: Record<string, string> = {
-  sales: "Rex",
-  accounting: "Penny",
-  support: "Ally",
+  sales: "Blitz",
+  accounting: "Tally",
+  support: "Haven",
   collections: "Chase",
   estimation: "Cal",
-  social: "Sushie",
+  social: "Pixel",
 };
 
 export function getAgentName(agentType: string): string {

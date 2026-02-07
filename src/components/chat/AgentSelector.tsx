@@ -18,12 +18,12 @@ interface Agent {
 }
 
 const agents: Agent[] = [
-  { id: "sales", name: "Rex", icon: TrendingUp, description: "Sales & Orders" },
-  { id: "accounting", name: "Penny", icon: Calculator, description: "Invoices & QB" },
-  { id: "support", name: "Ally", icon: HeadphonesIcon, description: "Customer Care" },
+  { id: "sales", name: "Blitz", icon: TrendingUp, description: "Sales & Orders" },
+  { id: "accounting", name: "Tally", icon: Calculator, description: "Invoices & QB" },
+  { id: "support", name: "Haven", icon: HeadphonesIcon, description: "Customer Care" },
   { id: "collections", name: "Chase", icon: Receipt, description: "AR & Payments" },
   { id: "estimation", name: "Cal", icon: Ruler, description: "Job Costing" },
-  { id: "social", name: "Sushie", icon: Share2, description: "Social Media" },
+  { id: "social", name: "Pixel", icon: Share2, description: "Social Media" },
 ];
 
 interface AgentSelectorProps {

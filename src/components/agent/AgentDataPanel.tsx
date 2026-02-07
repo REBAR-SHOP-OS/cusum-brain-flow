@@ -202,7 +202,7 @@ function EstimatingPanel() {
         <Card className="p-4 bg-primary/5 border-primary/20">
           <h3 className="text-sm font-semibold mb-2">📐 Rebar Estimation</h3>
           <p className="text-xs text-muted-foreground leading-relaxed">
-            Upload structural drawings (PDF, DWG, images) and Eddie will extract rebar quantities, 
+            Upload structural drawings (PDF, DWG, images) and Gauge will extract rebar quantities, 
             calculate weights using CSA G30.18 standards, and produce detailed takeoff reports.
           </p>
         </Card>
@@ -331,7 +331,7 @@ function SocialPanel() {
         <Card className="p-4 bg-primary/5 border-primary/20">
           <h3 className="text-sm font-semibold mb-2">📱 Social Media Hub</h3>
           <p className="text-xs text-muted-foreground leading-relaxed">
-            Ask Sushie to create posts, plan content calendars, suggest hashtags, 
+            Ask Pixel to create posts, plan content calendars, suggest hashtags, 
             and adapt content for Facebook, Instagram, LinkedIn, and Twitter.
           </p>
         </Card>
