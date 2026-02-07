@@ -23,7 +23,10 @@ export function RebarTagCard({
   dwg, item, customer, reference, address, dims, shapeImageUrl,
 }: RebarTagCardProps) {
   return (
-    <div className="rebar-tag border-2 border-foreground/80 bg-white text-black overflow-hidden font-mono print:break-inside-avoid print:page-break-inside-avoid">
+    <div
+      className="rebar-tag border-2 border-foreground/80 bg-white text-black overflow-hidden font-mono print:break-inside-avoid print:page-break-inside-avoid print:break-after-page"
+      style={{ width: "6in", height: "4in", boxSizing: "border-box" }}
+    >
       {/* === TOP HEADER ROW === */}
       <div className="grid grid-cols-5 border-b-2 border-foreground/80">
         <div className="border-r border-foreground/60 px-2 py-1.5 text-center">
