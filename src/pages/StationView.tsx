@@ -5,6 +5,7 @@ import { useUserRole } from "@/hooks/useUserRole";
 import { CutterStationView } from "@/components/shopfloor/CutterStationView";
 import { BenderStationView } from "@/components/shopfloor/BenderStationView";
 import { BarSizeGroup } from "@/components/shopfloor/BarSizeGroup";
+import { ProductionCard } from "@/components/shopfloor/ProductionCard";
 import { StationHeader } from "@/components/shopfloor/StationHeader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -43,18 +44,27 @@ export default function StationView() {
     );
   }
 
-  // If user selected a specific item AND machine is cutter or bender, show focused view
-  if (selectedItemId || machine.type === "bender") {
+  // If user selected a specific item, show focused view for that machine type
+  if (selectedItemId) {
     if (machine.type === "bender") {
-      return <BenderStationView machine={machine} items={items} canWrite={canWrite} />;
+      const itemIndex = items.findIndex((i) => i.id === selectedItemId);
+      return (
+        <BenderStationView
+          machine={machine}
+          items={items}
+          canWrite={canWrite}
+          initialIndex={itemIndex >= 0 ? itemIndex : 0}
+        />
+      );
     }
     if (machine.type === "cutter") {
       return <CutterStationView machine={machine} items={items} canWrite={canWrite} />;
     }
   }
 
-  // Default: show production cards grouped by bar size
+  // Default: show production cards grouped by bar size (cutters) or flat grid (benders)
   const needsFixCount = items.filter((i) => i.needs_fix).length;
+  const isBender = machine.type === "bender";
 
   // Calculate bar size range for header
   const barCodes = groups.map((g) => g.barCode);
@@ -67,7 +77,7 @@ export default function StationView() {
       <StationHeader
         machineName={machine.name}
         machineModel={machine.model}
-        barSizeRange={barSizeRange}
+        barSizeRange={isBender ? undefined : barSizeRange}
         canWrite={canWrite}
         isSupervisor={isSupervisor}
         onToggleSupervisor={() => setIsSupervisor((v) => !v)}
@@ -95,22 +105,44 @@ export default function StationView() {
           <TabsContent value="production" className="mt-0">
             <ScrollArea className="h-[calc(100vh-180px)]">
               <div className="space-y-10 py-4 pr-3">
-                {groups.length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground text-sm">
-                    No items queued to this machine yet
-                  </div>
+                {isBender ? (
+                  /* Bender: flat card grid — no path split */
+                  items.length === 0 ? (
+                    <div className="text-center py-12 text-muted-foreground text-sm">
+                      No items queued to this bender yet
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {items.map((item) => (
+                        <ProductionCard
+                          key={item.id}
+                          item={item}
+                          canWrite={canWrite}
+                          isSupervisor={isSupervisor}
+                          onClick={() => setSelectedItemId(item.id)}
+                        />
+                      ))}
+                    </div>
+                  )
                 ) : (
-                  groups.map((group) => (
-                    <BarSizeGroup
-                      key={group.barCode}
-                      group={group}
-                      canWrite={canWrite}
-                      isSupervisor={isSupervisor}
-                      onCardClick={(itemId) => {
-                        setSelectedItemId(itemId);
-                      }}
-                    />
-                  ))
+                  /* Cutter: grouped by bar size with path split */
+                  groups.length === 0 ? (
+                    <div className="text-center py-12 text-muted-foreground text-sm">
+                      No items queued to this machine yet
+                    </div>
+                  ) : (
+                    groups.map((group) => (
+                      <BarSizeGroup
+                        key={group.barCode}
+                        group={group}
+                        canWrite={canWrite}
+                        isSupervisor={isSupervisor}
+                        onCardClick={(itemId) => {
+                          setSelectedItemId(itemId);
+                        }}
+                      />
+                    ))
+                  )
                 )}
               </div>
             </ScrollArea>

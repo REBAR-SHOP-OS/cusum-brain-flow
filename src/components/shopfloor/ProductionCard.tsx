@@ -118,7 +118,7 @@ export function ProductionCard({ item, canWrite, isSupervisor = false, onClick }
         {/* Bottom: progress label + count */}
         <div className="space-y-1 pt-1">
           <p className="text-[9px] text-muted-foreground tracking-[0.15em] uppercase">
-            PROG: {progress}%
+            {isBend ? "ORDER TARGET" : `PROG: ${progress}%`}
           </p>
           <p className="text-lg font-black text-foreground">
             {item.completed_pieces} / {item.total_pieces} PCS
