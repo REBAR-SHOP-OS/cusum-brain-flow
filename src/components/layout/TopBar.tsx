@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { Search, Sparkles, PanelRight, Warehouse, ChevronDown } from "lucide-react";
+import { Search, Sparkles, Warehouse, ChevronDown, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useSuperAdmin } from "@/hooks/useSuperAdmin";
 import { UserMenu } from "./UserMenu";
 import { ThemeToggle } from "./ThemeToggle";
 import { CommandBar } from "./CommandBar";
@@ -23,6 +24,7 @@ const warehouses = [
 export function TopBar() {
   const { warehouse, setWarehouse, toggleIntelligencePanel, intelligencePanelOpen } = useWorkspace();
   const { isAdmin, isOffice } = useUserRole();
+  const { isSuperAdmin } = useSuperAdmin();
   const [commandOpen, setCommandOpen] = useState(false);
   const currentWarehouse = warehouses.find((w) => w.id === warehouse) ?? warehouses[0];
 
@@ -71,16 +73,18 @@ export function TopBar() {
           <kbd className="ml-auto text-[10px] bg-muted px-1.5 py-0.5 rounded hidden md:inline">⌘K</kbd>
         </Button>
 
-        {/* Intelligence Panel Toggle */}
-        <Button
-          variant={intelligencePanelOpen ? "secondary" : "ghost"}
-          size="sm"
-          className="h-8 w-8 p-0"
-          onClick={toggleIntelligencePanel}
-          title="Intelligence Panel"
-        >
-          <Sparkles className="w-4 h-4" />
-        </Button>
+        {/* Admin Console Toggle - Super Admin only */}
+        {isSuperAdmin && (
+          <Button
+            variant={intelligencePanelOpen ? "secondary" : "ghost"}
+            size="sm"
+            className="h-8 w-8 p-0"
+            onClick={toggleIntelligencePanel}
+            title="Admin Console"
+          >
+            <Wrench className="w-4 h-4" />
+          </Button>
+        )}
 
         <ThemeToggle />
         <UserMenu />
