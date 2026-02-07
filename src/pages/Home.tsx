@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { Card } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { AutomationsSection } from "@/components/integrations/AutomationsSection";
 import { 
   TrendingUp, 
   FileText, 
@@ -200,6 +201,11 @@ export default function Home() {
               </Card>
             ))}
           </div>
+        </div>
+
+        {/* Automations Section */}
+        <div className="w-full mb-12">
+          <AutomationsSection />
         </div>
 
         {/* Helpers Section */}
