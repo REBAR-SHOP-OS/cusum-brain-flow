@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useJobs, useMachines, useQueues } from "@/hooks/useFirebaseCollection";
 import { useSupabaseWorkOrders, SupabaseWorkOrder } from "@/hooks/useSupabaseWorkOrders";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -131,6 +132,12 @@ export default function ShopFloor() {
               Cloud Data
             </Badge>
           )}
+          <Link to="/shopfloor/live-monitor">
+            <Button variant="outline" size="sm" className="gap-2">
+              <Factory className="w-4 h-4" />
+              <span className="hidden sm:inline">Live Monitor</span>
+            </Button>
+          </Link>
           <Button variant="outline" size="sm" className="gap-2" onClick={handleRefresh}>
             <RefreshCw className="w-4 h-4" />
             <span className="hidden sm:inline">Refresh</span>
