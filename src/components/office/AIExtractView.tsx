@@ -717,6 +717,26 @@ export function AIExtractView() {
           </div>
         )}
 
+        {/* Extracting state indicator */}
+        {activeSession && activeSession.status === "extracting" && !processing && (
+          <Card className="border-primary/30 bg-primary/5">
+            <CardContent className="p-10 flex flex-col items-center justify-center gap-4">
+              <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
+                <Loader2 className="w-8 h-8 text-primary animate-spin" />
+              </div>
+              <div className="text-center space-y-1">
+                <h3 className="text-sm font-bold text-foreground">AI Extraction in Progress</h3>
+                <p className="text-xs text-muted-foreground">
+                  This session is being processed. It may take up to 2 minutes for large files.
+                </p>
+              </div>
+              <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => { refreshSessions(); refreshRows(); }}>
+                <Clock className="w-3.5 h-3.5" /> Refresh Status
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
         {activeSession?.status === "approved" && (
           <div className="flex items-center gap-2 p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
             <CheckCircle2 className="w-5 h-5 text-emerald-500" />
