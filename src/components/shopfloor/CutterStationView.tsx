@@ -174,6 +174,7 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
       toast({ title: "Machine started", description: `Cutting ${currentItem.mark_number || "item"}` });
     } catch (err: any) {
       toast({ title: "Start failed", description: err.message, variant: "destructive" });
+    } finally {
       setIsRunning(false);
     }
   };
