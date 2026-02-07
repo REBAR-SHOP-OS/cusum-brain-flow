@@ -2697,6 +2697,56 @@ export type Database = {
         }
         Relationships: []
       }
+      system_learnings: {
+        Row: {
+          bar_code: string | null
+          company_id: string
+          context: Json
+          created_at: string
+          event_type: string
+          id: string
+          learning_type: string
+          machine_id: string | null
+          module: string
+          resolution: string | null
+          weight_adjustment: number | null
+        }
+        Insert: {
+          bar_code?: string | null
+          company_id?: string
+          context?: Json
+          created_at?: string
+          event_type: string
+          id?: string
+          learning_type?: string
+          machine_id?: string | null
+          module: string
+          resolution?: string | null
+          weight_adjustment?: number | null
+        }
+        Update: {
+          bar_code?: string | null
+          company_id?: string
+          context?: Json
+          created_at?: string
+          event_type?: string
+          id?: string
+          learning_type?: string
+          machine_id?: string | null
+          module?: string
+          resolution?: string | null
+          weight_adjustment?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "system_learnings_machine_id_fkey"
+            columns: ["machine_id"]
+            isOneToOne: false
+            referencedRelation: "machines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tasks: {
         Row: {
           agent_type: string | null

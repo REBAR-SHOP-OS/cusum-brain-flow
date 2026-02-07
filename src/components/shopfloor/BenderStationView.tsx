@@ -3,13 +3,18 @@ import { supabase } from "@/integrations/supabase/client";
 import { StationHeader } from "./StationHeader";
 import { AsaShapeDiagram } from "./AsaShapeDiagram";
 import { BendingSchematic } from "./BendingSchematic";
+import { ForemanPanel } from "./ForemanPanel";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useInventoryData } from "@/hooks/useInventoryData";
+import { useMachineCapabilities } from "@/hooks/useCutPlans";
+import { useForemanBrain } from "@/hooks/useForemanBrain";
 import { manageInventory } from "@/lib/inventoryService";
+import { recordCompletion } from "@/lib/foremanLearningService";
 import { Check, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import type { ForemanContext } from "@/lib/foremanBrain";
 import type { LiveMachine } from "@/types/machine";
 import type { StationItem } from "@/hooks/useStationData";
 
@@ -28,11 +33,36 @@ export function BenderStationView({ machine, items, canWrite }: BenderStationVie
   const cutPlanId = currentItem?.cut_plan_id || null;
   const barCode = currentItem?.bar_code;
 
-  const { wipBatches } = useInventoryData(cutPlanId, barCode);
+  const { wipBatches, lots, floorStock } = useInventoryData(cutPlanId, barCode);
+  const { getMaxBars } = useMachineCapabilities(machine.model, "bend");
+  const maxBars = currentItem ? (getMaxBars(currentItem.bar_code) || null) : null;
 
   const progress = currentItem
     ? Math.round((currentItem.completed_pieces / currentItem.total_pieces) * 100)
     : 0;
+
+  // ── Foreman Brain context ──
+  const foremanContext: ForemanContext | null = currentItem
+    ? {
+        module: "bend",
+        machineId: machine.id,
+        machineName: machine.name,
+        machineModel: machine.model,
+        machineStatus: machine.status,
+        machineType: machine.type,
+        currentItem,
+        items,
+        lots,
+        floorStock,
+        wipBatches,
+        maxBars,
+        selectedStockLength: 12000,
+        currentIndex,
+        canWrite,
+      }
+    : null;
+
+  const foreman = useForemanBrain({ context: foremanContext });
 
   const handleDone = async () => {
     if (!currentItem || submitting) return;
@@ -48,9 +78,17 @@ export function BenderStationView({ machine, items, canWrite }: BenderStationVie
 
       toast({ title: `+1 Confirmed`, description: `${newCount} / ${currentItem.total_pieces} pieces` });
 
-      // Auto-advance if complete
-      if (newCount >= currentItem.total_pieces && currentIndex < items.length - 1) {
-        setCurrentIndex((i) => i + 1);
+      // Record completion learning if mark done
+      if (newCount >= currentItem.total_pieces) {
+        recordCompletion("bend", machine.id, currentItem.bar_code, {
+          mark: currentItem.mark_number,
+          shape_code: currentItem.asa_shape_code,
+          total_pieces: currentItem.total_pieces,
+        });
+        // Auto-advance
+        if (currentIndex < items.length - 1) {
+          setCurrentIndex((i) => i + 1);
+        }
       }
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -77,8 +115,8 @@ export function BenderStationView({ machine, items, canWrite }: BenderStationVie
           sourceId: wipSource.id,
         });
         toast({ title: "WIP consumed", description: "1 piece from cut output" });
-      } catch (err: any) {
-        // WIP consumption is best-effort; don't block the operator
+      } catch {
+        // WIP consumption is best-effort
       }
     }
   };
@@ -86,9 +124,9 @@ export function BenderStationView({ machine, items, canWrite }: BenderStationVie
   if (!currentItem) {
     return (
       <div className="flex flex-col h-full">
-        <StationHeader 
-          machineName={machine.name} 
-          machineModel={machine.model} 
+        <StationHeader
+          machineName={machine.name}
+          machineModel={machine.model}
           canWrite={canWrite}
           showBedsSuffix={true}
         />
@@ -113,6 +151,11 @@ export function BenderStationView({ machine, items, canWrite }: BenderStationVie
 
       {/* Main content */}
       <div className="flex-1 overflow-auto p-4 sm:p-6">
+        {/* ── FOREMAN BRAIN PANEL ── */}
+        <div className="mb-4">
+          <ForemanPanel foreman={foreman} />
+        </div>
+
         {/* Shape code badge */}
         <div className="flex justify-start mb-4">
           <Badge className="bg-muted text-foreground border border-border font-mono text-sm px-3 py-1">
@@ -135,102 +178,65 @@ export function BenderStationView({ machine, items, canWrite }: BenderStationVie
           )}
         </div>
 
-        {/* Stats row — 3 cards matching reference */}
+        {/* Stats row */}
         <div className="grid grid-cols-3 gap-3 sm:gap-4 mb-8">
           <Card className="bg-card border border-border">
             <CardContent className="p-4 text-center">
-              <p className="text-[9px] text-muted-foreground tracking-[0.15em] uppercase mb-1">
-                Bar Size
-              </p>
-              <p className="text-2xl sm:text-3xl font-black text-foreground">
-                {currentItem.bar_code}
-              </p>
+              <p className="text-[9px] text-muted-foreground tracking-[0.15em] uppercase mb-1">Bar Size</p>
+              <p className="text-2xl sm:text-3xl font-black text-foreground">{currentItem.bar_code}</p>
             </CardContent>
           </Card>
           <Card className="bg-card border border-border">
             <CardContent className="p-4 text-center">
-              <p className="text-[9px] text-muted-foreground tracking-[0.15em] uppercase mb-1">
-                Finished Progress
-              </p>
+              <p className="text-[9px] text-muted-foreground tracking-[0.15em] uppercase mb-1">Finished Progress</p>
               <div className="flex items-baseline justify-center gap-1">
-                <span className="text-3xl sm:text-4xl font-black text-primary">
-                  {currentItem.completed_pieces}
-                </span>
-                <span className="text-lg text-muted-foreground">
-                  / {currentItem.total_pieces}
-                </span>
+                <span className="text-3xl sm:text-4xl font-black text-primary">{currentItem.completed_pieces}</span>
+                <span className="text-lg text-muted-foreground">/ {currentItem.total_pieces}</span>
               </div>
-              <p className="text-[9px] text-muted-foreground tracking-wider uppercase mt-0.5">
-                Pieces Verified
-              </p>
+              <p className="text-[9px] text-muted-foreground tracking-wider uppercase mt-0.5">Pieces Verified</p>
             </CardContent>
           </Card>
           <Card className="bg-card border border-border relative">
             <CardContent className="p-4 text-center">
-              <p className="text-[9px] text-muted-foreground tracking-[0.15em] uppercase mb-1">
-                Mark ID
-              </p>
-              <p className="text-2xl sm:text-3xl font-black text-foreground">
-                {currentItem.mark_number || "—"}
-              </p>
+              <p className="text-[9px] text-muted-foreground tracking-[0.15em] uppercase mb-1">Mark ID</p>
+              <p className="text-2xl sm:text-3xl font-black text-foreground">{currentItem.mark_number || "—"}</p>
             </CardContent>
-            {/* Progress indicator circle */}
             <div className="absolute top-3 right-3">
-              <div 
+              <div
                 className="w-8 h-8 rounded-full border-[3px] border-primary/30 flex items-center justify-center text-[9px] font-bold text-primary"
                 style={{
                   background: `conic-gradient(hsl(var(--primary)) ${progress}%, transparent ${progress}%)`
                 }}
               >
-                <span className="bg-card rounded-full w-5 h-5 flex items-center justify-center">
-                  {progress}%
-                </span>
+                <span className="bg-card rounded-full w-5 h-5 flex items-center justify-center">{progress}%</span>
               </div>
             </div>
           </Card>
         </div>
 
-        {/* Bending schematic — dimension values */}
+        {/* Bending schematic */}
         <BendingSchematic dimensions={currentItem.bend_dimensions} />
       </div>
 
-      {/* Bottom bar: batch navigation + DONE button */}
+      {/* Bottom bar */}
       <div className="border-t border-border p-4 flex items-center justify-between bg-card">
-        {/* Batch navigation */}
         <div className="flex items-center gap-2">
           <div className="flex flex-col items-start mr-3">
             <span className="text-[9px] text-muted-foreground tracking-wider uppercase">Batch</span>
-            <span className="text-[9px] text-muted-foreground tracking-wider uppercase">
-              Unit {currentIndex + 1}
-            </span>
+            <span className="text-[9px] text-muted-foreground tracking-wider uppercase">Unit {currentIndex + 1}</span>
           </div>
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-8 w-8"
-            disabled={currentIndex <= 0}
-            onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}
-          >
+          <Button variant="outline" size="icon" className="h-8 w-8" disabled={currentIndex <= 0} onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}>
             <ChevronLeft className="w-4 h-4" />
           </Button>
-          <span className="text-xl font-bold text-foreground min-w-[40px] text-center">
-            {currentIndex + 1}
-          </span>
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-8 w-8"
-            disabled={currentIndex >= items.length - 1}
-            onClick={() => setCurrentIndex((i) => Math.min(items.length - 1, i + 1))}
-          >
+          <span className="text-xl font-bold text-foreground min-w-[40px] text-center">{currentIndex + 1}</span>
+          <Button variant="outline" size="icon" className="h-8 w-8" disabled={currentIndex >= items.length - 1} onClick={() => setCurrentIndex((i) => Math.min(items.length - 1, i + 1))}>
             <ChevronRight className="w-4 h-4" />
           </Button>
         </div>
 
-        {/* Large DONE button */}
         <Button
           size="lg"
-          className="flex-1 ml-4 h-14 gap-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-lg rounded-lg"
+          className="flex-1 ml-4 h-14 gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-lg rounded-lg"
           disabled={!canWrite || submitting}
           onClick={handleDone}
         >
