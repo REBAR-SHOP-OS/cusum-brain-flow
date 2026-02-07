@@ -1,9 +1,11 @@
 import { useState, useMemo } from "react";
 import { useTeamChannels, useTeamMessages, useSendMessage, useMyProfile } from "@/hooks/useTeamChat";
 import { useProfiles } from "@/hooks/useProfiles";
+import { useCreateChannel } from "@/hooks/useChannelManagement";
 import { ChannelSidebar } from "@/components/teamhub/ChannelSidebar";
 import { MessageThread } from "@/components/teamhub/MessageThread";
-import { MessageSquare, Globe, Users, Hash, Sparkles } from "lucide-react";
+import { CreateChannelDialog } from "@/components/teamhub/CreateChannelDialog";
+import { MessageSquare, Globe, Users, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
 export default function TeamHub() {
@@ -11,8 +13,10 @@ export default function TeamHub() {
   const { profiles } = useProfiles();
   const myProfile = useMyProfile();
   const sendMutation = useSendMessage();
+  const createChannelMutation = useCreateChannel();
 
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
 
   const activeChannelId = selectedChannelId || channels[0]?.id || null;
   const activeChannel = channels.find((c) => c.id === activeChannelId);
@@ -51,6 +55,23 @@ export default function TeamHub() {
     }
   };
 
+  const handleCreateChannel = async (data: {
+    name: string;
+    description: string;
+    memberIds: string[];
+  }) => {
+    try {
+      const result = await createChannelMutation.mutateAsync(data);
+      setShowCreateDialog(false);
+      if (result?.id) {
+        setSelectedChannelId(result.id);
+      }
+      toast.success(`Channel #${data.name} created!`);
+    } catch (err: any) {
+      toast.error("Failed to create channel", { description: err.message });
+    }
+  };
+
   return (
     <div className="relative flex flex-col h-full bg-background overflow-hidden">
       {/* Ambient glow effects */}
@@ -67,6 +88,7 @@ export default function TeamHub() {
           onSelect={setSelectedChannelId}
           onlineCount={onlineCount}
           profiles={profiles}
+          onCreateChannel={() => setShowCreateDialog(true)}
         />
 
         <div className="flex-1 flex flex-col min-w-0">
@@ -113,6 +135,15 @@ export default function TeamHub() {
           )}
         </div>
       </div>
+
+      {/* Create Channel Dialog */}
+      <CreateChannelDialog
+        open={showCreateDialog}
+        onOpenChange={setShowCreateDialog}
+        profiles={profiles}
+        onCreateChannel={handleCreateChannel}
+        isCreating={createChannelMutation.isPending}
+      />
     </div>
   );
 }
