@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
-import type { RunPlan, RunSlot } from "@/lib/foremanBrain";
+import type { RunPlan } from "@/lib/foremanBrain";
 import type { ActiveSlot, SlotStatus } from "@/components/shopfloor/SlotTracker";
 
 interface UseSlotTrackerOpts {
@@ -9,7 +9,7 @@ interface UseSlotTrackerOpts {
 
 export interface SlotTrackerResult {
   slots: ActiveSlot[];
-  /** Record a single stroke on the current active slot */
+  /** Record a single stroke — increments cutsDone for ALL active bars */
   recordStroke: () => void;
   /** Remove a bar at the given slot index (must be "removable") */
   removeBar: (slotIndex: number) => void;
@@ -19,23 +19,73 @@ export interface SlotTrackerResult {
   reset: () => void;
   /** Total cuts done across all slots */
   totalCutsDone: number;
+  /** Start slots with a specific bar count (operator override) */
+  startWithBars: (bars: number) => void;
 }
 
-function buildSlots(plan: RunPlan): ActiveSlot[] {
-  return plan.slots.map((s) => ({
-    index: s.index,
-    plannedCuts: s.plannedCuts,
-    cutsDone: 0,
-    // All bars are loaded and cut simultaneously — all start active
-    status: "active" as SlotStatus,
-    isPartial: s.removeAfterCuts,
-  }));
+/**
+ * Build slots from RunPlan, optionally overriding bar count.
+ * When overrideBars is provided, we rebuild the slot array to match
+ * the actual number of bars the operator loaded.
+ */
+function buildSlots(plan: RunPlan, overrideBars?: number): ActiveSlot[] {
+  const piecesPerBar = plan.piecesPerBar;
+  const barsToUse = overrideBars ?? plan.barsThisRun;
+  
+  if (piecesPerBar <= 0 || barsToUse <= 0) return [];
+
+  // Total remaining pieces from the plan
+  const totalRemaining = plan.slots.reduce((sum, s) => sum + s.plannedCuts, 0);
+  // Recompute for the actual bars loaded
+  const totalPiecesThisRun = overrideBars
+    ? Math.min(totalRemaining + ((overrideBars - plan.barsThisRun) * piecesPerBar), overrideBars * piecesPerBar)
+    : totalRemaining;
+
+  const slots: ActiveSlot[] = [];
+  let piecesAssigned = 0;
+
+  for (let i = 0; i < barsToUse; i++) {
+    const piecesLeft = totalPiecesThisRun - piecesAssigned;
+    if (piecesLeft <= 0) break;
+
+    const cutsThisSlot = Math.min(piecesPerBar, piecesLeft);
+    const isPartial = cutsThisSlot < piecesPerBar;
+
+    slots.push({
+      index: i,
+      plannedCuts: cutsThisSlot,
+      cutsDone: 0,
+      // All bars are loaded simultaneously — all start active
+      status: "active" as SlotStatus,
+      isPartial,
+    });
+
+    piecesAssigned += cutsThisSlot;
+  }
+
+  return slots;
 }
 
 export function useSlotTracker({ runPlan, isRunning }: UseSlotTrackerOpts): SlotTrackerResult {
   const [slots, setSlots] = useState<ActiveSlot[]>([]);
 
-  // Initialize slots when a run starts with a valid plan
+  // Reset when run stops
+  useEffect(() => {
+    if (!isRunning) {
+      // Don't auto-clear — only reset() does that
+    }
+  }, [isRunning]);
+
+  /**
+   * Called by CutterStationView on LOCK & START with the actual bar count
+   * the operator chose. This is the primary way to initialize slots.
+   */
+  const startWithBars = useCallback((bars: number) => {
+    if (!runPlan?.feasible) return;
+    setSlots(buildSlots(runPlan, bars));
+  }, [runPlan]);
+
+  // Fallback: auto-init from runPlan if startWithBars wasn't called
   useEffect(() => {
     if (isRunning && runPlan?.feasible && runPlan.slots.length > 0 && slots.length === 0) {
       setSlots(buildSlots(runPlan));
@@ -76,13 +126,6 @@ export function useSlotTracker({ runPlan, isRunning }: UseSlotTrackerOpts): Slot
       if (!slot || slot.status !== "removable") return prev;
 
       slot.status = "removed";
-
-      // If there are still waiting slots, activate next
-      const nextWaiting = next.find((s) => s.status === "waiting");
-      if (nextWaiting) {
-        nextWaiting.status = "active";
-      }
-
       return next;
     });
   }, []);
@@ -97,5 +140,5 @@ export function useSlotTracker({ runPlan, isRunning }: UseSlotTrackerOpts): Slot
 
   const totalCutsDone = slots.reduce((s, sl) => s + sl.cutsDone, 0);
 
-  return { slots, recordStroke, removeBar, allDone, reset, totalCutsDone };
+  return { slots, recordStroke, removeBar, allDone, reset, totalCutsDone, startWithBars };
 }
