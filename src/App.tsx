@@ -28,6 +28,7 @@ import Phonecalls from "./pages/Phonecalls";
 import Settings from "./pages/Settings";
 
 import AdminPanel from "./pages/AdminPanel";
+import AdminDbAudit from "./pages/AdminDbAudit";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import TermsOfService from "./pages/TermsOfService";
 import Landing from "./pages/Landing";
@@ -217,6 +218,16 @@ const App = () => (
                 <ProtectedRoute>
                   <AppLayout>
                     <AdminPanel />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/db-audit"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <AdminDbAudit />
                   </AppLayout>
                 </ProtectedRoute>
               }
