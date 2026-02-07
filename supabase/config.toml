@@ -44,3 +44,6 @@ verify_jwt = false
 
 [functions.manage-machine]
 verify_jwt = false
+
+[functions.shape-vision]
+verify_jwt = false
