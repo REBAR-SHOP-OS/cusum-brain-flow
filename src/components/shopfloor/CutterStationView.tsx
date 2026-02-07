@@ -1,13 +1,12 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { StationHeader } from "./StationHeader";
 import { CutEngine } from "./CutEngine";
 import { AsaShapeDiagram } from "./AsaShapeDiagram";
 import { ForemanPanel } from "./ForemanPanel";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { manageMachine } from "@/lib/manageMachineService";
 import { manageInventory } from "@/lib/inventoryService";
-import { recordCompletion } from "@/lib/foremanLearningService";
+import { recordCompletion, recordLearning } from "@/lib/foremanLearningService";
 import { useToast } from "@/hooks/use-toast";
 import { useMachineCapabilities } from "@/hooks/useCutPlans";
 import { useInventoryData } from "@/hooks/useInventoryData";
@@ -28,6 +27,7 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const [selectedStockLength, setSelectedStockLength] = useState(12000);
+  const [manualFloorConfirmed, setManualFloorConfirmed] = useState(false);
 
   const currentItem = items[currentIndex] || null;
   const { getMaxBars } = useMachineCapabilities(machine.model, "cut");
@@ -57,10 +57,49 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
         selectedStockLength,
         currentIndex,
         canWrite,
+        manualFloorStockConfirmed: manualFloorConfirmed,
       }
     : null;
 
   const foreman = useForemanBrain({ context: foremanContext });
+  const runPlan = foreman.decision?.runPlan || null;
+
+  // Use run plan's computed values (deterministic from stock length + cut length)
+  const computedPiecesPerBar = runPlan?.piecesPerBar || (currentItem ? Math.floor(selectedStockLength / currentItem.cut_length_mm) : 1);
+  const totalPieces = currentItem?.total_pieces || 0;
+  const completedPieces = currentItem?.completed_pieces || 0;
+  const remainingPieces = totalPieces - completedPieces;
+  const barsStillNeeded = computedPiecesPerBar > 0 ? Math.ceil(remainingPieces / computedPiecesPerBar) : 0;
+  const isDone = remainingPieces <= 0;
+
+  const handleAlternativeAction = useCallback((actionType: string) => {
+    if (actionType === "use_floor") {
+      setManualFloorConfirmed(true);
+      toast({ title: "Floor stock confirmed", description: "Run plan adjusted — LOCK & START enabled." });
+    } else if (actionType === "use_remnant") {
+      toast({ title: "Using remnant stock", description: "Foreman will select remnant as source." });
+    } else if (actionType === "partial_run") {
+      toast({ title: "Partial run selected", description: "Will complete as many pieces as stock allows." });
+    }
+
+    // Record learning
+    recordLearning({
+      module: "cut",
+      learningType: "edge_case",
+      eventType: "smart_run_adjusted_due_to_stock_shortage",
+      context: {
+        machine_id: machine.id,
+        bar_code: currentItem?.bar_code,
+        cut_length: currentItem?.cut_length_mm,
+        stock_length: selectedStockLength,
+        action: actionType,
+        bars_adjusted: runPlan?.barsThisRun,
+        partial_slot: runPlan?.lastBarPieces,
+      },
+      machineId: machine.id,
+      barCode: currentItem?.bar_code,
+    });
+  }, [machine.id, currentItem, selectedStockLength, runPlan, toast]);
 
   const handleLockAndStart = async (stockLength: number, bars: number) => {
     if (!currentItem) return;
@@ -73,9 +112,10 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
         process: "cut",
         barCode: currentItem.bar_code,
         qty: bars,
-        notes: `Stock: ${stockLength}mm | Mark: ${currentItem.mark_number || "—"} | Length: ${currentItem.cut_length_mm}mm`,
+        notes: `Stock: ${stockLength}mm | Mark: ${currentItem.mark_number || "—"} | Length: ${currentItem.cut_length_mm}mm | Pcs/bar: ${computedPiecesPerBar}`,
       });
 
+      // Try to consume from best available source
       const bestLot = lots.find((l) => l.qty_on_hand - l.qty_reserved >= bars);
       if (bestLot) {
         try {
@@ -94,15 +134,40 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
         }
       }
 
-      // Record success learning
-      const piecesPerBar = currentItem.pieces_per_bar || 1;
-      const piecesProduced = bars * piecesPerBar;
-      const remainingAfter = currentItem.total_pieces - currentItem.completed_pieces - piecesProduced;
+      // Record adjusted run learning if applicable
+      if (runPlan?.isAdjusted) {
+        recordLearning({
+          module: "cut",
+          learningType: "edge_case",
+          eventType: "smart_run_adjusted_due_to_stock_shortage",
+          context: {
+            machine_id: machine.id,
+            bar_code: currentItem.bar_code,
+            cut_length_mm: currentItem.cut_length_mm,
+            stock_length_mm: stockLength,
+            bars_loaded: bars,
+            pcs_per_bar: computedPiecesPerBar,
+            partial_bar: runPlan.lastBarPieces,
+            stock_source: runPlan.stockSource,
+            adjustment_reason: runPlan.adjustmentReason,
+          },
+          machineId: machine.id,
+          barCode: currentItem.bar_code,
+        });
+      }
+
+      // Check for completion
+      const totalPiecesThisRun = runPlan
+        ? runPlan.slots.reduce((s, sl) => s + sl.plannedCuts, 0)
+        : bars * computedPiecesPerBar;
+      const remainingAfter = remainingPieces - totalPiecesThisRun;
       if (remainingAfter <= 0) {
         recordCompletion("cut", machine.id, currentItem.bar_code, {
           mark: currentItem.mark_number,
           total_pieces: currentItem.total_pieces,
           stock_length: stockLength,
+          scrap_count: runPlan?.expectedScrapBars || 0,
+          remnant_count: runPlan?.expectedRemnantBars || 0,
         });
       }
 
@@ -129,14 +194,6 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
     );
   }
 
-  const piecesPerBar = currentItem.pieces_per_bar || 1;
-  const totalBars = currentItem.qty_bars || 0;
-  const totalPieces = currentItem.total_pieces || 0;
-  const completedPieces = currentItem.completed_pieces || 0;
-  const remainingPieces = totalPieces - completedPieces;
-  const barsStillNeeded = Math.ceil(remainingPieces / piecesPerBar);
-  const isDone = remainingPieces <= 0;
-
   return (
     <div className="flex flex-col h-full">
       <StationHeader
@@ -162,7 +219,10 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
           )}
 
           {/* ── FOREMAN BRAIN PANEL ── */}
-          <ForemanPanel foreman={foreman} />
+          <ForemanPanel
+            foreman={foreman}
+            onAlternativeAction={handleAlternativeAction}
+          />
 
           {/* BIG CUT LENGTH */}
           <Card className="bg-card border border-border">
@@ -184,24 +244,24 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
             <Card className="bg-card border-border">
               <CardContent className="p-4 text-center">
                 <Scissors className="w-5 h-5 text-primary mx-auto mb-2" />
-                <p className="text-3xl font-black font-mono text-foreground">{piecesPerBar}</p>
+                <p className="text-3xl font-black font-mono text-foreground">{computedPiecesPerBar}</p>
                 <p className="text-[10px] text-muted-foreground tracking-wider uppercase mt-1">Pcs / Bar</p>
               </CardContent>
             </Card>
             <Card className="bg-card border-border">
               <CardContent className="p-4 text-center">
                 <Layers className="w-5 h-5 text-primary mx-auto mb-2" />
-                <p className="text-3xl font-black font-mono text-foreground">{totalBars}</p>
-                <p className="text-[10px] text-muted-foreground tracking-wider uppercase mt-1">Total Bars</p>
+                <p className="text-3xl font-black font-mono text-foreground">{barsStillNeeded}</p>
+                <p className="text-[10px] text-muted-foreground tracking-wider uppercase mt-1">Bars Needed</p>
               </CardContent>
             </Card>
             <Card className={`border-border ${isDone ? "bg-primary/5 border-primary/30" : "bg-card"}`}>
               <CardContent className="p-4 text-center">
                 <Ruler className="w-5 h-5 text-accent-foreground mx-auto mb-2" />
                 <p className={`text-3xl font-black font-mono ${isDone ? "text-primary" : "text-foreground"}`}>
-                  {isDone ? "✓" : barsStillNeeded}
+                  {isDone ? "✓" : (runPlan?.barsThisRun || barsStillNeeded)}
                 </p>
-                <p className="text-[10px] text-muted-foreground tracking-wider uppercase mt-1">Bars Left</p>
+                <p className="text-[10px] text-muted-foreground tracking-wider uppercase mt-1">This Run</p>
               </CardContent>
             </Card>
             <Card className="bg-card border-border">
@@ -244,7 +304,7 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
             <button
               className="w-10 h-10 rounded-full border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-30"
               disabled={currentIndex <= 0}
-              onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}
+              onClick={() => { setCurrentIndex((i) => Math.max(0, i - 1)); setManualFloorConfirmed(false); }}
             >
               ‹
             </button>
@@ -254,7 +314,7 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
             <button
               className="w-10 h-10 rounded-full border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-30"
               disabled={currentIndex >= items.length - 1}
-              onClick={() => setCurrentIndex((i) => Math.min(items.length - 1, i + 1))}
+              onClick={() => { setCurrentIndex((i) => Math.min(items.length - 1, i + 1)); setManualFloorConfirmed(false); }}
             >
               ›
             </button>
@@ -267,7 +327,9 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
             barCode={currentItem.bar_code}
             maxBars={maxBars}
             suggestedBars={Math.min(barsStillNeeded, maxBars)}
+            runPlan={runPlan}
             onLockAndStart={handleLockAndStart}
+            onStockLengthChange={setSelectedStockLength}
             isRunning={isRunning || machine.status === "running"}
             canWrite={canWrite}
             darkMode

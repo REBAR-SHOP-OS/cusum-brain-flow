@@ -14,6 +14,9 @@ import {
   X,
   HelpCircle,
   ArrowRight,
+  Warehouse,
+  Recycle,
+  Settings2,
 } from "lucide-react";
 import type { ForemanResult } from "@/hooks/useForemanBrain";
 import type { PlaybookEntry } from "@/lib/foremanPlaybook";
@@ -21,9 +24,10 @@ import type { PlaybookEntry } from "@/lib/foremanPlaybook";
 interface ForemanPanelProps {
   foreman: ForemanResult;
   compact?: boolean;
+  onAlternativeAction?: (actionType: string) => void;
 }
 
-export function ForemanPanel({ foreman, compact = false }: ForemanPanelProps) {
+export function ForemanPanel({ foreman, compact = false, onAlternativeAction }: ForemanPanelProps) {
   const { decision, playbook, suggestions } = foreman;
   const [showWhy, setShowWhy] = useState(false);
   const [showPlaybook, setShowPlaybook] = useState(false);
@@ -34,6 +38,20 @@ export function ForemanPanel({ foreman, compact = false }: ForemanPanelProps) {
   const hasWarnings = decision.warnings.length > 0;
   const hasAlternatives = decision.alternatives.length > 0;
   const smartSuggestions = [...suggestions.actions, ...suggestions.optimizations].slice(0, 3);
+
+  // Alternatives with action buttons
+  const actionAlternatives = decision.alternatives.filter(a => a.actionType);
+  const infoAlternatives = decision.alternatives.filter(a => !a.actionType);
+
+  const actionIcon = (type?: string) => {
+    switch (type) {
+      case "use_floor": return <Warehouse className="w-3.5 h-3.5" />;
+      case "use_remnant": return <Recycle className="w-3.5 h-3.5" />;
+      case "adjust_plan":
+      case "partial_run": return <Settings2 className="w-3.5 h-3.5" />;
+      default: return <Lightbulb className="w-3.5 h-3.5" />;
+    }
+  };
 
   return (
     <div className="space-y-3">
@@ -57,6 +75,41 @@ export function ForemanPanel({ foreman, compact = false }: ForemanPanelProps) {
                 </ol>
               </div>
             ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── SHORTAGE RECOVERY ACTIONS ── */}
+      {actionAlternatives.length > 0 && (
+        <Card className="border-accent bg-accent/30">
+          <CardContent className="p-3 space-y-2">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-accent-foreground shrink-0" />
+              <span className="text-xs font-bold tracking-wider uppercase text-accent-foreground">
+                Stock Shortage — Adjusted Run Possible
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {actionAlternatives.map((alt) => (
+                <Button
+                  key={alt.id}
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 text-xs border-primary/30 hover:bg-primary/10 hover:text-primary"
+                  onClick={() => onAlternativeAction?.(alt.actionType!)}
+                >
+                  {actionIcon(alt.actionType)}
+                  {alt.label}
+                </Button>
+              ))}
+            </div>
+            <div className="space-y-1">
+              {actionAlternatives.map((alt) => (
+                <p key={alt.id} className="text-[11px] text-muted-foreground">
+                  <span className="font-medium text-foreground">{alt.label}:</span> {alt.description}
+                </p>
+              ))}
+            </div>
           </CardContent>
         </Card>
       )}
@@ -120,17 +173,17 @@ export function ForemanPanel({ foreman, compact = false }: ForemanPanelProps) {
         </Card>
       )}
 
-      {/* ── ALTERNATIVES ── */}
-      {hasAlternatives && !compact && (
+      {/* ── INFO ALTERNATIVES ── */}
+      {infoAlternatives.length > 0 && !compact && (
         <Card className="border-border bg-card">
           <CardContent className="p-3 space-y-2">
-          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2">
               <Lightbulb className="w-4 h-4 text-primary shrink-0" />
               <span className="text-xs font-bold tracking-wider uppercase text-primary">
                 Alternatives
               </span>
             </div>
-            {decision.alternatives.map((alt, i) => (
+            {infoAlternatives.map((alt, i) => (
               <div key={i} className="p-2 rounded bg-muted/50 space-y-0.5">
                 <p className="text-xs font-semibold text-foreground">{alt.label}</p>
                 <p className="text-[11px] text-muted-foreground">{alt.description}</p>
