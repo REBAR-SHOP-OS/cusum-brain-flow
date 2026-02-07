@@ -5,13 +5,6 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import {
   Hash,
   Users,
   Plus,
@@ -20,9 +13,6 @@ import {
   Globe,
   ChevronDown,
   ChevronRight,
-  Settings,
-  Bell,
-  BellOff,
   Circle,
 } from "lucide-react";
 import type { TeamChannel } from "@/hooks/useTeamChat";
@@ -34,6 +24,7 @@ interface ChannelSidebarProps {
   onSelect: (id: string) => void;
   onlineCount: number;
   profiles: Profile[];
+  onCreateChannel: () => void;
 }
 
 function getInitials(name: string) {
@@ -51,7 +42,7 @@ function getAvatarColor(name: string) {
   return avatarColors[Math.abs(hash) % avatarColors.length];
 }
 
-export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, profiles }: ChannelSidebarProps) {
+export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, profiles, onCreateChannel }: ChannelSidebarProps) {
   const [channelsOpen, setChannelsOpen] = useState(true);
   const [membersOpen, setMembersOpen] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -100,16 +91,27 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
       {/* Scrollable Content */}
       <div className="flex-1 overflow-auto py-1 px-2">
         {/* Channels Section */}
-        <button
-          onClick={() => setChannelsOpen(!channelsOpen)}
-          className="w-full flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-bold tracking-wider uppercase text-muted-foreground hover:text-foreground transition-colors"
-        >
-          {channelsOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-          Channels
-          <Badge variant="secondary" className="ml-auto text-[9px] px-1 py-0 h-4">
-            {groupChannels.length}
-          </Badge>
-        </button>
+        <div className="flex items-center justify-between pr-1">
+          <button
+            onClick={() => setChannelsOpen(!channelsOpen)}
+            className="flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-bold tracking-wider uppercase text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {channelsOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+            Channels
+            <Badge variant="secondary" className="ml-1 text-[9px] px-1 py-0 h-4">
+              {groupChannels.length}
+            </Badge>
+          </button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
+            onClick={onCreateChannel}
+            title="Create channel"
+          >
+            <Plus className="w-3.5 h-3.5 text-muted-foreground" />
+          </Button>
+        </div>
 
         {channelsOpen && (
           <div className="space-y-0.5 mb-3">
