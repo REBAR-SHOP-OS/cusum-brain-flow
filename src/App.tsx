@@ -39,6 +39,7 @@ import PrivacyPolicy from "./pages/PrivacyPolicy";
 import TermsOfService from "./pages/TermsOfService";
 import Landing from "./pages/Landing";
 import Install from "./pages/Install";
+import OfficePortal from "./pages/OfficePortal";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -295,6 +296,16 @@ const App = () => (
                   <AppLayout>
                     <AdminMachines />
                   </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Office Portal - standalone layout */}
+            <Route
+              path="/office"
+              element={
+                <ProtectedRoute>
+                  <OfficePortal />
                 </ProtectedRoute>
               }
             />

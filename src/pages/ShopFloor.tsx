@@ -28,7 +28,7 @@ const hubCards: HubCard[] = [
   {
     label: "OFFICE",
     icon: <LayoutGrid className="w-7 h-7" />,
-    to: "/home",
+    to: "/office",
   },
   {
     label: "SHOP FLOOR",
