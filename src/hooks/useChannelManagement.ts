@@ -18,7 +18,8 @@ export function useCreateChannel() {
       description: string;
       memberIds: string[];
     }) => {
-      if (!user || !myProfile) throw new Error("Not authenticated");
+      if (!user) throw new Error("Not logged in");
+      if (!myProfile) throw new Error("Your profile is not set up yet. Please ask an admin to link your account.");
 
       // Create the channel
       const { data: channel, error: channelErr } = await (supabase as any)
@@ -71,7 +72,8 @@ export function useOpenDM() {
       targetProfileId: string;
       targetName: string;
     }) => {
-      if (!user || !myProfile) throw new Error("Not authenticated");
+      if (!user) throw new Error("Not logged in");
+      if (!myProfile) throw new Error("Your profile is not set up yet. Please ask an admin to link your account.");
 
       // Check if a DM channel already exists between these two users
       const { data: existingMembers } = await (supabase as any)
