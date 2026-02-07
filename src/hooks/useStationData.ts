@@ -39,12 +39,12 @@ export function useStationData(machineId: string | null) {
     queryKey: ["station-data", machineId],
     enabled: !!user && !!machineId,
     queryFn: async () => {
-      // Get cut plans assigned to this machine
+      // Get cut plans assigned to this machine OR unassigned active plans
       const { data: plans, error: plansError } = await supabase
         .from("cut_plans")
-        .select("id, name, project_name")
-        .eq("machine_id", machineId!)
-        .in("status", ["draft", "queued", "in_progress"]);
+        .select("id, name, project_name, machine_id")
+        .or(`machine_id.eq.${machineId},machine_id.is.null`)
+        .in("status", ["draft", "queued", "running"]);
 
       if (plansError) throw plansError;
       if (!plans?.length) return [];
