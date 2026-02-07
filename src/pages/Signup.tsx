@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { CheckCircle2 } from "lucide-react";
 import logoCoin from "@/assets/logo-coin.png";
+import loginBg from "@/assets/login-bg.png";
 import { useToast } from "@/hooks/use-toast";
 
 export default function Signup() {
@@ -83,8 +84,17 @@ export default function Signup() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
-      <div className="w-full max-w-sm space-y-8">
+    <div className="relative flex min-h-screen items-center justify-center bg-background p-4 overflow-hidden">
+      {/* Dynamic background */}
+      <div className="absolute inset-0 pointer-events-none">
+        <img 
+          src={loginBg} 
+          alt="" 
+          className="w-full h-full object-cover opacity-20 animate-[pulse_8s_ease-in-out_infinite]"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/80 to-background/60" />
+      </div>
+      <div className="relative z-10 w-full max-w-sm space-y-8">
         {/* Logo */}
         <div className="flex flex-col items-center gap-4">
           <img src={logoCoin} alt="REBAR SHOP OS" className="w-14 h-14 rounded-xl" />
