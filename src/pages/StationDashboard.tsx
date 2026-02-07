@@ -4,14 +4,15 @@ import { useProductionQueues } from "@/hooks/useProductionQueues";
 import { MachineSelector } from "@/components/shopfloor/MachineSelector";
 import { ActiveProductionHub } from "@/components/shopfloor/ActiveProductionHub";
 import { Badge } from "@/components/ui/badge";
-import { Cloud, Radio, Loader2, Settings, FolderOpen, FileText, Layers } from "lucide-react";
+import { Cloud, Radio, Loader2, Settings, FolderOpen, FileText, Layers, Play, Pause, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
 import brandLogo from "@/assets/brand-logo.png";
-
 export default function StationDashboard() {
   const { machines, isLoading } = useLiveMonitorData();
-  const { plans, loading: plansLoading } = useCutPlans();
+  const { plans, loading: plansLoading, updatePlanStatus } = useCutPlans();
   const { projectLanes } = useProductionQueues();
+  const { toast } = useToast();
 
   // Active cut plans (draft, ready, queued, in_progress)
   const activePlans = plans.filter(p =>
@@ -97,9 +98,11 @@ export default function StationDashboard() {
                     return (
                       <div
                         key={plan.id}
-                        className="flex items-center gap-3 p-3 rounded-lg border border-border bg-card hover:bg-muted/30 transition-colors"
+                        className={`flex items-center gap-3 p-3 rounded-lg border bg-card hover:bg-muted/30 transition-colors ${
+                          plan.status === "in_progress" ? "border-green-500/40" : "border-border"
+                        }`}
                       >
-                        <div className={`w-2 h-2 rounded-full ${plan.status === "in_progress" ? "bg-green-500 animate-pulse" : "bg-muted-foreground/30"}`} />
+                        <div className={`w-2 h-2 rounded-full shrink-0 ${plan.status === "in_progress" ? "bg-green-500 animate-pulse" : "bg-muted-foreground/30"}`} />
                         <Badge className={`${st.color} text-[10px] tracking-wider shrink-0`}>
                           {st.label}
                         </Badge>
@@ -124,6 +127,51 @@ export default function StationDashboard() {
                               </span>
                             )}
                           </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {(plan.status === "draft" || plan.status === "queued" || plan.status === "ready") && (
+                            <Button
+                              size="sm"
+                              className="h-7 text-[10px] gap-1 px-2.5 font-bold"
+                              onClick={async () => {
+                                const ok = await updatePlanStatus(plan.id, "in_progress");
+                                if (ok) toast({ title: "Started", description: plan.name });
+                              }}
+                            >
+                              <Play className="w-3 h-3" />
+                              Start
+                            </Button>
+                          )}
+                          {plan.status === "in_progress" && (
+                            <>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 text-[10px] gap-1 px-2.5 font-bold border-yellow-500/40 text-yellow-500 hover:bg-yellow-500/10"
+                                onClick={async () => {
+                                  const ok = await updatePlanStatus(plan.id, "queued");
+                                  if (ok) toast({ title: "Paused", description: plan.name });
+                                }}
+                              >
+                                <Pause className="w-3 h-3" />
+                                Pause
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 text-[10px] gap-1 px-2.5 font-bold border-green-500/40 text-green-500 hover:bg-green-500/10"
+                                onClick={async () => {
+                                  const ok = await updatePlanStatus(plan.id, "completed");
+                                  if (ok) toast({ title: "Completed", description: plan.name });
+                                }}
+                              >
+                                <CheckCircle2 className="w-3 h-3" />
+                                Complete
+                              </Button>
+                            </>
+                          )}
                         </div>
                       </div>
                     );
