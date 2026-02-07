@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Inbox, Brain, Settings, Plug, MessageSquare, CheckSquare, Factory, Truck, Users, Kanban, History, Bell, Home, Phone } from "lucide-react";
+import { Inbox, Brain, Settings, Plug, MessageSquare, CheckSquare, Factory, Truck, Users, Kanban, History, Bell, Home, Phone, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { UserMenu } from "./UserMenu";
 import { ThemeToggle } from "./ThemeToggle";
@@ -20,9 +20,11 @@ const navigation = [
   { name: "Deliveries", href: "/deliveries", icon: Truck },
   { name: "Brain", href: "/brain", icon: Brain },
   { name: "Integrations", href: "/integrations", icon: Plug },
+  { name: "Team", href: "/team", icon: Users },
 ];
 
 const bottomNav = [
+  { name: "Admin", href: "/admin", icon: Shield },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 
