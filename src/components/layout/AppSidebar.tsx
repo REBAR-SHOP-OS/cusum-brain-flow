@@ -76,7 +76,7 @@ export function AppSidebar() {
   };
 
   return (
-    <aside className="w-14 shrink-0 bg-sidebar border-r border-sidebar-border flex flex-col h-full">
+    <aside className="group/sidebar w-14 hover:w-48 shrink-0 bg-sidebar border-r border-sidebar-border flex flex-col h-full transition-all duration-200 ease-in-out overflow-hidden">
       <ScrollArea className="flex-1 py-2">
         {navGroups.map((group) => {
           const visibleItems = group.items.filter(isVisible);
@@ -84,11 +84,11 @@ export function AppSidebar() {
           return (
             <div key={group.label} className="mb-3">
               <div className="px-2 mb-1">
-                <span className="text-[8px] font-bold tracking-[0.2em] text-sidebar-foreground/40 uppercase">
+                <span className="text-[8px] font-bold tracking-[0.2em] text-sidebar-foreground/40 uppercase whitespace-nowrap">
                   {group.label}
                 </span>
               </div>
-              <div className="flex flex-col items-center gap-0.5">
+              <div className="flex flex-col gap-0.5 px-2">
                 {visibleItems.map((item) => {
                   const isActive =
                     location.pathname === item.href ||
@@ -99,22 +99,25 @@ export function AppSidebar() {
                         <Link
                           to={item.href}
                           className={cn(
-                            "relative w-10 h-10 rounded-lg flex items-center justify-center transition-colors",
+                            "relative h-10 rounded-lg flex items-center gap-3 px-2 transition-colors whitespace-nowrap",
                             "hover:bg-sidebar-accent",
                             isActive
                               ? "bg-sidebar-accent text-sidebar-accent-foreground"
                               : "text-sidebar-foreground"
                           )}
                         >
-                          <item.icon className="w-[18px] h-[18px]" />
+                          <item.icon className="w-[18px] h-[18px] shrink-0" />
+                          <span className="text-sm opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-200 overflow-hidden">
+                            {item.name}
+                          </span>
                           {item.badge && item.badge > 0 && (
-                            <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-destructive text-destructive-foreground text-[9px] font-bold rounded-full flex items-center justify-center">
+                            <span className="absolute -top-0.5 right-0.5 w-4 h-4 bg-destructive text-destructive-foreground text-[9px] font-bold rounded-full flex items-center justify-center">
                               {item.badge > 99 ? "99" : item.badge}
                             </span>
                           )}
                         </Link>
                       </TooltipTrigger>
-                      <TooltipContent side="right" className="text-xs">
+                      <TooltipContent side="right" className="text-xs group-hover/sidebar:hidden">
                         {item.name}
                       </TooltipContent>
                     </Tooltip>
