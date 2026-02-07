@@ -50,7 +50,7 @@ const hubCards: HubCard[] = [
   {
     label: "CLEARANCE",
     icon: <ShieldCheck className="w-7 h-7" />,
-    to: "/shop-floor",
+    to: "/shopfloor/clearance",
   },
   {
     label: "LOADING ST.",

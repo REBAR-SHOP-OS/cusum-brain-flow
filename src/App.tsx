@@ -46,6 +46,7 @@ import OfficePortal from "./pages/OfficePortal";
 import TimeClock from "./pages/TimeClock";
 import TeamHub from "./pages/TeamHub";
 import NotFound from "./pages/NotFound";
+import ClearanceStation from "./pages/ClearanceStation";
 
 const queryClient = new QueryClient();
 
@@ -92,6 +93,7 @@ const App = () => (
                 <Route path="/shopfloor/station" element={<P><StationDashboard /></P>} />
                 <Route path="/shopfloor/station/:machineId" element={<P><StationView /></P>} />
                 <Route path="/shopfloor/pickup" element={<P><PickupStation /></P>} />
+                <Route path="/shopfloor/clearance" element={<P><ClearanceStation /></P>} />
                 <Route path="/shopfloor/live-monitor" element={<P><LiveMonitor /></P>} />
                 <Route path="/deliveries" element={<P><Deliveries /></P>} />
                 <Route path="/timeclock" element={<P><TimeClock /></P>} />

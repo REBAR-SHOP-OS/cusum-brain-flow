@@ -266,6 +266,53 @@ export type Database = {
         }
         Relationships: []
       }
+      clearance_evidence: {
+        Row: {
+          created_at: string
+          cut_plan_item_id: string
+          id: string
+          material_photo_url: string | null
+          notes: string | null
+          status: string
+          tag_scan_url: string | null
+          updated_at: string
+          verified_at: string | null
+          verified_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          cut_plan_item_id: string
+          id?: string
+          material_photo_url?: string | null
+          notes?: string | null
+          status?: string
+          tag_scan_url?: string | null
+          updated_at?: string
+          verified_at?: string | null
+          verified_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          cut_plan_item_id?: string
+          id?: string
+          material_photo_url?: string | null
+          notes?: string | null
+          status?: string
+          tag_scan_url?: string | null
+          updated_at?: string
+          verified_at?: string | null
+          verified_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clearance_evidence_cut_plan_item_id_fkey"
+            columns: ["cut_plan_item_id"]
+            isOneToOne: true
+            referencedRelation: "cut_plan_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       command_log: {
         Row: {
           created_at: string
