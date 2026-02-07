@@ -25,6 +25,7 @@ interface ChannelSidebarProps {
   onlineCount: number;
   profiles: Profile[];
   onCreateChannel: () => void;
+  onClickMember: (profileId: string, name: string) => void;
 }
 
 function getInitials(name: string) {
@@ -42,7 +43,7 @@ function getAvatarColor(name: string) {
   return avatarColors[Math.abs(hash) % avatarColors.length];
 }
 
-export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, profiles, onCreateChannel }: ChannelSidebarProps) {
+export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, profiles, onCreateChannel, onClickMember }: ChannelSidebarProps) {
   const [channelsOpen, setChannelsOpen] = useState(true);
   const [membersOpen, setMembersOpen] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -181,9 +182,10 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
         {membersOpen && (
           <div className="space-y-0.5 mb-3">
             {filteredMembers.map((p) => (
-              <div
+              <button
                 key={p.id}
-                className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-muted/30 transition-colors"
+                onClick={() => onClickMember(p.id, p.full_name)}
+                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer text-left"
               >
                 <div className="relative">
                   <Avatar className="w-6 h-6">
@@ -200,7 +202,7 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
                 {p.preferred_language && p.preferred_language !== "en" && (
                   <span className="text-[9px] text-muted-foreground/60">{p.preferred_language.toUpperCase()}</span>
                 )}
-              </div>
+              </button>
             ))}
           </div>
         )}
