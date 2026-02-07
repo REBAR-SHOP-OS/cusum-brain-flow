@@ -102,7 +102,7 @@ export function useCommunications(options?: { search?: string; typeFilter?: stri
       const errors: string[] = [];
       const infos: string[] = [];
 
-      // Helper to extract mismatch vs real errors
+      // Helper to extract mismatch/not-connected vs real errors
       const handleResult = (res: PromiseSettledResult<{ data: unknown; error: unknown }>, name: string) => {
         if (res.status === "rejected") {
           errors.push(`${name} sync failed`);
@@ -110,18 +110,17 @@ export function useCommunications(options?: { search?: string; typeFilter?: stri
         }
         const { data, error } = res.value as { 
           data: Record<string, unknown> | null; 
-          error: { message?: string; context?: Response } | null 
+          error: { message?: string } | null 
         };
         
         if (!error) return; // Success
         
-        // On non-2xx, supabase-js puts the parsed response body in `data`
-        // Check if it's a mismatch error (403)
+        // Check if it's a "not connected" or "mismatch" response
         if (data && typeof data === "object") {
-          const errType = (data as Record<string, unknown>).error as string;
-          const mismatchMsg = (data as Record<string, unknown>).message as string;
-          if (errType && (errType.includes("mismatch") || errType.includes("Mismatch"))) {
-            infos.push(mismatchMsg || `${name} is connected to a different account`);
+          const errType = String((data as Record<string, unknown>).error || "");
+          const msg = String((data as Record<string, unknown>).message || "");
+          if (errType.includes("not_connected") || errType.includes("mismatch") || msg.includes("not connected") || msg.includes("mismatch")) {
+            infos.push(msg || `${name} is not connected for your account`);
             return;
           }
         }
@@ -133,7 +132,8 @@ export function useCommunications(options?: { search?: string; typeFilter?: stri
       handleResult(rcRes, "RingCentral");
 
       if (infos.length > 0 && errors.length === 0) {
-        toast({ title: "Not connected", description: infos.join(". ") });
+        // Only show info if there were no real errors — this is expected for users without connections
+        // Don't show toast for "not connected" — the UI banner handles it
       } else if (errors.length > 0) {
         toast({ title: "Sync warnings", description: [...errors, ...infos].join("; "), variant: "destructive" });
       } else {

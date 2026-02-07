@@ -17,19 +17,43 @@ async function verifyAuth(req: Request): Promise<string | null> {
   );
 
   const token = authHeader.replace("Bearer ", "");
-  const { data, error } = await supabase.auth.getUser(token);
-  if (error || !data.user) return null;
-  
-  return data.user.id;
+  const { data, error } = await supabase.auth.getClaims(token);
+  if (error || !data?.claims) return null;
+
+  return data.claims.sub as string;
 }
 
-async function getAccessToken(): Promise<string> {
+async function getAccessTokenForUser(userId: string): Promise<string> {
+  const supabaseAdmin = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  );
+
+  const { data: tokenRow } = await supabaseAdmin
+    .from("user_gmail_tokens")
+    .select("refresh_token")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  let refreshToken = tokenRow?.refresh_token;
+
+  // Fallback to shared env var if user email matches
+  if (!refreshToken) {
+    const sharedToken = Deno.env.get("GMAIL_REFRESH_TOKEN");
+    if (sharedToken) {
+      refreshToken = sharedToken;
+    }
+  }
+
+  if (!refreshToken) {
+    throw new Error("Gmail not connected. Please connect your Gmail account first.");
+  }
+
   const clientId = Deno.env.get("GMAIL_CLIENT_ID");
   const clientSecret = Deno.env.get("GMAIL_CLIENT_SECRET");
-  const refreshToken = Deno.env.get("GMAIL_REFRESH_TOKEN");
 
-  if (!clientId || !clientSecret || !refreshToken) {
-    throw new Error("Gmail credentials not configured");
+  if (!clientId || !clientSecret) {
+    throw new Error("Gmail OAuth credentials not configured");
   }
 
   const response = await fetch("https://oauth2.googleapis.com/token", {
@@ -44,7 +68,12 @@ async function getAccessToken(): Promise<string> {
   });
 
   if (!response.ok) {
-    throw new Error(`Token refresh failed: ${await response.text()}`);
+    const error = await response.text();
+    if (error.includes("invalid_grant")) {
+      await supabaseAdmin.from("user_gmail_tokens").delete().eq("user_id", userId);
+      throw new Error("Gmail token expired. Please reconnect your Gmail account.");
+    }
+    throw new Error(`Token refresh failed: ${error}`);
   }
 
   const data = await response.json();
@@ -68,8 +97,6 @@ function createRawEmail(to: string, subject: string, body: string, fromEmail: st
   emailLines.push("", body);
 
   const email = emailLines.join("\r\n");
-  
-  // Base64url encode
   const base64 = btoa(unescape(encodeURIComponent(email)));
   return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
@@ -89,7 +116,8 @@ serve(async (req) => {
   }
 
   try {
-    // Verify authentication
+    const clonedReq = req.clone();
+
     const userId = await verifyAuth(req);
     if (!userId) {
       return new Response(
@@ -98,13 +126,14 @@ serve(async (req) => {
       );
     }
 
-    const { to, subject, body, threadId, replyToMessageId, references }: SendEmailRequest = await req.json();
+    const { to, subject, body, threadId, replyToMessageId, references }: SendEmailRequest = await clonedReq.json();
 
     if (!to || !subject || !body) {
       throw new Error("Missing required fields: to, subject, body");
     }
 
-    const accessToken = await getAccessToken();
+    // Use this user's own Gmail token
+    const accessToken = await getAccessTokenForUser(userId);
 
     // Get user's email address
     const profileResponse = await fetch(
@@ -119,7 +148,6 @@ serve(async (req) => {
     const profile = await profileResponse.json();
     const fromEmail = profile.emailAddress;
 
-    // Create raw email
     const raw = createRawEmail(
       to,
       subject,
@@ -128,7 +156,6 @@ serve(async (req) => {
       replyToMessageId ? { messageId: replyToMessageId, references: references || "" } : undefined
     );
 
-    // Send email
     const sendResponse = await fetch(
       "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
       {

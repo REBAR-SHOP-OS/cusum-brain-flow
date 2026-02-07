@@ -19,22 +19,80 @@ async function verifyAuth(req: Request): Promise<string | null> {
   const token = authHeader.replace("Bearer ", "");
   const { data, error } = await supabase.auth.getClaims(token);
   if (error || !data?.claims) return null;
-  
+
   return data.claims.sub as string;
 }
 
-interface TokenResponse {
-  access_token: string;
-  expires_in: number;
-}
+async function getAccessTokenForUser(userId: string): Promise<string> {
+  const supabaseAdmin = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  );
 
-async function getAccessToken(): Promise<string> {
+  // Look up per-user token first
+  const { data: tokenRow } = await supabaseAdmin
+    .from("user_gmail_tokens")
+    .select("refresh_token")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  let refreshToken = tokenRow?.refresh_token;
+
+  // Fallback: if no per-user token, check the shared env var
+  // but only allow it if the user's email matches the Gmail account
+  if (!refreshToken) {
+    const sharedToken = Deno.env.get("GMAIL_REFRESH_TOKEN");
+    if (sharedToken) {
+      // Verify the user owns this Gmail account
+      const { data: userData } = await supabaseAdmin.auth.admin.getUserById(userId);
+      const userEmail = userData?.user?.email?.toLowerCase();
+
+      // Quick check: try to get Gmail profile with shared token
+      const clientId = Deno.env.get("GMAIL_CLIENT_ID");
+      const clientSecret = Deno.env.get("GMAIL_CLIENT_SECRET");
+      if (clientId && clientSecret) {
+        const checkRes = await fetch("https://oauth2.googleapis.com/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            client_id: clientId,
+            client_secret: clientSecret,
+            refresh_token: sharedToken,
+            grant_type: "refresh_token",
+          }),
+        });
+        if (checkRes.ok) {
+          const checkData = await checkRes.json();
+          const profileRes = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/profile", {
+            headers: { Authorization: `Bearer ${checkData.access_token}` },
+          });
+          if (profileRes.ok) {
+            const profile = await profileRes.json();
+            const gmailEmail = (profile.emailAddress || "").toLowerCase();
+            if (gmailEmail === userEmail) {
+              // User matches — auto-migrate their token to the DB
+              await supabaseAdmin.from("user_gmail_tokens").upsert({
+                user_id: userId,
+                gmail_email: gmailEmail,
+                refresh_token: sharedToken,
+              }, { onConflict: "user_id" });
+              refreshToken = sharedToken;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (!refreshToken) {
+    throw new Error("Gmail not connected. Please connect your Gmail account from Inbox settings.");
+  }
+
   const clientId = Deno.env.get("GMAIL_CLIENT_ID");
   const clientSecret = Deno.env.get("GMAIL_CLIENT_SECRET");
-  const refreshToken = Deno.env.get("GMAIL_REFRESH_TOKEN");
 
-  if (!clientId || !clientSecret || !refreshToken) {
-    throw new Error("Gmail credentials not configured");
+  if (!clientId || !clientSecret) {
+    throw new Error("Gmail OAuth credentials not configured");
   }
 
   const response = await fetch("https://oauth2.googleapis.com/token", {
@@ -50,10 +108,15 @@ async function getAccessToken(): Promise<string> {
 
   if (!response.ok) {
     const error = await response.text();
+    // If token is invalid, clean up
+    if (error.includes("invalid_grant")) {
+      await supabaseAdmin.from("user_gmail_tokens").delete().eq("user_id", userId);
+      throw new Error("Gmail token expired. Please reconnect your Gmail account.");
+    }
     throw new Error(`Token refresh failed: ${error}`);
   }
 
-  const data: TokenResponse = await response.json();
+  const data = await response.json();
   return data.access_token;
 }
 
@@ -97,12 +160,10 @@ function getBodyContent(message: GmailMessage): string {
   if (message.payload.body?.data) {
     return decodeBase64Url(message.payload.body.data);
   }
-  
   const textPart = message.payload.parts?.find((p) => p.mimeType === "text/plain");
   if (textPart?.body?.data) {
     return decodeBase64Url(textPart.body.data);
   }
-  
   return message.snippet;
 }
 
@@ -112,10 +173,8 @@ serve(async (req) => {
   }
 
   try {
-    // Clone request to read body later (verifyAuth may consume the stream)
     const clonedReq = req.clone();
 
-    // Verify authentication
     const userId = await verifyAuth(req);
     if (!userId) {
       return new Response(
@@ -124,46 +183,15 @@ serve(async (req) => {
       );
     }
 
-    // Get user's email to verify they own this Gmail account
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-    const { data: userData } = await supabaseAdmin.auth.admin.getUserById(userId);
-    const userEmail = userData?.user?.email?.toLowerCase();
-
-    // Get Gmail access token (single call, reused throughout)
-    const accessToken = await getAccessToken();
-
-    // Check the Gmail account email
-    const profileRes = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/profile", {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-
-    let gmailAccountEmail = "";
-    if (profileRes.ok) {
-      const profile = await profileRes.json();
-      gmailAccountEmail = (profile.emailAddress || "").toLowerCase();
-    }
-
-    // Only allow sync if user's email matches the Gmail account
-    if (gmailAccountEmail && userEmail && gmailAccountEmail !== userEmail) {
-      return new Response(
-        JSON.stringify({
-          error: "Gmail account mismatch",
-          message: `This Gmail integration is connected to ${gmailAccountEmail}. You are logged in as ${userEmail}.`,
-          synced: 0,
-        }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    // Get the user's own Gmail access token
+    const accessToken = await getAccessTokenForUser(userId);
 
     // Parse body for parameters
     let body: { maxResults?: number; pageToken?: string; query?: string } = {};
     try {
       body = await clonedReq.json();
     } catch {
-      // No body or invalid JSON, use defaults
+      // No body or invalid JSON
     }
 
     const maxResults = String(body.maxResults ?? 20);
@@ -225,7 +253,12 @@ serve(async (req) => {
 
     const validMessages = messages.filter(Boolean);
 
-    // Upsert each message into communications
+    // Upsert into communications
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
     for (const msg of validMessages) {
       if (!msg) continue;
 
@@ -263,9 +296,20 @@ serve(async (req) => {
     );
   } catch (error) {
     console.error("Gmail sync error:", error);
+
+    // Return specific error for "not connected" so UI can handle it
+    const message = error instanceof Error ? error.message : "Unknown error";
+    const isNotConnected = message.includes("not connected") || message.includes("reconnect");
+
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      JSON.stringify({
+        error: isNotConnected ? "gmail_not_connected" : "sync_error",
+        message,
+      }),
+      {
+        status: isNotConnected ? 403 : 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }
     );
   }
 });

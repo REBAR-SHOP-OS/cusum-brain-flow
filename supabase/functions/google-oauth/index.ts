@@ -7,7 +7,6 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Google OAuth scopes for different integrations
 const SCOPES: Record<string, string[]> = {
   gmail: [
     "https://www.googleapis.com/auth/gmail.readonly",
@@ -54,7 +53,6 @@ serve(async (req) => {
   }
 
   try {
-    // Verify authentication
     const userId = await verifyAuth(req);
     if (!userId) {
       return new Response(
@@ -66,43 +64,32 @@ serve(async (req) => {
     const url = new URL(req.url);
     let action = url.searchParams.get("action");
 
-    // Parse body once for all actions - clone request first to avoid stream issues
     let body: Record<string, unknown> = {};
     try {
       const text = await req.text();
-      if (text) {
-        body = JSON.parse(text);
-      }
-    } catch (e) {
-      console.log("Body parsing error or empty body:", e);
+      if (text) body = JSON.parse(text);
+    } catch {
+      // empty body
     }
 
-    console.log("Request URL:", req.url);
-    console.log("Query action:", action);
-    console.log("Body:", JSON.stringify(body));
-
-    // Also check for action in body (supabase.functions.invoke passes in body)
-    if (!action && body.action) {
-      action = body.action as string;
-    }
-
-    console.log("Final action:", action);
+    if (!action && body.action) action = body.action as string;
 
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Handle different actions
+    // ─── Generate OAuth URL ────────────────────────────────────────
     if (action === "get-auth-url") {
-      // Generate OAuth authorization URL
       const integration = body.integration as string;
       const redirectUri = body.redirectUri as string;
 
       const clientId = Deno.env.get("GOOGLE_CLIENT_ID") || Deno.env.get("GMAIL_CLIENT_ID");
-      if (!clientId) {
-        throw new Error("Google Client ID not configured");
-      }
+      if (!clientId) throw new Error("Google Client ID not configured");
+
+      // Get user's email to pre-fill the login hint
+      const { data: userData } = await supabaseAdmin.auth.admin.getUserById(userId);
+      const userEmail = userData?.user?.email || "";
 
       const scopes = SCOPES[integration] || SCOPES.gmail;
       const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
@@ -113,6 +100,7 @@ serve(async (req) => {
       authUrl.searchParams.set("access_type", "offline");
       authUrl.searchParams.set("prompt", "consent");
       authUrl.searchParams.set("state", integration);
+      if (userEmail) authUrl.searchParams.set("login_hint", userEmail);
 
       return new Response(
         JSON.stringify({ authUrl: authUrl.toString() }),
@@ -120,8 +108,8 @@ serve(async (req) => {
       );
     }
 
+    // ─── Exchange code for tokens ──────────────────────────────────
     if (action === "exchange-code") {
-      // Exchange authorization code for tokens
       const code = body.code as string;
       const redirectUri = body.redirectUri as string;
       const integration = body.integration as string;
@@ -129,9 +117,7 @@ serve(async (req) => {
       const clientId = Deno.env.get("GOOGLE_CLIENT_ID") || Deno.env.get("GMAIL_CLIENT_ID");
       const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET") || Deno.env.get("GMAIL_CLIENT_SECRET");
 
-      if (!clientId || !clientSecret) {
-        throw new Error("Google OAuth credentials not configured");
-      }
+      if (!clientId || !clientSecret) throw new Error("Google OAuth credentials not configured");
 
       const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",
@@ -152,7 +138,39 @@ serve(async (req) => {
 
       const tokens = await tokenResponse.json();
 
-      // Update integration status in database
+      if (!tokens.refresh_token) {
+        throw new Error("No refresh token received. Please revoke app access in your Google Account and try again.");
+      }
+
+      // Get the Gmail email address from the new token
+      let gmailEmail = "";
+      if (integration === "gmail") {
+        const profileRes = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/profile", {
+          headers: { Authorization: `Bearer ${tokens.access_token}` },
+        });
+        if (profileRes.ok) {
+          const profile = await profileRes.json();
+          gmailEmail = profile.emailAddress || "";
+        }
+      }
+
+      // Save refresh token per-user in the database
+      if (integration === "gmail" && tokens.refresh_token) {
+        const { error: upsertError } = await supabaseAdmin
+          .from("user_gmail_tokens")
+          .upsert({
+            user_id: userId,
+            gmail_email: gmailEmail,
+            refresh_token: tokens.refresh_token,
+          }, { onConflict: "user_id" });
+
+        if (upsertError) {
+          console.error("Failed to save Gmail token:", upsertError);
+          throw new Error("Failed to save Gmail credentials");
+        }
+      }
+
+      // Update integration status
       await supabaseAdmin
         .from("integration_connections")
         .upsert({
@@ -160,57 +178,105 @@ serve(async (req) => {
           status: "connected",
           last_checked_at: new Date().toISOString(),
           error_message: null,
-          config: { hasRefreshToken: !!tokens.refresh_token },
+          config: { hasRefreshToken: true },
         }, { onConflict: "integration_id" });
 
       return new Response(
         JSON.stringify({
           success: true,
-          refreshToken: tokens.refresh_token,
-          message: "Authorization successful! Please save the refresh token as a secret.",
+          gmailEmail,
+          message: `Gmail connected as ${gmailEmail || "your account"}!`,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
+    // ─── Check connection status for current user ──────────────────
     if (action === "check-status") {
-      // Check if an integration is connected
       const integration = body.integration as string;
 
-      // Try to verify the connection by refreshing the token
-      // Use integration-specific credentials, falling back to shared Gmail/Google credentials
-      const clientId = Deno.env.get("GOOGLE_CLIENT_ID") || Deno.env.get("GMAIL_CLIENT_ID");
-      const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET") || Deno.env.get("GMAIL_CLIENT_SECRET");
-      
-      // Check for integration-specific refresh token, then fall back to shared one
-      let refreshToken: string | undefined;
       if (integration === "gmail") {
-        refreshToken = Deno.env.get("GMAIL_REFRESH_TOKEN");
-      } else if (integration === "google-calendar") {
-        refreshToken = Deno.env.get("GOOGLE_CALENDAR_REFRESH_TOKEN") || Deno.env.get("GMAIL_REFRESH_TOKEN");
-      } else if (integration === "google-drive") {
-        refreshToken = Deno.env.get("GOOGLE_DRIVE_REFRESH_TOKEN") || Deno.env.get("GMAIL_REFRESH_TOKEN");
-      } else {
-        refreshToken = Deno.env.get("GMAIL_REFRESH_TOKEN");
+        // Check if the user has a stored token
+        const { data: tokenData } = await supabaseAdmin
+          .from("user_gmail_tokens")
+          .select("gmail_email, updated_at")
+          .eq("user_id", userId)
+          .maybeSingle();
+
+        if (tokenData) {
+          return new Response(
+            JSON.stringify({ status: "connected", email: tokenData.gmail_email }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        // Fallback: check if shared env token matches this user's email
+        const sharedToken = Deno.env.get("GMAIL_REFRESH_TOKEN");
+        if (sharedToken) {
+          const { data: userData } = await supabaseAdmin.auth.admin.getUserById(userId);
+          const userEmail = userData?.user?.email?.toLowerCase();
+          const clientId = Deno.env.get("GMAIL_CLIENT_ID");
+          const clientSecret = Deno.env.get("GMAIL_CLIENT_SECRET");
+
+          if (clientId && clientSecret) {
+            try {
+              const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: new URLSearchParams({
+                  client_id: clientId,
+                  client_secret: clientSecret,
+                  refresh_token: sharedToken,
+                  grant_type: "refresh_token",
+                }),
+              });
+              if (tokenRes.ok) {
+                const tokenData2 = await tokenRes.json();
+                const profileRes = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/profile", {
+                  headers: { Authorization: `Bearer ${tokenData2.access_token}` },
+                });
+                if (profileRes.ok) {
+                  const profile = await profileRes.json();
+                  const gmailEmail = (profile.emailAddress || "").toLowerCase();
+                  if (gmailEmail === userEmail) {
+                    // Auto-migrate token
+                    await supabaseAdmin.from("user_gmail_tokens").upsert({
+                      user_id: userId,
+                      gmail_email: gmailEmail,
+                      refresh_token: sharedToken,
+                    }, { onConflict: "user_id" });
+
+                    return new Response(
+                      JSON.stringify({ status: "connected", email: gmailEmail }),
+                      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+                    );
+                  }
+                }
+              }
+            } catch {
+              // Shared token check failed, treat as not connected
+            }
+          }
+        }
+
+        return new Response(
+          JSON.stringify({ status: "not_connected" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
 
-      if (!clientId || !clientSecret || !refreshToken) {
-        await supabaseAdmin
-          .from("integration_connections")
-          .upsert({
-            integration_id: integration,
-            status: "available",
-            last_checked_at: new Date().toISOString(),
-            error_message: "Credentials not configured",
-          }, { onConflict: "integration_id" });
+      // For non-gmail integrations, use the old shared-token approach
+      const clientId = Deno.env.get("GOOGLE_CLIENT_ID") || Deno.env.get("GMAIL_CLIENT_ID");
+      const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET") || Deno.env.get("GMAIL_CLIENT_SECRET");
+      const refreshToken = Deno.env.get("GMAIL_REFRESH_TOKEN");
 
+      if (!clientId || !clientSecret || !refreshToken) {
         return new Response(
           JSON.stringify({ status: "available", error: "Credentials not configured" }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      // Try to refresh the token
       const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -223,35 +289,30 @@ serve(async (req) => {
       });
 
       if (!tokenResponse.ok) {
-        const error = await tokenResponse.text();
-        await supabaseAdmin
-          .from("integration_connections")
-          .upsert({
-            integration_id: integration,
-            status: "error",
-            last_checked_at: new Date().toISOString(),
-            error_message: error.includes("invalid_grant") ? "Token expired - please reconnect" : "Connection error",
-          }, { onConflict: "integration_id" });
-
         return new Response(
           JSON.stringify({ status: "error", error: "Token invalid or expired" }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      // Token is valid
-      await supabaseAdmin
-        .from("integration_connections")
-        .upsert({
-          integration_id: integration,
-          status: "connected",
-          last_checked_at: new Date().toISOString(),
-          last_sync_at: new Date().toISOString(),
-          error_message: null,
-        }, { onConflict: "integration_id" });
-
       return new Response(
         JSON.stringify({ status: "connected" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ─── Disconnect Gmail for current user ─────────────────────────
+    if (action === "disconnect") {
+      const integration = body.integration as string;
+      if (integration === "gmail") {
+        await supabaseAdmin
+          .from("user_gmail_tokens")
+          .delete()
+          .eq("user_id", userId);
+      }
+
+      return new Response(
+        JSON.stringify({ success: true }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

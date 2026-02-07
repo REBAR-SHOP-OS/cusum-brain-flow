@@ -1,5 +1,5 @@
-import { useState, useMemo, useCallback } from "react";
-import { RefreshCw, Settings, Loader2, Search, CheckSquare, Trash2, Archive, X } from "lucide-react";
+import { useState, useMemo, useCallback, useEffect } from "react";
+import { RefreshCw, Settings, Loader2, Search, CheckSquare, Trash2, Archive, X, Mail, LogOut } from "lucide-react";
 import { InboxEmailList, type InboxEmail } from "./InboxEmailList";
 import { InboxEmailViewer } from "./InboxEmailViewer";
 import { InboxManagerSettings } from "./InboxManagerSettings";
@@ -91,6 +91,67 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const { toast } = useToast();
+
+  // Gmail connection state
+  const [gmailStatus, setGmailStatus] = useState<"loading" | "connected" | "not_connected">("loading");
+  const [gmailEmail, setGmailEmail] = useState<string | null>(null);
+  const [connecting, setConnecting] = useState(false);
+
+  // Check if current user has Gmail connected
+  useEffect(() => {
+    const checkGmailStatus = async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke("google-oauth", {
+          body: { action: "check-status", integration: "gmail" },
+        });
+        if (error) {
+          setGmailStatus("not_connected");
+          return;
+        }
+        if (data?.status === "connected") {
+          setGmailStatus("connected");
+          setGmailEmail(data.email || userEmail);
+        } else {
+          setGmailStatus("not_connected");
+        }
+      } catch {
+        setGmailStatus("not_connected");
+      }
+    };
+    checkGmailStatus();
+  }, [userEmail]);
+
+  const handleConnectGmail = async () => {
+    setConnecting(true);
+    try {
+      const redirectUri = `${window.location.origin}/integrations/callback`;
+      const { data, error } = await supabase.functions.invoke("google-oauth", {
+        body: { action: "get-auth-url", integration: "gmail", redirectUri },
+      });
+      if (error) throw new Error(error.message);
+      window.location.href = data.authUrl;
+    } catch (err) {
+      toast({
+        title: "Connection failed",
+        description: err instanceof Error ? err.message : "Could not start Gmail connection",
+        variant: "destructive",
+      });
+      setConnecting(false);
+    }
+  };
+
+  const handleDisconnectGmail = async () => {
+    try {
+      await supabase.functions.invoke("google-oauth", {
+        body: { action: "disconnect", integration: "gmail" },
+      });
+      setGmailStatus("not_connected");
+      setGmailEmail(null);
+      toast({ title: "Gmail disconnected" });
+    } catch {
+      toast({ title: "Failed to disconnect", variant: "destructive" });
+    }
+  };
 
   // Map communications to InboxEmail format
   const allEmails: (InboxEmail & { priority: number })[] = useMemo(() => {
@@ -349,6 +410,40 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
             </Button>
           </div>
         </div>
+
+        {/* Gmail connection banner */}
+        {gmailStatus === "not_connected" && (
+          <div className="px-3 py-3 border-b bg-muted/50">
+            <div className="flex items-center gap-3">
+              <Mail className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium">Connect your Gmail</p>
+                <p className="text-xs text-muted-foreground">Sign in to sync your emails</p>
+              </div>
+              <Button size="sm" onClick={handleConnectGmail} disabled={connecting}>
+                {connecting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Connect"}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {gmailStatus === "connected" && gmailEmail && (
+          <div className="px-3 py-1.5 border-b bg-muted/30 flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">
+              <Mail className="w-3 h-3 inline mr-1" />
+              {gmailEmail}
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-1.5 text-xs text-muted-foreground hover:text-destructive"
+              onClick={handleDisconnectGmail}
+              title="Disconnect Gmail"
+            >
+              <LogOut className="w-3 h-3" />
+            </Button>
+          </div>
+        )}
 
         {/* AI Toolbar */}
         <InboxAIToolbar emailCount={allEmails.length} onAction={handleAIAction} />
