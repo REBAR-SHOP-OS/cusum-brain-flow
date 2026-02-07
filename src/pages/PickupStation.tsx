@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { usePickupOrders, usePickupOrderItems } from "@/hooks/usePickupOrders";
+import { useCompletedBundles } from "@/hooks/useCompletedBundles";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAuth } from "@/lib/auth";
 import { PickupVerification } from "@/components/shopfloor/PickupVerification";
+import { ReadyBundleList } from "@/components/dispatch/ReadyBundleList";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Package, MapPin } from "lucide-react";
@@ -20,6 +22,7 @@ export default function PickupStation() {
   const { isAdmin, isWorkshop } = useUserRole();
   const canWrite = isAdmin || isWorkshop;
 
+  const { bundles } = useCompletedBundles();
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const selectedOrder = orders.find((o) => o.id === selectedOrderId) || null;
   const { items, toggleVerified } = usePickupOrderItems(selectedOrderId);
@@ -55,12 +58,18 @@ export default function PickupStation() {
       </header>
 
       {/* Content */}
-      <div className="flex-1 overflow-auto p-4 sm:p-6">
+      <div className="flex-1 overflow-auto p-4 sm:p-6 space-y-6">
+        {/* Ready bundles from clearance */}
+        <ReadyBundleList
+          bundles={bundles}
+          title="Cleared — Ready for Pickup"
+        />
+
         {loading ? (
           <div className="flex items-center justify-center h-64">
             <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
           </div>
-        ) : orders.length === 0 ? (
+        ) : orders.length === 0 && bundles.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 gap-2 text-muted-foreground">
             <Package className="w-10 h-10" />
             <p>No pickup orders found</p>

@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useCompletedBundles } from "@/hooks/useCompletedBundles";
+import { ReadyBundleList } from "@/components/dispatch/ReadyBundleList";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -68,6 +70,7 @@ const stopStatusColors: Record<string, string> = {
 export default function Deliveries() {
   const [activeTab, setActiveTab] = useState("today");
   const [selectedDelivery, setSelectedDelivery] = useState<Delivery | null>(null);
+  const { bundles } = useCompletedBundles();
 
   const { data: deliveries = [], isLoading, error } = useQuery({
     queryKey: ["deliveries"],
@@ -155,12 +158,12 @@ export default function Deliveries() {
             <StatCard 
               label="In Transit" 
               value={activeDeliveries.length} 
-              icon={<Truck className="w-4 h-4 text-blue-500" />}
+              icon={<Truck className="w-4 h-4 text-primary" />}
             />
             <StatCard 
               label="Today" 
               value={todayDeliveries.length} 
-              icon={<Calendar className="w-4 h-4 text-yellow-500" />}
+              icon={<Calendar className="w-4 h-4 text-muted-foreground" />}
             />
             <StatCard 
               label="Upcoming" 
@@ -170,9 +173,20 @@ export default function Deliveries() {
             <StatCard 
               label="Completed" 
               value={completedDeliveries.length} 
-              icon={<CheckCircle2 className="w-4 h-4 text-green-500" />}
+              icon={<CheckCircle2 className="w-4 h-4 text-primary" />}
             />
           </div>
+        </div>
+
+        {/* Ready Bundles from Clearance */}
+        {bundles.length > 0 && (
+          <div className="px-4 sm:px-6 py-4 border-b border-border">
+            <ReadyBundleList
+              bundles={bundles}
+              title="Cleared — Ready for Delivery"
+            />
+          </div>
+        )}
         </div>
 
         {/* Content */}
