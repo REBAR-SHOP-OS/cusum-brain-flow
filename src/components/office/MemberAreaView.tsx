@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +26,7 @@ import { useAuth } from "@/lib/auth";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAvatarUpload } from "@/hooks/useAvatarUpload";
 import { BulkAvatarUploadDialog } from "@/components/settings/BulkAvatarUploadDialog";
+import { AiVisionUploadDialog, type UploadedSchematic } from "@/components/office/AiVisionUploadDialog";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -390,11 +391,35 @@ function SystemConfigTab({
   measurement, setMeasurement, customCode, setCustomCode,
 }: SystemConfigProps) {
   const [uploadingSchematic, setUploadingSchematic] = useState(false);
-  const [aiAssigning, setAiAssigning] = useState(false);
-  const [aiResult, setAiResult] = useState<{ shape_code?: string; confidence?: number; description?: string } | null>(null);
-  const [uploadedSchematics, setUploadedSchematics] = useState<{ code: string; url: string; analysis?: string }[]>([]);
+  const [aiVisionOpen, setAiVisionOpen] = useState(false);
+  const [savedSchematics, setSavedSchematics] = useState<UploadedSchematic[]>([]);
+  const [loadingSchematics, setLoadingSchematics] = useState(false);
   const schematicFileRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+
+  // Load existing schematics from DB
+  const loadSchematics = async () => {
+    setLoadingSchematics(true);
+    try {
+      const { data, error } = await supabase
+        .from("custom_shape_schematics")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (!error && data) {
+        setSavedSchematics(data as UploadedSchematic[]);
+      }
+    } catch {
+      // silent
+    } finally {
+      setLoadingSchematics(false);
+    }
+  };
+
+  useEffect(() => {
+    if (configTab === "asa-shapes") {
+      loadSchematics();
+    }
+  }, [configTab]);
 
   const handleUploadSchematic = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -416,26 +441,18 @@ function SystemConfigTab({
 
       const publicUrl = `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/shape-schematics/${path}`;
 
-      // Run AI analysis on the uploaded image
       const { data: analysisData, error: analysisError } = await supabase.functions.invoke("shape-vision", {
         body: { imageUrl: publicUrl, action: "analyze" },
       });
 
       const analysis = analysisError ? null : analysisData;
 
-      // Save to database
       await supabase.from("custom_shape_schematics").insert({
         shape_code: customCode.trim().toUpperCase(),
         image_url: publicUrl,
         ai_analysis: analysis ? JSON.stringify(analysis) : null,
         uploaded_by: "system",
       });
-
-      setUploadedSchematics(prev => [...prev, {
-        code: customCode.trim().toUpperCase(),
-        url: publicUrl,
-        analysis: analysis?.description || analysis?.shape_code,
-      }]);
 
       toast({
         title: "Schematic uploaded",
@@ -444,45 +461,12 @@ function SystemConfigTab({
           : "Upload successful, AI analysis pending.",
       });
       setCustomCode("");
+      loadSchematics(); // Refresh the list
     } catch (err: any) {
       toast({ title: "Upload failed", description: err.message, variant: "destructive" });
     } finally {
       setUploadingSchematic(false);
       if (schematicFileRef.current) schematicFileRef.current.value = "";
-    }
-  };
-
-  const handleAiVisionAssign = async () => {
-    setAiAssigning(true);
-    setAiResult(null);
-    try {
-      // Run AI routing analysis on all standard shapes
-      const results: { code: string; routing: any }[] = [];
-      const shapesToAnalyze = ["4", "5", "17", "T3"];
-
-      for (const code of shapesToAnalyze) {
-        const { data, error } = await supabase.functions.invoke("shape-vision", {
-          body: { shapeCode: code, action: "assign" },
-        });
-        if (!error && data) {
-          results.push({ code, routing: data.routing });
-        }
-      }
-
-      toast({
-        title: "AI Vision Assignment Complete",
-        description: `Analyzed ${results.length} shape codes for machine routing.`,
-      });
-
-      setAiResult({
-        shape_code: "Multi-shape",
-        confidence: 1,
-        description: `${results.length} shapes analyzed. Routing recommendations generated for bender and cutter stations.`,
-      });
-    } catch (err: any) {
-      toast({ title: "AI analysis failed", description: err.message, variant: "destructive" });
-    } finally {
-      setAiAssigning(false);
     }
   };
 
@@ -571,27 +555,19 @@ function SystemConfigTab({
             </div>
             <Button
               className="gap-1.5"
-              onClick={handleAiVisionAssign}
-              disabled={aiAssigning}
+              onClick={() => setAiVisionOpen(true)}
             >
-              {aiAssigning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-              {aiAssigning ? "Analyzing..." : "AI Vision Assign"}
+              <Sparkles className="w-4 h-4" />
+              AI Vision Assign
             </Button>
           </div>
 
-          {/* AI Result Banner */}
-          {aiResult && (
-            <Card className="border-primary/40 bg-primary/5">
-              <CardContent className="p-4 flex items-center gap-3">
-                <Sparkles className="w-5 h-5 text-primary shrink-0" />
-                <div>
-                  <p className="text-sm font-bold text-foreground">{aiResult.shape_code}</p>
-                  <p className="text-xs text-muted-foreground">{aiResult.description}</p>
-                </div>
-                <Button variant="ghost" size="sm" className="ml-auto" onClick={() => setAiResult(null)}>Dismiss</Button>
-              </CardContent>
-            </Card>
-          )}
+          {/* AI Vision Upload Dialog */}
+          <AiVisionUploadDialog
+            open={aiVisionOpen}
+            onOpenChange={setAiVisionOpen}
+            onUploadsComplete={loadSchematics}
+          />
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {asaStandardShapes.map((shape) => (
@@ -637,25 +613,39 @@ function SystemConfigTab({
             )}
           </section>
 
-          {/* Uploaded custom schematics */}
-          {uploadedSchematics.length > 0 && (
+          {/* Saved schematics from DB */}
+          {savedSchematics.length > 0 && (
             <section>
               <div className="flex items-center gap-2 mb-3">
                 <CheckCircle2 className="w-4 h-4 text-primary" />
                 <h3 className="text-[10px] font-bold tracking-[0.2em] text-muted-foreground uppercase">
-                  Recently Uploaded ({uploadedSchematics.length})
+                  Uploaded Shapes ({savedSchematics.length})
                 </h3>
               </div>
               <div className="grid grid-cols-4 sm:grid-cols-6 gap-3">
-                {uploadedSchematics.map((s, i) => (
-                  <div key={i} className="rounded-lg border border-primary/30 bg-primary/5 p-2 flex flex-col items-center gap-1">
-                    <img src={s.url} alt={s.code} className="w-full aspect-square object-contain rounded" />
-                    <span className="text-[10px] font-bold text-primary">{s.code}</span>
-                    {s.analysis && <span className="text-[8px] text-muted-foreground truncate w-full text-center">{s.analysis}</span>}
-                  </div>
-                ))}
+                {savedSchematics.map((s) => {
+                  let analysisInfo: string | undefined;
+                  try {
+                    const parsed = s.ai_analysis ? JSON.parse(s.ai_analysis) : null;
+                    analysisInfo = parsed?.description || parsed?.shape_code;
+                  } catch { /* ignore */ }
+
+                  return (
+                    <div key={s.id} className="rounded-lg border border-primary/30 bg-primary/5 p-2 flex flex-col items-center gap-1">
+                      <img src={s.image_url} alt={s.shape_code} className="w-full aspect-square object-contain rounded" />
+                      <span className="text-[10px] font-bold text-primary">{s.shape_code}</span>
+                      {analysisInfo && <span className="text-[8px] text-muted-foreground truncate w-full text-center">{analysisInfo}</span>}
+                    </div>
+                  );
+                })}
               </div>
             </section>
+          )}
+
+          {loadingSchematics && (
+            <div className="text-center py-4">
+              <Loader2 className="w-5 h-5 animate-spin mx-auto text-muted-foreground" />
+            </div>
           )}
 
           {/* Full shape grid */}
