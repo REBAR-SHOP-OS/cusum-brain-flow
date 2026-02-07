@@ -179,10 +179,12 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
 
       toast({ title: "Machine started", description: `Cutting ${currentItem.mark_number || "item"} — use slot tracker to record cuts` });
     } catch (err: any) {
-      toast({ title: "Start failed", description: err.message, variant: "destructive" });
-    } finally {
       setIsRunning(false);
+      toast({ title: "Start failed", description: err.message, variant: "destructive" });
     }
+    // NOTE: Do NOT reset isRunning in finally — it stays true until
+    // handleCompleteRun or reset. This prevents a race condition where
+    // machineIsRunning briefly becomes false before the DB status refreshes.
   };
 
   // ── Record stroke ──

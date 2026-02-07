@@ -25,42 +25,74 @@ export interface SlotTrackerResult {
 
 /**
  * Build slots from RunPlan, optionally overriding bar count.
- * When overrideBars is provided, we rebuild the slot array to match
- * the actual number of bars the operator loaded.
+ *
+ * Physical model: ALL loaded bars are cut simultaneously on each stroke.
+ * Partial bar = the last bar that needs fewer cuts than piecesPerBar.
+ * After the partial bar's cuts are done, operator removes it and continues.
+ *
+ * Edge cases handled:
+ *   1. remaining >= bars * piecesPerBar → all bars full, no partial
+ *   2. remaining < bars * piecesPerBar → last bar is partial, removed early
+ *   3. bars > totalBarsNeeded → extra bars all get full cuts (excess to stock)
  */
 function buildSlots(plan: RunPlan, overrideBars?: number): ActiveSlot[] {
   const piecesPerBar = plan.piecesPerBar;
   const barsToUse = overrideBars ?? plan.barsThisRun;
-  
+
   if (piecesPerBar <= 0 || barsToUse <= 0) return [];
 
-  // Total remaining pieces from the plan
-  const totalRemaining = plan.slots.reduce((sum, s) => sum + s.plannedCuts, 0);
-  // Recompute for the actual bars loaded
-  const totalPiecesThisRun = overrideBars
-    ? Math.min(totalRemaining + ((overrideBars - plan.barsThisRun) * piecesPerBar), overrideBars * piecesPerBar)
-    : totalRemaining;
+  // Total remaining pieces in the ENTIRE order (not just this run)
+  const totalRemaining = plan.lastBarPieces > 0
+    ? (plan.totalBarsNeeded - 1) * piecesPerBar + plan.lastBarPieces
+    : plan.totalBarsNeeded * piecesPerBar;
+
+  // Full capacity if every bar gets max cuts
+  const fullCapacity = barsToUse * piecesPerBar;
 
   const slots: ActiveSlot[] = [];
-  let piecesAssigned = 0;
 
-  for (let i = 0; i < barsToUse; i++) {
-    const piecesLeft = totalPiecesThisRun - piecesAssigned;
-    if (piecesLeft <= 0) break;
+  if (fullCapacity <= totalRemaining) {
+    // ── Case 1: We need ALL these pieces (and more). Every bar gets full cuts.
+    for (let i = 0; i < barsToUse; i++) {
+      slots.push({
+        index: i,
+        plannedCuts: piecesPerBar,
+        cutsDone: 0,
+        status: "active" as SlotStatus,
+        isPartial: false,
+      });
+    }
+  } else {
+    // ── Case 2: This run can finish the remaining order.
+    // Distribute remaining pieces across bars. Last bar may be partial.
+    let piecesAssigned = 0;
+    for (let i = 0; i < barsToUse; i++) {
+      const piecesLeft = totalRemaining - piecesAssigned;
 
-    const cutsThisSlot = Math.min(piecesPerBar, piecesLeft);
-    const isPartial = cutsThisSlot < piecesPerBar;
+      if (piecesLeft <= 0) {
+        // Extra bars beyond order needs — still loaded, get full cuts (excess → WIP stock)
+        slots.push({
+          index: i,
+          plannedCuts: piecesPerBar,
+          cutsDone: 0,
+          status: "active" as SlotStatus,
+          isPartial: false,
+        });
+        piecesAssigned += piecesPerBar;
+      } else {
+        const cutsThisSlot = Math.min(piecesPerBar, piecesLeft);
+        const isPartial = cutsThisSlot < piecesPerBar;
 
-    slots.push({
-      index: i,
-      plannedCuts: cutsThisSlot,
-      cutsDone: 0,
-      // All bars are loaded simultaneously — all start active
-      status: "active" as SlotStatus,
-      isPartial,
-    });
-
-    piecesAssigned += cutsThisSlot;
+        slots.push({
+          index: i,
+          plannedCuts: cutsThisSlot,
+          cutsDone: 0,
+          status: "active" as SlotStatus,
+          isPartial,
+        });
+        piecesAssigned += cutsThisSlot;
+      }
+    }
   }
 
   return slots;
@@ -68,13 +100,6 @@ function buildSlots(plan: RunPlan, overrideBars?: number): ActiveSlot[] {
 
 export function useSlotTracker({ runPlan, isRunning }: UseSlotTrackerOpts): SlotTrackerResult {
   const [slots, setSlots] = useState<ActiveSlot[]>([]);
-
-  // Reset when run stops
-  useEffect(() => {
-    if (!isRunning) {
-      // Don't auto-clear — only reset() does that
-    }
-  }, [isRunning]);
 
   /**
    * Called by CutterStationView on LOCK & START with the actual bar count
