@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ChevronUp, ChevronDown, Lock, Zap, AlertCircle } from "lucide-react";
@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 interface CutEngineProps {
   barCode: string;
   maxBars?: number;
+  suggestedBars?: number;
   onLockAndStart: (stockLength: number, bars: number) => void;
   isRunning: boolean;
   canWrite: boolean;
@@ -18,13 +19,21 @@ const STOCK_LENGTHS = [6000, 12000, 18000];
 export function CutEngine({ 
   barCode, 
   maxBars = 10, 
+  suggestedBars,
   onLockAndStart, 
   isRunning, 
   canWrite,
   darkMode = false 
 }: CutEngineProps) {
   const [selectedStock, setSelectedStock] = useState(12000);
-  const [bars, setBars] = useState(1);
+  const [bars, setBars] = useState(suggestedBars || 1);
+
+  // Update bars when suggested value changes (new item selected)
+  useEffect(() => {
+    if (suggestedBars && suggestedBars > 0) {
+      setBars(Math.min(suggestedBars, maxBars));
+    }
+  }, [suggestedBars, maxBars]);
 
   const baseClasses = darkMode 
     ? "text-white" 
@@ -48,12 +57,18 @@ export function CutEngine({
         </h3>
       </div>
 
+      {/* Bar code display */}
+      <div className={cn("text-center py-2 rounded-lg border", borderClasses, darkMode ? "bg-slate-800" : "bg-muted")}>
+        <p className={cn("text-[10px] tracking-wider uppercase", mutedClasses)}>Bar Size</p>
+        <p className="text-lg font-black font-mono">{barCode}</p>
+      </div>
+
       {/* Stock length selector */}
       <div className="space-y-2">
         <div className="flex items-center gap-2">
           <AlertCircle className="w-3.5 h-3.5 text-primary" />
           <p className={cn("text-xs tracking-wider uppercase font-medium", mutedClasses)}>
-            Load Selection
+            Stock Length
           </p>
         </div>
         <div className={cn("flex rounded-lg overflow-hidden border", borderClasses)}>
@@ -70,7 +85,7 @@ export function CutEngine({
                     : "bg-muted text-muted-foreground hover:bg-muted/80"
               )}
             >
-              {len.toLocaleString()}mm
+              {(len / 1000)}M
             </button>
           ))}
         </div>
@@ -78,6 +93,9 @@ export function CutEngine({
 
       {/* Bars counter */}
       <div className="space-y-2">
+        <p className={cn("text-xs tracking-wider uppercase font-medium", mutedClasses)}>
+          Bars to Load
+        </p>
         <div className={cn(
           "flex items-center justify-between rounded-lg p-3",
           darkMode ? "bg-slate-800 border border-slate-700" : "bg-muted border border-border"
@@ -95,7 +113,7 @@ export function CutEngine({
             <ChevronDown className="w-4 h-4" />
           </Button>
           <div className="text-center">
-            <span className="text-2xl font-bold font-mono">{bars}</span>
+            <span className="text-3xl font-black font-mono">{bars}</span>
             <span className={cn("text-xs ml-1.5 uppercase tracking-wider", mutedClasses)}>
               Bars
             </span>
@@ -113,6 +131,9 @@ export function CutEngine({
             <ChevronUp className="w-4 h-4" />
           </Button>
         </div>
+        <p className={cn("text-[10px] text-center", mutedClasses)}>
+          Max capacity: {maxBars} bars
+        </p>
       </div>
 
       {/* Lock & Start button */}
