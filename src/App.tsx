@@ -36,6 +36,7 @@ import AdminPanel from "./pages/AdminPanel";
 import AdminMachines from "./pages/AdminMachines";
 import AdminDbAudit from "./pages/AdminDbAudit";
 import CleanupReport from "./pages/CleanupReport";
+import DataStoresAudit from "./pages/DataStoresAudit";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import TermsOfService from "./pages/TermsOfService";
 import Landing from "./pages/Landing";
@@ -306,6 +307,16 @@ const App = () => (
                 <ProtectedRoute>
                   <AppLayout>
                     <CleanupReport />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/data-audit"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <DataStoresAudit />
                   </AppLayout>
                 </ProtectedRoute>
               }

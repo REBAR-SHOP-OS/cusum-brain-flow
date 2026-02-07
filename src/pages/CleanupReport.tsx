@@ -40,7 +40,7 @@ const databaseCleanup: CleanupItem[] = [
 
 const deprecatedItems: CleanupItem[] = [
   { label: "src/pages/InboxManager.tsx (293 lines)", detail: "Onboarding wizard for Inbox — only reachable via /inbox-manager which redirects to /inbox. Kept for potential future re-use of the setup flow.", severity: "deprecated" },
-  { label: "firebase npm package", detail: "Still installed (12.9.0) but no longer imported anywhere. Safe to uninstall when ready.", severity: "deprecated" },
+  { label: "firebase npm package", detail: "Uninstalled in the Collections Audit pass. No Firebase code or dependencies remain.", severity: "removed" },
   { label: "InventoryStatusPanel.tsx", detail: "Was removed from station detail views in the UI redesign. Still a valid component — should be re-added to detail views or office portal.", severity: "deprecated" },
 ];
 
@@ -60,7 +60,7 @@ const recommendedRefactors: string[] = [
   "Add Deno tests for smart-dispatch and manage-inventory transactional guarantees",
   "Re-integrate InventoryStatusPanel into CutterStationView and BenderStationView as a collapsible side panel",
   "Implement proper office role read-only RLS on events, deliveries, and delivery_stops tables",
-  "Uninstall the firebase npm package (bun remove firebase)",
+  "Firebase npm package has been uninstalled ✓",
   "Add proper loading skeletons to all station views for better perceived performance",
   "Implement the TIME CLOCK, TEAM HUB, CLEARANCE, and LOADING ST. modules or mark as coming soon",
   "Add end-to-end tests for production task lifecycle: dispatch → queue → start → complete",
