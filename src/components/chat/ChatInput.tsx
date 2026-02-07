@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Send, Paperclip, X, FileIcon, Loader2 } from "lucide-react";
+import { Send, Paperclip, X, FileIcon, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -18,15 +18,18 @@ interface ChatInputProps {
   placeholder?: string;
   disabled?: boolean;
   showFileUpload?: boolean;
+  showSmartMode?: boolean;
 }
 
 export function ChatInput({ 
   onSend, 
   placeholder = "Message...", 
   disabled,
-  showFileUpload = false
+  showFileUpload = false,
+  showSmartMode = false,
 }: ChatInputProps) {
   const [value, setValue] = useState("");
+  const [smartMode, setSmartMode] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -266,9 +269,27 @@ export function ChatInput({
         </Button>
       </div>
 
-      <p className="text-xs text-muted-foreground mt-2 text-center">
-        AI drafts only • Human approval required for actions
-      </p>
+      <div className="flex items-center justify-between mt-2 px-1">
+        {showSmartMode ? (
+          <button
+            onClick={() => setSmartMode(!smartMode)}
+            className={cn(
+              "flex items-center gap-1.5 text-xs font-medium rounded-full px-2.5 py-1 transition-colors",
+              smartMode
+                ? "bg-primary/15 text-primary"
+                : "bg-muted text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <Sparkles className={cn("w-3.5 h-3.5", smartMode && "text-primary")} />
+            Smart mode {smartMode ? "on" : "off"}
+          </button>
+        ) : (
+          <div />
+        )}
+        <p className="text-xs text-muted-foreground">
+          AI drafts only • Human approval required for actions
+        </p>
+      </div>
     </div>
   );
 }
