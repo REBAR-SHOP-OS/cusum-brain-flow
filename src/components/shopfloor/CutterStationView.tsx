@@ -119,6 +119,8 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
     if (!currentItem) return;
     try {
       setIsRunning(true);
+      // Initialize slot tracker with actual bars the operator chose
+      slotTracker.startWithBars(bars);
 
       const result = await manageMachine({
         action: "start-run",
