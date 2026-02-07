@@ -194,3 +194,70 @@
     border-radius: 3px;
   }
 }
+
+/* ============================================
+   Zebra ZT411 Label Print Styles
+   4" × 6" (101.6mm × 152.4mm) @ 203/300 DPI
+   ============================================ */
+@media print {
+  @page {
+    size: 4in 6in;
+    margin: 0;
+  }
+
+  /* Hide everything except tag cards */
+  body * {
+    visibility: hidden !important;
+  }
+
+  .rebar-tag,
+  .rebar-tag * {
+    visibility: visible !important;
+  }
+
+  .rebar-tag {
+    position: relative;
+    width: 4in !important;
+    height: 6in !important;
+    max-width: 4in !important;
+    max-height: 6in !important;
+    page-break-after: always;
+    page-break-inside: avoid;
+    border-width: 1px !important;
+    border-color: #000 !important;
+    border-radius: 0 !important;
+    background: #fff !important;
+    color: #000 !important;
+    font-size: 10pt !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    overflow: hidden;
+  }
+
+  /* Force black text and borders for thermal printing */
+  .rebar-tag * {
+    color: #000 !important;
+    border-color: #000 !important;
+    background: transparent !important;
+  }
+
+  /* Make SVG shapes print black */
+  .rebar-tag svg path,
+  .rebar-tag svg circle,
+  .rebar-tag svg text {
+    stroke: #000 !important;
+    fill: none !important;
+  }
+  .rebar-tag svg text {
+    fill: #000 !important;
+  }
+  .rebar-tag svg circle[fill] {
+    fill: #eee !important;
+  }
+
+  /* Barcode bars stay black */
+  .rebar-tag .bg-black {
+    background: #000 !important;
+  }
+}
