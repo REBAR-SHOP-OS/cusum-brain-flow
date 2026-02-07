@@ -1,4 +1,4 @@
-import { ArrowLeft, Shield, ShieldOff, Eye } from "lucide-react";
+import { ArrowLeft, Shield, ShieldOff, Eye, ChevronDown, Building } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useNavigate } from "react-router-dom";
@@ -17,6 +17,8 @@ interface StationHeaderProps {
   backTo?: string;
   /** Job workspace name shown in top-right chip */
   workspaceName?: string | null;
+  /** Show "BEDS" suffix in title */
+  showBedsSuffix?: boolean;
 }
 
 export function StationHeader({
@@ -32,50 +34,63 @@ export function StationHeader({
   onToggleSupervisor,
   backTo = "/shopfloor/station",
   workspaceName,
+  showBedsSuffix = true,
 }: StationHeaderProps) {
   const navigate = useNavigate();
 
+  // Build title: "DTX400 10-15MM BEDS" or "BENDER B36 BEDS"
+  const machineLabel = machineModel || machineName;
+  const titleParts = [machineLabel.toUpperCase()];
+  if (barSizeRange) titleParts.push(barSizeRange);
+  if (showBedsSuffix) titleParts.push("BEDS");
+  const mainTitle = titleParts.join(" ");
+
   return (
     <header className="flex items-center justify-between px-4 py-3 bg-card border-b border-border">
+      {/* Left: Back + Title */}
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={() => navigate(backTo)}>
           <ArrowLeft className="w-5 h-5" />
         </Button>
 
-        {barSizeRange && (
-          <Badge className="bg-primary/20 text-primary border-primary/30 font-mono text-xs">
-            {barSizeRange}
-          </Badge>
-        )}
-
-        <div className="flex flex-col">
-          <span className="font-bold text-sm uppercase tracking-wide">
-            {machineModel || machineName}
-          </span>
-          {(markNumber || drawingRef || projectName) && (
-            <span className="text-xs text-muted-foreground font-mono">
-              {markNumber && `MARK ${markNumber}`}
-              {markNumber && drawingRef && " | "}
-              {drawingRef}
-              {projectName && ` • ${projectName}`}
-            </span>
-          )}
-        </div>
+        <h1 className="font-bold text-base sm:text-lg uppercase tracking-wide text-foreground">
+          {mainTitle}
+        </h1>
       </div>
 
+      {/* Center: Mark/Drawing info (detail views only) */}
+      {(markNumber || drawingRef) && (
+        <div className="hidden sm:flex items-center gap-2">
+          {markNumber && (
+            <>
+              <span className="text-sm font-bold text-foreground">MARK {markNumber}</span>
+              {drawingRef && <span className="text-muted-foreground">|</span>}
+            </>
+          )}
+          {drawingRef && (
+            <span className="text-sm text-primary font-mono">DWG# {drawingRef}</span>
+          )}
+        </div>
+      )}
+
+      {/* Right: Actions */}
       <div className="flex items-center gap-2">
         {remainingCount !== undefined && (
-          <Badge variant="outline" className="font-mono text-xs">
-            {remainingCount} REMAINING
+          <Badge variant="outline" className="font-mono text-xs hidden sm:flex">
+            ⏱ {remainingCount} REMAINING
           </Badge>
         )}
 
-        {/* Supervisor toggle */}
+        {/* Supervisor toggle — styled as badge toggle */}
         {canWrite && onToggleSupervisor ? (
           <Button
             variant={isSupervisor ? "destructive" : "outline"}
             size="sm"
-            className="gap-1.5 text-xs"
+            className={`gap-1.5 text-xs rounded-full ${
+              isSupervisor 
+                ? "bg-destructive hover:bg-destructive/90" 
+                : "border-border"
+            }`}
             onClick={onToggleSupervisor}
           >
             {isSupervisor ? (
@@ -102,25 +117,15 @@ export function StationHeader({
           </Badge>
         )}
 
-        {/* Workspace chip */}
+        {/* Workspace chip — dark pill with dropdown */}
         {workspaceName && (
-          <Badge className="bg-foreground text-background font-bold text-xs gap-1.5 px-3 py-1">
-            <LayoutGridIcon className="w-3.5 h-3.5" />
-            {workspaceName}
+          <Badge className="bg-foreground text-background font-bold text-xs gap-1.5 px-3 py-1.5 rounded-full cursor-pointer hover:bg-foreground/90 transition-colors">
+            <Building className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">{workspaceName}</span>
+            <ChevronDown className="w-3 h-3" />
           </Badge>
         )}
       </div>
     </header>
-  );
-}
-
-function LayoutGridIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 16 16" fill="currentColor" className={className}>
-      <rect x="1" y="1" width="6" height="6" rx="1" />
-      <rect x="9" y="1" width="6" height="6" rx="1" />
-      <rect x="1" y="9" width="6" height="6" rx="1" />
-      <rect x="9" y="9" width="6" height="6" rx="1" />
-    </svg>
   );
 }

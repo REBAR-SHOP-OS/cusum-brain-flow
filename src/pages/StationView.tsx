@@ -56,14 +56,22 @@ export default function StationView() {
   // Default: show production cards grouped by bar size
   const needsFixCount = items.filter((i) => i.needs_fix).length;
 
+  // Calculate bar size range for header
+  const barCodes = groups.map((g) => g.barCode);
+  const barSizeRange = barCodes.length > 1 
+    ? `${barCodes[0]}-${barCodes[barCodes.length - 1]}`
+    : barCodes[0] || "";
+
   return (
     <div className="flex flex-col h-full">
       <StationHeader
         machineName={machine.name}
         machineModel={machine.model}
+        barSizeRange={barSizeRange}
         canWrite={canWrite}
         isSupervisor={isSupervisor}
         onToggleSupervisor={() => setIsSupervisor((v) => !v)}
+        showBedsSuffix={true}
       />
 
       <div className="px-4 pt-3">

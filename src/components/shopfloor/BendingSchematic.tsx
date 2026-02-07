@@ -16,30 +16,49 @@ export function BendingSchematic({ dimensions }: BendingSchematicProps) {
   const entries = Object.entries(dimensions).sort(([a], [b]) => a.localeCompare(b));
 
   return (
-    <div className="space-y-2">
-      <p className="text-xs text-muted-foreground tracking-wider uppercase font-semibold">
-        Bending Schematic
-      </p>
-      <div className="grid gap-2">
-        {entries.map(([key, value]) => (
-          <Card key={key} className="bg-muted/30">
-            <CardContent className="p-3 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                  <span className="text-sm font-bold text-primary">{key}</span>
-                </div>
-                <span className="text-xs text-muted-foreground tracking-wider uppercase">
-                  Dimension {key}
-                </span>
-              </div>
-              <span className="text-xl font-bold font-mono">
-                {value}
-                <span className="text-sm text-muted-foreground ml-1">mm</span>
-              </span>
-            </CardContent>
-          </Card>
-        ))}
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-bold tracking-[0.15em] uppercase text-muted-foreground">
+          ⬡ Bending Schematic
+        </span>
       </div>
+      
+      <Card className="bg-card border border-border">
+        <CardContent className="p-4 space-y-3">
+          {entries.map(([key, value]) => (
+            <div 
+              key={key} 
+              className="flex items-center justify-between py-2 border-b border-border last:border-b-0"
+            >
+              <span className={`text-xl font-bold ${getColorForDimension(key)}`}>
+                {key}
+              </span>
+              <span className="text-3xl font-black font-mono text-foreground">
+                {value}
+                <span className="text-sm text-muted-foreground ml-1 font-normal">mm</span>
+              </span>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
     </div>
   );
+}
+
+function getColorForDimension(key: string): string {
+  const colors: Record<string, string> = {
+    A: "text-primary",
+    B: "text-primary",
+    C: "text-red-500",
+    D: "text-muted-foreground",
+    E: "text-primary",
+    F: "text-primary",
+    G: "text-primary",
+    H: "text-muted-foreground",
+    J: "text-muted-foreground",
+    K: "text-muted-foreground",
+    O: "text-primary",
+    R: "text-primary",
+  };
+  return colors[key.toUpperCase()] || "text-muted-foreground";
 }
