@@ -3,14 +3,15 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 const SUPER_ADMIN_EMAIL = "sattar@rebar.shop";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response(null, { headers: corsHeaders });
   }
 
   try {
@@ -28,7 +29,10 @@ serve(async (req) => {
     }
 
     const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser(token);
     if (authError || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
@@ -38,56 +42,150 @@ serve(async (req) => {
 
     // Super-admin check
     if (user.email !== SUPER_ADMIN_EMAIL) {
-      return new Response(JSON.stringify({ error: "Forbidden: Super admin access only" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ error: "Forbidden: Super admin access only" }),
+        {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
-    const { logType = "edge", search = "", limit = 100 } = await req.json();
+    const { logType = "events", search = "", limit = 100 } = await req.json();
+    const safeLimit = Math.min(Number(limit) || 100, 500);
 
-    const projectRef = supabaseUrl.replace("https://", "").replace(".supabase.co", "");
+    let logs: any[] = [];
 
-    let query = "";
     switch (logType) {
-      case "edge":
-        query = `
-          select id, function_edge_logs.timestamp, event_message, 
-                 response.status_code, request.method, 
-                 m.function_id, m.execution_time_ms, m.deployment_id
-          from function_edge_logs
-            cross join unnest(metadata) as m
-            cross join unnest(m.response) as response
-            cross join unnest(m.request) as request
-          ${search ? `where event_message ilike '%${search.replace(/'/g, "''")}%'` : ""}
-          order by timestamp desc
-          limit ${Math.min(Number(limit), 500)}
-        `;
+      case "events": {
+        let query = supabase
+          .from("events")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .limit(safeLimit);
+
+        if (search) {
+          query = query.or(
+            `event_type.ilike.%${search}%,description.ilike.%${search}%,entity_type.ilike.%${search}%`
+          );
+        }
+
+        const { data, error } = await query;
+        if (error) throw error;
+
+        logs = (data || []).map((e: any) => ({
+          id: e.id,
+          timestamp: e.created_at,
+          event_message: `${e.event_type} on ${e.entity_type}:${e.entity_id}`,
+          level: e.event_type?.includes("error") ? "ERROR" : "INFO",
+          details: {
+            event_type: e.event_type,
+            entity_type: e.entity_type,
+            entity_id: e.entity_id,
+            description: e.description,
+            actor_id: e.actor_id,
+            actor_type: e.actor_type,
+            metadata: e.metadata,
+          },
+        }));
         break;
-      case "auth":
-        query = `
-          select id, auth_logs.timestamp, event_message, 
-                 metadata.level, metadata.status, metadata.path, 
-                 metadata.msg as msg, metadata.error
-          from auth_logs
-            cross join unnest(metadata) as metadata
-          ${search ? `where event_message ilike '%${search.replace(/'/g, "''")}%'` : ""}
-          order by timestamp desc
-          limit ${Math.min(Number(limit), 500)}
-        `;
+      }
+
+      case "commands": {
+        let query = supabase
+          .from("command_log")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .limit(safeLimit);
+
+        if (search) {
+          query = query.or(
+            `raw_input.ilike.%${search}%,parsed_intent.ilike.%${search}%,result_message.ilike.%${search}%`
+          );
+        }
+
+        const { data, error } = await query;
+        if (error) throw error;
+
+        logs = (data || []).map((c: any) => ({
+          id: c.id,
+          timestamp: c.created_at,
+          event_message: c.raw_input,
+          level: c.result === "error" ? "ERROR" : c.result === "success" ? "INFO" : "LOG",
+          details: {
+            raw_input: c.raw_input,
+            parsed_intent: c.parsed_intent,
+            parsed_params: c.parsed_params,
+            result: c.result,
+            result_message: c.result_message,
+            user_id: c.user_id,
+          },
+        }));
         break;
-      case "postgres":
-        query = `
-          select identifier, postgres_logs.timestamp, id, event_message, 
-                 parsed.error_severity
-          from postgres_logs
-            cross join unnest(metadata) as m
-            cross join unnest(m.parsed) as parsed
-          ${search ? `where event_message ilike '%${search.replace(/'/g, "''")}%'` : ""}
-          order by timestamp desc
-          limit ${Math.min(Number(limit), 500)}
-        `;
+      }
+
+      case "machine_runs": {
+        let query = supabase
+          .from("machine_runs")
+          .select("*, machines(name)")
+          .order("created_at", { ascending: false })
+          .limit(safeLimit);
+
+        if (search) {
+          query = query.or(
+            `process.ilike.%${search}%,status.ilike.%${search}%,notes.ilike.%${search}%`
+          );
+        }
+
+        const { data, error } = await query;
+        if (error) throw error;
+
+        logs = (data || []).map((r: any) => ({
+          id: r.id,
+          timestamp: r.created_at,
+          event_message: `${r.process} [${r.status}] on ${r.machines?.name || r.machine_id}`,
+          level:
+            r.status === "rejected" || r.status === "blocked"
+              ? "ERROR"
+              : r.status === "completed"
+              ? "INFO"
+              : "LOG",
+          details: {
+            process: r.process,
+            status: r.status,
+            machine: r.machines?.name,
+            machine_id: r.machine_id,
+            started_at: r.started_at,
+            ended_at: r.ended_at,
+            duration_seconds: r.duration_seconds,
+            input_qty: r.input_qty,
+            output_qty: r.output_qty,
+            scrap_qty: r.scrap_qty,
+            notes: r.notes,
+          },
+        }));
         break;
+      }
+
+      case "db_stats": {
+        const { data, error } = await supabase.rpc("get_table_stats");
+        if (error) throw error;
+
+        logs = (data || []).map((t: any, i: number) => ({
+          id: `stat-${i}`,
+          timestamp: new Date().toISOString(),
+          event_message: `${t.table_name}: ${t.approx_rows} rows — ${t.size_pretty}`,
+          level: t.approx_rows > 10000 ? "WARNING" : "INFO",
+          details: {
+            table_name: t.table_name,
+            approx_rows: t.approx_rows,
+            size_pretty: t.size_pretty,
+            size_bytes: t.size_bytes,
+          },
+        }));
+        break;
+      }
+
       default:
         return new Response(JSON.stringify({ error: "Invalid log type" }), {
           status: 400,
@@ -95,31 +193,7 @@ serve(async (req) => {
         });
     }
 
-    // Use the analytics endpoint
-    const analyticsUrl = `${supabaseUrl.replace('.supabase.co', '.supabase.co')}/analytics/v1/query`;
-    
-    const analyticsResponse = await fetch(analyticsUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "apikey": supabaseServiceKey,
-        "Authorization": `Bearer ${supabaseServiceKey}`,
-      },
-      body: JSON.stringify({ query }),
-    });
-
-    if (!analyticsResponse.ok) {
-      const errText = await analyticsResponse.text();
-      console.error("Analytics API error:", errText);
-      return new Response(JSON.stringify({ error: "Failed to fetch logs", details: errText }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const result = await analyticsResponse.json();
-
-    return new Response(JSON.stringify({ logs: result }), {
+    return new Response(JSON.stringify({ logs }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {

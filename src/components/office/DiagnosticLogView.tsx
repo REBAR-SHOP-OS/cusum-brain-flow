@@ -23,10 +23,11 @@ import {
   Download,
   Copy,
   Database,
-  Shield,
   Zap,
   Loader2,
   AlertTriangle,
+  Cog,
+  History,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -34,66 +35,44 @@ import { format } from "date-fns";
 
 const SUPER_ADMIN_EMAIL = "sattar@rebar.shop";
 
-type LogType = "edge" | "auth" | "postgres";
+type LogType = "events" | "commands" | "machine_runs" | "db_stats";
 
 interface LogEntry {
   id: string;
-  timestamp: string | number;
+  timestamp: string;
   event_message: string;
-  // Edge-specific
-  status_code?: number;
-  method?: string;
-  function_id?: string;
-  execution_time_ms?: number;
-  // Auth-specific
   level?: string;
-  status?: number;
-  path?: string;
-  msg?: string;
-  error?: string;
-  // Postgres-specific
-  identifier?: string;
-  error_severity?: string;
+  details?: Record<string, any>;
 }
 
 const logTypeConfig: Record<LogType, { label: string; icon: React.ElementType; description: string }> = {
-  edge: { label: "Edge Function Logs", icon: Zap, description: "Edge function execution with request/response data" },
-  auth: { label: "Authentication Logs", icon: Shield, description: "User authentication events and security logs" },
-  postgres: { label: "PostgreSQL Logs", icon: Database, description: "Database queries, errors, and performance metrics" },
+  events: { label: "System Events", icon: Zap, description: "Application events and entity changes" },
+  commands: { label: "Command Log", icon: Terminal, description: "User commands and AI parsed intents" },
+  machine_runs: { label: "Machine Runs", icon: Cog, description: "Production machine run history" },
+  db_stats: { label: "Database Stats", icon: Database, description: "Table sizes and row counts" },
 };
 
-function getStatusColor(status?: number | string): string {
-  if (!status) return "text-muted-foreground";
-  const code = typeof status === "string" ? parseInt(status) : status;
-  if (code >= 200 && code < 300) return "text-emerald-500";
-  if (code >= 300 && code < 400) return "text-amber-500";
-  if (code >= 400 && code < 500) return "text-orange-500";
-  if (code >= 500) return "text-destructive";
-  return "text-muted-foreground";
-}
-
-function getSeverityColor(severity?: string): string {
-  if (!severity) return "bg-muted text-muted-foreground";
-  const s = severity.toUpperCase();
-  if (s === "ERROR" || s === "FATAL" || s === "PANIC") return "bg-destructive/15 text-destructive";
+function getSeverityColor(level?: string): string {
+  if (!level) return "bg-muted text-muted-foreground";
+  const s = level.toUpperCase();
+  if (s === "ERROR" || s === "FATAL") return "bg-destructive/15 text-destructive";
   if (s === "WARNING") return "bg-amber-500/15 text-amber-600 dark:text-amber-400";
-  if (s === "LOG" || s === "INFO") return "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400";
+  if (s === "INFO") return "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400";
   return "bg-muted text-muted-foreground";
 }
 
-function formatTimestamp(ts: string | number): string {
+function formatTimestamp(ts: string): string {
   try {
-    const d = typeof ts === "number" ? new Date(ts / 1000) : new Date(ts);
-    return format(d, "dd MMM HH:mm:ss");
+    return format(new Date(ts), "dd MMM HH:mm:ss");
   } catch {
-    return String(ts);
+    return ts;
   }
 }
 
 export function DiagnosticLogView() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [logType, setLogType] = useState<LogType>("edge");
+  const [logType, setLogType] = useState<LogType>("events");
   const [searchTerm, setSearchTerm] = useState("");
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -110,31 +89,7 @@ export function DiagnosticLogView() {
       });
 
       if (error) throw error;
-
-      // The analytics API returns data in different formats
-      const rawLogs = data?.logs || [];
-      
-      // Handle both array and result format
-      const parsedLogs: LogEntry[] = Array.isArray(rawLogs) 
-        ? rawLogs.map((row: any, i: number) => ({
-            id: row.id || `log-${i}`,
-            timestamp: row.timestamp,
-            event_message: row.event_message || "",
-            status_code: row.status_code,
-            method: row.method,
-            function_id: row.function_id,
-            execution_time_ms: row.execution_time_ms,
-            level: row.level,
-            status: row.status,
-            path: row.path,
-            msg: row.msg,
-            error: row.error,
-            identifier: row.identifier,
-            error_severity: row.error_severity,
-          }))
-        : [];
-
-      setLogs(parsedLogs);
+      setLogs(data?.logs || []);
       setHasLoaded(true);
     } catch (err: any) {
       console.error("Failed to fetch logs:", err);
@@ -151,7 +106,7 @@ export function DiagnosticLogView() {
   }, [logType, searchTerm, toast]);
 
   const handleCopyLogs = () => {
-    const text = logs.map((l) => `${formatTimestamp(l.timestamp)} | ${l.event_message}`).join("\n");
+    const text = logs.map((l) => `${formatTimestamp(l.timestamp)} | ${l.level || "LOG"} | ${l.event_message}`).join("\n");
     navigator.clipboard.writeText(text);
     toast({ title: "Logs copied to clipboard" });
   };
@@ -162,12 +117,11 @@ export function DiagnosticLogView() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `diagnostic-${logType}-logs-${Date.now()}.json`;
+    a.download = `diagnostic-${logType}-${Date.now()}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
-  // Access denied for non-super-admin
   if (!isSuperAdmin) {
     return (
       <div className="p-6 flex flex-col items-center justify-center h-full gap-4">
@@ -203,24 +157,31 @@ export function DiagnosticLogView() {
 
         {/* Controls */}
         <div className="flex items-center gap-3 mt-5">
-          {/* Log type selector */}
-          <Select value={logType} onValueChange={(v) => { setLogType(v as LogType); setLogs([]); setHasLoaded(false); }}>
+          <Select
+            value={logType}
+            onValueChange={(v) => {
+              setLogType(v as LogType);
+              setLogs([]);
+              setHasLoaded(false);
+            }}
+          >
             <SelectTrigger className="w-52 h-9">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {(Object.entries(logTypeConfig) as [LogType, typeof logTypeConfig.edge][]).map(([key, config]) => (
-                <SelectItem key={key} value={key}>
-                  <span className="flex items-center gap-2">
-                    <config.icon className="w-3.5 h-3.5" />
-                    {config.label}
-                  </span>
-                </SelectItem>
-              ))}
+              {(Object.entries(logTypeConfig) as [LogType, (typeof logTypeConfig)["events"]][]).map(
+                ([key, config]) => (
+                  <SelectItem key={key} value={key}>
+                    <span className="flex items-center gap-2">
+                      <config.icon className="w-3.5 h-3.5" />
+                      {config.label}
+                    </span>
+                  </SelectItem>
+                )
+              )}
             </SelectContent>
           </Select>
 
-          {/* Search */}
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
@@ -232,13 +193,15 @@ export function DiagnosticLogView() {
             />
           </div>
 
-          {/* Fetch button */}
           <Button onClick={fetchLogs} disabled={loading} size="sm" className="gap-1.5 h-9">
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+            {loading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <RefreshCw className="w-4 h-4" />
+            )}
             {loading ? "Loading..." : "Fetch Logs"}
           </Button>
 
-          {/* Actions */}
           {logs.length > 0 && (
             <>
               <Button variant="outline" size="sm" className="gap-1.5 h-9" onClick={handleDownloadLogs}>
@@ -257,9 +220,11 @@ export function DiagnosticLogView() {
         {!hasLoaded ? (
           <div className="p-12 flex flex-col items-center justify-center gap-4 text-center">
             <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center">
-              <Terminal className="w-7 h-7 text-muted-foreground" />
+              <History className="w-7 h-7 text-muted-foreground" />
             </div>
-            <p className="text-sm text-muted-foreground">Select a log type and click "Fetch Logs" to load entries.</p>
+            <p className="text-sm text-muted-foreground">
+              Select a log type and click "Fetch Logs" to load entries.
+            </p>
           </div>
         ) : logs.length === 0 ? (
           <div className="p-12 flex flex-col items-center justify-center gap-3 text-center">
@@ -274,7 +239,6 @@ export function DiagnosticLogView() {
                 <LogRow
                   key={log.id}
                   log={log}
-                  logType={logType}
                   expanded={expandedId === log.id}
                   onToggle={() => setExpandedId(expandedId === log.id ? null : log.id)}
                 />
@@ -289,23 +253,13 @@ export function DiagnosticLogView() {
 
 function LogRow({
   log,
-  logType,
   expanded,
   onToggle,
 }: {
   log: LogEntry;
-  logType: LogType;
   expanded: boolean;
   onToggle: () => void;
 }) {
-  const severity = logType === "postgres"
-    ? log.error_severity
-    : logType === "auth"
-    ? log.level
-    : log.status_code
-    ? (log.status_code >= 400 ? "ERROR" : "LOG")
-    : "LOG";
-
   return (
     <div className="group">
       <button
@@ -322,99 +276,43 @@ function LogRow({
           <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
         )}
 
-        {/* Timestamp */}
         <span className="text-xs text-muted-foreground font-mono w-32 shrink-0">
           {formatTimestamp(log.timestamp)}
         </span>
 
-        {/* Severity badge */}
         <Badge
           variant="secondary"
-          className={cn("text-[10px] font-mono px-1.5 py-0 shrink-0", getSeverityColor(severity))}
+          className={cn("text-[10px] font-mono px-1.5 py-0 shrink-0", getSeverityColor(log.level))}
         >
-          {severity || "LOG"}
+          {log.level || "LOG"}
         </Badge>
 
-        {/* Method + Status for edge logs */}
-        {logType === "edge" && log.method && (
-          <span className="text-xs font-mono font-medium shrink-0">
-            {log.method}
-            {log.status_code != null && (
-              <span className={cn("ml-2", getStatusColor(log.status_code))}>
-                {log.status_code}
-              </span>
-            )}
-          </span>
-        )}
-
-        {/* Auth status */}
-        {logType === "auth" && log.status != null && (
-          <span className={cn("text-xs font-mono font-medium shrink-0", getStatusColor(log.status))}>
-            {log.status}
-          </span>
-        )}
-
-        {/* Message */}
         <span className="text-xs text-foreground/80 font-mono truncate flex-1">
           {log.event_message}
         </span>
-
-        {/* Execution time for edge */}
-        {logType === "edge" && log.execution_time_ms != null && (
-          <span className="text-[10px] text-muted-foreground font-mono shrink-0">
-            {log.execution_time_ms}ms
-          </span>
-        )}
       </button>
 
-      {/* Expanded detail */}
-      {expanded && (
+      {expanded && log.details && (
         <Card className="ml-10 mr-4 mb-2 mt-1 border-border/50">
           <CardContent className="p-4 space-y-2">
-            <DetailField label="Event Message" value={log.event_message} />
-            <DetailField label="Timestamp" value={String(log.timestamp)} />
-            <DetailField label="ID" value={log.id} />
-
-            {logType === "edge" && (
-              <>
-                <DetailField label="Method" value={log.method} />
-                <DetailField label="Status Code" value={log.status_code?.toString()} />
-                <DetailField label="Function ID" value={log.function_id} />
-                <DetailField label="Execution Time" value={log.execution_time_ms ? `${log.execution_time_ms}ms` : undefined} />
-              </>
-            )}
-
-            {logType === "auth" && (
-              <>
-                <DetailField label="Level" value={log.level} />
-                <DetailField label="Status" value={log.status?.toString()} />
-                <DetailField label="Path" value={log.path} />
-                <DetailField label="Message" value={log.msg} />
-                <DetailField label="Error" value={log.error} />
-              </>
-            )}
-
-            {logType === "postgres" && (
-              <>
-                <DetailField label="Identifier" value={log.identifier} />
-                <DetailField label="Severity" value={log.error_severity} />
-              </>
-            )}
+            {Object.entries(log.details).map(([key, value]) => {
+              if (value == null || value === "") return null;
+              const display =
+                typeof value === "object" ? JSON.stringify(value, null, 2) : String(value);
+              return (
+                <div key={key} className="flex gap-3">
+                  <span className="text-[10px] uppercase tracking-widest text-muted-foreground w-32 shrink-0 pt-0.5">
+                    {key.replace(/_/g, " ")}
+                  </span>
+                  <span className="text-xs font-mono text-foreground break-all whitespace-pre-wrap">
+                    {display}
+                  </span>
+                </div>
+              );
+            })}
           </CardContent>
         </Card>
       )}
-    </div>
-  );
-}
-
-function DetailField({ label, value }: { label: string; value?: string }) {
-  if (!value) return null;
-  return (
-    <div className="flex gap-3">
-      <span className="text-[10px] uppercase tracking-widest text-muted-foreground w-28 shrink-0 pt-0.5">
-        {label}
-      </span>
-      <span className="text-xs font-mono text-foreground break-all">{value}</span>
     </div>
   );
 }
