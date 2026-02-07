@@ -17,6 +17,7 @@ import Pipeline from "./pages/Pipeline";
 import Customers from "./pages/Customers";
 import ShopFloor from "./pages/ShopFloor";
 import LiveMonitor from "./pages/LiveMonitor";
+import CutterPlanning from "./pages/CutterPlanning";
 import Deliveries from "./pages/Deliveries";
 import Brain from "./pages/Brain";
 import Integrations from "./pages/Integrations";
@@ -120,6 +121,16 @@ const App = () => (
                 <ProtectedRoute>
                   <AppLayout>
                     <ShopFloor />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/shopfloor/cutter"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <CutterPlanning />
                   </AppLayout>
                 </ProtectedRoute>
               }
