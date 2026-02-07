@@ -31,6 +31,8 @@ serve(async (req) => {
       workOrdersRes,
       deliveriesRes,
       teamMsgsRes,
+      meetingsRes,
+      rcCallsRes,
     ] = await Promise.all([
       supabase
         .from("communications")
@@ -73,6 +75,23 @@ serve(async (req) => {
         .lte("created_at", dayEnd)
         .order("created_at", { ascending: false })
         .limit(50),
+      // Team meetings with AI summaries
+      supabase
+        .from("team_meetings")
+        .select("title, meeting_type, started_at, ended_at, ai_summary, participants, duration_seconds, status")
+        .gte("started_at", dayStart)
+        .lte("started_at", dayEnd)
+        .order("started_at", { ascending: false })
+        .limit(20),
+      // RingCentral calls from communications
+      supabase
+        .from("communications")
+        .select("from_address, to_address, subject, body_preview, received_at, status, source, metadata")
+        .eq("source", "ringcentral")
+        .gte("received_at", dayStart)
+        .lte("received_at", dayEnd)
+        .order("received_at", { ascending: false })
+        .limit(50),
     ]);
 
     const emails = emailsRes.data || [];
@@ -82,6 +101,8 @@ serve(async (req) => {
     const workOrders = workOrdersRes.data || [];
     const deliveries = deliveriesRes.data || [];
     const teamMessages = teamMsgsRes.data || [];
+    const meetings = meetingsRes.data || [];
+    const rcCalls = rcCallsRes.data || [];
 
     // ── Build context for AI ─────────────────────────────────────────
     const dataContext = `
@@ -128,6 +149,28 @@ ${teamMessages.length > 0
   ? teamMessages.map((m: any, i: number) => `${i + 1}. [${m.original_language}] ${(m.original_text || "").slice(0, 200)}`).join("\n")
   : "No team messages today."
 }
+
+--- TEAM MEETINGS (${meetings.length} today) ---
+${meetings.length > 0
+  ? meetings.map((m: any, i: number) => {
+      const dur = m.duration_seconds ? `${Math.round(m.duration_seconds / 60)}min` : "ongoing";
+      const participants = (m.participants || []).join(", ") || "N/A";
+      return `${i + 1}. ${m.title} (${m.meeting_type}) — ${dur} | Participants: ${participants}${m.ai_summary ? `\n   Summary: ${m.ai_summary}` : ""}`;
+    }).join("\n")
+  : "No team meetings today."
+}
+
+--- RINGCENTRAL CALLS & SMS (${rcCalls.length} today) ---
+${rcCalls.length > 0
+  ? rcCalls.map((c: any, i: number) => {
+      const meta = c.metadata || {};
+      const type = meta.type || "call";
+      const duration = meta.duration ? `${Math.floor(meta.duration / 60)}m ${meta.duration % 60}s` : "";
+      const result = meta.result || "";
+      return `${i + 1}. [${type.toUpperCase()}] ${c.subject || ""} | From: ${c.from_address} → To: ${c.to_address}${duration ? ` | Duration: ${duration}` : ""}${result ? ` | Result: ${result}` : ""}`;
+    }).join("\n")
+  : "No RingCentral calls/SMS today."
+}
 `;
 
     // ── Call Lovable AI ───────────────────────────────────────────────
@@ -156,6 +199,24 @@ You MUST return valid JSON with this exact structure (no markdown, no code fence
       ]
     }
   ],
+  "meetingSummaries": [
+    {
+      "title": "Meeting title with emoji",
+      "type": "video/audio/screen_share",
+      "duration": "Duration in minutes",
+      "summary": "AI-generated meeting summary",
+      "actionItems": ["Action items from meeting"]
+    }
+  ],
+  "phoneCalls": [
+    {
+      "contact": "Caller/receiver name or number",
+      "direction": "Inbound/Outbound",
+      "duration": "Call duration",
+      "summary": "Brief summary",
+      "action": "Follow-up action needed"
+    }
+  ],
   "calendarEvents": [
     {
       "time": "Suggested time slot",
@@ -175,6 +236,8 @@ Rules:
 - Group emails by business category (IT/Security, Sales/Operations, Finance/Admin, etc.)
 - Prioritize urgent items first
 - Include specific numbers, names, and amounts from the data
+- Include meeting summaries with key decisions and action items
+- Summarize all RingCentral phone calls and SMS with recommended follow-ups
 - If there's little data, still provide useful suggestions and planning tips
 - Keep takeaways actionable and concise
 - Suggest calendar blocks for follow-ups based on the data`;
@@ -243,6 +306,8 @@ Rules:
           workOrders: workOrders.length,
           deliveries: deliveries.length,
           teamMessages: teamMessages.length,
+          meetings: meetings.length,
+          phoneCalls: rcCalls.length,
         },
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }

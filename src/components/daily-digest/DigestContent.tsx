@@ -1,4 +1,4 @@
-import { ThumbsUp, ThumbsDown, Calendar, Mail, Lightbulb, Sparkles } from "lucide-react";
+import { ThumbsUp, ThumbsDown, Calendar, Mail, Lightbulb, Sparkles, Video, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -25,7 +25,7 @@ export function DigestContent({ digest, stats, currentDate }: DigestContentProps
 
       {/* Stats Bar */}
       {stats && (
-        <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
+        <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
           {[
             { label: "Emails", value: stats.emails },
             { label: "Tasks", value: stats.tasks },
@@ -33,6 +33,8 @@ export function DigestContent({ digest, stats, currentDate }: DigestContentProps
             { label: "Orders", value: stats.orders },
             { label: "Work Orders", value: stats.workOrders },
             { label: "Deliveries", value: stats.deliveries },
+            { label: "Meetings", value: stats.meetings ?? 0 },
+            { label: "Calls", value: stats.phoneCalls ?? 0 },
           ].map((s) => (
             <Card key={s.label} className="text-center">
               <CardContent className="py-3 px-2">
@@ -102,7 +104,67 @@ export function DigestContent({ digest, stats, currentDate }: DigestContentProps
         </Card>
       )}
 
-      {/* Calendar */}
+      {/* Meeting Summaries */}
+      {digest.meetingSummaries && digest.meetingSummaries.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Video className="w-5 h-5 text-purple-500" />
+              Meetings ({digest.meetingSummaries.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {digest.meetingSummaries.map((meeting, i) => (
+              <div key={i} className="p-3 bg-muted/50 rounded-lg space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-sm">{meeting.title}</span>
+                  <Badge variant="outline" className="text-[10px]">{meeting.type}</Badge>
+                  {meeting.duration && (
+                    <span className="text-[10px] text-muted-foreground">{meeting.duration}</span>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">{meeting.summary}</p>
+                {meeting.actionItems && meeting.actionItems.length > 0 && (
+                  <div className="pl-3 border-l-2 border-primary/30">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase mb-1">Action Items</p>
+                    {meeting.actionItems.map((item, j) => (
+                      <p key={j} className="text-xs text-muted-foreground">• {item}</p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Phone Calls */}
+      {digest.phoneCalls && digest.phoneCalls.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Phone className="w-5 h-5 text-emerald-500" />
+              Phone Calls & SMS ({digest.phoneCalls.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {digest.phoneCalls.map((call, i) => (
+              <div key={i} className="p-3 bg-muted/50 rounded-lg space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-sm">{call.contact}</span>
+                  <Badge variant="outline" className="text-[10px]">{call.direction}</Badge>
+                  {call.duration && (
+                    <span className="text-[10px] text-muted-foreground">{call.duration}</span>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">• {call.summary}</p>
+                <p className="text-xs text-muted-foreground">• Action: {call.action}</p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
       {digest.calendarEvents && digest.calendarEvents.length > 0 && (
         <Card>
           <CardHeader className="pb-2">
