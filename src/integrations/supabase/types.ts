@@ -396,6 +396,44 @@ export type Database = {
           },
         ]
       }
+      employee_salaries: {
+        Row: {
+          created_at: string
+          id: string
+          notes: string | null
+          profile_id: string
+          salary_amount: number
+          salary_type: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          profile_id: string
+          salary_amount: number
+          salary_type?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          profile_id?: string
+          salary_amount?: number
+          salary_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_salaries_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       estimation_learnings: {
         Row: {
           confidence_score: number | null
@@ -817,6 +855,51 @@ export type Database = {
           },
         ]
       }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          department: string | null
+          duties: string[] | null
+          email: string | null
+          full_name: string
+          id: string
+          is_active: boolean | null
+          phone: string | null
+          title: string | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          department?: string | null
+          duties?: string[] | null
+          email?: string | null
+          full_name: string
+          id?: string
+          is_active?: boolean | null
+          phone?: string | null
+          title?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          department?: string | null
+          duties?: string[] | null
+          email?: string | null
+          full_name?: string
+          id?: string
+          is_active?: boolean | null
+          phone?: string | null
+          title?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       quotes: {
         Row: {
           contact_id: string | null
@@ -1181,7 +1264,13 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "admin" | "sales" | "accounting"
+      app_role:
+        | "admin"
+        | "sales"
+        | "accounting"
+        | "office"
+        | "workshop"
+        | "field"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1309,7 +1398,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "sales", "accounting"],
+      app_role: ["admin", "sales", "accounting", "office", "workshop", "field"],
     },
   },
 } as const

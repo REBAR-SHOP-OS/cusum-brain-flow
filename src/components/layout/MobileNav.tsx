@@ -2,7 +2,7 @@ import { Link, useLocation } from "react-router-dom";
 import { Home, Inbox, CheckSquare, Kanban, Phone, Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
-import { Brain, Settings, Plug, Factory, Truck, Users } from "lucide-react";
+import { Brain, Settings, Plug, Factory, Truck, Users, Shield } from "lucide-react";
 
 const primaryNav = [
   { name: "Home", href: "/home", icon: Home },
@@ -19,6 +19,8 @@ const moreItems = [
   { name: "Deliveries", href: "/deliveries", icon: Truck },
   { name: "Brain", href: "/brain", icon: Brain },
   { name: "Integrations", href: "/integrations", icon: Plug },
+  { name: "Team", href: "/team", icon: Users },
+  { name: "Admin", href: "/admin", icon: Shield },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 
