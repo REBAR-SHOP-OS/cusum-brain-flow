@@ -1,54 +1,35 @@
-import { useState, useRef, useEffect, useCallback } from "react";
-import { X, Sparkles, Send, Loader2, Wrench } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { X, Send, Loader2, Wrench, Trash2, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
-import { useCommandHandler } from "@/hooks/useCommandHandler";
+import { useAdminChat } from "@/hooks/useAdminChat";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 
-interface ChatEntry {
-  id: string;
-  role: "user" | "system";
-  content: string;
-  timestamp: Date;
-}
-
 export function IntelligencePanel() {
   const { intelligencePanelOpen, setIntelligencePanelOpen } = useWorkspace();
-  const { executeCommand, isProcessing } = useCommandHandler();
-  const [messages, setMessages] = useState<ChatEntry[]>([]);
-  const [question, setQuestion] = useState("");
+  const { messages, isStreaming, sendMessage, clearChat, cancelStream } = useAdminChat();
+  const [input, setInput] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const handleSend = useCallback(async () => {
-    if (!question.trim() || isProcessing) return;
-    const q = question.trim();
-    setQuestion("");
+  const handleSend = () => {
+    if (!input.trim() || isStreaming) return;
+    sendMessage(input);
+    setInput("");
+  };
 
-    const userMsg: ChatEntry = {
-      id: crypto.randomUUID(),
-      role: "user",
-      content: q,
-      timestamp: new Date(),
-    };
-    setMessages((prev) => [...prev, userMsg]);
-
-    const result = await executeCommand(q);
-
-    const sysMsg: ChatEntry = {
-      id: crypto.randomUUID(),
-      role: "system",
-      content: result?.message || "No response.",
-      timestamp: new Date(),
-    };
-    setMessages((prev) => [...prev, sysMsg]);
-  }, [question, isProcessing, executeCommand]);
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
 
   if (!intelligencePanelOpen) return null;
 
@@ -60,9 +41,16 @@ export function IntelligencePanel() {
           <Wrench className="w-4 h-4 text-primary" />
           <span className="text-xs font-bold tracking-wider uppercase">Admin Console</span>
         </div>
-        <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setIntelligencePanelOpen(false)}>
-          <X className="w-4 h-4" />
-        </Button>
+        <div className="flex items-center gap-1">
+          {messages.length > 0 && (
+            <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={clearChat} title="Clear chat">
+              <Trash2 className="w-3.5 h-3.5" />
+            </Button>
+          )}
+          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setIntelligencePanelOpen(false)}>
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
       </div>
 
       {/* Chat messages */}
@@ -73,12 +61,13 @@ export function IntelligencePanel() {
               <Wrench className="w-8 h-8 text-muted-foreground/30 mx-auto mb-3" />
               <p className="text-sm font-medium text-foreground">Admin Console</p>
               <p className="text-xs text-muted-foreground mt-1">
-                Ask questions, run commands, fix issues.
+                AI-powered system diagnostics & fixes.
               </p>
               <div className="mt-4 space-y-1.5 text-[10px] text-muted-foreground/60">
-                <p>"Show idle machines"</p>
-                <p>"Check stock levels"</p>
-                <p>"How many active orders?"</p>
+                <p>"What machines are idle and why?"</p>
+                <p>"Any stuck orders? How to fix?"</p>
+                <p>"Show me stock that's running low"</p>
+                <p>"Diagnose production bottlenecks"</p>
               </div>
             </div>
           )}
@@ -87,14 +76,14 @@ export function IntelligencePanel() {
             <div
               key={msg.id}
               className={cn(
-                "rounded-lg px-3 py-2 text-xs max-w-[90%]",
+                "rounded-lg px-3 py-2 text-xs max-w-[95%]",
                 msg.role === "user"
                   ? "ml-auto bg-primary text-primary-foreground"
                   : "mr-auto bg-muted text-foreground"
               )}
             >
-              {msg.role === "system" ? (
-                <div className="prose prose-sm dark:prose-invert max-w-none text-xs [&_p]:mb-1 [&_p]:mt-0">
+              {msg.role === "assistant" ? (
+                <div className="prose prose-sm dark:prose-invert max-w-none text-xs [&_p]:mb-1 [&_p]:mt-0 [&_pre]:text-[10px] [&_code]:text-[10px] [&_h1]:text-sm [&_h2]:text-xs [&_h3]:text-xs [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0">
                   <ReactMarkdown>{msg.content}</ReactMarkdown>
                 </div>
               ) : (
@@ -106,10 +95,10 @@ export function IntelligencePanel() {
             </div>
           ))}
 
-          {isProcessing && (
+          {isStreaming && messages[messages.length - 1]?.role !== "assistant" && (
             <div className="mr-auto bg-muted rounded-lg px-3 py-2 text-xs flex items-center gap-2">
               <Loader2 className="w-3 h-3 animate-spin" />
-              <span className="text-muted-foreground">Processing...</span>
+              <span className="text-muted-foreground">Thinking...</span>
             </div>
           )}
 
@@ -119,18 +108,25 @@ export function IntelligencePanel() {
 
       {/* Input */}
       <div className="border-t border-border p-3 shrink-0">
-        <div className="flex gap-1.5">
-          <Input
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
+        <div className="flex gap-1.5 items-end">
+          <Textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
             placeholder="Ask or command..."
-            className="h-9 text-xs"
-            onKeyDown={(e) => e.key === "Enter" && handleSend()}
-            disabled={isProcessing}
+            className="min-h-[36px] max-h-[120px] text-xs resize-none"
+            rows={1}
+            onKeyDown={handleKeyDown}
+            disabled={isStreaming}
           />
-          <Button size="sm" className="h-9 w-9 p-0 shrink-0" onClick={handleSend} disabled={isProcessing}>
-            {isProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-          </Button>
+          {isStreaming ? (
+            <Button size="sm" variant="destructive" className="h-9 w-9 p-0 shrink-0" onClick={cancelStream}>
+              <Square className="w-3 h-3" />
+            </Button>
+          ) : (
+            <Button size="sm" className="h-9 w-9 p-0 shrink-0" onClick={handleSend} disabled={!input.trim()}>
+              <Send className="w-3.5 h-3.5" />
+            </Button>
+          )}
         </div>
       </div>
     </aside>
