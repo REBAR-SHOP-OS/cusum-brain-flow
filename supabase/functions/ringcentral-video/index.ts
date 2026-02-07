@@ -103,7 +103,7 @@ serve(async (req) => {
         },
       };
 
-      const createResponse = await fetch(`${RC_SERVER}/rcvideo/v2/bridges`, {
+      const createResponse = await fetch(`${RC_SERVER}/rcvideo/v2/account/~/extension/~/bridges`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${accessToken}`,
