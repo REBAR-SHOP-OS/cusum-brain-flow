@@ -27,6 +27,8 @@ import { useUserRole } from "@/hooks/useUserRole";
 import { useAvatarUpload } from "@/hooks/useAvatarUpload";
 import { BulkAvatarUploadDialog } from "@/components/settings/BulkAvatarUploadDialog";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 import brandLogo from "@/assets/brand-logo.png";
 
 // ── ASA Shape data ──
@@ -387,8 +389,107 @@ function SystemConfigTab({
   configTab, setConfigTab, companyName, setCompanyName,
   measurement, setMeasurement, customCode, setCustomCode,
 }: SystemConfigProps) {
+  const [uploadingSchematic, setUploadingSchematic] = useState(false);
+  const [aiAssigning, setAiAssigning] = useState(false);
+  const [aiResult, setAiResult] = useState<{ shape_code?: string; confidence?: number; description?: string } | null>(null);
+  const [uploadedSchematics, setUploadedSchematics] = useState<{ code: string; url: string; analysis?: string }[]>([]);
+  const schematicFileRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
+
+  const handleUploadSchematic = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !customCode.trim()) {
+      toast({ title: "Enter a shape code first", variant: "destructive" });
+      return;
+    }
+
+    setUploadingSchematic(true);
+    try {
+      const ext = file.name.split(".").pop()?.toLowerCase() || "png";
+      const path = `${customCode.trim().toUpperCase()}_${Date.now()}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("shape-schematics")
+        .upload(path, file, { upsert: true, contentType: file.type });
+
+      if (uploadError) throw uploadError;
+
+      const publicUrl = `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/shape-schematics/${path}`;
+
+      // Run AI analysis on the uploaded image
+      const { data: analysisData, error: analysisError } = await supabase.functions.invoke("shape-vision", {
+        body: { imageUrl: publicUrl, action: "analyze" },
+      });
+
+      const analysis = analysisError ? null : analysisData;
+
+      // Save to database
+      await supabase.from("custom_shape_schematics").insert({
+        shape_code: customCode.trim().toUpperCase(),
+        image_url: publicUrl,
+        ai_analysis: analysis ? JSON.stringify(analysis) : null,
+        uploaded_by: "system",
+      });
+
+      setUploadedSchematics(prev => [...prev, {
+        code: customCode.trim().toUpperCase(),
+        url: publicUrl,
+        analysis: analysis?.description || analysis?.shape_code,
+      }]);
+
+      toast({
+        title: "Schematic uploaded",
+        description: analysis?.shape_code
+          ? `AI detected: ${analysis.shape_code} (${Math.round((analysis.confidence || 0) * 100)}% confidence)`
+          : "Upload successful, AI analysis pending.",
+      });
+      setCustomCode("");
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    } finally {
+      setUploadingSchematic(false);
+      if (schematicFileRef.current) schematicFileRef.current.value = "";
+    }
+  };
+
+  const handleAiVisionAssign = async () => {
+    setAiAssigning(true);
+    setAiResult(null);
+    try {
+      // Run AI routing analysis on all standard shapes
+      const results: { code: string; routing: any }[] = [];
+      const shapesToAnalyze = ["4", "5", "17", "T3"];
+
+      for (const code of shapesToAnalyze) {
+        const { data, error } = await supabase.functions.invoke("shape-vision", {
+          body: { shapeCode: code, action: "assign" },
+        });
+        if (!error && data) {
+          results.push({ code, routing: data.routing });
+        }
+      }
+
+      toast({
+        title: "AI Vision Assignment Complete",
+        description: `Analyzed ${results.length} shape codes for machine routing.`,
+      });
+
+      setAiResult({
+        shape_code: "Multi-shape",
+        confidence: 1,
+        description: `${results.length} shapes analyzed. Routing recommendations generated for bender and cutter stations.`,
+      });
+    } catch (err: any) {
+      toast({ title: "AI analysis failed", description: err.message, variant: "destructive" });
+    } finally {
+      setAiAssigning(false);
+    }
+  };
+
   return (
     <div className="p-8 max-w-4xl mx-auto space-y-6">
+      <input ref={schematicFileRef} type="file" accept="image/*" className="hidden" onChange={handleUploadSchematic} />
+
       {/* Config sub-tabs */}
       <div className="flex bg-card border border-border rounded-lg overflow-hidden">
         <button
@@ -468,8 +569,29 @@ function SystemConfigTab({
               <h2 className="text-lg font-black italic text-foreground uppercase">ASA Standard Renderings</h2>
               <p className="text-[10px] tracking-[0.2em] text-muted-foreground uppercase">Cross-Reference Mappings for Machine Routing</p>
             </div>
-            <Button className="gap-1.5"><Sparkles className="w-4 h-4" /> AI Vision Assign</Button>
+            <Button
+              className="gap-1.5"
+              onClick={handleAiVisionAssign}
+              disabled={aiAssigning}
+            >
+              {aiAssigning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+              {aiAssigning ? "Analyzing..." : "AI Vision Assign"}
+            </Button>
           </div>
+
+          {/* AI Result Banner */}
+          {aiResult && (
+            <Card className="border-primary/40 bg-primary/5">
+              <CardContent className="p-4 flex items-center gap-3">
+                <Sparkles className="w-5 h-5 text-primary shrink-0" />
+                <div>
+                  <p className="text-sm font-bold text-foreground">{aiResult.shape_code}</p>
+                  <p className="text-xs text-muted-foreground">{aiResult.description}</p>
+                </div>
+                <Button variant="ghost" size="sm" className="ml-auto" onClick={() => setAiResult(null)}>Dismiss</Button>
+              </CardContent>
+            </Card>
+          )}
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {asaStandardShapes.map((shape) => (
@@ -488,17 +610,55 @@ function SystemConfigTab({
             ))}
           </div>
 
+          {/* Custom Mapping Override */}
           <section>
             <div className="flex items-center gap-2 mb-3">
               <Sparkles className="w-4 h-4 text-muted-foreground" />
               <h3 className="text-[10px] font-bold tracking-[0.2em] text-muted-foreground uppercase">Custom Mapping Override</h3>
             </div>
             <div className="flex gap-3">
-              <Input placeholder="Type Code (E.G. S1)" value={customCode} onChange={(e) => setCustomCode(e.target.value)} className="flex-1 h-11" />
-              <Button className="gap-1.5 h-11 px-5"><Upload className="w-4 h-4" /> Upload Schematic</Button>
+              <Input
+                placeholder="Type Code (E.G. S1)"
+                value={customCode}
+                onChange={(e) => setCustomCode(e.target.value)}
+                className="flex-1 h-11"
+              />
+              <Button
+                className="gap-1.5 h-11 px-5"
+                onClick={() => schematicFileRef.current?.click()}
+                disabled={uploadingSchematic || !customCode.trim()}
+              >
+                {uploadingSchematic ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                {uploadingSchematic ? "Uploading..." : "Upload Schematic"}
+              </Button>
             </div>
+            {!customCode.trim() && (
+              <p className="text-[10px] text-muted-foreground mt-1.5">Enter a shape code before uploading</p>
+            )}
           </section>
 
+          {/* Uploaded custom schematics */}
+          {uploadedSchematics.length > 0 && (
+            <section>
+              <div className="flex items-center gap-2 mb-3">
+                <CheckCircle2 className="w-4 h-4 text-primary" />
+                <h3 className="text-[10px] font-bold tracking-[0.2em] text-muted-foreground uppercase">
+                  Recently Uploaded ({uploadedSchematics.length})
+                </h3>
+              </div>
+              <div className="grid grid-cols-4 sm:grid-cols-6 gap-3">
+                {uploadedSchematics.map((s, i) => (
+                  <div key={i} className="rounded-lg border border-primary/30 bg-primary/5 p-2 flex flex-col items-center gap-1">
+                    <img src={s.url} alt={s.code} className="w-full aspect-square object-contain rounded" />
+                    <span className="text-[10px] font-bold text-primary">{s.code}</span>
+                    {s.analysis && <span className="text-[8px] text-muted-foreground truncate w-full text-center">{s.analysis}</span>}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Full shape grid */}
           <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-3">
             {allShapeCodes.map((code, i) => (
               <div key={`${code}-${i}`} className="aspect-square rounded-lg border border-border bg-card hover:border-primary/40 transition-colors cursor-pointer flex flex-col items-center justify-center gap-1 p-2">

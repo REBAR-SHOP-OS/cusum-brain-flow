@@ -242,6 +242,33 @@ export type Database = {
           },
         ]
       }
+      custom_shape_schematics: {
+        Row: {
+          ai_analysis: string | null
+          created_at: string
+          id: string
+          image_url: string
+          shape_code: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          ai_analysis?: string | null
+          created_at?: string
+          id?: string
+          image_url: string
+          shape_code: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          ai_analysis?: string | null
+          created_at?: string
+          id?: string
+          image_url?: string
+          shape_code?: string
+          uploaded_by?: string | null
+        }
+        Relationships: []
+      }
       customers: {
         Row: {
           company_name: string | null
