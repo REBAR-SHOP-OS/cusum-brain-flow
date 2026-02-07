@@ -2931,6 +2931,50 @@ export type Database = {
         }
         Relationships: []
       }
+      team_meetings: {
+        Row: {
+          channel_id: string | null
+          ended_at: string | null
+          id: string
+          meeting_type: string
+          room_code: string
+          started_at: string
+          started_by: string
+          status: string
+          title: string
+        }
+        Insert: {
+          channel_id?: string | null
+          ended_at?: string | null
+          id?: string
+          meeting_type?: string
+          room_code: string
+          started_at?: string
+          started_by: string
+          status?: string
+          title?: string
+        }
+        Update: {
+          channel_id?: string | null
+          ended_at?: string | null
+          id?: string
+          meeting_type?: string
+          room_code?: string
+          started_at?: string
+          started_by?: string
+          status?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_meetings_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: false
+            referencedRelation: "team_channels"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       team_messages: {
         Row: {
           channel_id: string

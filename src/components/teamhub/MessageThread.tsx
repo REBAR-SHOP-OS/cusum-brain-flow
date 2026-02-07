@@ -29,10 +29,14 @@ import {
   Languages,
   ChevronDown,
   MessageSquare,
+  Video,
+  Phone,
+  MonitorUp,
 } from "lucide-react";
 import { format, isToday, isYesterday, isSameDay } from "date-fns";
 import type { TeamMessage } from "@/hooks/useTeamChat";
 import type { Profile } from "@/hooks/useProfiles";
+import type { TeamMeeting } from "@/hooks/useTeamMeetings";
 import { cn } from "@/lib/utils";
 
 const LANG_LABELS: Record<string, { name: string; flag: string }> = {
@@ -66,6 +70,9 @@ interface MessageThreadProps {
   isLoading: boolean;
   isSending: boolean;
   onSend: (text: string) => void;
+  activeMeetings?: TeamMeeting[];
+  onStartMeeting?: () => void;
+  onJoinMeeting?: (meeting: TeamMeeting) => void;
 }
 
 const avatarColors = [
@@ -103,6 +110,9 @@ export function MessageThread({
   isLoading,
   isSending,
   onSend,
+  activeMeetings = [],
+  onStartMeeting,
+  onJoinMeeting,
 }: MessageThreadProps) {
   const [input, setInput] = useState("");
   const [showOriginal, setShowOriginal] = useState<Set<string>>(new Set());
@@ -190,6 +200,29 @@ export function MessageThread({
         </div>
         <div className="flex items-center gap-1">
           <TooltipProvider>
+            {/* Meeting buttons */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 hover:text-primary"
+                  onClick={onStartMeeting}
+                >
+                  <Video className="w-4 h-4 text-muted-foreground" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Start meeting</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8">
+                  <Phone className="w-4 h-4 text-muted-foreground" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Audio call</TooltipContent>
+            </Tooltip>
+            <div className="w-px h-4 bg-border mx-0.5" />
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -217,6 +250,35 @@ export function MessageThread({
           </TooltipProvider>
         </div>
       </div>
+
+      {/* Active Meeting Banner */}
+      {activeMeetings.length > 0 && (
+        <div className="border-b border-border bg-primary/5 px-5 py-2">
+          {activeMeetings.map((m) => (
+            <div key={m.id} className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                <span className="text-xs font-semibold text-foreground">{m.title}</span>
+                <Badge variant="outline" className="text-[9px] px-1.5 py-0 gap-1">
+                  {m.meeting_type === "video" && <Video className="w-2.5 h-2.5" />}
+                  {m.meeting_type === "audio" && <Phone className="w-2.5 h-2.5" />}
+                  {m.meeting_type === "screen_share" && <MonitorUp className="w-2.5 h-2.5" />}
+                  LIVE
+                </Badge>
+              </div>
+              <Button
+                size="sm"
+                variant="default"
+                className="h-7 text-xs gap-1.5 rounded-full"
+                onClick={() => onJoinMeeting?.(m)}
+              >
+                <Video className="w-3 h-3" />
+                Join
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Messages */}
       <ScrollArea className="flex-1" ref={scrollRef}>
