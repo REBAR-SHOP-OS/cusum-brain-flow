@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Plus, X, Brain, Image, Video, Globe, FileText, Loader2 } from "lucide-react";
+import { useState, useRef } from "react";
+import { Plus, X, Brain, Image, Video, Globe, FileText, Loader2, Upload, Paperclip } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,12 +15,18 @@ interface AddKnowledgeDialogProps {
 }
 
 const categoryOptions = [
-  { value: "memory", label: "Memory", icon: Brain, description: "A fact, preference, or learning" },
-  { value: "image", label: "Image", icon: Image, description: "An image URL or reference" },
-  { value: "video", label: "Video", icon: Video, description: "A video URL or reference" },
-  { value: "webpage", label: "Webpage", icon: Globe, description: "A website or web page link" },
-  { value: "document", label: "Document", icon: FileText, description: "A document or file" },
+  { value: "memory", label: "Memory", icon: Brain },
+  { value: "image", label: "Image", icon: Image },
+  { value: "video", label: "Video", icon: Video },
+  { value: "webpage", label: "Webpage", icon: Globe },
+  { value: "document", label: "Document", icon: FileText },
 ];
+
+const acceptByCategory: Record<string, string> = {
+  image: "image/*",
+  document: ".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.pptx",
+  video: "video/*",
+};
 
 export function AddKnowledgeDialog({ open, onOpenChange, onSuccess }: AddKnowledgeDialogProps) {
   const [category, setCategory] = useState("memory");
@@ -28,9 +34,68 @@ export function AddKnowledgeDialog({ open, onOpenChange, onSuccess }: AddKnowled
   const [content, setContent] = useState("");
   const [sourceUrl, setSourceUrl] = useState("");
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadedFile, setUploadedFile] = useState<{ name: string; url: string; path: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   if (!open) return null;
+
+  const supportsUpload = ["image", "document", "video"].includes(category);
+  const showUrlField = ["image", "video", "webpage", "document"].includes(category);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast({ title: "Please log in to upload files", variant: "destructive" });
+        return;
+      }
+
+      const ext = file.name.split(".").pop() || "bin";
+      const fileName = `${crypto.randomUUID()}.${ext}`;
+      const filePath = `${user.id}/brain/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("estimation-files")
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from("estimation-files")
+        .getPublicUrl(filePath);
+
+      setUploadedFile({ name: file.name, url: publicUrl, path: filePath });
+      setSourceUrl(publicUrl);
+      if (!title.trim()) setTitle(file.name.replace(/\.[^/.]+$/, ""));
+
+      toast({ title: "File uploaded!" });
+    } catch (err) {
+      toast({
+        title: "Upload failed",
+        description: err instanceof Error ? err.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const removeUploadedFile = async () => {
+    if (uploadedFile) {
+      try {
+        await supabase.storage.from("estimation-files").remove([uploadedFile.path]);
+      } catch {}
+      setUploadedFile(null);
+      setSourceUrl("");
+    }
+  };
 
   const handleSave = async () => {
     if (!title.trim()) {
@@ -45,6 +110,7 @@ export function AddKnowledgeDialog({ open, onOpenChange, onSuccess }: AddKnowled
         content: content.trim() || null,
         category,
         source_url: sourceUrl.trim() || null,
+        metadata: uploadedFile ? { file_name: uploadedFile.name, file_type: uploadedFile.name.split(".").pop() } : null,
       });
 
       if (error) throw error;
@@ -54,6 +120,7 @@ export function AddKnowledgeDialog({ open, onOpenChange, onSuccess }: AddKnowled
       setContent("");
       setSourceUrl("");
       setCategory("memory");
+      setUploadedFile(null);
       onOpenChange(false);
       onSuccess();
     } catch (err) {
@@ -63,7 +130,13 @@ export function AddKnowledgeDialog({ open, onOpenChange, onSuccess }: AddKnowled
     }
   };
 
-  const showUrlField = ["image", "video", "webpage", "document"].includes(category);
+  const handleCategoryChange = (value: string) => {
+    setCategory(value);
+    // Clear upload when switching categories
+    if (uploadedFile) {
+      removeUploadedFile();
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => onOpenChange(false)}>
@@ -88,7 +161,7 @@ export function AddKnowledgeDialog({ open, onOpenChange, onSuccess }: AddKnowled
               {categoryOptions.map((opt) => (
                 <button
                   key={opt.value}
-                  onClick={() => setCategory(opt.value)}
+                  onClick={() => handleCategoryChange(opt.value)}
                   className={cn(
                     "flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 transition-colors",
                     category === opt.value
@@ -102,6 +175,63 @@ export function AddKnowledgeDialog({ open, onOpenChange, onSuccess }: AddKnowled
               ))}
             </div>
           </div>
+
+          {/* File Upload Area */}
+          {supportsUpload && (
+            <div className="space-y-2">
+              <Label>Upload File</Label>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept={acceptByCategory[category] || "*"}
+                onChange={handleFileUpload}
+                className="hidden"
+              />
+
+              {uploadedFile ? (
+                <div className="flex items-center gap-3 p-3 bg-primary/5 border border-primary/20 rounded-xl">
+                  <Paperclip className="w-4 h-4 text-primary flex-shrink-0" />
+                  <span className="text-sm font-medium truncate flex-1">{uploadedFile.name}</span>
+                  <button
+                    onClick={removeUploadedFile}
+                    className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  className={cn(
+                    "w-full flex flex-col items-center gap-2 p-6 border-2 border-dashed border-border rounded-xl",
+                    "hover:border-primary/40 hover:bg-primary/5 transition-colors cursor-pointer",
+                    uploading && "opacity-50 cursor-not-allowed"
+                  )}
+                >
+                  {uploading ? (
+                    <Loader2 className="w-6 h-6 text-muted-foreground animate-spin" />
+                  ) : (
+                    <Upload className="w-6 h-6 text-muted-foreground" />
+                  )}
+                  <span className="text-sm text-muted-foreground">
+                    {uploading ? "Uploading..." : "Click to upload a file"}
+                  </span>
+                  <span className="text-xs text-muted-foreground/70">
+                    {category === "image" ? "JPG, PNG, WebP, SVG" :
+                     category === "video" ? "MP4, WebM, MOV" :
+                     "PDF, DOC, XLSX, CSV, TXT"}
+                  </span>
+                </button>
+              )}
+
+              <div className="flex items-center gap-3">
+                <div className="flex-1 h-px bg-border" />
+                <span className="text-xs text-muted-foreground">or paste a URL</span>
+                <div className="flex-1 h-px bg-border" />
+              </div>
+            </div>
+          )}
 
           {/* Title */}
           <div className="space-y-2">
@@ -151,6 +281,7 @@ export function AddKnowledgeDialog({ open, onOpenChange, onSuccess }: AddKnowled
                   category === "webpage" ? "https://example.com" :
                   "https://example.com/document.pdf"
                 }
+                disabled={!!uploadedFile}
               />
             </div>
           )}
@@ -161,7 +292,7 @@ export function AddKnowledgeDialog({ open, onOpenChange, onSuccess }: AddKnowled
           <Button variant="outline" className="flex-1" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button className="flex-1 gap-2" onClick={handleSave} disabled={saving || !title.trim()}>
+          <Button className="flex-1 gap-2" onClick={handleSave} disabled={saving || !title.trim() || uploading}>
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
             Add
           </Button>
