@@ -47,3 +47,9 @@ verify_jwt = false
 
 [functions.shape-vision]
 verify_jwt = false
+
+[functions.extract-manifest]
+verify_jwt = false
+
+[functions.quickbooks-oauth]
+verify_jwt = false
