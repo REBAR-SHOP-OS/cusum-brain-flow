@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Mail, BarChart3, Truck, Factory } from "lucide-react";
 import logoCoin from "@/assets/logo-coin.png";
+import brainHero from "@/assets/brain-hero.png";
 
 export default function Landing() {
   return (
@@ -26,13 +27,14 @@ export default function Landing() {
 
       {/* Hero */}
       <section className="relative py-20 px-6 overflow-hidden">
-        {/* Big logo background */}
+        {/* Brain background */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <img 
-            src={logoCoin} 
+            src={brainHero} 
             alt="" 
-            className="w-[500px] h-[500px] opacity-[0.07]" 
+            className="w-full h-full object-cover opacity-[0.15]" 
           />
+          <div className="absolute inset-0 bg-gradient-to-b from-background/40 via-transparent to-background" />
         </div>
         <div className="relative max-w-4xl mx-auto text-center">
           <h1 className="text-4xl md:text-5xl font-bold text-foreground mb-6">
