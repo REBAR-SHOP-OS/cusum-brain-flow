@@ -33,6 +33,7 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
   const [selectedStockLength, setSelectedStockLength] = useState(12000);
   const [operatorBars, setOperatorBars] = useState<number | null>(null);
   const [manualFloorConfirmed, setManualFloorConfirmed] = useState(false);
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
 
   const currentItem = items[currentIndex] || null;
   const { getMaxBars } = useMachineCapabilities(machine.model, "cut");
@@ -135,6 +136,7 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
       });
 
       const runId = result.machineRunId;
+      setActiveRunId(runId || null);
 
       // Try to consume from best available source
       const bestLot = lots.find((l) => l.qty_on_hand - l.qty_reserved >= bars);
@@ -212,7 +214,7 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
       try {
         await manageInventory({
           action: "cut-complete",
-          machineRunId: machine.current_run_id || undefined,
+          machineRunId: activeRunId || machine.current_run_id || undefined,
           cutPlanItemId: currentItem.id,
           barCode: currentItem.bar_code,
           qty: 1,
@@ -246,7 +248,7 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
       machineId: machine.id,
       barCode: currentItem.bar_code,
     });
-  }, [currentItem, slotTracker, selectedStockLength, machine, toast]);
+  }, [currentItem, slotTracker, selectedStockLength, machine, toast, activeRunId]);
 
   // ── Complete run ──
   const handleCompleteRun = useCallback(async () => {
@@ -282,6 +284,7 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
 
       slotTracker.reset();
       setIsRunning(false);
+      setActiveRunId(null);
       setOperatorBars(null);
       setManualFloorConfirmed(false);
 
