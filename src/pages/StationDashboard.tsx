@@ -1,13 +1,25 @@
 import { useLiveMonitorData } from "@/hooks/useLiveMonitorData";
+import { useCutPlans } from "@/hooks/useCutPlans";
+import { useProductionQueues } from "@/hooks/useProductionQueues";
 import { MachineSelector } from "@/components/shopfloor/MachineSelector";
 import { ActiveProductionHub } from "@/components/shopfloor/ActiveProductionHub";
 import { Badge } from "@/components/ui/badge";
-import { Cloud, Radio, Loader2, Settings } from "lucide-react";
+import { Cloud, Radio, Loader2, Settings, FolderOpen, FileText, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import brandLogo from "@/assets/brand-logo.png";
 
 export default function StationDashboard() {
   const { machines, isLoading } = useLiveMonitorData();
+  const { plans, loading: plansLoading } = useCutPlans();
+  const { projectLanes } = useProductionQueues();
+
+  // Active cut plans (draft, ready, queued, in_progress)
+  const activePlans = plans.filter(p =>
+    ["draft", "ready", "queued", "in_progress"].includes(p.status)
+  );
+
+  // Build a machine name lookup
+  const machineMap = new Map(machines.map(m => [m.id, m.name]));
 
   return (
     <div className="flex flex-col h-full">
@@ -47,21 +59,77 @@ export default function StationDashboard() {
           </div>
         ) : (
           <>
-            <ActiveProductionHub machines={machines} />
+            <ActiveProductionHub machines={machines} activePlans={activePlans} />
 
-            {/* Live Queue placeholder */}
+            {/* Live Queue - Cut Plans */}
             <div className="space-y-3">
               <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded bg-muted flex items-center justify-center text-[10px] font-bold text-muted-foreground">0</div>
+                <div className="w-6 h-6 rounded bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">
+                  {activePlans.length}
+                </div>
                 <h2 className="text-lg font-black italic tracking-wide uppercase text-foreground">
                   Live Queue
                 </h2>
               </div>
-              <div className="rounded-lg border border-dashed border-border p-6 text-center">
-                <p className="text-sm text-muted-foreground">
-                  Drag & drop orders to reorder
-                </p>
-              </div>
+
+              {plansLoading ? (
+                <div className="rounded-lg border border-dashed border-border p-6 text-center">
+                  <Loader2 className="w-5 h-5 animate-spin text-muted-foreground mx-auto" />
+                </div>
+              ) : activePlans.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-border p-6 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    No active jobs in queue
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {activePlans.map(plan => {
+                    const statusMap: Record<string, { label: string; color: string }> = {
+                      draft: { label: "DRAFT", color: "bg-muted text-muted-foreground" },
+                      ready: { label: "READY", color: "bg-yellow-500/20 text-yellow-500" },
+                      queued: { label: "QUEUED", color: "bg-blue-500/20 text-blue-500" },
+                      in_progress: { label: "ACTIVE", color: "bg-green-500/20 text-green-500" },
+                    };
+                    const st = statusMap[plan.status] || statusMap.draft;
+                    const machineName = plan.machine_id ? machineMap.get(plan.machine_id) : null;
+
+                    return (
+                      <div
+                        key={plan.id}
+                        className="flex items-center gap-3 p-3 rounded-lg border border-border bg-card hover:bg-muted/30 transition-colors"
+                      >
+                        <div className={`w-2 h-2 rounded-full ${plan.status === "in_progress" ? "bg-green-500 animate-pulse" : "bg-muted-foreground/30"}`} />
+                        <Badge className={`${st.color} text-[10px] tracking-wider shrink-0`}>
+                          {st.label}
+                        </Badge>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-sm font-bold text-foreground truncate">{plan.name}</h3>
+                          <div className="flex items-center gap-3 text-[10px] text-muted-foreground mt-0.5">
+                            {plan.project_name && (
+                              <span className="flex items-center gap-1 truncate">
+                                <FolderOpen className="w-3 h-3 shrink-0" />
+                                {plan.project_name}
+                              </span>
+                            )}
+                            {machineName && (
+                              <span className="flex items-center gap-1 truncate">
+                                <Layers className="w-3 h-3 shrink-0" />
+                                {machineName}
+                              </span>
+                            )}
+                            {!plan.project_name && !machineName && (
+                              <span className="flex items-center gap-1">
+                                <FileText className="w-3 h-3" /> Unassigned
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             <MachineSelector machines={machines} />
