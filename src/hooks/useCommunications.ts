@@ -100,13 +100,42 @@ export function useCommunications(options?: { search?: string; typeFilter?: stri
       ]);
 
       const errors: string[] = [];
-      if (gmailRes.status === "rejected") errors.push("Gmail sync failed");
-      else if (gmailRes.value.error) errors.push(`Gmail: ${gmailRes.value.error.message}`);
-      if (rcRes.status === "rejected") errors.push("RingCentral sync failed");
-      else if (rcRes.value.error) errors.push(`RingCentral: ${rcRes.value.error.message}`);
+      const infos: string[] = [];
 
-      if (errors.length > 0) {
-        toast({ title: "Sync warnings", description: errors.join("; "), variant: "destructive" });
+      // Helper to extract mismatch vs real errors
+      const handleResult = (res: PromiseSettledResult<{ data: unknown; error: unknown }>, name: string) => {
+        if (res.status === "rejected") {
+          errors.push(`${name} sync failed`);
+          return;
+        }
+        const { data, error } = res.value as { 
+          data: Record<string, unknown> | null; 
+          error: { message?: string; context?: Response } | null 
+        };
+        
+        if (!error) return; // Success
+        
+        // On non-2xx, supabase-js puts the parsed response body in `data`
+        // Check if it's a mismatch error (403)
+        if (data && typeof data === "object") {
+          const errType = (data as Record<string, unknown>).error as string;
+          const mismatchMsg = (data as Record<string, unknown>).message as string;
+          if (errType && (errType.includes("mismatch") || errType.includes("Mismatch"))) {
+            infos.push(mismatchMsg || `${name} is connected to a different account`);
+            return;
+          }
+        }
+        
+        errors.push(`${name}: ${error.message || "sync failed"}`);
+      };
+
+      handleResult(gmailRes, "Gmail");
+      handleResult(rcRes, "RingCentral");
+
+      if (infos.length > 0 && errors.length === 0) {
+        toast({ title: "Not connected", description: infos.join(". ") });
+      } else if (errors.length > 0) {
+        toast({ title: "Sync warnings", description: [...errors, ...infos].join("; "), variant: "destructive" });
       } else {
         toast({ title: "Synced", description: "Emails & calls refreshed" });
       }
