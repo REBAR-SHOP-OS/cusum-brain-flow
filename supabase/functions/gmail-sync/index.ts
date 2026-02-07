@@ -112,6 +112,9 @@ serve(async (req) => {
   }
 
   try {
+    // Clone request to read body later (verifyAuth may consume the stream)
+    const clonedReq = req.clone();
+
     // Verify authentication
     const userId = await verifyAuth(req);
     if (!userId) {
@@ -129,12 +132,14 @@ serve(async (req) => {
     const { data: userData } = await supabaseAdmin.auth.admin.getUserById(userId);
     const userEmail = userData?.user?.email?.toLowerCase();
 
-    // Get the Gmail account email by checking the token's profile
+    // Get Gmail access token (single call, reused throughout)
     const accessToken = await getAccessToken();
+
+    // Check the Gmail account email
     const profileRes = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/profile", {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
-    
+
     let gmailAccountEmail = "";
     if (profileRes.ok) {
       const profile = await profileRes.json();
@@ -144,10 +149,10 @@ serve(async (req) => {
     // Only allow sync if user's email matches the Gmail account
     if (gmailAccountEmail && userEmail && gmailAccountEmail !== userEmail) {
       return new Response(
-        JSON.stringify({ 
-          error: "Gmail account mismatch", 
+        JSON.stringify({
+          error: "Gmail account mismatch",
           message: `This Gmail integration is connected to ${gmailAccountEmail}. You are logged in as ${userEmail}.`,
-          synced: 0 
+          synced: 0,
         }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -156,7 +161,7 @@ serve(async (req) => {
     // Parse body for parameters
     let body: { maxResults?: number; pageToken?: string; query?: string } = {};
     try {
-      body = await req.json();
+      body = await clonedReq.json();
     } catch {
       // No body or invalid JSON, use defaults
     }
@@ -164,8 +169,6 @@ serve(async (req) => {
     const maxResults = String(body.maxResults ?? 20);
     const pageToken = body.pageToken ?? "";
     const query = body.query ?? "";
-
-    const accessToken = await getAccessToken();
 
     // List messages
     const listParams = new URLSearchParams({
@@ -176,9 +179,7 @@ serve(async (req) => {
 
     const listResponse = await fetch(
       `https://gmail.googleapis.com/gmail/v1/users/me/messages?${listParams}`,
-      {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      }
+      { headers: { Authorization: `Bearer ${accessToken}` } }
     );
 
     if (!listResponse.ok) {
@@ -201,9 +202,9 @@ serve(async (req) => {
           `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`,
           { headers: { Authorization: `Bearer ${accessToken}` } }
         );
-        
+
         if (!msgResponse.ok) return null;
-        
+
         const msgData: GmailMessage = await msgResponse.json();
         const headers = msgData.payload.headers;
 
@@ -224,16 +225,10 @@ serve(async (req) => {
 
     const validMessages = messages.filter(Boolean);
 
-    // Store emails in communications table using service role
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-
     // Upsert each message into communications
     for (const msg of validMessages) {
       if (!msg) continue;
-      
+
       const { error: upsertError } = await supabaseAdmin
         .from("communications")
         .upsert({
@@ -249,9 +244,9 @@ serve(async (req) => {
           status: msg.isUnread ? "unread" : "read",
           metadata: { body: msg.body, date: msg.date },
           user_id: userId,
-        }, { 
+        }, {
           onConflict: "source,source_id",
-          ignoreDuplicates: false 
+          ignoreDuplicates: false,
         });
 
       if (upsertError) {
