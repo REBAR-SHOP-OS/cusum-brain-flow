@@ -13,6 +13,7 @@ export interface Profile {
   email: string | null;
   avatar_url: string | null;
   is_active: boolean;
+  preferred_language: string;
   created_at: string;
   updated_at: string;
 }
