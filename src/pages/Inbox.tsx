@@ -12,6 +12,7 @@ import { InboxView } from "@/components/inbox/InboxView";
 import { useCommunications, Communication } from "@/hooks/useCommunications";
 import { useChatSessions, getAgentName } from "@/hooks/useChatSessions";
 import { sendAgentMessage } from "@/lib/agent";
+import { useRingCentralWidget } from "@/hooks/useRingCentralWidget";
 import { Mail, Phone, MessageSquare, Bot, ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,9 @@ export default function Inbox() {
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const { toast } = useToast();
   const { createSession, addMessage: saveMessage, getSessionMessages } = useChatSessions();
+  
+  // Load RC Embeddable dial pad widget
+  useRingCentralWidget();
 
   const typeFilter = activeTab === "calls" ? "call" : activeTab === "sms" ? "sms" : undefined;
   const { communications, loading, error, sync } = useCommunications({
