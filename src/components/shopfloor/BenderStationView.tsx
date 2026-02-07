@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useQueryClient } from "@tanstack/react-query";
 import { StationHeader } from "./StationHeader";
 import { AsaShapeDiagram } from "./AsaShapeDiagram";
 import { BendingSchematic } from "./BendingSchematic";
@@ -26,6 +27,7 @@ interface BenderStationViewProps {
 
 export function BenderStationView({ machine, items, canWrite, initialIndex = 0 }: BenderStationViewProps) {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [submitting, setSubmitting] = useState(false);
   const [unitCount, setUnitCount] = useState(1);
@@ -97,6 +99,9 @@ export function BenderStationView({ machine, items, canWrite, initialIndex = 0 }
         .eq("id", currentItem.id);
 
       if (error) throw error;
+
+      // Force immediate data refresh
+      await queryClient.invalidateQueries({ queryKey: ["station-data", machine.id] });
 
       const added = newCount - bendCompleted;
       toast({ title: `+${added} Confirmed`, description: `${newCount} / ${currentItem.total_pieces} pieces` });
