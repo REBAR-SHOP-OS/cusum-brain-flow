@@ -34,7 +34,7 @@ interface Helper {
 const helpers: Helper[] = [
   {
     id: "sales",
-    name: "Salesy",
+    name: "Blitz",
     role: "Sales & Pipeline",
     image: salesHelper,
     gradient: "from-blue-500 to-blue-600",
@@ -42,7 +42,7 @@ const helpers: Helper[] = [
   },
   {
     id: "support",
-    name: "Sasha",
+    name: "Haven",
     role: "Customer Support",
     image: supportHelper,
     gradient: "from-purple-500 to-purple-600",
@@ -50,7 +50,7 @@ const helpers: Helper[] = [
   },
   {
     id: "accounting",
-    name: "Archie",
+    name: "Tally",
     role: "Accounting",
     image: accountingHelper,
     gradient: "from-green-500 to-green-600",
@@ -58,7 +58,7 @@ const helpers: Helper[] = [
   },
   {
     id: "estimating",
-    name: "Eddie",
+    name: "Gauge",
     role: "Estimating",
     image: estimatingHelper,
     gradient: "from-orange-500 to-orange-600",
@@ -66,7 +66,7 @@ const helpers: Helper[] = [
   },
   {
     id: "shopfloor",
-    name: "Steely",
+    name: "Forge",
     role: "Shop Floor",
     image: shopfloorHelper,
     gradient: "from-slate-500 to-slate-600",
@@ -74,7 +74,7 @@ const helpers: Helper[] = [
   },
   {
     id: "delivery",
-    name: "Danny",
+    name: "Atlas",
     role: "Deliveries",
     image: deliveryHelper,
     gradient: "from-yellow-500 to-yellow-600",
@@ -82,7 +82,7 @@ const helpers: Helper[] = [
   },
   {
     id: "email",
-    name: "Emmy",
+    name: "Relay",
     role: "Email & Inbox",
     image: emailHelper,
     gradient: "from-pink-500 to-pink-600",
@@ -90,7 +90,7 @@ const helpers: Helper[] = [
   },
   {
     id: "social",
-    name: "Sushie",
+    name: "Pixel",
     role: "Social Media",
     image: socialHelper,
     gradient: "from-purple-500 to-pink-500",
@@ -98,7 +98,7 @@ const helpers: Helper[] = [
   },
   {
     id: "data",
-    name: "Dexter",
+    name: "Prism",
     role: "Data & Insights",
     image: dataHelper,
     gradient: "from-teal-500 to-teal-600",
@@ -145,7 +145,6 @@ export default function Home() {
   const [inputValue, setInputValue] = useState("");
 
   const handleSend = useCallback((content: string) => {
-    // Navigate to inbox with the message
     navigate("/inbox-manager", { state: { initialMessage: content } });
   }, [navigate]);
 
@@ -169,7 +168,6 @@ export default function Home() {
             Your AI-powered operations assistant
           </p>
           
-          {/* Chat Input */}
           <div className="w-full">
             <ChatInput
               onSend={handleSend}
@@ -229,14 +227,11 @@ function HelperCard({ helper, onClick }: { helper: Helper; onClick: () => void }
       onClick={onClick}
     >
       <div className="relative aspect-[4/5]">
-        {/* Character Image */}
         <img
           src={helper.image}
           alt={helper.name}
           className="w-full h-full object-cover"
         />
-        
-        {/* Solid bottom bar instead of blurry gradient */}
         <div className="absolute inset-x-0 bottom-0 bg-black/70 backdrop-blur-none p-3">
           <h3 className="font-bold text-lg leading-tight text-white">{helper.name}</h3>
           <p className="text-sm text-white/80">{helper.role}</p>
