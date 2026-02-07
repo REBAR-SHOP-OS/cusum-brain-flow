@@ -1,70 +1,99 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Plus, Settings, ChevronLeft, ChevronRight, ThumbsUp, Palette, Users, TrendingUp } from "lucide-react";
+import {
+  ArrowLeft, Plus, Settings, ChevronLeft, ChevronRight,
+  ThumbsUp, Palette, Users, TrendingUp, Search, Filter, X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { format, addDays, startOfWeek } from "date-fns";
+import { cn } from "@/lib/utils";
 import { PostReviewPanel } from "@/components/social/PostReviewPanel";
 import { BrandKitDialog } from "@/components/social/BrandKitDialog";
 import { CreateContentDialog } from "@/components/social/CreateContentDialog";
 import { SocialCalendar } from "@/components/social/SocialCalendar";
 import { SettingsSheet } from "@/components/social/SettingsSheet";
+import { useSocialPosts, type SocialPost } from "@/hooks/useSocialPosts";
 
-export interface SocialPost {
-  id: string;
-  platform: "facebook" | "instagram" | "linkedin" | "twitter";
-  status: "published" | "scheduled" | "draft";
-  title: string;
-  content: string;
-  imageUrl?: string;
-  scheduledDate: Date;
-  hashtags: string[];
-}
+const platformFilters = [
+  { id: "all", label: "All" },
+  { id: "facebook", label: "Facebook" },
+  { id: "instagram", label: "Instagram" },
+  { id: "linkedin", label: "LinkedIn" },
+  { id: "twitter", label: "X / Twitter" },
+  { id: "tiktok", label: "TikTok" },
+  { id: "youtube", label: "YouTube" },
+];
 
-// Mock data for posts
-const generateMockPosts = (): SocialPost[] => {
-  const posts: SocialPost[] = [];
-  const platforms: SocialPost["platform"][] = ["facebook", "instagram", "linkedin", "twitter"];
-  const today = new Date();
-  const startDate = startOfWeek(today, { weekStartsOn: 1 });
-  
-  for (let day = 0; day < 7; day++) {
-    const date = addDays(startDate, day);
-    const numPosts = Math.floor(Math.random() * 4) + 4;
-    
-    for (let i = 0; i < numPosts; i++) {
-      const platform = platforms[Math.floor(Math.random() * platforms.length)];
-      const isFuture = date > today;
-      
-      posts.push({
-        id: `post-${day}-${i}`,
-        platform,
-        status: isFuture ? "scheduled" : "published",
-        title: "Custom",
-        content: "Prefab rebar. Ready when you are.\n\nNo more waiting on site deliveries. Get top-grade prefab SKUs in stock for same-day pickup and fast project turnaround.\n\nSpeed and reliability start here. Contact us to reserve your order today. 🏗️",
-        imageUrl: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=400",
-        scheduledDate: date,
-        hashtags: ["#RebarShop", "#BuildStrong", "#TorontoConstruction", "#ConstructionMaterials"],
-      });
-    }
-  }
-  
-  return posts;
-};
+const statusFilters = [
+  { id: "all", label: "All statuses" },
+  { id: "draft", label: "Drafts" },
+  { id: "scheduled", label: "Scheduled" },
+  { id: "published", label: "Published" },
+  { id: "declined", label: "Declined" },
+];
 
 export default function SocialMediaManager() {
   const navigate = useNavigate();
-  const [posts] = useState<SocialPost[]>(generateMockPosts);
+  const { posts, isLoading, updatePost } = useSocialPosts();
+
   const [weekStart, setWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
   const [selectedPost, setSelectedPost] = useState<SocialPost | null>(null);
   const [showBrandKit, setShowBrandKit] = useState(false);
   const [showCreateContent, setShowCreateContent] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
 
-  const postsToReview = posts.filter(p => p.status === "scheduled").length;
+  // Filters & search
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [platformFilter, setPlatformFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+
   const weekEnd = addDays(weekStart, 6);
 
-  const handlePrevWeek = () => setWeekStart(prev => addDays(prev, -7));
-  const handleNextWeek = () => setWeekStart(prev => addDays(prev, 7));
+  const filteredPosts = useMemo(() => {
+    let items = posts;
+    if (platformFilter !== "all") {
+      items = items.filter((p) => p.platform === platformFilter);
+    }
+    if (statusFilter !== "all") {
+      items = items.filter((p) => p.status === statusFilter);
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      items = items.filter(
+        (p) =>
+          p.title.toLowerCase().includes(q) ||
+          p.content.toLowerCase().includes(q) ||
+          p.hashtags.some((h) => h.toLowerCase().includes(q))
+      );
+    }
+    return items;
+  }, [posts, platformFilter, statusFilter, searchQuery]);
+
+  const counts = useMemo(() => {
+    const c: Record<string, number> = { all: posts.length };
+    for (const p of posts) {
+      c[p.platform] = (c[p.platform] || 0) + 1;
+    }
+    return c;
+  }, [posts]);
+
+  const postsToReview = posts.filter((p) => p.status === "scheduled").length;
+
+  const handlePrevWeek = () => setWeekStart((prev) => addDays(prev, -7));
+  const handleNextWeek = () => setWeekStart((prev) => addDays(prev, 7));
+
+  const handleSchedule = (post: SocialPost) => {
+    updatePost.mutate({ id: post.id, status: "scheduled" });
+    setSelectedPost(null);
+  };
+
+  const handleDecline = (post: SocialPost) => {
+    updatePost.mutate({ id: post.id, status: "declined" });
+    setSelectedPost(null);
+  };
 
   return (
     <div className="flex flex-col h-full bg-background">
@@ -90,10 +119,9 @@ export default function SocialMediaManager() {
       <div className="flex-1 overflow-y-auto p-6">
         {/* Quick Actions & Stats */}
         <div className="flex flex-wrap gap-4 mb-6">
-          {/* Quick Action Cards */}
           <button
             onClick={() => {
-              const firstScheduled = posts.find(p => p.status === "scheduled");
+              const firstScheduled = posts.find((p) => p.status === "scheduled");
               if (firstScheduled) setSelectedPost(firstScheduled);
             }}
             className="flex items-center gap-3 px-4 py-3 rounded-xl bg-gradient-to-br from-purple-600 to-purple-500 text-white hover:opacity-90 transition-opacity"
@@ -102,7 +130,7 @@ export default function SocialMediaManager() {
             <span className="font-medium">{postsToReview} posts to review</span>
             <ArrowLeft className="w-4 h-4 rotate-[135deg]" />
           </button>
-          
+
           <button
             onClick={() => setShowBrandKit(true)}
             className="flex items-center gap-3 px-4 py-3 rounded-xl bg-gradient-to-br from-violet-600 to-violet-500 text-white hover:opacity-90 transition-opacity"
@@ -112,23 +140,83 @@ export default function SocialMediaManager() {
             <ArrowLeft className="w-4 h-4 rotate-[135deg]" />
           </button>
 
-          {/* Stats */}
           <div className="flex items-center gap-6 ml-auto">
             <div className="flex items-center gap-2">
               <Users className="w-5 h-5 text-muted-foreground" />
               <div>
-                <p className="text-2xl font-bold">112.7K</p>
-                <p className="text-xs text-muted-foreground">People reached</p>
+                <p className="text-2xl font-bold">{posts.filter((p) => p.status === "published").length}</p>
+                <p className="text-xs text-muted-foreground">Published</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-muted-foreground" />
               <div>
-                <p className="text-2xl font-bold">1.6K</p>
-                <p className="text-xs text-muted-foreground">Interactions</p>
+                <p className="text-2xl font-bold">{posts.length}</p>
+                <p className="text-xs text-muted-foreground">Total posts</p>
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Search & Filters */}
+        <div className="flex items-center gap-2 flex-wrap mb-4">
+          {searchOpen ? (
+            <div className="flex items-center gap-1 bg-card border border-border rounded-lg px-3 py-1.5">
+              <Search className="w-4 h-4 text-muted-foreground" />
+              <Input
+                autoFocus
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search posts..."
+                className="border-0 h-7 bg-transparent p-0 text-sm focus-visible:ring-0 w-40"
+              />
+              <button
+                onClick={() => { setSearchOpen(false); setSearchQuery(""); }}
+                className="p-0.5 rounded hover:bg-muted"
+              >
+                <X className="w-3.5 h-3.5 text-muted-foreground" />
+              </button>
+            </div>
+          ) : (
+            <Button variant="outline" size="sm" className="gap-2" onClick={() => setSearchOpen(true)}>
+              <Search className="w-4 h-4" />
+              Search
+            </Button>
+          )}
+
+          {/* Status filter dropdown-like pills */}
+          {statusFilters.map((f) => (
+            <Button
+              key={f.id}
+              variant={statusFilter === f.id ? "default" : "outline"}
+              size="sm"
+              className={cn(
+                statusFilter === f.id ? "bg-primary text-primary-foreground" : "bg-card"
+              )}
+              onClick={() => setStatusFilter(f.id)}
+            >
+              {f.label}
+            </Button>
+          ))}
+
+          {/* Platform pills */}
+          <div className="w-px h-6 bg-border mx-1" />
+          {platformFilters.map((f) => (
+            <Button
+              key={f.id}
+              variant={platformFilter === f.id ? "default" : "outline"}
+              size="sm"
+              className={cn(
+                platformFilter === f.id ? "bg-primary text-primary-foreground" : "bg-card"
+              )}
+              onClick={() => setPlatformFilter(f.id)}
+            >
+              {f.label}
+              {counts[f.id] !== undefined && (
+                <span className="text-xs opacity-70 ml-1">({counts[f.id]})</span>
+              )}
+            </Button>
+          ))}
         </div>
 
         {/* Date Navigation */}
@@ -144,12 +232,40 @@ export default function SocialMediaManager() {
           </Button>
         </div>
 
-        {/* Calendar Grid */}
-        <SocialCalendar
-          posts={posts}
-          weekStart={weekStart}
-          onPostClick={setSelectedPost}
-        />
+        {/* Calendar Grid or Loading */}
+        {isLoading ? (
+          <div className="grid grid-cols-7 gap-2">
+            {Array.from({ length: 7 }).map((_, i) => (
+              <div key={i} className="min-h-[400px]">
+                <Skeleton className="h-8 w-full mb-2 rounded-lg" />
+                <div className="space-y-2">
+                  <Skeleton className="h-20 w-full rounded-lg" />
+                  <Skeleton className="h-20 w-full rounded-lg" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : filteredPosts.length === 0 && !searchQuery && platformFilter === "all" && statusFilter === "all" ? (
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
+              <Plus className="w-8 h-8 text-muted-foreground" />
+            </div>
+            <h3 className="text-lg font-medium mb-2">No posts yet</h3>
+            <p className="text-muted-foreground text-sm max-w-md">
+              Create your first social media post to get started.
+            </p>
+            <Button className="mt-4 gap-2" onClick={() => setShowCreateContent(true)}>
+              <Plus className="w-4 h-4" />
+              Create content
+            </Button>
+          </div>
+        ) : (
+          <SocialCalendar
+            posts={filteredPosts}
+            weekStart={weekStart}
+            onPostClick={setSelectedPost}
+          />
+        )}
       </div>
 
       {/* Post Review Panel */}
@@ -157,8 +273,8 @@ export default function SocialMediaManager() {
         post={selectedPost}
         postsToReview={postsToReview}
         onClose={() => setSelectedPost(null)}
-        onSchedule={() => setSelectedPost(null)}
-        onDecline={() => setSelectedPost(null)}
+        onSchedule={() => selectedPost && handleSchedule(selectedPost)}
+        onDecline={() => selectedPost && handleDecline(selectedPost)}
       />
 
       {/* Brand Kit Dialog */}

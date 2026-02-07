@@ -2,9 +2,13 @@ import { useState, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MessageCircle, Image, Plus, Minus, ChevronLeft, Upload, X, Loader2 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { MessageCircle, Image, Plus, Minus, ChevronLeft, Upload, X, Loader2, Calendar } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useSocialPosts } from "@/hooks/useSocialPosts";
+import { supabase } from "@/integrations/supabase/client";
 
 interface CreateContentDialogProps {
   open: boolean;
@@ -19,23 +23,42 @@ interface UploadedMedia {
   type: string;
 }
 
+const platforms = [
+  { value: "facebook", label: "Facebook" },
+  { value: "instagram", label: "Instagram" },
+  { value: "linkedin", label: "LinkedIn" },
+  { value: "twitter", label: "X / Twitter" },
+  { value: "tiktok", label: "TikTok" },
+  { value: "youtube", label: "YouTube" },
+];
+
 export function CreateContentDialog({ open, onOpenChange }: CreateContentDialogProps) {
   const [step, setStep] = useState<Step>("choose");
-  const [postCount, setPostCount] = useState(1);
-  const [instructions, setInstructions] = useState("");
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
+  const [platform, setPlatform] = useState("facebook");
+  const [status, setStatus] = useState("draft");
+  const [scheduledDate, setScheduledDate] = useState("");
+  const [hashtags, setHashtags] = useState("");
   const [uploadedMedia, setUploadedMedia] = useState<UploadedMedia[]>([]);
-  const [generating, setGenerating] = useState(false);
+  const [saving, setSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+  const { createPost } = useSocialPosts();
 
   const handleClose = () => {
     onOpenChange(false);
     setStep("choose");
-    setInstructions("");
+    setTitle("");
+    setContent("");
+    setPlatform("facebook");
+    setStatus("draft");
+    setScheduledDate("");
+    setHashtags("");
     setUploadedMedia([]);
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
 
@@ -44,21 +67,24 @@ export function CreateContentDialog({ open, onOpenChange }: CreateContentDialogP
       return;
     }
 
-    Array.from(files).forEach((file) => {
+    for (const file of Array.from(files)) {
       if (file.size > 10 * 1024 * 1024) {
         toast({ title: "File too large", description: `${file.name} exceeds 10MB limit.`, variant: "destructive" });
-        return;
+        continue;
       }
 
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        const url = ev.target?.result as string;
-        if (url) {
-          setUploadedMedia((prev) => [...prev, { name: file.name, url, type: file.type }]);
-        }
-      };
-      reader.readAsDataURL(file);
-    });
+      // Upload to storage
+      const ext = file.name.split(".").pop();
+      const filePath = `social-media/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const { error } = await supabase.storage.from("estimation-files").upload(filePath, file);
+      if (error) {
+        toast({ title: "Upload failed", description: error.message, variant: "destructive" });
+        continue;
+      }
+
+      const { data: urlData } = supabase.storage.from("estimation-files").getPublicUrl(filePath);
+      setUploadedMedia((prev) => [...prev, { name: file.name, url: urlData.publicUrl, type: file.type }]);
+    }
     e.target.value = "";
   };
 
@@ -66,20 +92,46 @@ export function CreateContentDialog({ open, onOpenChange }: CreateContentDialogP
     setUploadedMedia((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const handleGenerate = async () => {
-    setGenerating(true);
-    // Simulate generation (replace with actual AI call later)
-    await new Promise((r) => setTimeout(r, 2000));
-    setGenerating(false);
-    toast({ title: "Posts generated!", description: `${postCount} post${postCount > 1 ? "s" : ""} created by Sushie.` });
-    handleClose();
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast({ title: "Not authenticated", description: "Please log in first.", variant: "destructive" });
+        setSaving(false);
+        return;
+      }
+
+      const hashtagArray = hashtags
+        .split(/[,\s]+/)
+        .map((h) => h.trim())
+        .filter((h) => h.length > 0)
+        .map((h) => (h.startsWith("#") ? h : `#${h}`));
+
+      await createPost.mutateAsync({
+        title: title || "Untitled Post",
+        content,
+        platform: platform as any,
+        status: status as any,
+        scheduled_date: scheduledDate ? new Date(scheduledDate).toISOString() : null,
+        hashtags: hashtagArray,
+        image_url: uploadedMedia[0]?.url || null,
+        user_id: user.id,
+      });
+
+      handleClose();
+    } catch {
+      // Error handled in mutation
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const canGenerate = instructions.trim().length > 0 || uploadedMedia.length > 0;
+  const canSave = title.trim().length > 0 || content.trim().length > 0;
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center gap-2">
             {step === "create" && (
@@ -127,16 +179,79 @@ export function CreateContentDialog({ open, onOpenChange }: CreateContentDialogP
           </div>
         ) : (
           <div className="space-y-4">
+            {/* Platform & Status */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-sm">Platform</Label>
+                <Select value={platform} onValueChange={setPlatform}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {platforms.map((p) => (
+                      <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm">Status</Label>
+                <Select value={status} onValueChange={setStatus}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="draft">Draft</SelectItem>
+                    <SelectItem value="scheduled">Scheduled</SelectItem>
+                    <SelectItem value="published">Published</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Title */}
+            <div className="space-y-1.5">
+              <Label className="text-sm">Title</Label>
+              <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Post title..." />
+            </div>
+
+            {/* Content */}
+            <div className="space-y-1.5">
+              <Label className="text-sm">Content</Label>
+              <Textarea
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                placeholder="Write your post content..."
+                className="min-h-[100px] resize-none"
+              />
+            </div>
+
+            {/* Scheduled date */}
+            <div className="space-y-1.5">
+              <Label className="text-sm">Scheduled date</Label>
+              <Input
+                type="datetime-local"
+                value={scheduledDate}
+                onChange={(e) => setScheduledDate(e.target.value)}
+              />
+            </div>
+
+            {/* Hashtags */}
+            <div className="space-y-1.5">
+              <Label className="text-sm">Hashtags (comma or space separated)</Label>
+              <Input
+                value={hashtags}
+                onChange={(e) => setHashtags(e.target.value)}
+                placeholder="#RebarShop #Construction"
+              />
+            </div>
+
             {/* Upload Zone */}
             <div
               onClick={() => fileInputRef.current?.click()}
-              className="border-2 border-dashed border-muted-foreground/30 rounded-lg p-8 text-center hover:border-muted-foreground/50 transition-colors cursor-pointer"
+              className="border-2 border-dashed border-muted-foreground/30 rounded-lg p-6 text-center hover:border-muted-foreground/50 transition-colors cursor-pointer"
             >
-              <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center mx-auto mb-3">
+              <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center mx-auto mb-2">
                 <Plus className="w-5 h-5" />
               </div>
-              <p className="font-medium">Click to upload or drag and drop</p>
-              <p className="text-sm text-muted-foreground">PNG, JPG or MP4 up to 10MB. Max 10 files.</p>
+              <p className="font-medium text-sm">Click to upload media</p>
+              <p className="text-xs text-muted-foreground">PNG, JPG or MP4 up to 10MB</p>
             </div>
             <input
               ref={fileInputRef}
@@ -164,65 +279,19 @@ export function CreateContentDialog({ open, onOpenChange }: CreateContentDialogP
               </div>
             )}
 
-            {/* Add from Media Library */}
-            <Button variant="outline" className="w-full" onClick={() => fileInputRef.current?.click()}>
-              <Upload className="w-4 h-4 mr-2" />
-              Add from media library
-            </Button>
-
-            {/* Instructions */}
-            <div className="space-y-2">
-              <Label className="text-sm text-muted-foreground">Instructions</Label>
-              <Textarea
-                value={instructions}
-                onChange={(e) => setInstructions(e.target.value)}
-                placeholder="Add your instructions — e.g. 'Create posts and stories for next week with productivity tips and a call-to-action to book a session'."
-                className="min-h-[100px] resize-none"
-              />
-            </div>
-
-            {/* What can Sushie make */}
-            <p className="text-sm text-center text-muted-foreground underline cursor-pointer">
-              What content can Sushie make?
-            </p>
-
-            {/* Post Count */}
-            <div className="flex items-center justify-between py-2">
-              <span className="text-sm">Post count</span>
-              <div className="flex items-center gap-3">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="w-8 h-8"
-                  onClick={() => setPostCount(Math.max(1, postCount - 1))}
-                >
-                  <Minus className="w-4 h-4" />
-                </Button>
-                <span className="w-8 text-center font-medium">{postCount}</span>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="w-8 h-8"
-                  onClick={() => setPostCount(Math.min(10, postCount + 1))}
-                >
-                  <Plus className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-
-            {/* Generate Button */}
+            {/* Save Button */}
             <Button
               className="w-full gap-2"
-              disabled={!canGenerate || generating}
-              onClick={handleGenerate}
+              disabled={!canSave || saving}
+              onClick={handleSave}
             >
-              {generating ? (
+              {saving ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Generating...
+                  Saving...
                 </>
               ) : (
-                `Generate ${postCount} post${postCount > 1 ? "s" : ""}`
+                "Save post"
               )}
             </Button>
           </div>
