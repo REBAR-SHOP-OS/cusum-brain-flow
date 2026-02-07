@@ -37,6 +37,16 @@ export function BenderStationView({ machine, items, canWrite, initialIndex = 0 }
   const { getMaxBars } = useMachineCapabilities(machine.model, "bend");
   const maxBars = currentItem ? (getMaxBars(currentItem.bar_code) || null) : null;
 
+  // Batch size per DONE press based on bar size
+  const getBatchSize = (barCode: string): number => {
+    const num = parseInt(barCode.replace(/\D/g, "")) || 0;
+    if (num <= 10) return 6;
+    if (num <= 15) return 4;
+    if (num <= 20) return 2;
+    return 1;
+  };
+
+  const batchSize = currentItem ? getBatchSize(currentItem.bar_code) : 1;
   const bendCompleted = currentItem?.bend_completed_pieces ?? currentItem?.completed_pieces ?? 0;
   const progress = currentItem
     ? Math.round((bendCompleted / currentItem.total_pieces) * 100)
@@ -71,7 +81,7 @@ export function BenderStationView({ machine, items, canWrite, initialIndex = 0 }
     if (!currentItem || submitting || isMarkComplete) return;
     setSubmitting(true);
     try {
-      const newCount = bendCompleted + 1;
+      const newCount = Math.min(bendCompleted + batchSize, currentItem.total_pieces);
       // Update bend_completed_pieces and set phase to 'bending'
       const { error } = await supabase
         .from("cut_plan_items")
@@ -80,7 +90,8 @@ export function BenderStationView({ machine, items, canWrite, initialIndex = 0 }
 
       if (error) throw error;
 
-      toast({ title: `+1 Confirmed`, description: `${newCount} / ${currentItem.total_pieces} pieces` });
+      const added = newCount - bendCompleted;
+      toast({ title: `+${added} Confirmed`, description: `${newCount} / ${currentItem.total_pieces} pieces` });
 
       // Record completion learning if mark done
       if (newCount >= currentItem.total_pieces) {
@@ -205,7 +216,7 @@ export function BenderStationView({ machine, items, canWrite, initialIndex = 0 }
       <div className="border-t border-border p-4 flex items-center justify-between bg-card">
         <div className="flex items-center gap-2">
           <div className="flex flex-col items-start mr-3">
-            <span className="text-[9px] text-muted-foreground tracking-wider uppercase">Batch</span>
+            <span className="text-[9px] text-muted-foreground tracking-wider uppercase">Batch ×{batchSize}</span>
             <span className="text-[9px] text-muted-foreground tracking-wider uppercase">Unit {currentIndex + 1}</span>
           </div>
           <Button variant="outline" size="icon" className="h-8 w-8" disabled={currentIndex <= 0 || submitting} onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}>
@@ -233,7 +244,7 @@ export function BenderStationView({ machine, items, canWrite, initialIndex = 0 }
           ) : (
             <>
               <span className="text-xl font-black">DONE</span>
-              <span className="text-xs opacity-80">CONFIRMED +1 PIECE</span>
+              <span className="text-xs opacity-80">CONFIRMED +{batchSize} {batchSize === 1 ? "PIECE" : "PIECES"}</span>
             </>
           )}
         </Button>
