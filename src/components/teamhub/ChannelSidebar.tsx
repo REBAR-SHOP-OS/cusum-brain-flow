@@ -14,6 +14,7 @@ import {
   ChevronDown,
   ChevronRight,
   Circle,
+  X,
 } from "lucide-react";
 import type { TeamChannel } from "@/hooks/useTeamChat";
 import type { Profile } from "@/hooks/useProfiles";
@@ -26,6 +27,7 @@ interface ChannelSidebarProps {
   profiles: Profile[];
   onCreateChannel: () => void;
   onClickMember: (profileId: string, name: string) => void;
+  onClose?: () => void;
 }
 
 function getInitials(name: string) {
@@ -43,7 +45,7 @@ function getAvatarColor(name: string) {
   return avatarColors[Math.abs(hash) % avatarColors.length];
 }
 
-export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, profiles, onCreateChannel, onClickMember }: ChannelSidebarProps) {
+export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, profiles, onCreateChannel, onClickMember, onClose }: ChannelSidebarProps) {
   const [channelsOpen, setChannelsOpen] = useState(true);
   const [membersOpen, setMembersOpen] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -56,14 +58,24 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
     ? activeProfiles.filter((p) => p.full_name.toLowerCase().includes(searchTerm.toLowerCase()))
     : activeProfiles;
 
+  const handleSelect = (id: string) => {
+    onSelect(id);
+    onClose?.();
+  };
+
+  const handleClickMember = (profileId: string, name: string) => {
+    onClickMember(profileId, name);
+    onClose?.();
+  };
+
   return (
-    <div className="flex flex-col h-full border-r border-border bg-card/30 backdrop-blur-sm w-72 shrink-0">
+    <div className="flex flex-col h-full border-r border-border bg-card/30 backdrop-blur-sm w-full md:w-64 lg:w-72 shrink-0">
       {/* Workspace Header */}
-      <div className="p-4 border-b border-border">
+      <div className="p-3 md:p-4 border-b border-border">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-primary/15 border border-primary/20 flex items-center justify-center">
-              <MessageSquare className="w-4.5 h-4.5 text-primary" />
+            <div className="w-8 h-8 md:w-9 md:h-9 rounded-xl bg-primary/15 border border-primary/20 flex items-center justify-center">
+              <MessageSquare className="w-4 h-4 text-primary" />
             </div>
             <div>
               <h2 className="text-sm font-bold text-foreground tracking-tight">Team Hub</h2>
@@ -73,6 +85,11 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
               </div>
             </div>
           </div>
+          {onClose && (
+            <Button variant="ghost" size="icon" className="h-8 w-8 md:hidden" onClick={onClose}>
+              <X className="w-4 h-4" />
+            </Button>
+          )}
         </div>
       </div>
 
@@ -119,9 +136,9 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
             {groupChannels.map((ch) => (
               <button
                 key={ch.id}
-                onClick={() => onSelect(ch.id)}
+                onClick={() => handleSelect(ch.id)}
                 className={cn(
-                  "w-full flex items-center gap-2 px-2.5 py-1.5 text-sm rounded-lg transition-all group",
+                  "w-full flex items-center gap-2 px-2.5 py-2 md:py-1.5 text-sm rounded-lg transition-all group",
                   selectedId === ch.id
                     ? "bg-primary/10 text-primary font-semibold shadow-sm shadow-primary/5"
                     : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
@@ -151,9 +168,9 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
               {dmChannels.map((ch) => (
                 <button
                   key={ch.id}
-                  onClick={() => onSelect(ch.id)}
+                  onClick={() => handleSelect(ch.id)}
                   className={cn(
-                    "w-full flex items-center gap-2 px-2.5 py-1.5 text-sm rounded-lg transition-all",
+                    "w-full flex items-center gap-2 px-2.5 py-2 md:py-1.5 text-sm rounded-lg transition-all",
                     selectedId === ch.id
                       ? "bg-primary/10 text-primary font-semibold"
                       : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
@@ -184,8 +201,8 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
             {filteredMembers.map((p) => (
               <button
                 key={p.id}
-                onClick={() => onClickMember(p.id, p.full_name)}
-                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer text-left"
+                onClick={() => handleClickMember(p.id, p.full_name)}
+                className="w-full flex items-center gap-2 px-2.5 py-2 md:py-1.5 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer text-left"
               >
                 <div className="relative">
                   <Avatar className="w-6 h-6">

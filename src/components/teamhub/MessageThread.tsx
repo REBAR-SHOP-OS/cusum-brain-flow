@@ -185,8 +185,8 @@ export function MessageThread({
 
   return (
     <div className="flex flex-col h-full">
-      {/* Channel Header */}
-      <div className="border-b border-border px-5 py-3 flex items-center justify-between bg-card/50 backdrop-blur-sm">
+      {/* Channel Header - hidden on mobile (parent handles mobile top bar) */}
+      <div className="hidden md:flex border-b border-border px-4 lg:px-5 py-3 items-center justify-between bg-card/50 backdrop-blur-sm">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
             <Hash className="w-4 h-4 text-primary" />
@@ -248,6 +248,26 @@ export function MessageThread({
               <TooltipContent>Search in channel</TooltipContent>
             </Tooltip>
           </TooltipProvider>
+        </div>
+      </div>
+
+      {/* Mobile action bar */}
+      <div className="flex md:hidden items-center justify-between px-3 py-1.5 border-b border-border bg-card/30">
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onStartMeeting}>
+            <Video className="w-4 h-4 text-muted-foreground" />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8">
+            <Phone className="w-4 h-4 text-muted-foreground" />
+          </Button>
+        </div>
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="icon" className="h-8 w-8">
+            <Users className="w-4 h-4 text-muted-foreground" />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8">
+            <Search className="w-4 h-4 text-muted-foreground" />
+          </Button>
         </div>
       </div>
 
@@ -422,9 +442,9 @@ export function MessageThread({
       </ScrollArea>
 
       {/* Composer */}
-      <div className="border-t border-border p-4 bg-card/50 backdrop-blur-sm">
-        {/* Formatting toolbar */}
-        <div className="flex items-center gap-0.5 mb-2">
+      <div className="border-t border-border p-2 md:p-4 bg-card/50 backdrop-blur-sm safe-area-bottom">
+        {/* Formatting toolbar - hidden on mobile */}
+        <div className="hidden md:flex items-center gap-0.5 mb-2">
           <Button variant="ghost" size="icon" className="h-7 w-7">
             <Bold className="w-3.5 h-3.5 text-muted-foreground" />
           </Button>
@@ -450,7 +470,7 @@ export function MessageThread({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder={`Message #${channelName}...`}
-            className="min-h-[44px] max-h-32 resize-none border-0 focus-visible:ring-0 bg-transparent px-3 py-2.5 text-sm"
+            className="min-h-[40px] md:min-h-[44px] max-h-32 resize-none border-0 focus-visible:ring-0 bg-transparent px-3 py-2 md:py-2.5 text-sm"
             rows={1}
             dir={isRtl(myLang) ? "rtl" : "ltr"}
             onKeyDown={(e) => {
@@ -462,7 +482,7 @@ export function MessageThread({
           />
 
           {/* Bottom bar */}
-          <div className="flex items-center justify-between px-2 pb-2">
+          <div className="flex items-center justify-between px-2 pb-1.5 md:pb-2">
             <div className="flex items-center gap-0.5">
               <Button variant="ghost" size="icon" className="h-7 w-7">
                 <Paperclip className="w-3.5 h-3.5 text-muted-foreground" />
@@ -470,14 +490,14 @@ export function MessageThread({
               <Button variant="ghost" size="icon" className="h-7 w-7">
                 <Smile className="w-3.5 h-3.5 text-muted-foreground" />
               </Button>
-              <Badge variant="outline" className="text-[9px] px-1.5 py-0 gap-1 ml-1">
+              <Badge variant="outline" className="text-[9px] px-1.5 py-0 gap-1 ml-1 hidden sm:inline-flex">
                 {myLangInfo.flag} {myLangInfo.name}
               </Badge>
             </div>
 
             <Button
               size="sm"
-              className="h-8 px-3 gap-1.5 rounded-lg"
+              className="h-8 w-8 md:w-auto md:px-3 gap-1.5 rounded-lg p-0 md:p-2"
               onClick={handleSubmit}
               disabled={!input.trim() || isSending}
             >
@@ -486,13 +506,13 @@ export function MessageThread({
               ) : (
                 <Send className="w-3.5 h-3.5" />
               )}
-              Send
+              <span className="hidden md:inline">Send</span>
             </Button>
           </div>
         </div>
 
         {/* Typing indicator area */}
-        <div className="h-4 mt-1">
+        <div className="h-3 md:h-4 mt-0.5 md:mt-1">
           <p className="text-[10px] text-muted-foreground/60">
             {isSending && "Translating & sending..."}
           </p>

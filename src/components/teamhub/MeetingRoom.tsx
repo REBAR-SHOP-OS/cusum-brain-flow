@@ -77,13 +77,13 @@ export function MeetingRoom({
       )}
     >
       {/* Meeting Header */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-card/80 backdrop-blur-sm">
-        <div className="flex items-center gap-3">
-          <div className="relative">
+      <div className="flex items-center justify-between px-3 md:px-4 py-2 border-b border-border bg-card/80 backdrop-blur-sm">
+        <div className="flex items-center gap-2 md:gap-3 min-w-0">
+          <div className="relative shrink-0">
             <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
           </div>
-          <div>
-            <h3 className="text-sm font-bold text-foreground">{meeting.title}</h3>
+          <div className="min-w-0">
+            <h3 className="text-xs md:text-sm font-bold text-foreground truncate">{meeting.title}</h3>
             <div className="flex items-center gap-2">
               <Badge variant="outline" className="text-[9px] px-1.5 py-0 gap-1">
                 {meeting.meeting_type === "video" && <Video className="w-2.5 h-2.5" />}
@@ -96,11 +96,11 @@ export function MeetingRoom({
           </div>
         </div>
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 shrink-0">
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7"
+            className="h-7 w-7 hidden md:inline-flex"
             onClick={() => setIsFullscreen(!isFullscreen)}
           >
             {isFullscreen ? (
@@ -131,11 +131,11 @@ export function MeetingRoom({
       </div>
 
       {/* Bottom Controls */}
-      <div className="flex items-center justify-center gap-2 px-4 py-3 border-t border-border bg-card/80 backdrop-blur-sm">
+      <div className="flex items-center justify-center gap-2 md:gap-3 px-3 md:px-4 py-2 md:py-3 border-t border-border bg-card/80 backdrop-blur-sm safe-area-bottom">
         <Button
           variant={isMuted ? "destructive" : "outline"}
           size="sm"
-          className="h-9 w-9 rounded-full p-0"
+          className="h-9 w-9 md:h-10 md:w-10 rounded-full p-0"
           onClick={() => setIsMuted(!isMuted)}
         >
           {isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
@@ -143,7 +143,7 @@ export function MeetingRoom({
         <Button
           variant={isVideoOff ? "destructive" : "outline"}
           size="sm"
-          className="h-9 w-9 rounded-full p-0"
+          className="h-9 w-9 md:h-10 md:w-10 rounded-full p-0"
           onClick={() => setIsVideoOff(!isVideoOff)}
         >
           {isVideoOff ? <VideoOff className="w-4 h-4" /> : <Video className="w-4 h-4" />}
@@ -153,14 +153,14 @@ export function MeetingRoom({
         <Button
           variant="destructive"
           size="sm"
-          className="h-9 px-4 rounded-full gap-1.5"
+          className="h-9 md:h-10 px-3 md:px-4 rounded-full gap-1.5"
           onClick={() => {
             if (isCreator) onEnd();
             else onLeave();
           }}
         >
           <PhoneOff className="w-4 h-4" />
-          {isCreator ? "End Meeting" : "Leave"}
+          <span className="hidden sm:inline">{isCreator ? "End Meeting" : "Leave"}</span>
         </Button>
       </div>
     </div>
