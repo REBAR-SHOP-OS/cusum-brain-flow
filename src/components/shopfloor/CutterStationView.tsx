@@ -2,14 +2,18 @@ import { useState } from "react";
 import { StationHeader } from "./StationHeader";
 import { CutEngine } from "./CutEngine";
 import { AsaShapeDiagram } from "./AsaShapeDiagram";
+import { ForemanPanel } from "./ForemanPanel";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { manageMachine } from "@/lib/manageMachineService";
 import { manageInventory } from "@/lib/inventoryService";
+import { recordCompletion } from "@/lib/foremanLearningService";
 import { useToast } from "@/hooks/use-toast";
 import { useMachineCapabilities } from "@/hooks/useCutPlans";
 import { useInventoryData } from "@/hooks/useInventoryData";
-import { Scissors, Layers, ArrowRight, Package, Ruler, Hash, CheckCircle2 } from "lucide-react";
+import { useForemanBrain } from "@/hooks/useForemanBrain";
+import { Scissors, Layers, Ruler, Hash, CheckCircle2 } from "lucide-react";
+import type { ForemanContext } from "@/lib/foremanBrain";
 import type { LiveMachine } from "@/types/machine";
 import type { StationItem } from "@/hooks/useStationData";
 
@@ -23,15 +27,40 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
   const { toast } = useToast();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
+  const [selectedStockLength, setSelectedStockLength] = useState(12000);
 
   const currentItem = items[currentIndex] || null;
   const { getMaxBars } = useMachineCapabilities(machine.model, "cut");
   const cutPlanId = currentItem?.cut_plan_id || null;
   const barCode = currentItem?.bar_code;
 
-  const { lots } = useInventoryData(cutPlanId, barCode);
+  const { lots, floorStock, wipBatches } = useInventoryData(cutPlanId, barCode);
 
   const remaining = items.filter((i) => i.completed_pieces < i.total_pieces).length;
+  const maxBars = currentItem ? (getMaxBars(currentItem.bar_code) || 10) : 10;
+
+  // ── Foreman Brain context ──
+  const foremanContext: ForemanContext | null = currentItem
+    ? {
+        module: "cut",
+        machineId: machine.id,
+        machineName: machine.name,
+        machineModel: machine.model,
+        machineStatus: machine.status,
+        machineType: machine.type,
+        currentItem,
+        items,
+        lots,
+        floorStock,
+        wipBatches,
+        maxBars,
+        selectedStockLength,
+        currentIndex,
+        canWrite,
+      }
+    : null;
+
+  const foreman = useForemanBrain({ context: foremanContext });
 
   const handleLockAndStart = async (stockLength: number, bars: number) => {
     if (!currentItem) return;
@@ -60,9 +89,21 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
             sourceId: bestLot.id,
             stockLengthMm: stockLength,
           });
-        } catch (invErr: any) {
+        } catch {
           // Inventory consumption is best-effort
         }
+      }
+
+      // Record success learning
+      const piecesPerBar = currentItem.pieces_per_bar || 1;
+      const piecesProduced = bars * piecesPerBar;
+      const remainingAfter = currentItem.total_pieces - currentItem.completed_pieces - piecesProduced;
+      if (remainingAfter <= 0) {
+        recordCompletion("cut", machine.id, currentItem.bar_code, {
+          mark: currentItem.mark_number,
+          total_pieces: currentItem.total_pieces,
+          stock_length: stockLength,
+        });
       }
 
       toast({ title: "Machine started", description: `Cutting ${currentItem.mark_number || "item"}` });
@@ -88,14 +129,12 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
     );
   }
 
-  const maxBars = getMaxBars(currentItem.bar_code) || 10;
   const piecesPerBar = currentItem.pieces_per_bar || 1;
   const totalBars = currentItem.qty_bars || 0;
   const totalPieces = currentItem.total_pieces || 0;
   const completedPieces = currentItem.completed_pieces || 0;
   const remainingPieces = totalPieces - completedPieces;
   const barsStillNeeded = Math.ceil(remainingPieces / piecesPerBar);
-  const progress = totalPieces > 0 ? Math.round((completedPieces / totalPieces) * 100) : 0;
   const isDone = remainingPieces <= 0;
 
   return (
@@ -118,10 +157,12 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
           {/* Project / Plan context */}
           {(currentItem.project_name || currentItem.plan_name) && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Package className="w-3.5 h-3.5 text-primary" />
               <span className="font-medium">{currentItem.project_name || currentItem.plan_name}</span>
             </div>
           )}
+
+          {/* ── FOREMAN BRAIN PANEL ── */}
+          <ForemanPanel foreman={foreman} />
 
           {/* BIG CUT LENGTH */}
           <Card className="bg-card border border-border">
@@ -138,100 +179,47 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
             </CardContent>
           </Card>
 
-          {/* OPERATOR INSTRUCTION CARDS */}
+          {/* OPERATOR STATS CARDS */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            {/* Pieces per bar */}
             <Card className="bg-card border-border">
               <CardContent className="p-4 text-center">
                 <Scissors className="w-5 h-5 text-primary mx-auto mb-2" />
                 <p className="text-3xl font-black font-mono text-foreground">{piecesPerBar}</p>
-                <p className="text-[10px] text-muted-foreground tracking-wider uppercase mt-1">
-                  Pcs / Bar
-                </p>
+                <p className="text-[10px] text-muted-foreground tracking-wider uppercase mt-1">Pcs / Bar</p>
               </CardContent>
             </Card>
-
-            {/* Total bars needed */}
             <Card className="bg-card border-border">
               <CardContent className="p-4 text-center">
-                <Layers className="w-5 h-5 text-blue-500 mx-auto mb-2" />
+                <Layers className="w-5 h-5 text-primary mx-auto mb-2" />
                 <p className="text-3xl font-black font-mono text-foreground">{totalBars}</p>
-                <p className="text-[10px] text-muted-foreground tracking-wider uppercase mt-1">
-                  Total Bars
-                </p>
+                <p className="text-[10px] text-muted-foreground tracking-wider uppercase mt-1">Total Bars</p>
               </CardContent>
             </Card>
-
-            {/* Bars still needed */}
-            <Card className={`border-border ${isDone ? "bg-green-500/5 border-green-500/30" : "bg-card"}`}>
+            <Card className={`border-border ${isDone ? "bg-primary/5 border-primary/30" : "bg-card"}`}>
               <CardContent className="p-4 text-center">
-                <Ruler className="w-5 h-5 text-orange-500 mx-auto mb-2" />
-                <p className={`text-3xl font-black font-mono ${isDone ? "text-green-500" : "text-foreground"}`}>
+                <Ruler className="w-5 h-5 text-accent-foreground mx-auto mb-2" />
+                <p className={`text-3xl font-black font-mono ${isDone ? "text-primary" : "text-foreground"}`}>
                   {isDone ? "✓" : barsStillNeeded}
                 </p>
-                <p className="text-[10px] text-muted-foreground tracking-wider uppercase mt-1">
-                  Bars Left
-                </p>
+                <p className="text-[10px] text-muted-foreground tracking-wider uppercase mt-1">Bars Left</p>
               </CardContent>
             </Card>
-
-            {/* Total pieces */}
             <Card className="bg-card border-border">
               <CardContent className="p-4 text-center">
-                <Hash className="w-5 h-5 text-purple-500 mx-auto mb-2" />
+                <Hash className="w-5 h-5 text-secondary-foreground mx-auto mb-2" />
                 <p className="text-3xl font-black font-mono text-foreground">
                   {completedPieces}<span className="text-lg text-muted-foreground">/{totalPieces}</span>
                 </p>
-                <p className="text-[10px] text-muted-foreground tracking-wider uppercase mt-1">
-                  Pieces Done
-                </p>
+                <p className="text-[10px] text-muted-foreground tracking-wider uppercase mt-1">Pieces Done</p>
               </CardContent>
             </Card>
           </div>
 
-          {/* Step-by-step instruction banner */}
-          {!isDone && (
-            <Card className="bg-primary/5 border-primary/20">
-              <CardContent className="p-4 space-y-3">
-                <div className="flex items-center gap-2">
-                  <ArrowRight className="w-4 h-4 text-primary" />
-                  <h4 className="text-xs font-bold tracking-wider uppercase text-primary">
-                    Operator Instructions
-                  </h4>
-                </div>
-                <div className="space-y-2 text-sm text-foreground">
-                  <div className="flex items-start gap-3">
-                    <Badge className="bg-primary text-primary-foreground w-6 h-6 rounded-full flex items-center justify-center shrink-0 p-0 text-[11px]">1</Badge>
-                    <p>
-                      Set stopper to <span className="font-black font-mono text-primary">{currentItem.cut_length_mm}mm</span>
-                    </p>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <Badge className="bg-primary text-primary-foreground w-6 h-6 rounded-full flex items-center justify-center shrink-0 p-0 text-[11px]">2</Badge>
-                    <p>
-                      Load <span className="font-black font-mono">{currentItem.bar_code}</span> bar — you get <span className="font-black font-mono text-primary">{piecesPerBar} piece{piecesPerBar !== 1 ? "s" : ""}</span> per bar
-                    </p>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <Badge className="bg-primary text-primary-foreground w-6 h-6 rounded-full flex items-center justify-center shrink-0 p-0 text-[11px]">3</Badge>
-                    <p>
-                      Cut <span className="font-black font-mono text-orange-500">{barsStillNeeded} bar{barsStillNeeded !== 1 ? "s" : ""}</span> to complete this mark ({remainingPieces} piece{remainingPieces !== 1 ? "s" : ""} remaining)
-                    </p>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <Badge className="bg-primary text-primary-foreground w-6 h-6 rounded-full flex items-center justify-center shrink-0 p-0 text-[11px]">4</Badge>
-                    <p>Select stock length & bar count on the right, then press <span className="font-bold">LOCK & START</span></p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
           {isDone && (
-            <Card className="bg-green-500/10 border-green-500/30">
+            <Card className="bg-primary/10 border-primary/30">
               <CardContent className="p-6 flex items-center justify-center gap-3">
-                <CheckCircle2 className="w-6 h-6 text-green-500" />
-                <p className="text-sm font-bold text-green-500 tracking-wider uppercase">
+                <CheckCircle2 className="w-6 h-6 text-primary" />
+                <p className="text-sm font-bold text-primary tracking-wider uppercase">
                   This mark is complete — move to next item
                 </p>
               </CardContent>
