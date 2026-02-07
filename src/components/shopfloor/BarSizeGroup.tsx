@@ -6,10 +6,12 @@ interface BarSizeGroupProps {
   group: BarSizeGroupType;
   canWrite: boolean;
   isSupervisor?: boolean;
+  machineId?: string;
+  machineType?: string;
   onCardClick?: (itemId: string) => void;
 }
 
-export function BarSizeGroup({ group, canWrite, isSupervisor = false, onCardClick }: BarSizeGroupProps) {
+export function BarSizeGroup({ group, canWrite, isSupervisor = false, machineId, machineType, onCardClick }: BarSizeGroupProps) {
   return (
     <div className="space-y-5">
       {/* Bar size header — blue circle icon + title + divider line */}
@@ -44,6 +46,8 @@ export function BarSizeGroup({ group, canWrite, isSupervisor = false, onCardClic
                   item={item}
                   canWrite={canWrite}
                   isSupervisor={isSupervisor}
+                  machineId={machineId}
+                  machineType={machineType}
                   onClick={() => onCardClick?.(item.id)}
                 />
               ))}
@@ -67,6 +71,8 @@ export function BarSizeGroup({ group, canWrite, isSupervisor = false, onCardClic
                   item={item}
                   canWrite={canWrite}
                   isSupervisor={isSupervisor}
+                  machineId={machineId}
+                  machineType={machineType}
                   onClick={() => onCardClick?.(item.id)}
                 />
               ))}

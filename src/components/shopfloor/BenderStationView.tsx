@@ -37,8 +37,9 @@ export function BenderStationView({ machine, items, canWrite, initialIndex = 0 }
   const { getMaxBars } = useMachineCapabilities(machine.model, "bend");
   const maxBars = currentItem ? (getMaxBars(currentItem.bar_code) || null) : null;
 
+  const bendCompleted = currentItem?.bend_completed_pieces ?? currentItem?.completed_pieces ?? 0;
   const progress = currentItem
-    ? Math.round((currentItem.completed_pieces / currentItem.total_pieces) * 100)
+    ? Math.round((bendCompleted / currentItem.total_pieces) * 100)
     : 0;
 
   // ── Foreman Brain context ──
@@ -64,16 +65,17 @@ export function BenderStationView({ machine, items, canWrite, initialIndex = 0 }
 
   const foreman = useForemanBrain({ context: foremanContext });
 
-  const isMarkComplete = currentItem ? currentItem.completed_pieces >= currentItem.total_pieces : false;
+  const isMarkComplete = currentItem ? bendCompleted >= currentItem.total_pieces : false;
 
   const handleDone = async () => {
     if (!currentItem || submitting || isMarkComplete) return;
     setSubmitting(true);
     try {
-      const newCount = currentItem.completed_pieces + 1;
+      const newCount = bendCompleted + 1;
+      // Update bend_completed_pieces and set phase to 'bending'
       const { error } = await supabase
         .from("cut_plan_items")
-        .update({ completed_pieces: newCount })
+        .update({ bend_completed_pieces: newCount, phase: "bending" } as any)
         .eq("id", currentItem.id);
 
       if (error) throw error;
@@ -171,7 +173,7 @@ export function BenderStationView({ machine, items, canWrite, initialIndex = 0 }
             <CardContent className="p-4 text-center">
               <p className="text-[9px] text-muted-foreground tracking-[0.15em] uppercase mb-1">Finished Progress</p>
               <div className="flex items-baseline justify-center gap-1">
-                <span className="text-3xl sm:text-4xl font-black text-primary">{currentItem.completed_pieces}</span>
+                <span className="text-3xl sm:text-4xl font-black text-primary">{currentItem.bend_completed_pieces ?? 0}</span>
                 <span className="text-lg text-muted-foreground">/ {currentItem.total_pieces}</span>
               </div>
               <p className="text-[9px] text-muted-foreground tracking-wider uppercase mt-0.5">Pieces Verified</p>

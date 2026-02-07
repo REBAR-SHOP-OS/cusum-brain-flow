@@ -558,6 +558,7 @@ export type Database = {
         Row: {
           asa_shape_code: string | null
           bar_code: string
+          bend_completed_pieces: number
           bend_dimensions: Json | null
           bend_type: string
           completed_pieces: number
@@ -568,6 +569,7 @@ export type Database = {
           mark_number: string | null
           needs_fix: boolean
           notes: string | null
+          phase: string
           pieces_per_bar: number
           qty_bars: number
           total_pieces: number
@@ -576,6 +578,7 @@ export type Database = {
         Insert: {
           asa_shape_code?: string | null
           bar_code: string
+          bend_completed_pieces?: number
           bend_dimensions?: Json | null
           bend_type?: string
           completed_pieces?: number
@@ -586,6 +589,7 @@ export type Database = {
           mark_number?: string | null
           needs_fix?: boolean
           notes?: string | null
+          phase?: string
           pieces_per_bar?: number
           qty_bars: number
           total_pieces?: number
@@ -594,6 +598,7 @@ export type Database = {
         Update: {
           asa_shape_code?: string | null
           bar_code?: string
+          bend_completed_pieces?: number
           bend_dimensions?: Json | null
           bend_type?: string
           completed_pieces?: number
@@ -604,6 +609,7 @@ export type Database = {
           mark_number?: string | null
           needs_fix?: boolean
           notes?: string | null
+          phase?: string
           pieces_per_bar?: number
           qty_bars?: number
           total_pieces?: number

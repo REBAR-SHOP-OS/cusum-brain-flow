@@ -16,7 +16,8 @@ import { useState } from "react";
 export default function StationView() {
   const { machineId } = useParams<{ machineId: string }>();
   const { machines, isLoading: machinesLoading } = useLiveMonitorData();
-  const { groups, items, isLoading: dataLoading } = useStationData(machineId || null);
+  const machine = machines.find((m) => m.id === machineId);
+  const { groups, items, isLoading: dataLoading } = useStationData(machineId || null, machine?.type);
   const { isAdmin, isWorkshop } = useUserRole();
   const canWrite = isAdmin || isWorkshop;
   const [activeTab, setActiveTab] = useState("production");
@@ -25,7 +26,6 @@ export default function StationView() {
 
   if (!machineId) return <Navigate to="/shopfloor/station" replace />;
 
-  const machine = machines.find((m) => m.id === machineId);
   const isLoading = machinesLoading || dataLoading;
 
   if (isLoading) {
@@ -119,6 +119,8 @@ export default function StationView() {
                           item={item}
                           canWrite={canWrite}
                           isSupervisor={isSupervisor}
+                          machineId={machineId}
+                          machineType={machine?.type}
                           onClick={() => setSelectedItemId(item.id)}
                         />
                       ))}
@@ -137,6 +139,8 @@ export default function StationView() {
                         group={group}
                         canWrite={canWrite}
                         isSupervisor={isSupervisor}
+                        machineId={machineId}
+                        machineType={machine?.type}
                         onCardClick={(itemId) => {
                           setSelectedItemId(itemId);
                         }}
