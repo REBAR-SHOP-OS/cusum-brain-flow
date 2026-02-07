@@ -14,6 +14,7 @@ export interface TeamMeeting {
   started_at: string;
   ended_at: string | null;
   meeting_type: string;
+  notes: string | null;
 }
 
 export function useActiveMeetings(channelId: string | null) {
@@ -69,8 +70,31 @@ export function useStartMeeting() {
     }) => {
       if (!myProfile) throw new Error("Profile not found");
 
-      const roomCode = `rebar-${channelId.slice(0, 8)}-${Date.now().toString(36)}`;
+      let joinUrl = "";
+      let roomCode = `rebar-${channelId.slice(0, 8)}-${Date.now().toString(36)}`;
 
+      // Try to create RingCentral Video bridge
+      try {
+        const { data: rcvData, error: rcvError } = await supabase.functions.invoke("ringcentral-video", {
+          body: {
+            action: "create",
+            meetingName: title,
+            meetingType,
+          },
+        });
+
+        if (!rcvError && rcvData?.success && rcvData?.joinUrl) {
+          joinUrl = rcvData.joinUrl;
+          roomCode = rcvData.bridgeId || rcvData.shortId || roomCode;
+          console.log("[Meeting] RingCentral Video bridge created:", joinUrl);
+        } else {
+          console.warn("[Meeting] RingCentral Video unavailable, falling back to Jitsi:", rcvError || rcvData?.error);
+        }
+      } catch (e) {
+        console.warn("[Meeting] RingCentral Video call failed, falling back to Jitsi:", e);
+      }
+
+      // Insert meeting record with join URL
       const { data, error } = await (supabase as any)
         .from("team_meetings")
         .insert({
@@ -80,6 +104,7 @@ export function useStartMeeting() {
           started_by: myProfile.id,
           meeting_type: meetingType,
           status: "active",
+          notes: joinUrl ? JSON.stringify({ joinUrl, provider: "ringcentral" }) : JSON.stringify({ provider: "jitsi" }),
         })
         .select("*")
         .single();
