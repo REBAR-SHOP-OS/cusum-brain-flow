@@ -11,6 +11,8 @@ export interface CutPlan {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  project_name: string | null;
+  machine_id: string | null;
 }
 
 export interface CutPlanItem {
@@ -21,6 +23,15 @@ export interface CutPlanItem {
   cut_length_mm: number;
   pieces_per_bar: number;
   notes: string | null;
+  mark_number: string | null;
+  drawing_ref: string | null;
+  bend_type: string;
+  asa_shape_code: string | null;
+  total_pieces: number;
+  completed_pieces: number;
+  needs_fix: boolean;
+  bend_dimensions: Record<string, number> | null;
+  work_order_id: string | null;
 }
 
 export interface RebarSize {

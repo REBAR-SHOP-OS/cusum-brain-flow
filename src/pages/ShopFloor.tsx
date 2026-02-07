@@ -133,6 +133,12 @@ export default function ShopFloor() {
               Cloud Data
             </Badge>
           )}
+          <Link to="/shopfloor/station">
+            <Button variant="default" size="sm" className="gap-2">
+              <Factory className="w-4 h-4" />
+              <span className="hidden sm:inline">Station</span>
+            </Button>
+          </Link>
           <Link to="/shopfloor/cutter">
             <Button variant="outline" size="sm" className="gap-2">
               <Scissors className="w-4 h-4" />
