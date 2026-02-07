@@ -2325,6 +2325,7 @@ export type Database = {
           id: string
           is_active: boolean | null
           phone: string | null
+          preferred_language: string
           title: string | null
           updated_at: string
           user_id: string | null
@@ -2340,6 +2341,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           phone?: string | null
+          preferred_language?: string
           title?: string | null
           updated_at?: string
           user_id?: string | null
@@ -2355,6 +2357,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           phone?: string | null
+          preferred_language?: string
           title?: string | null
           updated_at?: string
           user_id?: string | null
@@ -2855,6 +2858,120 @@ export type Database = {
             columns: ["customer_id"]
             isOneToOne: false
             referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      team_channel_members: {
+        Row: {
+          channel_id: string
+          id: string
+          joined_at: string
+          profile_id: string
+        }
+        Insert: {
+          channel_id: string
+          id?: string
+          joined_at?: string
+          profile_id: string
+        }
+        Update: {
+          channel_id?: string
+          id?: string
+          joined_at?: string
+          profile_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_channel_members_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: false
+            referencedRelation: "team_channels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "team_channel_members_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      team_channels: {
+        Row: {
+          channel_type: string
+          company_id: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          channel_type?: string
+          company_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          channel_type?: string
+          company_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      team_messages: {
+        Row: {
+          channel_id: string
+          created_at: string
+          id: string
+          original_language: string
+          original_text: string
+          sender_profile_id: string
+          translations: Json
+        }
+        Insert: {
+          channel_id: string
+          created_at?: string
+          id?: string
+          original_language?: string
+          original_text: string
+          sender_profile_id: string
+          translations?: Json
+        }
+        Update: {
+          channel_id?: string
+          created_at?: string
+          id?: string
+          original_language?: string
+          original_text?: string
+          sender_profile_id?: string
+          translations?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_messages_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: false
+            referencedRelation: "team_channels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "team_messages_sender_profile_id_fkey"
+            columns: ["sender_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]

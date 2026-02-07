@@ -87,6 +87,7 @@ export function SettingsPeople() {
       phone: null,
       avatar_url: null,
       is_active: true,
+      preferred_language: "en",
     }, {
       onSuccess: () => {
         setNewMember({ full_name: "", email: "", title: "", department: "office" });

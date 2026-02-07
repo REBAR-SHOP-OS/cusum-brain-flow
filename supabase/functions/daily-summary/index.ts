@@ -30,6 +30,7 @@ serve(async (req) => {
       ordersRes,
       workOrdersRes,
       deliveriesRes,
+      teamMsgsRes,
     ] = await Promise.all([
       supabase
         .from("communications")
@@ -65,6 +66,13 @@ serve(async (req) => {
         .select("delivery_number, status, scheduled_date, driver_name, notes")
         .eq("scheduled_date", targetDate)
         .limit(20),
+      supabase
+        .from("team_messages")
+        .select("original_text, original_language, sender_profile_id, created_at, channel_id")
+        .gte("created_at", dayStart)
+        .lte("created_at", dayEnd)
+        .order("created_at", { ascending: false })
+        .limit(50),
     ]);
 
     const emails = emailsRes.data || [];
@@ -73,6 +81,7 @@ serve(async (req) => {
     const orders = ordersRes.data || [];
     const workOrders = workOrdersRes.data || [];
     const deliveries = deliveriesRes.data || [];
+    const teamMessages = teamMsgsRes.data || [];
 
     // ── Build context for AI ─────────────────────────────────────────
     const dataContext = `
@@ -112,6 +121,12 @@ ${workOrders.length > 0
 ${deliveries.length > 0
   ? deliveries.map((d, i) => `${i + 1}. ${d.delivery_number} — Status: ${d.status} | Driver: ${d.driver_name || "unassigned"}`).join("\n")
   : "No deliveries scheduled."
+}
+
+--- TEAM HUB (${teamMessages.length} messages today) ---
+${teamMessages.length > 0
+  ? teamMessages.map((m: any, i: number) => `${i + 1}. [${m.original_language}] ${(m.original_text || "").slice(0, 200)}`).join("\n")
+  : "No team messages today."
 }
 `;
 
@@ -227,6 +242,7 @@ Rules:
           orders: orders.length,
           workOrders: workOrders.length,
           deliveries: deliveries.length,
+          teamMessages: teamMessages.length,
         },
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
