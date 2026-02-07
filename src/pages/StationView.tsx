@@ -9,7 +9,7 @@ import { StationHeader } from "@/components/shopfloor/StationHeader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2 } from "lucide-react";
+import { Loader2, AlertTriangle, LayoutGrid } from "lucide-react";
 import { useState } from "react";
 
 export default function StationView() {
@@ -20,6 +20,7 @@ export default function StationView() {
   const canWrite = isAdmin || isWorkshop;
   const [activeTab, setActiveTab] = useState("production");
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [isSupervisor, setIsSupervisor] = useState(false);
 
   if (!machineId) return <Navigate to="/shopfloor/station" replace />;
 
@@ -61,16 +62,22 @@ export default function StationView() {
         machineName={machine.name}
         machineModel={machine.model}
         canWrite={canWrite}
+        isSupervisor={isSupervisor}
+        onToggleSupervisor={() => setIsSupervisor((v) => !v)}
       />
 
       <div className="px-4 pt-3">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList>
-            <TabsTrigger value="production">Production</TabsTrigger>
-            <TabsTrigger value="needs-fix" className="gap-1">
+            <TabsTrigger value="production" className="gap-1.5">
+              <LayoutGrid className="w-3.5 h-3.5" />
+              Production
+            </TabsTrigger>
+            <TabsTrigger value="needs-fix" className="gap-1.5">
+              <AlertTriangle className="w-3.5 h-3.5" />
               Needs Fix
               {needsFixCount > 0 && (
-                <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
+                <Badge variant="destructive" className="text-[10px] px-1.5 py-0 ml-1">
                   {needsFixCount}
                 </Badge>
               )}
@@ -79,7 +86,7 @@ export default function StationView() {
 
           <TabsContent value="production" className="mt-0">
             <ScrollArea className="h-[calc(100vh-180px)]">
-              <div className="space-y-8 pb-6 pr-3">
+              <div className="space-y-10 py-4 pr-3">
                 {groups.length === 0 ? (
                   <div className="text-center py-12 text-muted-foreground text-sm">
                     No items queued to this machine yet
@@ -90,12 +97,9 @@ export default function StationView() {
                       key={group.barCode}
                       group={group}
                       canWrite={canWrite}
+                      isSupervisor={isSupervisor}
                       onCardClick={(itemId) => {
                         setSelectedItemId(itemId);
-                        // For cutters, entering the focused view
-                        if (machine.type === "cutter") {
-                          // Re-render triggers CutterStationView
-                        }
                       }}
                     />
                   ))
@@ -106,7 +110,7 @@ export default function StationView() {
 
           <TabsContent value="needs-fix" className="mt-0">
             <ScrollArea className="h-[calc(100vh-180px)]">
-              <div className="space-y-3 pb-6 pr-3">
+              <div className="space-y-3 pb-6 pr-3 pt-4">
                 {items.filter((i) => i.needs_fix).length === 0 ? (
                   <div className="text-center py-12 text-muted-foreground text-sm">
                     No items flagged for review

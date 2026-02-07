@@ -1,4 +1,4 @@
-import { ArrowLeft, Shield, Eye } from "lucide-react";
+import { ArrowLeft, Shield, ShieldOff, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useNavigate } from "react-router-dom";
@@ -12,7 +12,11 @@ interface StationHeaderProps {
   drawingRef?: string | null;
   remainingCount?: number;
   canWrite: boolean;
+  isSupervisor?: boolean;
+  onToggleSupervisor?: () => void;
   backTo?: string;
+  /** Job workspace name shown in top-right chip */
+  workspaceName?: string | null;
 }
 
 export function StationHeader({
@@ -24,7 +28,10 @@ export function StationHeader({
   drawingRef,
   remainingCount,
   canWrite,
+  isSupervisor = false,
+  onToggleSupervisor,
   backTo = "/shopfloor/station",
+  workspaceName,
 }: StationHeaderProps) {
   const navigate = useNavigate();
 
@@ -42,19 +49,15 @@ export function StationHeader({
         )}
 
         <div className="flex flex-col">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-sm">
-              {machineModel || machineName}
-            </span>
-            {projectName && (
-              <span className="text-xs text-muted-foreground">• {projectName}</span>
-            )}
-          </div>
-          {(markNumber || drawingRef) && (
+          <span className="font-bold text-sm uppercase tracking-wide">
+            {machineModel || machineName}
+          </span>
+          {(markNumber || drawingRef || projectName) && (
             <span className="text-xs text-muted-foreground font-mono">
               {markNumber && `MARK ${markNumber}`}
               {markNumber && drawingRef && " | "}
               {drawingRef}
+              {projectName && ` • ${projectName}`}
             </span>
           )}
         </div>
@@ -67,7 +70,27 @@ export function StationHeader({
           </Badge>
         )}
 
-        {canWrite ? (
+        {/* Supervisor toggle */}
+        {canWrite && onToggleSupervisor ? (
+          <Button
+            variant={isSupervisor ? "destructive" : "outline"}
+            size="sm"
+            className="gap-1.5 text-xs"
+            onClick={onToggleSupervisor}
+          >
+            {isSupervisor ? (
+              <>
+                <ShieldOff className="w-3.5 h-3.5" />
+                Exit Supervisor
+              </>
+            ) : (
+              <>
+                <Shield className="w-3.5 h-3.5" />
+                Supervisor
+              </>
+            )}
+          </Button>
+        ) : canWrite ? (
           <Badge className="bg-warning/20 text-warning border-warning/30 gap-1">
             <Shield className="w-3 h-3" />
             SUPERVISOR
@@ -78,7 +101,26 @@ export function StationHeader({
             VIEW ONLY
           </Badge>
         )}
+
+        {/* Workspace chip */}
+        {workspaceName && (
+          <Badge className="bg-foreground text-background font-bold text-xs gap-1.5 px-3 py-1">
+            <LayoutGridIcon className="w-3.5 h-3.5" />
+            {workspaceName}
+          </Badge>
+        )}
       </div>
     </header>
+  );
+}
+
+function LayoutGridIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="currentColor" className={className}>
+      <rect x="1" y="1" width="6" height="6" rx="1" />
+      <rect x="9" y="1" width="6" height="6" rx="1" />
+      <rect x="1" y="9" width="6" height="6" rx="1" />
+      <rect x="9" y="9" width="6" height="6" rx="1" />
+    </svg>
   );
 }
