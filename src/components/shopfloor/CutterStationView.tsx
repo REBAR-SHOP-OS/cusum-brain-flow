@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import { StationHeader } from "./StationHeader";
 import { CutEngine } from "./CutEngine";
 import { AsaShapeDiagram } from "./AsaShapeDiagram";
@@ -260,6 +261,17 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
         (s) => s.status === "removed" &&
           selectedStockLength - s.cutsDone * currentItem.cut_length_mm < REMNANT_THRESHOLD_MM
       ).length;
+
+      // ── Persist completed_pieces to DB (triggers auto_advance_item_phase) ──
+      const newCompleted = Math.min(completedPieces + totalOutput, totalPieces);
+      const { error: itemErr } = await supabase
+        .from("cut_plan_items")
+        .update({
+          completed_pieces: newCompleted,
+          phase: "cutting",  // trigger will auto-advance to cut_done/complete
+        } as any)
+        .eq("id", currentItem.id);
+      if (itemErr) throw itemErr;
 
       await manageMachine({
         action: "complete-run",
