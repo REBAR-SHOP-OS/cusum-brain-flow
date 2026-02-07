@@ -1,13 +1,11 @@
 import { useNavigate } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
-import { Scissors, LayoutGrid } from "lucide-react";
+import { LayoutGrid, Lock } from "lucide-react";
 import type { LiveMachine } from "@/types/machine";
+import { getMachineSpec } from "./machineRegistry";
+import { MachineSpecsPanel } from "./MachineSpecsPanel";
 
-interface MachineSelectorProps {
-  machines: LiveMachine[];
-}
-
-// SVG icons matching the reference screenshots
+// Fallback SVG icons when no image is available
 function CutterIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
@@ -39,7 +37,7 @@ function CircularIcon({ className }: { className?: string }) {
   );
 }
 
-function getIcon(type: string) {
+function getFallbackIcon(type: string) {
   switch (type) {
     case "cutter": return CutterIcon;
     case "bender": return BenderIcon;
@@ -53,6 +51,17 @@ const statusColors: Record<string, string> = {
   blocked: "border-warning/50",
   down: "border-destructive/50",
 };
+
+const statusLabels: Record<string, { text: string; class: string }> = {
+  idle: { text: "IDLE", class: "text-muted-foreground" },
+  running: { text: "RUNNING", class: "text-success" },
+  blocked: { text: "BLOCKED", class: "text-warning" },
+  down: { text: "DOWN", class: "text-destructive" },
+};
+
+interface MachineSelectorProps {
+  machines: LiveMachine[];
+}
 
 export function MachineSelector({ machines }: MachineSelectorProps) {
   const navigate = useNavigate();
@@ -68,30 +77,77 @@ export function MachineSelector({ machines }: MachineSelectorProps) {
 
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
         {machines.map((machine) => {
-          const Icon = getIcon(machine.type);
-          return (
-            <button
-              key={machine.id}
-              onClick={() => navigate(`/shopfloor/station/${machine.id}`)}
-              className={`group relative rounded-xl border-2 bg-card hover:bg-muted/30 transition-all duration-200 p-6 sm:p-8 flex flex-col items-center gap-4 cursor-pointer hover:scale-[1.02] active:scale-[0.98] ${statusColors[machine.status] || statusColors.idle}`}
-            >
-              <Icon className="w-16 h-16 sm:w-20 sm:h-20 text-muted-foreground/40 group-hover:text-primary/60 transition-colors" />
-              
-              <div className="text-center space-y-1">
-                <h3 className="text-sm sm:text-base font-black tracking-wide uppercase text-foreground">
-                  {machine.name}
-                </h3>
-                <p className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
-                  Station
-                </p>
-              </div>
+          const spec = getMachineSpec(machine.model);
+          const FallbackIcon = getFallbackIcon(machine.type);
+          const status = statusLabels[machine.status] || statusLabels.idle;
 
+          return (
+            <div
+              key={machine.id}
+              className={`group relative rounded-xl border-2 bg-card overflow-hidden transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] ${statusColors[machine.status] || statusColors.idle}`}
+            >
+              {/* Clickable main area */}
+              <button
+                onClick={() => navigate(`/shopfloor/station/${machine.id}`)}
+                className="w-full p-4 sm:p-6 flex flex-col items-center gap-3 cursor-pointer hover:bg-muted/30 transition-colors"
+              >
+                {/* Machine image or fallback icon */}
+                {spec?.image ? (
+                  <div className="w-20 h-20 sm:w-24 sm:h-24 relative">
+                    <img
+                      src={spec.image}
+                      alt={machine.model || machine.name}
+                      className="w-full h-full object-contain drop-shadow-md"
+                    />
+                  </div>
+                ) : (
+                  <FallbackIcon className="w-16 h-16 sm:w-20 sm:h-20 text-muted-foreground/40 group-hover:text-primary/60 transition-colors" />
+                )}
+
+                {/* Machine name + model */}
+                <div className="text-center space-y-0.5">
+                  <h3 className="text-sm sm:text-base font-black tracking-wide uppercase text-foreground">
+                    {machine.name}
+                  </h3>
+                  {machine.model && (
+                    <p className="text-[10px] tracking-[0.15em] uppercase text-muted-foreground font-medium">
+                      {machine.model}
+                    </p>
+                  )}
+                </div>
+
+                {/* Capability badges */}
+                {spec && (
+                  <div className="flex items-center gap-1.5 flex-wrap justify-center">
+                    <Badge variant="outline" className="text-[9px] px-1.5 py-0 font-mono">
+                      {spec.operation.toUpperCase()}
+                    </Badge>
+                    <Badge variant="outline" className="text-[9px] px-1.5 py-0 font-mono">
+                      MAX {spec.maxBarCode}
+                    </Badge>
+                  </div>
+                )}
+
+                {/* Status */}
+                <span className={`text-[9px] tracking-[0.2em] uppercase font-bold ${status.class}`}>
+                  {status.text}
+                </span>
+              </button>
+
+              {/* Specs button (non-navigating) */}
+              {spec && (
+                <div className="border-t border-border flex justify-center py-1.5">
+                  <MachineSpecsPanel spec={spec} machineName={machine.name} />
+                </div>
+              )}
+
+              {/* Running indicator */}
               {machine.status === "running" && (
                 <div className="absolute top-3 right-3">
                   <div className="w-2.5 h-2.5 rounded-full bg-success animate-pulse" />
                 </div>
               )}
-            </button>
+            </div>
           );
         })}
       </div>
