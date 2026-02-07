@@ -53,3 +53,15 @@ verify_jwt = false
 
 [functions.quickbooks-oauth]
 verify_jwt = false
+
+[functions.handle-command]
+verify_jwt = false
+
+[functions.manage-extract]
+verify_jwt = false
+
+[functions.manage-inventory]
+verify_jwt = false
+
+[functions.smart-dispatch]
+verify_jwt = false
