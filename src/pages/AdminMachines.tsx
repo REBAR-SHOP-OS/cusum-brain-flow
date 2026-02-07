@@ -59,6 +59,7 @@ interface MachineRow {
   company_id: string;
   warehouse_id: string | null;
   name: string;
+  model: string | null;
   type: MachineType;
   status: MachineStatus;
   current_run_id: string | null;
@@ -144,6 +145,7 @@ function useMachinesCRUD() {
   const createMachine = useMutation({
     mutationFn: async (machine: {
       name: string;
+      model: string | null;
       type: MachineType;
       warehouse_id: string | null;
       status: MachineStatus;
@@ -169,6 +171,7 @@ function useMachinesCRUD() {
     }: {
       id: string;
       name?: string;
+      model?: string | null;
       type?: MachineType;
       warehouse_id?: string | null;
       status?: MachineStatus;
@@ -252,6 +255,7 @@ export default function AdminMachines() {
   const handleSave = async (
     data: {
       name: string;
+      model: string | null;
       type: MachineType;
       warehouse_id: string | null;
       status: MachineStatus;
@@ -371,6 +375,7 @@ export default function AdminMachines() {
                     <div className="flex-1 min-w-0">
                       <h3 className="font-semibold truncate">{machine.name}</h3>
                       <p className="text-sm text-muted-foreground capitalize">
+                        {machine.model && <span className="font-medium">{machine.model} • </span>}
                         {typeOpt?.label || machine.type}
                         {machine.warehouse_id && ` • WH: ${machine.warehouse_id.slice(0, 8)}…`}
                       </p>
@@ -469,6 +474,7 @@ interface MachineDialogProps {
   onSave: (
     data: {
       name: string;
+      model: string | null;
       type: MachineType;
       warehouse_id: string | null;
       status: MachineStatus;
@@ -488,6 +494,7 @@ function MachineDialog({
   onSave,
 }: MachineDialogProps) {
   const [name, setName] = useState("");
+  const [model, setModel] = useState("");
   const [type, setType] = useState<MachineType>("cutter");
   const [warehouseId, setWarehouseId] = useState("");
   const [status, setStatus] = useState<MachineStatus>("idle");
@@ -497,6 +504,7 @@ function MachineDialog({
   useEffect(() => {
     if (open) {
       setName(machine?.name || "");
+      setModel(machine?.model || "");
       setType(machine?.type || "cutter");
       setWarehouseId(machine?.warehouse_id || "");
       setStatus(machine?.status || "idle");
@@ -511,6 +519,7 @@ function MachineDialog({
       await onSave(
         {
           name: name.trim(),
+          model: model.trim() || null,
           type,
           warehouse_id: warehouseId.trim() || null,
           status,
@@ -540,6 +549,17 @@ function MachineDialog({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="CNC Cutter #1"
+              disabled={isEditing && !canEditAll}
+            />
+          </div>
+
+          {/* Model — owner only */}
+          <div className="space-y-1.5">
+            <Label>Model</Label>
+            <Input
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              placeholder="e.g. Rod Chomper BR18"
               disabled={isEditing && !canEditAll}
             />
           </div>
