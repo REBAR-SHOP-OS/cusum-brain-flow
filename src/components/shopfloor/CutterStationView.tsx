@@ -2,7 +2,8 @@ import { useState } from "react";
 import { StationHeader } from "./StationHeader";
 import { CutEngine } from "./CutEngine";
 import { AsaShapeDiagram } from "./AsaShapeDiagram";
-import { InventoryStatusPanel } from "./InventoryStatusPanel";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { manageMachine } from "@/lib/manageMachineService";
 import { manageInventory } from "@/lib/inventoryService";
 import { useToast } from "@/hooks/use-toast";
@@ -27,15 +28,7 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
   const cutPlanId = currentItem?.cut_plan_id || null;
   const barCode = currentItem?.bar_code;
 
-  const {
-    reservations,
-    lots,
-    scrapRecords,
-    summary,
-    isLoading: inventoryLoading,
-  } = useInventoryData(cutPlanId, barCode);
-
-  const remnants = lots.filter((l) => l.source === "remnant");
+  const { lots } = useInventoryData(cutPlanId, barCode);
 
   const remaining = items.filter((i) => i.completed_pieces < i.total_pieces).length;
 
@@ -87,6 +80,7 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
           machineName={machine.name}
           machineModel={machine.model}
           canWrite={canWrite}
+          showBedsSuffix={true}
         />
         <div className="flex-1 flex items-center justify-center text-muted-foreground">
           No items queued to this machine
@@ -96,86 +90,85 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
   }
 
   const maxBars = getMaxBars(currentItem.bar_code) || 10;
-  const barSizeRange = currentItem.bar_code;
 
   return (
     <div className="flex flex-col h-full">
+      {/* Header with bar size + mark/dwg in center */}
       <StationHeader
         machineName={machine.name}
         machineModel={machine.model}
-        barSizeRange={barSizeRange}
-        projectName={currentItem.project_name}
+        barSizeRange={currentItem.bar_code}
         markNumber={currentItem.mark_number}
         drawingRef={currentItem.drawing_ref}
         remainingCount={remaining}
         canWrite={canWrite}
+        showBedsSuffix={false}
       />
 
       <div className="flex-1 flex overflow-hidden">
-        {/* Left panel — cut length / shape */}
-        <div className="flex-1 flex flex-col items-center justify-center p-6 gap-6">
-          {/* Item navigation */}
-          <div className="flex items-center gap-4">
-            <button
-              className="text-muted-foreground hover:text-foreground disabled:opacity-30 text-lg"
-              disabled={currentIndex <= 0}
-              onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}
-            >
-              ‹
-            </button>
-            <span className="text-xs text-muted-foreground font-mono">
-              {currentIndex + 1} / {items.length}
-            </span>
-            <button
-              className="text-muted-foreground hover:text-foreground disabled:opacity-30 text-lg"
-              disabled={currentIndex >= items.length - 1}
-              onClick={() => setCurrentIndex((i) => Math.min(items.length - 1, i + 1))}
-            >
-              ›
-            </button>
-          </div>
-
+        {/* Left panel — large cut length display */}
+        <div className="flex-1 flex flex-col items-center justify-center p-6 gap-6 bg-muted/20">
           {/* Large cut length display */}
-          <div className="text-center">
-            <p className="text-7xl sm:text-8xl font-bold font-mono text-foreground leading-none">
-              {currentItem.cut_length_mm}
-            </p>
-            <p className="text-sm text-muted-foreground tracking-[0.3em] uppercase mt-2">
-              MM Cut Length
-            </p>
-          </div>
+          <Card className="bg-card border border-border w-full max-w-lg">
+            <CardContent className="py-10 px-6 text-center">
+              <p className="text-7xl sm:text-8xl lg:text-9xl font-black font-mono text-foreground leading-none tracking-tight">
+                {currentItem.cut_length_mm}
+              </p>
+              <p className="text-sm text-primary tracking-[0.35em] uppercase mt-3 font-bold">
+                MM Cut Length
+              </p>
+            </CardContent>
+          </Card>
 
-          {/* ASA shape if bend */}
+          {/* ASA shape diagram if bend type */}
           {currentItem.bend_type === "bend" && currentItem.asa_shape_code && (
-            <AsaShapeDiagram
-              shapeCode={currentItem.asa_shape_code}
-              dimensions={currentItem.bend_dimensions}
-              size="md"
-            />
+            <Card className="bg-card border border-border w-full max-w-lg">
+              <CardContent className="py-6 px-4 flex justify-center">
+                <AsaShapeDiagram
+                  shapeCode={currentItem.asa_shape_code}
+                  dimensions={currentItem.bend_dimensions}
+                  size="md"
+                />
+              </CardContent>
+            </Card>
           )}
 
           {/* Pieces progress */}
           <div className="text-center text-xs text-muted-foreground font-mono">
             {currentItem.completed_pieces} / {currentItem.total_pieces} PCS COMPLETED
           </div>
+
+          {/* Item navigation */}
+          <div className="flex items-center gap-4">
+            <button
+              className="w-10 h-10 rounded-full border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-30"
+              disabled={currentIndex <= 0}
+              onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}
+            >
+              ‹
+            </button>
+            <span className="text-sm text-muted-foreground font-mono min-w-[60px] text-center">
+              {currentIndex + 1} / {items.length}
+            </span>
+            <button
+              className="w-10 h-10 rounded-full border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-30"
+              disabled={currentIndex >= items.length - 1}
+              onClick={() => setCurrentIndex((i) => Math.min(items.length - 1, i + 1))}
+            >
+              ›
+            </button>
+          </div>
         </div>
 
-        {/* Right panel — cut engine + inventory status */}
-        <div className="w-72 lg:w-80 border-l border-border p-4 flex flex-col gap-4 overflow-y-auto">
+        {/* Right panel — dark CUT ENGINE */}
+        <div className="w-80 lg:w-96 bg-slate-900 text-white p-5 flex flex-col gap-4 overflow-y-auto">
           <CutEngine
             barCode={currentItem.bar_code}
             maxBars={maxBars}
             onLockAndStart={handleLockAndStart}
             isRunning={isRunning || machine.status === "running"}
             canWrite={canWrite}
-          />
-
-          <InventoryStatusPanel
-            summary={summary}
-            reservations={reservations}
-            remnants={remnants}
-            scrapRecords={scrapRecords}
-            barCode={currentItem.bar_code}
+            darkMode
           />
         </div>
       </div>
