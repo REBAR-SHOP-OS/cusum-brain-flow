@@ -19,7 +19,6 @@ const moreItems = [
   { name: "Deliveries", href: "/deliveries", icon: Truck },
   { name: "Brain", href: "/brain", icon: Brain },
   { name: "Integrations", href: "/integrations", icon: Plug },
-  { name: "Team", href: "/team", icon: Users },
   { name: "Admin", href: "/admin", icon: Shield },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
