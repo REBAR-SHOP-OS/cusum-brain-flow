@@ -284,6 +284,81 @@ export type Database = {
         }
         Relationships: []
       }
+      cut_plan_items: {
+        Row: {
+          bar_code: string
+          cut_length_mm: number
+          cut_plan_id: string
+          id: string
+          notes: string | null
+          pieces_per_bar: number
+          qty_bars: number
+        }
+        Insert: {
+          bar_code: string
+          cut_length_mm: number
+          cut_plan_id: string
+          id?: string
+          notes?: string | null
+          pieces_per_bar?: number
+          qty_bars: number
+        }
+        Update: {
+          bar_code?: string
+          cut_length_mm?: number
+          cut_plan_id?: string
+          id?: string
+          notes?: string | null
+          pieces_per_bar?: number
+          qty_bars?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cut_plan_items_bar_code_fkey"
+            columns: ["bar_code"]
+            isOneToOne: false
+            referencedRelation: "rebar_sizes"
+            referencedColumns: ["bar_code"]
+          },
+          {
+            foreignKeyName: "cut_plan_items_cut_plan_id_fkey"
+            columns: ["cut_plan_id"]
+            isOneToOne: false
+            referencedRelation: "cut_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cut_plans: {
+        Row: {
+          company_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          name: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       deliveries: {
         Row: {
           created_at: string
