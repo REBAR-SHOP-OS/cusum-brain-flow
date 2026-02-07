@@ -38,3 +38,6 @@ verify_jwt = false
 
 [functions.daily-summary]
 verify_jwt = false
+
+[functions.log-machine-run]
+verify_jwt = false
