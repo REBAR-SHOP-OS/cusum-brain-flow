@@ -222,7 +222,7 @@ export function BenderStationView({ machine, items, canWrite, initialIndex = 0 }
             <ChevronLeft className="w-4 h-4" />
           </Button>
           <span className="text-xl font-bold text-foreground min-w-[40px] text-center">{unitCount}</span>
-          <Button variant="outline" size="icon" className="h-8 w-8" disabled={submitting || isMarkComplete} onClick={() => setUnitCount((u) => u + 1)}>
+          <Button variant="outline" size="icon" className="h-8 w-8" disabled={unitCount >= batchSize || submitting || isMarkComplete} onClick={() => setUnitCount((u) => Math.min(batchSize, u + 1))}>
             <ChevronRight className="w-4 h-4" />
           </Button>
         </div>
