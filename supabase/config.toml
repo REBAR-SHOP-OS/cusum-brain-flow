@@ -65,3 +65,9 @@ verify_jwt = false
 
 [functions.smart-dispatch]
 verify_jwt = false
+
+[functions.translate-message]
+verify_jwt = false
+
+[functions.diagnostic-logs]
+verify_jwt = false
