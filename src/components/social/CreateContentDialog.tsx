@@ -153,7 +153,7 @@ export function CreateContentDialog({ open, onOpenChange }: CreateContentDialogP
                 <MessageCircle className="w-5 h-5" />
               </div>
               <div className="flex-1">
-                <p className="font-medium">Create with Sushie</p>
+                <p className="font-medium">Create with Pixel</p>
                 <p className="text-sm text-muted-foreground">
                   Talk to your Social Media Manager and create posts together.
                 </p>
@@ -171,7 +171,7 @@ export function CreateContentDialog({ open, onOpenChange }: CreateContentDialogP
               <div className="flex-1">
                 <p className="font-medium">Create from media</p>
                 <p className="text-sm text-muted-foreground">
-                  Add your own media — Sushie will turn it into ready-to-post content.
+                  Add your own media — Pixel will turn it into ready-to-post content.
                 </p>
               </div>
               <ChevronLeft className="w-5 h-5 rotate-180 text-muted-foreground" />
