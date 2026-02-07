@@ -2933,10 +2933,14 @@ export type Database = {
       }
       team_meetings: {
         Row: {
+          ai_summary: string | null
           channel_id: string | null
+          duration_seconds: number | null
           ended_at: string | null
           id: string
           meeting_type: string
+          notes: string | null
+          participants: string[] | null
           room_code: string
           started_at: string
           started_by: string
@@ -2944,10 +2948,14 @@ export type Database = {
           title: string
         }
         Insert: {
+          ai_summary?: string | null
           channel_id?: string | null
+          duration_seconds?: number | null
           ended_at?: string | null
           id?: string
           meeting_type?: string
+          notes?: string | null
+          participants?: string[] | null
           room_code: string
           started_at?: string
           started_by: string
@@ -2955,10 +2963,14 @@ export type Database = {
           title?: string
         }
         Update: {
+          ai_summary?: string | null
           channel_id?: string | null
+          duration_seconds?: number | null
           ended_at?: string | null
           id?: string
           meeting_type?: string
+          notes?: string | null
+          participants?: string[] | null
           room_code?: string
           started_at?: string
           started_by?: string

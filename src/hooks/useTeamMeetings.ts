@@ -98,11 +98,20 @@ export function useEndMeeting() {
 
   return useMutation({
     mutationFn: async (meetingId: string) => {
+      // End the meeting
       const { error } = await (supabase as any)
         .from("team_meetings")
         .update({ status: "ended", ended_at: new Date().toISOString() })
         .eq("id", meetingId);
       if (error) throw error;
+
+      // Trigger AI summarization in background (don't await - fire and forget)
+      supabase.functions.invoke("summarize-meeting", {
+        body: { meetingId },
+      }).then(({ data, error: fnErr }) => {
+        if (fnErr) console.error("Meeting summarization failed:", fnErr);
+        else console.log("Meeting summarized:", data?.summary?.slice(0, 100));
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["team-meetings"] });

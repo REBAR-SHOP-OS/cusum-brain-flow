@@ -24,11 +24,29 @@ export interface DigestTip {
   closing: string;
 }
 
+export interface DigestMeetingSummary {
+  title: string;
+  type: string;
+  duration: string;
+  summary: string;
+  actionItems?: string[];
+}
+
+export interface DigestPhoneCall {
+  contact: string;
+  direction: string;
+  duration: string;
+  summary: string;
+  action: string;
+}
+
 export interface DigestData {
   greeting: string;
   affirmation: string;
   keyTakeaways: string[];
   emailCategories: DigestEmailCategory[];
+  meetingSummaries?: DigestMeetingSummary[];
+  phoneCalls?: DigestPhoneCall[];
   calendarEvents: DigestCalendarEvent[];
   tipOfTheDay: DigestTip;
   randomFact: string;
@@ -41,6 +59,8 @@ export interface DigestStats {
   orders: number;
   workOrders: number;
   deliveries: number;
+  meetings?: number;
+  phoneCalls?: number;
 }
 
 export function useDailyDigest(date: Date) {
