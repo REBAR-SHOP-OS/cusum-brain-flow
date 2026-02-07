@@ -2102,6 +2102,108 @@ export type Database = {
         }
         Relationships: []
       }
+      purchase_order_lines: {
+        Row: {
+          bar_code: string
+          created_at: string
+          id: string
+          notes: string | null
+          purchase_order_id: string
+          qty_ordered: number
+          qty_received: number
+          standard_length_mm: number
+          unit_cost: number | null
+          updated_at: string
+        }
+        Insert: {
+          bar_code: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          purchase_order_id: string
+          qty_ordered?: number
+          qty_received?: number
+          standard_length_mm?: number
+          unit_cost?: number | null
+          updated_at?: string
+        }
+        Update: {
+          bar_code?: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          purchase_order_id?: string
+          qty_ordered?: number
+          qty_received?: number
+          standard_length_mm?: number
+          unit_cost?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "purchase_order_lines_bar_code_fkey"
+            columns: ["bar_code"]
+            isOneToOne: false
+            referencedRelation: "rebar_sizes"
+            referencedColumns: ["bar_code"]
+          },
+          {
+            foreignKeyName: "purchase_order_lines_purchase_order_id_fkey"
+            columns: ["purchase_order_id"]
+            isOneToOne: false
+            referencedRelation: "purchase_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      purchase_orders: {
+        Row: {
+          company_id: string
+          created_at: string
+          created_by: string | null
+          expected_delivery: string | null
+          id: string
+          notes: string | null
+          order_date: string
+          po_number: string
+          received_at: string | null
+          received_by: string | null
+          status: string
+          supplier_name: string
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          expected_delivery?: string | null
+          id?: string
+          notes?: string | null
+          order_date?: string
+          po_number: string
+          received_at?: string | null
+          received_by?: string | null
+          status?: string
+          supplier_name: string
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          expected_delivery?: string | null
+          id?: string
+          notes?: string | null
+          order_date?: string
+          po_number?: string
+          received_at?: string | null
+          received_by?: string | null
+          status?: string
+          supplier_name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       quotes: {
         Row: {
           contact_id: string | null

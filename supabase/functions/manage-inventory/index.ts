@@ -71,6 +71,108 @@ serve(async (req) => {
     const events: Record<string, unknown>[] = [];
 
     switch (action) {
+      // ─── RECEIVE PO: create inventory_lots from a purchase order ────
+      case "receive-po": {
+        const { purchaseOrderId, lines } = body;
+        if (!purchaseOrderId) return json({ error: "Missing purchaseOrderId" }, 400);
+
+        // Validate PO exists and belongs to company
+        const { data: po, error: poErr } = await svc
+          .from("purchase_orders")
+          .select("id, company_id, status")
+          .eq("id", purchaseOrderId)
+          .single();
+        if (poErr || !po) return json({ error: "Purchase order not found" }, 404);
+        if (po.company_id !== companyId) return json({ error: "PO not in your company" }, 403);
+        if (po.status === "received") return json({ error: "PO already fully received" }, 400);
+
+        // If lines provided, receive specific lines; otherwise receive all
+        let linesToReceive = lines;
+        if (!linesToReceive) {
+          const { data: allLines } = await svc
+            .from("purchase_order_lines")
+            .select("id, bar_code, standard_length_mm, qty_ordered, qty_received")
+            .eq("purchase_order_id", purchaseOrderId);
+          linesToReceive = (allLines || []).map((l: any) => ({
+            lineId: l.id,
+            qtyReceiving: l.qty_ordered - l.qty_received,
+          }));
+        }
+
+        let totalReceived = 0;
+        for (const line of linesToReceive) {
+          const { lineId, qtyReceiving } = line;
+          if (!lineId || !qtyReceiving || qtyReceiving <= 0) continue;
+
+          // Get line details
+          const { data: polLine } = await svc
+            .from("purchase_order_lines")
+            .select("id, bar_code, standard_length_mm, qty_ordered, qty_received")
+            .eq("id", lineId)
+            .single();
+          if (!polLine) continue;
+
+          const remaining = polLine.qty_ordered - polLine.qty_received;
+          const actualQty = Math.min(qtyReceiving, remaining);
+          if (actualQty <= 0) continue;
+
+          // Create inventory_lot
+          const lotNumber = `PO-${purchaseOrderId.slice(0, 8)}-${Date.now().toString(36)}`;
+          const { error: lotErr } = await svc.from("inventory_lots").insert({
+            company_id: companyId,
+            bar_code: polLine.bar_code,
+            standard_length_mm: polLine.standard_length_mm,
+            qty_on_hand: actualQty,
+            qty_reserved: 0,
+            source: "purchase",
+            location: "yard",
+            lot_number: lotNumber,
+          });
+          if (lotErr) {
+            console.error("Lot insert error:", lotErr);
+            continue;
+          }
+
+          // Update PO line qty_received
+          await svc.from("purchase_order_lines")
+            .update({ qty_received: polLine.qty_received + actualQty })
+            .eq("id", lineId);
+
+          totalReceived += actualQty;
+
+          events.push({
+            entity_type: "inventory",
+            entity_id: purchaseOrderId,
+            event_type: "po_received",
+            actor_id: userId,
+            actor_type: "user",
+            description: `Received ${actualQty}× ${polLine.bar_code} (${polLine.standard_length_mm}mm) from PO`,
+            metadata: { purchaseOrderId, lineId, barCode: polLine.bar_code, qty: actualQty, lotNumber },
+          });
+        }
+
+        // Check if fully received
+        const { data: updatedLines } = await svc
+          .from("purchase_order_lines")
+          .select("qty_ordered, qty_received")
+          .eq("purchase_order_id", purchaseOrderId);
+
+        const allReceived = updatedLines?.every((l: any) => l.qty_received >= l.qty_ordered);
+        const someReceived = updatedLines?.some((l: any) => l.qty_received > 0);
+
+        const newStatus = allReceived ? "received" : someReceived ? "partial" : po.status;
+        await svc.from("purchase_orders").update({
+          status: newStatus,
+          ...(allReceived ? { received_at: now, received_by: userId } : {}),
+        }).eq("id", purchaseOrderId);
+
+        if (events.length > 0) {
+          await svc.from("events").insert(events);
+        }
+
+        return json({ success: true, action, totalReceived, poStatus: newStatus });
+      }
+
       // ─── RESERVE STOCK ──────────────────────────────────────────────
       case "reserve": {
         const { cutPlanId, cutPlanItemId, barCode, qty, sourceType, sourceId, stockLengthMm } = body;

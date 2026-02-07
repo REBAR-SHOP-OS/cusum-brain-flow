@@ -459,6 +459,54 @@ async function approveExtract(sb: any, sessionId: string, userId: string) {
     }));
 
     await sb.from("cut_plan_items").insert(cutItems);
+
+    // ── Generate production_tasks from cut_plan_items ──────────
+    const { data: savedItems } = await sb
+      .from("cut_plan_items")
+      .select("id, bar_code, cut_length_mm, mark_number, drawing_ref, bend_type, asa_shape_code, total_pieces, bend_dimensions, work_order_id")
+      .eq("cut_plan_id", cutPlan.id);
+
+    if (savedItems?.length) {
+      const tasks = savedItems.map((item: any) => ({
+        company_id: session.company_id,
+        project_id: workOrder.id,
+        work_order_id: item.work_order_id || workOrder.id,
+        cut_plan_id: cutPlan.id,
+        cut_plan_item_id: item.id,
+        task_type: item.bend_type === "bend" ? "bend" : "cut",
+        bar_code: item.bar_code,
+        setup_key: `${item.bar_code}_${item.bend_type === "bend" ? "bend" : "straight"}`,
+        priority: 100,
+        status: "pending",
+        qty_required: item.total_pieces,
+        qty_completed: 0,
+        mark_number: item.mark_number,
+        drawing_ref: item.drawing_ref,
+        cut_length_mm: item.cut_length_mm,
+        asa_shape_code: item.asa_shape_code,
+        bend_dimensions: item.bend_dimensions,
+        created_by: userId,
+      }));
+
+      const { data: createdTasks, error: taskErr } = await sb
+        .from("production_tasks")
+        .insert(tasks)
+        .select("id, task_type, bar_code");
+
+      if (taskErr) {
+        console.error("Failed to create production tasks:", taskErr);
+      } else {
+        // Auto-dispatch: queue each task to the best machine
+        for (const task of (createdTasks || [])) {
+          try {
+            await autoDispatchTask(sb, task.id, session.company_id);
+          } catch (dispatchErr) {
+            console.error(`Auto-dispatch failed for task ${task.id}:`, dispatchErr);
+            // Non-fatal: task stays in "pending" status
+          }
+        }
+      }
+    }
   }
 
   // Update session status
@@ -534,6 +582,88 @@ async function rejectExtract(sb: any, sessionId: string, userId: string, reason?
   });
 
   return jsonResponse({ success: true, status: "rejected" });
+}
+
+// ─── Auto-Dispatch a task to best available machine ─────────
+async function autoDispatchTask(sb: any, taskId: string, companyId: string) {
+  const { data: task } = await sb
+    .from("production_tasks")
+    .select("*")
+    .eq("id", taskId)
+    .single();
+  if (!task) return;
+
+  const processMap: Record<string, string> = { cut: "cut", bend: "bend", spiral: "bend", load: "load", other: "other" };
+  const machineProcess = processMap[task.task_type] || task.task_type;
+
+  // Find capable machines
+  const { data: capabilities } = await sb
+    .from("machine_capabilities")
+    .select("machine_id, max_bars")
+    .eq("bar_code", task.bar_code)
+    .eq("process", machineProcess);
+
+  if (!capabilities?.length) return; // No machine can handle this
+
+  const capableMachineIds = capabilities.map((c: any) => c.machine_id);
+
+  const { data: machines } = await sb
+    .from("machines")
+    .select("id, name, status, current_run_id")
+    .in("id", capableMachineIds)
+    .eq("company_id", companyId);
+
+  if (!machines?.length) return;
+
+  // Get queue counts
+  const { data: queueCounts } = await sb
+    .from("machine_queue_items")
+    .select("machine_id")
+    .in("machine_id", capableMachineIds)
+    .in("status", ["queued", "running"]);
+
+  const queueMap = new Map<string, number>();
+  for (const q of (queueCounts || [])) {
+    queueMap.set((q as any).machine_id, (queueMap.get((q as any).machine_id) || 0) + 1);
+  }
+
+  // Score: idle bonus, shortest queue
+  let bestMachine = machines[0];
+  let bestScore = -Infinity;
+  for (const m of machines) {
+    let score = 0;
+    if (m.status === "idle" && !m.current_run_id) score += 50;
+    else if (m.status === "running") score += 10;
+    if (m.status === "blocked") score -= 30;
+    if (m.status === "down") score -= 100;
+    score -= (queueMap.get(m.id) || 0) * 10;
+    if (score > bestScore) { bestScore = score; bestMachine = m; }
+  }
+
+  // Get next position
+  const { data: posData } = await sb
+    .from("machine_queue_items")
+    .select("position")
+    .eq("machine_id", bestMachine.id)
+    .in("status", ["queued", "running"])
+    .order("position", { ascending: false })
+    .limit(1);
+  const nextPos = posData?.length ? (posData[0] as any).position + 1 : 0;
+
+  // Insert queue item
+  const { error: qiErr } = await sb.from("machine_queue_items").insert({
+    company_id: companyId,
+    task_id: taskId,
+    machine_id: bestMachine.id,
+    project_id: task.project_id,
+    work_order_id: task.work_order_id,
+    position: nextPos,
+    status: "queued",
+  });
+
+  if (!qiErr) {
+    await sb.from("production_tasks").update({ status: "queued" }).eq("id", taskId);
+  }
 }
 
 function buildDimensions(row: any): Record<string, number> | null {
