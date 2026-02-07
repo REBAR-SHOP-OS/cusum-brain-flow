@@ -43,6 +43,8 @@ import TermsOfService from "./pages/TermsOfService";
 import Landing from "./pages/Landing";
 import Install from "./pages/Install";
 import OfficePortal from "./pages/OfficePortal";
+import TimeClock from "./pages/TimeClock";
+import TeamHub from "./pages/TeamHub";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -92,6 +94,8 @@ const App = () => (
                 <Route path="/shopfloor/pickup" element={<P><PickupStation /></P>} />
                 <Route path="/shopfloor/live-monitor" element={<P><LiveMonitor /></P>} />
                 <Route path="/deliveries" element={<P><Deliveries /></P>} />
+                <Route path="/timeclock" element={<P><TimeClock /></P>} />
+                <Route path="/team-hub" element={<P><TeamHub /></P>} />
 
                 {/* Office Portal - standalone layout but wrapped in workspace */}
                 <Route path="/office" element={<ProtectedRoute><OfficePortal /></ProtectedRoute>} />
