@@ -35,7 +35,7 @@ const defaultAutomations: Automation[] = [
     color: "blue",
     icon: "inbox",
     beta: true,
-    route: "/inbox-manager",
+    route: "/inbox",
   },
   {
     id: "daily-summarizer",

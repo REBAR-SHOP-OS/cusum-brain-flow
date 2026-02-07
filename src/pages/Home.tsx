@@ -137,7 +137,7 @@ const useCases: UseCase[] = [
     title: "Summarize today's emails",
     icon: Mail,
     category: "Productivity",
-    route: "/inbox-manager",
+    route: "/inbox",
   },
 ];
 
