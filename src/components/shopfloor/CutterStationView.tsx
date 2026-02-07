@@ -3,6 +3,7 @@ import { StationHeader } from "./StationHeader";
 import { CutEngine } from "./CutEngine";
 import { AsaShapeDiagram } from "./AsaShapeDiagram";
 import { ForemanPanel } from "./ForemanPanel";
+import { SlotTracker } from "./SlotTracker";
 import { Card, CardContent } from "@/components/ui/card";
 import { manageMachine } from "@/lib/manageMachineService";
 import { manageInventory } from "@/lib/inventoryService";
@@ -11,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useMachineCapabilities } from "@/hooks/useCutPlans";
 import { useInventoryData } from "@/hooks/useInventoryData";
 import { useForemanBrain } from "@/hooks/useForemanBrain";
+import { useSlotTracker } from "@/hooks/useSlotTracker";
 import { Scissors, Layers, Ruler, Hash, CheckCircle2 } from "lucide-react";
 import type { ForemanContext } from "@/lib/foremanBrain";
 import type { LiveMachine } from "@/types/machine";
@@ -21,6 +23,8 @@ interface CutterStationViewProps {
   items: StationItem[];
   canWrite: boolean;
 }
+
+const REMNANT_THRESHOLD_MM = 300;
 
 export function CutterStationView({ machine, items, canWrite }: CutterStationViewProps) {
   const { toast } = useToast();
@@ -64,7 +68,16 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
   const foreman = useForemanBrain({ context: foremanContext });
   const runPlan = foreman.decision?.runPlan || null;
 
-  // Use run plan's computed values (deterministic from stock length + cut length)
+  // Determine if machine is actively running (local start or DB status)
+  const machineIsRunning = isRunning || machine.status === "running";
+
+  // ── Slot Tracker ──
+  const slotTracker = useSlotTracker({
+    runPlan,
+    isRunning: machineIsRunning,
+  });
+
+  // Use run plan's computed values
   const computedPiecesPerBar = runPlan?.piecesPerBar || (currentItem ? Math.floor(selectedStockLength / currentItem.cut_length_mm) : 1);
   const totalPieces = currentItem?.total_pieces || 0;
   const completedPieces = currentItem?.completed_pieces || 0;
@@ -72,6 +85,7 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
   const barsStillNeeded = computedPiecesPerBar > 0 ? Math.ceil(remainingPieces / computedPiecesPerBar) : 0;
   const isDone = remainingPieces <= 0;
 
+  // ── Alternative action handler ──
   const handleAlternativeAction = useCallback((actionType: string) => {
     if (actionType === "use_floor") {
       setManualFloorConfirmed(true);
@@ -82,7 +96,6 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
       toast({ title: "Partial run selected", description: "Will complete as many pieces as stock allows." });
     }
 
-    // Record learning
     recordLearning({
       module: "cut",
       learningType: "edge_case",
@@ -101,6 +114,7 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
     });
   }, [machine.id, currentItem, selectedStockLength, runPlan, toast]);
 
+  // ── LOCK & START ──
   const handleLockAndStart = async (stockLength: number, bars: number) => {
     if (!currentItem) return;
     try {
@@ -134,7 +148,7 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
         }
       }
 
-      // Record adjusted run learning if applicable
+      // Record adjusted run learning
       if (runPlan?.isAdjusted) {
         recordLearning({
           module: "cut",
@@ -156,28 +170,113 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
         });
       }
 
-      // Check for completion
-      const totalPiecesThisRun = runPlan
-        ? runPlan.slots.reduce((s, sl) => s + sl.plannedCuts, 0)
-        : bars * computedPiecesPerBar;
-      const remainingAfter = remainingPieces - totalPiecesThisRun;
-      if (remainingAfter <= 0) {
-        recordCompletion("cut", machine.id, currentItem.bar_code, {
-          mark: currentItem.mark_number,
-          total_pieces: currentItem.total_pieces,
-          stock_length: stockLength,
-          scrap_count: runPlan?.expectedScrapBars || 0,
-          remnant_count: runPlan?.expectedRemnantBars || 0,
-        });
-      }
-
-      toast({ title: "Machine started", description: `Cutting ${currentItem.mark_number || "item"}` });
+      toast({ title: "Machine started", description: `Cutting ${currentItem.mark_number || "item"} — use slot tracker to record cuts` });
     } catch (err: any) {
       toast({ title: "Start failed", description: err.message, variant: "destructive" });
     } finally {
       setIsRunning(false);
     }
   };
+
+  // ── Record stroke ──
+  const handleRecordStroke = useCallback(() => {
+    slotTracker.recordStroke();
+    toast({
+      title: "Cut recorded",
+      description: `${slotTracker.totalCutsDone + 1} total cuts done`,
+    });
+  }, [slotTracker, toast]);
+
+  // ── Remove bar ──
+  const handleRemoveBar = useCallback(async (slotIndex: number) => {
+    if (!currentItem) return;
+
+    const slot = slotTracker.slots.find((s) => s.index === slotIndex);
+    if (!slot) return;
+
+    const leftover = selectedStockLength - slot.cutsDone * currentItem.cut_length_mm;
+
+    slotTracker.removeBar(slotIndex);
+
+    // Create remnant or scrap via inventory service
+    if (leftover >= REMNANT_THRESHOLD_MM) {
+      try {
+        await manageInventory({
+          action: "cut-complete",
+          machineRunId: machine.current_run_id || undefined,
+          cutPlanItemId: currentItem.id,
+          barCode: currentItem.bar_code,
+          qty: 1,
+          stockLengthMm: selectedStockLength,
+          cutLengthMm: currentItem.cut_length_mm,
+          piecesPerBar: slot.cutsDone,
+          bars: 1,
+          reason: `Bar ${slotIndex + 1} removed — remnant ${leftover}mm`,
+        });
+      } catch {
+        // Best-effort
+      }
+      toast({ title: `Bar ${slotIndex + 1} removed`, description: `Remnant: ${leftover}mm set aside` });
+    } else {
+      toast({ title: `Bar ${slotIndex + 1} removed`, description: `Scrap: ${leftover}mm (< ${REMNANT_THRESHOLD_MM}mm threshold)` });
+    }
+
+    recordLearning({
+      module: "cut",
+      learningType: "success",
+      eventType: "bar_removed",
+      context: {
+        machine_id: machine.id,
+        bar_code: currentItem.bar_code,
+        slot_index: slotIndex,
+        cuts_done: slot.cutsDone,
+        planned_cuts: slot.plannedCuts,
+        leftover_mm: leftover,
+        is_remnant: leftover >= REMNANT_THRESHOLD_MM,
+      },
+      machineId: machine.id,
+      barCode: currentItem.bar_code,
+    });
+  }, [currentItem, slotTracker, selectedStockLength, machine, toast]);
+
+  // ── Complete run ──
+  const handleCompleteRun = useCallback(async () => {
+    if (!currentItem) return;
+
+    try {
+      const totalOutput = slotTracker.totalCutsDone;
+      const scrapSlots = slotTracker.slots.filter(
+        (s) => s.status === "removed" &&
+          selectedStockLength - s.cutsDone * currentItem.cut_length_mm < REMNANT_THRESHOLD_MM
+      ).length;
+
+      await manageMachine({
+        action: "complete-run",
+        machineId: machine.id,
+        outputQty: totalOutput,
+        scrapQty: scrapSlots,
+      });
+
+      recordCompletion("cut", machine.id, currentItem.bar_code, {
+        mark: currentItem.mark_number,
+        total_pieces: currentItem.total_pieces,
+        cuts_this_run: totalOutput,
+        stock_length: selectedStockLength,
+        scrap_count: scrapSlots,
+        remnant_count: slotTracker.slots.filter(
+          (s) => s.status === "removed" &&
+            selectedStockLength - s.cutsDone * currentItem.cut_length_mm >= REMNANT_THRESHOLD_MM
+        ).length,
+        slots_completed: slotTracker.slots.filter((s) => s.status === "completed").length,
+        slots_removed: slotTracker.slots.filter((s) => s.status === "removed").length,
+      });
+
+      slotTracker.reset();
+      toast({ title: "Run complete", description: `${totalOutput} pieces cut` });
+    } catch (err: any) {
+      toast({ title: "Complete failed", description: err.message, variant: "destructive" });
+    }
+  }, [currentItem, slotTracker, selectedStockLength, machine, toast]);
 
   if (!currentItem) {
     return (
@@ -219,11 +318,27 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
             </div>
           )}
 
-          {/* ── FOREMAN BRAIN PANEL ── */}
-          <ForemanPanel
-            foreman={foreman}
-            onAlternativeAction={handleAlternativeAction}
-          />
+          {/* ── SLOT TRACKER (visible during active run) ── */}
+          {machineIsRunning && slotTracker.slots.length > 0 && (
+            <SlotTracker
+              slots={slotTracker.slots}
+              barCode={currentItem.bar_code}
+              cutLengthMm={currentItem.cut_length_mm}
+              stockLengthMm={selectedStockLength}
+              onRecordStroke={handleRecordStroke}
+              onRemoveBar={handleRemoveBar}
+              onCompleteRun={handleCompleteRun}
+              canWrite={canWrite}
+            />
+          )}
+
+          {/* ── FOREMAN BRAIN PANEL (instructions before/during run) ── */}
+          {(!machineIsRunning || slotTracker.slots.length === 0) && (
+            <ForemanPanel
+              foreman={foreman}
+              onAlternativeAction={handleAlternativeAction}
+            />
+          )}
 
           {/* BIG CUT LENGTH */}
           <Card className="bg-card border border-border">
@@ -269,14 +384,15 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
               <CardContent className="p-4 text-center">
                 <Hash className="w-5 h-5 text-secondary-foreground mx-auto mb-2" />
                 <p className="text-3xl font-black font-mono text-foreground">
-                  {completedPieces}<span className="text-lg text-muted-foreground">/{totalPieces}</span>
+                  {completedPieces + slotTracker.totalCutsDone}
+                  <span className="text-lg text-muted-foreground">/{totalPieces}</span>
                 </p>
                 <p className="text-[10px] text-muted-foreground tracking-wider uppercase mt-1">Pieces Done</p>
               </CardContent>
             </Card>
           </div>
 
-          {isDone && (
+          {isDone && !machineIsRunning && (
             <Card className="bg-primary/10 border-primary/30">
               <CardContent className="p-6 flex items-center justify-center gap-3">
                 <CheckCircle2 className="w-6 h-6 text-primary" />
@@ -304,8 +420,8 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
           <div className="flex items-center justify-center gap-4 pt-2">
             <button
               className="w-10 h-10 rounded-full border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-30"
-              disabled={currentIndex <= 0}
-              onClick={() => { setCurrentIndex((i) => Math.max(0, i - 1)); setManualFloorConfirmed(false); }}
+              disabled={currentIndex <= 0 || machineIsRunning}
+              onClick={() => { setCurrentIndex((i) => Math.max(0, i - 1)); setManualFloorConfirmed(false); slotTracker.reset(); }}
             >
               ‹
             </button>
@@ -314,8 +430,8 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
             </span>
             <button
               className="w-10 h-10 rounded-full border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-30"
-              disabled={currentIndex >= items.length - 1}
-              onClick={() => { setCurrentIndex((i) => Math.min(items.length - 1, i + 1)); setManualFloorConfirmed(false); }}
+              disabled={currentIndex >= items.length - 1 || machineIsRunning}
+              onClick={() => { setCurrentIndex((i) => Math.min(items.length - 1, i + 1)); setManualFloorConfirmed(false); slotTracker.reset(); }}
             >
               ›
             </button>
@@ -331,7 +447,7 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
             runPlan={runPlan}
             onLockAndStart={handleLockAndStart}
             onStockLengthChange={setSelectedStockLength}
-            isRunning={isRunning || machine.status === "running"}
+            isRunning={machineIsRunning}
             canWrite={canWrite}
             darkMode
           />
