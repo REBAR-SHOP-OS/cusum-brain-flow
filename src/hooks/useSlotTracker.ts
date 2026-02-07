@@ -22,12 +22,12 @@ export interface SlotTrackerResult {
 }
 
 function buildSlots(plan: RunPlan): ActiveSlot[] {
-  return plan.slots.map((s, i) => ({
+  return plan.slots.map((s) => ({
     index: s.index,
     plannedCuts: s.plannedCuts,
     cutsDone: 0,
-    // First slot is active, rest are waiting
-    status: (i === 0 ? "active" : "waiting") as SlotStatus,
+    // All bars are loaded and cut simultaneously — all start active
+    status: "active" as SlotStatus,
     isPartial: s.removeAfterCuts,
   }));
 }
@@ -45,26 +45,23 @@ export function useSlotTracker({ runPlan, isRunning }: UseSlotTrackerOpts): Slot
   const recordStroke = useCallback(() => {
     setSlots((prev) => {
       const next = prev.map((s) => ({ ...s }));
-      const activeIdx = next.findIndex((s) => s.status === "active");
-      if (activeIdx === -1) return prev;
 
-      const slot = next[activeIdx];
-      slot.cutsDone += 1;
+      // A single physical stroke cuts ALL active bars simultaneously
+      const activeBars = next.filter((s) => s.status === "active");
+      if (activeBars.length === 0) return prev;
 
-      // Check if this slot's planned cuts are done
-      if (slot.cutsDone >= slot.plannedCuts) {
-        if (slot.isPartial) {
-          // Partial bar → removable (operator must physically remove it)
-          slot.status = "removable";
-        } else {
-          // Full bar → completed automatically
-          slot.status = "completed";
-        }
+      for (const slot of activeBars) {
+        slot.cutsDone += 1;
 
-        // Activate the next waiting slot
-        const nextWaiting = next.find((s) => s.status === "waiting");
-        if (nextWaiting) {
-          nextWaiting.status = "active";
+        // Check if this slot's planned cuts are done
+        if (slot.cutsDone >= slot.plannedCuts) {
+          if (slot.isPartial) {
+            // Partial bar → removable (operator must physically remove it)
+            slot.status = "removable";
+          } else {
+            // Full bar → completed automatically
+            slot.status = "completed";
+          }
         }
       }
 
