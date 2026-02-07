@@ -11,6 +11,63 @@
 
 @layer base {
   :root {
+    --background: 0 0% 98%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    --primary: 172 66% 40%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 14% 94%;
+    --secondary-foreground: 222 30% 30%;
+
+    --muted: 220 14% 96%;
+    --muted-foreground: 215 16% 47%;
+
+    --accent: 172 66% 40%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 142 71% 38%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 222 47% 11%;
+
+    --border: 220 13% 88%;
+    --input: 220 13% 91%;
+    --ring: 172 66% 40%;
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 220 14% 96%;
+    --sidebar-foreground: 215 16% 47%;
+    --sidebar-primary: 172 66% 40%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 13% 91%;
+    --sidebar-accent-foreground: 222 47% 11%;
+    --sidebar-border: 220 13% 88%;
+    --sidebar-ring: 172 66% 40%;
+
+    /* Custom REBAR SHOP OS tokens */
+    --agent-sales: 172 66% 40%;
+    --agent-accounting: 262 83% 58%;
+    --agent-support: 38 92% 50%;
+    --agent-collections: 0 72% 51%;
+    --agent-estimation: 199 89% 48%;
+
+    --chat-user: 220 14% 94%;
+    --chat-agent: 0 0% 100%;
+  }
+
+  .dark {
     --background: 222 47% 6%;
     --foreground: 210 40% 96%;
 
@@ -45,8 +102,6 @@
     --input: 222 30% 14%;
     --ring: 172 66% 50%;
 
-    --radius: 0.5rem;
-
     --sidebar-background: 222 47% 5%;
     --sidebar-foreground: 215 20% 65%;
     --sidebar-primary: 172 66% 50%;
@@ -56,7 +111,6 @@
     --sidebar-border: 222 30% 15%;
     --sidebar-ring: 172 66% 50%;
 
-    /* Custom REBAR SHOP OS tokens */
     --agent-sales: 172 66% 50%;
     --agent-accounting: 262 83% 58%;
     --agent-support: 38 92% 50%;
