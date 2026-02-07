@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Inbox, Brain, Settings, Plug, MessageSquare, CheckSquare, Factory, Truck, Users, Kanban, History, Bell, Home, Phone } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { UserMenu } from "./UserMenu";
+import { ThemeToggle } from "./ThemeToggle";
 import { InboxPanel } from "@/components/panels/InboxPanel";
 import { HistoryPanel } from "@/components/panels/HistoryPanel";
 import { useNotifications } from "@/hooks/useNotifications";
@@ -135,6 +136,9 @@ export function Sidebar() {
             );
           })}
           
+          {/* Theme Toggle */}
+          <ThemeToggle />
+
           {/* User Menu */}
           <UserMenu />
         </div>

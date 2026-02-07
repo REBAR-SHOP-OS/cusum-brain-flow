@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { 
   User, Lock, Tag, CreditCard, Lightbulb, HelpCircle, LogOut, 
-  ChevronDown, Camera
+  ChevronDown, Camera, Sun, Moon, Monitor
 } from "lucide-react";
+import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -139,6 +140,12 @@ export default function Settings() {
                 </Select>
               </div>
             </div>
+          </section>
+
+          {/* Appearance */}
+          <section className="space-y-4">
+            <h3 className="text-sm font-medium text-muted-foreground">Appearance</h3>
+            <ThemeToggle variant="full" />
           </section>
 
           {/* Security */}
