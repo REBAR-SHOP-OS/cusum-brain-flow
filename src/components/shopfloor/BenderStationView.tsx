@@ -78,7 +78,7 @@ export function BenderStationView({ machine, items, canWrite }: BenderStationVie
         });
         toast({ title: "WIP consumed", description: "1 piece from cut output" });
       } catch (err: any) {
-        console.warn("WIP consumption warning:", err.message);
+        // WIP consumption is best-effort; don't block the operator
       }
     }
   };

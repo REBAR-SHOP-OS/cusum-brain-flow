@@ -35,6 +35,7 @@ import Settings from "./pages/Settings";
 import AdminPanel from "./pages/AdminPanel";
 import AdminMachines from "./pages/AdminMachines";
 import AdminDbAudit from "./pages/AdminDbAudit";
+import CleanupReport from "./pages/CleanupReport";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import TermsOfService from "./pages/TermsOfService";
 import Landing from "./pages/Landing";
@@ -231,7 +232,7 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
-            {/* /inbox-manager redirects to /inbox */}
+            {/* Legacy route redirect */}
             <Route path="/inbox-manager" element={
               <ProtectedRoute>
                 <AppLayout>
@@ -295,6 +296,16 @@ const App = () => (
                 <ProtectedRoute>
                   <AppLayout>
                     <AdminMachines />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/cleanup"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <CleanupReport />
                   </AppLayout>
                 </ProtectedRoute>
               }

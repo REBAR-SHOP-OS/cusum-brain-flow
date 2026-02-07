@@ -62,7 +62,7 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
             stockLengthMm: stockLength,
           });
         } catch (invErr: any) {
-          console.warn("Inventory consumption warning:", invErr.message);
+          // Inventory consumption is best-effort; don't block the operator
         }
       }
 
