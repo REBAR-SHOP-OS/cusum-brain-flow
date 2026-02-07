@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { CheckCircle2, XCircle, Loader2, Copy, Check } from "lucide-react";
+import { CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default function IntegrationCallback() {
@@ -9,12 +9,10 @@ export default function IntegrationCallback() {
   const navigate = useNavigate();
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
   const [message, setMessage] = useState("");
-  const [refreshToken, setRefreshToken] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     const code = searchParams.get("code");
-    const state = searchParams.get("state"); // integration id
+    const state = searchParams.get("state");
     const error = searchParams.get("error");
 
     if (error) {
@@ -29,12 +27,10 @@ export default function IntegrationCallback() {
       return;
     }
 
-    // Wait for auth session to be available before exchanging code
     const waitForAuthAndExchange = async () => {
-      // Give Supabase a moment to restore the session from localStorage
       let retries = 0;
       let session = null;
-      
+
       while (retries < 5) {
         const { data } = await supabase.auth.getSession();
         session = data.session;
@@ -59,45 +55,36 @@ export default function IntegrationCallback() {
     try {
       const redirectUri = `${window.location.origin}/integrations/callback`;
 
-      const { data, error } = await supabase.functions.invoke(
-        "google-oauth",
-        {
-          body: {
-            action: "exchange-code",
-            code,
-            redirectUri,
-            integration,
-          },
-        }
-      );
+      const { data, error } = await supabase.functions.invoke("google-oauth", {
+        body: {
+          action: "exchange-code",
+          code,
+          redirectUri,
+          integration,
+        },
+      });
 
       if (error) throw new Error(error.message);
 
       setStatus("success");
       setMessage(data.message || "Successfully connected!");
-      
-      if (data.refreshToken) {
-        setRefreshToken(data.refreshToken);
-      } else {
-        // No refresh token to display, redirect to integrations after a brief delay
-        setTimeout(() => navigate("/integrations"), 2000);
-      }
+
+      // Auto-redirect to inbox after success
+      setTimeout(() => {
+        if (integration === "gmail") {
+          navigate("/inbox");
+        } else {
+          navigate("/integrations");
+        }
+      }, 2000);
     } catch (err) {
       setStatus("error");
       setMessage(err instanceof Error ? err.message : "Failed to complete authorization");
     }
   };
 
-  const copyToken = async () => {
-    if (refreshToken) {
-      await navigator.clipboard.writeText(refreshToken);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
-
-  const goToIntegrations = () => {
-    navigate("/integrations");
+  const goBack = () => {
+    navigate("/inbox");
   };
 
   return (
@@ -106,37 +93,17 @@ export default function IntegrationCallback() {
         {status === "loading" && (
           <>
             <Loader2 className="w-16 h-16 mx-auto text-primary animate-spin" />
-            <h1 className="text-xl font-semibold">Completing Authorization...</h1>
-            <p className="text-muted-foreground">Please wait while we connect your account.</p>
+            <h1 className="text-xl font-semibold">Connecting your Gmail...</h1>
+            <p className="text-muted-foreground">Please wait while we link your account.</p>
           </>
         )}
 
         {status === "success" && (
           <>
-            <CheckCircle2 className="w-16 h-16 mx-auto text-success" />
-            <h1 className="text-xl font-semibold text-success">Connected Successfully!</h1>
+            <CheckCircle2 className="w-16 h-16 mx-auto text-green-500" />
+            <h1 className="text-xl font-semibold text-green-500">Gmail Connected!</h1>
             <p className="text-muted-foreground">{message}</p>
-
-            {refreshToken && (
-              <div className="bg-muted p-4 rounded-lg text-left space-y-3">
-                <p className="text-sm font-medium">Save this refresh token as a secret:</p>
-                <div className="flex gap-2">
-                  <code className="flex-1 text-xs bg-background p-2 rounded border overflow-x-auto">
-                    {refreshToken.slice(0, 30)}...
-                  </code>
-                  <Button size="sm" variant="outline" onClick={copyToken}>
-                    {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Add this to your project secrets in Lovable Cloud → Settings → Secrets
-                </p>
-              </div>
-            )}
-
-            <Button onClick={goToIntegrations} className="w-full">
-              Go to Integrations
-            </Button>
+            <p className="text-sm text-muted-foreground">Redirecting to your inbox...</p>
           </>
         )}
 
@@ -145,8 +112,8 @@ export default function IntegrationCallback() {
             <XCircle className="w-16 h-16 mx-auto text-destructive" />
             <h1 className="text-xl font-semibold text-destructive">Connection Failed</h1>
             <p className="text-muted-foreground">{message}</p>
-            <Button variant="outline" onClick={goToIntegrations}>
-              Back to Integrations
+            <Button variant="outline" onClick={goBack}>
+              Back to Inbox
             </Button>
           </>
         )}
