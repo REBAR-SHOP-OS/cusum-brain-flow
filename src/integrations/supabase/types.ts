@@ -1105,6 +1105,33 @@ export type Database = {
           },
         ]
       }
+      rebar_sizes: {
+        Row: {
+          area_mm2: number
+          bar_code: string
+          created_at: string
+          diameter_mm: number
+          mass_kg_per_m: number
+          standard: string
+        }
+        Insert: {
+          area_mm2: number
+          bar_code: string
+          created_at?: string
+          diameter_mm: number
+          mass_kg_per_m: number
+          standard?: string
+        }
+        Update: {
+          area_mm2?: number
+          bar_code?: string
+          created_at?: string
+          diameter_mm?: number
+          mass_kg_per_m?: number
+          standard?: string
+        }
+        Relationships: []
+      }
       rebar_standards: {
         Row: {
           area_mm2: number | null
