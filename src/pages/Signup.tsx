@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { MessageSquare, CheckCircle2 } from "lucide-react";
+import { CheckCircle2 } from "lucide-react";
+import logoCoin from "@/assets/logo-coin.png";
 import { useToast } from "@/hooks/use-toast";
 
 export default function Signup() {
@@ -86,9 +87,7 @@ export default function Signup() {
       <div className="w-full max-w-sm space-y-8">
         {/* Logo */}
         <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-primary flex items-center justify-center">
-            <MessageSquare className="w-6 h-6 text-primary-foreground" />
-          </div>
+          <img src={logoCoin} alt="REBAR SHOP OS" className="w-14 h-14 rounded-xl" />
           <div className="text-center">
             <h1 className="text-2xl font-semibold">Create account</h1>
             <p className="text-sm text-muted-foreground">Get started with REBAR SHOP OS</p>

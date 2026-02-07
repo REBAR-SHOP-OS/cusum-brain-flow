@@ -11,6 +11,7 @@ import {
   Mail,
   ChevronRight 
 } from "lucide-react";
+import logoCoin from "@/assets/logo-coin.png";
 
 // Helper character images
 import salesHelper from "@/assets/helpers/sales-helper.png";
@@ -159,9 +160,18 @@ export default function Home() {
 
   return (
     <ScrollArea className="h-full">
-      <div className="flex flex-col items-center px-6 py-8 max-w-6xl mx-auto">
+      <div className="relative flex flex-col items-center px-6 py-8 max-w-6xl mx-auto">
+        {/* Big logo background */}
+        <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-0">
+          <img 
+            src={logoCoin} 
+            alt="" 
+            className="w-[600px] h-[600px] opacity-[0.04]" 
+          />
+        </div>
+
         {/* Hero Section */}
-        <div className="w-full max-w-2xl text-center mb-12">
+        <div className="relative z-10 w-full max-w-2xl text-center mb-12">
           <h1 className="text-3xl font-bold mb-2">
             How can REBAR SHOP OS help you today?
           </h1>
@@ -179,7 +189,7 @@ export default function Home() {
         </div>
 
         {/* Use Cases Section */}
-        <div className="w-full mb-12">
+        <div className="relative z-10 w-full mb-12">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">Quick Actions</h2>
           </div>
@@ -204,12 +214,12 @@ export default function Home() {
         </div>
 
         {/* Automations Section */}
-        <div className="w-full mb-12">
+        <div className="relative z-10 w-full mb-12">
           <AutomationsSection />
         </div>
 
         {/* Helpers Section */}
-        <div className="w-full">
+        <div className="relative z-10 w-full">
           <h2 className="text-lg font-semibold mb-4">Your Helpers</h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
             {helpers.map((helper) => (
