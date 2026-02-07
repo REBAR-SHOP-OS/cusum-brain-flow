@@ -62,6 +62,8 @@ export function SlotTracker({
   const totalPlanned = slots.reduce((s, sl) => s + sl.plannedCuts, 0);
   const nextStroke = activeSlots.length > 0 ? activeSlots[0].cutsDone + 1 : 0;
   const maxStrokes = activeSlots.length > 0 ? Math.max(...activeSlots.map(s => s.plannedCuts)) : 0;
+  const piecesPerStroke = activeSlots.length;
+  const strokesDone = activeSlots.length > 0 ? activeSlots[0].cutsDone : (slots.length > 0 ? slots[0].cutsDone : 0);
 
   return (
     <div className="space-y-3">
@@ -73,8 +75,10 @@ export function SlotTracker({
             Active Run — Slot Tracker
           </h4>
         </div>
-        <Badge variant="outline" className="font-mono text-xs">
-          {totalCutsDone}/{totalPlanned} cuts
+        <Badge variant="outline" className="font-mono text-xs flex items-center gap-1.5">
+          <span>{strokesDone}/{maxStrokes || slots[0]?.plannedCuts || 0} strokes</span>
+          <span className="text-muted-foreground">·</span>
+          <span>{totalCutsDone}/{totalPlanned} pcs</span>
         </Badge>
       </div>
 
@@ -194,7 +198,7 @@ export function SlotTracker({
             onClick={onRecordStroke}
           >
             <Scissors className="w-4 h-4" />
-            Record Stroke ({nextStroke}/{maxStrokes}) — {activeSlots.length} bar{activeSlots.length > 1 ? "s" : ""}
+            Record Stroke ({nextStroke}/{maxStrokes}) — {piecesPerStroke} piece{piecesPerStroke > 1 ? "s" : ""}
           </Button>
         )}
 

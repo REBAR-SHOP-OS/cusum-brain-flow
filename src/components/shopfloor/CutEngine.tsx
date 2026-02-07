@@ -16,6 +16,12 @@ interface CutEngineProps {
   isRunning: boolean;
   canWrite: boolean;
   darkMode?: boolean;
+  /** Live counter data from slot tracker */
+  strokesDone?: number;
+  totalStrokesNeeded?: number;
+  totalPiecesDone?: number;
+  totalPiecesPlanned?: number;
+  activeBars?: number;
 }
 
 const STOCK_LENGTHS = [6000, 12000, 18000];
@@ -31,6 +37,11 @@ export function CutEngine({
   isRunning,
   canWrite,
   darkMode = false,
+  strokesDone = 0,
+  totalStrokesNeeded = 0,
+  totalPiecesDone = 0,
+  totalPiecesPlanned = 0,
+  activeBars = 0,
 }: CutEngineProps) {
   const [selectedStock, setSelectedStock] = useState(12000);
   const [bars, setBars] = useState(suggestedBars || 1);
@@ -246,6 +257,51 @@ export function CutEngine({
         >
           Machine Active
         </Badge>
+      )}
+
+      {/* ── LIVE COUNTER (visible during run) ── */}
+      {isRunning && totalPiecesPlanned > 0 && (
+        <div className={cn("rounded-lg border p-4 space-y-3", borderClasses, cardBg)}>
+          <div className="flex items-center gap-2">
+            <Scissors className="w-3.5 h-3.5 text-primary" />
+            <p className={cn("text-[10px] tracking-wider uppercase font-bold", mutedClasses)}>
+              Live Counter
+            </p>
+          </div>
+
+          {/* Strokes */}
+          <div className="text-center">
+            <p className={cn("text-[9px] tracking-wider uppercase mb-1", mutedClasses)}>Strokes</p>
+            <p className="text-4xl font-black font-mono leading-none">
+              {strokesDone}
+              <span className={cn("text-lg", mutedClasses)}>/{totalStrokesNeeded}</span>
+            </p>
+          </div>
+
+          {/* Pieces this run */}
+          <div className="text-center">
+            <p className={cn("text-[9px] tracking-wider uppercase mb-1", mutedClasses)}>Pieces This Run</p>
+            <p className="text-4xl font-black font-mono leading-none text-primary">
+              {totalPiecesDone}
+              <span className={cn("text-lg", mutedClasses)}>/{totalPiecesPlanned}</span>
+            </p>
+          </div>
+
+          {/* Per stroke info */}
+          {activeBars > 0 && (
+            <p className={cn("text-[10px] text-center", mutedClasses)}>
+              Each stroke = {activeBars} piece{activeBars > 1 ? "s" : ""} ({activeBars} bar{activeBars > 1 ? "s" : ""})
+            </p>
+          )}
+
+          {/* Progress bar */}
+          <div className="h-2 bg-muted rounded-full overflow-hidden">
+            <div
+              className="h-full bg-primary rounded-full transition-all duration-300"
+              style={{ width: `${totalPiecesPlanned > 0 ? (totalPiecesDone / totalPiecesPlanned) * 100 : 0}%` }}
+            />
+          </div>
+        </div>
       )}
     </div>
   );
