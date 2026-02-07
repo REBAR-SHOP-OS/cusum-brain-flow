@@ -197,11 +197,11 @@
 
 /* ============================================
    Zebra ZT411 Label Print Styles
-   4" × 6" (101.6mm × 152.4mm) @ 203/300 DPI
+   4" × 6" landscape (6" wide × 4" tall)
    ============================================ */
 @media print {
   @page {
-    size: 4in 6in;
+    size: 6in 4in;
     margin: 0;
   }
 
@@ -217,10 +217,10 @@
 
   .rebar-tag {
     position: relative;
-    width: 4in !important;
-    height: 6in !important;
-    max-width: 4in !important;
-    max-height: 6in !important;
+    width: 6in !important;
+    height: 4in !important;
+    max-width: 6in !important;
+    max-height: 4in !important;
     page-break-after: always;
     page-break-inside: avoid;
     border-width: 1px !important;
