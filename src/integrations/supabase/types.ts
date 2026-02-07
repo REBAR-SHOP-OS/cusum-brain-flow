@@ -751,6 +751,7 @@ export type Database = {
           created_at: string
           id: string
           machine_id: string
+          max_bars: number
           max_length_mm: number | null
           notes: string | null
           process: string
@@ -762,6 +763,7 @@ export type Database = {
           created_at?: string
           id?: string
           machine_id: string
+          max_bars?: number
           max_length_mm?: number | null
           notes?: string | null
           process: string
@@ -773,6 +775,7 @@ export type Database = {
           created_at?: string
           id?: string
           machine_id?: string
+          max_bars?: number
           max_length_mm?: number | null
           notes?: string | null
           process?: string
@@ -888,6 +891,7 @@ export type Database = {
           current_run_id: string | null
           id: string
           last_event_at: string | null
+          model: string | null
           name: string
           status: string
           type: string
@@ -901,6 +905,7 @@ export type Database = {
           current_run_id?: string | null
           id?: string
           last_event_at?: string | null
+          model?: string | null
           name: string
           status?: string
           type: string
@@ -914,6 +919,7 @@ export type Database = {
           current_run_id?: string | null
           id?: string
           last_event_at?: string | null
+          model?: string | null
           name?: string
           status?: string
           type?: string

@@ -134,9 +134,9 @@ serve(async (req) => {
         break;
       }
 
-      // ─── Start run ────────────────────────────────────────────────
+      // ─── Start run (with capability validation) ────────────────────
       case "start-run": {
-        const { process, workOrderId, notes } = body;
+        const { process, workOrderId, notes, barCode, qty } = body;
         const validProcesses = [
           "cut", "bend", "load", "pickup", "delivery", "clearance", "other",
         ];
@@ -147,6 +147,115 @@ serve(async (req) => {
           return json({ error: "Machine already has an active run" }, 400);
         }
 
+        // ── CAPABILITY VALIDATION (hard rule) ────────────────────────
+        // If barCode is provided, validate against machine_capabilities
+        if (barCode) {
+          // First verify bar_code exists in rebar_sizes (canonical source)
+          const { data: rebarSize, error: rebarErr } = await supabaseService
+            .from("rebar_sizes")
+            .select("bar_code, diameter_mm")
+            .eq("bar_code", barCode)
+            .single();
+
+          if (rebarErr || !rebarSize) {
+            return json({
+              error: `Invalid bar_code: ${barCode}. Must be a valid RSIC Canada size (10M–55M).`,
+            }, 400);
+          }
+
+          // Check machine has capability for this bar_code + process
+          const { data: capability, error: capErr } = await supabaseService
+            .from("machine_capabilities")
+            .select("bar_code, process, max_bars")
+            .eq("machine_id", machineId)
+            .eq("bar_code", barCode)
+            .eq("process", process)
+            .maybeSingle();
+
+          if (capErr) {
+            console.error("Capability check error:", capErr);
+          }
+
+          if (!capability) {
+            // ❌ Block run + log capability_violation event
+            events.push({
+              entity_type: "machine",
+              entity_id: machineId,
+              event_type: "capability_violation",
+              actor_id: userId,
+              actor_type: "user",
+              description: `BLOCKED: ${machine.name} cannot ${process} ${barCode}. No matching capability.`,
+              metadata: {
+                machineId,
+                machineName: machine.name,
+                model: machine.model,
+                barCode,
+                process,
+                requestedQty: qty || 1,
+              },
+            });
+
+            // Write events before returning error
+            if (events.length > 0) {
+              const { error: evtErr } = await supabaseService
+                .from("events")
+                .insert(events);
+              if (evtErr) console.error("Failed to log events:", evtErr);
+            }
+
+            return json({
+              error: `Capability violation: ${machine.name} is not configured to ${process} ${barCode}. Check machine_capabilities.`,
+              violation: {
+                machineId,
+                machineName: machine.name,
+                barCode,
+                process,
+                requestedQty: qty || 1,
+              },
+            }, 403);
+          }
+
+          // Check qty against max_bars
+          const requestedQty = qty || 1;
+          if (requestedQty > capability.max_bars) {
+            events.push({
+              entity_type: "machine",
+              entity_id: machineId,
+              event_type: "capability_violation",
+              actor_id: userId,
+              actor_type: "user",
+              description: `BLOCKED: ${machine.name} max ${capability.max_bars} bars for ${barCode} ${process}, requested ${requestedQty}.`,
+              metadata: {
+                machineId,
+                machineName: machine.name,
+                barCode,
+                process,
+                requestedQty,
+                maxBars: capability.max_bars,
+              },
+            });
+
+            if (events.length > 0) {
+              const { error: evtErr } = await supabaseService
+                .from("events")
+                .insert(events);
+              if (evtErr) console.error("Failed to log events:", evtErr);
+            }
+
+            return json({
+              error: `Capacity exceeded: ${machine.name} can ${process} max ${capability.max_bars} × ${barCode} at once (requested ${requestedQty}).`,
+              violation: {
+                machineId,
+                barCode,
+                process,
+                requestedQty,
+                maxBars: capability.max_bars,
+              },
+            }, 403);
+          }
+        }
+
+        // ── Create the run ───────────────────────────────────────────
         const runRow: Record<string, unknown> = {
           company_id: machine.company_id,
           machine_id: machineId,
@@ -158,6 +267,7 @@ serve(async (req) => {
         };
         if (workOrderId) runRow.work_order_id = workOrderId;
         if (notes) runRow.notes = notes;
+        if (qty) runRow.input_qty = qty;
 
         const { data: newRun, error: runError } = await supabaseUser
           .from("machine_runs")
@@ -183,11 +293,13 @@ serve(async (req) => {
             event_type: "machine_run_started",
             actor_id: userId,
             actor_type: "user",
-            description: `Run started: ${process} on ${machine.name}`,
+            description: `Run started: ${process}${barCode ? ` ${barCode}` : ""} on ${machine.name}`,
             metadata: {
               machineRunId: newRun.id,
               machineId,
               process,
+              barCode: barCode || null,
+              qty: qty || null,
               status: "running",
               startedAt: now,
             },
