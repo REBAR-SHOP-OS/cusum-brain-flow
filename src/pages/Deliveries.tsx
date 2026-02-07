@@ -187,7 +187,6 @@ export default function Deliveries() {
             />
           </div>
         )}
-        </div>
 
         {/* Content */}
         <div className="flex-1 overflow-hidden">
@@ -233,7 +232,7 @@ export default function Deliveries() {
         </div>
       </div>
 
-      {/* Delivery Detail Panel */}
+      {/* Detail Panel */}
       <div className={`${selectedDelivery ? 'flex' : 'hidden md:flex'} w-full md:w-96 flex-col bg-muted/20`}>
         {selectedDelivery ? (
           <>
