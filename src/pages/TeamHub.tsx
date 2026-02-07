@@ -3,8 +3,7 @@ import { useTeamChannels, useTeamMessages, useSendMessage, useMyProfile } from "
 import { useProfiles } from "@/hooks/useProfiles";
 import { ChannelSidebar } from "@/components/teamhub/ChannelSidebar";
 import { MessageThread } from "@/components/teamhub/MessageThread";
-import { ArrowLeft, MessageSquare, Globe } from "lucide-react";
-import { Link } from "react-router-dom";
+import { MessageSquare, Globe, Users, Hash, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
 export default function TeamHub() {
@@ -15,7 +14,6 @@ export default function TeamHub() {
 
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
 
-  // Auto-select first channel
   const activeChannelId = selectedChannelId || channels[0]?.id || null;
   const activeChannel = channels.find((c) => c.id === activeChannelId);
 
@@ -23,7 +21,6 @@ export default function TeamHub() {
 
   const myLang = myProfile?.preferred_language || "en";
 
-  // Collect unique languages of all channel members for translation
   const targetLangs = useMemo(() => {
     const langs = new Set<string>();
     for (const p of profiles) {
@@ -34,12 +31,13 @@ export default function TeamHub() {
     return [...langs];
   }, [profiles]);
 
+  const onlineCount = profiles.filter((p) => p.is_active).length;
+
   const handleSend = async (text: string) => {
     if (!activeChannelId || !myProfile) {
       toast.error("Cannot send — profile not found");
       return;
     }
-
     try {
       await sendMutation.mutateAsync({
         channelId: activeChannelId,
@@ -55,32 +53,11 @@ export default function TeamHub() {
 
   return (
     <div className="relative flex flex-col h-full bg-background overflow-hidden">
-      {/* Glow */}
+      {/* Ambient glow effects */}
       <div className="absolute inset-0 pointer-events-none z-0">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] rounded-full bg-purple-500/8 blur-[150px]" />
+        <div className="absolute -top-20 -right-20 w-[500px] h-[500px] rounded-full bg-primary/5 blur-[120px]" />
+        <div className="absolute bottom-0 -left-20 w-[400px] h-[400px] rounded-full bg-purple-500/5 blur-[100px]" />
       </div>
-
-      {/* Top Bar */}
-      <header className="relative z-10 border-b border-border bg-card/80 backdrop-blur-sm px-4 py-3 flex items-center gap-3">
-        <Link
-          to="/shop-floor"
-          className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" />
-        </Link>
-        <div className="p-2 rounded-lg bg-purple-500/10 border border-purple-500/20">
-          <MessageSquare className="w-5 h-5 text-purple-500" />
-        </div>
-        <div>
-          <h1 className="text-lg font-black italic text-foreground tracking-tight">TEAM HUB</h1>
-          <div className="flex items-center gap-1.5">
-            <Globe className="w-3 h-3 text-primary" />
-            <p className="text-[10px] tracking-widest text-primary uppercase">
-              Auto-translated messaging
-            </p>
-          </div>
-        </div>
-      </header>
 
       {/* Main Content */}
       <div className="relative z-10 flex flex-1 overflow-hidden">
@@ -88,12 +65,17 @@ export default function TeamHub() {
           channels={channels}
           selectedId={activeChannelId}
           onSelect={setSelectedChannelId}
+          onlineCount={onlineCount}
+          profiles={profiles}
         />
+
         <div className="flex-1 flex flex-col min-w-0">
           {activeChannel ? (
             <MessageThread
               channelName={activeChannel.name}
+              channelDescription={activeChannel.description}
               messages={messages}
+              profiles={profiles}
               myProfile={myProfile}
               myLang={myLang}
               isLoading={msgsLoading}
@@ -101,8 +83,32 @@ export default function TeamHub() {
               onSend={handleSend}
             />
           ) : (
-            <div className="flex items-center justify-center h-full text-muted-foreground">
-              <p className="text-sm">Select a channel to start chatting</p>
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center space-y-4">
+                <div className="w-20 h-20 rounded-3xl bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto">
+                  <MessageSquare className="w-9 h-9 text-primary" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-foreground">Welcome to Team Hub</h2>
+                  <p className="text-sm text-muted-foreground mt-1 max-w-sm">
+                    Real-time messaging with automatic translation. Select a channel to start.
+                  </p>
+                </div>
+                <div className="flex items-center justify-center gap-4 pt-2">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Globe className="w-3.5 h-3.5 text-primary" />
+                    <span>Auto-translate</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Sparkles className="w-3.5 h-3.5 text-primary" />
+                    <span>AI-powered</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Users className="w-3.5 h-3.5 text-primary" />
+                    <span>{onlineCount} members</span>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </div>
