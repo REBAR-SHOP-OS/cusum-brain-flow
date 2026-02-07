@@ -1248,6 +1248,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_table_stats: {
+        Args: never
+        Returns: {
+          approx_rows: number
+          size_bytes: number
+          size_pretty: string
+          table_name: string
+        }[]
+      }
       has_any_role: {
         Args: {
           _roles: Database["public"]["Enums"]["app_role"][]
