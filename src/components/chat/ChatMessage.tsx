@@ -2,6 +2,8 @@ import { cn } from "@/lib/utils";
 import { AgentBadge, AgentType } from "./AgentSelector";
 import { User, Bot, FileIcon, Download } from "lucide-react";
 import { UploadedFile } from "./ChatInput";
+import { MessageActions } from "./MessageActions";
+import ReactMarkdown from "react-markdown";
 
 export interface Message {
   id: string;
@@ -15,9 +17,10 @@ export interface Message {
 
 interface ChatMessageProps {
   message: Message;
+  onRegenerate?: () => void;
 }
 
-export function ChatMessage({ message }: ChatMessageProps) {
+export function ChatMessage({ message, onRegenerate }: ChatMessageProps) {
   const isUser = message.role === "user";
 
   return (
@@ -42,7 +45,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
       </div>
 
       {/* Message Content */}
-      <div className={cn("flex flex-col gap-1", isUser ? "items-end" : "items-start")}>
+      <div className={cn("flex flex-col gap-1 max-w-[80%]", isUser ? "items-end" : "items-start")}>
         {/* Agent badge for agent messages */}
         {!isUser && message.agent && (
           <AgentBadge agent={message.agent} />
@@ -74,10 +77,27 @@ export function ChatMessage({ message }: ChatMessageProps) {
             isUser ? "chat-bubble-user" : "chat-bubble-agent"
           )}
         >
-          <p className="text-sm leading-relaxed whitespace-pre-wrap">
-            {message.content || (message.files?.length ? "📎 Files attached" : "")}
-          </p>
+          {isUser ? (
+            <p className="text-sm leading-relaxed whitespace-pre-wrap">
+              {message.content || (message.files?.length ? "📎 Files attached" : "")}
+            </p>
+          ) : (
+            <div className="text-sm leading-relaxed prose prose-sm dark:prose-invert max-w-none">
+              <ReactMarkdown>
+                {message.content || ""}
+              </ReactMarkdown>
+            </div>
+          )}
         </div>
+
+        {/* Action buttons for agent messages */}
+        {!isUser && message.content && (
+          <MessageActions
+            content={message.content}
+            messageId={message.id}
+            onRegenerate={onRegenerate}
+          />
+        )}
 
         {/* Metadata */}
         <div className="flex items-center gap-2 text-xs text-muted-foreground">

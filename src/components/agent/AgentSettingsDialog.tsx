@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, Sparkles, MessageSquare, Globe, Pencil, Search, ToggleLeft } from "lucide-react";
+import { X, Sparkles, MessageSquare, Globe, Pencil, Search, Brain, Database, BookOpen, FileText, Cloud } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
@@ -28,10 +28,20 @@ const vibeOptions = [
 
 const messageLengthOptions = ["Short", "Medium", "Long"];
 
-const languageOptions = [
-  { value: "basic", label: "Basic", icon: Globe },
-  { value: "casual", label: "Casual", icon: Pencil },
-  { value: "expert", label: "Expert", icon: Sparkles },
+const writingStyleOptions = [
+  { value: "conversational", label: "Conversational" },
+  { value: "formal", label: "Formal" },
+  { value: "bullet-points", label: "Bullet Points" },
+  { value: "detailed", label: "Detailed" },
+];
+
+const dataSources = [
+  { key: "agentBrain", label: "Agent Brain", description: "Agent-specific memory & learnings", icon: Brain, defaultOn: true },
+  { key: "mainBrain", label: "Main Brain", description: "Shared company knowledge base", icon: Database, defaultOn: true },
+  { key: "googleSearch", label: "Google Search", description: "Live web search results", icon: Search, defaultOn: true },
+  { key: "customerData", label: "Customer Data", description: "CRM contacts & history", icon: BookOpen, defaultOn: true },
+  { key: "documents", label: "Documents", description: "Uploaded files & attachments", icon: FileText, defaultOn: false },
+  { key: "googleDrive", label: "Google Drive", description: "Connected Drive files", icon: Cloud, defaultOn: false },
 ];
 
 export function AgentSettingsDialog({
@@ -42,15 +52,20 @@ export function AgentSettingsDialog({
 }: AgentSettingsDialogProps) {
   const [vibe, setVibe] = useState("business-casual");
   const [messageLength, setMessageLength] = useState("Medium");
-  const [language, setLanguage] = useState("casual");
-  const [searchGoogle, setSearchGoogle] = useState(true);
-  const [writingStyle, setWritingStyle] = useState(false);
+  const [writingStyle, setWritingStyle] = useState("conversational");
+  const [sources, setSources] = useState<Record<string, boolean>>(
+    Object.fromEntries(dataSources.map((s) => [s.key, s.defaultOn]))
+  );
   const [customInstructions, setCustomInstructions] = useState("");
   const [instructionsOpen, setInstructionsOpen] = useState(false);
 
   if (!open) return null;
 
   const vibeIndex = vibeOptions.findIndex((v) => v.value === vibe);
+
+  const toggleSource = (key: string) => {
+    setSources((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => onOpenChange(false)}>
@@ -85,7 +100,7 @@ export function AgentSettingsDialog({
               {vibeOptions.find((v) => v.value === vibe)?.emoji}
             </p>
             <div className="relative h-10 bg-gradient-to-r from-primary to-accent rounded-full flex items-center px-1">
-              {vibeOptions.map((opt, i) => (
+              {vibeOptions.map((opt) => (
                 <button
                   key={opt.value}
                   onClick={() => setVibe(opt.value)}
@@ -100,7 +115,6 @@ export function AgentSettingsDialog({
                   />
                 </button>
               ))}
-              {/* Thumb */}
               <div
                 className="absolute w-8 h-8 rounded-full bg-card border-2 border-primary shadow-lg transition-all duration-200"
                 style={{
@@ -132,40 +146,56 @@ export function AgentSettingsDialog({
             </div>
           </div>
 
-          {/* Language */}
+          {/* Writing Style */}
           <div className="space-y-2">
-            <span className="font-semibold">Language</span>
-            <div className="grid grid-cols-3 gap-2">
-              {languageOptions.map((opt) => (
+            <span className="font-semibold">Writing Style</span>
+            <div className="grid grid-cols-2 gap-2">
+              {writingStyleOptions.map((opt) => (
                 <button
                   key={opt.value}
-                  onClick={() => setLanguage(opt.value)}
+                  onClick={() => setWritingStyle(opt.value)}
                   className={cn(
-                    "flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-colors",
-                    language === opt.value
-                      ? "border-primary text-primary"
+                    "py-2.5 px-3 rounded-xl border-2 text-sm font-medium transition-colors text-center",
+                    writingStyle === opt.value
+                      ? "border-primary text-primary bg-primary/5"
                       : "border-border text-muted-foreground hover:border-muted-foreground"
                   )}
                 >
-                  <opt.icon className="w-6 h-6" />
-                  <span className="text-sm font-medium">{opt.label}</span>
+                  {opt.label}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Traits */}
+          {/* Data Sources */}
           <div className="space-y-3">
-            <span className="font-semibold">Traits</span>
+            <span className="font-semibold">Data Sources</span>
+            <p className="text-xs text-muted-foreground">Choose what {agentName} can access for answers</p>
             <div className="space-y-2">
-              <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                <span className="text-sm">Search Google</span>
-                <Switch checked={searchGoogle} onCheckedChange={setSearchGoogle} />
-              </div>
-              <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                <span className="text-sm">Writing Style</span>
-                <Switch checked={writingStyle} onCheckedChange={setWritingStyle} />
-              </div>
+              {dataSources.map((source) => (
+                <div
+                  key={source.key}
+                  className={cn(
+                    "flex items-center gap-3 p-3 rounded-lg transition-colors",
+                    sources[source.key] ? "bg-primary/5 border border-primary/20" : "bg-muted"
+                  )}
+                >
+                  <div className={cn(
+                    "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0",
+                    sources[source.key] ? "bg-primary/10 text-primary" : "bg-muted-foreground/10 text-muted-foreground"
+                  )}>
+                    <source.icon className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm font-medium">{source.label}</span>
+                    <p className="text-xs text-muted-foreground truncate">{source.description}</p>
+                  </div>
+                  <Switch
+                    checked={sources[source.key]}
+                    onCheckedChange={() => toggleSource(source.key)}
+                  />
+                </div>
+              ))}
             </div>
           </div>
 
