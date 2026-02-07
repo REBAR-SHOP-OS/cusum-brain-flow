@@ -279,11 +279,37 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
       });
 
       slotTracker.reset();
-      toast({ title: "Run complete", description: `${totalOutput} pieces cut` });
+      setIsRunning(false);
+      setOperatorBars(null);
+      setManualFloorConfirmed(false);
+
+      // ── Routing toast based on bend type ──
+      const markLabel = currentItem.mark_number || "item";
+      const newCompletedPieces = completedPieces + totalOutput;
+      const isMarkComplete = newCompletedPieces >= totalPieces;
+
+      if (currentItem.bend_type === "bend") {
+        toast({
+          title: `✓ ${totalOutput} pieces cut — SEND TO BENDER`,
+          description: `${markLabel} → Bending station${isMarkComplete ? " (mark complete)" : ""}`,
+        });
+      } else {
+        toast({
+          title: `✓ ${totalOutput} pieces cut — BUNDLE → PICKUP`,
+          description: `${markLabel} → Bundle & send to pickup/delivery zone${isMarkComplete ? " (mark complete)" : ""}`,
+        });
+      }
+
+      // ── Auto-advance to next item if mark is complete ──
+      if (isMarkComplete && currentIndex < items.length - 1) {
+        setTimeout(() => {
+          setCurrentIndex((i) => i + 1);
+        }, 1200);
+      }
     } catch (err: any) {
       toast({ title: "Complete failed", description: err.message, variant: "destructive" });
     }
-  }, [currentItem, slotTracker, selectedStockLength, machine, toast]);
+  }, [currentItem, slotTracker, selectedStockLength, machine, toast, completedPieces, totalPieces, currentIndex, items.length]);
 
   if (!currentItem) {
     return (
