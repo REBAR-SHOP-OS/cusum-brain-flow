@@ -14,9 +14,9 @@ export default function StationDashboard() {
   const { projectLanes } = useProductionQueues();
   const { toast } = useToast();
 
-  // Active cut plans (draft, ready, queued, in_progress)
+  // Active cut plans (draft, ready, queued, running)
   const activePlans = plans.filter(p =>
-    ["draft", "ready", "queued", "in_progress"].includes(p.status)
+    ["draft", "ready", "queued", "running"].includes(p.status)
   );
 
   // Build a machine name lookup
@@ -90,7 +90,7 @@ export default function StationDashboard() {
                       draft: { label: "DRAFT", color: "bg-muted text-muted-foreground" },
                       ready: { label: "READY", color: "bg-yellow-500/20 text-yellow-500" },
                       queued: { label: "QUEUED", color: "bg-blue-500/20 text-blue-500" },
-                      in_progress: { label: "ACTIVE", color: "bg-green-500/20 text-green-500" },
+                      running: { label: "ACTIVE", color: "bg-green-500/20 text-green-500" },
                     };
                     const st = statusMap[plan.status] || statusMap.draft;
                     const machineName = plan.machine_id ? machineMap.get(plan.machine_id) : null;
@@ -99,10 +99,10 @@ export default function StationDashboard() {
                       <div
                         key={plan.id}
                         className={`flex items-center gap-3 p-3 rounded-lg border bg-card hover:bg-muted/30 transition-colors ${
-                          plan.status === "in_progress" ? "border-green-500/40" : "border-border"
+                          plan.status === "running" ? "border-green-500/40" : "border-border"
                         }`}
                       >
-                        <div className={`w-2 h-2 rounded-full shrink-0 ${plan.status === "in_progress" ? "bg-green-500 animate-pulse" : "bg-muted-foreground/30"}`} />
+                        <div className={`w-2 h-2 rounded-full shrink-0 ${plan.status === "running" ? "bg-green-500 animate-pulse" : "bg-muted-foreground/30"}`} />
                         <Badge className={`${st.color} text-[10px] tracking-wider shrink-0`}>
                           {st.label}
                         </Badge>
@@ -136,7 +136,7 @@ export default function StationDashboard() {
                               size="sm"
                               className="h-7 text-[10px] gap-1 px-2.5 font-bold"
                               onClick={async () => {
-                                const ok = await updatePlanStatus(plan.id, "in_progress");
+                                const ok = await updatePlanStatus(plan.id, "running");
                                 if (ok) toast({ title: "Started", description: plan.name });
                               }}
                             >
@@ -144,7 +144,7 @@ export default function StationDashboard() {
                               Start
                             </Button>
                           )}
-                          {plan.status === "in_progress" && (
+                          {plan.status === "running" && (
                             <>
                               <Button
                                 variant="outline"
