@@ -9,7 +9,9 @@ import { MessageThread } from "@/components/teamhub/MessageThread";
 import { CreateChannelDialog } from "@/components/teamhub/CreateChannelDialog";
 import { StartMeetingDialog } from "@/components/teamhub/StartMeetingDialog";
 import { MeetingRoom } from "@/components/teamhub/MeetingRoom";
-import { MessageSquare, Globe, Users, Sparkles } from "lucide-react";
+import { MessageSquare, Globe, Users, Sparkles, Menu } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { toast } from "sonner";
 
 export default function TeamHub() {
@@ -26,6 +28,7 @@ export default function TeamHub() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showMeetingDialog, setShowMeetingDialog] = useState(false);
   const [activeMeeting, setActiveMeeting] = useState<TeamMeeting | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const activeChannelId = selectedChannelId || channels[0]?.id || null;
   const activeChannel = channels.find((c) => c.id === activeChannelId);
@@ -103,7 +106,7 @@ export default function TeamHub() {
     try {
       await endMeetingMutation.mutateAsync(activeMeeting.id);
       setActiveMeeting(null);
-      toast.success("Meeting ended");
+      toast.success("Meeting ended — AI is summarizing...");
     } catch (err: any) {
       toast.error("Failed to end meeting", { description: err.message });
     }
@@ -112,6 +115,32 @@ export default function TeamHub() {
   const handleLeaveMeeting = () => {
     setActiveMeeting(null);
   };
+
+  const sidebarContent = (
+    <ChannelSidebar
+      channels={channels}
+      selectedId={activeChannelId}
+      onSelect={setSelectedChannelId}
+      onlineCount={onlineCount}
+      profiles={profiles}
+      onCreateChannel={() => setShowCreateDialog(true)}
+      onClickMember={async (profileId, name) => {
+        if (profileId === myProfile?.id) return;
+        try {
+          const result = await openDMMutation.mutateAsync({
+            targetProfileId: profileId,
+            targetName: name,
+          });
+          if (result?.id) {
+            setSelectedChannelId(result.id);
+          }
+        } catch (err: any) {
+          toast.error("Failed to open DM", { description: err.message });
+        }
+      }}
+      onClose={() => setSidebarOpen(false)}
+    />
+  );
 
   return (
     <div className="relative flex flex-col h-full bg-background overflow-hidden">
@@ -123,91 +152,109 @@ export default function TeamHub() {
 
       {/* Main Content */}
       <div className="relative z-10 flex flex-1 overflow-hidden">
-        <ChannelSidebar
-          channels={channels}
-          selectedId={activeChannelId}
-          onSelect={setSelectedChannelId}
-          onlineCount={onlineCount}
-          profiles={profiles}
-          onCreateChannel={() => setShowCreateDialog(true)}
-          onClickMember={async (profileId, name) => {
-            if (profileId === myProfile?.id) return;
-            try {
-              const result = await openDMMutation.mutateAsync({
-                targetProfileId: profileId,
-                targetName: name,
-              });
-              if (result?.id) {
-                setSelectedChannelId(result.id);
-              }
-            } catch (err: any) {
-              toast.error("Failed to open DM", { description: err.message });
-            }
-          }}
-        />
+        {/* Mobile sidebar sheet */}
+        <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
+          <SheetContent side="left" className="p-0 w-[280px] sm:w-[320px]">
+            {sidebarContent}
+          </SheetContent>
+        </Sheet>
+
+        {/* Desktop/tablet sidebar */}
+        <div className="hidden md:flex">
+          {sidebarContent}
+        </div>
 
         {/* Chat + Meeting split */}
-        <div className="flex-1 flex min-w-0">
-          {/* Message Thread */}
-          <div className={activeMeeting ? "flex-1 min-w-0 hidden lg:flex lg:flex-col" : "flex-1 flex flex-col min-w-0"}>
-            {activeChannel ? (
-              <MessageThread
-                channelName={activeChannel.name}
-                channelDescription={activeChannel.description}
-                messages={messages}
-                profiles={profiles}
-                myProfile={myProfile}
-                myLang={myLang}
-                isLoading={msgsLoading}
-                isSending={sendMutation.isPending}
-                onSend={handleSend}
-                activeMeetings={activeMeetings}
-                onStartMeeting={() => setShowMeetingDialog(true)}
-                onJoinMeeting={(m) => setActiveMeeting(m)}
-              />
-            ) : (
-              <div className="flex items-center justify-center h-full">
-                <div className="text-center space-y-4">
-                  <div className="w-20 h-20 rounded-3xl bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto">
-                    <MessageSquare className="w-9 h-9 text-primary" />
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-bold text-foreground">Welcome to Team Hub</h2>
-                    <p className="text-sm text-muted-foreground mt-1 max-w-sm">
-                      Real-time messaging with automatic translation. Select a channel to start.
-                    </p>
-                  </div>
-                  <div className="flex items-center justify-center gap-4 pt-2">
-                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <Globe className="w-3.5 h-3.5 text-primary" />
-                      <span>Auto-translate</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <Sparkles className="w-3.5 h-3.5 text-primary" />
-                      <span>AI-powered</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <Users className="w-3.5 h-3.5 text-primary" />
-                      <span>{onlineCount} members</span>
-                    </div>
-                  </div>
-                </div>
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* Mobile top bar with hamburger */}
+          <div className="flex md:hidden items-center gap-2 px-3 py-2 border-b border-border bg-card/50 backdrop-blur-sm">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 shrink-0"
+              onClick={() => setSidebarOpen(true)}
+            >
+              <Menu className="w-4 h-4" />
+            </Button>
+            {activeChannel && (
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="text-sm font-bold text-foreground truncate">#{activeChannel.name}</span>
               </div>
             )}
           </div>
 
-          {/* Meeting Room Panel */}
-          {activeMeeting && (
-            <div className="flex-1 min-w-0 lg:max-w-[60%]">
-              <MeetingRoom
-                meeting={activeMeeting}
-                displayName={myProfile?.full_name || "Guest"}
-                onLeave={handleLeaveMeeting}
-                onEnd={handleEndMeeting}
-                isCreator={activeMeeting.started_by === myProfile?.id}
-              />
+          {/* Content area */}
+          <div className="flex-1 flex min-w-0 overflow-hidden">
+            {/* Message Thread */}
+            <div className={activeMeeting ? "flex-1 min-w-0 hidden lg:flex lg:flex-col" : "flex-1 flex flex-col min-w-0"}>
+              {activeChannel ? (
+                <MessageThread
+                  channelName={activeChannel.name}
+                  channelDescription={activeChannel.description}
+                  messages={messages}
+                  profiles={profiles}
+                  myProfile={myProfile}
+                  myLang={myLang}
+                  isLoading={msgsLoading}
+                  isSending={sendMutation.isPending}
+                  onSend={handleSend}
+                  activeMeetings={activeMeetings}
+                  onStartMeeting={() => setShowMeetingDialog(true)}
+                  onJoinMeeting={(m) => setActiveMeeting(m)}
+                />
+              ) : (
+                <div className="flex items-center justify-center h-full px-6">
+                  <div className="text-center space-y-4">
+                    <div className="w-16 h-16 md:w-20 md:h-20 rounded-3xl bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto">
+                      <MessageSquare className="w-7 h-7 md:w-9 md:h-9 text-primary" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg md:text-xl font-bold text-foreground">Welcome to Team Hub</h2>
+                      <p className="text-xs md:text-sm text-muted-foreground mt-1 max-w-sm">
+                        Real-time messaging with automatic translation. Select a channel to start.
+                      </p>
+                    </div>
+                    <div className="flex items-center justify-center gap-3 md:gap-4 pt-2 flex-wrap">
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <Globe className="w-3.5 h-3.5 text-primary" />
+                        <span>Auto-translate</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <Sparkles className="w-3.5 h-3.5 text-primary" />
+                        <span>AI-powered</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <Users className="w-3.5 h-3.5 text-primary" />
+                        <span>{onlineCount} members</span>
+                      </div>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="md:hidden mt-2"
+                      onClick={() => setSidebarOpen(true)}
+                    >
+                      <Menu className="w-4 h-4 mr-1.5" />
+                      Browse Channels
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
-          )}
+
+            {/* Meeting Room Panel */}
+            {activeMeeting && (
+              <div className="flex-1 min-w-0 lg:max-w-[60%]">
+                <MeetingRoom
+                  meeting={activeMeeting}
+                  displayName={myProfile?.full_name || "Guest"}
+                  onLeave={handleLeaveMeeting}
+                  onEnd={handleEndMeeting}
+                  isCreator={activeMeeting.started_by === myProfile?.id}
+                />
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
