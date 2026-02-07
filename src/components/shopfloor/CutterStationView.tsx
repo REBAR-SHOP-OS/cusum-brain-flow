@@ -2,9 +2,12 @@ import { useState } from "react";
 import { StationHeader } from "./StationHeader";
 import { CutEngine } from "./CutEngine";
 import { AsaShapeDiagram } from "./AsaShapeDiagram";
+import { InventoryStatusPanel } from "./InventoryStatusPanel";
 import { manageMachine } from "@/lib/manageMachineService";
+import { manageInventory } from "@/lib/inventoryService";
 import { useToast } from "@/hooks/use-toast";
 import { useMachineCapabilities } from "@/hooks/useCutPlans";
+import { useInventoryData } from "@/hooks/useInventoryData";
 import type { LiveMachine } from "@/types/machine";
 import type { StationItem } from "@/hooks/useStationData";
 
@@ -21,6 +24,18 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
 
   const currentItem = items[currentIndex] || null;
   const { getMaxBars } = useMachineCapabilities(machine.model, "cut");
+  const cutPlanId = currentItem?.cut_plan_id || null;
+  const barCode = currentItem?.bar_code;
+
+  const {
+    reservations,
+    lots,
+    scrapRecords,
+    summary,
+    isLoading: inventoryLoading,
+  } = useInventoryData(cutPlanId, barCode);
+
+  const remnants = lots.filter((l) => l.source === "remnant");
 
   const remaining = items.filter((i) => i.completed_pieces < i.total_pieces).length;
 
@@ -28,6 +43,8 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
     if (!currentItem) return;
     try {
       setIsRunning(true);
+
+      // 1. Start the machine run
       await manageMachine({
         action: "start-run",
         machineId: machine.id,
@@ -36,6 +53,26 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
         qty: bars,
         notes: `Stock: ${stockLength}mm | Mark: ${currentItem.mark_number || "—"} | Length: ${currentItem.cut_length_mm}mm`,
       });
+
+      // 2. Consume inventory on start — find best source
+      const bestLot = lots.find((l) => l.qty_on_hand - l.qty_reserved >= bars);
+      if (bestLot) {
+        try {
+          await manageInventory({
+            action: "consume-on-start",
+            machineRunId: machine.current_run_id || undefined,
+            cutPlanItemId: currentItem.id,
+            barCode: currentItem.bar_code,
+            qty: bars,
+            sourceType: bestLot.source === "remnant" ? "remnant" : "lot",
+            sourceId: bestLot.id,
+            stockLengthMm: stockLength,
+          });
+        } catch (invErr: any) {
+          console.warn("Inventory consumption warning:", invErr.message);
+        }
+      }
+
       toast({ title: "Machine started", description: `Cutting ${currentItem.mark_number || "item"}` });
     } catch (err: any) {
       toast({ title: "Start failed", description: err.message, variant: "destructive" });
@@ -123,14 +160,22 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
           </div>
         </div>
 
-        {/* Right panel — cut engine */}
-        <div className="w-72 lg:w-80 border-l border-border p-4 flex flex-col justify-center">
+        {/* Right panel — cut engine + inventory status */}
+        <div className="w-72 lg:w-80 border-l border-border p-4 flex flex-col gap-4 overflow-y-auto">
           <CutEngine
             barCode={currentItem.bar_code}
             maxBars={maxBars}
             onLockAndStart={handleLockAndStart}
             isRunning={isRunning || machine.status === "running"}
             canWrite={canWrite}
+          />
+
+          <InventoryStatusPanel
+            summary={summary}
+            reservations={reservations}
+            remnants={remnants}
+            scrapRecords={scrapRecords}
+            barCode={currentItem.bar_code}
           />
         </div>
       </div>

@@ -311,6 +311,73 @@ export type Database = {
         }
         Relationships: []
       }
+      cut_output_batches: {
+        Row: {
+          bar_code: string
+          company_id: string
+          created_at: string
+          cut_length_mm: number
+          cut_plan_item_id: string | null
+          id: string
+          machine_run_id: string | null
+          qty_available: number
+          qty_consumed: number
+          qty_produced: number
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          bar_code: string
+          company_id: string
+          created_at?: string
+          cut_length_mm: number
+          cut_plan_item_id?: string | null
+          id?: string
+          machine_run_id?: string | null
+          qty_available?: number
+          qty_consumed?: number
+          qty_produced?: number
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          bar_code?: string
+          company_id?: string
+          created_at?: string
+          cut_length_mm?: number
+          cut_plan_item_id?: string | null
+          id?: string
+          machine_run_id?: string | null
+          qty_available?: number
+          qty_consumed?: number
+          qty_produced?: number
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cut_output_batches_bar_code_fkey"
+            columns: ["bar_code"]
+            isOneToOne: false
+            referencedRelation: "rebar_sizes"
+            referencedColumns: ["bar_code"]
+          },
+          {
+            foreignKeyName: "cut_output_batches_cut_plan_item_id_fkey"
+            columns: ["cut_plan_item_id"]
+            isOneToOne: false
+            referencedRelation: "cut_plan_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cut_output_batches_machine_run_id_fkey"
+            columns: ["machine_run_id"]
+            isOneToOne: false
+            referencedRelation: "machine_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cut_plan_items: {
         Row: {
           asa_shape_code: string | null
@@ -1006,6 +1073,54 @@ export type Database = {
         }
         Relationships: []
       }
+      floor_stock: {
+        Row: {
+          bar_code: string
+          company_id: string
+          id: string
+          length_mm: number
+          machine_id: string | null
+          qty_on_hand: number
+          qty_reserved: number
+          updated_at: string
+        }
+        Insert: {
+          bar_code: string
+          company_id: string
+          id?: string
+          length_mm?: number
+          machine_id?: string | null
+          qty_on_hand?: number
+          qty_reserved?: number
+          updated_at?: string
+        }
+        Update: {
+          bar_code?: string
+          company_id?: string
+          id?: string
+          length_mm?: number
+          machine_id?: string | null
+          qty_on_hand?: number
+          qty_reserved?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "floor_stock_bar_code_fkey"
+            columns: ["bar_code"]
+            isOneToOne: false
+            referencedRelation: "rebar_sizes"
+            referencedColumns: ["bar_code"]
+          },
+          {
+            foreignKeyName: "floor_stock_machine_id_fkey"
+            columns: ["machine_id"]
+            isOneToOne: false
+            referencedRelation: "machines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       integration_connections: {
         Row: {
           config: Json | null
@@ -1071,6 +1186,174 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      inventory_lots: {
+        Row: {
+          bar_code: string
+          company_id: string
+          created_at: string
+          id: string
+          location: string | null
+          lot_number: string | null
+          qty_on_hand: number
+          qty_reserved: number
+          source: string
+          standard_length_mm: number
+          updated_at: string
+        }
+        Insert: {
+          bar_code: string
+          company_id: string
+          created_at?: string
+          id?: string
+          location?: string | null
+          lot_number?: string | null
+          qty_on_hand?: number
+          qty_reserved?: number
+          source?: string
+          standard_length_mm?: number
+          updated_at?: string
+        }
+        Update: {
+          bar_code?: string
+          company_id?: string
+          created_at?: string
+          id?: string
+          location?: string | null
+          lot_number?: string | null
+          qty_on_hand?: number
+          qty_reserved?: number
+          source?: string
+          standard_length_mm?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_lots_bar_code_fkey"
+            columns: ["bar_code"]
+            isOneToOne: false
+            referencedRelation: "rebar_sizes"
+            referencedColumns: ["bar_code"]
+          },
+        ]
+      }
+      inventory_reservations: {
+        Row: {
+          bar_code: string
+          company_id: string
+          created_at: string
+          cut_plan_id: string | null
+          cut_plan_item_id: string | null
+          id: string
+          qty_consumed: number
+          qty_reserved: number
+          source_id: string
+          source_type: string
+          status: string
+          stock_length_mm: number
+          updated_at: string
+        }
+        Insert: {
+          bar_code: string
+          company_id: string
+          created_at?: string
+          cut_plan_id?: string | null
+          cut_plan_item_id?: string | null
+          id?: string
+          qty_consumed?: number
+          qty_reserved?: number
+          source_id: string
+          source_type: string
+          status?: string
+          stock_length_mm?: number
+          updated_at?: string
+        }
+        Update: {
+          bar_code?: string
+          company_id?: string
+          created_at?: string
+          cut_plan_id?: string | null
+          cut_plan_item_id?: string | null
+          id?: string
+          qty_consumed?: number
+          qty_reserved?: number
+          source_id?: string
+          source_type?: string
+          status?: string
+          stock_length_mm?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_reservations_bar_code_fkey"
+            columns: ["bar_code"]
+            isOneToOne: false
+            referencedRelation: "rebar_sizes"
+            referencedColumns: ["bar_code"]
+          },
+          {
+            foreignKeyName: "inventory_reservations_cut_plan_id_fkey"
+            columns: ["cut_plan_id"]
+            isOneToOne: false
+            referencedRelation: "cut_plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_reservations_cut_plan_item_id_fkey"
+            columns: ["cut_plan_item_id"]
+            isOneToOne: false
+            referencedRelation: "cut_plan_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inventory_scrap: {
+        Row: {
+          bar_code: string
+          company_id: string
+          created_at: string
+          id: string
+          length_mm: number
+          machine_run_id: string | null
+          qty: number
+          reason: string | null
+        }
+        Insert: {
+          bar_code: string
+          company_id: string
+          created_at?: string
+          id?: string
+          length_mm: number
+          machine_run_id?: string | null
+          qty?: number
+          reason?: string | null
+        }
+        Update: {
+          bar_code?: string
+          company_id?: string
+          created_at?: string
+          id?: string
+          length_mm?: number
+          machine_run_id?: string | null
+          qty?: number
+          reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_scrap_bar_code_fkey"
+            columns: ["bar_code"]
+            isOneToOne: false
+            referencedRelation: "rebar_sizes"
+            referencedColumns: ["bar_code"]
+          },
+          {
+            foreignKeyName: "inventory_scrap_machine_run_id_fkey"
+            columns: ["machine_run_id"]
+            isOneToOne: false
+            referencedRelation: "machine_runs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       knowledge: {
         Row: {
