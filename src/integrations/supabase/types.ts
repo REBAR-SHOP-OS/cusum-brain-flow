@@ -1521,6 +1521,74 @@ export type Database = {
           },
         ]
       }
+      machine_queue_items: {
+        Row: {
+          company_id: string
+          created_at: string
+          id: string
+          machine_id: string
+          position: number
+          project_id: string | null
+          status: string
+          task_id: string
+          updated_at: string
+          work_order_id: string | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          id?: string
+          machine_id: string
+          position?: number
+          project_id?: string | null
+          status?: string
+          task_id: string
+          updated_at?: string
+          work_order_id?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          id?: string
+          machine_id?: string
+          position?: number
+          project_id?: string | null
+          status?: string
+          task_id?: string
+          updated_at?: string
+          work_order_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "machine_queue_items_machine_id_fkey"
+            columns: ["machine_id"]
+            isOneToOne: false
+            referencedRelation: "machines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "machine_queue_items_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "work_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "machine_queue_items_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "production_tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "machine_queue_items_work_order_id_fkey"
+            columns: ["work_order_id"]
+            isOneToOne: false
+            referencedRelation: "work_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       machine_runs: {
         Row: {
           company_id: string
@@ -1858,6 +1926,130 @@ export type Database = {
             columns: ["customer_id"]
             isOneToOne: false
             referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      production_tasks: {
+        Row: {
+          asa_shape_code: string | null
+          bar_code: string
+          bend_dimensions: Json | null
+          company_id: string
+          created_at: string
+          created_by: string | null
+          cut_length_mm: number | null
+          cut_plan_id: string | null
+          cut_plan_item_id: string | null
+          drawing_ref: string | null
+          grade: string | null
+          id: string
+          locked_to_machine_id: string | null
+          mark_number: string | null
+          notes: string | null
+          priority: number
+          project_id: string | null
+          qty_completed: number
+          qty_required: number
+          setup_key: string | null
+          status: string
+          task_type: string
+          updated_at: string
+          work_order_id: string | null
+        }
+        Insert: {
+          asa_shape_code?: string | null
+          bar_code: string
+          bend_dimensions?: Json | null
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          cut_length_mm?: number | null
+          cut_plan_id?: string | null
+          cut_plan_item_id?: string | null
+          drawing_ref?: string | null
+          grade?: string | null
+          id?: string
+          locked_to_machine_id?: string | null
+          mark_number?: string | null
+          notes?: string | null
+          priority?: number
+          project_id?: string | null
+          qty_completed?: number
+          qty_required?: number
+          setup_key?: string | null
+          status?: string
+          task_type?: string
+          updated_at?: string
+          work_order_id?: string | null
+        }
+        Update: {
+          asa_shape_code?: string | null
+          bar_code?: string
+          bend_dimensions?: Json | null
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          cut_length_mm?: number | null
+          cut_plan_id?: string | null
+          cut_plan_item_id?: string | null
+          drawing_ref?: string | null
+          grade?: string | null
+          id?: string
+          locked_to_machine_id?: string | null
+          mark_number?: string | null
+          notes?: string | null
+          priority?: number
+          project_id?: string | null
+          qty_completed?: number
+          qty_required?: number
+          setup_key?: string | null
+          status?: string
+          task_type?: string
+          updated_at?: string
+          work_order_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "production_tasks_bar_code_fkey"
+            columns: ["bar_code"]
+            isOneToOne: false
+            referencedRelation: "rebar_sizes"
+            referencedColumns: ["bar_code"]
+          },
+          {
+            foreignKeyName: "production_tasks_cut_plan_id_fkey"
+            columns: ["cut_plan_id"]
+            isOneToOne: false
+            referencedRelation: "cut_plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "production_tasks_cut_plan_item_id_fkey"
+            columns: ["cut_plan_item_id"]
+            isOneToOne: false
+            referencedRelation: "cut_plan_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "production_tasks_locked_to_machine_id_fkey"
+            columns: ["locked_to_machine_id"]
+            isOneToOne: false
+            referencedRelation: "machines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "production_tasks_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "work_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "production_tasks_work_order_id_fkey"
+            columns: ["work_order_id"]
+            isOneToOne: false
+            referencedRelation: "work_orders"
             referencedColumns: ["id"]
           },
         ]
