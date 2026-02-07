@@ -41,6 +41,7 @@ ${emailBody}
 
 Write only the reply text, no subject line or email headers.`;
 
+    // Use Flash-Lite for email drafts — simple, fast, cost-effective
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -48,11 +49,13 @@ Write only the reply text, no subject line or email headers.`;
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "google/gemini-2.5-flash-lite",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
         ],
+        max_tokens: 800,
+        temperature: 0.4,
       }),
     });
 

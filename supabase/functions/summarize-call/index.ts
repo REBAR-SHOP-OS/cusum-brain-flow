@@ -74,6 +74,7 @@ Rules:
 
 ${transcript}`;
 
+    // Use Flash for call summaries — good structured extraction at low cost
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {

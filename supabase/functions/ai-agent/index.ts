@@ -1218,6 +1218,127 @@ async function fetchContext(supabase: ReturnType<typeof createClient>, agent: st
   return context;
 }
 
+// Intelligent model routing — picks the optimal model per agent & task complexity
+function selectModel(agent: string, message: string, hasAttachments: boolean, historyLength: number): {
+  model: string;
+  maxTokens: number;
+  temperature: number;
+  reason: string;
+} {
+  // Estimation with documents → Pro (best vision + reasoning for structural drawings)
+  if (agent === "estimation" && hasAttachments) {
+    return {
+      model: "google/gemini-2.5-pro",
+      maxTokens: 8000,
+      temperature: 0.1,
+      reason: "estimation+documents → Pro for vision+complex reasoning",
+    };
+  }
+
+  // Estimation without documents → Flash for quick Q&A, Pro for deep analysis
+  if (agent === "estimation") {
+    const isDeepAnalysis = /smart\s*estimate|full\s*auto|takeoff|calculate|weight|summary|changy/i.test(message);
+    if (isDeepAnalysis || historyLength > 6) {
+      return {
+        model: "google/gemini-2.5-pro",
+        maxTokens: 6000,
+        temperature: 0.2,
+        reason: "estimation deep analysis → Pro for precision",
+      };
+    }
+    return {
+      model: "google/gemini-3-flash-preview",
+      maxTokens: 4000,
+      temperature: 0.3,
+      reason: "estimation quick Q&A → Flash for speed",
+    };
+  }
+
+  // Accounting — financial precision matters
+  if (agent === "accounting" || agent === "collections") {
+    const isComplexFinancial = /report|aging|analysis|reconcil|audit|forecast/i.test(message);
+    if (isComplexFinancial) {
+      return {
+        model: "google/gemini-2.5-flash",
+        maxTokens: 3000,
+        temperature: 0.3,
+        reason: "accounting complex analysis → Flash for balanced precision",
+      };
+    }
+    return {
+      model: "google/gemini-2.5-flash-lite",
+      maxTokens: 1500,
+      temperature: 0.4,
+      reason: "accounting simple query → Flash-Lite for speed+cost",
+    };
+  }
+
+  // Social — creative content needs more freedom
+  if (agent === "social") {
+    const isStrategyOrBulk = /strategy|calendar|week|month|campaign|plan/i.test(message);
+    if (isStrategyOrBulk) {
+      return {
+        model: "google/gemini-3-flash-preview",
+        maxTokens: 3000,
+        temperature: 0.8,
+        reason: "social strategy → Flash-preview for creative planning",
+      };
+    }
+    return {
+      model: "google/gemini-2.5-flash",
+      maxTokens: 2000,
+      temperature: 0.9,
+      reason: "social content creation → Flash for creative output",
+    };
+  }
+
+  // Sales — quick pipeline actions vs deeper analysis
+  if (agent === "sales") {
+    const isAnalysis = /pipeline\s*review|forecast|analysis|summary|report/i.test(message);
+    if (isAnalysis) {
+      return {
+        model: "google/gemini-3-flash-preview",
+        maxTokens: 2500,
+        temperature: 0.5,
+        reason: "sales analysis → Flash-preview for balanced output",
+      };
+    }
+    return {
+      model: "google/gemini-2.5-flash-lite",
+      maxTokens: 1500,
+      temperature: 0.6,
+      reason: "sales quick action → Flash-Lite for speed",
+    };
+  }
+
+  // Support — empathetic responses, moderate complexity
+  if (agent === "support") {
+    const isComplex = /investigate|escalat|multiple|history|timeline/i.test(message);
+    if (isComplex || historyLength > 8) {
+      return {
+        model: "google/gemini-3-flash-preview",
+        maxTokens: 2500,
+        temperature: 0.5,
+        reason: "support complex issue → Flash-preview for nuance",
+      };
+    }
+    return {
+      model: "google/gemini-2.5-flash-lite",
+      maxTokens: 1500,
+      temperature: 0.6,
+      reason: "support simple query → Flash-Lite for speed",
+    };
+  }
+
+  // Default fallback
+  return {
+    model: "google/gemini-3-flash-preview",
+    maxTokens: 2000,
+    temperature: 0.5,
+    reason: "default → Flash-preview balanced",
+  };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -1364,23 +1485,44 @@ serve(async (req) => {
       { role: "user", content: message },
     ];
 
+    // Intelligent model selection based on agent type & task complexity
+    const modelConfig = selectModel(agent, message, attachedFiles.length > 0, history.length);
+    console.log(`🧠 Model routing: ${agent} → ${modelConfig.model} (${modelConfig.reason})`);
+
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) {
+      throw new Error("LOVABLE_API_KEY is not configured");
+    }
+
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${Deno.env.get("LOVABLE_API_KEY")}`,
+        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: modelConfig.model,
         messages,
-        max_tokens: agent === "estimation" ? 4000 : 1000,
-        temperature: agent === "estimation" ? 0.3 : 0.7,
+        max_tokens: modelConfig.maxTokens,
+        temperature: modelConfig.temperature,
       }),
     });
 
     if (!aiResponse.ok) {
+      if (aiResponse.status === 429) {
+        return new Response(
+          JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }),
+          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      if (aiResponse.status === 402) {
+        return new Response(
+          JSON.stringify({ error: "AI credits exhausted. Please add credits to continue." }),
+          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
       const errorText = await aiResponse.text();
-      console.error("AI Gateway error:", errorText);
+      console.error("AI Gateway error:", aiResponse.status, errorText);
       throw new Error(`AI Gateway error: ${aiResponse.status}`);
     }
 
@@ -1388,7 +1530,12 @@ serve(async (req) => {
     const reply = aiData.choices?.[0]?.message?.content || "I couldn't process that request.";
 
     return new Response(
-      JSON.stringify({ reply, context: mergedContext }),
+      JSON.stringify({ 
+        reply, 
+        context: mergedContext,
+        modelUsed: modelConfig.model,
+        modelReason: modelConfig.reason,
+      }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 
