@@ -164,6 +164,7 @@ export default function AgentWorkspace() {
                 placeholder={config.placeholder}
                 disabled={isLoading}
                 showFileUpload={agentId === "estimating"}
+                showSmartMode
               />
             </div>
 
@@ -186,6 +187,7 @@ export default function AgentWorkspace() {
               placeholder={config.placeholder}
               disabled={isLoading}
               showFileUpload={agentId === "estimating"}
+              showSmartMode
             />
           </>
         )}
