@@ -30,7 +30,7 @@ export function useIntegrations() {
         .select("*");
 
       if (error) {
-        console.log("Could not load integration statuses:", error);
+        // Silently skip — integration statuses may not be configured
         return;
       }
 
@@ -55,7 +55,7 @@ export function useIntegrations() {
         );
       }
     } catch (err) {
-      console.log("Error loading integration statuses:", err);
+      // Silently skip
     } finally {
       setLoading(false);
     }
@@ -180,7 +180,7 @@ export function useIntegrations() {
           );
         }
       } catch (err) {
-        console.log(`${id} check skipped:`, err);
+        // Silently skip unavailable integration
       }
     }
 
@@ -205,7 +205,7 @@ export function useIntegrations() {
         );
       }
     } catch (err) {
-      console.log("QuickBooks check skipped:", err);
+      // Silently skip
     }
 
 
@@ -238,7 +238,7 @@ export function useIntegrations() {
         )
       );
     } catch (err) {
-      console.log("RingCentral check skipped:", err);
+      // Silently skip
     }
 
     setLoading(false);
