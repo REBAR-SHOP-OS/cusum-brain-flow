@@ -198,9 +198,9 @@ export function TagsExportView() {
       {/* Table view */}
       {viewMode === "table" ? (
         <ScrollArea className="flex-1">
-          <div className="min-w-[2200px]">
+          <div className="min-w-[2400px]">
             {/* Header row */}
-            <div className="grid grid-cols-[70px_50px_60px_90px_50px_60px_55px_90px_repeat(12,65px)_70px_90px_120px_80px_160px] gap-0 px-4 py-2 bg-primary/10 border-b border-border text-[10px] font-bold tracking-widest text-primary uppercase sticky top-0 z-10">
+            <div className="grid grid-cols-[70px_50px_60px_90px_50px_60px_55px_90px_repeat(12,65px)_80px_110px_140px_80px_180px] gap-0 px-4 py-2 bg-primary/10 border-b border-border text-[10px] font-bold tracking-widest text-primary uppercase sticky top-0 z-10">
               <span>DWG #</span>
               <span>Item</span>
               <span>Grade</span>
@@ -230,7 +230,7 @@ export function TagsExportView() {
                 return (
                   <div
                     key={row.id}
-                    className="grid grid-cols-[70px_50px_60px_90px_50px_60px_55px_90px_repeat(12,65px)_70px_90px_120px_80px_160px] gap-0 px-4 py-2.5 border-b border-border/50 hover:bg-muted/30 text-sm items-center"
+                    className="grid grid-cols-[70px_50px_60px_90px_50px_60px_55px_90px_repeat(12,65px)_80px_110px_140px_80px_180px] gap-0 px-4 py-2.5 border-b border-border/50 hover:bg-muted/30 text-sm items-center"
                   >
                     <span className="text-xs text-muted-foreground font-mono">{row.dwg || "—"}</span>
                     <span className="text-xs text-muted-foreground">{row.row_index}</span>
