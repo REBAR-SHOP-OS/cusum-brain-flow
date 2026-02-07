@@ -33,6 +33,23 @@ export interface BarSizeGroup {
   straightItems: StationItem[];
 }
 
+/** Cutter bar-size distribution rules: machine ID → allowed bar sizes (numeric mm from bar_code) */
+const CUTTER_DISTRIBUTION: Record<string, { maxMm: number } | { minMm: number }> = {
+  // CUTTER-01: 10M, 15M only
+  "e2dfa6e1-8a49-48eb-82a8-2be40e20d4b3": { maxMm: 15 },
+  // CUTTER-02: 20M and above
+  "b0000000-0000-0000-0000-000000000002": { minMm: 20 },
+};
+
+function passesDistribution(machineId: string, barCode: string): boolean {
+  const rule = CUTTER_DISTRIBUTION[machineId];
+  if (!rule) return true; // no rule → show everything
+  const num = parseInt(barCode.replace(/\D/g, "")) || 0;
+  if ("maxMm" in rule) return num <= rule.maxMm;
+  if ("minMm" in rule) return num >= rule.minMm;
+  return true;
+}
+
 export function useStationData(machineId: string | null, machineType?: string) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -82,17 +99,19 @@ export function useStationData(machineId: string | null, machineType?: string) {
 
       if (itemsError) throw itemsError;
 
-      return (items || []).map((item: any) => {
-        const plan = planMap.get(item.cut_plan_id);
-        return {
-          ...item,
-          bend_completed_pieces: item.bend_completed_pieces || 0,
-          phase: item.phase || "queued",
-          bend_dimensions: item.bend_dimensions as Record<string, number> | null,
-          plan_name: plan?.name || "",
-          project_name: plan?.project_name || null,
-        } as StationItem;
-      });
+      return (items || [])
+        .filter((item: any) => passesDistribution(machineId!, item.bar_code))
+        .map((item: any) => {
+          const plan = planMap.get(item.cut_plan_id);
+          return {
+            ...item,
+            bend_completed_pieces: item.bend_completed_pieces || 0,
+            phase: item.phase || "queued",
+            bend_dimensions: item.bend_dimensions as Record<string, number> | null,
+            plan_name: plan?.name || "",
+            project_name: plan?.project_name || null,
+          } as StationItem;
+        });
     },
   });
 
