@@ -18,7 +18,7 @@ import {
 import {
   User, Users, Settings,
   Sparkles, Tag, LayoutGrid, UserPlus, MoreHorizontal,
-  Crown, Briefcase, HardHat, Truck as TruckIcon, Camera, ImagePlus, Loader2, CheckCircle2,
+  Crown, Briefcase, HardHat, Truck as TruckIcon, Camera, ImagePlus, Loader2, CheckCircle2, Globe,
 } from "lucide-react";
 
 import { useProfiles } from "@/hooks/useProfiles";
@@ -31,6 +31,22 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import brandLogo from "@/assets/brand-logo.png";
+
+// ── Language options ──
+const languageOptions = [
+  { value: "en", label: "English", flag: "🇬🇧" },
+  { value: "fa", label: "فارسی", flag: "🇮🇷" },
+  { value: "ar", label: "العربية", flag: "🇸🇦" },
+  { value: "es", label: "Español", flag: "🇪🇸" },
+  { value: "fr", label: "Français", flag: "🇫🇷" },
+  { value: "zh", label: "中文", flag: "🇨🇳" },
+  { value: "hi", label: "हिन्दी", flag: "🇮🇳" },
+  { value: "tr", label: "Türkçe", flag: "🇹🇷" },
+];
+
+function getLangLabel(code: string) {
+  return languageOptions.find((l) => l.value === code) || { value: code, label: code, flag: "🌐" };
+}
 
 // (ASA shape data removed – real shapes come from DB)
 
@@ -114,7 +130,7 @@ export function MemberAreaView() {
 // ── My Profile Tab ──
 function MyProfileTab() {
   const { user } = useAuth();
-  const { profiles } = useProfiles();
+  const { profiles, updateProfile } = useProfiles();
   const { uploading, uploadSingle } = useAvatarUpload();
   const fileRef = useRef<HTMLInputElement>(null);
   const myProfile = profiles.find((p) => p.user_id === user?.id);
@@ -123,6 +139,11 @@ function MyProfileTab() {
     const file = e.target.files?.[0];
     if (!file || !myProfile) return;
     await uploadSingle(myProfile.id, file);
+  };
+
+  const handleLanguageChange = (lang: string) => {
+    if (!myProfile) return;
+    updateProfile.mutate({ id: myProfile.id, preferred_language: lang });
   };
 
   return (
@@ -164,6 +185,25 @@ function MyProfileTab() {
               <label className="text-[10px] tracking-widest text-muted-foreground uppercase mb-1 block">Job Title</label>
               <Input defaultValue={myProfile?.title || ""} className="h-10" />
             </div>
+            <div>
+              <label className="text-[10px] tracking-widest text-muted-foreground uppercase mb-1 block">Preferred Language</label>
+              <Select value={myProfile?.preferred_language || "en"} onValueChange={handleLanguageChange}>
+                <SelectTrigger className="h-10">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {languageOptions.map((lang) => (
+                    <SelectItem key={lang.value} value={lang.value}>
+                      <span className="flex items-center gap-2">
+                        <span>{lang.flag}</span>
+                        <span>{lang.label}</span>
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[10px] text-muted-foreground mt-1">Team Hub messages will be translated to this language for you.</p>
+            </div>
           </div>
           <Button className="w-full">Save Changes</Button>
         </CardContent>
@@ -179,7 +219,7 @@ function TeamAccessTab() {
   const { isAdmin } = useUserRole();
   const { uploading, uploadSingle } = useAvatarUpload();
   const [addDialogOpen, setAddDialogOpen] = useState(false);
-  const [newMember, setNewMember] = useState({ full_name: "", email: "", title: "", department: "office" });
+  const [newMember, setNewMember] = useState({ full_name: "", email: "", title: "", department: "office", preferred_language: "en" });
 
   const activeProfiles = profiles.filter((p) => p.is_active !== false);
 
@@ -195,10 +235,10 @@ function TeamAccessTab() {
       phone: null,
       avatar_url: null,
       is_active: true,
-      preferred_language: "en",
+      preferred_language: newMember.preferred_language,
     }, {
       onSuccess: () => {
-        setNewMember({ full_name: "", email: "", title: "", department: "office" });
+        setNewMember({ full_name: "", email: "", title: "", department: "office", preferred_language: "en" });
         setAddDialogOpen(false);
       },
     });
@@ -261,6 +301,22 @@ function TeamAccessTab() {
                       </SelectContent>
                     </Select>
                   </div>
+                  <div className="space-y-1.5">
+                    <Label>Preferred Language</Label>
+                    <Select value={newMember.preferred_language} onValueChange={(v) => setNewMember((p) => ({ ...p, preferred_language: v }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {languageOptions.map((lang) => (
+                          <SelectItem key={lang.value} value={lang.value}>
+                            <span className="flex items-center gap-2">
+                              <span>{lang.flag}</span>
+                              <span>{lang.label}</span>
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <Button onClick={handleAddMember} className="w-full" disabled={!newMember.full_name.trim()}>
                     Add Member
                   </Button>
@@ -310,8 +366,14 @@ function TeamAccessTab() {
                   </span>
                 </div>
 
-                {/* Role badge */}
+                {/* Role & Language badges */}
                 <div className="flex items-center gap-2">
+                  {/* Language badge */}
+                  <Badge variant="outline" className="text-[10px] gap-1 font-normal">
+                    <Globe className="w-3 h-3" />
+                    {getLangLabel(profile.preferred_language || "en").flag} {getLangLabel(profile.preferred_language || "en").label}
+                  </Badge>
+
                   <Badge
                     variant="secondary"
                     className={cn(
@@ -330,7 +392,7 @@ function TeamAccessTab() {
                           <MoreHorizontal className="w-4 h-4" />
                         </Button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
+                      <DropdownMenuContent align="end" className="w-48">
                         <DropdownMenuItem onClick={() => handleAvatarUpload(profile.id)}>
                           <Camera className="w-3.5 h-3.5 mr-2" /> Upload Photo
                         </DropdownMenuItem>
@@ -338,6 +400,24 @@ function TeamAccessTab() {
                         <DropdownMenuItem onClick={() => updateProfile.mutate({ id: profile.id, department: "office" })}>Set as Office</DropdownMenuItem>
                         <DropdownMenuItem onClick={() => updateProfile.mutate({ id: profile.id, department: "workshop" })}>Set as Workshop</DropdownMenuItem>
                         <DropdownMenuItem onClick={() => updateProfile.mutate({ id: profile.id, department: "field" })}>Set as Field</DropdownMenuItem>
+                        <div className="px-2 py-1.5">
+                          <p className="text-[10px] text-muted-foreground font-medium mb-1">Language</p>
+                          <Select
+                            value={profile.preferred_language || "en"}
+                            onValueChange={(lang) => updateProfile.mutate({ id: profile.id, preferred_language: lang })}
+                          >
+                            <SelectTrigger className="h-7 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {languageOptions.map((lang) => (
+                                <SelectItem key={lang.value} value={lang.value}>
+                                  {lang.flag} {lang.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
                         <DropdownMenuItem className="text-destructive" onClick={() => updateProfile.mutate({ id: profile.id, is_active: false })}>
                           Remove member
                         </DropdownMenuItem>
