@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { encode as base64Encode } from "https://deno.land/std@0.190.0/encoding/base64.ts";
+import * as XLSX from "https://esm.sh/xlsx@0.18.5";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -113,13 +114,35 @@ Rules:
       },
     ];
 
-    // For any binary file (image, PDF, spreadsheet), fetch and send as base64 data URL
-    if (isImage || isPdf || isSpreadsheet) {
-      console.log(`Fetching file for AI: ${fileName} (${isSpreadsheet ? "spreadsheet" : isImage ? "image" : "pdf"})`);
+    // For spreadsheets, parse to CSV text and send as text content
+    if (isSpreadsheet) {
+      console.log(`Parsing spreadsheet: ${fileName}`);
       const fileResp = await fetch(fileUrl);
-      if (!fileResp.ok) {
-        throw new Error(`Failed to fetch file: ${fileResp.status}`);
+      if (!fileResp.ok) throw new Error(`Failed to fetch file: ${fileResp.status}`);
+      const fileBytes = new Uint8Array(await fileResp.arrayBuffer());
+      const workbook = XLSX.read(fileBytes, { type: "array" });
+
+      // Convert all sheets to CSV
+      const csvParts: string[] = [];
+      for (const sheetName of workbook.SheetNames) {
+        const sheet = workbook.Sheets[sheetName];
+        const csv = XLSX.utils.sheet_to_csv(sheet);
+        if (csv.trim()) {
+          csvParts.push(`--- Sheet: ${sheetName} ---\n${csv}`);
+        }
       }
+      const allCsv = csvParts.join("\n\n");
+      console.log(`Parsed ${csvParts.length} sheet(s), ${allCsv.length} chars of CSV`);
+
+      userContent.push({
+        type: "text",
+        text: `Here is the spreadsheet content as CSV:\n\n${allCsv}`,
+      });
+    } else if (isImage || isPdf) {
+      // For images and PDFs, send as base64 data URL
+      console.log(`Fetching file for AI: ${fileName} (${isImage ? "image" : "pdf"})`);
+      const fileResp = await fetch(fileUrl);
+      if (!fileResp.ok) throw new Error(`Failed to fetch file: ${fileResp.status}`);
       const fileBytes = new Uint8Array(await fileResp.arrayBuffer());
       const b64 = base64Encode(fileBytes);
       const mimeType = getMimeType(fileName || fileUrl);
