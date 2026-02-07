@@ -55,6 +55,9 @@ serve(async (req) => {
       case "approve":
         return await approveExtract(sb, sessionId, user.id);
 
+      case "reject":
+        return await rejectExtract(sb, sessionId, user.id, params.reason);
+
       default:
         return jsonResponse({ error: `Unknown action: ${action}` }, 400);
     }
@@ -494,6 +497,43 @@ async function approveExtract(sb: any, sessionId: string, userId: string) {
     work_order_number: woNumber,
     items_approved: rows.length,
   });
+}
+
+// ─── Reject ─────────────────────────────────────────────────
+async function rejectExtract(sb: any, sessionId: string, userId: string, reason?: string) {
+  const { data: session } = await sb
+    .from("extract_sessions")
+    .select("id, name, status")
+    .eq("id", sessionId)
+    .single();
+
+  if (!session) return jsonResponse({ error: "Session not found" }, 404);
+  if (session.status === "approved") {
+    return jsonResponse({ error: "Cannot reject an already approved session" }, 400);
+  }
+
+  await sb
+    .from("extract_sessions")
+    .update({ status: "rejected" })
+    .eq("id", sessionId);
+
+  await sb
+    .from("extract_rows")
+    .update({ status: "rejected" })
+    .eq("session_id", sessionId);
+
+  // Log event
+  await sb.from("events").insert({
+    entity_type: "extract_session",
+    entity_id: sessionId,
+    event_type: "rejected",
+    actor_id: userId,
+    actor_type: "user",
+    description: `Rejected session "${session.name}"${reason ? `: ${reason}` : ""}`,
+    metadata: { reason: reason || null, previous_status: session.status },
+  });
+
+  return jsonResponse({ success: true, status: "rejected" });
 }
 
 function buildDimensions(row: any): Record<string, number> | null {

@@ -230,6 +230,15 @@ export async function approveExtract(sessionId: string) {
   return data;
 }
 
+export async function rejectExtract(sessionId: string, reason?: string) {
+  const { data, error } = await supabase.functions.invoke("manage-extract", {
+    body: { action: "reject", sessionId, reason },
+  });
+  if (error) throw new Error(error.message);
+  if (data?.error) throw new Error(data.error);
+  return data;
+}
+
 export async function fetchExtractRows(sessionId: string): Promise<ExtractRow[]> {
   const { data, error } = await supabase
     .from("extract_rows")
