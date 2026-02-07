@@ -829,6 +829,63 @@ export type Database = {
           },
         ]
       }
+      machines: {
+        Row: {
+          company_id: string
+          created_at: string
+          current_operator_profile_id: string | null
+          current_run_id: string | null
+          id: string
+          last_event_at: string | null
+          name: string
+          status: string
+          type: string
+          updated_at: string
+          warehouse_id: string | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          current_operator_profile_id?: string | null
+          current_run_id?: string | null
+          id?: string
+          last_event_at?: string | null
+          name: string
+          status?: string
+          type: string
+          updated_at?: string
+          warehouse_id?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          current_operator_profile_id?: string | null
+          current_run_id?: string | null
+          id?: string
+          last_event_at?: string | null
+          name?: string
+          status?: string
+          type?: string
+          updated_at?: string
+          warehouse_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "machines_current_operator_profile_id_fkey"
+            columns: ["current_operator_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "machines_current_run_id_fkey"
+            columns: ["current_run_id"]
+            isOneToOne: false
+            referencedRelation: "machine_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           agent_color: string | null
