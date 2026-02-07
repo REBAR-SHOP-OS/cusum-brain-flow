@@ -4,21 +4,44 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Play, Pause, LayoutGrid } from "lucide-react";
 import type { LiveMachine } from "@/types/machine";
+import type { CutPlan } from "@/hooks/useCutPlans";
 
 interface ActiveProductionHubProps {
   machines: LiveMachine[];
+  activePlans?: CutPlan[];
 }
 
-export function ActiveProductionHub({ machines }: ActiveProductionHubProps) {
+export function ActiveProductionHub({ machines, activePlans = [] }: ActiveProductionHubProps) {
   const navigate = useNavigate();
-  
-  // Show hub if there are any cut plans assigned (working), not just running machines
-  // For now, show any machine that has queued runs or is running
+
+  // Machines that are running or have queued runs
   const workingMachines = machines.filter(
     (m) => m.status === "running" || (m.queued_runs && m.queued_runs.length > 0)
   );
 
-  if (workingMachines.length === 0) {
+  // Also include machines that have cut plans assigned but aren't in the working list yet
+  const machinesWithPlans = new Set(
+    activePlans
+      .filter(p => p.machine_id && ["queued", "in_progress"].includes(p.status))
+      .map(p => p.machine_id!)
+  );
+
+  const additionalMachines = machines.filter(
+    m => machinesWithPlans.has(m.id) && !workingMachines.some(wm => wm.id === m.id)
+  );
+
+  const allWorkingMachines = [...workingMachines, ...additionalMachines];
+
+  // Count plans per machine for display
+  const plansByMachine = new Map<string, CutPlan[]>();
+  for (const plan of activePlans) {
+    if (plan.machine_id) {
+      if (!plansByMachine.has(plan.machine_id)) plansByMachine.set(plan.machine_id, []);
+      plansByMachine.get(plan.machine_id)!.push(plan);
+    }
+  }
+
+  if (allWorkingMachines.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-border p-6 text-center">
         <p className="text-muted-foreground text-sm">No machines currently running</p>
@@ -43,13 +66,15 @@ export function ActiveProductionHub({ machines }: ActiveProductionHubProps) {
           </div>
         </div>
         <Badge className="bg-success/20 text-success border-success/30">
-          {workingMachines.length} WORKING
+          {allWorkingMachines.length} WORKING
         </Badge>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {workingMachines.map((machine) => {
+        {allWorkingMachines.map((machine) => {
           const queuedCount = machine.queued_runs?.length || 0;
+          const machinePlans = plansByMachine.get(machine.id) || [];
+          const planCount = machinePlans.length;
 
           return (
             <div
@@ -61,18 +86,41 @@ export function ActiveProductionHub({ machines }: ActiveProductionHubProps) {
                 <Badge variant="outline" className="text-[10px] font-mono">
                   #{machine.name}
                 </Badge>
-                {machine.status === "running" && (
-                  <span className="text-xs text-success font-mono flex items-center gap-1">
-                    <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
-                    LIVE
-                  </span>
-                )}
+                <div className="flex items-center gap-2">
+                  {planCount > 0 && (
+                    <Badge variant="outline" className="text-[10px]">
+                      {planCount} job{planCount !== 1 ? "s" : ""}
+                    </Badge>
+                  )}
+                  {machine.status === "running" && (
+                    <span className="text-xs text-success font-mono flex items-center gap-1">
+                      <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
+                      LIVE
+                    </span>
+                  )}
+                </div>
               </div>
 
               {/* Machine / project name */}
               <h3 className="text-xl font-black text-foreground">
                 {machine.model || machine.name}
               </h3>
+
+              {/* Show assigned plans */}
+              {machinePlans.length > 0 && (
+                <div className="space-y-1">
+                  {machinePlans.slice(0, 3).map(plan => (
+                    <p key={plan.id} className="text-xs text-muted-foreground truncate">
+                      • {plan.name}
+                    </p>
+                  ))}
+                  {machinePlans.length > 3 && (
+                    <p className="text-xs text-muted-foreground">
+                      +{machinePlans.length - 3} more
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* Progress */}
               <div className="space-y-1.5">
