@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Mail, BarChart3, Truck, Factory, Brain } from "lucide-react";
+import { ArrowRight, Mail, BarChart3, Truck, Factory } from "lucide-react";
+import logoCoin from "@/assets/logo-coin.png";
 
 export default function Landing() {
   return (
@@ -9,9 +10,7 @@ export default function Landing() {
       <header className="border-b border-border">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-              <Brain className="w-5 h-5 text-primary-foreground" />
-            </div>
+            <img src={logoCoin} alt="REBAR SHOP OS" className="w-8 h-8 rounded-lg" />
             <span className="text-xl font-bold text-foreground">REBAR SHOP OS</span>
           </div>
           <div className="flex items-center gap-4">
@@ -26,8 +25,16 @@ export default function Landing() {
       </header>
 
       {/* Hero */}
-      <section className="py-20 px-6">
-        <div className="max-w-4xl mx-auto text-center">
+      <section className="relative py-20 px-6 overflow-hidden">
+        {/* Big logo background */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <img 
+            src={logoCoin} 
+            alt="" 
+            className="w-[500px] h-[500px] opacity-[0.07]" 
+          />
+        </div>
+        <div className="relative max-w-4xl mx-auto text-center">
           <h1 className="text-4xl md:text-5xl font-bold text-foreground mb-6">
             REBAR SHOP OS - AI-Powered Operations Management
           </h1>
@@ -91,9 +98,7 @@ export default function Landing() {
       <footer className="border-t border-border py-8 px-6">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 bg-primary rounded flex items-center justify-center">
-              <Brain className="w-4 h-4 text-primary-foreground" />
-            </div>
+            <img src={logoCoin} alt="REBAR SHOP OS" className="w-6 h-6 rounded" />
             <span className="font-semibold text-foreground">REBAR SHOP OS</span>
           </div>
           <nav className="flex items-center gap-6 text-sm text-muted-foreground">
