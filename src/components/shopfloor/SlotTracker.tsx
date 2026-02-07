@@ -53,13 +53,15 @@ export function SlotTracker({
   onCompleteRun,
   canWrite,
 }: SlotTrackerProps) {
-  const activeSlot = slots.find((s) => s.status === "active");
+  const activeSlots = slots.filter((s) => s.status === "active");
   const removableSlots = slots.filter((s) => s.status === "removable");
   const allDone = slots.every(
     (s) => s.status === "completed" || s.status === "removed"
   );
   const totalCutsDone = slots.reduce((s, sl) => s + sl.cutsDone, 0);
   const totalPlanned = slots.reduce((s, sl) => s + sl.plannedCuts, 0);
+  const nextStroke = activeSlots.length > 0 ? activeSlots[0].cutsDone + 1 : 0;
+  const maxStrokes = activeSlots.length > 0 ? Math.max(...activeSlots.map(s => s.plannedCuts)) : 0;
 
   return (
     <div className="space-y-3">
@@ -185,14 +187,14 @@ export function SlotTracker({
 
       {/* ── Action buttons ── */}
       <div className="flex gap-2">
-        {/* Record stroke (only when there's an active slot) */}
-        {activeSlot && canWrite && (
+        {/* Record stroke (only when there are active slots) */}
+        {activeSlots.length > 0 && canWrite && (
           <Button
             className="flex-1 gap-2 font-bold"
             onClick={onRecordStroke}
           >
             <Scissors className="w-4 h-4" />
-            Record Cut ({activeSlot.cutsDone + 1}/{activeSlot.plannedCuts})
+            Record Stroke ({nextStroke}/{maxStrokes}) — {activeSlots.length} bar{activeSlots.length > 1 ? "s" : ""}
           </Button>
         )}
 
