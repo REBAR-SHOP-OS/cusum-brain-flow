@@ -2,7 +2,7 @@ import { useState, useRef, useMemo } from "react";
 import {
   Upload, Globe, FileText, Loader2, Truck, Package,
   CheckCircle2, AlertCircle, Sparkles, X, ArrowRight,
-  Shield, TriangleAlert, Clock, ChevronRight, History,
+  Shield, TriangleAlert, Clock, ChevronRight, History, XCircle,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,12 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { useExtractSessions, useExtractRows, useExtractErrors } from "@/hooks/useExtractSessions";
@@ -22,6 +28,7 @@ import {
   applyMapping,
   validateExtract,
   approveExtract,
+  rejectExtract,
 } from "@/lib/extractService";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
@@ -62,6 +69,8 @@ export function AIExtractView() {
   // Active session
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
+  const [showRejectDialog, setShowRejectDialog] = useState(false);
 
   // Data hooks
   const { sessions, refresh: refreshSessions } = useExtractSessions();
@@ -223,6 +232,24 @@ export function AIExtractView() {
       });
     } catch (err: any) {
       toast({ title: "Approval failed", description: err.message, variant: "destructive" });
+    } finally {
+      setProcessing(false);
+      setProcessingStep("");
+    }
+  };
+
+  const handleReject = async () => {
+    if (!activeSessionId) return;
+    setProcessing(true);
+    setProcessingStep("Declining session...");
+    setShowRejectDialog(false);
+    try {
+      await rejectExtract(activeSessionId, rejectReason || undefined);
+      await refreshSessions();
+      toast({ title: "Session declined", description: rejectReason || "Session has been rejected." });
+      setRejectReason("");
+    } catch (err: any) {
+      toast({ title: "Decline failed", description: err.message, variant: "destructive" });
     } finally {
       setProcessing(false);
       setProcessingStep("");
@@ -459,7 +486,7 @@ export function AIExtractView() {
         )}
 
         {/* Action Bar for active session */}
-        {activeSession && !processing && activeSession.status !== "approved" && (
+        {activeSession && !processing && activeSession.status !== "approved" && activeSession.status !== "rejected" && (
           <div className="flex items-center gap-2">
             {currentStepIndex >= 2 && currentStepIndex < 3 && (
               <Button onClick={handleApplyMapping} className="gap-1.5">
@@ -482,6 +509,38 @@ export function AIExtractView() {
                 {processingStep}
               </Badge>
             )}
+
+            {/* Decline button — available at every step */}
+            <AlertDialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" className="gap-1.5 ml-auto border-destructive/40 text-destructive hover:bg-destructive/10">
+                  <XCircle className="w-4 h-4" /> Decline
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Decline this session?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will reject the extraction session. You can optionally provide a reason.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <Textarea
+                  placeholder="Reason for declining (optional)..."
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  className="min-h-[80px]"
+                />
+                <AlertDialogFooter>
+                  <AlertDialogCancel onClick={() => setRejectReason("")}>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={handleReject}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    Confirm Decline
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
         )}
 
@@ -490,6 +549,15 @@ export function AIExtractView() {
             <CheckCircle2 className="w-5 h-5 text-emerald-500" />
             <span className="text-sm font-bold text-emerald-500">
               Session approved — work orders and cut plans have been created.
+            </span>
+          </div>
+        )}
+
+        {activeSession?.status === "rejected" && (
+          <div className="flex items-center gap-2 p-4 rounded-lg bg-destructive/10 border border-destructive/30">
+            <XCircle className="w-5 h-5 text-destructive" />
+            <span className="text-sm font-bold text-destructive">
+              Session declined — no work orders were created.
             </span>
           </div>
         )}
