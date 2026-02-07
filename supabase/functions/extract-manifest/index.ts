@@ -1,15 +1,30 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { encode as base64Encode } from "https://deno.land/std@0.190.0/encoding/base64.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const LABEL_COLUMNS = [
-  "DWG#", "ITEM", "GRADE", "MARK", "QUANTITY", "SIZE", "TYPE",
-  "TOTAL_LENGTH", "A", "B", "C", "D", "E", "F", "G", "H", "J", "K",
-  "O", "R", "WEIGHT", "PICTURE", "CUSTOMER", "REF", "ADD",
-];
+// Map file extensions to MIME types the AI gateway accepts
+function getMimeType(fileName: string): string {
+  const ext = (fileName.split(".").pop() || "").toLowerCase();
+  const map: Record<string, string> = {
+    xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    xls: "application/vnd.ms-excel",
+    csv: "text/csv",
+    pdf: "application/pdf",
+    png: "image/png",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    gif: "image/gif",
+    webp: "image/webp",
+    bmp: "image/bmp",
+    tif: "image/tiff",
+    tiff: "image/tiff",
+  };
+  return map[ext] || "application/octet-stream";
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -32,6 +47,7 @@ serve(async (req) => {
 
     const isImage = /\.(png|jpg|jpeg|gif|webp|bmp|tiff?)$/i.test(fileName || fileUrl);
     const isPdf = /\.pdf$/i.test(fileName || fileUrl);
+    const isSpreadsheet = /\.(xlsx?|csv)$/i.test(fileName || fileUrl);
 
     // Build the prompt for AI extraction
     const systemPrompt = `You are a rebar schedule extraction engine. Your job is to parse uploaded documents (PDFs, spreadsheets, images of drawings) and extract rebar bar-bending schedule data.
@@ -97,15 +113,32 @@ Rules:
       },
     ];
 
-    if (isImage || isPdf) {
+    // For any binary file (image, PDF, spreadsheet), fetch and send as base64 data URL
+    if (isImage || isPdf || isSpreadsheet) {
+      console.log(`Fetching file for AI: ${fileName} (${isSpreadsheet ? "spreadsheet" : isImage ? "image" : "pdf"})`);
+      const fileResp = await fetch(fileUrl);
+      if (!fileResp.ok) {
+        throw new Error(`Failed to fetch file: ${fileResp.status}`);
+      }
+      const fileBytes = new Uint8Array(await fileResp.arrayBuffer());
+      const b64 = base64Encode(fileBytes);
+      const mimeType = getMimeType(fileName || fileUrl);
+      const dataUrl = `data:${mimeType};base64,${b64}`;
+
       userContent.push({
         type: "image_url",
-        image_url: { url: fileUrl },
+        image_url: { url: dataUrl },
       });
     }
 
-    // Use Gemini Pro for vision + complex extraction
-    const model = (isImage || isPdf) ? "google/gemini-2.5-pro" : "google/gemini-2.5-flash";
+    // Use flash for spreadsheets (fast, text-based), pro for vision tasks
+    const model = isSpreadsheet
+      ? "google/gemini-3-flash-preview"
+      : (isImage || isPdf)
+        ? "google/gemini-2.5-pro"
+        : "google/gemini-3-flash-preview";
+
+    console.log(`Using model: ${model} for file: ${fileName}`);
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -126,7 +159,19 @@ Rules:
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("AI API error:", errorText);
+      console.error("AI API error:", response.status, errorText);
+      if (response.status === 429) {
+        return new Response(
+          JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }),
+          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      if (response.status === 402) {
+        return new Response(
+          JSON.stringify({ error: "AI credits exhausted. Please add funds to continue." }),
+          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
       throw new Error(`AI API error: ${response.status}`);
     }
 
@@ -147,12 +192,9 @@ Rules:
         extractedData = JSON.parse(jsonStr);
       } catch {
         console.warn("Initial JSON parse failed, attempting truncation repair...");
-        // Find the last complete item in the array by finding last "},"
         const lastCompleteItem = jsonStr.lastIndexOf("},");
         if (lastCompleteItem > 0) {
-          // Close the array and object after the last complete item
           jsonStr = jsonStr.substring(0, lastCompleteItem + 1) + "]}";
-          // Try to parse the repaired JSON
           extractedData = JSON.parse(jsonStr);
           console.log(`Repaired truncated JSON: recovered ${extractedData.items?.length || 0} items`);
         } else {
