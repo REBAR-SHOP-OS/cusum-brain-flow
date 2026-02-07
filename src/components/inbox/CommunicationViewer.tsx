@@ -7,6 +7,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { EmailActionBar, type ReplyMode } from "./EmailActionBar";
 import { EmailReplyComposer } from "./EmailReplyComposer";
+import { AddToTaskButton } from "@/components/shared/AddToTaskButton";
+import { CreateTaskDialog } from "@/components/shared/CreateTaskDialog";
 import type { InboxEmail } from "./InboxEmailList";
 
 interface CommunicationViewerProps {
@@ -108,12 +110,23 @@ function AddToBrainButton({ communication }: { communication: Communication }) {
     }
   };
 
+  const taskDefaults = {
+    title: communication.type === "email"
+      ? `Follow up: ${communication.subject || "(no subject)"}`
+      : communication.type === "call"
+        ? `Follow up: ${communication.direction === "inbound" ? "Incoming" : "Outgoing"} call – ${parseDisplayName(communication.from).name}`
+        : `Follow up: SMS – ${parseDisplayName(communication.from).name}`,
+    description: communication.preview || "",
+    source: communication.type,
+    sourceRef: communication.sourceId,
+  };
+
   return (
-    <div className="shrink-0 border-t border-border px-4 py-3">
+    <div className="shrink-0 border-t border-border px-4 py-3 flex gap-2">
       <Button
         variant="outline"
         size="sm"
-        className="gap-2 w-full"
+        className="gap-2 flex-1"
         onClick={handleAddToBrain}
         disabled={saving || saved}
       >
@@ -124,6 +137,7 @@ function AddToBrainButton({ communication }: { communication: Communication }) {
         )}
         {saved ? "Added to Brain" : saving ? "Saving..." : "Add to Brain"}
       </Button>
+      <AddToTaskButton defaults={taskDefaults} className="flex-1" />
     </div>
   );
 }
@@ -131,6 +145,7 @@ function AddToBrainButton({ communication }: { communication: Communication }) {
 export function CommunicationViewer({ communication }: CommunicationViewerProps) {
   const [replyMode, setReplyMode] = useState<ReplyMode>(null);
   const [drafting, setDrafting] = useState(false);
+  const [showTaskDialog, setShowTaskDialog] = useState(false);
   const { toast } = useToast();
 
   const handleSmartReply = async () => {
@@ -305,6 +320,7 @@ export function CommunicationViewer({ communication }: CommunicationViewerProps)
         activeMode={replyMode}
         onModeChange={setReplyMode}
         onSmartReply={handleSmartReply}
+        onCreateTask={() => setShowTaskDialog(true)}
         drafting={drafting}
       />
 
@@ -351,6 +367,18 @@ export function CommunicationViewer({ communication }: CommunicationViewerProps)
         email={inboxEmail}
         mode={replyMode}
         onClose={() => setReplyMode(null)}
+      />
+
+      {/* Create Task Dialog */}
+      <CreateTaskDialog
+        open={showTaskDialog}
+        onOpenChange={setShowTaskDialog}
+        defaults={{
+          title: `Follow up: ${communication.subject || "(no subject)"}`,
+          description: communication.preview || "",
+          source: "email",
+          sourceRef: communication.sourceId,
+        }}
       />
     </div>
   );

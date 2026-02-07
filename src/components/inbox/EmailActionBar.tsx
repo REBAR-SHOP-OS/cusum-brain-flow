@@ -1,4 +1,4 @@
-import { Reply, Forward, ReplyAll, Sparkles, Archive, Trash2, MoreHorizontal } from "lucide-react";
+import { Reply, Forward, ReplyAll, Sparkles, Archive, Trash2, MoreHorizontal, CheckSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -14,10 +14,11 @@ interface EmailActionBarProps {
   activeMode: ReplyMode;
   onModeChange: (mode: ReplyMode) => void;
   onSmartReply: () => void;
+  onCreateTask?: () => void;
   drafting: boolean;
 }
 
-export function EmailActionBar({ activeMode, onModeChange, onSmartReply, drafting }: EmailActionBarProps) {
+export function EmailActionBar({ activeMode, onModeChange, onSmartReply, onCreateTask, drafting }: EmailActionBarProps) {
   const { toast } = useToast();
 
   const handleArchive = () => {
@@ -90,6 +91,12 @@ export function EmailActionBar({ activeMode, onModeChange, onSmartReply, draftin
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          {onCreateTask && (
+            <DropdownMenuItem onClick={onCreateTask}>
+              <CheckSquare className="w-3.5 h-3.5 mr-2" />
+              Create Task
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem onClick={() => toast({ title: "Marked as unread" })}>
             Mark as unread
           </DropdownMenuItem>

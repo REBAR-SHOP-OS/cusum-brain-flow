@@ -5,6 +5,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { EmailActionBar, type ReplyMode } from "./EmailActionBar";
 import { EmailReplyComposer } from "./EmailReplyComposer";
+import { AddToTaskButton } from "@/components/shared/AddToTaskButton";
+import { CreateTaskDialog } from "@/components/shared/CreateTaskDialog";
 import type { InboxEmail } from "./InboxEmailList";
 
 interface InboxEmailViewerProps {
@@ -15,6 +17,7 @@ interface InboxEmailViewerProps {
 export function InboxEmailViewer({ email, onClose }: InboxEmailViewerProps) {
   const [replyMode, setReplyMode] = useState<ReplyMode>(null);
   const [drafting, setDrafting] = useState(false);
+  const [showTaskDialog, setShowTaskDialog] = useState(false);
   const { toast } = useToast();
 
   const handleSmartReply = async () => {
@@ -63,6 +66,7 @@ export function InboxEmailViewer({ email, onClose }: InboxEmailViewerProps) {
         activeMode={replyMode}
         onModeChange={setReplyMode}
         onSmartReply={handleSmartReply}
+        onCreateTask={() => setShowTaskDialog(true)}
         drafting={drafting}
       />
 
@@ -110,11 +114,38 @@ export function InboxEmailViewer({ email, onClose }: InboxEmailViewerProps) {
         </div>
       </div>
 
+      {/* Add to Task (shown when no reply composer) */}
+      {!replyMode && (
+        <div className="shrink-0 border-t border-border px-4 py-3">
+          <AddToTaskButton
+            defaults={{
+              title: `Follow up: ${email.subject}`,
+              description: email.preview || "",
+              source: "email",
+              sourceRef: email.sourceId || email.id,
+            }}
+            className="w-full"
+          />
+        </div>
+      )}
+
       {/* Reply Composer */}
       <EmailReplyComposer
         email={email}
         mode={replyMode}
         onClose={() => setReplyMode(null)}
+      />
+
+      {/* Create Task Dialog */}
+      <CreateTaskDialog
+        open={showTaskDialog}
+        onOpenChange={setShowTaskDialog}
+        defaults={{
+          title: `Follow up: ${email.subject}`,
+          description: email.preview || "",
+          source: "email",
+          sourceRef: email.sourceId || email.id,
+        }}
       />
     </div>
   );
