@@ -1,56 +1,56 @@
-import { useState } from "react";
-import { ArrowLeft, RefreshCw, Settings, Loader2 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useState, useMemo } from "react";
+import { RefreshCw, Settings, Loader2, Search, Filter } from "lucide-react";
 import { InboxEmailList, type InboxEmail } from "./InboxEmailList";
 import { InboxEmailViewer } from "./InboxEmailViewer";
 import { InboxManagerSettings } from "./InboxManagerSettings";
+import { InboxAIToolbar, type AIAction } from "./InboxAIToolbar";
+import { InboxSummaryPanel, type InboxSummary } from "./InboxSummaryPanel";
 import { useCommunications } from "@/hooks/useCommunications";
+import { supabase } from "@/integrations/supabase/client";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 
-function categorizeEmail(from: string, subject: string, preview: string): { label: string; labelColor: string } {
+// ─── Categorization ────────────────────────────────────────────────
+function categorizeEmail(from: string, subject: string, preview: string): { label: string; labelColor: string; priority: number } {
   const fromLower = from.toLowerCase();
   const subjectLower = (subject || "").toLowerCase();
-  const previewLower = (preview || "").toLowerCase();
 
-  // Delivery failures / notifications
   if (fromLower.includes("mailer-daemon") || fromLower.includes("postmaster") || subjectLower.includes("delivery status")) {
-    return { label: "Notification", labelColor: "bg-cyan-400" };
+    return { label: "Notification", labelColor: "bg-cyan-400", priority: 4 };
   }
-
-  // Automated / marketing / newsletters
-  if (fromLower.includes("noreply") || fromLower.includes("no-reply") || fromLower.includes("newsletter") || fromLower.includes("alibaba") || fromLower.includes("marketing")) {
-    return { label: "Marketing", labelColor: "bg-pink-400" };
+  if (fromLower.includes("noreply") || fromLower.includes("no-reply") || fromLower.includes("newsletter") || fromLower.includes("marketing")) {
+    return { label: "Marketing", labelColor: "bg-pink-400", priority: 5 };
   }
-
-  // Security / access codes
   if (subjectLower.includes("security") || subjectLower.includes("access code") || subjectLower.includes("verification")) {
-    return { label: "Notification", labelColor: "bg-cyan-400" };
+    return { label: "Notification", labelColor: "bg-cyan-400", priority: 4 };
   }
-
-  // Financial / invoices
-  if (subjectLower.includes("invoice") || subjectLower.includes("payment") || subjectLower.includes("transfer") || subjectLower.includes("interac")) {
-    return { label: "FYI", labelColor: "bg-amber-400" };
+  if (subjectLower.includes("invoice") || subjectLower.includes("payment") || subjectLower.includes("transfer")) {
+    return { label: "FYI", labelColor: "bg-amber-400", priority: 2 };
   }
-
-  // Support cases
   if (subjectLower.includes("support case") || subjectLower.includes("ticket")) {
-    return { label: "Awaiting Reply", labelColor: "bg-amber-400" };
+    return { label: "Awaiting Reply", labelColor: "bg-amber-400", priority: 3 };
   }
-
-  // Phone calls (RingCentral)
-  if (subjectLower.includes("call")) {
-    return { label: "Call Log", labelColor: "bg-violet-400" };
+  if (subjectLower.includes("urgent") || subjectLower.includes("asap") || subjectLower.includes("important")) {
+    return { label: "Urgent", labelColor: "bg-red-500", priority: 0 };
   }
-
-  // Default: likely needs a response
-  return { label: "To Respond", labelColor: "bg-red-400" };
+  if (subjectLower.includes("spam") || fromLower.includes("alibaba") || subjectLower.includes("unsubscribe")) {
+    return { label: "Spam", labelColor: "bg-gray-500", priority: 6 };
+  }
+  return { label: "To Respond", labelColor: "bg-red-400", priority: 1 };
 }
 
 function extractSenderName(fromAddress: string): string {
-  // Extract name from "Name <email>" format
   const match = fromAddress.match(/^([^<]+)</);
   if (match) return match[1].trim();
-  // Extract name from email
   const emailMatch = fromAddress.match(/([^@]+)@/);
   if (emailMatch) return emailMatch[1].replace(/[._]/g, " ").replace(/\b\w/g, c => c.toUpperCase());
   return fromAddress;
@@ -62,41 +62,95 @@ function extractEmail(fromAddress: string): string {
   return fromAddress;
 }
 
+// ─── Label filter options ──────────────────────────────────────────
+const labelFilters = [
+  { label: "All", value: "all" },
+  { label: "To Respond", value: "To Respond", color: "bg-red-400" },
+  { label: "Urgent", value: "Urgent", color: "bg-red-500" },
+  { label: "FYI", value: "FYI", color: "bg-amber-400" },
+  { label: "Awaiting Reply", value: "Awaiting Reply", color: "bg-amber-400" },
+  { label: "Notification", value: "Notification", color: "bg-cyan-400" },
+  { label: "Marketing", value: "Marketing", color: "bg-pink-400" },
+  { label: "Spam", value: "Spam", color: "bg-gray-500" },
+];
+
+// ─── Component ─────────────────────────────────────────────────────
 interface InboxViewProps {
   connectedEmail?: string;
 }
 
 export function InboxView({ connectedEmail = "sattar@rebar.shop" }: InboxViewProps) {
-  const navigate = useNavigate();
   const { communications, loading, sync } = useCommunications({ typeFilter: "email" });
   const [selectedEmail, setSelectedEmail] = useState<InboxEmail | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [search, setSearch] = useState("");
+  const [activeFilter, setActiveFilter] = useState("all");
+  const [sortByPriority, setSortByPriority] = useState(false);
+  const [summary, setSummary] = useState<InboxSummary | null>(null);
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
 
-  // Map real communications to InboxEmail format
-  const emails: InboxEmail[] = communications.map((comm) => {
-    const category = categorizeEmail(comm.from, comm.subject || "", comm.preview || "");
-    const meta = comm.metadata as Record<string, unknown> | null;
-    const fullBody = (meta?.body as string) || comm.preview || "";
-    const receivedDate = comm.receivedAt ? new Date(comm.receivedAt) : null;
+  // Map communications to InboxEmail format
+  const allEmails: (InboxEmail & { priority: number })[] = useMemo(() => {
+    return communications.map((comm) => {
+      const category = categorizeEmail(comm.from, comm.subject || "", comm.preview || "");
+      const meta = comm.metadata as Record<string, unknown> | null;
+      const fullBody = (meta?.body as string) || comm.preview || "";
+      const receivedDate = comm.receivedAt ? new Date(comm.receivedAt) : null;
 
-    return {
-      id: comm.id,
-      sender: extractSenderName(comm.from),
-      senderEmail: extractEmail(comm.from),
-      toAddress: comm.to,
-      subject: comm.subject || "(no subject)",
-      preview: comm.preview || "",
-      body: fullBody,
-      time: receivedDate ? format(receivedDate, "h:mm a") : "",
-      fullDate: receivedDate ? format(receivedDate, "MMM d, h:mm a") : "",
-      label: category.label,
-      labelColor: category.labelColor,
-      isUnread: comm.status === "unread",
-      threadId: comm.threadId || undefined,
-      sourceId: comm.sourceId,
-    };
-  });
+      return {
+        id: comm.id,
+        sender: extractSenderName(comm.from),
+        senderEmail: extractEmail(comm.from),
+        toAddress: comm.to,
+        subject: comm.subject || "(no subject)",
+        preview: comm.preview || "",
+        body: fullBody,
+        time: receivedDate ? format(receivedDate, "h:mm a") : "",
+        fullDate: receivedDate ? format(receivedDate, "MMM d, h:mm a") : "",
+        label: category.label,
+        labelColor: category.labelColor,
+        isUnread: comm.status === "unread",
+        threadId: comm.threadId || undefined,
+        sourceId: comm.sourceId,
+        priority: category.priority,
+      };
+    });
+  }, [communications]);
+
+  // Filter + sort
+  const emails = useMemo(() => {
+    let filtered = allEmails.filter((e) => !hiddenIds.has(e.id));
+
+    if (search) {
+      const q = search.toLowerCase();
+      filtered = filtered.filter(
+        (e) =>
+          e.sender.toLowerCase().includes(q) ||
+          e.subject.toLowerCase().includes(q) ||
+          e.preview.toLowerCase().includes(q)
+      );
+    }
+
+    if (activeFilter !== "all") {
+      filtered = filtered.filter((e) => e.label === activeFilter);
+    }
+
+    if (sortByPriority) {
+      filtered = [...filtered].sort((a, b) => a.priority - b.priority);
+    }
+
+    return filtered;
+  }, [allEmails, search, activeFilter, sortByPriority, hiddenIds]);
+
+  // Label counts
+  const labelCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    allEmails.forEach((e) => {
+      counts[e.label] = (counts[e.label] || 0) + 1;
+    });
+    return counts;
+  }, [allEmails]);
 
   const handleSync = async () => {
     setSyncing(true);
@@ -104,43 +158,200 @@ export function InboxView({ connectedEmail = "sattar@rebar.shop" }: InboxViewPro
     setSyncing(false);
   };
 
+  // AI Actions handler
+  const handleAIAction = async (action: AIAction) => {
+    switch (action) {
+      case "summarize": {
+        const toRespond = allEmails.filter((e) => e.label === "To Respond" || e.label === "Urgent").length;
+        const fyi = allEmails.filter((e) => e.label === "FYI" || e.label === "Awaiting Reply").length;
+        const marketing = allEmails.filter((e) => e.label === "Marketing").length;
+        const spam = allEmails.filter((e) => e.label === "Spam").length;
+
+        const highlights: string[] = [];
+        if (toRespond > 0) highlights.push(`${toRespond} email(s) need your reply — prioritize these first.`);
+        const urgentEmails = allEmails.filter((e) => e.label === "Urgent");
+        if (urgentEmails.length > 0) {
+          highlights.push(`Urgent: "${urgentEmails[0].subject}" from ${urgentEmails[0].sender}`);
+        }
+        if (marketing > 3) highlights.push(`${marketing} marketing emails — consider archiving them.`);
+        if (spam > 0) highlights.push(`${spam} suspected spam email(s) detected.`);
+        if (fyi > 0) highlights.push(`${fyi} informational email(s) — read when you have time.`);
+
+        setSummary({
+          totalEmails: allEmails.length,
+          toRespond,
+          fyi,
+          marketing,
+          spam,
+          highlights,
+        });
+        break;
+      }
+
+      case "detect-spam": {
+        // Mark obvious spam via categorization
+        const spamCount = allEmails.filter((e) => e.label === "Spam").length;
+        if (spamCount === 0) {
+          // Re-scan subjects for spam keywords
+          const spamKeywords = ["alibaba", "unsubscribe", "free trial", "act now", "limited time", "congratulations", "winner"];
+          const detected = allEmails.filter((e) =>
+            spamKeywords.some((kw) =>
+              e.subject.toLowerCase().includes(kw) || e.sender.toLowerCase().includes(kw)
+            )
+          );
+          if (detected.length > 0) {
+            setHiddenIds(new Set(detected.map((e) => e.id)));
+          }
+        }
+        setActiveFilter("Spam");
+        break;
+      }
+
+      case "clean": {
+        // Hide marketing + spam
+        const clutter = allEmails.filter((e) => e.label === "Marketing" || e.label === "Spam");
+        setHiddenIds(new Set(clutter.map((e) => e.id)));
+        break;
+      }
+
+      case "prioritize":
+        setSortByPriority(true);
+        break;
+
+      case "label-all":
+        // Already auto-labeled — just show all
+        setActiveFilter("all");
+        setSortByPriority(false);
+        setHiddenIds(new Set());
+        break;
+
+      case "archive-marketing": {
+        const marketingEmails = allEmails.filter((e) => e.label === "Marketing");
+        setHiddenIds((prev) => {
+          const next = new Set(prev);
+          marketingEmails.forEach((e) => next.add(e.id));
+          return next;
+        });
+        break;
+      }
+
+      case "unsubscribe": {
+        setActiveFilter("Marketing");
+        break;
+      }
+    }
+  };
+
   return (
-    <div className="flex h-full bg-muted/30">
+    <div className="flex h-full">
       {/* Email List Panel */}
-      <div className="w-[400px] bg-background border-r flex flex-col min-h-0">
+      <div className={cn(
+        "bg-background border-r flex flex-col min-h-0",
+        selectedEmail ? "hidden md:flex md:w-[400px]" : "flex w-full md:w-[400px]"
+      )}>
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b">
-          <div className="flex items-center gap-3">
-            <button 
-              onClick={() => navigate("/integrations")}
-              className="text-muted-foreground hover:text-foreground"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </button>
+        <div className="flex items-center justify-between p-3 border-b">
+          <div className="flex items-center gap-2">
             <h1 className="text-lg font-semibold">Inbox</h1>
             {loading && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
           </div>
-          <div className="flex items-center gap-2">
-            <button 
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
               onClick={handleSync}
               disabled={syncing}
-              className="p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted disabled:opacity-50"
             >
-              <RefreshCw className={`w-5 h-5 ${syncing ? "animate-spin" : ""}`} />
-            </button>
-            <button 
+              <RefreshCw className={cn("w-4 h-4", syncing && "animate-spin")} />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
               onClick={() => setShowSettings(true)}
-              className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted"
             >
               <Settings className="w-4 h-4" />
-              <span>Settings</span>
-            </button>
+            </Button>
           </div>
         </div>
 
+        {/* AI Toolbar */}
+        <InboxAIToolbar emailCount={allEmails.length} onAction={handleAIAction} />
+
+        {/* Summary Panel */}
+        <InboxSummaryPanel summary={summary} onClose={() => setSummary(null)} />
+
+        {/* Search */}
+        <div className="px-3 py-2 border-b">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search emails..."
+              className="h-8 pl-8 text-xs"
+            />
+          </div>
+        </div>
+
+        {/* Filter chips */}
+        <div className="flex items-center gap-1.5 px-3 py-2 border-b overflow-x-auto">
+          {labelFilters.map((f) => {
+            const count = f.value === "all" ? allEmails.length : (labelCounts[f.value] || 0);
+            if (f.value !== "all" && count === 0) return null;
+            return (
+              <button
+                key={f.value}
+                onClick={() => {
+                  setActiveFilter(f.value);
+                  setHiddenIds(new Set());
+                }}
+                className={cn(
+                  "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors shrink-0",
+                  activeFilter === f.value
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground hover:bg-muted/80"
+                )}
+              >
+                {f.color && <span className={cn("w-2 h-2 rounded-full", f.color)} />}
+                {f.label}
+                <Badge variant="secondary" className="text-[10px] h-4 px-1 ml-0.5">
+                  {count}
+                </Badge>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Hidden items banner */}
+        {hiddenIds.size > 0 && (
+          <div className="flex items-center justify-between px-3 py-1.5 bg-warning/10 border-b text-xs">
+            <span className="text-warning-foreground">{hiddenIds.size} email(s) hidden by AI cleanup</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs h-6"
+              onClick={() => setHiddenIds(new Set())}
+            >
+              Show all
+            </Button>
+          </div>
+        )}
+
         {/* Email Count */}
-        <div className="px-4 py-2 text-xs text-muted-foreground border-b">
-          {emails.length} email{emails.length !== 1 ? "s" : ""}
+        <div className="px-3 py-1.5 text-[11px] text-muted-foreground border-b flex items-center justify-between">
+          <span>{emails.length} email{emails.length !== 1 ? "s" : ""}</span>
+          {sortByPriority && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-[11px] h-5 px-1.5"
+              onClick={() => setSortByPriority(false)}
+            >
+              Clear sort
+            </Button>
+          )}
         </div>
 
         {/* Email List */}
@@ -152,10 +363,13 @@ export function InboxView({ connectedEmail = "sattar@rebar.shop" }: InboxViewPro
       </div>
 
       {/* Email Viewer */}
-      <div className="flex-1 min-h-0">
-        <InboxEmailViewer 
-          email={selectedEmail} 
-          onClose={() => setSelectedEmail(null)} 
+      <div className={cn(
+        "flex-1 min-h-0",
+        selectedEmail ? "flex" : "hidden md:flex"
+      )}>
+        <InboxEmailViewer
+          email={selectedEmail}
+          onClose={() => setSelectedEmail(null)}
         />
       </div>
 

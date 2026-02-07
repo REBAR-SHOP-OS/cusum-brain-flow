@@ -8,6 +8,7 @@ import { ChatInput, UploadedFile } from "@/components/chat/ChatInput";
 import { Message } from "@/components/chat/ChatMessage";
 import { UnifiedInboxList } from "@/components/inbox/UnifiedInboxList";
 import { CommunicationViewer } from "@/components/inbox/CommunicationViewer";
+import { InboxView } from "@/components/inbox/InboxView";
 import { useCommunications, Communication } from "@/hooks/useCommunications";
 import { useChatSessions, getAgentName } from "@/hooks/useChatSessions";
 import { sendAgentMessage } from "@/lib/agent";
@@ -29,8 +30,11 @@ export default function Inbox() {
   const { toast } = useToast();
   const { createSession, addMessage: saveMessage, getSessionMessages } = useChatSessions();
 
-  const typeFilter = activeTab === "calls" ? "call" : activeTab === "sms" ? "sms" : activeTab === "email" ? "email" : undefined;
-  const { communications, loading, error, sync } = useCommunications({ search: search || undefined, typeFilter });
+  const typeFilter = activeTab === "calls" ? "call" : activeTab === "sms" ? "sms" : undefined;
+  const { communications, loading, error, sync } = useCommunications({
+    search: search || undefined,
+    typeFilter: activeTab === "calls" || activeTab === "sms" ? typeFilter : undefined,
+  });
 
   // Handle loading a session from History panel
   useEffect(() => {
@@ -54,7 +58,6 @@ export default function Inbox() {
     setMessages(loaded);
     setCurrentSessionId(sessionId);
 
-    // Set the agent type from the first agent message
     const agentMsg = msgs.find((m) => m.agent_type);
     if (agentMsg?.agent_type) {
       setSelectedAgent(agentMsg.agent_type as AgentType);
@@ -81,7 +84,6 @@ export default function Inbox() {
     setMessages((prev) => [...prev, userMessage]);
     setIsTyping(true);
 
-    // Create or reuse session
     let sessionId = currentSessionId;
     if (!sessionId) {
       const title = content.slice(0, 80) || "New conversation";
@@ -90,7 +92,6 @@ export default function Inbox() {
       setCurrentSessionId(sessionId);
     }
 
-    // Persist user message
     if (sessionId) {
       saveMessage(sessionId, "user", messageContent);
     }
@@ -121,7 +122,6 @@ export default function Inbox() {
       };
       setMessages((prev) => [...prev, agentMessage]);
 
-      // Persist agent message
       if (sessionId) {
         saveMessage(sessionId, "agent", response.reply, selectedAgent);
       }
@@ -143,21 +143,19 @@ export default function Inbox() {
     setCurrentSessionId(null);
   };
 
-  const showCommsList = activeTab !== "agents";
-
   return (
     <div className="flex flex-col h-full">
       {/* Header with Tabs */}
       <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-border gap-3 sm:gap-0">
         <div className="flex items-center gap-2">
-          {selectedComm && showCommsList && (
+          {selectedComm && activeTab !== "email" && activeTab !== "agents" && (
             <Button variant="ghost" size="icon" className="md:hidden mr-1" onClick={() => setSelectedComm(null)}>
               <ArrowLeft className="w-4 h-4" />
             </Button>
           )}
           <div>
             <h1 className="text-xl font-semibold">Inbox</h1>
-            <p className="text-sm text-muted-foreground hidden sm:block">Emails, calls, SMS & agent conversations</p>
+            <p className="text-sm text-muted-foreground hidden sm:block">AI-managed emails, calls, SMS & agents</p>
           </div>
         </div>
         <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v as InboxTab); setSelectedComm(null); }}>
@@ -183,24 +181,12 @@ export default function Inbox() {
       </header>
 
       {/* Content */}
-      {showCommsList ? (
-        <div className="flex-1 flex overflow-hidden">
-          <div className={`${selectedComm ? 'hidden md:flex' : 'flex'} w-full md:w-96 flex-shrink-0 flex-col`}>
-            <UnifiedInboxList
-              communications={communications}
-              loading={loading}
-              error={error}
-              selectedId={selectedComm?.id}
-              onSelect={setSelectedComm}
-              onRefresh={sync}
-              onSearchChange={setSearch}
-            />
-          </div>
-          <div className={`${selectedComm ? 'flex' : 'hidden md:flex'} flex-1 flex-col min-h-0 overflow-hidden`}>
-            <CommunicationViewer communication={selectedComm} />
-          </div>
+      {activeTab === "email" ? (
+        // AI-powered unified inbox
+        <div className="flex-1 overflow-hidden">
+          <InboxView />
         </div>
-      ) : (
+      ) : activeTab === "agents" ? (
         <div className="flex-1 flex flex-col overflow-hidden">
           <AgentSelector selected={selectedAgent} onSelect={handleAgentChange} />
           {selectedAgent === "estimation" ? (
@@ -224,6 +210,24 @@ export default function Inbox() {
               />
             </>
           )}
+        </div>
+      ) : (
+        // Calls & SMS tabs
+        <div className="flex-1 flex overflow-hidden">
+          <div className={`${selectedComm ? 'hidden md:flex' : 'flex'} w-full md:w-96 flex-shrink-0 flex-col`}>
+            <UnifiedInboxList
+              communications={communications}
+              loading={loading}
+              error={error}
+              selectedId={selectedComm?.id}
+              onSelect={setSelectedComm}
+              onRefresh={sync}
+              onSearchChange={setSearch}
+            />
+          </div>
+          <div className={`${selectedComm ? 'flex' : 'hidden md:flex'} flex-1 flex-col min-h-0 overflow-hidden`}>
+            <CommunicationViewer communication={selectedComm} />
+          </div>
         </div>
       )}
     </div>

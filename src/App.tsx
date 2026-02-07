@@ -21,7 +21,7 @@ import Brain from "./pages/Brain";
 import Integrations from "./pages/Integrations";
 import IntegrationCallback from "./pages/IntegrationCallback";
 import SocialMediaManager from "./pages/SocialMediaManager";
-import InboxManager from "./pages/InboxManager";
+
 import DailySummarizer from "./pages/DailySummarizer";
 import FacebookCommenter from "./pages/FacebookCommenter";
 import Phonecalls from "./pages/Phonecalls";
@@ -173,16 +173,14 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
-            <Route
-              path="/inbox-manager"
-              element={
-                <ProtectedRoute>
-                  <AppLayout>
-                    <InboxManager />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
+            {/* /inbox-manager redirects to /inbox */}
+            <Route path="/inbox-manager" element={
+              <ProtectedRoute>
+                <AppLayout>
+                  <Inbox />
+                </AppLayout>
+              </ProtectedRoute>
+            } />
             <Route
               path="/daily-summarizer"
               element={
