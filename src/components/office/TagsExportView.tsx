@@ -199,73 +199,76 @@ export function TagsExportView() {
       {viewMode === "table" ? (
         <ScrollArea className="flex-1">
           <div className="min-w-[2400px]">
-            {/* Header row */}
-            <div className="grid grid-cols-[70px_50px_60px_90px_50px_60px_55px_90px_repeat(12,65px)_80px_110px_140px_80px_180px] gap-0 px-4 py-2 bg-primary/10 border-b border-border text-[10px] font-bold tracking-widest text-primary uppercase sticky top-0 z-10">
-              <span>DWG #</span>
-              <span>Item</span>
-              <span>Grade</span>
-              <span>Mark</span>
-              <span>Qty</span>
-              <span>Size</span>
-              <span>Type</span>
-              <span className="text-primary">Total Length</span>
-              {DIM_COLS.map((c) => <span key={c}>{c}</span>)}
-              <span className="text-right">Weight</span>
-              <span>Picture</span>
-              <span>Customer</span>
-              <span>Ref</span>
-              <span>Add</span>
-            </div>
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="bg-primary/10 border-b border-border sticky top-0 z-10">
+                  <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-left px-3 py-2 whitespace-nowrap">DWG #</th>
+                  <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-left px-3 py-2 whitespace-nowrap">Item</th>
+                  <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-left px-3 py-2 whitespace-nowrap">Grade</th>
+                  <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-left px-3 py-2 whitespace-nowrap">Mark</th>
+                  <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-left px-3 py-2 whitespace-nowrap">Qty</th>
+                  <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-left px-3 py-2 whitespace-nowrap">Size</th>
+                  <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-left px-3 py-2 whitespace-nowrap">Type</th>
+                  <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-left px-3 py-2 whitespace-nowrap">Total Length</th>
+                  {DIM_COLS.map((c) => (
+                    <th key={c} className="text-[10px] font-bold tracking-widest text-primary uppercase text-right px-3 py-2 whitespace-nowrap">{c}</th>
+                  ))}
+                  <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-right px-3 py-2 whitespace-nowrap">Weight</th>
+                  <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-left px-3 py-2 whitespace-nowrap">Picture</th>
+                  <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-left px-3 py-2 whitespace-nowrap">Customer</th>
+                  <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-left px-3 py-2 whitespace-nowrap">Ref</th>
+                  <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-left px-3 py-2 whitespace-nowrap">Add</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rowsLoading ? (
+                  <tr><td colSpan={25} className="p-8 text-center text-muted-foreground text-sm">Loading...</td></tr>
+                ) : sortedRows.length === 0 ? (
+                  <tr><td colSpan={25} className="p-8 text-center text-muted-foreground text-sm">No items.</td></tr>
+                ) : (
+                  sortedRows.map((row) => {
+                    const size = row.bar_size_mapped || row.bar_size || "";
+                    const shapeType = row.shape_code_mapped || row.shape_type || "";
+                    const weight = getWeight(size, row.total_length_mm, row.quantity);
 
-            {rowsLoading ? (
-              <div className="p-8 text-center text-muted-foreground text-sm">Loading...</div>
-            ) : sortedRows.length === 0 ? (
-              <div className="p-8 text-center text-muted-foreground text-sm">No items.</div>
-            ) : (
-              sortedRows.map((row) => {
-                const size = row.bar_size_mapped || row.bar_size || "";
-                const shapeType = row.shape_code_mapped || row.shape_type || "";
-                const weight = getWeight(size, row.total_length_mm, row.quantity);
-
-                return (
-                  <div
-                    key={row.id}
-                    className="grid grid-cols-[70px_50px_60px_90px_50px_60px_55px_90px_repeat(12,65px)_80px_110px_140px_80px_180px] gap-0 px-4 py-2.5 border-b border-border/50 hover:bg-muted/30 text-sm items-center"
-                  >
-                    <span className="text-xs text-muted-foreground font-mono">{row.dwg || "—"}</span>
-                    <span className="text-xs text-muted-foreground">{row.row_index}</span>
-                    <span className="text-xs text-muted-foreground">{row.grade_mapped || row.grade || "—"}</span>
-                    <span className="text-xs font-bold text-foreground">{row.mark || "—"}</span>
-                    <span className="text-xs font-medium">{row.quantity ?? "—"}</span>
-                    <span className="text-xs">{size || "—"}</span>
-                    <span className="text-xs">{shapeType || "—"}</span>
-                    <span className="text-xs font-bold text-primary">
-                      {row.total_length_mm ? (
-                        <>{row.total_length_mm} <sub className="text-[8px] text-primary/60">MM</sub></>
-                      ) : "—"}
-                    </span>
-                    {DIM_COLS.map((d) => {
-                      const key = `dim_${d.toLowerCase()}` as keyof typeof row;
-                      const val = row[key];
-                      return (
-                        <span key={d} className="text-xs text-muted-foreground">
-                          {val != null && val !== 0 ? (
-                            <>{String(val)} <sub className="text-[8px] ml-0.5">MM</sub></>
-                          ) : ""}
-                        </span>
-                      );
-                    })}
-                    <span className="text-xs text-muted-foreground text-right">{weight}</span>
-                    <span className="text-[10px] text-muted-foreground truncate">
-                      {shapeType ? `TYPE-${shapeType}.PNG` : "—"}
-                    </span>
-                    <span className="text-xs text-muted-foreground truncate">{row.customer || "—"}</span>
-                    <span className="text-xs text-muted-foreground truncate">{row.reference || "—"}</span>
-                    <span className="text-xs text-muted-foreground truncate">{row.address || "—"}</span>
-                  </div>
-                );
-              })
-            )}
+                    return (
+                      <tr key={row.id} className="border-b border-border/50 hover:bg-muted/30">
+                        <td className="text-xs text-muted-foreground font-mono px-3 py-2.5 whitespace-nowrap">{row.dwg || "—"}</td>
+                        <td className="text-xs text-muted-foreground px-3 py-2.5">{row.row_index}</td>
+                        <td className="text-xs text-muted-foreground px-3 py-2.5">{row.grade_mapped || row.grade || "—"}</td>
+                        <td className="text-xs font-bold text-foreground px-3 py-2.5 whitespace-nowrap">{row.mark || "—"}</td>
+                        <td className="text-xs font-medium px-3 py-2.5">{row.quantity ?? "—"}</td>
+                        <td className="text-xs px-3 py-2.5">{size || "—"}</td>
+                        <td className="text-xs px-3 py-2.5">{shapeType || "—"}</td>
+                        <td className="text-xs font-bold text-primary px-3 py-2.5 whitespace-nowrap">
+                          {row.total_length_mm ? (
+                            <>{row.total_length_mm} <sub className="text-[8px] text-primary/60">MM</sub></>
+                          ) : "—"}
+                        </td>
+                        {DIM_COLS.map((d) => {
+                          const key = `dim_${d.toLowerCase()}` as keyof typeof row;
+                          const val = row[key];
+                          return (
+                            <td key={d} className="text-xs text-muted-foreground text-right px-3 py-2.5 whitespace-nowrap">
+                              {val != null && val !== 0 ? (
+                                <>{String(val)} <sub className="text-[8px] ml-0.5">MM</sub></>
+                              ) : ""}
+                            </td>
+                          );
+                        })}
+                        <td className="text-xs text-muted-foreground text-right px-3 py-2.5 whitespace-nowrap">{weight}</td>
+                        <td className="text-[10px] text-muted-foreground px-3 py-2.5 whitespace-nowrap">
+                          {shapeType ? `TYPE-${shapeType}.PNG` : "—"}
+                        </td>
+                        <td className="text-xs text-muted-foreground px-3 py-2.5 whitespace-nowrap">{row.customer || "—"}</td>
+                        <td className="text-xs text-muted-foreground px-3 py-2.5 whitespace-nowrap">{row.reference || "—"}</td>
+                        <td className="text-xs text-muted-foreground px-3 py-2.5">{row.address || "—"}</td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
           <ScrollBar orientation="horizontal" />
         </ScrollArea>
