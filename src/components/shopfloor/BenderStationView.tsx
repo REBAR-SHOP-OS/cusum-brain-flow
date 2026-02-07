@@ -215,17 +215,25 @@ export function BenderStationView({ machine, items, canWrite, initialIndex = 0 }
       {/* Bottom bar */}
       <div className="border-t border-border p-4 flex items-center justify-between bg-card">
         <div className="flex items-center gap-2">
-          <div className="flex flex-col items-start mr-3">
-            <span className="text-[9px] text-muted-foreground tracking-wider uppercase">Batch ×{batchSize}</span>
-            <span className="text-[9px] text-muted-foreground tracking-wider uppercase">Unit {currentIndex + 1}</span>
-          </div>
-          <Button variant="outline" size="icon" className="h-8 w-8" disabled={currentIndex <= 0 || submitting} onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}>
-            <ChevronLeft className="w-4 h-4" />
-          </Button>
-          <span className="text-xl font-bold text-foreground min-w-[40px] text-center">{currentIndex + 1}</span>
-          <Button variant="outline" size="icon" className="h-8 w-8" disabled={currentIndex >= items.length - 1 || submitting} onClick={() => setCurrentIndex((i) => Math.min(items.length - 1, i + 1))}>
-            <ChevronRight className="w-4 h-4" />
-          </Button>
+          {(() => {
+            const totalBatches = Math.ceil((currentItem?.total_pieces || 1) / batchSize);
+            const currentBatch = Math.min(Math.floor(bendCompleted / batchSize) + 1, totalBatches);
+            return (
+              <>
+                <div className="flex flex-col items-start mr-3">
+                  <span className="text-[9px] text-muted-foreground tracking-wider uppercase">Batch ×{batchSize}</span>
+                  <span className="text-[9px] text-muted-foreground tracking-wider uppercase">Unit {currentBatch} / {totalBatches}</span>
+                </div>
+                <Button variant="outline" size="icon" className="h-8 w-8" disabled={currentIndex <= 0 || submitting} onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}>
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+                <span className="text-xl font-bold text-foreground min-w-[40px] text-center">{currentBatch}</span>
+                <Button variant="outline" size="icon" className="h-8 w-8" disabled={currentIndex >= items.length - 1 || submitting} onClick={() => setCurrentIndex((i) => Math.min(items.length - 1, i + 1))}>
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+              </>
+            );
+          })()}
         </div>
 
         <Button
