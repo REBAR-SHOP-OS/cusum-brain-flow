@@ -29,6 +29,7 @@ import Phonecalls from "./pages/Phonecalls";
 import Settings from "./pages/Settings";
 
 import AdminPanel from "./pages/AdminPanel";
+import AdminMachines from "./pages/AdminMachines";
 import AdminDbAudit from "./pages/AdminDbAudit";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import TermsOfService from "./pages/TermsOfService";
@@ -239,6 +240,16 @@ const App = () => (
                 <ProtectedRoute>
                   <AppLayout>
                     <AdminDbAudit />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/machines"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <AdminMachines />
                   </AppLayout>
                 </ProtectedRoute>
               }
