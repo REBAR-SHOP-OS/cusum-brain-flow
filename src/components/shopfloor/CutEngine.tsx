@@ -12,6 +12,7 @@ interface CutEngineProps {
   runPlan?: RunPlan | null;
   onLockAndStart: (stockLength: number, bars: number) => void;
   onStockLengthChange?: (length: number) => void;
+  onBarsChange?: (bars: number) => void;
   isRunning: boolean;
   canWrite: boolean;
   darkMode?: boolean;
@@ -26,6 +27,7 @@ export function CutEngine({
   runPlan,
   onLockAndStart,
   onStockLengthChange,
+  onBarsChange,
   isRunning,
   canWrite,
   darkMode = false,
@@ -186,7 +188,7 @@ export function CutEngine({
               "h-9 w-9 rounded-md",
               darkMode && "border-slate-600 bg-slate-700 hover:bg-slate-600 text-white"
             )}
-            onClick={() => setBars(Math.max(1, bars - 1))}
+            onClick={() => { const n = Math.max(1, bars - 1); setBars(n); onBarsChange?.(n); }}
             disabled={bars <= 1}
           >
             <ChevronDown className="w-4 h-4" />
@@ -204,7 +206,7 @@ export function CutEngine({
               "h-9 w-9 rounded-md",
               darkMode && "border-slate-600 bg-slate-700 hover:bg-slate-600 text-white"
             )}
-            onClick={() => setBars(Math.min(maxBars, bars + 1))}
+            onClick={() => { const n = Math.min(maxBars, bars + 1); setBars(n); onBarsChange?.(n); }}
             disabled={bars >= maxBars}
           >
             <ChevronUp className="w-4 h-4" />

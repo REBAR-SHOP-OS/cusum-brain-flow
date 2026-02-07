@@ -35,6 +35,8 @@ export interface ForemanContext {
   maxBars: number | null;
   /** Operator-selected or default stock length in mm */
   selectedStockLength: number;
+  /** Operator-selected bar count override (from CutEngine UI) */
+  operatorBars?: number;
   /** Current index in item list */
   currentIndex: number;
   canWrite: boolean;
@@ -432,7 +434,8 @@ function computeCutDecision(ctx: ForemanContext, d: ForemanDecision): ForemanDec
 
   // Deterministic shop-language instructions
   const { piecesPerBar, totalBarsNeeded, lastBarPieces, slots, barsThisRun } = runPlan;
-  const hasPartialBar = lastBarPieces > 0;
+  const operatorBars = ctx.operatorBars ?? barsThisRun;
+  const hasPartialBar = lastBarPieces > 0 && operatorBars >= totalBarsNeeded;
   const fullSlots = slots.filter(s => !s.removeAfterCuts);
   const partialSlot = slots.find(s => s.removeAfterCuts);
 
@@ -445,7 +448,7 @@ function computeCutDecision(ctx: ForemanContext, d: ForemanDecision): ForemanDec
     {
       step: 2,
       text: `Load`,
-      emphasis: `${barsThisRun} × ${item.bar_code} bars (${ctx.selectedStockLength / 1000}M stock)`,
+      emphasis: `${operatorBars} × ${item.bar_code} bars (${ctx.selectedStockLength / 1000}M stock)`,
     },
     {
       step: 3,
@@ -470,11 +473,11 @@ function computeCutDecision(ctx: ForemanContext, d: ForemanDecision): ForemanDec
     }
   }
 
-  // Result summary
-  const totalPiecesThisRun = slots.reduce((s, sl) => s + sl.plannedCuts, 0);
+  // Result summary — use operatorBars for display
+  const totalPiecesThisRun = operatorBars * piecesPerBar - (hasPartialBar ? (piecesPerBar - lastBarPieces) : 0);
   const piecesAfter = remaining - totalPiecesThisRun;
 
-  d.recommendation = `Load ${barsThisRun} × ${item.bar_code} → cut at ${item.cut_length_mm}mm → ${totalPiecesThisRun} pieces`;
+  d.recommendation = `Load ${operatorBars} × ${item.bar_code} → cut at ${item.cut_length_mm}mm → ${totalPiecesThisRun} pieces`;
   d.recommendationReason = [
     `${piecesPerBar} pcs/bar × ${fullSlots.length} full bar${fullSlots.length !== 1 ? "s" : ""}`,
     hasPartialBar ? ` + ${lastBarPieces} pcs on partial bar` : "",

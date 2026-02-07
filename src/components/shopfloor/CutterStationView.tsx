@@ -31,6 +31,7 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const [selectedStockLength, setSelectedStockLength] = useState(12000);
+  const [operatorBars, setOperatorBars] = useState<number | null>(null);
   const [manualFloorConfirmed, setManualFloorConfirmed] = useState(false);
 
   const currentItem = items[currentIndex] || null;
@@ -59,6 +60,7 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
         wipBatches,
         maxBars,
         selectedStockLength,
+        operatorBars: operatorBars ?? undefined,
         currentIndex,
         canWrite,
         manualFloorStockConfirmed: manualFloorConfirmed,
@@ -83,6 +85,7 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
   const completedPieces = currentItem?.completed_pieces || 0;
   const remainingPieces = totalPieces - completedPieces;
   const barsStillNeeded = computedPiecesPerBar > 0 ? Math.ceil(remainingPieces / computedPiecesPerBar) : 0;
+  const barsForThisRun = operatorBars ?? runPlan?.barsThisRun ?? barsStillNeeded;
   const isDone = remainingPieces <= 0;
 
   // ── Alternative action handler ──
@@ -379,7 +382,7 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
               <CardContent className="p-4 text-center">
                 <Ruler className="w-5 h-5 text-accent-foreground mx-auto mb-2" />
                 <p className={`text-3xl font-black font-mono ${isDone ? "text-primary" : "text-foreground"}`}>
-                  {isDone ? "✓" : (runPlan?.barsThisRun || barsStillNeeded)}
+                  {isDone ? "✓" : barsForThisRun}
                 </p>
                 <p className="text-[10px] text-muted-foreground tracking-wider uppercase mt-1">This Run</p>
               </CardContent>
@@ -425,7 +428,7 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
             <button
               className="w-10 h-10 rounded-full border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-30"
               disabled={currentIndex <= 0 || machineIsRunning}
-              onClick={() => { setCurrentIndex((i) => Math.max(0, i - 1)); setManualFloorConfirmed(false); slotTracker.reset(); }}
+              onClick={() => { setCurrentIndex((i) => Math.max(0, i - 1)); setManualFloorConfirmed(false); setOperatorBars(null); slotTracker.reset(); }}
             >
               ‹
             </button>
@@ -435,7 +438,7 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
             <button
               className="w-10 h-10 rounded-full border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-30"
               disabled={currentIndex >= items.length - 1 || machineIsRunning}
-              onClick={() => { setCurrentIndex((i) => Math.min(items.length - 1, i + 1)); setManualFloorConfirmed(false); slotTracker.reset(); }}
+              onClick={() => { setCurrentIndex((i) => Math.min(items.length - 1, i + 1)); setManualFloorConfirmed(false); setOperatorBars(null); slotTracker.reset(); }}
             >
               ›
             </button>
@@ -451,6 +454,7 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
             runPlan={runPlan}
             onLockAndStart={handleLockAndStart}
             onStockLengthChange={setSelectedStockLength}
+            onBarsChange={setOperatorBars}
             isRunning={machineIsRunning}
             canWrite={canWrite}
             darkMode
