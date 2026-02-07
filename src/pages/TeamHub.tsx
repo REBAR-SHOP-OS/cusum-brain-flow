@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useTeamChannels, useTeamMessages, useSendMessage, useMyProfile } from "@/hooks/useTeamChat";
 import { useProfiles } from "@/hooks/useProfiles";
-import { useCreateChannel } from "@/hooks/useChannelManagement";
+import { useCreateChannel, useOpenDM } from "@/hooks/useChannelManagement";
 import { ChannelSidebar } from "@/components/teamhub/ChannelSidebar";
 import { MessageThread } from "@/components/teamhub/MessageThread";
 import { CreateChannelDialog } from "@/components/teamhub/CreateChannelDialog";
@@ -14,6 +14,7 @@ export default function TeamHub() {
   const myProfile = useMyProfile();
   const sendMutation = useSendMessage();
   const createChannelMutation = useCreateChannel();
+  const openDMMutation = useOpenDM();
 
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -89,6 +90,20 @@ export default function TeamHub() {
           onlineCount={onlineCount}
           profiles={profiles}
           onCreateChannel={() => setShowCreateDialog(true)}
+          onClickMember={async (profileId, name) => {
+            if (profileId === myProfile?.id) return;
+            try {
+              const result = await openDMMutation.mutateAsync({
+                targetProfileId: profileId,
+                targetName: name,
+              });
+              if (result?.id) {
+                setSelectedChannelId(result.id);
+              }
+            } catch (err: any) {
+              toast.error("Failed to open DM", { description: err.message });
+            }
+          }}
         />
 
         <div className="flex-1 flex flex-col min-w-0">
