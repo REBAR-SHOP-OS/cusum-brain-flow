@@ -198,9 +198,9 @@ export function TagsExportView() {
       {/* Table view */}
       {viewMode === "table" ? (
         <ScrollArea className="flex-1">
-          <div className="min-w-[1600px]">
+          <div className="min-w-[2200px]">
             {/* Header row */}
-            <div className="grid grid-cols-[70px_50px_60px_90px_50px_60px_55px_90px_repeat(12,65px)_70px] gap-0 px-4 py-2 bg-primary/10 border-b border-border text-[10px] font-bold tracking-widest text-primary uppercase sticky top-0 z-10">
+            <div className="grid grid-cols-[70px_50px_60px_90px_50px_60px_55px_90px_repeat(12,65px)_70px_90px_120px_80px_160px] gap-0 px-4 py-2 bg-primary/10 border-b border-border text-[10px] font-bold tracking-widest text-primary uppercase sticky top-0 z-10">
               <span>DWG #</span>
               <span>Item</span>
               <span>Grade</span>
@@ -210,7 +210,11 @@ export function TagsExportView() {
               <span>Type</span>
               <span className="text-primary">Total Length</span>
               {DIM_COLS.map((c) => <span key={c}>{c}</span>)}
-              <span className="text-right">Weight (KG)</span>
+              <span className="text-right">Weight</span>
+              <span>Picture</span>
+              <span>Customer</span>
+              <span>Ref</span>
+              <span>Add</span>
             </div>
 
             {rowsLoading ? (
@@ -226,7 +230,7 @@ export function TagsExportView() {
                 return (
                   <div
                     key={row.id}
-                    className="grid grid-cols-[70px_50px_60px_90px_50px_60px_55px_90px_repeat(12,65px)_70px] gap-0 px-4 py-2.5 border-b border-border/50 hover:bg-muted/30 text-sm items-center"
+                    className="grid grid-cols-[70px_50px_60px_90px_50px_60px_55px_90px_repeat(12,65px)_70px_90px_120px_80px_160px] gap-0 px-4 py-2.5 border-b border-border/50 hover:bg-muted/30 text-sm items-center"
                   >
                     <span className="text-xs text-muted-foreground font-mono">{row.dwg || "—"}</span>
                     <span className="text-xs text-muted-foreground">{row.row_index}</span>
@@ -252,6 +256,12 @@ export function TagsExportView() {
                       );
                     })}
                     <span className="text-xs text-muted-foreground text-right">{weight}</span>
+                    <span className="text-[10px] text-muted-foreground truncate">
+                      {shapeType ? `TYPE-${shapeType}.PNG` : "—"}
+                    </span>
+                    <span className="text-xs text-muted-foreground truncate">{row.customer || "—"}</span>
+                    <span className="text-xs text-muted-foreground truncate">{row.reference || "—"}</span>
+                    <span className="text-xs text-muted-foreground truncate">{row.address || "—"}</span>
                   </div>
                 );
               })
