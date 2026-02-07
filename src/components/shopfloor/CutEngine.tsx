@@ -45,15 +45,25 @@ export function CutEngine({
 }: CutEngineProps) {
   const [selectedStock, setSelectedStock] = useState(12000);
   const [bars, setBars] = useState(suggestedBars || 1);
+  const [operatorOverride, setOperatorOverride] = useState(false);
 
-  // Sync bars from run plan or suggested
+  // Sync bars from run plan or suggested — but NEVER override operator's manual choice
+  // and NEVER change bars while a run is active
   useEffect(() => {
+    if (isRunning || operatorOverride) return;
     if (runPlan?.feasible) {
       setBars(runPlan.barsThisRun);
     } else if (suggestedBars && suggestedBars > 0) {
       setBars(Math.min(suggestedBars, maxBars));
     }
-  }, [runPlan?.barsThisRun, runPlan?.feasible, suggestedBars, maxBars]);
+  }, [runPlan?.barsThisRun, runPlan?.feasible, suggestedBars, maxBars, isRunning, operatorOverride]);
+
+  // Reset override flag when item changes (new barCode) or run completes
+  useEffect(() => {
+    if (!isRunning) {
+      setOperatorOverride(false);
+    }
+  }, [barCode, isRunning]);
 
   const handleStockChange = (len: number) => {
     setSelectedStock(len);
@@ -199,7 +209,7 @@ export function CutEngine({
               "h-9 w-9 rounded-md",
               darkMode && "border-slate-600 bg-slate-700 hover:bg-slate-600 text-white"
             )}
-            onClick={() => { const n = Math.max(1, bars - 1); setBars(n); onBarsChange?.(n); }}
+            onClick={() => { const n = Math.max(1, bars - 1); setBars(n); setOperatorOverride(true); onBarsChange?.(n); }}
             disabled={bars <= 1}
           >
             <ChevronDown className="w-4 h-4" />
@@ -217,7 +227,7 @@ export function CutEngine({
               "h-9 w-9 rounded-md",
               darkMode && "border-slate-600 bg-slate-700 hover:bg-slate-600 text-white"
             )}
-            onClick={() => { const n = Math.min(maxBars, bars + 1); setBars(n); onBarsChange?.(n); }}
+            onClick={() => { const n = Math.min(maxBars, bars + 1); setBars(n); setOperatorOverride(true); onBarsChange?.(n); }}
             disabled={bars >= maxBars}
           >
             <ChevronUp className="w-4 h-4" />
