@@ -2,6 +2,7 @@ import { AppSidebar } from "./AppSidebar";
 import { TopBar } from "./TopBar";
 import { IntelligencePanel } from "./IntelligencePanel";
 import { MobileNavV2 } from "./MobileNavV2";
+import { AppTour } from "@/components/tour/AppTour";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -10,6 +11,9 @@ interface AppLayoutProps {
 export function AppLayout({ children }: AppLayoutProps) {
   return (
     <div className="flex flex-col h-screen bg-background">
+      {/* Onboarding Tour */}
+      <AppTour />
+
       {/* Top bar */}
       <TopBar />
 
