@@ -32,7 +32,7 @@ export function useCommunications(options?: { search?: string; typeFilter?: stri
         .from("communications")
         .select("*")
         .order("received_at", { ascending: false })
-        .limit(50);
+        .limit(200);
 
       if (options?.search) {
         query = query.or(
