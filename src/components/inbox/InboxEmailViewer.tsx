@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import DOMPurify from "dompurify";
-import { Mail } from "lucide-react";
+import { Mail, FileText, Image, File, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -15,11 +15,73 @@ interface InboxEmailViewerProps {
   onClose: () => void;
 }
 
+// Extract attachment-like links from email body
+function extractAttachments(body: string): { name: string; url: string; type: string }[] {
+  const attachments: { name: string; url: string; type: string }[] = [];
+  if (!body) return attachments;
+
+  // Match markdown-style numbered links: [N] https://...
+  const numberedLinkRegex = /\[(\d+)\]\s*(https?:\/\/[^\s]+)/g;
+  let match;
+  while ((match = numberedLinkRegex.exec(body)) !== null) {
+    const url = match[2];
+    // Skip common non-attachment links
+    if (url.includes("unsubscribe") || url.includes("mailto:") || url.includes("odoo.com?utm")) continue;
+    const fileName = decodeURIComponent(url.split("/").pop()?.split("?")[0] || `Link ${match[1]}`);
+    const ext = fileName.split(".").pop()?.toLowerCase() || "";
+    const type = ["pdf"].includes(ext) ? "pdf" 
+      : ["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(ext) ? "image"
+      : ["doc", "docx", "xls", "xlsx", "csv"].includes(ext) ? "document"
+      : "link";
+    attachments.push({ name: fileName, url, type });
+  }
+
+  // Match <a> tags with file-like hrefs
+  const anchorRegex = /<a[^>]+href="(https?:\/\/[^"]*\.(pdf|png|jpg|jpeg|gif|doc|docx|xls|xlsx|csv|dwg|zip)[^"]*)"[^>]*>([^<]*)<\/a>/gi;
+  while ((match = anchorRegex.exec(body)) !== null) {
+    const url = match[1];
+    const ext = match[2].toLowerCase();
+    const linkText = match[3].trim();
+    const fileName = linkText || decodeURIComponent(url.split("/").pop()?.split("?")[0] || "File");
+    // Avoid duplicates
+    if (attachments.some(a => a.url === url)) continue;
+    const type = ext === "pdf" ? "pdf" 
+      : ["png", "jpg", "jpeg", "gif"].includes(ext) ? "image"
+      : "document";
+    attachments.push({ name: fileName, url, type });
+  }
+
+  return attachments;
+}
+
+function getAttachmentIcon(type: string) {
+  switch (type) {
+    case "pdf": return <FileText className="w-4 h-4 text-red-500" />;
+    case "image": return <Image className="w-4 h-4 text-blue-500" />;
+    case "document": return <File className="w-4 h-4 text-amber-500" />;
+    default: return <ExternalLink className="w-4 h-4 text-muted-foreground" />;
+  }
+}
+
+function getAttachmentBg(type: string) {
+  switch (type) {
+    case "pdf": return "bg-red-500/10 border-red-500/20 hover:bg-red-500/15";
+    case "image": return "bg-blue-500/10 border-blue-500/20 hover:bg-blue-500/15";
+    case "document": return "bg-amber-500/10 border-amber-500/20 hover:bg-amber-500/15";
+    default: return "bg-muted/50 border-border hover:bg-muted";
+  }
+}
+
 export function InboxEmailViewer({ email, onClose }: InboxEmailViewerProps) {
   const [replyMode, setReplyMode] = useState<ReplyMode>(null);
   const [drafting, setDrafting] = useState(false);
   const [showTaskDialog, setShowTaskDialog] = useState(false);
   const { toast } = useToast();
+
+  const attachments = useMemo(() => {
+    if (!email) return [];
+    return extractAttachments(email.body || "");
+  }, [email]);
 
   const handleSmartReply = async () => {
     if (!email) return;
@@ -108,18 +170,47 @@ export function InboxEmailViewer({ email, onClose }: InboxEmailViewerProps) {
           {/* Divider */}
           <div className="border-b my-4" />
 
-          {/* Email Body */}
-          <div
-            className="prose prose-sm max-w-none dark:prose-invert"
-            dangerouslySetInnerHTML={{
-              __html: DOMPurify.sanitize(email.body || email.preview || "", {
-                ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'u', 'a', 'ul', 'ol', 'li', 'blockquote', 'div', 'span', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'img', 'table', 'thead', 'tbody', 'tr', 'td', 'th', 'hr'],
-                ALLOWED_ATTR: ['href', 'target', 'rel', 'src', 'alt', 'class', 'style', 'width', 'height'],
-                FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form'],
-                FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover']
-              })
-            }}
-          />
+          {/* Email Body — light bg container for HTML emails */}
+          <div className="rounded-lg border border-border overflow-hidden">
+            <div
+              className="p-4 bg-white text-zinc-900 [&_a]:text-blue-600 [&_a]:underline [&_img]:max-w-full [&_img]:h-auto [&_table]:border-collapse [&_td]:p-1 [&_th]:p-1"
+              style={{ fontSize: '14px', lineHeight: '1.6' }}
+              dangerouslySetInnerHTML={{
+                __html: DOMPurify.sanitize(email.body || email.preview || "", {
+                  ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'u', 'a', 'ul', 'ol', 'li', 'blockquote', 'div', 'span', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'img', 'table', 'thead', 'tbody', 'tr', 'td', 'th', 'hr', 'b', 'i', 'font', 'center', 'pre', 'code'],
+                  ALLOWED_ATTR: ['href', 'target', 'rel', 'src', 'alt', 'class', 'style', 'width', 'height', 'border', 'cellpadding', 'cellspacing', 'align', 'valign', 'color', 'bgcolor', 'colspan', 'rowspan'],
+                  FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form'],
+                  FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover']
+                })
+              }}
+            />
+          </div>
+
+          {/* Attachments — Odoo-style file chips */}
+          {attachments.length > 0 && (
+            <div className="mt-4">
+              <p className="text-xs font-medium text-muted-foreground mb-2">
+                Attachments ({attachments.length})
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {attachments.map((att, i) => (
+                  <a
+                    key={i}
+                    href={att.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={cn(
+                      "inline-flex items-center gap-2 px-3 py-1.5 rounded-md border text-sm transition-colors cursor-pointer",
+                      getAttachmentBg(att.type)
+                    )}
+                  >
+                    {getAttachmentIcon(att.type)}
+                    <span className="max-w-[180px] truncate text-foreground">{att.name}</span>
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
