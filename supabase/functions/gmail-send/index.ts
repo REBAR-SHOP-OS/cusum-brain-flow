@@ -23,7 +23,7 @@ async function verifyAuth(req: Request): Promise<string | null> {
   return data.claims.sub as string;
 }
 
-async function getAccessTokenForUser(userId: string): Promise<string> {
+async function getAccessTokenForUser(userId: string, clientIp: string): Promise<string> {
   const supabaseAdmin = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
@@ -77,6 +77,13 @@ async function getAccessTokenForUser(userId: string): Promise<string> {
   }
 
   const data = await response.json();
+
+  // Track usage for anomaly detection
+  await supabaseAdmin
+    .from("user_gmail_tokens")
+    .update({ last_used_at: new Date().toISOString(), last_used_ip: clientIp })
+    .eq("user_id", userId);
+
   return data.access_token;
 }
 
@@ -132,8 +139,9 @@ serve(async (req) => {
       throw new Error("Missing required fields: to, subject, body");
     }
 
-    // Use this user's own Gmail token
-    const accessToken = await getAccessTokenForUser(userId);
+    // Use this user's own Gmail token with IP tracking
+    const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+    const accessToken = await getAccessTokenForUser(userId, clientIp);
 
     // Get user's email address
     const profileResponse = await fetch(
