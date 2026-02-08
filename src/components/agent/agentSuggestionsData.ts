@@ -46,4 +46,39 @@ export const agentSuggestions: Record<string, AgentSuggestion[]> = {
     { title: "Compare this week vs last week", category: "Trends" },
     { title: "Generate a sales report", category: "Reports" },
   ],
+  bizdev: [
+    { title: "Analyze our market position", category: "Strategy" },
+    { title: "Find new partnership opportunities", category: "Partnerships" },
+    { title: "Draft a business growth plan", category: "Growth" },
+  ],
+  webbuilder: [
+    { title: "Audit our website for SEO issues", category: "SEO" },
+    { title: "Suggest landing page improvements", category: "Web" },
+    { title: "Write homepage copy for rebar.shop", category: "Content" },
+  ],
+  assistant: [
+    { title: "What should I focus on today?", category: "Planning" },
+    { title: "Summarize my pending tasks", category: "Tasks" },
+    { title: "Draft a meeting agenda", category: "Organize" },
+  ],
+  copywriting: [
+    { title: "Write a proposal for a rebar project", category: "Proposals" },
+    { title: "Draft a marketing email campaign", category: "Email" },
+    { title: "Write product descriptions for our services", category: "Marketing" },
+  ],
+  talent: [
+    { title: "Write a job posting for a fabricator", category: "Hiring" },
+    { title: "Create interview questions for a welder", category: "Interviews" },
+    { title: "Draft an employee onboarding checklist", category: "Onboarding" },
+  ],
+  seo: [
+    { title: "What keywords should rebar.shop target?", category: "Keywords" },
+    { title: "Audit our current search rankings", category: "Audit" },
+    { title: "Create a content plan for better SEO", category: "Strategy" },
+  ],
+  growth: [
+    { title: "Help me set quarterly goals", category: "Goals" },
+    { title: "How can I improve my productivity?", category: "Productivity" },
+    { title: "Create a learning plan for my team", category: "Development" },
+  ],
 };

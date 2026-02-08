@@ -23,6 +23,13 @@ import deliveryHelper from "@/assets/helpers/delivery-helper.png";
 import emailHelper from "@/assets/helpers/email-helper.png";
 import dataHelper from "@/assets/helpers/data-helper.png";
 import socialHelper from "@/assets/helpers/social-helper.png";
+import bizdevHelper from "@/assets/helpers/bizdev-helper.png";
+import webbuilderHelper from "@/assets/helpers/webbuilder-helper.png";
+import assistantHelper from "@/assets/helpers/assistant-helper.png";
+import copywritingHelper from "@/assets/helpers/copywriting-helper.png";
+import talentHelper from "@/assets/helpers/talent-helper.png";
+import seoHelper from "@/assets/helpers/seo-helper.png";
+import growthHelper from "@/assets/helpers/growth-helper.png";
 
 interface Helper {
   id: string;
@@ -105,6 +112,62 @@ const helpers: Helper[] = [
     image: dataHelper,
     gradient: "from-teal-500 to-teal-600",
     route: "/agent/data",
+  },
+  {
+    id: "bizdev",
+    name: "Buddy",
+    role: "Business Development",
+    image: bizdevHelper,
+    gradient: "from-blue-600 to-indigo-600",
+    route: "/agent/bizdev",
+  },
+  {
+    id: "webbuilder",
+    name: "Commet",
+    role: "Web Builder",
+    image: webbuilderHelper,
+    gradient: "from-orange-500 to-red-500",
+    route: "/agent/webbuilder",
+  },
+  {
+    id: "assistant",
+    name: "Vizzy",
+    role: "Virtual Assistant",
+    image: assistantHelper,
+    gradient: "from-yellow-400 to-amber-500",
+    route: "/agent/assistant",
+  },
+  {
+    id: "copywriting",
+    name: "Penn",
+    role: "Copywriting",
+    image: copywritingHelper,
+    gradient: "from-emerald-500 to-teal-500",
+    route: "/agent/copywriting",
+  },
+  {
+    id: "talent",
+    name: "Scouty",
+    role: "Talent & HR",
+    image: talentHelper,
+    gradient: "from-cyan-400 to-cyan-600",
+    route: "/agent/talent",
+  },
+  {
+    id: "seo",
+    name: "Seomi",
+    role: "SEO & Search",
+    image: seoHelper,
+    gradient: "from-lime-500 to-green-600",
+    route: "/agent/seo",
+  },
+  {
+    id: "growth",
+    name: "Gigi",
+    role: "Personal Development",
+    image: growthHelper,
+    gradient: "from-green-400 to-emerald-600",
+    route: "/agent/growth",
   },
 ];
 
