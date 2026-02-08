@@ -156,6 +156,34 @@ export function IntegrationIcon({ id, className }: IntegrationIconProps) {
         </svg>
       );
 
+    case "instagram":
+      return (
+        <svg viewBox="0 0 24 24" className={iconClass}>
+          <defs>
+            <linearGradient id="ig-grad" x1="0%" y1="100%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#FEDA75"/>
+              <stop offset="25%" stopColor="#FA7E1E"/>
+              <stop offset="50%" stopColor="#D62976"/>
+              <stop offset="75%" stopColor="#962FBF"/>
+              <stop offset="100%" stopColor="#4F5BD5"/>
+            </linearGradient>
+          </defs>
+          <rect x="2" y="2" width="20" height="20" rx="6" fill="url(#ig-grad)"/>
+          <circle cx="12" cy="12" r="5" stroke="white" strokeWidth="2" fill="none"/>
+          <circle cx="17.5" cy="6.5" r="1.5" fill="white"/>
+        </svg>
+      );
+
+    case "tiktok":
+      return (
+        <svg viewBox="0 0 24 24" className={iconClass}>
+          <rect x="2" y="2" width="20" height="20" rx="4" fill="#000000"/>
+          <path d="M16.5 4.5C16.5 4.5 16.5 8.5 20 8.5V11C20 11 17.5 11 16.5 9.5V16C16.5 19.5 13 21 10.5 19.5C8 18 7.5 15 9 13C10.5 11 13.5 11 13.5 13V15.5C13.5 15.5 11.5 14.5 10.5 15.5C9.5 16.5 10 18 11.5 18.5C13 19 14 18 14 16.5V4.5H16.5Z" fill="white"/>
+          <path d="M16 4C16 4 16 8 19.5 8V10.5C19.5 10.5 17 10.5 16 9V15.5C16 19 12.5 20.5 10 19C7.5 17.5 7 14.5 8.5 12.5C10 10.5 13 10.5 13 12.5V15C13 15 11 14 10 15C9 16 9.5 17.5 11 18C12.5 18.5 13.5 17.5 13.5 16V4H16Z" fill="#25F4EE" opacity="0.7"/>
+          <path d="M17 5C17 5 17 9 20.5 9V11.5C20.5 11.5 18 11.5 17 10V16.5C17 20 13.5 21.5 11 20C8.5 18.5 8 15.5 9.5 13.5C11 11.5 14 11.5 14 13.5V16C14 16 12 15 11 16C10 17 10.5 18.5 12 19C13.5 19.5 14.5 18.5 14.5 17V5H17Z" fill="#FE2C55" opacity="0.7"/>
+        </svg>
+      );
+
     default:
       return (
         <div className={cn("rounded-lg bg-muted flex items-center justify-center text-muted-foreground", iconClass)}>

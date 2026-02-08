@@ -153,6 +153,32 @@ export const defaultIntegrations: Integration[] = [
     ],
   },
   {
+    id: "instagram",
+    name: "Instagram",
+    description: "Schedule posts, stories, and manage your business profile.",
+    status: "available",
+    icon: "instagram",
+    docsUrl: "https://developers.facebook.com/docs/instagram-api/",
+    fields: [
+      { key: "INSTAGRAM_APP_ID", label: "App ID", type: "text", placeholder: "xxx", helpText: "From Facebook Developer Console (same app as Facebook)" },
+      { key: "INSTAGRAM_APP_SECRET", label: "App Secret", type: "password", placeholder: "xxx", helpText: "From Facebook Developer Console" },
+      { key: "INSTAGRAM_ACCESS_TOKEN", label: "Page Access Token", type: "textarea", placeholder: "xxx", helpText: "Long-lived token from Graph API Explorer" },
+    ],
+  },
+  {
+    id: "tiktok",
+    name: "TikTok",
+    description: "Post videos and track performance on TikTok.",
+    status: "available",
+    icon: "tiktok",
+    docsUrl: "https://developers.tiktok.com/",
+    fields: [
+      { key: "TIKTOK_CLIENT_KEY", label: "Client Key", type: "text", placeholder: "xxx", helpText: "From TikTok Developer Portal" },
+      { key: "TIKTOK_CLIENT_SECRET", label: "Client Secret", type: "password", placeholder: "xxx", helpText: "From TikTok Developer Portal" },
+      { key: "TIKTOK_ACCESS_TOKEN", label: "Access Token", type: "textarea", placeholder: "xxx", helpText: "From OAuth flow" },
+    ],
+  },
+  {
     id: "linkedin",
     name: "LinkedIn",
     description: "Create and share posts with your network.",
@@ -168,7 +194,7 @@ export const defaultIntegrations: Integration[] = [
   {
     id: "facebook",
     name: "Facebook",
-    description: "Manage Facebook and Instagram pages and posts.",
+    description: "Manage Facebook pages and posts.",
     status: "available",
     icon: "facebook",
     docsUrl: "https://developers.facebook.com/apps/",
