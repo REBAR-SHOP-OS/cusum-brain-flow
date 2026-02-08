@@ -14,13 +14,16 @@ const SKIP_SENDERS = [
   "@myactivecampaign.com", "@go.autodesk.com", "@tm.openai.com",
   "@sgsitescanner.", "@linkedin.com", "@facebookmail.com",
   "@github.com", "@notify.", "@newsletter.", "@marketing.",
-  "@synologynotification.com",
+  "@synologynotification.com", "@ringcentral.com", "@lovable.dev",
+  "@service.ringcentral.com", "sns@", "@uber.com",
+  "service@", "@notifications.", "@alert.",
 ];
 
 // Internal bot senders to skip (but real team members should pass through)
 const SKIP_INTERNAL_BOTS = ["odoobot"];
 
 const INTERNAL_DOMAIN = "@rebar.shop";
+const OWN_COMPANY_NAMES = ["rebar.shop", "rebar shop", "ontario rebars", "ontariorebars"];
 
 
 interface LeadExtraction {
@@ -144,27 +147,29 @@ function shouldSkipSender(from: string, to: string): boolean {
     const nameMatch = from.match(/^([^<]+)</);
     const senderName = (nameMatch?.[1] || "").trim().toLowerCase();
     if (SKIP_INTERNAL_BOTS.some((bot) => senderName.includes(bot))) return true;
-
-    // If both from AND to are @rebar.shop and it's purely internal routing, let AI decide
-    // (team members forward customer RFQs internally — these are valid)
   }
 
-  // Skip if BOTH from and to are internal AND there's no external party involved
-  // (pure internal chatter with no customer context)
+  // Skip if BOTH from and to are @rebar.shop — purely internal emails
+  // These are internal forwards/tests with no external customer context
   if (lowerFrom.includes(INTERNAL_DOMAIN) && lowerTo.includes(INTERNAL_DOMAIN)) {
-    // Check if to_address has any external recipients
     const toAddresses = lowerTo.split(",").map(a => a.trim());
     const hasExternal = toAddresses.some(a => !a.includes(INTERNAL_DOMAIN));
     if (!hasExternal) {
-      // Pure internal — still let it through, AI will decide if it's a forwarded RFQ
-      // Only skip if subject is clearly internal task assignment
-      if (lowerFrom.includes("odoobot") || /assigned to you|task update/i.test(from + " " + (to || ""))) {
-        return true;
-      }
+      // Pure internal — skip entirely (no external party = no lead)
+      return true;
     }
   }
 
   return false;
+}
+
+/**
+ * Check if the AI-detected company is our own company (self-referencing).
+ */
+function isSelfCompany(companyName: string): boolean {
+  if (!companyName) return false;
+  const normalized = companyName.toLowerCase().replace(/[^a-z0-9\s]/g, "").trim();
+  return OWN_COMPANY_NAMES.some(own => normalized.includes(own) || own.includes(normalized));
 }
 
 /**
@@ -505,6 +510,14 @@ serve(async (req) => {
         const analysis = await analyzeEmailWithAI(subject, from, body);
 
         if (!analysis.is_lead) {
+          filtered++;
+          results.push({ emailId: email.id, from, subject, action: "filtered", lead: analysis });
+          continue;
+        }
+
+        // Skip if AI detected our own company as the sender company (self-referencing)
+        if (isSelfCompany(analysis.sender_company)) {
+          console.log(`Skipping self-referencing lead from ${from} (company: ${analysis.sender_company})`);
           filtered++;
           results.push({ emailId: email.id, from, subject, action: "filtered", lead: analysis });
           continue;
