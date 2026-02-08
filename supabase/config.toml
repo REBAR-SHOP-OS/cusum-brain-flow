@@ -98,3 +98,6 @@ verify_jwt = false
 
 [functions.facebook-data-deletion]
 verify_jwt = false
+
+[functions.social-publish]
+verify_jwt = false

@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { RefreshCw, Sparkles, Calendar, MapPin, Phone, Globe, Trash2, Pencil, Loader2 } from "lucide-react";
+import { RefreshCw, Sparkles, Calendar, MapPin, Phone, Globe, Trash2, Pencil, Loader2, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { usePublishPost } from "@/hooks/usePublishPost";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,6 +26,7 @@ export function PostReviewPanel({
   onDecline,
 }: PostReviewPanelProps) {
   const { updatePost, deletePost } = useSocialPosts();
+  const { publishPost, publishing } = usePublishPost();
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState("");
   const [editContent, setEditContent] = useState("");
@@ -172,6 +174,23 @@ export function PostReviewPanel({
         {/* Footer Actions */}
         {!editing && (
           <div className="p-4 border-t space-y-2">
+            {(post.platform === "facebook" || post.platform === "instagram") && (
+              <Button
+                className="w-full gap-2 bg-green-600 hover:bg-green-700 text-white"
+                onClick={async () => {
+                  const success = await publishPost(post);
+                  if (success) onClose();
+                }}
+                disabled={publishing}
+              >
+                {publishing ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Send className="w-4 h-4" />
+                )}
+                {publishing ? "Publishing..." : `Publish to ${post.platform}`}
+              </Button>
+            )}
             <div className="flex gap-2">
               <Button variant="outline" className="flex-1" onClick={onDecline}>
                 Decline
