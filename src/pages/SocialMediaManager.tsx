@@ -1,9 +1,9 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Plus, Settings, ChevronLeft, ChevronRight,
   ThumbsUp, Palette, Users, TrendingUp, Search, Filter, X,
-  Sparkles, Loader2,
+  Sparkles, Loader2, BookOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,7 @@ import { PostReviewPanel } from "@/components/social/PostReviewPanel";
 import { BrandKitDialog } from "@/components/social/BrandKitDialog";
 import { CreateContentDialog } from "@/components/social/CreateContentDialog";
 import { SocialCalendar } from "@/components/social/SocialCalendar";
+import { ContentStrategyPanel } from "@/components/social/ContentStrategyPanel";
 import { SettingsSheet } from "@/components/social/SettingsSheet";
 import { useSocialPosts, type SocialPost } from "@/hooks/useSocialPosts";
 import { useAutoGenerate } from "@/hooks/useAutoGenerate";
@@ -46,6 +47,22 @@ export default function SocialMediaManager() {
   const [showBrandKit, setShowBrandKit] = useState(false);
   const [showCreateContent, setShowCreateContent] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+
+  // Strategy panel
+  const [showStrategy, setShowStrategy] = useState(false);
+  const [completedChecklist, setCompletedChecklist] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("social_checklist") || "[]");
+    } catch { return []; }
+  });
+
+  const toggleChecklist = useCallback((id: string) => {
+    setCompletedChecklist((prev) => {
+      const next = prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id];
+      localStorage.setItem("social_checklist", JSON.stringify(next));
+      return next;
+    });
+  }, []);
 
   // Filters & search
   const [searchOpen, setSearchOpen] = useState(false);
@@ -121,6 +138,14 @@ export default function SocialMediaManager() {
               <Sparkles className="w-4 h-4" />
             )}
             {generating ? "Generating..." : "Auto-generate today"}
+          </Button>
+          <Button
+            variant={showStrategy ? "default" : "outline"}
+            className="gap-2"
+            onClick={() => setShowStrategy((v) => !v)}
+          >
+            <BookOpen className="w-4 h-4" />
+            Strategy
           </Button>
           <Button onClick={() => setShowCreateContent(true)} className="bg-primary hover:bg-primary/90">
             <Plus className="w-4 h-4 mr-2" />
@@ -234,6 +259,16 @@ export default function SocialMediaManager() {
             </Button>
           ))}
         </div>
+
+        {/* Content Strategy Panel */}
+        {showStrategy && (
+          <div className="mb-6">
+            <ContentStrategyPanel
+              completedChecklist={completedChecklist}
+              onToggleChecklist={toggleChecklist}
+            />
+          </div>
+        )}
 
         {/* Date Navigation */}
         <div className="flex items-center gap-4 mb-4">
