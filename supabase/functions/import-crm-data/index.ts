@@ -108,6 +108,7 @@ serve(async (req) => {
                 customer_type: "business",
                 status: "active",
                 notes: `Imported from Odoo CRM`,
+                company_id: "a0000000-0000-0000-0000-000000000001",
               })
               .select("id")
               .single();
@@ -140,6 +141,7 @@ serve(async (req) => {
               phone: lead.phone,
               customer_id: customerId,
               is_primary: true,
+              company_id: "a0000000-0000-0000-0000-000000000001",
             });
           }
         }
