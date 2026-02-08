@@ -1,4 +1,5 @@
 import { useState } from "react";
+import DOMPurify from "dompurify";
 import { Mail } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -108,9 +109,17 @@ export function InboxEmailViewer({ email, onClose }: InboxEmailViewerProps) {
           <div className="border-b my-4" />
 
           {/* Email Body */}
-          <div className="text-sm whitespace-pre-wrap leading-relaxed text-foreground/90">
-            {email.body || email.preview}
-          </div>
+          <div
+            className="prose prose-sm max-w-none dark:prose-invert"
+            dangerouslySetInnerHTML={{
+              __html: DOMPurify.sanitize(email.body || email.preview || "", {
+                ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'u', 'a', 'ul', 'ol', 'li', 'blockquote', 'div', 'span', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'img', 'table', 'thead', 'tbody', 'tr', 'td', 'th', 'hr'],
+                ALLOWED_ATTR: ['href', 'target', 'rel', 'src', 'alt', 'class', 'style', 'width', 'height'],
+                FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form'],
+                FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover']
+              })
+            }}
+          />
         </div>
       </div>
 
