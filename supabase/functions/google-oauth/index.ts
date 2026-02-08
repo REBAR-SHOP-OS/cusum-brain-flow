@@ -33,6 +33,17 @@ const SCOPES: Record<string, string[]> = {
   ],
 };
 
+// The stable redirect URI — the edge function itself
+function getRedirectUri(): string {
+  return `${Deno.env.get("SUPABASE_URL")}/functions/v1/google-oauth`;
+}
+
+function getClientCredentials() {
+  const clientId = Deno.env.get("GOOGLE_CLIENT_ID") || Deno.env.get("GMAIL_CLIENT_ID");
+  const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET") || Deno.env.get("GMAIL_CLIENT_SECRET");
+  return { clientId, clientSecret };
+}
+
 async function verifyAuth(req: Request): Promise<string | null> {
   const authHeader = req.headers.get("Authorization");
   if (!authHeader?.startsWith("Bearer ")) return null;
@@ -50,11 +61,144 @@ async function verifyAuth(req: Request): Promise<string | null> {
   return data.claims.sub as string;
 }
 
+// ─── Handle the GET callback from Google ────────────────────────────
+async function handleOAuthCallback(req: Request): Promise<Response> {
+  const url = new URL(req.url);
+  const code = url.searchParams.get("code");
+  const stateParam = url.searchParams.get("state");
+  const error = url.searchParams.get("error");
+
+  // Default fallback URL
+  const fallbackUrl = "https://cusum-brain-flow.lovable.app";
+
+  if (error) {
+    return new Response(null, {
+      status: 302,
+      headers: { Location: `${fallbackUrl}/integrations/callback?status=error&message=${encodeURIComponent(error)}` },
+    });
+  }
+
+  if (!code || !stateParam) {
+    return new Response(null, {
+      status: 302,
+      headers: { Location: `${fallbackUrl}/integrations/callback?status=error&message=${encodeURIComponent("Missing code or state")}` },
+    });
+  }
+
+  let state: { integration: string; userId: string; returnUrl: string };
+  try {
+    state = JSON.parse(atob(stateParam));
+  } catch {
+    return new Response(null, {
+      status: 302,
+      headers: { Location: `${fallbackUrl}/integrations/callback?status=error&message=${encodeURIComponent("Invalid state")}` },
+    });
+  }
+
+  const { integration, userId, returnUrl } = state;
+  const appUrl = returnUrl || fallbackUrl;
+
+  try {
+    const { clientId, clientSecret } = getClientCredentials();
+    if (!clientId || !clientSecret) throw new Error("Google OAuth credentials not configured");
+
+    const redirectUri = getRedirectUri();
+
+    // Exchange code for tokens
+    const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        code,
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uri: redirectUri,
+        grant_type: "authorization_code",
+      }),
+    });
+
+    if (!tokenResponse.ok) {
+      const errText = await tokenResponse.text();
+      throw new Error(`Token exchange failed: ${errText}`);
+    }
+
+    const tokens = await tokenResponse.json();
+
+    if (!tokens.refresh_token) {
+      throw new Error("No refresh token received. Please revoke app access in your Google Account and try again.");
+    }
+
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
+    // Get Gmail email if connecting Gmail
+    let gmailEmail = "";
+    if (integration === "gmail") {
+      const profileRes = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/profile", {
+        headers: { Authorization: `Bearer ${tokens.access_token}` },
+      });
+      if (profileRes.ok) {
+        const profile = await profileRes.json();
+        gmailEmail = profile.emailAddress || "";
+      }
+    }
+
+    // Save token for Gmail
+    if (integration === "gmail" && tokens.refresh_token) {
+      const { error: upsertError } = await supabaseAdmin
+        .from("user_gmail_tokens")
+        .upsert({
+          user_id: userId,
+          gmail_email: gmailEmail,
+          refresh_token: tokens.refresh_token,
+        }, { onConflict: "user_id" });
+
+      if (upsertError) {
+        console.error("Failed to save Gmail token:", upsertError);
+        throw new Error("Failed to save Gmail credentials");
+      }
+    }
+
+    // Update integration status
+    await supabaseAdmin
+      .from("integration_connections")
+      .upsert({
+        integration_id: integration,
+        status: "connected",
+        last_checked_at: new Date().toISOString(),
+        error_message: null,
+        config: { hasRefreshToken: true },
+      }, { onConflict: "integration_id" });
+
+    // Redirect back to the app with success
+    const successUrl = `${appUrl}/integrations/callback?status=success&integration=${encodeURIComponent(integration)}&email=${encodeURIComponent(gmailEmail)}`;
+    return new Response(null, {
+      status: 302,
+      headers: { Location: successUrl },
+    });
+  } catch (err) {
+    console.error("OAuth callback error:", err);
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return new Response(null, {
+      status: 302,
+      headers: { Location: `${appUrl}/integrations/callback?status=error&message=${encodeURIComponent(message)}` },
+    });
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // ─── Handle GET = OAuth callback from Google ─────────────────────
+  if (req.method === "GET") {
+    return handleOAuthCallback(req);
+  }
+
+  // ─── Handle POST = API calls from frontend ──────────────────────
   try {
     const userId = await verifyAuth(req);
     if (!userId) {
@@ -85,16 +229,21 @@ serve(async (req) => {
     // ─── Generate OAuth URL ────────────────────────────────────────
     if (action === "get-auth-url") {
       const integration = body.integration as string;
-      const redirectUri = body.redirectUri as string;
+      const returnUrl = (body.returnUrl as string) || "https://cusum-brain-flow.lovable.app";
 
-      const clientId = Deno.env.get("GOOGLE_CLIENT_ID") || Deno.env.get("GMAIL_CLIENT_ID");
+      const { clientId } = getClientCredentials();
       if (!clientId) throw new Error("Google Client ID not configured");
 
       // Get user's email to pre-fill the login hint
       const { data: userData } = await supabaseAdmin.auth.admin.getUserById(userId);
       const userEmail = userData?.user?.email || "";
 
+      // Encode state with integration, userId, and returnUrl
+      const state = btoa(JSON.stringify({ integration, userId, returnUrl }));
+
       const scopes = SCOPES[integration] || SCOPES.gmail;
+      const redirectUri = getRedirectUri();
+
       const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
       authUrl.searchParams.set("client_id", clientId);
       authUrl.searchParams.set("redirect_uri", redirectUri);
@@ -102,94 +251,11 @@ serve(async (req) => {
       authUrl.searchParams.set("scope", scopes.join(" "));
       authUrl.searchParams.set("access_type", "offline");
       authUrl.searchParams.set("prompt", "consent");
-      authUrl.searchParams.set("state", integration);
+      authUrl.searchParams.set("state", state);
       if (userEmail) authUrl.searchParams.set("login_hint", userEmail);
 
       return new Response(
         JSON.stringify({ authUrl: authUrl.toString() }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // ─── Exchange code for tokens ──────────────────────────────────
-    if (action === "exchange-code") {
-      const code = body.code as string;
-      const redirectUri = body.redirectUri as string;
-      const integration = body.integration as string;
-
-      const clientId = Deno.env.get("GOOGLE_CLIENT_ID") || Deno.env.get("GMAIL_CLIENT_ID");
-      const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET") || Deno.env.get("GMAIL_CLIENT_SECRET");
-
-      if (!clientId || !clientSecret) throw new Error("Google OAuth credentials not configured");
-
-      const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          code,
-          client_id: clientId,
-          client_secret: clientSecret,
-          redirect_uri: redirectUri,
-          grant_type: "authorization_code",
-        }),
-      });
-
-      if (!tokenResponse.ok) {
-        const error = await tokenResponse.text();
-        throw new Error(`Token exchange failed: ${error}`);
-      }
-
-      const tokens = await tokenResponse.json();
-
-      if (!tokens.refresh_token) {
-        throw new Error("No refresh token received. Please revoke app access in your Google Account and try again.");
-      }
-
-      // Get the Gmail email address from the new token
-      let gmailEmail = "";
-      if (integration === "gmail") {
-        const profileRes = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/profile", {
-          headers: { Authorization: `Bearer ${tokens.access_token}` },
-        });
-        if (profileRes.ok) {
-          const profile = await profileRes.json();
-          gmailEmail = profile.emailAddress || "";
-        }
-      }
-
-      // Save refresh token per-user in the database
-      if (integration === "gmail" && tokens.refresh_token) {
-        const { error: upsertError } = await supabaseAdmin
-          .from("user_gmail_tokens")
-          .upsert({
-            user_id: userId,
-            gmail_email: gmailEmail,
-            refresh_token: tokens.refresh_token,
-          }, { onConflict: "user_id" });
-
-        if (upsertError) {
-          console.error("Failed to save Gmail token:", upsertError);
-          throw new Error("Failed to save Gmail credentials");
-        }
-      }
-
-      // Update integration status
-      await supabaseAdmin
-        .from("integration_connections")
-        .upsert({
-          integration_id: integration,
-          status: "connected",
-          last_checked_at: new Date().toISOString(),
-          error_message: null,
-          config: { hasRefreshToken: true },
-        }, { onConflict: "integration_id" });
-
-      return new Response(
-        JSON.stringify({
-          success: true,
-          gmailEmail,
-          message: `Gmail connected as ${gmailEmail || "your account"}!`,
-        }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -218,8 +284,7 @@ serve(async (req) => {
         if (sharedToken) {
           const { data: userData } = await supabaseAdmin.auth.admin.getUserById(userId);
           const userEmail = userData?.user?.email?.toLowerCase();
-          const clientId = Deno.env.get("GMAIL_CLIENT_ID");
-          const clientSecret = Deno.env.get("GMAIL_CLIENT_SECRET");
+          const { clientId, clientSecret } = getClientCredentials();
 
           if (clientId && clientSecret) {
             try {
@@ -269,8 +334,7 @@ serve(async (req) => {
       }
 
       // For non-gmail integrations, use the old shared-token approach
-      const clientId = Deno.env.get("GOOGLE_CLIENT_ID") || Deno.env.get("GMAIL_CLIENT_ID");
-      const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET") || Deno.env.get("GMAIL_CLIENT_SECRET");
+      const { clientId, clientSecret } = getClientCredentials();
       const refreshToken = Deno.env.get("GMAIL_REFRESH_TOKEN");
 
       if (!clientId || !clientSecret || !refreshToken) {
