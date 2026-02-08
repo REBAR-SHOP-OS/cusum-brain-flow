@@ -1,9 +1,10 @@
 import { useState, useRef } from "react";
 import {
   Lock, Tag, CreditCard, Lightbulb, HelpCircle, LogOut,
-  Camera, Settings as SettingsIcon, Users, Loader2,
+  Camera, Settings as SettingsIcon, Users, Loader2, GraduationCap,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
+import { useTour } from "@/hooks/useTour";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -27,6 +28,7 @@ type SettingsTab = "settings";
 export default function Settings() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  const { resetTour, restartTour } = useTour();
   const userEmail = user?.email ?? "";
   const { profiles } = useProfiles();
   const { uploading, uploadSingle } = useAvatarUpload();
@@ -228,6 +230,24 @@ export default function Settings() {
               <section className="space-y-4">
                 <h3 className="text-sm font-medium text-muted-foreground">Other</h3>
                 <div className="space-y-2">
+                  <button
+                    onClick={() => {
+                      resetTour();
+                      restartTour();
+                      navigate("/home");
+                    }}
+                    className="flex items-center gap-3 p-4 w-full rounded-xl bg-secondary/50 cursor-pointer hover:bg-secondary transition-colors text-left"
+                  >
+                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <GraduationCap className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                      <p className="font-medium">Replay Training Tour</p>
+                      <p className="text-sm text-muted-foreground">
+                        Re-watch the onboarding walkthrough for your role
+                      </p>
+                    </div>
+                  </button>
                   <div className="flex items-center gap-3 p-4 rounded-xl bg-secondary/50 cursor-pointer hover:bg-secondary transition-colors">
                     <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center"><Lightbulb className="w-5 h-5 text-primary" /></div>
                     <span className="font-medium">Request a feature</span>
