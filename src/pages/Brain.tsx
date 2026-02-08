@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { AddKnowledgeDialog } from "@/components/brain/AddKnowledgeDialog";
 import { KnowledgeDetailDialog } from "@/components/brain/KnowledgeDetailDialog";
+import { InteractiveBrainBg } from "@/components/brain/InteractiveBrainBg";
 
 interface KnowledgeItem {
   id: string;
@@ -221,9 +222,12 @@ export default function Brain() {
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full relative">
+      {/* Interactive brain background */}
+      <InteractiveBrainBg />
+
       {/* Header */}
-      <header className="flex items-center justify-between px-6 py-4 border-b border-border">
+      <header className="flex items-center justify-between px-6 py-4 border-b border-border relative z-10">
         <h1 className="text-2xl font-semibold">Brain AI</h1>
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="icon">
@@ -236,7 +240,7 @@ export default function Brain() {
         </div>
       </header>
 
-      <div className="flex-1 overflow-auto p-6 space-y-6">
+      <div className="flex-1 overflow-auto p-6 space-y-6 relative z-10">
         {/* Banner */}
         {!bannerDismissed && (
           <div className="bg-primary/5 border border-primary/20 rounded-xl p-6 flex items-start gap-4">
