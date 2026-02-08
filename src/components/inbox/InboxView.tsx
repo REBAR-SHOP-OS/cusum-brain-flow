@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback, useEffect } from "react";
 import { RefreshCw, Settings, Loader2, Search, CheckSquare, Trash2, Archive, X, Mail, LogOut, Phone, LayoutGrid, List } from "lucide-react";
 import { InboxEmailList, type InboxEmail } from "./InboxEmailList";
 import { InboxEmailViewer } from "./InboxEmailViewer";
+import { InboxDetailView } from "./InboxDetailView";
 import { InboxManagerSettings } from "./InboxManagerSettings";
 import { InboxAIToolbar, type AIAction } from "./InboxAIToolbar";
 import { InboxSummaryPanel, type InboxSummary } from "./InboxSummaryPanel";
@@ -579,23 +580,21 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
       {/* Main content area */}
       {viewMode === "kanban" ? (
         /* ── Kanban View ── */
-        <div className="flex-1 flex overflow-hidden">
-          <InboxKanbanBoard
-            emails={allEmails.filter((e) => !hiddenIds.has(e.id))}
-            onSelect={setSelectedEmail}
-            selectedId={selectedEmail?.id ?? null}
+        selectedEmail ? (
+          /* Half-page detail view */
+          <InboxDetailView
+            email={selectedEmail}
+            onClose={() => setSelectedEmail(null)}
           />
-
-          {/* Slide-over viewer for kanban */}
-          {selectedEmail && (
-            <div className="w-full md:w-[480px] border-l border-border shrink-0 overflow-hidden">
-              <InboxEmailViewer
-                email={selectedEmail}
-                onClose={() => setSelectedEmail(null)}
-              />
-            </div>
-          )}
-        </div>
+        ) : (
+          <div className="flex-1 flex overflow-hidden">
+            <InboxKanbanBoard
+              emails={allEmails.filter((e) => !hiddenIds.has(e.id))}
+              onSelect={setSelectedEmail}
+              selectedId={selectedEmail?.id ?? null}
+            />
+          </div>
+        )
       ) : (
         /* ── List View ── */
         <div className="flex-1 flex overflow-hidden">
@@ -646,7 +645,14 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
 
           {/* Email Viewer */}
           <div className={cn("flex-1 min-h-0", selectedEmail ? "flex" : "hidden md:flex")}>
-            <InboxEmailViewer email={selectedEmail} onClose={() => setSelectedEmail(null)} />
+            {selectedEmail ? (
+              <InboxDetailView email={selectedEmail} onClose={() => setSelectedEmail(null)} />
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-3 w-full">
+                <Mail className="w-10 h-10 opacity-30" />
+                <p className="text-sm">Select an email to read</p>
+              </div>
+            )}
           </div>
         </div>
       )}
