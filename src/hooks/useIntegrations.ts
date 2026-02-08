@@ -325,7 +325,7 @@ export function useIntegrations() {
 
   const startOAuth = useCallback(async (integrationId: string) => {
     try {
-      const redirectUri = "https://cusum-brain-flow.lovable.app/integrations/callback";
+      const redirectUri = "https://erp.rebar.shop/integrations/callback";
 
       // QuickBooks
       if (integrationId === "quickbooks") {
