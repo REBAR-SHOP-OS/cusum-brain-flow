@@ -23,6 +23,7 @@ const SCOPES: Record<string, string[]> = {
     "pages_read_engagement",
     "instagram_basic",
     "instagram_manage_comments",
+    "instagram_manage_messages",
     "instagram_content_publish",
     "business_management",
     "public_profile",
