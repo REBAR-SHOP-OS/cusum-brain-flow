@@ -1,4 +1,5 @@
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
 import {
   CheckCircle2, AlertTriangle, Info, TrendingUp, TrendingDown,
@@ -28,6 +29,7 @@ export function RichMarkdown({ content, className }: RichMarkdownProps) {
   return (
     <div className={cn("text-sm leading-relaxed", className)}>
       <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
         components={{
           // ── Headings ──
           h1: ({ children }) => (
