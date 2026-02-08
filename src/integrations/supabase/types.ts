@@ -3075,6 +3075,8 @@ export type Database = {
           created_at: string
           gmail_email: string
           id: string
+          last_used_at: string | null
+          last_used_ip: string | null
           refresh_token: string
           updated_at: string
           user_id: string
@@ -3083,6 +3085,8 @@ export type Database = {
           created_at?: string
           gmail_email: string
           id?: string
+          last_used_at?: string | null
+          last_used_ip?: string | null
           refresh_token: string
           updated_at?: string
           user_id: string
@@ -3091,6 +3095,8 @@ export type Database = {
           created_at?: string
           gmail_email?: string
           id?: string
+          last_used_at?: string | null
+          last_used_ip?: string | null
           refresh_token?: string
           updated_at?: string
           user_id?: string
