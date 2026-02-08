@@ -5,7 +5,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MessageCircle, Image, Plus, Minus, ChevronLeft, Upload, X, Loader2, Calendar } from "lucide-react";
+import { MessageCircle, Image, Plus, Minus, ChevronLeft, Upload, X, Loader2, Calendar, Video } from "lucide-react";
+import { VideoGeneratorDialog } from "./VideoGeneratorDialog";
 import { useToast } from "@/hooks/use-toast";
 import { useSocialPosts } from "@/hooks/useSocialPosts";
 import { supabase } from "@/integrations/supabase/client";
@@ -34,6 +35,7 @@ const platforms = [
 
 export function CreateContentDialog({ open, onOpenChange }: CreateContentDialogProps) {
   const [step, setStep] = useState<Step>("choose");
+  const [showVideoGen, setShowVideoGen] = useState(false);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [platform, setPlatform] = useState("facebook");
@@ -49,6 +51,7 @@ export function CreateContentDialog({ open, onOpenChange }: CreateContentDialogP
   const handleClose = () => {
     onOpenChange(false);
     setStep("choose");
+    setShowVideoGen(false);
     setTitle("");
     setContent("");
     setPlatform("facebook");
@@ -131,6 +134,7 @@ export function CreateContentDialog({ open, onOpenChange }: CreateContentDialogP
   const canSave = title.trim().length > 0 || content.trim().length > 0;
 
   return (
+    <>
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -173,6 +177,22 @@ export function CreateContentDialog({ open, onOpenChange }: CreateContentDialogP
                 <p className="font-medium">Create from media</p>
                 <p className="text-sm text-muted-foreground">
                   Add your own media — Pixel will turn it into ready-to-post content.
+                </p>
+              </div>
+              <ChevronLeft className="w-5 h-5 rotate-180 text-muted-foreground" />
+            </button>
+
+            <button
+              onClick={() => setShowVideoGen(true)}
+              className="w-full flex items-center gap-4 p-4 rounded-lg border hover:bg-muted/50 transition-colors text-left"
+            >
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center text-white">
+                <Video className="w-5 h-5" />
+              </div>
+              <div className="flex-1">
+                <p className="font-medium">Generate AI Video</p>
+                <p className="text-sm text-muted-foreground">
+                  Create stunning videos from text prompts using Google Veo 3.
                 </p>
               </div>
               <ChevronLeft className="w-5 h-5 rotate-180 text-muted-foreground" />
@@ -299,5 +319,15 @@ export function CreateContentDialog({ open, onOpenChange }: CreateContentDialogP
         )}
       </DialogContent>
     </Dialog>
+
+    <VideoGeneratorDialog
+      open={showVideoGen}
+      onOpenChange={setShowVideoGen}
+      onVideoReady={(url) => {
+        setUploadedMedia((prev) => [...prev, { name: "ai-video.mp4", url, type: "video/mp4" }]);
+        setStep("create");
+      }}
+    />
+    </>
   );
 }
