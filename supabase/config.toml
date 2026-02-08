@@ -83,3 +83,6 @@ verify_jwt = false
 
 [functions.process-rfq-emails]
 verify_jwt = false
+
+[functions.pipeline-ai]
+verify_jwt = false
