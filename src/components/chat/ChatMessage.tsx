@@ -3,7 +3,7 @@ import { AgentBadge, AgentType } from "./AgentSelector";
 import { User, Bot, FileIcon, Download } from "lucide-react";
 import { UploadedFile } from "./ChatInput";
 import { MessageActions } from "./MessageActions";
-import ReactMarkdown from "react-markdown";
+import { RichMarkdown } from "./RichMarkdown";
 
 export interface Message {
   id: string;
@@ -82,11 +82,7 @@ export function ChatMessage({ message, onRegenerate }: ChatMessageProps) {
               {message.content || (message.files?.length ? "📎 Files attached" : "")}
             </p>
           ) : (
-            <div className="text-sm leading-relaxed prose prose-sm dark:prose-invert max-w-none">
-              <ReactMarkdown>
-                {message.content || ""}
-              </ReactMarkdown>
-            </div>
+            <RichMarkdown content={message.content || ""} />
           )}
         </div>
 

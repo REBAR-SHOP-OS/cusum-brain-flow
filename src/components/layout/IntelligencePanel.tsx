@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { useAdminChat } from "@/hooks/useAdminChat";
 import { cn } from "@/lib/utils";
-import ReactMarkdown from "react-markdown";
+import { RichMarkdown } from "@/components/chat/RichMarkdown";
 
 export function IntelligencePanel() {
   const { intelligencePanelOpen, setIntelligencePanelOpen } = useWorkspace();
@@ -83,9 +83,7 @@ export function IntelligencePanel() {
               )}
             >
               {msg.role === "assistant" ? (
-                <div className="prose prose-sm dark:prose-invert max-w-none text-xs [&_p]:mb-1 [&_p]:mt-0 [&_pre]:text-[10px] [&_code]:text-[10px] [&_h1]:text-sm [&_h2]:text-xs [&_h3]:text-xs [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0">
-                  <ReactMarkdown>{msg.content}</ReactMarkdown>
-                </div>
+                <RichMarkdown content={msg.content} className="text-xs [&_h1]:text-sm [&_h2]:text-xs [&_h3]:text-xs [&_p]:text-xs" />
               ) : (
                 <p className="whitespace-pre-wrap">{msg.content}</p>
               )}
