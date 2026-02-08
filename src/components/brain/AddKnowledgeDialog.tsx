@@ -66,9 +66,8 @@ export function AddKnowledgeDialog({ open, onOpenChange, onSuccess }: AddKnowled
 
       if (uploadError) throw uploadError;
 
-      const { data: { publicUrl } } = supabase.storage
-        .from("estimation-files")
-        .getPublicUrl(filePath);
+      const { getSignedFileUrl } = await import("@/lib/storageUtils");
+      const publicUrl = await getSignedFileUrl(filePath);
 
       setUploadedFile({ name: file.name, url: publicUrl, path: filePath });
       setSourceUrl(publicUrl);

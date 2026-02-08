@@ -91,15 +91,14 @@ export function CalChatInterface({ onBack }: CalChatInterfaceProps) {
           continue;
         }
 
-        const { data: { publicUrl } } = supabase.storage
-          .from('estimation-files')
-          .getPublicUrl(filePath);
+        const { getSignedFileUrl } = await import("@/lib/storageUtils");
+        const signedUrl = await getSignedFileUrl(filePath);
 
         newFiles.push({
           name: file.name,
           size: file.size,
           type: file.type || 'application/octet-stream',
-          url: publicUrl,
+          url: signedUrl,
           path: filePath,
         });
       }

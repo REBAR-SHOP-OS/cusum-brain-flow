@@ -82,8 +82,9 @@ export function CreateContentDialog({ open, onOpenChange }: CreateContentDialogP
         continue;
       }
 
-      const { data: urlData } = supabase.storage.from("estimation-files").getPublicUrl(filePath);
-      setUploadedMedia((prev) => [...prev, { name: file.name, url: urlData.publicUrl, type: file.type }]);
+      const { getSignedFileUrl } = await import("@/lib/storageUtils");
+      const signedUrl = await getSignedFileUrl(filePath);
+      setUploadedMedia((prev) => [...prev, { name: file.name, url: signedUrl, type: file.type }]);
     }
     e.target.value = "";
   };
