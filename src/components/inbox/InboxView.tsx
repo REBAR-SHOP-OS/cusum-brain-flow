@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
-import { RefreshCw, Settings, Loader2, Search, CheckSquare, Trash2, Archive, X, Mail, LogOut, Phone, LayoutGrid, List } from "lucide-react";
+import { RefreshCw, Settings, Loader2, Search, CheckSquare, Trash2, Archive, X, Mail, LogOut, Phone, LayoutGrid, List, MessageSquare } from "lucide-react";
 import { InboxEmailList, type InboxEmail } from "./InboxEmailList";
 import { InboxEmailViewer } from "./InboxEmailViewer";
 import { InboxDetailView } from "./InboxDetailView";
@@ -108,6 +108,7 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
   const [activeFilter, setActiveFilter] = useState("all");
   const [sortByPriority, setSortByPriority] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "kanban">("kanban");
+  const [kanbanTypeFilter, setKanbanTypeFilter] = useState<"all" | "email" | "call" | "sms">("all");
   const [summary, setSummary] = useState<InboxSummary | null>(null);
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
   const [selectionMode, setSelectionMode] = useState(false);
@@ -617,12 +618,40 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
             onClose={() => setSelectedEmail(null)}
           />
         ) : (
-          <div className="flex-1 flex overflow-hidden">
-            <InboxKanbanBoard
-              emails={allEmails.filter((e) => !hiddenIds.has(e.id))}
-              onSelect={setSelectedEmail}
-              selectedId={selectedEmail?.id ?? null}
-            />
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Type filter tabs for Kanban */}
+            <div className="flex items-center gap-1 px-4 py-2 border-b border-border shrink-0">
+              {([
+                { value: "all" as const, label: "All", icon: null, count: allEmails.filter(e => !hiddenIds.has(e.id)).length },
+                { value: "email" as const, label: "Email", icon: <Mail className="w-3.5 h-3.5" />, count: allEmails.filter(e => !hiddenIds.has(e.id) && e.commType === "email").length },
+                { value: "call" as const, label: "Calls", icon: <Phone className="w-3.5 h-3.5" />, count: allEmails.filter(e => !hiddenIds.has(e.id) && e.commType === "call").length },
+                { value: "sms" as const, label: "SMS", icon: <MessageSquare className="w-3.5 h-3.5" />, count: allEmails.filter(e => !hiddenIds.has(e.id) && e.commType === "sms").length },
+              ]).map((tab) => (
+                <button
+                  key={tab.value}
+                  onClick={() => setKanbanTypeFilter(tab.value)}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
+                    kanbanTypeFilter === tab.value
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  )}
+                >
+                  {tab.icon}
+                  {tab.label}
+                  <Badge variant={kanbanTypeFilter === tab.value ? "outline" : "secondary"} className={cn("text-[10px] h-4 px-1.5 ml-0.5", kanbanTypeFilter === tab.value && "border-primary-foreground/30 text-primary-foreground")}>
+                    {tab.count}
+                  </Badge>
+                </button>
+              ))}
+            </div>
+            <div className="flex-1 flex overflow-hidden">
+              <InboxKanbanBoard
+                emails={allEmails.filter((e) => !hiddenIds.has(e.id) && (kanbanTypeFilter === "all" || e.commType === kanbanTypeFilter))}
+                onSelect={setSelectedEmail}
+                selectedId={selectedEmail?.id ?? null}
+              />
+            </div>
           </div>
         )
       ) : (
