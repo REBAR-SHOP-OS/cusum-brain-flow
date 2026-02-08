@@ -140,6 +140,19 @@ export const defaultIntegrations: Integration[] = [
     ],
   },
   {
+    id: "google-search-console",
+    name: "Google Search Console",
+    description: "Monitor search performance, indexing, and SEO insights.",
+    status: "available",
+    icon: "google-search-console",
+    docsUrl: "https://search.google.com/search-console",
+    fields: [
+      { key: "GSC_CLIENT_ID", label: "Client ID", type: "text", placeholder: "xxx.apps.googleusercontent.com", helpText: "From Google Cloud Console" },
+      { key: "GSC_CLIENT_SECRET", label: "Client Secret", type: "password", placeholder: "GOCSPX-xxx", helpText: "From Google Cloud Console" },
+      { key: "GSC_REFRESH_TOKEN", label: "Refresh Token", type: "textarea", placeholder: "1//xxx", helpText: "From OAuth Playground with Search Console scopes" },
+    ],
+  },
+  {
     id: "linkedin",
     name: "LinkedIn",
     description: "Create and share posts with your network.",

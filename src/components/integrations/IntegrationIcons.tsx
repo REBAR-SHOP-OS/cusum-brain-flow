@@ -145,6 +145,17 @@ export function IntegrationIcon({ id, className }: IntegrationIconProps) {
         </svg>
       );
 
+    case "google-search-console":
+      return (
+        <svg viewBox="0 0 24 24" className={iconClass}>
+          <circle cx="12" cy="12" r="10" fill="#4285F4"/>
+          <circle cx="10" cy="10" r="4" stroke="white" strokeWidth="2" fill="none"/>
+          <line x1="13" y1="13" x2="18" y2="18" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+          <path d="M16 7L19 4" stroke="#FBBC05" strokeWidth="1.5" strokeLinecap="round"/>
+          <path d="M19 7L16 4" stroke="#EA4335" strokeWidth="1.5" strokeLinecap="round"/>
+        </svg>
+      );
+
     default:
       return (
         <div className={cn("rounded-lg bg-muted flex items-center justify-center text-muted-foreground", iconClass)}>
