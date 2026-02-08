@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useCompanyId } from "@/hooks/useCompanyId";
 
 interface AddKnowledgeDialogProps {
   open: boolean;
@@ -37,6 +38,7 @@ export function AddKnowledgeDialog({ open, onOpenChange, onSuccess }: AddKnowled
   const [uploading, setUploading] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<{ name: string; url: string; path: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { companyId } = useCompanyId();
   const { toast } = useToast();
 
   if (!open) return null;
@@ -110,6 +112,7 @@ export function AddKnowledgeDialog({ open, onOpenChange, onSuccess }: AddKnowled
         category,
         source_url: sourceUrl.trim() || null,
         metadata: uploadedFile ? { file_name: uploadedFile.name, file_type: uploadedFile.name.split(".").pop() } : null,
+        company_id: companyId!,
       });
 
       if (error) throw error;

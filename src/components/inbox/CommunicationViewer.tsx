@@ -4,6 +4,7 @@ import { Communication } from "@/hooks/useCommunications";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useCompanyId } from "@/hooks/useCompanyId";
 import { Button } from "@/components/ui/button";
 import { EmailActionBar, type ReplyMode } from "./EmailActionBar";
 import { EmailReplyComposer } from "./EmailReplyComposer";
@@ -60,6 +61,7 @@ function AddToBrainButton({ communication }: { communication: Communication }) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const { toast } = useToast();
+  const { companyId } = useCompanyId();
 
   const handleAddToBrain = async () => {
     setSaving(true);
@@ -85,6 +87,7 @@ function AddToBrainButton({ communication }: { communication: Communication }) {
         content,
         category: "memory",
         source_url: null,
+        company_id: companyId!,
         metadata: {
           source_type: communication.type,
           source_id: communication.sourceId,

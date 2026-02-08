@@ -5,6 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { AddToTaskButton } from "@/components/shared/AddToTaskButton";
 import { CreateTaskDialog, type CreateTaskDefaults } from "@/components/shared/CreateTaskDialog";
 import { supabase } from "@/integrations/supabase/client";
+import { useCompanyId } from "@/hooks/useCompanyId";
 
 interface MessageActionsProps {
   content: string;
@@ -13,6 +14,7 @@ interface MessageActionsProps {
 }
 
 export function MessageActions({ content, messageId, onRegenerate }: MessageActionsProps) {
+  const { companyId } = useCompanyId();
   const { toast } = useToast();
   const [liked, setLiked] = useState<"up" | "down" | null>(null);
   const [taskOpen, setTaskOpen] = useState(false);
@@ -32,6 +34,7 @@ export function MessageActions({ content, messageId, onRegenerate }: MessageActi
         title: content.slice(0, 80),
         content,
         category: "agent-response",
+        company_id: companyId!,
       });
       if (error) throw error;
       toast({ title: "Saved to Brain" });

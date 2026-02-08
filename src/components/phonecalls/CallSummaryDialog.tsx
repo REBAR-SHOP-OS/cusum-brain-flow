@@ -81,6 +81,8 @@ export function CallSummaryDialog({
 
     setCreatingTasks((prev) => new Set(prev).add(index));
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data: profile } = await supabase.from("profiles").select("company_id").eq("user_id", user!.id).maybeSingle();
       const { error } = await supabase.from("tasks").insert({
         title: task.title,
         description: task.description,
@@ -88,6 +90,7 @@ export function CallSummaryDialog({
         status: "todo",
         source: "call-transcription",
         source_ref: `${fromNumber} → ${toNumber}`,
+        company_id: profile?.company_id,
       });
 
       if (error) throw error;

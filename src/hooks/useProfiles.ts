@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useCompanyId } from "@/hooks/useCompanyId";
 
 export interface Profile {
   id: string;
@@ -107,20 +108,7 @@ export function useSalaries() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  // Fetch the current user's company_id for scoping
-  const { data: myCompanyId } = useQuery({
-    queryKey: ["my_company_id"],
-    queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return null;
-      const { data } = await supabase
-        .from("profiles")
-        .select("company_id")
-        .eq("user_id", user.id)
-        .maybeSingle();
-      return data?.company_id ?? null;
-    },
-  });
+  const { companyId: myCompanyId } = useCompanyId();
 
   const { data: salaries, isLoading } = useQuery({
     queryKey: ["employee_salaries"],

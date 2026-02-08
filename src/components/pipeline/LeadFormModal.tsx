@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useCompanyId } from "@/hooks/useCompanyId";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -40,6 +41,7 @@ interface LeadFormModalProps {
 export function LeadFormModal({ open, onOpenChange, lead }: LeadFormModalProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { companyId } = useCompanyId();
 
   const { data: customers = [] } = useQuery({
     queryKey: ["customers-select"],
@@ -123,7 +125,7 @@ export function LeadFormModal({ open, onOpenChange, lead }: LeadFormModalProps) 
           .eq("id", lead.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("leads").insert(payload);
+        const { error } = await supabase.from("leads").insert({ ...payload, company_id: companyId! });
         if (error) throw error;
       }
     },

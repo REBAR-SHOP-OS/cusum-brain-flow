@@ -4,6 +4,7 @@
  */
 
 import { supabase } from "@/integrations/supabase/client";
+import { getCompanyId } from "@/hooks/useCompanyId";
 
 export interface LearningEntry {
   module: string;
@@ -34,11 +35,13 @@ export async function recordLearning(entry: LearningEntry): Promise<void> {
     }]);
 
     // Write event for audit trail
+    const companyId = await getCompanyId();
     await supabase.from("events").insert({
       entity_type: "foreman_brain",
       entity_id: entry.machineId || "system",
       event_type: `foreman_${entry.learningType}`,
       description: `[${entry.module}] ${entry.eventType}${entry.resolution ? ` → ${entry.resolution}` : ""}`,
+      company_id: companyId!,
       metadata: {
         module: entry.module,
         event_type: entry.eventType,
@@ -62,11 +65,13 @@ export async function recordSuggestionInteraction(
   context: Record<string, unknown> = {}
 ): Promise<void> {
   try {
+    const companyId = await getCompanyId();
     await supabase.from("events").insert({
       entity_type: "foreman_suggestion",
       entity_id: suggestionId,
       event_type: `suggestion_${action}`,
       description: `[${module}] Suggestion ${action}`,
+      company_id: companyId!,
       metadata: { module, action, ...context },
     });
   } catch {
