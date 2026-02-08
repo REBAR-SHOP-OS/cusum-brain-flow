@@ -17,11 +17,13 @@ const SCOPES: Record<string, string[]> = {
     "public_profile",
   ],
   instagram: [
+    "instagram_business_basic",
+    "instagram_business_content_publish",
+    "instagram_business_manage_comments",
+    "instagram_business_manage_insights",
+    "instagram_business_manage_messages",
     "pages_show_list",
-    "instagram_basic",
-    "instagram_content_publish",
-    "instagram_manage_comments",
-    "instagram_manage_insights",
+    "pages_read_engagement",
     "public_profile",
   ],
 };
