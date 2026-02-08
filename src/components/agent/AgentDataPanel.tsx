@@ -325,23 +325,46 @@ function EmailPanel() {
 }
 
 function SocialPanel() {
+  const [posts, setPosts] = useState<any[]>([]);
+
+  useEffect(() => {
+    async function load() {
+      const { data } = await supabase.from("social_posts")
+        .select("*")
+        .order("scheduled_date", { ascending: false })
+        .limit(20);
+      if (data) setPosts(data);
+    }
+    load();
+  }, []);
+
+  const published = posts.filter((p) => p.status === "published").length;
+  const scheduled = posts.filter((p) => p.status === "scheduled").length;
+  const drafts = posts.filter((p) => p.status === "draft").length;
+
   return (
     <ScrollArea className="flex-1">
       <div className="p-4 space-y-4">
-        <Card className="p-4 bg-primary/5 border-primary/20">
-          <h3 className="text-sm font-semibold mb-2">📱 Social Media Hub</h3>
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            Ask Pixel to create posts, plan content calendars, suggest hashtags, 
-            and adapt content for Facebook, Instagram, LinkedIn, and Twitter.
-          </p>
-        </Card>
+        <div className="grid grid-cols-2 gap-3">
+          <StatCard label="Total Posts" value={posts.length} icon={Share2} />
+          <StatCard label="Published" value={published} icon={TrendingUp} />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <StatCard label="Scheduled" value={scheduled} icon={BarChart3} />
+          <StatCard label="Drafts" value={drafts} icon={FileText} />
+        </div>
         <div>
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Connected Platforms</h3>
-          <div className="flex flex-wrap gap-2">
-            {["Facebook", "Instagram", "LinkedIn", "Twitter"].map((p) => (
-              <Badge key={p} variant="outline" className="text-[10px]">{p}</Badge>
-            ))}
-          </div>
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Recent Posts</h3>
+          {posts.map((p) => (
+            <ListItem
+              key={p.id}
+              title={p.title || "(Untitled)"}
+              subtitle={`${p.platform} · ${p.scheduled_date ? new Date(p.scheduled_date).toLocaleDateString() : "No date"}`}
+              badge={p.status}
+              badgeVariant={p.status === "published" ? "default" : p.status === "scheduled" ? "secondary" : "outline"}
+            />
+          ))}
+          {posts.length === 0 && <p className="text-sm text-muted-foreground">No posts yet — ask Pixel to create some!</p>}
         </div>
       </div>
     </ScrollArea>
