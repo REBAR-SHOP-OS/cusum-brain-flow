@@ -2042,6 +2042,7 @@ export type Database = {
       }
       orders: {
         Row: {
+          company_id: string | null
           created_at: string
           customer_id: string
           id: string
@@ -2056,6 +2057,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          company_id?: string | null
           created_at?: string
           customer_id: string
           id?: string
@@ -2070,6 +2072,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          company_id?: string | null
           created_at?: string
           customer_id?: string
           id?: string
