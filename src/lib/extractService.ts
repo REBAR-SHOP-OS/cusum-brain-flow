@@ -107,7 +107,8 @@ export async function uploadExtractFile(params: {
 
   if (uploadErr) throw new Error(`Upload failed: ${uploadErr.message}`);
 
-  const fileUrl = `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/estimation-files/${storagePath}`;
+  const { getSignedFileUrl } = await import("@/lib/storageUtils");
+  const fileUrl = await getSignedFileUrl(storagePath);
 
   const { data, error } = await supabase
     .from("extract_raw_files")

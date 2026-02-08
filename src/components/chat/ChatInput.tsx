@@ -177,8 +177,9 @@ export function ChatInput({
           continue;
         }
 
-        const { data: { publicUrl } } = supabase.storage.from("estimation-files").getPublicUrl(filePath);
-        newFiles.push({ name: file.name, size: file.size, type: file.type || "application/octet-stream", url: publicUrl, path: filePath });
+        const { getSignedFileUrl } = await import("@/lib/storageUtils");
+        const signedUrl = await getSignedFileUrl(filePath);
+        newFiles.push({ name: file.name, size: file.size, type: file.type || "application/octet-stream", url: signedUrl, path: filePath });
       }
 
       setUploadedFiles((prev) => [...prev, ...newFiles]);
