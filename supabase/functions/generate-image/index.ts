@@ -46,6 +46,7 @@ serve(async (req) => {
           prompt,
           size: size || "1536x1024",
           quality: quality || "high",
+          output_format: "png",
           n: 1,
         }),
       });
@@ -62,7 +63,7 @@ serve(async (req) => {
       const data = await resp.json();
       const imageData = data.data?.[0];
 
-      // gpt-image-1 returns base64 by default
+      // gpt-image-1 returns base64 by default — convert to data URI for client upload to storage
       const imageUrl = imageData?.url || (imageData?.b64_json ? `data:image/png;base64,${imageData.b64_json}` : null);
 
       return new Response(
