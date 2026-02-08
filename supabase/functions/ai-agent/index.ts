@@ -1523,7 +1523,7 @@ serve(async (req) => {
       }
       const errorText = await aiResponse.text();
       console.error("AI Gateway error:", aiResponse.status, errorText);
-      throw new Error(`AI Gateway error: ${aiResponse.status}`);
+      throw new Error("AI service temporarily unavailable");
     }
 
     const aiData = await aiResponse.json();
@@ -1541,9 +1541,10 @@ serve(async (req) => {
 
   } catch (error) {
     console.error("Agent error:", error);
+    const isCreditsError = error instanceof Error && error.message.includes("credits");
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      JSON.stringify({ error: isCreditsError ? error.message : "AI service temporarily unavailable" }),
+      { status: isCreditsError ? 402 : 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
