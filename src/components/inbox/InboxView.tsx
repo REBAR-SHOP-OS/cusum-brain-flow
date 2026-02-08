@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useLayoutEffect } from "react";
 import {
   RefreshCw, Settings, Loader2, Search, CheckSquare,
   Trash2, Archive, X, Mail, LogOut, Phone, LayoutGrid,
@@ -120,7 +120,9 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
   const [showSearch, setShowSearch] = useState(false);
   const [activeFilter, setActiveFilter] = useState("all");
   const [sortByPriority, setSortByPriority] = useState(false);
-  const [viewMode, setViewMode] = useState<"list" | "kanban">("kanban");
+  // Default to list view on mobile, kanban on desktop
+  const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
+  const [viewMode, setViewMode] = useState<"list" | "kanban">(isMobile ? "list" : "kanban");
   const [kanbanTypeFilter, setKanbanTypeFilter] = useState<"all" | "email" | "call" | "sms">("all");
   const [summary, setSummary] = useState<InboxSummary | null>(null);
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
