@@ -27,6 +27,7 @@ interface PostReviewPanelProps {
 const CONTENT_TYPE_OPTIONS: SelectionOption[] = [
   { value: "post", label: "Post", description: "Regular feed post" },
   { value: "story", label: "Story", description: "24-hour temporary content" },
+  { value: "reel", label: "Reel", description: "Short-form vertical video" },
 ];
 
 const PLATFORM_OPTIONS: SelectionOption[] = [
