@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { ChevronDown, PanelLeftClose, PanelLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ChatThread } from "@/components/chat/ChatThread";
@@ -16,6 +16,7 @@ import { agentConfigs } from "@/components/agent/agentConfigs";
 export default function AgentWorkspace() {
   const { agentId } = useParams<{ agentId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const config = agentConfigs[agentId || ""] || agentConfigs.sales;
 
   const [messages, setMessages] = useState<Message[]>([]);
@@ -48,6 +49,15 @@ export default function AgentWorkspace() {
     setActiveSessionId(null);
   }, []);
 
+  // Auto-send initial message from Quick Actions
+  useEffect(() => {
+    const state = location.state as { initialMessage?: string } | null;
+    if (state?.initialMessage && messages.length === 0 && !isLoading) {
+      // Clear the state so it doesn't re-fire on re-render
+      window.history.replaceState({}, "");
+      handleSend(state.initialMessage);
+    }
+  }, [location.state]); // eslint-disable-line react-hooks/exhaustive-deps
   const handleSend = useCallback(async (content: string) => {
     const userMsg: Message = {
       id: crypto.randomUUID(),

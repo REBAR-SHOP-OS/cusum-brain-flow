@@ -113,6 +113,7 @@ interface UseCase {
   icon: React.ElementType;
   category: string;
   route: string;
+  prompt: string;
 }
 
 const useCases: UseCase[] = [
@@ -120,25 +121,29 @@ const useCases: UseCase[] = [
     title: "Check my pipeline status",
     icon: TrendingUp,
     category: "Sales",
-    route: "/pipeline",
+    route: "/agent/sales",
+    prompt: "Check my pipeline status. Show me a summary of active leads, their stages, and expected close dates.",
   },
   {
     title: "Create a quote for a customer",
     icon: FileText,
     category: "Estimating",
-    route: "/tasks",
+    route: "/agent/estimating",
+    prompt: "Help me create a new quote for a customer. Walk me through the process step by step.",
   },
   {
     title: "Track today's deliveries",
     icon: Truck,
     category: "Operations",
-    route: "/deliveries",
+    route: "/agent/delivery",
+    prompt: "Show me today's delivery schedule. What's the status of all active deliveries?",
   },
   {
     title: "Summarize today's emails",
     icon: Mail,
     category: "Productivity",
-    route: "/inbox",
+    route: "/agent/email",
+    prompt: "Summarize today's emails. Highlight anything urgent or requiring my attention.",
   },
 ];
 
@@ -155,7 +160,7 @@ export default function Home() {
   };
 
   const handleUseCaseClick = (useCase: UseCase) => {
-    navigate(useCase.route);
+    navigate(useCase.route, { state: { initialMessage: useCase.prompt } });
   };
 
   return (
