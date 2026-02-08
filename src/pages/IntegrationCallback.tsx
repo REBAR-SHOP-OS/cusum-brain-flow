@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -11,69 +10,17 @@ export default function IntegrationCallback() {
   const [message, setMessage] = useState("");
 
   useEffect(() => {
-    const code = searchParams.get("code");
-    const state = searchParams.get("state");
-    const error = searchParams.get("error");
+    const callbackStatus = searchParams.get("status");
+    const integration = searchParams.get("integration") || "";
+    const errorMessage = searchParams.get("message");
+    const email = searchParams.get("email");
 
-    if (error) {
-      setStatus("error");
-      setMessage(`Authorization denied: ${error}`);
-      return;
-    }
-
-    if (!code || !state) {
-      setStatus("error");
-      setMessage("Missing authorization code or state");
-      return;
-    }
-
-    const waitForAuthAndExchange = async () => {
-      let retries = 0;
-      let session = null;
-
-      while (retries < 5) {
-        const { data } = await supabase.auth.getSession();
-        session = data.session;
-        if (session) break;
-        retries++;
-        await new Promise(resolve => setTimeout(resolve, 500));
-      }
-
-      if (!session) {
-        setStatus("error");
-        setMessage("Session expired. Please log in and try connecting again.");
-        return;
-      }
-
-      await exchangeCode(code, state);
-    };
-
-    waitForAuthAndExchange();
-  }, [searchParams]);
-
-  const exchangeCode = async (code: string, integration: string) => {
-    try {
-      // Must match the redirect URI used in the auth request (published URL)
-      const redirectUri = "https://cusum-brain-flow.lovable.app/integrations/callback";
-
-      // Route to the correct edge function based on integration
-      const edgeFunction = integration === "ringcentral" ? "ringcentral-oauth" : "google-oauth";
-
-      const { data, error } = await supabase.functions.invoke(edgeFunction, {
-        body: {
-          action: "exchange-code",
-          code,
-          redirectUri,
-          integration,
-        },
-      });
-
-      if (error) throw new Error(error.message);
-
+    if (callbackStatus === "success") {
       setStatus("success");
-      setMessage(data.message || "Successfully connected!");
+      const label = integration || "your account";
+      setMessage(email ? `Connected as ${email}!` : `${label} connected successfully!`);
 
-      // Auto-redirect to inbox after success
+      // Auto-redirect after success
       setTimeout(() => {
         if (integration === "gmail" || integration === "ringcentral") {
           navigate("/inbox");
@@ -81,14 +28,18 @@ export default function IntegrationCallback() {
           navigate("/integrations");
         }
       }, 2000);
-    } catch (err) {
+    } else if (callbackStatus === "error") {
       setStatus("error");
-      setMessage(err instanceof Error ? err.message : "Failed to complete authorization");
+      setMessage(errorMessage || "Connection failed");
+    } else {
+      // Legacy flow or unexpected state
+      setStatus("error");
+      setMessage("Unexpected callback. Please try connecting again.");
     }
-  };
+  }, [searchParams, navigate]);
 
   const goBack = () => {
-    navigate("/inbox");
+    navigate("/integrations");
   };
 
   return (
@@ -107,7 +58,7 @@ export default function IntegrationCallback() {
             <CheckCircle2 className="w-16 h-16 mx-auto text-green-500" />
             <h1 className="text-xl font-semibold text-green-500">Account Connected!</h1>
             <p className="text-muted-foreground">{message}</p>
-            <p className="text-sm text-muted-foreground">Redirecting to your inbox...</p>
+            <p className="text-sm text-muted-foreground">Redirecting...</p>
           </>
         )}
 
@@ -117,7 +68,7 @@ export default function IntegrationCallback() {
             <h1 className="text-xl font-semibold text-destructive">Connection Failed</h1>
             <p className="text-muted-foreground">{message}</p>
             <Button variant="outline" onClick={goBack}>
-              Back to Inbox
+              Back to Integrations
             </Button>
           </>
         )}
