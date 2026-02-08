@@ -59,14 +59,19 @@ ${(body || "").substring(0, 4000)}
 
 Analyze and extract information using the suggest_lead tool.
 
-An email IS a lead if it:
-- Requests a quote or pricing for rebar/steel/fabrication work
-- Inquires about services, projects, or capabilities  
+An email IS a lead if it matches ANY of these criteria:
+- Requests a quote, quotation, pricing, estimate, or bid for rebar/steel/fabrication work
+- Contains words like "quote", "quotation", "pricing", "price", "bid", "tender", "RFQ", "estimation", "estimate", "proposal", "budget", "cost"
+- Forwards or references attached drawings, plans, specifications, shop drawings, or bid documents
+- Inquires about services, projects, or capabilities for rebar/steel/construction
 - Is from a construction company, contractor, engineer, or supplier asking about rebar
-- Contains project details, drawings, or specifications
+- Contains project details, drawings, specifications, or download links for bid packages
 - Asks about availability, pricing, or timelines for rebar work
+- References a bid invitation, tender notice, or construction opportunity
+- Contains attachments like PDFs, DWGs, or spreadsheets related to construction/rebar
+- Even brief emails like "quotation please" or "please quote" or "need pricing" ARE leads
 
-An email is NOT a lead if it's spam, marketing, newsletters, receipts, system notifications, job applications, or internal @rebar.shop communication.
+IMPORTANT: When in doubt, classify as a lead (is_lead = true). It's better to capture a borderline email than miss a real opportunity. Only classify as NOT a lead if it's clearly spam, marketing, newsletters, receipts, system notifications, job applications, or purely internal communication with zero business context.
 
 NAMING CONVENTION: Create a short project name like "Halford Avenue Project" or "TTC College Pole Bases" or "Rebar Quote" — concise, descriptive, based on project/site name from the email.
 
