@@ -14,9 +14,14 @@ const SKIP_SENDERS = [
   "@myactivecampaign.com", "@go.autodesk.com", "@tm.openai.com",
   "@sgsitescanner.", "@linkedin.com", "@facebookmail.com",
   "@github.com", "@notify.", "@newsletter.", "@marketing.",
+  "@synologynotification.com",
 ];
 
+// Internal bot senders to skip (but real team members should pass through)
+const SKIP_INTERNAL_BOTS = ["odoobot"];
+
 const INTERNAL_DOMAIN = "@rebar.shop";
+
 
 interface LeadExtraction {
   is_lead: boolean;
@@ -121,10 +126,40 @@ Extract the sender's COMPANY NAME as precisely as possible. Look in email signat
   return JSON.parse(toolCall.function.arguments) as LeadExtraction;
 }
 
-function shouldSkipSender(from: string): boolean {
+function shouldSkipSender(from: string, to: string): boolean {
   const lowerFrom = from.toLowerCase();
-  if (lowerFrom.includes(INTERNAL_DOMAIN)) return true;
-  return SKIP_SENDERS.some((pattern) => lowerFrom.includes(pattern));
+  const lowerTo = to.toLowerCase();
+
+  // Skip known system/marketing senders
+  if (SKIP_SENDERS.some((pattern) => lowerFrom.includes(pattern))) return true;
+
+  // Skip internal bot messages (OdooBot), but NOT real team members
+  if (lowerFrom.includes(INTERNAL_DOMAIN)) {
+    // Extract sender name before the email — e.g. "OdooBot <rfq@rebar.shop>"
+    const nameMatch = from.match(/^([^<]+)</);
+    const senderName = (nameMatch?.[1] || "").trim().toLowerCase();
+    if (SKIP_INTERNAL_BOTS.some((bot) => senderName.includes(bot))) return true;
+
+    // If both from AND to are @rebar.shop and it's purely internal routing, let AI decide
+    // (team members forward customer RFQs internally — these are valid)
+  }
+
+  // Skip if BOTH from and to are internal AND there's no external party involved
+  // (pure internal chatter with no customer context)
+  if (lowerFrom.includes(INTERNAL_DOMAIN) && lowerTo.includes(INTERNAL_DOMAIN)) {
+    // Check if to_address has any external recipients
+    const toAddresses = lowerTo.split(",").map(a => a.trim());
+    const hasExternal = toAddresses.some(a => !a.includes(INTERNAL_DOMAIN));
+    if (!hasExternal) {
+      // Pure internal — still let it through, AI will decide if it's a forwarded RFQ
+      // Only skip if subject is clearly internal task assignment
+      if (lowerFrom.includes("odoobot") || /assigned to you|task update/i.test(from + " " + (to || ""))) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
 
 /**
@@ -279,7 +314,8 @@ serve(async (req) => {
       }
     }
 
-    // Fetch recent emails to @rebar.shop (last 30 days)
+    // Fetch recent emails involving @rebar.shop (last 30 days)
+    // Include both inbound (TO @rebar.shop) and outbound (FROM @rebar.shop) 
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
@@ -288,13 +324,13 @@ serve(async (req) => {
     const { data: emails, error: queryError } = await supabaseAdmin
       .from("communications")
       .select("id, source_id, from_address, to_address, subject, body_preview, metadata, received_at")
-      .ilike("to_address", "%@rebar.shop%")
+      .or("to_address.ilike.%@rebar.shop%,from_address.ilike.%@rebar.shop%")
       .gte("received_at", thirtyDaysAgo.toISOString())
       .order("received_at", { ascending: false })
-      .limit(100);
+      .limit(200);
 
     if (queryError) throw queryError;
-    console.log(`Found ${emails?.length || 0} emails to @rebar.shop`);
+    console.log(`Found ${emails?.length || 0} emails involving @rebar.shop`);
 
     if (!emails?.length) {
       return new Response(
@@ -303,10 +339,10 @@ serve(async (req) => {
       );
     }
 
-    // Pre-filter system/internal emails
-    const candidateEmails = emails.filter((e) => !shouldSkipSender(e.from_address || ""));
+    // Pre-filter system/bot emails
+    const candidateEmails = emails.filter((e) => !shouldSkipSender(e.from_address || "", e.to_address || ""));
     const prefiltered = emails.length - candidateEmails.length;
-    console.log(`Pre-filtered ${prefiltered} system/internal emails, ${candidateEmails.length} candidates remain`);
+    console.log(`Pre-filtered ${prefiltered} system/bot emails, ${candidateEmails.length} candidates remain`);
 
     if (candidateEmails.length === 0) {
       return new Response(
