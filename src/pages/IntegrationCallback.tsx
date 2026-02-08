@@ -53,7 +53,8 @@ export default function IntegrationCallback() {
 
   const exchangeCode = async (code: string, integration: string) => {
     try {
-      const redirectUri = `${window.location.origin}/integrations/callback`;
+      // Must match the redirect URI used in the auth request (published URL)
+      const redirectUri = "https://cusum-brain-flow.lovable.app/integrations/callback";
 
       // Route to the correct edge function based on integration
       const edgeFunction = integration === "ringcentral" ? "ringcentral-oauth" : "google-oauth";

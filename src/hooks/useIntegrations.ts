@@ -261,8 +261,8 @@ export function useIntegrations() {
         return;
       }
 
-      // Google integrations
-      const redirectUri = `${window.location.origin}/integrations/callback`;
+      // Google integrations — always use published URL to avoid redirect_uri_mismatch
+      const redirectUri = "https://cusum-brain-flow.lovable.app/integrations/callback";
       
       const { data, error } = await supabase.functions.invoke(
         "google-oauth",
