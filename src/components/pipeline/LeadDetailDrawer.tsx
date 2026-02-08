@@ -10,6 +10,7 @@ import {
 import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { PIPELINE_STAGES } from "@/pages/Pipeline";
+import { LeadTimeline } from "./LeadTimeline";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Lead = Tables<"leads">;
@@ -131,12 +132,17 @@ export function LeadDetailDrawer({
 
         {/* Body */}
         <div className="p-6">
-          <Tabs defaultValue="details" className="w-full">
-            <TabsList className="w-full grid grid-cols-3 mb-4">
+          <Tabs defaultValue="timeline" className="w-full">
+            <TabsList className="w-full grid grid-cols-4 mb-4">
+              <TabsTrigger value="timeline">Timeline</TabsTrigger>
               <TabsTrigger value="details">Details</TabsTrigger>
               <TabsTrigger value="financials">Financials</TabsTrigger>
               <TabsTrigger value="notes">Notes</TabsTrigger>
             </TabsList>
+
+            <TabsContent value="timeline" className="mt-0">
+              <LeadTimeline lead={lead} />
+            </TabsContent>
 
             <TabsContent value="details" className="space-y-5 mt-0">
               {/* Customer Info */}
