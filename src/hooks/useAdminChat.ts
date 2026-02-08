@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from "react";
+import { supabase } from "@/integrations/supabase/client";
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-chat`;
 
@@ -62,11 +63,18 @@ export function useAdminChat() {
       const controller = new AbortController();
       abortRef.current = controller;
 
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        upsertAssistant("⚠️ Not authenticated. Please log in.");
+        setIsStreaming(false);
+        return;
+      }
+
       const resp = await fetch(CHAT_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({ messages: history }),
         signal: controller.signal,
