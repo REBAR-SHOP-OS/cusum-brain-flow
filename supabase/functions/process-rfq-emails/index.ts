@@ -7,110 +7,17 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const RFQ_EMAIL = "rfq@rebar.shop";
+// System/marketing senders to skip before AI analysis (saves API calls)
+const SKIP_SENDERS = [
+  "noreply@", "no-reply@", "mailer-daemon@", "postmaster@",
+  "@accounts.google.com", "@uber.com", "@stripe.com", "@siteground.com",
+  "@myactivecampaign.com", "@go.autodesk.com", "@tm.openai.com",
+  "@sgsitescanner.", "@linkedin.com", "@facebookmail.com",
+  "@github.com", "@notify.", "@newsletter.", "@marketing.",
+];
 
-interface GmailMessage {
-  id: string;
-  threadId: string;
-  snippet: string;
-  payload: {
-    headers: Array<{ name: string; value: string }>;
-    body?: { data?: string };
-    parts?: Array<{ mimeType: string; body?: { data?: string } }>;
-  };
-  internalDate: string;
-}
-
-function decodeBase64Url(data: string): string {
-  const base64 = data.replace(/-/g, "+").replace(/_/g, "/");
-  try {
-    return decodeURIComponent(
-      atob(base64)
-        .split("")
-        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
-        .join("")
-    );
-  } catch {
-    return atob(base64);
-  }
-}
-
-function getHeader(headers: Array<{ name: string; value: string }>, name: string): string {
-  return headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value || "";
-}
-
-function getBodyContent(message: GmailMessage): string {
-  if (message.payload.body?.data) {
-    return decodeBase64Url(message.payload.body.data);
-  }
-  const textPart = message.payload.parts?.find((p) => p.mimeType === "text/plain");
-  if (textPart?.body?.data) {
-    return decodeBase64Url(textPart.body.data);
-  }
-  return message.snippet;
-}
-
-async function getAccessToken(): Promise<string> {
-  const clientId = Deno.env.get("GMAIL_CLIENT_ID");
-  const clientSecret = Deno.env.get("GMAIL_CLIENT_SECRET");
-  const refreshToken = Deno.env.get("GMAIL_REFRESH_TOKEN");
-
-  if (!clientId || !clientSecret || !refreshToken) {
-    throw new Error("Gmail OAuth credentials not configured for RFQ inbox");
-  }
-
-  const response = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: clientId,
-      client_secret: clientSecret,
-      refresh_token: refreshToken,
-      grant_type: "refresh_token",
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Token refresh failed: ${await response.text()}`);
-  }
-
-  const data = await response.json();
-  return data.access_token;
-}
-
-async function fetchRecentEmails(accessToken: string, maxResults = 20): Promise<GmailMessage[]> {
-  // Search for emails sent TO rfq@rebar.shop
-  const query = `to:${RFQ_EMAIL} newer_than:7d`;
-  const listParams = new URLSearchParams({
-    maxResults: String(maxResults),
-    q: query,
-  });
-
-  const listResponse = await fetch(
-    `https://gmail.googleapis.com/gmail/v1/users/me/messages?${listParams}`,
-    { headers: { Authorization: `Bearer ${accessToken}` } }
-  );
-
-  if (!listResponse.ok) {
-    throw new Error(`Gmail API error: ${await listResponse.text()}`);
-  }
-
-  const listData = await listResponse.json();
-  if (!listData.messages?.length) return [];
-
-  const messages = await Promise.all(
-    listData.messages.map(async (msg: { id: string }) => {
-      const res = await fetch(
-        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`,
-        { headers: { Authorization: `Bearer ${accessToken}` } }
-      );
-      if (!res.ok) return null;
-      return await res.json();
-    })
-  );
-
-  return messages.filter(Boolean) as GmailMessage[];
-}
+// Skip emails FROM @rebar.shop (internal)
+const INTERNAL_DOMAIN = "@rebar.shop";
 
 interface LeadExtraction {
   is_lead: boolean;
@@ -131,24 +38,28 @@ async function analyzeEmailWithAI(
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-  const prompt = `You are an AI assistant for a rebar fabrication company. Analyze this email sent to rfq@rebar.shop and determine if it's a legitimate Request for Quotation (RFQ) or business lead.
+  const prompt = `You are an AI assistant for a rebar fabrication company (rebar.shop). Analyze this email and determine if it's a legitimate business lead — someone requesting a quote, pricing, or inquiring about rebar/steel fabrication services.
 
 EMAIL:
 From: ${from}
 Subject: ${subject}
 Body:
-${body.substring(0, 3000)}
+${(body || "").substring(0, 3000)}
 
 Analyze and respond using the suggest_lead tool. An email IS a lead if it:
 - Requests a quote or pricing for rebar/steel/fabrication work
-- Inquires about services, projects, or capabilities
-- Is from a construction company, contractor, or engineer asking about rebar
+- Inquires about services, projects, or capabilities  
+- Is from a construction company, contractor, engineer, or supplier asking about rebar
+- Contains project details, drawings, or specifications
+- Asks about availability, pricing, or timelines for rebar work
 
 An email is NOT a lead if it:
-- Is spam, marketing, or automated notifications
-- Is an internal/system email
-- Is a newsletter or promotional content
-- Is a reply to an existing conversation that doesn't contain new business`;
+- Is spam, marketing, newsletters, or automated notifications
+- Is a receipt, invoice, or billing notification
+- Is a security alert, password reset, or system notification
+- Is promotional content from software vendors
+- Is internal communication between @rebar.shop employees
+- Is a job application or recruitment email`;
 
   const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
@@ -164,7 +75,7 @@ An email is NOT a lead if it:
           type: "function",
           function: {
             name: "suggest_lead",
-            description: "Extract lead information from an RFQ email",
+            description: "Extract lead information from an email",
             parameters: {
               type: "object",
               properties: {
@@ -228,13 +139,20 @@ An email is NOT a lead if it:
   return JSON.parse(toolCall.function.arguments) as LeadExtraction;
 }
 
+function shouldSkipSender(from: string): boolean {
+  const lowerFrom = from.toLowerCase();
+  // Skip internal emails
+  if (lowerFrom.includes(INTERNAL_DOMAIN)) return true;
+  // Skip known system/marketing senders
+  return SKIP_SENDERS.some((pattern) => lowerFrom.includes(pattern));
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    // Verify the caller is authenticated
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -276,21 +194,46 @@ serve(async (req) => {
       });
     }
 
-    // Step 1: Fetch recent emails to rfq@rebar.shop
-    console.log("Fetching emails to rfq@rebar.shop...");
-    const accessToken = await getAccessToken();
-    const emails = await fetchRecentEmails(accessToken);
-    console.log(`Found ${emails.length} emails`);
+    // Step 1: Fetch recent emails from communications table 
+    // that were sent TO any @rebar.shop address (last 30 days)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    if (emails.length === 0) {
+    console.log("Scanning communications for leads...");
+
+    const { data: emails, error: queryError } = await supabaseAdmin
+      .from("communications")
+      .select("id, source_id, from_address, to_address, subject, body_preview, metadata, received_at")
+      .ilike("to_address", "%@rebar.shop%")
+      .gte("received_at", thirtyDaysAgo.toISOString())
+      .order("received_at", { ascending: false })
+      .limit(100);
+
+    if (queryError) throw queryError;
+
+    console.log(`Found ${emails?.length || 0} emails to @rebar.shop`);
+
+    if (!emails?.length) {
       return new Response(
-        JSON.stringify({ created: 0, skipped: 0, filtered: 0, leads: [] }),
+        JSON.stringify({ created: 0, skipped: 0, filtered: 0, prefiltered: 0, total: 0, leads: [] }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Step 2: Check which emails have already been processed
-    const emailIds = emails.map((e) => `gmail_rfq_${e.id}`);
+    // Step 2: Pre-filter obvious non-leads (system emails, internal, etc.)
+    const candidateEmails = emails.filter((e) => !shouldSkipSender(e.from_address || ""));
+    const prefiltered = emails.length - candidateEmails.length;
+    console.log(`Pre-filtered ${prefiltered} system/internal emails, ${candidateEmails.length} candidates remain`);
+
+    if (candidateEmails.length === 0) {
+      return new Response(
+        JSON.stringify({ created: 0, skipped: 0, filtered: 0, prefiltered, total: emails.length, leads: [] }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Step 3: Check which emails have already been processed
+    const emailIds = candidateEmails.map((e) => `comm_${e.id}`);
     const { data: existingLeads } = await supabaseAdmin
       .from("leads")
       .select("source_email_id")
@@ -298,7 +241,7 @@ serve(async (req) => {
 
     const processedIds = new Set((existingLeads ?? []).map((l) => l.source_email_id));
 
-    // Step 3: Process unprocessed emails with AI
+    // Step 4: Process unprocessed emails with AI
     const results: Array<{
       emailId: string;
       from: string;
@@ -311,23 +254,25 @@ serve(async (req) => {
     let skipped = 0;
     let filtered = 0;
 
-    for (const email of emails) {
-      const sourceEmailId = `gmail_rfq_${email.id}`;
+    for (const email of candidateEmails) {
+      const sourceEmailId = `comm_${email.id}`;
 
       if (processedIds.has(sourceEmailId)) {
         skipped++;
         results.push({
           emailId: email.id,
-          from: getHeader(email.payload.headers, "From"),
-          subject: getHeader(email.payload.headers, "Subject"),
+          from: email.from_address || "",
+          subject: email.subject || "",
           action: "skipped",
         });
         continue;
       }
 
-      const from = getHeader(email.payload.headers, "From");
-      const subject = getHeader(email.payload.headers, "Subject");
-      const body = getBodyContent(email);
+      const from = email.from_address || "";
+      const subject = email.subject || "";
+      // Use full body from metadata if available, fallback to preview
+      const meta = email.metadata as Record<string, unknown> | null;
+      const body = (meta?.body as string) || email.body_preview || "";
 
       try {
         const analysis = await analyzeEmailWithAI(subject, from, body);
@@ -340,8 +285,9 @@ serve(async (req) => {
 
         // Extract sender email from "Name <email>" format
         const senderEmail = from.match(/<(.+?)>/)?.[1] || from;
+        // Extract which @rebar.shop address received it
+        const toAddress = email.to_address || "";
 
-        // Create the lead
         const { error: insertError } = await supabaseAdmin.from("leads").insert({
           title: analysis.title,
           description: analysis.description,
@@ -351,12 +297,19 @@ serve(async (req) => {
           priority: analysis.priority,
           expected_value: analysis.expected_value,
           company_id: profile.company_id,
-          notes: `Auto-created from RFQ email.\nFrom: ${from}\nSubject: ${subject}\nCompany: ${analysis.sender_company}\nAI Reason: ${analysis.reason}`,
+          notes: [
+            `Auto-created from email scan.`,
+            `From: ${from}`,
+            `To: ${toAddress}`,
+            `Subject: ${subject}`,
+            `Company: ${analysis.sender_company}`,
+            `Received: ${email.received_at}`,
+            `AI Reason: ${analysis.reason}`,
+          ].join("\n"),
         });
 
         if (insertError) {
           console.error("Failed to insert lead:", insertError);
-          // If it's a duplicate, just skip
           if (insertError.code === "23505") {
             skipped++;
             results.push({ emailId: email.id, from, subject, action: "skipped" });
@@ -368,18 +321,18 @@ serve(async (req) => {
         results.push({ emailId: email.id, from, subject, action: "created", lead: analysis });
       } catch (aiError) {
         console.error(`AI analysis failed for email ${email.id}:`, aiError);
-        // Don't block on AI errors, skip this email
         continue;
       }
     }
 
-    console.log(`Done: ${created} created, ${skipped} skipped, ${filtered} filtered`);
+    console.log(`Done: ${created} created, ${skipped} already processed, ${filtered} AI-filtered, ${prefiltered} pre-filtered`);
 
     return new Response(
       JSON.stringify({
         created,
         skipped,
         filtered,
+        prefiltered,
         total: emails.length,
         leads: results,
       }),
