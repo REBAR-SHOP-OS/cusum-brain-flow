@@ -10,6 +10,13 @@ import deliveryHelper from "@/assets/helpers/delivery-helper.png";
 import emailHelper from "@/assets/helpers/email-helper.png";
 import dataHelper from "@/assets/helpers/data-helper.png";
 import socialHelper from "@/assets/helpers/social-helper.png";
+import bizdevHelper from "@/assets/helpers/bizdev-helper.png";
+import webbuilderHelper from "@/assets/helpers/webbuilder-helper.png";
+import assistantHelper from "@/assets/helpers/assistant-helper.png";
+import copywritingHelper from "@/assets/helpers/copywriting-helper.png";
+import talentHelper from "@/assets/helpers/talent-helper.png";
+import seoHelper from "@/assets/helpers/seo-helper.png";
+import growthHelper from "@/assets/helpers/growth-helper.png";
 
 export interface AgentConfig {
   name: string;
@@ -102,5 +109,68 @@ export const agentConfigs: Record<string, AgentConfig> = {
     greeting: "Hello! I'm Prism, your Data & Insights agent.",
     placeholder: "Ask about reports, trends, analytics...",
     capabilities: ["Business analytics", "Generate reports", "Trend analysis", "KPI tracking"],
+  },
+  bizdev: {
+    name: "Buddy",
+    role: "Business Development",
+    image: bizdevHelper,
+    agentType: "bizdev",
+    greeting: "Hey! I'm Buddy, your Business Development strategist.",
+    placeholder: "Ask about growth strategies, partnerships, market opportunities...",
+    capabilities: ["Identify new markets", "Partnership strategies", "Competitor analysis", "Growth planning"],
+  },
+  webbuilder: {
+    name: "Commet",
+    role: "Web Builder",
+    image: webbuilderHelper,
+    agentType: "webbuilder",
+    greeting: "Hi! I'm Commet, your Web Builder agent.",
+    placeholder: "Ask about website updates, landing pages, SEO...",
+    capabilities: ["Website content updates", "Landing page copy", "Technical SEO fixes", "Performance optimization"],
+  },
+  assistant: {
+    name: "Vizzy",
+    role: "Virtual Assistant",
+    image: assistantHelper,
+    agentType: "assistant",
+    greeting: "Hello! I'm Vizzy, your all-purpose Virtual Assistant.",
+    placeholder: "Ask me anything — scheduling, research, planning...",
+    capabilities: ["Schedule management", "Research topics", "Summarize documents", "Draft communications"],
+  },
+  copywriting: {
+    name: "Penn",
+    role: "Copywriting",
+    image: copywritingHelper,
+    agentType: "copywriting",
+    greeting: "Hey! I'm Penn, your professional Copywriter.",
+    placeholder: "Ask for proposals, emails, website copy, ads...",
+    capabilities: ["Write proposals", "Marketing copy", "Email campaigns", "Product descriptions"],
+  },
+  talent: {
+    name: "Scouty",
+    role: "Talent & HR",
+    image: talentHelper,
+    agentType: "talent",
+    greeting: "Hi! I'm Scouty, your Talent & HR agent.",
+    placeholder: "Ask about hiring, onboarding, team management...",
+    capabilities: ["Job descriptions", "Interview questions", "Onboarding checklists", "Team performance reviews"],
+  },
+  seo: {
+    name: "Seomi",
+    role: "SEO & Search",
+    image: seoHelper,
+    agentType: "seo",
+    greeting: "Hello! I'm Seomi, your SEO specialist.",
+    placeholder: "Ask about rankings, keywords, search performance...",
+    capabilities: ["Keyword research", "On-page SEO audit", "Content optimization", "Search Console insights"],
+  },
+  growth: {
+    name: "Gigi",
+    role: "Personal Development",
+    image: growthHelper,
+    agentType: "growth",
+    greeting: "Hi! I'm Gigi, your Personal Development coach.",
+    placeholder: "Ask about goals, habits, productivity, learning...",
+    capabilities: ["Goal setting & tracking", "Productivity tips", "Skill development plans", "Work-life balance"],
   },
 };
