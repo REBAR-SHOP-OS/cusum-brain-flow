@@ -31,34 +31,47 @@ interface LeadCardProps {
 function getCardSignal(lead: Lead): { border: string; dot: string; label: string } {
   const now = new Date();
   const daysSinceUpdate = differenceInDays(now, new Date(lead.updated_at));
+
+  // Closed stages — handle first, before any urgency logic
+  // 🟢 Green — Won
+  if (lead.stage === "won") {
+    return { border: "border-l-emerald-500", dot: "bg-emerald-500", label: "Won" };
+  }
+  // ⚪ Grey — Lost (closed, no action needed)
+  if (lead.stage === "lost") {
+    return { border: "border-l-zinc-400", dot: "bg-zinc-400", label: "Lost" };
+  }
+
+  // Active stages — apply urgency logic
   const isOverdue = lead.expected_close_date && new Date(lead.expected_close_date) < now;
   const isDueSoon = lead.expected_close_date && differenceInDays(new Date(lead.expected_close_date), now) <= 7 && !isOverdue;
 
-  // 🔴 Red — Overdue or high priority + stale (no update in 7+ days)
-  if (isOverdue || (lead.priority === "high" && daysSinceUpdate >= 7)) {
-    return { border: "border-l-red-500", dot: "bg-red-500", label: isOverdue ? "Overdue" : "Stale" };
+  // 🔴 Red — Overdue AND stale (no update in 7+ days) or very overdue (30+ days past)
+  const daysOverdue = isOverdue ? differenceInDays(now, new Date(lead.expected_close_date!)) : 0;
+  if ((isOverdue && daysSinceUpdate >= 7) || daysOverdue >= 30) {
+    return { border: "border-l-red-500", dot: "bg-red-500", label: "Overdue" };
   }
-  // 🟠 Orange — Due soon or high priority
-  if (isDueSoon || (lead.priority === "high" && daysSinceUpdate >= 3)) {
-    return { border: "border-l-orange-500", dot: "bg-orange-500", label: isDueSoon ? "Due soon" : "Needs action" };
+  // 🟠 Orange — Due soon, or overdue but recently touched, or high priority + stale
+  if (isDueSoon || (isOverdue && daysSinceUpdate < 7) || (lead.priority === "high" && daysSinceUpdate >= 5)) {
+    return { border: "border-l-orange-500", dot: "bg-orange-500", label: isDueSoon ? "Due soon" : isOverdue ? "Past due" : "Needs action" };
   }
-  // 🟡 Yellow — Medium priority or stale medium
+  // 🟡 Yellow — High priority active or medium + stale
+  if (lead.priority === "high" && daysSinceUpdate >= 2) {
+    return { border: "border-l-yellow-500", dot: "bg-yellow-500", label: "High priority" };
+  }
   if (lead.priority === "medium" && daysSinceUpdate >= 7) {
     return { border: "border-l-yellow-500", dot: "bg-yellow-500", label: "Needs attention" };
   }
-  if (lead.priority === "high") {
-    return { border: "border-l-yellow-500", dot: "bg-yellow-500", label: "High priority" };
-  }
-  // 🟢 Green — Won stage or high probability
-  if (lead.stage === "won" || (lead.probability !== null && lead.probability >= 70)) {
+  // 🟢 Green — High probability (≥70) or recently active high priority
+  if ((lead.probability !== null && lead.probability >= 70) || (lead.priority === "high" && daysSinceUpdate < 2)) {
     return { border: "border-l-green-500", dot: "bg-green-500", label: "On track" };
   }
-  // 🔵 Blue — Normal / active
-  if (lead.priority === "medium" || daysSinceUpdate < 3) {
+  // 🔵 Blue — Normal / active (recently updated)
+  if (daysSinceUpdate < 5) {
     return { border: "border-l-blue-500", dot: "bg-blue-500", label: "Active" };
   }
-  // ⚪ Grey — Uncategorized / low priority
-  return { border: "border-l-muted-foreground/30", dot: "bg-muted-foreground/50", label: "Low" };
+  // ⚪ Grey — Low priority or uncategorized
+  return { border: "border-l-muted-foreground/30", dot: "bg-muted-foreground/50", label: "Inactive" };
 }
 
 function getProbabilityColor(probability: number): string {

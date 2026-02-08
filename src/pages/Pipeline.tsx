@@ -20,6 +20,7 @@ export const PIPELINE_STAGES = [
   { id: "telephonic_enquiries", label: "Telephonic Enquiries", color: "bg-cyan-500" },
   { id: "qualified", label: "Qualified", color: "bg-teal-500" },
   { id: "rfi", label: "RFI", color: "bg-green-500" },
+  { id: "proposal", label: "Proposal", color: "bg-green-600" },
   { id: "qc_ben", label: "QC - Ben", color: "bg-lime-500" },
   { id: "addendums", label: "Addendums", color: "bg-yellow-500" },
   { id: "estimation_ben", label: "Estimation - Ben", color: "bg-amber-500" },
@@ -28,6 +29,7 @@ export const PIPELINE_STAGES = [
   { id: "quotation_priority", label: "Quotation Priority", color: "bg-rose-500" },
   { id: "quotation_bids", label: "Quotation Bids", color: "bg-pink-500" },
   { id: "won", label: "Won", color: "bg-emerald-500" },
+  { id: "lost", label: "Lost", color: "bg-zinc-500" },
   { id: "shop_drawing", label: "Shop Drawing", color: "bg-violet-500" },
   { id: "shop_drawing_approval", label: "Shop Drawing Sent for Approval", color: "bg-purple-500" },
 ];
