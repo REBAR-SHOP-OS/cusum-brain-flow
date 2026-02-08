@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { X, CheckSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useCompanyId } from "@/hooks/useCompanyId";
 import { GmailMessage } from "@/lib/gmail";
 
 interface CreateTaskModalProps {
@@ -44,6 +45,7 @@ export function CreateTaskModal({ email, onClose, onCreated }: CreateTaskModalPr
   const [dueDate, setDueDate] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
+  const { companyId } = useCompanyId();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,6 +61,7 @@ export function CreateTaskModal({ email, onClose, onCreated }: CreateTaskModalPr
         source: "email",
         source_ref: email.id,
         status: "open",
+        company_id: companyId!,
       });
 
       if (error) throw error;

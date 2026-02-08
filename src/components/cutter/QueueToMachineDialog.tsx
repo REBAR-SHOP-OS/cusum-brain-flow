@@ -5,6 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { MachineOption, CutPlanItem, CutPlan } from "@/hooks/useCutPlans";
 import { supabase } from "@/integrations/supabase/client";
+import { useCompanyId } from "@/hooks/useCompanyId";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
@@ -61,6 +62,7 @@ export function QueueToMachineDialog({
         actor_id: user?.id || null,
         actor_type: "user",
         description: `Cut plan "${plan.name}" queued to ${selectedMachine?.name || "machine"} with ${items.length} items`,
+        company_id: companyId!,
         metadata: {
           machine_id: machineId,
           machine_name: selectedMachine?.name,

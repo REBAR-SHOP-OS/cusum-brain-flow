@@ -152,6 +152,8 @@ export async function logBarlistEvent(
   description?: string,
   metadata?: Record<string, unknown>
 ) {
+  const { getCompanyId } = await import("@/hooks/useCompanyId");
+  const companyId = await getCompanyId();
   await supabase.from("events").insert({
     entity_type: "barlist",
     entity_id: barlistId,
@@ -159,6 +161,7 @@ export async function logBarlistEvent(
     actor_id: actorId,
     actor_type: "user",
     description: description || eventType,
+    company_id: companyId!,
     metadata: metadata || {},
   } as any);
 }

@@ -349,6 +349,7 @@ export type Database = {
       communications: {
         Row: {
           body_preview: string | null
+          company_id: string
           contact_id: string | null
           created_at: string
           customer_id: string | null
@@ -367,6 +368,7 @@ export type Database = {
         }
         Insert: {
           body_preview?: string | null
+          company_id: string
           contact_id?: string | null
           created_at?: string
           customer_id?: string | null
@@ -385,6 +387,7 @@ export type Database = {
         }
         Update: {
           body_preview?: string | null
+          company_id?: string
           contact_id?: string | null
           created_at?: string
           customer_id?: string | null
@@ -748,6 +751,7 @@ export type Database = {
       }
       deliveries: {
         Row: {
+          company_id: string
           created_at: string
           delivery_number: string
           driver_name: string | null
@@ -759,6 +763,7 @@ export type Database = {
           vehicle: string | null
         }
         Insert: {
+          company_id: string
           created_at?: string
           delivery_number: string
           driver_name?: string | null
@@ -770,6 +775,7 @@ export type Database = {
           vehicle?: string | null
         }
         Update: {
+          company_id?: string
           created_at?: string
           delivery_number?: string
           driver_name?: string | null
@@ -786,6 +792,7 @@ export type Database = {
         Row: {
           address: string | null
           arrival_time: string | null
+          company_id: string
           created_at: string
           customer_id: string | null
           delivery_id: string
@@ -803,6 +810,7 @@ export type Database = {
         Insert: {
           address?: string | null
           arrival_time?: string | null
+          company_id: string
           created_at?: string
           customer_id?: string | null
           delivery_id: string
@@ -820,6 +828,7 @@ export type Database = {
         Update: {
           address?: string | null
           arrival_time?: string | null
+          company_id?: string
           created_at?: string
           customer_id?: string | null
           delivery_id?: string
@@ -999,6 +1008,7 @@ export type Database = {
         Row: {
           actor_id: string | null
           actor_type: string | null
+          company_id: string
           created_at: string
           description: string | null
           entity_id: string
@@ -1010,6 +1020,7 @@ export type Database = {
         Insert: {
           actor_id?: string | null
           actor_type?: string | null
+          company_id: string
           created_at?: string
           description?: string | null
           entity_id: string
@@ -1021,6 +1032,7 @@ export type Database = {
         Update: {
           actor_id?: string | null
           actor_type?: string | null
+          company_id?: string
           created_at?: string
           description?: string | null
           entity_id?: string
@@ -1606,6 +1618,7 @@ export type Database = {
       knowledge: {
         Row: {
           category: string
+          company_id: string
           content: string | null
           created_at: string
           id: string
@@ -1616,6 +1629,7 @@ export type Database = {
         }
         Insert: {
           category: string
+          company_id: string
           content?: string | null
           created_at?: string
           id?: string
@@ -1626,6 +1640,7 @@ export type Database = {
         }
         Update: {
           category?: string
+          company_id?: string
           content?: string | null
           created_at?: string
           id?: string
@@ -1639,6 +1654,7 @@ export type Database = {
       leads: {
         Row: {
           assigned_to: string | null
+          company_id: string
           contact_id: string | null
           created_at: string
           customer_id: string | null
@@ -1657,6 +1673,7 @@ export type Database = {
         }
         Insert: {
           assigned_to?: string | null
+          company_id: string
           contact_id?: string | null
           created_at?: string
           customer_id?: string | null
@@ -1675,6 +1692,7 @@ export type Database = {
         }
         Update: {
           assigned_to?: string | null
+          company_id?: string
           contact_id?: string | null
           created_at?: string
           customer_id?: string | null
@@ -2819,6 +2837,7 @@ export type Database = {
         Row: {
           agent_type: string | null
           assigned_to: string | null
+          company_id: string
           completed_at: string | null
           created_at: string
           customer_id: string | null
@@ -2835,6 +2854,7 @@ export type Database = {
         Insert: {
           agent_type?: string | null
           assigned_to?: string | null
+          company_id: string
           completed_at?: string | null
           created_at?: string
           customer_id?: string | null
@@ -2851,6 +2871,7 @@ export type Database = {
         Update: {
           agent_type?: string | null
           assigned_to?: string | null
+          company_id?: string
           completed_at?: string | null
           created_at?: string
           customer_id?: string | null

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { CheckSquare, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useCompanyId } from "@/hooks/useCompanyId";
 
 export interface CreateTaskDefaults {
   title: string;
@@ -57,6 +58,7 @@ export function CreateTaskDialog({ open, onOpenChange, defaults, onCreated }: Cr
   const [dueDate, setDueDate] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
+  const { companyId } = useCompanyId();
 
   // Sync defaults when dialog opens with new data
   const handleOpenChange = (isOpen: boolean) => {
@@ -84,6 +86,7 @@ export function CreateTaskDialog({ open, onOpenChange, defaults, onCreated }: Cr
         source: defaults.source,
         source_ref: defaults.sourceRef,
         status: "open",
+        company_id: companyId!,
       });
 
       if (error) throw error;

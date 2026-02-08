@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { useCompanyId } from "@/hooks/useCompanyId";
 import {
   Dialog,
   DialogContent,
@@ -100,6 +101,7 @@ export function CallAnalysisDialog({
   const [savingTasks, setSavingTasks] = useState(false);
   const [tasksSaved, setTasksSaved] = useState(false);
   const { toast } = useToast();
+  const { companyId } = useCompanyId();
 
   const runAnalysis = useCallback(async () => {
     setLoading(true);
@@ -158,6 +160,7 @@ export function CallAnalysisDialog({
         status: "open",
         source: "ringcentral-ai",
         source_ref: callId,
+        company_id: companyId!,
       }));
 
       const { error: insertError } = await supabase
