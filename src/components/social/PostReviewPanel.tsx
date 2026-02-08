@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { RefreshCw, Sparkles, Calendar, MapPin, Phone, Globe, Trash2, Pencil, Loader2, Send, ImageIcon, Video } from "lucide-react";
+import { RefreshCw, Sparkles, Calendar, Trash2, Loader2, Send, ImageIcon, Video, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { usePublishPost } from "@/hooks/usePublishPost";
 import { Textarea } from "@/components/ui/textarea";
@@ -43,6 +43,7 @@ export function PostReviewPanel({
   const [uploading, setUploading] = useState(false);
 
   const handleMediaReady = async (tempUrl: string, type: "image" | "video") => {
+    if (!post) return;
     setUploading(true);
     try {
       const permanentUrl = await uploadSocialMediaAsset(tempUrl, type);
@@ -90,85 +91,73 @@ export function PostReviewPanel({
     onClose();
   };
 
+  const isVideo = post.image_url?.endsWith(".mp4");
+
   return (
     <>
     <Sheet open={!!post} onOpenChange={(open) => { if (!open) { setEditing(false); onClose(); } }}>
       <SheetContent className="w-[400px] sm:w-[450px] p-0 flex flex-col">
+        {/* Header */}
         <SheetHeader className="p-4 border-b">
           <div className="flex items-center justify-between">
-            <SheetTitle className="text-base">Social media post</SheetTitle>
+            <SheetTitle className="text-base font-semibold">Social media post</SheetTitle>
             <span className="text-sm text-muted-foreground">{postsToReview} left to review</span>
           </div>
         </SheetHeader>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {/* Preview Image / Generate Visual */}
-          {post.image_url ? (
-            <div className="relative rounded-lg overflow-hidden bg-muted aspect-square">
-              {post.image_url.endsWith(".mp4") ? (
-                <video src={post.image_url} controls className="w-full h-full object-cover" />
-              ) : (
-                <img src={post.image_url} alt="Post preview" className="w-full h-full object-cover" />
-              )}
-            </div>
-          ) : uploading ? (
-            <div className="rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 p-6 text-center space-y-3">
-              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
-                <Loader2 className="w-6 h-6 text-primary animate-spin" />
+        <div className="flex-1 overflow-y-auto">
+          {/* ── Visual Section ── */}
+          <div className="p-4 space-y-3">
+            {post.image_url ? (
+              <div className="rounded-lg overflow-hidden bg-muted">
+                {isVideo ? (
+                  <video src={post.image_url} controls className="w-full aspect-video object-cover" />
+                ) : (
+                  <img src={post.image_url} alt="Post preview" className="w-full aspect-[4/3] object-cover" />
+                )}
               </div>
-              <div>
+            ) : uploading ? (
+              <div className="rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 p-8 text-center space-y-3">
+                <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
+                  <Loader2 className="w-6 h-6 text-primary animate-spin" />
+                </div>
                 <p className="text-sm font-medium">Uploading media…</p>
-                <p className="text-xs text-muted-foreground">Saving to permanent storage</p>
               </div>
-            </div>
-          ) : (
-            <div className="rounded-lg border-2 border-dashed border-muted-foreground/20 bg-muted/30 p-6 text-center space-y-3">
-              <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mx-auto">
-                <ImageIcon className="w-6 h-6 text-muted-foreground" />
+            ) : (
+              <div className="rounded-lg border-2 border-dashed border-muted-foreground/20 bg-muted/30 p-8 text-center space-y-3">
+                <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mx-auto">
+                  <ImageIcon className="w-6 h-6 text-muted-foreground" />
+                </div>
+                <p className="text-sm text-muted-foreground">No visual attached</p>
               </div>
-              <div>
-                <p className="text-sm font-medium">No visual attached</p>
-                <p className="text-xs text-muted-foreground">Generate an image or video for this post</p>
-              </div>
-              <div className="flex gap-2 justify-center">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5"
-                  onClick={() => setShowImageGen(true)}
-                >
-                  <ImageIcon className="w-3.5 h-3.5" />
-                  Generate Image
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5"
-                  onClick={() => setShowVideoGen(true)}
-                >
-                  <Video className="w-3.5 h-3.5" />
-                  Generate Video
-                </Button>
-              </div>
-            </div>
-          )}
+            )}
 
+            {/* Regenerate / AI Edit buttons for visual */}
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => setShowImageGen(true)}
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                {post.image_url ? "Regenerate image" : "Generate image"}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => setShowVideoGen(true)}
+              >
+                <Video className="w-3.5 h-3.5" />
+                {isVideo ? "Regenerate video" : "Generate video"}
+              </Button>
+            </div>
+          </div>
+
+          {/* ── Content Section ── */}
           {editing ? (
-            <div className="space-y-3">
-              <div className="space-y-1.5">
-                <Label className="text-sm">Platform</Label>
-                <Select value={editPlatform} onValueChange={setEditPlatform}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="facebook">Facebook</SelectItem>
-                    <SelectItem value="instagram">Instagram</SelectItem>
-                    <SelectItem value="linkedin">LinkedIn</SelectItem>
-                    <SelectItem value="twitter">X / Twitter</SelectItem>
-                    <SelectItem value="tiktok">TikTok</SelectItem>
-                    <SelectItem value="youtube">YouTube</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className="px-4 pb-4 space-y-3">
               <div className="space-y-1.5">
                 <Label className="text-sm">Title</Label>
                 <Input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
@@ -192,53 +181,82 @@ export function PostReviewPanel({
             </div>
           ) : (
             <>
-              {/* Content */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium text-muted-foreground">Content</p>
-                  <Button variant="ghost" size="sm" onClick={startEdit}>
-                    <Pencil className="w-3.5 h-3.5 mr-1" />
-                    Edit
-                  </Button>
-                </div>
-                <div className="p-3 rounded-lg bg-muted/50 text-sm space-y-3">
-                  <p className="font-medium">{post.title || post.content.split("\n")[0]}</p>
-                  <p className="text-muted-foreground whitespace-pre-line">{post.content}</p>
+              {/* Content card */}
+              <div className="mx-4 rounded-lg border bg-card p-4 space-y-3">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Content</p>
+
+                <div className="space-y-2 text-sm">
+                  {post.title && (
+                    <p className="font-semibold text-foreground">{post.title}</p>
+                  )}
+                  <p className="text-foreground/90 whitespace-pre-line leading-relaxed">{post.content}</p>
+
                   {post.hashtags.length > 0 && (
-                    <p className="text-primary">{post.hashtags.join(" ")}</p>
+                    <p className="text-primary text-xs leading-relaxed">
+                      Hashtags: {post.hashtags.join(" ")}
+                    </p>
                   )}
                 </div>
               </div>
 
-              {/* Platform & Status */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="p-3 rounded-lg bg-muted/50">
-                  <p className="text-xs text-muted-foreground mb-1">Platform</p>
-                  <p className="text-sm font-medium capitalize">{post.platform}</p>
-                </div>
-                <div className="p-3 rounded-lg bg-muted/50">
-                  <p className="text-xs text-muted-foreground mb-1">Status</p>
-                  <p className="text-sm font-medium capitalize">{post.status}</p>
-                </div>
+              {/* Regenerate caption / AI Edit */}
+              <div className="flex gap-2 px-4 pt-3">
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={startEdit}>
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Regenerate caption
+                </Button>
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={startEdit}>
+                  <Sparkles className="w-3.5 h-3.5" />
+                  AI Edit
+                </Button>
               </div>
 
-              {/* Scheduled Date */}
-              {post.scheduled_date && (
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-muted-foreground">Publish date</p>
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                    <span className="text-sm">
-                      {format(new Date(post.scheduled_date), "MMMM d, yyyy 'at' h:mm a")}
+              {/* ── Fields Section ── */}
+              <div className="px-4 pt-4 space-y-3">
+                {/* Publish date */}
+                <div className="rounded-lg border bg-card p-3">
+                  <p className="text-xs text-muted-foreground mb-1">Publish date</p>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">
+                      {post.scheduled_date
+                        ? format(new Date(post.scheduled_date), "MMMM d, yyyy 'at' h:mm a")
+                        : "Not scheduled"}
                     </span>
                     <Calendar className="w-4 h-4 text-muted-foreground" />
                   </div>
                 </div>
-              )}
+
+                {/* Content type */}
+                <div className="rounded-lg border bg-card p-3">
+                  <p className="text-xs text-muted-foreground mb-1">Content type</p>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">
+                      {isVideo ? "Video" : post.image_url ? "Image Post" : "Post"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Platform */}
+                <div className="rounded-lg border bg-card p-3">
+                  <p className="text-xs text-muted-foreground mb-1">Platform</p>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium capitalize">{post.platform}</span>
+                  </div>
+                </div>
+
+                {/* Pages */}
+                <div className="rounded-lg border bg-card p-3">
+                  <p className="text-xs text-muted-foreground mb-1">Pages</p>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">Ontario Steel Detailing</span>
+                  </div>
+                </div>
+              </div>
             </>
           )}
         </div>
 
-        {/* Footer Actions */}
+        {/* ── Footer Actions ── */}
         {!editing && (
           <div className="p-4 border-t space-y-2">
             {(post.platform === "facebook" || post.platform === "instagram") && (
@@ -262,7 +280,7 @@ export function PostReviewPanel({
               <Button variant="outline" className="flex-1" onClick={onDecline}>
                 Decline
               </Button>
-              <Button className="flex-1 bg-primary" onClick={onSchedule}>
+              <Button className="flex-1" onClick={onSchedule}>
                 {post.status === "scheduled" ? "Approve" : "Schedule"}
               </Button>
             </div>
