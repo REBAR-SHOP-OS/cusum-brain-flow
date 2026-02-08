@@ -34,7 +34,7 @@ export function InteractiveBrainBg() {
     >
       {/* Outer glow ring */}
       <div
-        className="absolute top-1/2 left-1/2 w-[90vw] h-[90vh] rounded-full opacity-10 blur-[120px]"
+        className="absolute top-1/2 left-1/2 w-[120vw] h-[120vh] rounded-full opacity-20 blur-[100px]"
         style={{
           background: "radial-gradient(circle, hsl(var(--primary) / 0.8), hsl(var(--accent) / 0.3) 50%, transparent 70%)",
           transform: `translate(calc(-50% + ${offset.x * 0.3}px), calc(-50% + ${offset.y * 0.3}px))`,
@@ -44,7 +44,7 @@ export function InteractiveBrainBg() {
 
       {/* Inner glow pulse */}
       <div
-        className="absolute top-1/2 left-1/2 w-[70vw] h-[70vh] rounded-full opacity-25 blur-[60px]"
+        className="absolute top-1/2 left-1/2 w-[85vw] h-[85vh] rounded-full opacity-35 blur-[50px]"
         style={{
           background: "radial-gradient(circle, hsl(var(--primary) / 0.7), transparent 65%)",
           transform: `translate(calc(-50% + ${offset.x * 0.6}px), calc(-50% + ${offset.y * 0.6}px))`,
@@ -57,12 +57,12 @@ export function InteractiveBrainBg() {
       <img
         src={brainHero}
         alt=""
-        className="absolute top-1/2 left-1/2 w-[80vh] h-[80vh] max-w-[800px] max-h-[800px] object-contain opacity-[0.18] select-none"
+        className="absolute top-1/2 left-1/2 w-[95vh] h-[95vh] max-w-[1100px] max-h-[1100px] object-contain opacity-[0.3] select-none"
         draggable={false}
         style={{
           transform: `translate(calc(-50% + ${offset.x}px), calc(-50% + ${offset.y}px)) rotate(${offset.x * 0.4}deg) scale(${1 + Math.abs(offset.x + offset.y) * 0.003})`,
           transition: "transform 0.2s ease-out",
-          filter: "drop-shadow(0 0 60px hsl(var(--primary) / 0.25))",
+          filter: "drop-shadow(0 0 80px hsl(var(--primary) / 0.4))",
         }}
       />
 
