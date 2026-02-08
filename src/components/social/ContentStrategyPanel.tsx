@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import {
   Calendar, Target, BarChart3, Clock, CheckCircle2,
   ChevronRight, Smartphone, Globe, Flag, Sparkles,
+  TrendingUp, TrendingDown, Minus,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +18,7 @@ import {
   getEventsForMonth,
   type CalendarEvent,
 } from "./contentStrategyData";
+import type { SocialPost } from "@/hooks/useSocialPosts";
 
 const months = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -32,11 +34,51 @@ const regionBadge: Record<string, { label: string; className: string }> = {
 interface ContentStrategyPanelProps {
   completedChecklist?: string[];
   onToggleChecklist?: (id: string) => void;
+  posts?: SocialPost[];
+}
+
+function computeKpis(posts: SocialPost[]) {
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+
+  const thisMonthPosts = posts.filter((p) => {
+    const d = new Date(p.created_at);
+    return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+  });
+
+  const publishedThisMonth = thisMonthPosts.filter((p) => p.status === "published");
+
+  const totalReach = thisMonthPosts.reduce((sum, p) => sum + (p.reach || 0), 0);
+  const totalImpressions = thisMonthPosts.reduce((sum, p) => sum + (p.impressions || 0), 0);
+  const totalLikes = thisMonthPosts.reduce((sum, p) => sum + (p.likes || 0), 0);
+  const totalComments = thisMonthPosts.reduce((sum, p) => sum + (p.comments || 0), 0);
+  const totalShares = thisMonthPosts.reduce((sum, p) => sum + (p.shares || 0), 0);
+  const totalSaves = thisMonthPosts.reduce((sum, p) => sum + (p.saves || 0), 0);
+  const totalClicks = thisMonthPosts.reduce((sum, p) => sum + (p.clicks || 0), 0);
+
+  const totalEngagements = totalLikes + totalComments + totalShares + totalSaves;
+  const engagementRate = totalReach > 0 ? ((totalEngagements / totalReach) * 100) : 0;
+
+  return {
+    postsPublished: publishedThisMonth.length,
+    totalReach,
+    totalImpressions,
+    totalLikes,
+    totalComments,
+    totalShares,
+    totalSaves,
+    totalClicks,
+    engagementRate,
+    totalEngagements,
+    totalPosts: thisMonthPosts.length,
+  };
 }
 
 export function ContentStrategyPanel({
   completedChecklist = [],
   onToggleChecklist,
+  posts = [],
 }: ContentStrategyPanelProps) {
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const monthEvents = useMemo(() => getEventsForMonth(selectedMonth + 1), [selectedMonth]);
@@ -44,6 +86,60 @@ export function ContentStrategyPanel({
   const checklistProgress = Math.round(
     (completedChecklist.length / implementationChecklist.length) * 100
   );
+
+  const kpis = useMemo(() => computeKpis(posts), [posts]);
+
+  // Build real KPI cards with actual vs target
+  const realKpis = [
+    {
+      metric: "Posts Published",
+      actual: kpis.postsPublished,
+      target: 22,
+      icon: "📝",
+      description: `${kpis.totalPosts} total this month`,
+      format: (v: number) => String(v),
+    },
+    {
+      metric: "Total Reach",
+      actual: kpis.totalReach,
+      target: 20000,
+      icon: "👁️",
+      description: `${kpis.totalImpressions.toLocaleString()} impressions`,
+      format: (v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}K` : String(v),
+    },
+    {
+      metric: "Engagement Rate",
+      actual: kpis.engagementRate,
+      target: 4.5,
+      icon: "💬",
+      description: `${kpis.totalEngagements.toLocaleString()} total engagements`,
+      format: (v: number) => `${v.toFixed(1)}%`,
+    },
+    {
+      metric: "Website Clicks",
+      actual: kpis.totalClicks,
+      target: 400,
+      icon: "🔗",
+      description: "Clicks to rebar.shop from social",
+      format: (v: number) => v.toLocaleString(),
+    },
+    {
+      metric: "Likes",
+      actual: kpis.totalLikes,
+      target: 500,
+      icon: "❤️",
+      description: `${kpis.totalComments} comments, ${kpis.totalShares} shares`,
+      format: (v: number) => v.toLocaleString(),
+    },
+    {
+      metric: "Saves",
+      actual: kpis.totalSaves,
+      target: 100,
+      icon: "🔖",
+      description: "Content saved by audience",
+      format: (v: number) => v.toLocaleString(),
+    },
+  ];
 
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden">
@@ -184,50 +280,91 @@ export function ContentStrategyPanel({
             <h3 className="font-semibold text-sm">Platform Breakdown</h3>
           </div>
           <div className="space-y-3 max-h-[380px] overflow-y-auto pr-1">
-            {platformStrategies.map((ps) => (
-              <div key={ps.platform} className="border border-border rounded-lg p-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg">{ps.icon}</span>
-                    <span className="font-medium text-sm">{ps.platform}</span>
+            {platformStrategies.map((ps) => {
+              // Compute real post count per platform
+              const platformKey = ps.platform.toLowerCase();
+              const platformPosts = posts.filter((p) => p.platform === platformKey);
+              const publishedCount = platformPosts.filter((p) => p.status === "published").length;
+              const scheduledCount = platformPosts.filter((p) => p.status === "scheduled").length;
+
+              return (
+                <div key={ps.platform} className="border border-border rounded-lg p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">{ps.icon}</span>
+                      <span className="font-medium text-sm">{ps.platform}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary" className="text-xs">
+                        {publishedCount} published
+                      </Badge>
+                      <Badge variant="outline" className="text-xs">{ps.postsPerWeek}/week</Badge>
+                    </div>
                   </div>
-                  <Badge variant="outline" className="text-xs">{ps.postsPerWeek}/week</Badge>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <p className="font-medium text-muted-foreground mb-1">Content Mix</p>
+                      {ps.contentMix.map((c) => (
+                        <p key={c} className="text-muted-foreground">• {c}</p>
+                      ))}
+                    </div>
+                    <div>
+                      <p className="font-medium text-muted-foreground mb-1">Best Time</p>
+                      <p className="text-muted-foreground">{ps.bestTimeGeneral}</p>
+                      <p className="font-medium text-muted-foreground mt-2 mb-1">Tone</p>
+                      <p className="text-muted-foreground">{ps.toneGuide}</p>
+                    </div>
+                  </div>
+                  {scheduledCount > 0 && (
+                    <p className="text-xs text-muted-foreground bg-muted/50 rounded px-2 py-1">
+                      📅 {scheduledCount} post{scheduledCount > 1 ? "s" : ""} scheduled
+                    </p>
+                  )}
+                  <p className="text-xs text-primary/80 bg-primary/5 rounded px-2 py-1">{ps.notes}</p>
                 </div>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div>
-                    <p className="font-medium text-muted-foreground mb-1">Content Mix</p>
-                    {ps.contentMix.map((c) => (
-                      <p key={c} className="text-muted-foreground">• {c}</p>
-                    ))}
-                  </div>
-                  <div>
-                    <p className="font-medium text-muted-foreground mb-1">Best Time</p>
-                    <p className="text-muted-foreground">{ps.bestTimeGeneral}</p>
-                    <p className="font-medium text-muted-foreground mt-2 mb-1">Tone</p>
-                    <p className="text-muted-foreground">{ps.toneGuide}</p>
-                  </div>
-                </div>
-                <p className="text-xs text-primary/80 bg-primary/5 rounded px-2 py-1">{ps.notes}</p>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </TabsContent>
 
-        {/* ─── KPIs ─── */}
+        {/* ─── KPIs (Real Data) ─── */}
         <TabsContent value="kpis" className="p-4 mt-0">
           <div className="flex items-center gap-2 mb-4">
             <BarChart3 className="w-4 h-4 text-muted-foreground" />
-            <h3 className="font-semibold text-sm">Monthly KPI Targets</h3>
+            <h3 className="font-semibold text-sm">Monthly KPIs — Live</h3>
+            <Badge variant="outline" className="ml-auto text-xs">
+              {new Date().toLocaleString("default", { month: "long", year: "numeric" })}
+            </Badge>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            {monthlyKpiTargets.map((kpi) => (
-              <div key={kpi.metric} className="border border-border rounded-lg p-3 text-center">
-                <p className="text-2xl mb-1">{kpi.icon}</p>
-                <p className="text-xl font-bold">{kpi.target}</p>
-                <p className="text-sm font-medium">{kpi.metric}</p>
-                <p className="text-xs text-muted-foreground mt-1">{kpi.description}</p>
-              </div>
-            ))}
+            {realKpis.map((kpi) => {
+              const pct = kpi.target > 0 ? Math.min((kpi.actual / kpi.target) * 100, 100) : 0;
+              const isOnTrack = pct >= 50;
+              return (
+                <div key={kpi.metric} className="border border-border rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-2xl">{kpi.icon}</p>
+                    {isOnTrack ? (
+                      <TrendingUp className="w-4 h-4 text-green-500" />
+                    ) : kpi.actual > 0 ? (
+                      <TrendingDown className="w-4 h-4 text-amber-500" />
+                    ) : (
+                      <Minus className="w-4 h-4 text-muted-foreground" />
+                    )}
+                  </div>
+                  <p className="text-xl font-bold">{kpi.format(kpi.actual)}</p>
+                  <p className="text-sm font-medium">{kpi.metric}</p>
+                  <div className="mt-2">
+                    <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+                      <span>Target: {kpi.format(kpi.target)}</span>
+                      <span>{Math.round(pct)}%</span>
+                    </div>
+                    <Progress value={pct} className="h-1.5" />
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1.5">{kpi.description}</p>
+                </div>
+              );
+            })}
           </div>
         </TabsContent>
 
