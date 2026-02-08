@@ -19,6 +19,7 @@ interface PipelineBoardProps {
   onStageChange: (leadId: string, newStage: string) => void;
   onEdit: (lead: Lead) => void;
   onDelete: (id: string) => void;
+  onLeadClick: (lead: LeadWithCustomer) => void;
 }
 
 export function PipelineBoard({
@@ -28,6 +29,7 @@ export function PipelineBoard({
   onStageChange,
   onEdit,
   onDelete,
+  onLeadClick,
 }: PipelineBoardProps) {
   const [draggedLead, setDraggedLead] = useState<string | null>(null);
   const [dragOverStage, setDragOverStage] = useState<string | null>(null);
@@ -85,6 +87,7 @@ export function PipelineBoard({
             onDragEnd={handleDragEnd}
             onEdit={onEdit}
             onDelete={onDelete}
+            onLeadClick={onLeadClick}
           />
         ))}
       </div>
