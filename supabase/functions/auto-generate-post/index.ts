@@ -67,16 +67,64 @@ serve(async (req) => {
       year: "numeric",
     });
 
-    // Build the prompt
+    // Build the prompt with content strategy context
+    const platformList = platforms.join(", ");
+
+    // Determine today's content pillar from the weekly schedule
+    const dayOfWeek = new Date(postDate).getDay(); // 0=Sun, 1=Mon...
+    const weeklyThemes: Record<number, { theme: string; pillar: string; description: string }> = {
+      1: { theme: "Motivation Monday", pillar: "Team & Culture", description: "Start the week strong with team spotlights, motivational quotes, or weekly goals." },
+      2: { theme: "Tech Tuesday", pillar: "Innovation & Industry Insights", description: "Showcase technology, machines, or industry innovations." },
+      3: { theme: "Inventory Wednesday", pillar: "Ready Stock & Urgency", description: "Highlight available stock, new arrivals, and urgency messaging." },
+      4: { theme: "Throwback Thursday / Testimonial", pillar: "Testimonials & Social Proof", description: "Share client testimonials, project throwbacks, or success stories." },
+      5: { theme: "Fix-It Friday", pillar: "Problem → Solution", description: "Address a common contractor pain point and show how you solve it." },
+    };
+    const todayTheme = weeklyThemes[dayOfWeek];
+
+    // Check for upcoming events/holidays
+    const today = new Date(postDate);
+    const month = today.getMonth() + 1;
+    const day = today.getDate();
+    // Simplified upcoming events check
+    const upcomingEventsContext = `Check if today (${dateStr}) is near any of these Canadian/global events and incorporate relevant themes if applicable:
+- New Year (Jan 1), Family Day ON (Feb 17), International Women's Day (Mar 8), Earth Day (Apr 22)
+- Day of Mourning (Apr 28), Victoria Day (May 19), Canada Day (Jul 1), Labour Day (Sep 1)
+- Thanksgiving CA (Oct 13), Remembrance Day (Nov 11), Black Friday (Nov 28), Christmas (Dec 25)
+If today is within 3 days of an event, make the post themed around it.`;
+
     const themesText = themes.length > 0
       ? `Focus on these content themes:\n${themes.map((t: string) => `- ${t}`).join("\n")}`
-      : "Create diverse business-relevant content about rebar fabrication, steel detailing, and construction industry.";
+      : todayTheme
+        ? `Today's theme: "${todayTheme.theme}" (Pillar: ${todayTheme.pillar})\n${todayTheme.description}`
+        : "Create diverse business-relevant content about rebar fabrication, steel detailing, and construction industry.";
 
     const instructionsText = customInstructions
       ? `\n\nCustom instructions from the user: ${customInstructions}`
       : "";
 
-    const platformList = platforms.join(", ");
+    const contentPillarsContext = `
+CONTENT PILLARS (rotate through these):
+1. 📦 Ready Stock & Urgency — Showcase inventory, quick turnaround, create urgency. CTA: "Call now to reserve" or "Visit rebar.shop"
+2. 🔧 Problem → Solution — Address contractor pain points, position as the fix. CTA: "Send us your barlist, we'll handle the rest"
+3. ⭐ Testimonials & Social Proof — Client stories, project spotlights. CTA: "Join 500+ happy contractors"
+4. 👷 Team & Culture — Behind-the-scenes, team spotlights, safety. CTA: "Follow for more behind-the-scenes"
+5. 💡 Innovation & Industry Insights — Tech, machines, industry trends. CTA: "Learn more → rebar.shop"
+
+KEY RULES:
+- Real photos only — suggest real photo prompts (shop floor, machines, team, products), NOT AI-generated fantasy images
+- Strong CTAs aligned to content type
+- Problem-solution format for TikTok (your best performer) — hook in first 3 seconds
+- Ready stock urgency messaging when relevant
+- Canadian context: Ontario-based company, reference local events/seasons`;
+
+    const platformGuide = `
+PLATFORM-SPECIFIC GUIDELINES:
+- Facebook: Professional, informative, can be longer. Best at 9-12 PM EST. Community engagement focus.
+- Instagram: Visual-first, engaging caption, 5-10 hashtags. Best at 11 AM-1 PM EST. Reels > carousels > single.
+- LinkedIn: Thought leadership, professional, data-driven. Best at 8-10 AM EST. B2B focus, tag partners.
+- Twitter/X: Concise, punchy, under 280 chars. Bold takes, industry opinions.
+- TikTok: Casual, hook-driven, trending. Problem-solution hooks work best. Under 60 seconds. Best at 12-5 PM EST.
+- YouTube: Descriptive title, detailed description, educational. SEO-optimize titles.`;
 
     const systemPrompt = `You are Pixel, an expert social media manager for a rebar fabrication and steel detailing company called Ontario Steels / Rebar.shop. 
 
@@ -85,15 +133,13 @@ Your job is to create engaging, professional social media posts. Each post shoul
 ${themesText}
 ${instructionsText}
 
-Create exactly ${platforms.length} post(s) — one for each platform: ${platformList}.
+${contentPillarsContext}
 
-For each post, tailor the content style to the platform:
-- Facebook: Professional, informative, can be longer
-- Instagram: Visual-focused caption, engaging, uses relevant hashtags
-- LinkedIn: Industry thought leadership, professional tone
-- Twitter/X: Concise, punchy, under 280 chars
-- TikTok: Trendy, casual, hook-driven
-- YouTube: Descriptive title and description
+${platformGuide}
+
+${upcomingEventsContext}
+
+Create exactly ${platforms.length} post(s) — one for each platform: ${platformList}.
 
 Today's date: ${dateStr}
 
@@ -103,9 +149,9 @@ Return an array of objects with these exact fields:
   {
     "platform": "facebook",
     "title": "Short engaging title",
-    "content": "Full post content",
+    "content": "Full post content with CTA",
     "hashtags": ["#hashtag1", "#hashtag2"],
-    "image_prompt": "A detailed prompt to generate an image for this post"
+    "image_prompt": "A realistic photo prompt: describe a real photo scenario (e.g. 'A worker measuring rebar bundles on a shop floor with morning light'). NO AI art, NO illustrations, NO fantasy."
   }
 ]`;
 
