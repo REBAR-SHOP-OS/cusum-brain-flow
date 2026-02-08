@@ -22,7 +22,12 @@ export default function IntegrationCallback() {
       const integration = searchParams.get("integration") || "";
       const email = searchParams.get("email");
       setMessage(email ? `Connected as ${email}!` : `${integration} connected successfully!`);
-      setTimeout(() => navigate(integration === "gmail" ? "/inbox" : "/integrations"), 2000);
+      if (window.opener) {
+        try { window.opener.postMessage({ type: "oauth-success" }, "*"); } catch {}
+        setTimeout(() => window.close(), 1500);
+      } else {
+        setTimeout(() => navigate(integration === "gmail" ? "/inbox" : "/integrations"), 2000);
+      }
       return;
     }
     if (callbackStatus === "error") {
@@ -101,10 +106,13 @@ export default function IntegrationCallback() {
       setStatus("success");
       setMessage(data.message || "Successfully connected!");
 
-      // Auto-redirect after success
-      setTimeout(() => {
-        navigate("/integrations");
-      }, 2000);
+      // If opened as popup, notify opener and close; otherwise redirect
+      if (window.opener) {
+        try { window.opener.postMessage({ type: "oauth-success" }, "*"); } catch {}
+        setTimeout(() => window.close(), 1500);
+      } else {
+        setTimeout(() => navigate("/integrations"), 2000);
+      }
     } catch (err) {
       setStatus("error");
       setMessage(err instanceof Error ? err.message : "Failed to complete authorization");

@@ -294,63 +294,73 @@ export function useIntegrations() {
     setLoading(false);
   }, []);
 
+  const openOAuthPopup = useCallback((url: string, integrationId: string) => {
+    const width = 600;
+    const height = 700;
+    const left = window.screenX + (window.outerWidth - width) / 2;
+    const top = window.screenY + (window.outerHeight - height) / 2;
+    const popup = window.open(
+      url,
+      `oauth_${integrationId}`,
+      `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no`
+    );
+
+    if (!popup || popup.closed) {
+      toast({ title: "Popup blocked", description: "Please allow popups for this site and try again.", variant: "destructive" });
+      return;
+    }
+
+    // Poll for popup close & listen for success message
+    const pollTimer = setInterval(() => {
+      if (popup.closed) {
+        clearInterval(pollTimer);
+        // Refresh statuses after popup closes
+        loadIntegrationStatuses();
+      }
+    }, 1000);
+
+    // Safety: stop polling after 5 minutes
+    setTimeout(() => clearInterval(pollTimer), 5 * 60 * 1000);
+  }, [toast]);
+
   const startOAuth = useCallback(async (integrationId: string) => {
     try {
-      const returnUrl = window.location.href;
-      
-      // QuickBooks uses different OAuth endpoint
+      const redirectUri = "https://cusum-brain-flow.lovable.app/integrations/callback";
+
+      // QuickBooks
       if (integrationId === "quickbooks") {
         const { data, error } = await supabase.functions.invoke(
           "quickbooks-oauth",
-          { body: { action: "get-auth-url", returnUrl } }
+          { body: { action: "get-auth-url", returnUrl: window.location.href } }
         );
-
         if (error) throw new Error(error.message);
-        window.open(data.authUrl, "_blank");
+        openOAuthPopup(data.authUrl, integrationId);
         return;
       }
 
-      // Facebook / Instagram use Meta OAuth
+      // Facebook / Instagram — Meta OAuth
       if (metaIntegrations.includes(integrationId)) {
-        const redirectUri = "https://cusum-brain-flow.lovable.app/integrations/callback";
-
         const { data, error } = await supabase.functions.invoke(
           "facebook-oauth",
-          {
-            body: {
-              action: "get-auth-url",
-              integration: integrationId,
-              redirectUri,
-            },
-          }
+          { body: { action: "get-auth-url", integration: integrationId, redirectUri } }
         );
-
         if (error) throw new Error(error.message);
-        window.location.href = data.authUrl;
+        openOAuthPopup(data.authUrl, integrationId);
         return;
       }
 
-      // Google integrations — unified flow (any Google service triggers same OAuth)
-      const redirectUri = "https://cusum-brain-flow.lovable.app/integrations/callback";
-
+      // Google integrations — unified flow
       const { data, error } = await supabase.functions.invoke(
         "google-oauth",
-        {
-          body: {
-            action: "get-auth-url",
-            integration: integrationId,
-            redirectUri,
-          },
-        }
+        { body: { action: "get-auth-url", integration: integrationId, redirectUri } }
       );
-
       if (error) throw new Error(error.message);
-      window.location.href = data.authUrl;
+      openOAuthPopup(data.authUrl, integrationId);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to start OAuth";
       toast({ title: "OAuth Error", description: message, variant: "destructive" });
     }
-  }, [toast]);
+  }, [toast, openOAuthPopup]);
 
   const disconnectIntegration = useCallback(async (integrationId: string) => {
     setDisconnecting(integrationId);
