@@ -860,6 +860,7 @@ export type Database = {
       }
       employee_salaries: {
         Row: {
+          company_id: string
           created_at: string
           id: string
           notes: string | null
@@ -869,6 +870,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          company_id: string
           created_at?: string
           id?: string
           notes?: string | null
@@ -878,6 +880,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          company_id?: string
           created_at?: string
           id?: string
           notes?: string | null

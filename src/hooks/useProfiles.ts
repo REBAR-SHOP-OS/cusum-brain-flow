@@ -107,6 +107,21 @@ export function useSalaries() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
+  // Fetch the current user's company_id for scoping
+  const { data: myCompanyId } = useQuery({
+    queryKey: ["my_company_id"],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+      const { data } = await supabase
+        .from("profiles")
+        .select("company_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      return data?.company_id ?? null;
+    },
+  });
+
   const { data: salaries, isLoading } = useQuery({
     queryKey: ["employee_salaries"],
     queryFn: async () => {
@@ -123,10 +138,11 @@ export function useSalaries() {
   });
 
   const upsertSalary = useMutation({
-    mutationFn: async (salary: Omit<EmployeeSalary, "id" | "created_at" | "updated_at">) => {
+    mutationFn: async (salary: Omit<EmployeeSalary, "id" | "created_at" | "updated_at" | "company_id">) => {
+      if (!myCompanyId) throw new Error("Company ID not found");
       const { data, error } = await supabase
         .from("employee_salaries")
-        .upsert(salary, { onConflict: "profile_id" })
+        .upsert({ ...salary, company_id: myCompanyId }, { onConflict: "profile_id" })
         .select()
         .single();
       if (error) throw error;
