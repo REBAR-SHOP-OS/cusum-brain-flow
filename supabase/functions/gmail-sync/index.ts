@@ -267,6 +267,21 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
+    // Look up the user's company_id
+    const { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("company_id")
+      .eq("user_id", userId)
+      .maybeSingle();
+    const companyId = profile?.company_id;
+    if (!companyId) {
+      console.error("No company_id found for user", userId);
+      return new Response(
+        JSON.stringify({ error: "no_company", message: "No company found for your account." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     for (const msg of validMessages) {
       if (!msg) continue;
 
@@ -285,6 +300,7 @@ serve(async (req) => {
           status: msg.isUnread ? "unread" : "read",
           metadata: { body: msg.body, date: msg.date },
           user_id: userId,
+          company_id: companyId,
         }, {
           onConflict: "source,source_id",
           ignoreDuplicates: false,

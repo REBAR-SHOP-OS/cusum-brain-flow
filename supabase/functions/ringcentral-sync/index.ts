@@ -292,6 +292,26 @@ serve(async (req) => {
       throw err;
     }
 
+    // Look up the user's company_id
+    const { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("company_id")
+      .eq("user_id", userId)
+      .maybeSingle();
+    const companyId = profile?.company_id;
+    if (!companyId) {
+      console.error("No company_id found for user", userId);
+      return new Response(
+        JSON.stringify({
+          error: "no_company",
+          message: "No company found for your account.",
+          callsUpserted: 0,
+          smsUpserted: 0,
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     let callsUpserted = 0;
     let smsUpserted = 0;
 
@@ -325,6 +345,7 @@ serve(async (req) => {
               } : {}),
             },
             user_id: userId,
+            company_id: companyId,
           }, {
             onConflict: "source,source_id",
             ignoreDuplicates: false,
@@ -358,6 +379,7 @@ serve(async (req) => {
               type: "sms",
             },
             user_id: userId,
+            company_id: companyId,
           }, {
             onConflict: "source,source_id",
             ignoreDuplicates: false,
