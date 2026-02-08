@@ -1,27 +1,57 @@
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
-import { Mail, Clock } from "lucide-react";
+import { Mail, Phone, MessageSquare } from "lucide-react";
 import type { InboxEmail } from "./InboxEmailList";
 
 interface InboxKanbanBoardProps {
-  emails: (InboxEmail & { priority: number })[];
+  emails: (InboxEmail & { priority: number; commType?: "email" | "call" | "sms" })[];
   onSelect: (email: InboxEmail) => void;
   selectedId: string | null;
 }
 
 const KANBAN_COLUMNS = [
-  { label: "Urgent", value: "Urgent", color: "bg-red-500", dotColor: "bg-red-500" },
-  { label: "To Respond", value: "To Respond", color: "bg-red-400", dotColor: "bg-red-400" },
-  { label: "Awaiting Reply", value: "Awaiting Reply", color: "bg-amber-400", dotColor: "bg-amber-400" },
-  { label: "FYI", value: "FYI", color: "bg-amber-400", dotColor: "bg-amber-500" },
-  { label: "Notification", value: "Notification", color: "bg-cyan-400", dotColor: "bg-cyan-400" },
-  { label: "Marketing", value: "Marketing", color: "bg-pink-400", dotColor: "bg-pink-400" },
-  { label: "Spam", value: "Spam", color: "bg-zinc-500", dotColor: "bg-zinc-500" },
+  { label: "Urgent", value: "Urgent", dotColor: "bg-red-500" },
+  { label: "To Respond", value: "To Respond", dotColor: "bg-red-400" },
+  { label: "Awaiting Reply", value: "Awaiting Reply", dotColor: "bg-amber-400" },
+  { label: "FYI", value: "FYI", dotColor: "bg-amber-500" },
+  { label: "Notification", value: "Notification", dotColor: "bg-cyan-400" },
+  { label: "Marketing", value: "Marketing", dotColor: "bg-pink-400" },
+  { label: "Spam", value: "Spam", dotColor: "bg-zinc-500" },
 ];
 
+function getTypeIcon(type?: "email" | "call" | "sms") {
+  switch (type) {
+    case "call":
+      return <Phone className="w-3 h-3 text-blue-400" />;
+    case "sms":
+      return <MessageSquare className="w-3 h-3 text-green-400" />;
+    default:
+      return <Mail className="w-3 h-3 text-muted-foreground" />;
+  }
+}
+
+function getTypeBadge(type?: "email" | "call" | "sms") {
+  switch (type) {
+    case "call":
+      return (
+        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-blue-500/15 text-blue-400">
+          <Phone className="w-2.5 h-2.5" /> Call
+        </span>
+      );
+    case "sms":
+      return (
+        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-green-500/15 text-green-400">
+          <MessageSquare className="w-2.5 h-2.5" /> SMS
+        </span>
+      );
+    default:
+      return null;
+  }
+}
+
 export function InboxKanbanBoard({ emails, onSelect, selectedId }: InboxKanbanBoardProps) {
-  const emailsByLabel: Record<string, (InboxEmail & { priority: number })[]> = {};
+  const emailsByLabel: Record<string, (InboxEmail & { priority: number; commType?: "email" | "call" | "sms" })[]> = {};
   KANBAN_COLUMNS.forEach((col) => {
     emailsByLabel[col.value] = [];
   });
@@ -29,7 +59,6 @@ export function InboxKanbanBoard({ emails, onSelect, selectedId }: InboxKanbanBo
     if (emailsByLabel[email.label]) {
       emailsByLabel[email.label].push(email);
     } else {
-      // Fallback: put in "To Respond"
       emailsByLabel["To Respond"]?.push(email);
     }
   });
@@ -44,13 +73,13 @@ export function InboxKanbanBoard({ emails, onSelect, selectedId }: InboxKanbanBo
           return (
             <div
               key={col.value}
-              className="flex flex-col w-[280px] shrink-0 rounded-lg bg-muted/30 border border-border"
+              className="flex flex-col w-[280px] shrink-0 rounded-xl bg-muted/20 border border-border/50"
             >
               {/* Column header */}
-              <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border">
+              <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border/50">
                 <div className={cn("w-2.5 h-2.5 rounded-full", col.dotColor)} />
                 <span className="text-sm font-semibold">{col.label}</span>
-                <Badge variant="secondary" className="ml-auto text-[10px] h-5 px-1.5">
+                <Badge variant="secondary" className="ml-auto text-[10px] h-5 px-1.5 rounded-full">
                   {colEmails.length}
                 </Badge>
               </div>
@@ -58,7 +87,7 @@ export function InboxKanbanBoard({ emails, onSelect, selectedId }: InboxKanbanBo
               {/* Cards */}
               <div className="flex-1 overflow-y-auto p-2 space-y-2 max-h-[calc(100vh-280px)]">
                 {colEmails.map((email) => (
-                  <EmailKanbanCard
+                  <KanbanCard
                     key={email.id}
                     email={email}
                     isSelected={selectedId === email.id}
@@ -75,20 +104,23 @@ export function InboxKanbanBoard({ emails, onSelect, selectedId }: InboxKanbanBo
   );
 }
 
-function EmailKanbanCard({
+function KanbanCard({
   email,
   isSelected,
   onClick,
 }: {
-  email: InboxEmail;
+  email: InboxEmail & { commType?: "email" | "call" | "sms" };
   isSelected: boolean;
   onClick: () => void;
 }) {
+  const isCall = email.commType === "call";
+  const isSms = email.commType === "sms";
+
   return (
     <div
       onClick={onClick}
       className={cn(
-        "rounded-lg border border-border bg-card p-3 cursor-pointer transition-all hover:shadow-md hover:border-primary/30 space-y-2",
+        "rounded-lg border border-border/60 bg-card p-3 cursor-pointer transition-all hover:shadow-md hover:border-primary/30 space-y-2",
         isSelected && "ring-2 ring-primary border-primary"
       )}
     >
@@ -97,26 +129,37 @@ function EmailKanbanCard({
         <div
           className={cn(
             "w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-medium shrink-0",
-            email.isUnread ? "bg-green-500" : "bg-muted-foreground/60"
+            isCall ? "bg-blue-500" : isSms ? "bg-green-500" : email.isUnread ? "bg-emerald-500" : "bg-muted-foreground/60"
           )}
         >
-          {email.sender.charAt(0).toUpperCase()}
+          {isCall ? (
+            <Phone className="w-3.5 h-3.5" />
+          ) : isSms ? (
+            <MessageSquare className="w-3.5 h-3.5" />
+          ) : (
+            email.sender.charAt(0).toUpperCase()
+          )}
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium truncate">{email.sender}</p>
         </div>
-        <span className="text-[10px] text-muted-foreground whitespace-nowrap">{email.time}</span>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {getTypeBadge(email.commType)}
+          <span className="text-[10px] text-muted-foreground whitespace-nowrap">{email.time}</span>
+        </div>
       </div>
 
       {/* Subject */}
       <p className="text-xs font-medium leading-tight line-clamp-2">{email.subject}</p>
 
       {/* Preview */}
-      <p className="text-[11px] text-muted-foreground line-clamp-2 leading-snug">{email.preview}</p>
+      {email.preview && (
+        <p className="text-[11px] text-muted-foreground line-clamp-2 leading-snug">{email.preview}</p>
+      )}
 
       {/* Footer meta */}
       <div className="flex items-center gap-2 text-[10px] text-muted-foreground pt-0.5">
-        <Mail className="w-3 h-3" />
+        {getTypeIcon(email.commType)}
         <span className="truncate">{email.senderEmail}</span>
       </div>
     </div>
