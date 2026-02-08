@@ -5,8 +5,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MessageCircle, Image, Plus, Minus, ChevronLeft, Upload, X, Loader2, Calendar, Video } from "lucide-react";
+import { MessageCircle, Image, Plus, Minus, ChevronLeft, Upload, X, Loader2, Calendar, Video, ImageIcon } from "lucide-react";
 import { VideoGeneratorDialog } from "./VideoGeneratorDialog";
+import { ImageGeneratorDialog } from "./ImageGeneratorDialog";
 import { useToast } from "@/hooks/use-toast";
 import { useSocialPosts } from "@/hooks/useSocialPosts";
 import { supabase } from "@/integrations/supabase/client";
@@ -36,6 +37,7 @@ const platforms = [
 export function CreateContentDialog({ open, onOpenChange }: CreateContentDialogProps) {
   const [step, setStep] = useState<Step>("choose");
   const [showVideoGen, setShowVideoGen] = useState(false);
+  const [showImageGen, setShowImageGen] = useState(false);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [platform, setPlatform] = useState("facebook");
@@ -197,6 +199,22 @@ export function CreateContentDialog({ open, onOpenChange }: CreateContentDialogP
               </div>
               <ChevronLeft className="w-5 h-5 rotate-180 text-muted-foreground" />
             </button>
+
+            <button
+              onClick={() => setShowImageGen(true)}
+              className="w-full flex items-center gap-4 p-4 rounded-lg border hover:bg-muted/50 transition-colors text-left"
+            >
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500 to-cyan-500 flex items-center justify-center text-white">
+                <ImageIcon className="w-5 h-5" />
+              </div>
+              <div className="flex-1">
+                <p className="font-medium">Generate AI Image</p>
+                <p className="text-sm text-muted-foreground">
+                  Create images from text using GPT Image 1 or DALL·E 3.
+                </p>
+              </div>
+              <ChevronLeft className="w-5 h-5 rotate-180 text-muted-foreground" />
+            </button>
           </div>
         ) : (
           <div className="space-y-4">
@@ -325,6 +343,15 @@ export function CreateContentDialog({ open, onOpenChange }: CreateContentDialogP
       onOpenChange={setShowVideoGen}
       onVideoReady={(url) => {
         setUploadedMedia((prev) => [...prev, { name: "ai-video.mp4", url, type: "video/mp4" }]);
+        setStep("create");
+      }}
+    />
+
+    <ImageGeneratorDialog
+      open={showImageGen}
+      onOpenChange={setShowImageGen}
+      onImageReady={(url) => {
+        setUploadedMedia((prev) => [...prev, { name: "ai-image.png", url, type: "image/png" }]);
         setStep("create");
       }}
     />
