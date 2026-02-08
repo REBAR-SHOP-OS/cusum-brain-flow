@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, DollarSign } from "lucide-react";
+import { Plus, Search, DollarSign, Mail, Loader2 } from "lucide-react";
 import { PipelineBoard } from "@/components/pipeline/PipelineBoard";
 import { LeadFormModal } from "@/components/pipeline/LeadFormModal";
 import { useToast } from "@/hooks/use-toast";
@@ -33,6 +33,7 @@ export default function Pipeline() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
+  const [isScanningRfq, setIsScanningRfq] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -118,6 +119,36 @@ export default function Pipeline() {
     updateStageMutation.mutate({ id: leadId, stage: newStage });
   };
 
+  const handleScanRfq = async () => {
+    setIsScanningRfq(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("process-rfq-emails");
+      if (error) throw error;
+
+      if (data.created > 0) {
+        queryClient.invalidateQueries({ queryKey: ["leads"] });
+        toast({
+          title: `${data.created} new lead${data.created > 1 ? "s" : ""} created`,
+          description: `Scanned ${data.total} emails — ${data.filtered} filtered, ${data.skipped} already processed`,
+        });
+      } else {
+        toast({
+          title: "No new leads",
+          description: `Scanned ${data.total} emails — ${data.filtered} filtered out, ${data.skipped} already processed`,
+        });
+      }
+    } catch (err) {
+      console.error("RFQ scan error:", err);
+      toast({
+        title: "Scan failed",
+        description: err instanceof Error ? err.message : "Failed to scan RFQ emails",
+        variant: "destructive",
+      });
+    } finally {
+      setIsScanningRfq(false);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -141,6 +172,16 @@ export default function Pipeline() {
               className="pl-9"
             />
           </div>
+          <Button
+            onClick={handleScanRfq}
+            size="sm"
+            variant="outline"
+            disabled={isScanningRfq}
+            className="gap-2"
+          >
+            {isScanningRfq ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+            <span className="hidden sm:inline">Scan RFQ</span>
+          </Button>
           <Button onClick={() => setIsFormOpen(true)} size="sm" className="gap-2">
             <Plus className="w-4 h-4" />
             <span className="hidden sm:inline">Add Lead</span>
