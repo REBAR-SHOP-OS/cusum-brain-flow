@@ -78,12 +78,18 @@ async function veoPoll(apiKey: string, operationName: string) {
 // ─── Sora helpers ───────────────────────────────────────────
 
 async function soraGenerate(apiKey: string, prompt: string, duration: number, model: string) {
-  // Sora API uses multipart/form-data via curl, but JSON also works with the REST API
+  // Sora only supports 4, 8, 12 seconds — snap to nearest valid value
+  const validDurations = [4, 8, 12];
+  const rawDuration = duration || 8;
+  const soraDuration = validDurations.reduce((prev, curr) =>
+    Math.abs(curr - rawDuration) < Math.abs(prev - rawDuration) ? curr : prev
+  );
+
   const formData = new FormData();
   formData.append("prompt", prompt);
   formData.append("model", model || "sora-2");
   formData.append("size", "1280x720");
-  formData.append("seconds", String(Math.min(duration || 5, 20)));
+  formData.append("seconds", String(soraDuration));
 
   const resp = await fetch(`${OPENAI_BASE}/videos`, {
     method: "POST",

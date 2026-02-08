@@ -48,12 +48,11 @@ const modelOptions: ModelOption[] = [
     label: "OpenAI Sora 2",
     description: "Fast iteration, great for social content",
     pricing: "Usage-based",
-    maxDuration: 20,
+    maxDuration: 12,
     durationOptions: [
-      { value: "5", label: "5 seconds" },
-      { value: "10", label: "10 seconds" },
-      { value: "15", label: "15 seconds" },
-      { value: "20", label: "20 seconds" },
+      { value: "4", label: "4 seconds" },
+      { value: "8", label: "8 seconds" },
+      { value: "12", label: "12 seconds" },
     ],
   },
   {
@@ -62,12 +61,11 @@ const modelOptions: ModelOption[] = [
     label: "OpenAI Sora 2 Pro",
     description: "Production-quality, highest fidelity",
     pricing: "Premium",
-    maxDuration: 20,
+    maxDuration: 12,
     durationOptions: [
-      { value: "5", label: "5 seconds" },
-      { value: "10", label: "10 seconds" },
-      { value: "15", label: "15 seconds" },
-      { value: "20", label: "20 seconds" },
+      { value: "4", label: "4 seconds" },
+      { value: "8", label: "8 seconds" },
+      { value: "12", label: "12 seconds" },
     ],
   },
 ];
@@ -75,7 +73,7 @@ const modelOptions: ModelOption[] = [
 export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: VideoGeneratorDialogProps) {
   const [prompt, setPrompt] = useState("");
   const [selectedModel, setSelectedModel] = useState("veo-3");
-  const [duration, setDuration] = useState("5");
+  const [duration, setDuration] = useState("8");
   const [status, setStatus] = useState<Status>("idle");
   const [progress, setProgress] = useState(0);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
