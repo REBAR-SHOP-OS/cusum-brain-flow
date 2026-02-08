@@ -13,7 +13,6 @@ const SCOPES: Record<string, string[]> = {
   facebook: [
     "pages_show_list",
     "pages_read_engagement",
-    "pages_manage_posts",
     "pages_manage_metadata",
     "public_profile",
   ],
