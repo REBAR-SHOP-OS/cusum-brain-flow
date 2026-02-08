@@ -32,6 +32,26 @@ serve(async (req) => {
       });
     }
 
+    const userId = claims.claims.sub as string;
+
+    // Rate limit: 10 requests per 60 seconds per user
+    const svcClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+    const { data: allowed } = await svcClient.rpc("check_rate_limit", {
+      _user_id: userId,
+      _function_name: "shape-vision",
+      _max_requests: 10,
+      _window_seconds: 60,
+    });
+    if (allowed === false) {
+      return new Response(JSON.stringify({ error: "Rate limit exceeded. Try again in a moment." }), {
+        status: 429,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const { imageUrl, shapeCode, action } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");

@@ -2603,6 +2603,27 @@ export type Database = {
           },
         ]
       }
+      rate_limit_entries: {
+        Row: {
+          function_name: string
+          id: string
+          requested_at: string
+          user_id: string
+        }
+        Insert: {
+          function_name: string
+          id?: string
+          requested_at?: string
+          user_id: string
+        }
+        Update: {
+          function_name?: string
+          id?: string
+          requested_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       rebar_sizes: {
         Row: {
           area_mm2: number
@@ -3316,6 +3337,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      check_rate_limit: {
+        Args: {
+          _function_name: string
+          _max_requests?: number
+          _user_id: string
+          _window_seconds?: number
+        }
+        Returns: boolean
+      }
+      cleanup_rate_limit_entries: { Args: never; Returns: undefined }
       get_table_stats: {
         Args: never
         Returns: {

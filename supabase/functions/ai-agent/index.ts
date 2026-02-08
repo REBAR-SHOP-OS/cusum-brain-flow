@@ -1376,6 +1376,24 @@ serve(async (req) => {
       );
     }
 
+    // Rate limit: 10 requests per 60 seconds per user
+    const svcClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+    const { data: allowed } = await svcClient.rpc("check_rate_limit", {
+      _user_id: user.id,
+      _function_name: "ai-agent",
+      _max_requests: 10,
+      _window_seconds: 60,
+    });
+    if (allowed === false) {
+      return new Response(JSON.stringify({ error: "Rate limit exceeded. Try again in a moment." }), {
+        status: 429,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const dbContext = await fetchContext(supabase, agent);
     const mergedContext = { ...dbContext, ...userContext };
 

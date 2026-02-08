@@ -12,6 +12,32 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
 
   try {
+    // Auth check + rate limiting
+    const authHeader = req.headers.get("Authorization");
+    let rateLimitId = "anonymous";
+    if (authHeader?.startsWith("Bearer ")) {
+      const anonClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!);
+      const token = authHeader.replace("Bearer ", "");
+      const { data: claimsData } = await anonClient.auth.getClaims(token);
+      if (claimsData?.claims?.sub) {
+        rateLimitId = claimsData.claims.sub as string;
+      }
+    }
+
+    // Rate limit: 5 requests per 60 seconds
+    const { data: allowed } = await supabase.rpc("check_rate_limit", {
+      _user_id: rateLimitId,
+      _function_name: "daily-summary",
+      _max_requests: 5,
+      _window_seconds: 60,
+    });
+    if (allowed === false) {
+      return new Response(JSON.stringify({ error: "Rate limit exceeded. Try again in a moment." }), {
+        status: 429,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const { date } = await req.json(); // ISO date string e.g. "2026-02-07"
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;

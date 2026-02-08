@@ -36,6 +36,20 @@ serve(async (req) => {
       });
     }
 
+    // Rate limit: 15 requests per 60 seconds for admin chat
+    const { data: allowed } = await supabase.rpc("check_rate_limit", {
+      _user_id: user.id,
+      _function_name: "admin-chat",
+      _max_requests: 15,
+      _window_seconds: 60,
+    });
+    if (allowed === false) {
+      return new Response(JSON.stringify({ error: "Rate limit exceeded. Try again in a moment." }), {
+        status: 429,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const { messages } = await req.json();
 
     // Gather live system context for AI
