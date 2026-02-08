@@ -15,7 +15,7 @@ export function InteractiveBrainBg() {
       const cy = rect.top + rect.height / 2;
       const dx = (e.clientX - cx) / rect.width;
       const dy = (e.clientY - cy) / rect.height;
-      setOffset({ x: dx * 24, y: dy * 18 });
+      setOffset({ x: dx * 40, y: dy * 30 });
       rafRef.current = null;
     });
   }, []);
@@ -32,50 +32,92 @@ export function InteractiveBrainBg() {
       className="absolute inset-0 pointer-events-auto overflow-hidden"
       aria-hidden="true"
     >
-      {/* Glow pulse behind brain */}
+      {/* Outer glow ring */}
       <div
-        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[420px] h-[420px] rounded-full opacity-20 blur-3xl animate-pulse"
+        className="absolute top-1/2 left-1/2 w-[700px] h-[700px] rounded-full opacity-10 blur-[80px]"
         style={{
-          background: "radial-gradient(circle, hsl(var(--primary) / 0.6), transparent 70%)",
-          transform: `translate(calc(-50% + ${offset.x * 0.5}px), calc(-50% + ${offset.y * 0.5}px))`,
-          transition: "transform 0.3s ease-out",
+          background: "radial-gradient(circle, hsl(var(--primary) / 0.8), hsl(var(--accent) / 0.3) 50%, transparent 70%)",
+          transform: `translate(calc(-50% + ${offset.x * 0.3}px), calc(-50% + ${offset.y * 0.3}px))`,
+          transition: "transform 0.4s ease-out",
         }}
       />
 
-      {/* Brain image */}
+      {/* Inner glow pulse */}
+      <div
+        className="absolute top-1/2 left-1/2 w-[500px] h-[500px] rounded-full opacity-25 blur-3xl"
+        style={{
+          background: "radial-gradient(circle, hsl(var(--primary) / 0.7), transparent 65%)",
+          transform: `translate(calc(-50% + ${offset.x * 0.6}px), calc(-50% + ${offset.y * 0.6}px))`,
+          transition: "transform 0.3s ease-out",
+          animation: "brain-pulse 4s ease-in-out infinite",
+        }}
+      />
+
+      {/* Brain image — large & centered */}
       <img
         src={brainHero}
         alt=""
-        className="absolute top-1/2 left-1/2 w-[320px] h-[320px] object-contain opacity-[0.12] select-none"
+        className="absolute top-1/2 left-1/2 w-[520px] h-[520px] object-contain opacity-[0.18] select-none"
         draggable={false}
         style={{
-          transform: `translate(calc(-50% + ${offset.x}px), calc(-50% + ${offset.y}px)) rotate(${offset.x * 0.3}deg) scale(${1 + Math.abs(offset.x + offset.y) * 0.002})`,
-          transition: "transform 0.25s ease-out",
-          filter: "drop-shadow(0 0 40px hsl(var(--primary) / 0.15))",
+          transform: `translate(calc(-50% + ${offset.x}px), calc(-50% + ${offset.y}px)) rotate(${offset.x * 0.4}deg) scale(${1 + Math.abs(offset.x + offset.y) * 0.003})`,
+          transition: "transform 0.2s ease-out",
+          filter: "drop-shadow(0 0 60px hsl(var(--primary) / 0.25))",
         }}
       />
 
-      {/* Floating particles */}
-      {[...Array(6)].map((_, i) => (
-        <div
-          key={i}
-          className="absolute rounded-full bg-primary/10"
-          style={{
-            width: 4 + (i % 3) * 3,
-            height: 4 + (i % 3) * 3,
-            top: `${20 + i * 12}%`,
-            left: `${15 + i * 13}%`,
-            transform: `translate(${offset.x * (0.4 + i * 0.15)}px, ${offset.y * (0.4 + i * 0.15)}px)`,
-            transition: "transform 0.4s ease-out",
-            animation: `float-particle ${3 + i * 0.5}s ease-in-out infinite alternate`,
-          }}
-        />
-      ))}
+      {/* Orbiting particles */}
+      {[...Array(10)].map((_, i) => {
+        const angle = (i / 10) * 360;
+        const radius = 180 + (i % 3) * 60;
+        const size = 3 + (i % 4) * 2;
+        return (
+          <div
+            key={i}
+            className="absolute rounded-full bg-primary/20"
+            style={{
+              width: size,
+              height: size,
+              top: "50%",
+              left: "50%",
+              transform: `translate(calc(-50% + ${offset.x * (0.3 + i * 0.1)}px + ${Math.cos((angle * Math.PI) / 180) * radius}px), calc(-50% + ${offset.y * (0.3 + i * 0.1)}px + ${Math.sin((angle * Math.PI) / 180) * radius}px))`,
+              transition: "transform 0.35s ease-out",
+              animation: `orbit-float ${4 + i * 0.7}s ease-in-out infinite alternate`,
+              boxShadow: "0 0 6px hsl(var(--primary) / 0.3)",
+            }}
+          />
+        );
+      })}
+
+      {/* Neural connection lines */}
+      <svg className="absolute inset-0 w-full h-full opacity-[0.06]" style={{ transition: "transform 0.3s ease-out", transform: `translate(${offset.x * 0.15}px, ${offset.y * 0.15}px)` }}>
+        {[...Array(5)].map((_, i) => (
+          <line
+            key={i}
+            x1={`${30 + i * 10}%`}
+            y1={`${25 + i * 8}%`}
+            x2={`${50 + i * 5}%`}
+            y2="50%"
+            stroke="hsl(var(--primary))"
+            strokeWidth="1"
+            strokeDasharray="4 8"
+            style={{ animation: `dash-flow ${3 + i}s linear infinite` }}
+          />
+        ))}
+      </svg>
 
       <style>{`
-        @keyframes float-particle {
-          0% { opacity: 0.3; transform: translateY(0); }
-          100% { opacity: 0.7; transform: translateY(-12px); }
+        @keyframes brain-pulse {
+          0%, 100% { opacity: 0.2; transform: translate(-50%, -50%) scale(1); }
+          50% { opacity: 0.35; transform: translate(-50%, -50%) scale(1.08); }
+        }
+        @keyframes orbit-float {
+          0% { opacity: 0.2; }
+          50% { opacity: 0.6; }
+          100% { opacity: 0.3; }
+        }
+        @keyframes dash-flow {
+          to { stroke-dashoffset: -24; }
         }
       `}</style>
     </div>
