@@ -68,6 +68,39 @@ export function useIntegrations() {
       // For Google integrations, use the OAuth check endpoint
       const googleIntegrations = ["gmail", "google-calendar", "google-drive", "youtube", "google-analytics"];
       
+      // For Meta integrations, use facebook-oauth check endpoint
+      const metaIntegrations = ["facebook", "instagram"];
+
+      if (metaIntegrations.includes(integrationId)) {
+        const { data: statusData, error: statusError } = await supabase.functions.invoke(
+          "facebook-oauth",
+          { body: { action: "check-status", integration: integrationId } }
+        );
+
+        if (statusError) throw new Error(statusError.message);
+
+        setIntegrations((prev) =>
+          prev.map((i) =>
+            i.id === integrationId
+              ? {
+                  ...i,
+                  status: statusData.status,
+                  error: statusData.error,
+                  lastSync: statusData.status === "connected" ? new Date().toLocaleTimeString() : undefined,
+                }
+              : i
+          )
+        );
+
+        if (statusData.status === "connected") {
+          toast({ title: `${integrationId} connected`, description: `Connected as ${statusData.profileName}` });
+        } else if (statusData.status === "error") {
+          toast({ title: "Connection error", description: statusData.error, variant: "destructive" });
+        }
+
+        return statusData.status;
+      }
+
       if (googleIntegrations.includes(integrationId)) {
         const { data, error } = await supabase.functions.invoke("google-oauth", {
           body: { integration: integrationId },
@@ -208,6 +241,32 @@ export function useIntegrations() {
       // Silently skip
     }
 
+    // Check Meta (Facebook & Instagram)
+    const metaIntegrations = ["facebook", "instagram"];
+    for (const id of metaIntegrations) {
+      try {
+        const { data: metaStatus } = await supabase.functions.invoke("facebook-oauth", {
+          body: { action: "check-status", integration: id },
+        });
+
+        if (metaStatus) {
+          setIntegrations((prev) =>
+            prev.map((i) =>
+              i.id === id
+                ? {
+                    ...i,
+                    status: metaStatus.status,
+                    error: metaStatus.error,
+                    lastSync: metaStatus.status === "connected" ? new Date().toLocaleTimeString() : undefined,
+                  }
+                : i
+            )
+          );
+        }
+      } catch (err) {
+        // Silently skip
+      }
+    }
 
     // Check RingCentral
     try {
@@ -258,6 +317,27 @@ export function useIntegrations() {
         if (error) throw new Error(error.message);
         // Open in new tab to avoid iframe restrictions
         window.open(data.authUrl, "_blank");
+        return;
+      }
+
+      // Facebook / Instagram use Meta OAuth
+      const metaIntegrations = ["facebook", "instagram"];
+      if (metaIntegrations.includes(integrationId)) {
+        const redirectUri = "https://cusum-brain-flow.lovable.app/integrations/callback";
+
+        const { data, error } = await supabase.functions.invoke(
+          "facebook-oauth",
+          {
+            body: {
+              action: "get-auth-url",
+              integration: integrationId,
+              redirectUri,
+            },
+          }
+        );
+
+        if (error) throw new Error(error.message);
+        window.location.href = data.authUrl;
         return;
       }
 

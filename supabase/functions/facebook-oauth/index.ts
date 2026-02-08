@@ -195,8 +195,9 @@ serve(async (req) => {
           user_id: userId,
           platform: integration,
           access_token: longLivedToken,
-          profile_name: profileName,
-          profile_email: profileEmail,
+          token_type: "long_lived",
+          meta_user_id: profileName, // using name as identifier
+          meta_user_name: profileName,
           pages: pages.map(p => ({ id: p.id, name: p.name })),
           instagram_accounts: instagramAccounts,
           expires_at: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString(), // ~60 days
@@ -215,7 +216,7 @@ serve(async (req) => {
             user_id: userId,
             platform: `${integration}_page_${page.id}`,
             access_token: page.access_token,
-            profile_name: page.name,
+            meta_user_name: page.name,
             pages: [{ id: page.id, name: page.name }],
           }, { onConflict: "user_id,platform" });
       }
@@ -257,7 +258,7 @@ serve(async (req) => {
 
       const { data: tokenData } = await supabaseAdmin
         .from("user_meta_tokens")
-        .select("profile_name, profile_email, expires_at, pages, instagram_accounts")
+        .select("meta_user_name, expires_at, pages, instagram_accounts")
         .eq("user_id", userId)
         .eq("platform", integration)
         .maybeSingle();
@@ -284,7 +285,7 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({
           status: "connected",
-          profileName: tokenData.profile_name,
+          profileName: tokenData.meta_user_name,
           pagesCount: (tokenData.pages as unknown[])?.length || 0,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
