@@ -78,17 +78,37 @@ export function InboxCustomerContext({ senderEmail, senderName }: InboxCustomerC
   const loadContext = async () => {
     setLoading(true);
     try {
-      // 1. Find contact by email
-      const { data: contactData } = await supabase
+      // 1. Find contact by email — or by phone number for RC calls
+      let contactData: any[] | null = null;
+      let contactId: string | null = null;
+
+      // Try email match first
+      const { data: emailMatch } = await supabase
         .from("contacts")
         .select("*, customers(*)")
         .ilike("email", `%${senderEmail}%`)
         .limit(1);
 
+      contactData = emailMatch;
+
+      // If no email match and it looks like a phone number, try phone match
+      if ((!contactData || contactData.length === 0) && /^\+?\d/.test(senderEmail)) {
+        const digits = senderEmail.replace(/\D/g, "").slice(-10);
+        if (digits.length >= 7) {
+          const { data: phoneMatch } = await supabase
+            .from("contacts")
+            .select("*, customers(*)")
+            .ilike("phone", `%${digits}%`)
+            .limit(1);
+          contactData = phoneMatch;
+        }
+      }
+
       let custId: string | null = null;
 
       if (contactData && contactData.length > 0) {
         const contact = contactData[0];
+        contactId = contact.id;
         const cust = contact.customers as unknown as CustomerInfo | null;
         if (cust) {
           setCustomer(cust);
@@ -109,22 +129,45 @@ export function InboxCustomerContext({ senderEmail, senderName }: InboxCustomerC
         }
       }
 
+      // Build communications filter — match by email AND phone if available
+      let commsFilter = `from_address.ilike.%${senderEmail}%,to_address.ilike.%${senderEmail}%`;
+      if (/^\+?\d/.test(senderEmail)) {
+        const digits = senderEmail.replace(/\D/g, "").slice(-10);
+        if (digits.length >= 7) {
+          commsFilter += `,from_address.ilike.%${digits}%,to_address.ilike.%${digits}%`;
+        }
+      }
+
       // 2. Load all data in parallel
       const [leadsRes, commsRes, ordersRes, quotesRes, meetingsRes] = await Promise.allSettled([
-        // Leads
-        supabase
-          .from("leads")
-          .select("id, title, stage, expected_value, updated_at")
-          .or(`contact_email.ilike.%${senderEmail}%,company_name.ilike.%${senderName}%`)
-          .order("updated_at", { ascending: false })
-          .limit(10),
-        // Communications (emails, calls, SMS)
+        // Leads — use proper FK relationships, not non-existent columns
+        custId
+          ? supabase
+              .from("leads")
+              .select("id, title, stage, expected_value, updated_at")
+              .eq("customer_id", custId)
+              .order("updated_at", { ascending: false })
+              .limit(10)
+          : contactId
+            ? supabase
+                .from("leads")
+                .select("id, title, stage, expected_value, updated_at")
+                .eq("contact_id", contactId)
+                .order("updated_at", { ascending: false })
+                .limit(10)
+            : supabase
+                .from("leads")
+                .select("id, title, stage, expected_value, updated_at")
+                .ilike("title", `%${senderName}%`)
+                .order("updated_at", { ascending: false })
+                .limit(10),
+        // Communications (emails, calls, SMS) — increased limit
         supabase
           .from("communications")
           .select("id, subject, from_address, to_address, received_at, source, direction, metadata, body_preview")
-          .or(`from_address.ilike.%${senderEmail}%,to_address.ilike.%${senderEmail}%`)
+          .or(commsFilter)
           .order("received_at", { ascending: false })
-          .limit(30),
+          .limit(100),
         // Orders
         custId
           ? supabase
@@ -211,6 +254,21 @@ export function InboxCustomerContext({ senderEmail, senderName }: InboxCustomerC
             date: q.created_at || "",
             amount: q.total_amount,
             status: q.status,
+          });
+        });
+      }
+
+      // Meetings → activities
+      if (meetingsRes.status === "fulfilled") {
+        const meetings = (meetingsRes.value as any).data ?? [];
+        meetings.forEach((m: any) => {
+          allActivities.push({
+            id: m.id,
+            type: "meeting",
+            title: m.title || "Meeting",
+            subtitle: m.status ? `Status: ${m.status}` : null,
+            date: m.started_at || "",
+            status: m.status,
           });
         });
       }
