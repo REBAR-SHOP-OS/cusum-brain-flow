@@ -1,8 +1,7 @@
 import { Link, useLocation } from "react-router-dom";
 import {
   Home, Inbox, CheckSquare, Kanban, Users, Factory, Package, Truck,
-  LayoutGrid, Brain, Settings, Shield, Phone, Bell, History,
-  BarChart3,
+  LayoutGrid, Brain, Settings, Shield, Plug,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -59,6 +58,7 @@ export function AppSidebar() {
       label: "System",
       items: [
         { name: "Brain", href: "/brain", icon: Brain, tourId: "nav-brain" },
+        { name: "Integrations", href: "/integrations", icon: Plug, tourId: "nav-integrations" },
         { name: "Settings", href: "/settings", icon: Settings, tourId: "nav-settings" },
       ],
     },
