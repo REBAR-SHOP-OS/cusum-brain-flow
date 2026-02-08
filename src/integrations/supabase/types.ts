@@ -3216,6 +3216,57 @@ export type Database = {
         }
         Relationships: []
       }
+      user_meta_tokens: {
+        Row: {
+          access_token: string
+          created_at: string | null
+          expires_at: string | null
+          id: string
+          instagram_accounts: Json | null
+          last_used_at: string | null
+          meta_user_id: string | null
+          meta_user_name: string | null
+          pages: Json | null
+          platform: string
+          scopes: string[] | null
+          token_type: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          access_token: string
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          instagram_accounts?: Json | null
+          last_used_at?: string | null
+          meta_user_id?: string | null
+          meta_user_name?: string | null
+          pages?: Json | null
+          platform: string
+          scopes?: string[] | null
+          token_type?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          access_token?: string
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          instagram_accounts?: Json | null
+          last_used_at?: string | null
+          meta_user_id?: string | null
+          meta_user_name?: string | null
+          pages?: Json | null
+          platform?: string
+          scopes?: string[] | null
+          token_type?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_ringcentral_tokens: {
         Row: {
           access_token: string | null

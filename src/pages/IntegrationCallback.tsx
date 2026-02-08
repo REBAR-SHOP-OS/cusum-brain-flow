@@ -74,7 +74,12 @@ export default function IntegrationCallback() {
       const redirectUri = "https://cusum-brain-flow.lovable.app/integrations/callback";
 
       // Route to the correct edge function based on integration
-      const edgeFunction = integration === "ringcentral" ? "ringcentral-oauth" : "google-oauth";
+      const metaIntegrations = ["facebook", "instagram"];
+      const edgeFunction = metaIntegrations.includes(integration)
+        ? "facebook-oauth"
+        : integration === "ringcentral"
+          ? "ringcentral-oauth"
+          : "google-oauth";
 
       const { data, error } = await supabase.functions.invoke(edgeFunction, {
         body: {

@@ -159,11 +159,7 @@ export const defaultIntegrations: Integration[] = [
     status: "available",
     icon: "instagram",
     docsUrl: "https://developers.facebook.com/docs/instagram-api/",
-    fields: [
-      { key: "INSTAGRAM_APP_ID", label: "App ID", type: "text", placeholder: "xxx", helpText: "From Facebook Developer Console (same app as Facebook)" },
-      { key: "INSTAGRAM_APP_SECRET", label: "App Secret", type: "password", placeholder: "xxx", helpText: "From Facebook Developer Console" },
-      { key: "INSTAGRAM_ACCESS_TOKEN", label: "Page Access Token", type: "textarea", placeholder: "xxx", helpText: "Long-lived token from Graph API Explorer" },
-    ],
+    fields: [],
   },
   {
     id: "tiktok",
@@ -198,11 +194,7 @@ export const defaultIntegrations: Integration[] = [
     status: "available",
     icon: "facebook",
     docsUrl: "https://developers.facebook.com/apps/",
-    fields: [
-      { key: "FACEBOOK_APP_ID", label: "App ID", type: "text", placeholder: "xxx", helpText: "From Facebook Developer Console" },
-      { key: "FACEBOOK_APP_SECRET", label: "App Secret", type: "password", placeholder: "xxx", helpText: "From Facebook Developer Console" },
-      { key: "FACEBOOK_ACCESS_TOKEN", label: "Page Access Token", type: "textarea", placeholder: "xxx", helpText: "From Graph API Explorer" },
-    ],
+    fields: [],
   },
   {
     id: "outlook",
