@@ -14,6 +14,17 @@ export interface SocialPost {
   user_id: string;
   created_at: string;
   updated_at: string;
+  // Engagement metrics
+  reach: number;
+  impressions: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  saves: number;
+  clicks: number;
+  // Metadata
+  content_type: string | null;
+  page_name: string | null;
 }
 
 export type SocialPostInsert = Omit<SocialPost, "id" | "created_at" | "updated_at">;

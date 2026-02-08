@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Plus, Settings, ChevronLeft, ChevronRight,
@@ -18,6 +18,7 @@ import { ContentStrategyPanel } from "@/components/social/ContentStrategyPanel";
 import { SettingsSheet } from "@/components/social/SettingsSheet";
 import { useSocialPosts, type SocialPost } from "@/hooks/useSocialPosts";
 import { useAutoGenerate } from "@/hooks/useAutoGenerate";
+import { useStrategyChecklist } from "@/hooks/useStrategyChecklist";
 
 const platformFilters = [
   { id: "all", label: "All" },
@@ -41,7 +42,7 @@ export default function SocialMediaManager() {
   const navigate = useNavigate();
   const { generatePosts, generating } = useAutoGenerate();
   const { posts, isLoading, updatePost } = useSocialPosts();
-
+  const { completedChecklist, toggleChecklist } = useStrategyChecklist();
   const [weekStart, setWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
 
@@ -59,19 +60,6 @@ export default function SocialMediaManager() {
 
   // Strategy panel
   const [showStrategy, setShowStrategy] = useState(false);
-  const [completedChecklist, setCompletedChecklist] = useState<string[]>(() => {
-    try {
-      return JSON.parse(localStorage.getItem("social_checklist") || "[]");
-    } catch { return []; }
-  });
-
-  const toggleChecklist = useCallback((id: string) => {
-    setCompletedChecklist((prev) => {
-      const next = prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id];
-      localStorage.setItem("social_checklist", JSON.stringify(next));
-      return next;
-    });
-  }, []);
 
   // Filters & search
   const [searchOpen, setSearchOpen] = useState(false);
@@ -275,6 +263,7 @@ export default function SocialMediaManager() {
             <ContentStrategyPanel
               completedChecklist={completedChecklist}
               onToggleChecklist={toggleChecklist}
+              posts={posts}
             />
           </div>
         )}

@@ -2775,42 +2775,93 @@ export type Database = {
       }
       social_posts: {
         Row: {
+          clicks: number | null
+          comments: number | null
           content: string
+          content_type: string | null
           created_at: string
           hashtags: string[] | null
           id: string
           image_url: string | null
+          impressions: number | null
+          likes: number | null
+          page_name: string | null
           platform: string
+          reach: number | null
+          saves: number | null
           scheduled_date: string | null
+          shares: number | null
           status: string
           title: string
           updated_at: string
           user_id: string
         }
         Insert: {
+          clicks?: number | null
+          comments?: number | null
           content?: string
+          content_type?: string | null
           created_at?: string
           hashtags?: string[] | null
           id?: string
           image_url?: string | null
+          impressions?: number | null
+          likes?: number | null
+          page_name?: string | null
           platform: string
+          reach?: number | null
+          saves?: number | null
           scheduled_date?: string | null
+          shares?: number | null
           status?: string
           title?: string
           updated_at?: string
           user_id: string
         }
         Update: {
+          clicks?: number | null
+          comments?: number | null
           content?: string
+          content_type?: string | null
           created_at?: string
           hashtags?: string[] | null
           id?: string
           image_url?: string | null
+          impressions?: number | null
+          likes?: number | null
+          page_name?: string | null
           platform?: string
+          reach?: number | null
+          saves?: number | null
           scheduled_date?: string | null
+          shares?: number | null
           status?: string
           title?: string
           updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      social_strategy_checklist: {
+        Row: {
+          checklist_item_id: string
+          completed: boolean | null
+          completed_at: string | null
+          id: string
+          user_id: string
+        }
+        Insert: {
+          checklist_item_id: string
+          completed?: boolean | null
+          completed_at?: string | null
+          id?: string
+          user_id: string
+        }
+        Update: {
+          checklist_item_id?: string
+          completed?: boolean | null
+          completed_at?: string | null
+          id?: string
           user_id?: string
         }
         Relationships: []
