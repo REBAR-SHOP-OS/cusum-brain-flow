@@ -12,7 +12,7 @@ import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { PIPELINE_STAGES } from "@/pages/Pipeline";
 import { LeadTimeline } from "./LeadTimeline";
-import { supabase } from "@/integrations/supabase/client";
+import { LeadFiles } from "./LeadFiles";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Lead = Tables<"leads">;

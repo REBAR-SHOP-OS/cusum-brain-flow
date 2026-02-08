@@ -1715,6 +1715,7 @@ export type Database = {
           expected_close_date: string | null
           expected_value: number | null
           id: string
+          metadata: Json | null
           notes: string | null
           priority: string | null
           probability: number | null
@@ -1735,6 +1736,7 @@ export type Database = {
           expected_close_date?: string | null
           expected_value?: number | null
           id?: string
+          metadata?: Json | null
           notes?: string | null
           priority?: string | null
           probability?: number | null
@@ -1755,6 +1757,7 @@ export type Database = {
           expected_close_date?: string | null
           expected_value?: number | null
           id?: string
+          metadata?: Json | null
           notes?: string | null
           priority?: string | null
           probability?: number | null
