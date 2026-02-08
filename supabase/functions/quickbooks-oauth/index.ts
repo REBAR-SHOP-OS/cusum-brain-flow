@@ -276,6 +276,15 @@ serve(async (req) => {
 
       const config = connection.config as { realm_id: string; access_token: string };
 
+      // Get user's company_id for multi-tenant isolation
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("company_id")
+        .eq("user_id", userId)
+        .maybeSingle();
+      const companyId = profile?.company_id;
+      if (!companyId) throw new Error("User has no company assigned");
+
       const qbResponse = await fetch(
         `${QUICKBOOKS_API_BASE}/v3/company/${config.realm_id}/query?query=SELECT * FROM Customer MAXRESULTS 1000`,
         {
@@ -296,6 +305,7 @@ serve(async (req) => {
       const customers = qbData.QueryResponse?.Customer || [];
 
       let synced = 0;
+      const errors: string[] = [];
       for (const customer of customers) {
         const { error } = await supabase
           .from("customers")
@@ -303,12 +313,22 @@ serve(async (req) => {
             quickbooks_id: customer.Id,
             name: customer.DisplayName,
             company_name: customer.CompanyName || null,
+            company_id: companyId,
             notes: customer.Notes || null,
             credit_limit: customer.CreditLimit || null,
             payment_terms: customer.SalesTermRef?.name || null,
+            status: customer.Active ? "active" : "inactive",
           }, { onConflict: "quickbooks_id" });
 
-        if (!error) synced++;
+        if (!error) {
+          synced++;
+        } else {
+          errors.push(`${customer.DisplayName}: ${error.message}`);
+        }
+      }
+
+      if (errors.length > 0) {
+        console.error("Customer sync errors:", errors.slice(0, 5));
       }
 
       await supabase
@@ -317,7 +337,89 @@ serve(async (req) => {
         .eq("user_id", userId)
         .eq("integration_id", "quickbooks");
 
-      return new Response(JSON.stringify({ success: true, synced, total: customers.length }), {
+      return new Response(JSON.stringify({ success: true, synced, total: customers.length, errors: errors.length }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ─── Sync invoices from QuickBooks (per-user) ──────────────────
+    if (body.action === "sync-invoices") {
+      const connection = await getUserQBConnection(supabase, userId);
+      if (!connection) throw new Error("QuickBooks not connected");
+
+      const config = connection.config as { realm_id: string; access_token: string };
+
+      // Get user's company_id
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("company_id")
+        .eq("user_id", userId)
+        .maybeSingle();
+      const companyId = profile?.company_id;
+      if (!companyId) throw new Error("User has no company assigned");
+
+      const qbResponse = await fetch(
+        `${QUICKBOOKS_API_BASE}/v3/company/${config.realm_id}/query?query=SELECT * FROM Invoice MAXRESULTS 1000`,
+        {
+          headers: {
+            "Authorization": `Bearer ${config.access_token}`,
+            "Accept": "application/json",
+          },
+        }
+      );
+
+      if (!qbResponse.ok) {
+        const errorText = await qbResponse.text();
+        console.error("QuickBooks Invoice API error:", errorText);
+        throw new Error("Failed to fetch invoices from QuickBooks");
+      }
+
+      const qbData = await qbResponse.json();
+      const invoices = qbData.QueryResponse?.Invoice || [];
+
+      let synced = 0;
+      for (const invoice of invoices) {
+        // Map QB customer to local customer
+        let customerId: string | null = null;
+        if (invoice.CustomerRef?.value) {
+          const { data: customer } = await supabase
+            .from("customers")
+            .select("id")
+            .eq("quickbooks_id", invoice.CustomerRef.value)
+            .maybeSingle();
+          customerId = customer?.id || null;
+        }
+
+        const { error } = await supabase
+          .from("accounting_mirror")
+          .upsert({
+            quickbooks_id: invoice.Id,
+            entity_type: "Invoice",
+            balance: invoice.Balance || 0,
+            customer_id: customerId,
+            data: {
+              DocNumber: invoice.DocNumber,
+              TotalAmt: invoice.TotalAmt,
+              DueDate: invoice.DueDate,
+              TxnDate: invoice.TxnDate,
+              CustomerName: invoice.CustomerRef?.name,
+              EmailStatus: invoice.EmailStatus,
+              Balance: invoice.Balance,
+            },
+            last_synced_at: new Date().toISOString(),
+          }, { onConflict: "quickbooks_id" });
+
+        if (!error) synced++;
+        else console.error(`Invoice sync error (${invoice.Id}):`, error.message);
+      }
+
+      await supabase
+        .from("integration_connections")
+        .update({ last_sync_at: new Date().toISOString() })
+        .eq("user_id", userId)
+        .eq("integration_id", "quickbooks");
+
+      return new Response(JSON.stringify({ success: true, synced, total: invoices.length }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
