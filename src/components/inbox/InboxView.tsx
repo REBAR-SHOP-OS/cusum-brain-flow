@@ -1,5 +1,9 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
-import { RefreshCw, Settings, Loader2, Search, CheckSquare, Trash2, Archive, X, Mail, LogOut, Phone, LayoutGrid, List, MessageSquare } from "lucide-react";
+import {
+  RefreshCw, Settings, Loader2, Search, CheckSquare,
+  Trash2, Archive, X, Mail, LogOut, Phone, LayoutGrid,
+  List, MessageSquare, Wifi, WifiOff
+} from "lucide-react";
 import { InboxEmailList, type InboxEmail } from "./InboxEmailList";
 import { InboxEmailViewer } from "./InboxEmailViewer";
 import { InboxDetailView } from "./InboxDetailView";
@@ -14,6 +18,17 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -29,7 +44,6 @@ function categorizeCommunication(
   const subjectLower = (subject || "").toLowerCase();
   const previewLower = (preview || "").toLowerCase();
 
-  // Calls & SMS get priority categorization
   if (type === "call") {
     if (subjectLower.includes("missed")) return { label: "Urgent", labelColor: "bg-red-500", priority: 0 };
     return { label: "To Respond", labelColor: "bg-red-400", priority: 1 };
@@ -41,7 +55,6 @@ function categorizeCommunication(
     return { label: "To Respond", labelColor: "bg-red-400", priority: 1 };
   }
 
-  // Email categorization
   if (fromLower.includes("mailer-daemon") || fromLower.includes("postmaster") || subjectLower.includes("delivery status")) {
     return { label: "Notification", labelColor: "bg-cyan-400", priority: 4 };
   }
@@ -80,7 +93,6 @@ function extractEmail(fromAddress: string): string {
   return fromAddress;
 }
 
-// ─── Label filter options ──────────────────────────────────────────
 const labelFilters = [
   { label: "All", value: "all" },
   { label: "To Respond", value: "To Respond", color: "bg-red-400" },
@@ -105,6 +117,7 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
   const [showSettings, setShowSettings] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [search, setSearch] = useState("");
+  const [showSearch, setShowSearch] = useState(false);
   const [activeFilter, setActiveFilter] = useState("all");
   const [sortByPriority, setSortByPriority] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "kanban">("kanban");
@@ -125,26 +138,21 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
   const [rcEmail, setRcEmail] = useState<string | null>(null);
   const [rcConnecting, setRcConnecting] = useState(false);
 
-  // Check if current user has Gmail & RingCentral connected
+  // Check connection statuses
   useEffect(() => {
     const checkGmailStatus = async () => {
       try {
         const { data, error } = await supabase.functions.invoke("google-oauth", {
           body: { action: "check-status", integration: "gmail" },
         });
-        if (error) {
-          setGmailStatus("not_connected");
-          return;
-        }
+        if (error) { setGmailStatus("not_connected"); return; }
         if (data?.status === "connected") {
           setGmailStatus("connected");
           setGmailEmail(data.email || userEmail);
         } else {
           setGmailStatus("not_connected");
         }
-      } catch {
-        setGmailStatus("not_connected");
-      }
+      } catch { setGmailStatus("not_connected"); }
     };
 
     const checkRcStatus = async () => {
@@ -152,19 +160,14 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
         const { data, error } = await supabase.functions.invoke("ringcentral-oauth", {
           body: { action: "check-status" },
         });
-        if (error) {
-          setRcStatus("not_connected");
-          return;
-        }
+        if (error) { setRcStatus("not_connected"); return; }
         if (data?.status === "connected") {
           setRcStatus("connected");
           setRcEmail(data.email || null);
         } else {
           setRcStatus("not_connected");
         }
-      } catch {
-        setRcStatus("not_connected");
-      }
+      } catch { setRcStatus("not_connected"); }
     };
 
     checkGmailStatus();
@@ -181,26 +184,18 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
       if (error) throw new Error(error.message);
       window.location.href = data.authUrl;
     } catch (err) {
-      toast({
-        title: "Connection failed",
-        description: err instanceof Error ? err.message : "Could not start Gmail connection",
-        variant: "destructive",
-      });
+      toast({ title: "Connection failed", description: err instanceof Error ? err.message : "Could not start Gmail connection", variant: "destructive" });
       setConnecting(false);
     }
   };
 
   const handleDisconnectGmail = async () => {
     try {
-      await supabase.functions.invoke("google-oauth", {
-        body: { action: "disconnect", integration: "gmail" },
-      });
+      await supabase.functions.invoke("google-oauth", { body: { action: "disconnect", integration: "gmail" } });
       setGmailStatus("not_connected");
       setGmailEmail(null);
       toast({ title: "Gmail disconnected" });
-    } catch {
-      toast({ title: "Failed to disconnect", variant: "destructive" });
-    }
+    } catch { toast({ title: "Failed to disconnect", variant: "destructive" }); }
   };
 
   const handleConnectRC = async () => {
@@ -213,26 +208,18 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
       if (error) throw new Error(error.message);
       window.location.href = data.authUrl;
     } catch (err) {
-      toast({
-        title: "Connection failed",
-        description: err instanceof Error ? err.message : "Could not start RingCentral connection",
-        variant: "destructive",
-      });
+      toast({ title: "Connection failed", description: err instanceof Error ? err.message : "Could not start RingCentral connection", variant: "destructive" });
       setRcConnecting(false);
     }
   };
 
   const handleDisconnectRC = async () => {
     try {
-      await supabase.functions.invoke("ringcentral-oauth", {
-        body: { action: "disconnect" },
-      });
+      await supabase.functions.invoke("ringcentral-oauth", { body: { action: "disconnect" } });
       setRcStatus("not_connected");
       setRcEmail(null);
       toast({ title: "RingCentral disconnected" });
-    } catch {
-      toast({ title: "Failed to disconnect", variant: "destructive" });
-    }
+    } catch { toast({ title: "Failed to disconnect", variant: "destructive" }); }
   };
 
   // Map communications to InboxEmail format
@@ -244,7 +231,6 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
       const fullBody = (meta?.body as string) || comm.preview || "";
       const receivedDate = comm.receivedAt ? new Date(comm.receivedAt) : null;
 
-      // Build display subject for calls/SMS
       let displaySubject = comm.subject || "(no subject)";
       if (commType === "call") {
         const duration = meta?.duration as string | undefined;
@@ -338,31 +324,19 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
   }, [emails, selectedIds.size]);
 
   const handleDeleteEmail = useCallback((id: string) => {
-    setHiddenIds((prev) => {
-      const next = new Set(prev);
-      next.add(id);
-      return next;
-    });
+    setHiddenIds((prev) => { const next = new Set(prev); next.add(id); return next; });
     if (selectedEmail?.id === id) setSelectedEmail(null);
     toast({ title: "Email deleted", description: "Email has been removed from your inbox." });
   }, [selectedEmail, toast]);
 
   const handleArchiveEmail = useCallback((id: string) => {
-    setHiddenIds((prev) => {
-      const next = new Set(prev);
-      next.add(id);
-      return next;
-    });
+    setHiddenIds((prev) => { const next = new Set(prev); next.add(id); return next; });
     if (selectedEmail?.id === id) setSelectedEmail(null);
     toast({ title: "Email archived", description: "Email has been archived." });
   }, [selectedEmail, toast]);
 
   const handleBulkDelete = useCallback(() => {
-    setHiddenIds((prev) => {
-      const next = new Set(prev);
-      selectedIds.forEach((id) => next.add(id));
-      return next;
-    });
+    setHiddenIds((prev) => { const next = new Set(prev); selectedIds.forEach((id) => next.add(id)); return next; });
     if (selectedEmail && selectedIds.has(selectedEmail.id)) setSelectedEmail(null);
     toast({ title: "Bulk delete", description: `${selectedIds.size} email(s) deleted.` });
     setSelectedIds(new Set());
@@ -370,11 +344,7 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
   }, [selectedIds, selectedEmail, toast]);
 
   const handleBulkArchive = useCallback(() => {
-    setHiddenIds((prev) => {
-      const next = new Set(prev);
-      selectedIds.forEach((id) => next.add(id));
-      return next;
-    });
+    setHiddenIds((prev) => { const next = new Set(prev); selectedIds.forEach((id) => next.add(id)); return next; });
     if (selectedEmail && selectedIds.has(selectedEmail.id)) setSelectedEmail(null);
     toast({ title: "Bulk archive", description: `${selectedIds.size} email(s) archived.` });
     setSelectedIds(new Set());
@@ -389,89 +359,61 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
         const fyi = allEmails.filter((e) => e.label === "FYI" || e.label === "Awaiting Reply").length;
         const marketing = allEmails.filter((e) => e.label === "Marketing").length;
         const spam = allEmails.filter((e) => e.label === "Spam").length;
-
         const highlights: string[] = [];
         if (toRespond > 0) highlights.push(`${toRespond} email(s) need your reply — prioritize these first.`);
         const urgentEmails = allEmails.filter((e) => e.label === "Urgent");
-        if (urgentEmails.length > 0) {
-          highlights.push(`Urgent: "${urgentEmails[0].subject}" from ${urgentEmails[0].sender}`);
-        }
+        if (urgentEmails.length > 0) highlights.push(`Urgent: "${urgentEmails[0].subject}" from ${urgentEmails[0].sender}`);
         if (marketing > 3) highlights.push(`${marketing} marketing emails — consider archiving them.`);
         if (spam > 0) highlights.push(`${spam} suspected spam email(s) detected.`);
         if (fyi > 0) highlights.push(`${fyi} informational email(s) — read when you have time.`);
-
-        setSummary({
-          totalEmails: allEmails.length,
-          toRespond,
-          fyi,
-          marketing,
-          spam,
-          highlights,
-        });
+        setSummary({ totalEmails: allEmails.length, toRespond, fyi, marketing, spam, highlights });
         break;
       }
-
       case "detect-spam": {
         const spamCount = allEmails.filter((e) => e.label === "Spam").length;
         if (spamCount === 0) {
           const spamKeywords = ["alibaba", "unsubscribe", "free trial", "act now", "limited time", "congratulations", "winner"];
-          const detected = allEmails.filter((e) =>
-            spamKeywords.some((kw) =>
-              e.subject.toLowerCase().includes(kw) || e.sender.toLowerCase().includes(kw)
-            )
-          );
-          if (detected.length > 0) {
-            setHiddenIds(new Set(detected.map((e) => e.id)));
-          }
+          const detected = allEmails.filter((e) => spamKeywords.some((kw) => e.subject.toLowerCase().includes(kw) || e.sender.toLowerCase().includes(kw)));
+          if (detected.length > 0) setHiddenIds(new Set(detected.map((e) => e.id)));
         }
         setActiveFilter("Spam");
         break;
       }
-
       case "clean": {
         const clutter = allEmails.filter((e) => e.label === "Marketing" || e.label === "Spam");
         setHiddenIds(new Set(clutter.map((e) => e.id)));
         break;
       }
-
       case "prioritize":
         setSortByPriority(true);
         break;
-
       case "label-all":
         setActiveFilter("all");
         setSortByPriority(false);
         setHiddenIds(new Set());
         break;
-
       case "archive-marketing": {
         const marketingEmails = allEmails.filter((e) => e.label === "Marketing");
-        setHiddenIds((prev) => {
-          const next = new Set(prev);
-          marketingEmails.forEach((e) => next.add(e.id));
-          return next;
-        });
+        setHiddenIds((prev) => { const next = new Set(prev); marketingEmails.forEach((e) => next.add(e.id)); return next; });
         break;
       }
-
-      case "unsubscribe": {
+      case "unsubscribe":
         setActiveFilter("Marketing");
         break;
-      }
     }
   };
 
+  const gmailConnected = gmailStatus === "connected";
+  const rcConnected = rcStatus === "connected";
+  const bothLoading = gmailStatus === "loading" && rcStatus === "loading";
+
   return (
-    <div className="flex flex-col h-full">
-      {/* Top bar — always visible */}
-      <div className="flex items-center justify-between p-3 border-b shrink-0">
-        <div className="flex items-center gap-2">
-          <h1 className="text-lg font-semibold">Inbox</h1>
-          {loading && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
-        </div>
-        <div className="flex items-center gap-1">
+    <TooltipProvider>
+      <div className="flex flex-col h-full">
+        {/* ─── Unified Top Bar ─── */}
+        <div className="flex items-center gap-2 px-3 py-2 border-b shrink-0">
           {/* View toggle */}
-          <div className="flex items-center border border-border rounded-md overflow-hidden mr-1">
+          <div className="flex items-center border border-border rounded-md overflow-hidden">
             <Button
               variant={viewMode === "kanban" ? "secondary" : "ghost"}
               size="icon"
@@ -491,92 +433,137 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
               <List className="w-3.5 h-3.5" />
             </Button>
           </div>
+
+          {/* Search — inline expandable */}
+          {showSearch ? (
+            <div className="relative flex-1 max-w-xs">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search..."
+                className="h-7 pl-8 text-xs"
+                autoFocus
+                onBlur={() => { if (!search) setShowSearch(false); }}
+              />
+              {search && (
+                <button className="absolute right-2 top-1/2 -translate-y-1/2" onClick={() => { setSearch(""); setShowSearch(false); }}>
+                  <X className="w-3 h-3 text-muted-foreground" />
+                </button>
+              )}
+            </div>
+          ) : (
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setShowSearch(true)}>
+              <Search className="w-3.5 h-3.5" />
+            </Button>
+          )}
+
+          <div className="flex-1" />
+
+          {/* Connection status dots */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <button className="flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-muted transition-colors">
+                {bothLoading ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
+                ) : (
+                  <>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className={cn("w-2 h-2 rounded-full", gmailConnected ? "bg-emerald-400" : "bg-muted-foreground/40")} />
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="text-xs">
+                        Gmail: {gmailConnected ? gmailEmail : "Not connected"}
+                      </TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className={cn("w-2 h-2 rounded-full", rcConnected ? "bg-blue-400" : "bg-muted-foreground/40")} />
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="text-xs">
+                        RingCentral: {rcConnected ? rcEmail : "Not connected"}
+                      </TooltipContent>
+                    </Tooltip>
+                  </>
+                )}
+                <Wifi className="w-3 h-3 text-muted-foreground" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-72 p-3 space-y-3">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Connections</p>
+              {/* Gmail */}
+              <div className="flex items-center gap-2.5">
+                <div className={cn("w-7 h-7 rounded-full flex items-center justify-center shrink-0", gmailConnected ? "bg-emerald-500/15" : "bg-muted")}>
+                  <Mail className={cn("w-3.5 h-3.5", gmailConnected ? "text-emerald-400" : "text-muted-foreground")} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium">Gmail</p>
+                  <p className="text-[10px] text-muted-foreground truncate">
+                    {gmailConnected ? gmailEmail : "Not connected"}
+                  </p>
+                </div>
+                {gmailConnected ? (
+                  <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px] text-muted-foreground hover:text-destructive" onClick={handleDisconnectGmail}>
+                    <LogOut className="w-3 h-3 mr-1" />Disconnect
+                  </Button>
+                ) : (
+                  <Button size="sm" className="h-6 px-2 text-[10px]" onClick={handleConnectGmail} disabled={connecting}>
+                    {connecting ? <Loader2 className="w-3 h-3 animate-spin" /> : "Connect"}
+                  </Button>
+                )}
+              </div>
+              {/* RingCentral */}
+              <div className="flex items-center gap-2.5">
+                <div className={cn("w-7 h-7 rounded-full flex items-center justify-center shrink-0", rcConnected ? "bg-blue-500/15" : "bg-muted")}>
+                  <Phone className={cn("w-3.5 h-3.5", rcConnected ? "text-blue-400" : "text-muted-foreground")} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium">RingCentral</p>
+                  <p className="text-[10px] text-muted-foreground truncate">
+                    {rcConnected ? rcEmail : "Not connected"}
+                  </p>
+                </div>
+                {rcConnected ? (
+                  <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px] text-muted-foreground hover:text-destructive" onClick={handleDisconnectRC}>
+                    <LogOut className="w-3 h-3 mr-1" />Disconnect
+                  </Button>
+                ) : (
+                  <Button size="sm" className="h-6 px-2 text-[10px]" onClick={handleConnectRC} disabled={rcConnecting}>
+                    {rcConnecting ? <Loader2 className="w-3 h-3 animate-spin" /> : "Connect"}
+                  </Button>
+                )}
+              </div>
+            </PopoverContent>
+          </Popover>
+
+          {/* Actions */}
           <Button
             variant={selectionMode ? "secondary" : "ghost"}
             size="icon"
-            className="h-8 w-8"
+            className="h-7 w-7"
             onClick={toggleSelectMode}
             title={selectionMode ? "Exit selection" : "Select emails"}
           >
-            {selectionMode ? <X className="w-4 h-4" /> : <CheckSquare className="w-4 h-4" />}
+            {selectionMode ? <X className="w-3.5 h-3.5" /> : <CheckSquare className="w-3.5 h-3.5" />}
           </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleSync} disabled={syncing}>
-            <RefreshCw className={cn("w-4 h-4", syncing && "animate-spin")} />
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleSync} disabled={syncing}>
+            <RefreshCw className={cn("w-3.5 h-3.5", syncing && "animate-spin")} />
           </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setShowSettings(true)}>
-            <Settings className="w-4 h-4" />
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setShowSettings(true)}>
+            <Settings className="w-3.5 h-3.5" />
           </Button>
         </div>
-      </div>
 
-      {/* Connection banners */}
-      <div className="shrink-0">
-        {gmailStatus === "not_connected" && (
-          <div className="px-3 py-3 border-b bg-muted/50">
-            <div className="flex items-center gap-3">
-              <Mail className="w-5 h-5 text-muted-foreground flex-shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium">Connect your Gmail</p>
-                <p className="text-xs text-muted-foreground">Sign in to sync your emails</p>
-              </div>
-              <Button size="sm" onClick={handleConnectGmail} disabled={connecting}>
-                {connecting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Connect"}
-              </Button>
-            </div>
-          </div>
-        )}
-        {gmailStatus === "connected" && gmailEmail && (
-          <div className="px-3 py-1.5 border-b bg-muted/30 flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">
-              <Mail className="w-3 h-3 inline mr-1" />{gmailEmail}
-            </span>
-            <Button variant="ghost" size="sm" className="h-6 px-1.5 text-xs text-muted-foreground hover:text-destructive" onClick={handleDisconnectGmail} title="Disconnect Gmail">
-              <LogOut className="w-3 h-3" />
-            </Button>
-          </div>
-        )}
-        {rcStatus === "not_connected" && (
-          <div className="px-3 py-3 border-b bg-muted/50">
-            <div className="flex items-center gap-3">
-              <Phone className="w-5 h-5 text-muted-foreground flex-shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium">Connect RingCentral</p>
-                <p className="text-xs text-muted-foreground">Sign in to sync calls & SMS</p>
-              </div>
-              <Button size="sm" onClick={handleConnectRC} disabled={rcConnecting}>
-                {rcConnecting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Connect"}
-              </Button>
-            </div>
-          </div>
-        )}
-        {rcStatus === "connected" && rcEmail && (
-          <div className="px-3 py-1.5 border-b bg-muted/30 flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">
-              <Phone className="w-3 h-3 inline mr-1" />{rcEmail}
-            </span>
-            <Button variant="ghost" size="sm" className="h-6 px-1.5 text-xs text-muted-foreground hover:text-destructive" onClick={handleDisconnectRC} title="Disconnect RingCentral">
-              <LogOut className="w-3 h-3" />
-            </Button>
-          </div>
-        )}
-      </div>
+        {/* ─── AI Toolbar (compact) ─── */}
+        <div className="shrink-0">
+          <InboxAIToolbar emailCount={allEmails.length} onAction={handleAIAction} />
+          <InboxSummaryPanel summary={summary} onClose={() => setSummary(null)} />
+        </div>
 
-      {/* AI Toolbar + Search — shared between views */}
-      <div className="shrink-0">
-        <InboxAIToolbar emailCount={allEmails.length} onAction={handleAIAction} />
-        <InboxSummaryPanel summary={summary} onClose={() => setSummary(null)} />
-
+        {/* ─── List-only extras: filter chips ─── */}
         {viewMode === "list" && (
-          <>
-            <div className="px-3 py-2 border-b">
-              <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search emails..." className="h-8 pl-8 text-xs" />
-              </div>
-            </div>
-
-            {/* Filter chips */}
-            <div className="flex items-center gap-1.5 px-3 py-2 border-b overflow-x-auto">
+          <div className="shrink-0">
+            <div className="flex items-center gap-1.5 px-3 py-1.5 border-b overflow-x-auto">
               {labelFilters.map((f) => {
                 const count = f.value === "all" ? allEmails.length : (labelCounts[f.value] || 0);
                 if (f.value !== "all" && count === 0) return null;
@@ -596,128 +583,123 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
                 );
               })}
             </div>
-          </>
+          </div>
         )}
 
         {/* Hidden items banner */}
         {hiddenIds.size > 0 && (
-          <div className="flex items-center justify-between px-3 py-1.5 bg-warning/10 border-b text-xs">
+          <div className="flex items-center justify-between px-3 py-1.5 bg-warning/10 border-b text-xs shrink-0">
             <span className="text-warning-foreground">{hiddenIds.size} email(s) hidden by AI cleanup</span>
             <Button variant="ghost" size="sm" className="text-xs h-6" onClick={() => setHiddenIds(new Set())}>Show all</Button>
           </div>
         )}
-      </div>
 
-      {/* Main content area */}
-      {viewMode === "kanban" ? (
-        /* ── Kanban View ── */
-        selectedEmail ? (
-          /* Half-page detail view */
-          <InboxDetailView
-            email={selectedEmail}
-            onClose={() => setSelectedEmail(null)}
-          />
-        ) : (
-          <div className="flex-1 flex flex-col overflow-hidden">
-            {/* Type filter tabs for Kanban */}
-            <div className="flex items-center gap-1 px-4 py-2 border-b border-border shrink-0">
-              {([
-                { value: "all" as const, label: "All", icon: null, count: allEmails.filter(e => !hiddenIds.has(e.id)).length },
-                { value: "email" as const, label: "Email", icon: <Mail className="w-3.5 h-3.5" />, count: allEmails.filter(e => !hiddenIds.has(e.id) && e.commType === "email").length },
-                { value: "call" as const, label: "Calls", icon: <Phone className="w-3.5 h-3.5" />, count: allEmails.filter(e => !hiddenIds.has(e.id) && e.commType === "call").length },
-                { value: "sms" as const, label: "SMS", icon: <MessageSquare className="w-3.5 h-3.5" />, count: allEmails.filter(e => !hiddenIds.has(e.id) && e.commType === "sms").length },
-              ]).map((tab) => (
-                <button
-                  key={tab.value}
-                  onClick={() => setKanbanTypeFilter(tab.value)}
-                  className={cn(
-                    "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
-                    kanbanTypeFilter === tab.value
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                  )}
-                >
-                  {tab.icon}
-                  {tab.label}
-                  <Badge variant={kanbanTypeFilter === tab.value ? "outline" : "secondary"} className={cn("text-[10px] h-4 px-1.5 ml-0.5", kanbanTypeFilter === tab.value && "border-primary-foreground/30 text-primary-foreground")}>
-                    {tab.count}
-                  </Badge>
-                </button>
-              ))}
+        {/* ─── Main content area ─── */}
+        {viewMode === "kanban" ? (
+          selectedEmail ? (
+            <InboxDetailView email={selectedEmail} onClose={() => setSelectedEmail(null)} />
+          ) : (
+            <div className="flex-1 flex flex-col overflow-hidden">
+              {/* Type filter tabs for Kanban */}
+              <div className="flex items-center gap-1 px-4 py-1.5 border-b border-border shrink-0">
+                {([
+                  { value: "all" as const, label: "All", icon: null, count: allEmails.filter(e => !hiddenIds.has(e.id)).length },
+                  { value: "email" as const, label: "Email", icon: <Mail className="w-3.5 h-3.5" />, count: allEmails.filter(e => !hiddenIds.has(e.id) && e.commType === "email").length },
+                  { value: "call" as const, label: "Calls", icon: <Phone className="w-3.5 h-3.5" />, count: allEmails.filter(e => !hiddenIds.has(e.id) && e.commType === "call").length },
+                  { value: "sms" as const, label: "SMS", icon: <MessageSquare className="w-3.5 h-3.5" />, count: allEmails.filter(e => !hiddenIds.has(e.id) && e.commType === "sms").length },
+                ]).map((tab) => (
+                  <button
+                    key={tab.value}
+                    onClick={() => setKanbanTypeFilter(tab.value)}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-colors",
+                      kanbanTypeFilter === tab.value
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                    )}
+                  >
+                    {tab.icon}
+                    {tab.label}
+                    <Badge variant={kanbanTypeFilter === tab.value ? "outline" : "secondary"} className={cn("text-[10px] h-4 px-1.5 ml-0.5", kanbanTypeFilter === tab.value && "border-primary-foreground/30 text-primary-foreground")}>
+                      {tab.count}
+                    </Badge>
+                  </button>
+                ))}
+              </div>
+              <div className="flex-1 flex overflow-hidden">
+                <InboxKanbanBoard
+                  emails={allEmails.filter((e) => !hiddenIds.has(e.id) && (kanbanTypeFilter === "all" || e.commType === kanbanTypeFilter))}
+                  onSelect={setSelectedEmail}
+                  selectedId={selectedEmail?.id ?? null}
+                />
+              </div>
             </div>
-            <div className="flex-1 flex overflow-hidden">
-              <InboxKanbanBoard
-                emails={allEmails.filter((e) => !hiddenIds.has(e.id) && (kanbanTypeFilter === "all" || e.commType === kanbanTypeFilter))}
-                onSelect={setSelectedEmail}
+          )
+        ) : (
+          /* ── List View ── */
+          <div className="flex-1 flex overflow-hidden">
+            <div className={cn(
+              "bg-background border-r flex flex-col min-h-0",
+              selectedEmail ? "hidden md:flex md:w-[400px]" : "flex w-full md:w-[400px]"
+            )}>
+              {/* Email Count + selection bar */}
+              <div className="px-3 py-1.5 text-[11px] text-muted-foreground border-b flex items-center justify-between">
+                {selectionMode ? (
+                  <div className="flex items-center gap-2 w-full">
+                    <Checkbox checked={emails.length > 0 && selectedIds.size === emails.length} onCheckedChange={selectAll} />
+                    <span className="text-xs font-medium">
+                      {selectedIds.size > 0 ? `${selectedIds.size} selected` : "Select all"}
+                    </span>
+                    {selectedIds.size > 0 && (
+                      <div className="flex items-center gap-1 ml-auto">
+                        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs gap-1 text-destructive hover:text-destructive" onClick={handleBulkDelete}>
+                          <Trash2 className="w-3.5 h-3.5" />Delete
+                        </Button>
+                        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs gap-1" onClick={handleBulkArchive}>
+                          <Archive className="w-3.5 h-3.5" />Archive
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    <span>{emails.length} email{emails.length !== 1 ? "s" : ""}</span>
+                    {sortByPriority && (
+                      <Button variant="ghost" size="sm" className="text-[11px] h-5 px-1.5" onClick={() => setSortByPriority(false)}>Clear sort</Button>
+                    )}
+                  </>
+                )}
+              </div>
+
+              <InboxEmailList
+                emails={emails}
                 selectedId={selectedEmail?.id ?? null}
+                onSelect={setSelectedEmail}
+                selectionMode={selectionMode}
+                selectedIds={selectedIds}
+                onToggleSelect={toggleSelectId}
+                onDelete={handleDeleteEmail}
+                onArchive={handleArchiveEmail}
               />
             </div>
-          </div>
-        )
-      ) : (
-        /* ── List View ── */
-        <div className="flex-1 flex overflow-hidden">
-          <div className={cn(
-            "bg-background border-r flex flex-col min-h-0",
-            selectedEmail ? "hidden md:flex md:w-[400px]" : "flex w-full md:w-[400px]"
-          )}>
-            {/* Email Count + selection bar */}
-            <div className="px-3 py-1.5 text-[11px] text-muted-foreground border-b flex items-center justify-between">
-              {selectionMode ? (
-                <div className="flex items-center gap-2 w-full">
-                  <Checkbox checked={emails.length > 0 && selectedIds.size === emails.length} onCheckedChange={selectAll} />
-                  <span className="text-xs font-medium">
-                    {selectedIds.size > 0 ? `${selectedIds.size} selected` : "Select all"}
-                  </span>
-                  {selectedIds.size > 0 && (
-                    <div className="flex items-center gap-1 ml-auto">
-                      <Button variant="ghost" size="sm" className="h-7 px-2 text-xs gap-1 text-destructive hover:text-destructive" onClick={handleBulkDelete}>
-                        <Trash2 className="w-3.5 h-3.5" />Delete
-                      </Button>
-                      <Button variant="ghost" size="sm" className="h-7 px-2 text-xs gap-1" onClick={handleBulkArchive}>
-                        <Archive className="w-3.5 h-3.5" />Archive
-                      </Button>
-                    </div>
-                  )}
-                </div>
+
+            {/* Email Viewer */}
+            <div className={cn("flex-1 min-h-0", selectedEmail ? "flex" : "hidden md:flex")}>
+              {selectedEmail ? (
+                <InboxDetailView email={selectedEmail} onClose={() => setSelectedEmail(null)} />
               ) : (
-                <>
-                  <span>{emails.length} email{emails.length !== 1 ? "s" : ""}</span>
-                  {sortByPriority && (
-                    <Button variant="ghost" size="sm" className="text-[11px] h-5 px-1.5" onClick={() => setSortByPriority(false)}>Clear sort</Button>
-                  )}
-                </>
+                <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-3 w-full">
+                  <Mail className="w-10 h-10 opacity-30" />
+                  <p className="text-sm">Select an email to read</p>
+                </div>
               )}
             </div>
-
-            <InboxEmailList
-              emails={emails}
-              selectedId={selectedEmail?.id ?? null}
-              onSelect={setSelectedEmail}
-              selectionMode={selectionMode}
-              selectedIds={selectedIds}
-              onToggleSelect={toggleSelectId}
-              onDelete={handleDeleteEmail}
-              onArchive={handleArchiveEmail}
-            />
           </div>
+        )}
 
-          {/* Email Viewer */}
-          <div className={cn("flex-1 min-h-0", selectedEmail ? "flex" : "hidden md:flex")}>
-            {selectedEmail ? (
-              <InboxDetailView email={selectedEmail} onClose={() => setSelectedEmail(null)} />
-            ) : (
-              <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-3 w-full">
-                <Mail className="w-10 h-10 opacity-30" />
-                <p className="text-sm">Select an email to read</p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Settings Panel */}
-      <InboxManagerSettings open={showSettings} onOpenChange={setShowSettings} connectedEmail={userEmail} />
-    </div>
+        {/* Settings Panel */}
+        <InboxManagerSettings open={showSettings} onOpenChange={setShowSettings} connectedEmail={userEmail} />
+      </div>
+    </TooltipProvider>
   );
 }
