@@ -12,6 +12,7 @@ import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { PIPELINE_STAGES } from "@/pages/Pipeline";
 import { LeadTimeline } from "./LeadTimeline";
+import { LeadEmailContent } from "./LeadEmailContent";
 import { LeadFiles } from "./LeadFiles";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -134,14 +135,19 @@ export function LeadDetailDrawer({
 
         {/* Body */}
         <div className="p-6">
-          <Tabs defaultValue="timeline" className="w-full">
-            <TabsList className="w-full grid grid-cols-5 mb-4">
+          <Tabs defaultValue="email" className="w-full">
+            <TabsList className="w-full grid grid-cols-6 mb-4">
+              <TabsTrigger value="email">Email</TabsTrigger>
               <TabsTrigger value="timeline">Timeline</TabsTrigger>
               <TabsTrigger value="details">Details</TabsTrigger>
               <TabsTrigger value="files">Files</TabsTrigger>
               <TabsTrigger value="financials">$</TabsTrigger>
               <TabsTrigger value="notes">Notes</TabsTrigger>
             </TabsList>
+
+            <TabsContent value="email" className="space-y-4 mt-0">
+              <LeadEmailContent metadata={lead.metadata} notes={lead.notes} source={lead.source} />
+            </TabsContent>
 
             <TabsContent value="timeline" className="mt-0">
               <LeadTimeline lead={lead} />
