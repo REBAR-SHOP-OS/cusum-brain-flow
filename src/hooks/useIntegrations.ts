@@ -16,6 +16,7 @@ export function useIntegrations() {
   const [integrations, setIntegrations] = useState<Integration[]>(defaultIntegrations);
   const [loading, setLoading] = useState(true);
   const [testing, setTesting] = useState<string | null>(null);
+  const [disconnecting, setDisconnecting] = useState<string | null>(null);
   const { toast } = useToast();
 
   // Load statuses from database on mount
@@ -365,13 +366,66 @@ export function useIntegrations() {
     }
   }, [toast]);
 
+  const disconnectIntegration = useCallback(async (integrationId: string) => {
+    setDisconnecting(integrationId);
+    try {
+      const googleIntegrations = ["gmail", "google-calendar", "google-drive", "youtube", "google-analytics"];
+      const metaIntegrations = ["facebook", "instagram"];
+
+      if (googleIntegrations.includes(integrationId)) {
+        await supabase.functions.invoke("google-oauth", {
+          body: { action: "disconnect", integration: integrationId },
+        });
+      } else if (metaIntegrations.includes(integrationId)) {
+        await supabase.functions.invoke("facebook-oauth", {
+          body: { action: "disconnect", integration: integrationId },
+        });
+      } else if (integrationId === "quickbooks") {
+        // Remove from integration_connections
+        await supabase
+          .from("integration_connections")
+          .delete()
+          .eq("integration_id", "quickbooks");
+      } else if (integrationId === "ringcentral") {
+        await supabase
+          .from("integration_connections")
+          .delete()
+          .eq("integration_id", "ringcentral");
+      } else {
+        // Generic: remove from integration_connections
+        await supabase
+          .from("integration_connections")
+          .delete()
+          .eq("integration_id", integrationId);
+      }
+
+      // Reset local state
+      setIntegrations((prev) =>
+        prev.map((i) =>
+          i.id === integrationId
+            ? { ...i, status: "available" as const, error: undefined, lastSync: undefined }
+            : i
+        )
+      );
+
+      toast({ title: "Disconnected", description: `${integrationId} has been disconnected.` });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to disconnect";
+      toast({ title: "Disconnect failed", description: message, variant: "destructive" });
+    } finally {
+      setDisconnecting(null);
+    }
+  }, [toast]);
+
   return {
     integrations,
     loading,
     testing,
+    disconnecting,
     checkIntegrationStatus,
     checkAllStatuses,
     startOAuth,
+    disconnectIntegration,
     refreshStatuses: loadIntegrationStatuses,
   };
 }
