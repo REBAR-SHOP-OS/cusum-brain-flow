@@ -1392,6 +1392,7 @@ export type Database = {
           last_sync_at: string | null
           status: string
           updated_at: string
+          user_id: string
         }
         Insert: {
           config?: Json | null
@@ -1403,6 +1404,7 @@ export type Database = {
           last_sync_at?: string | null
           status?: string
           updated_at?: string
+          user_id: string
         }
         Update: {
           config?: Json | null
@@ -1414,6 +1416,7 @@ export type Database = {
           last_sync_at?: string | null
           status?: string
           updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }

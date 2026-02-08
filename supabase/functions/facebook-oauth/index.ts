@@ -80,14 +80,13 @@ serve(async (req) => {
 
     // ─── Generate OAuth URL ────────────────────────────────────────
     if (action === "get-auth-url") {
-      const integration = body.integration as string; // "facebook" or "instagram"
+      const integration = body.integration as string;
       const redirectUri = body.redirectUri as string;
 
       const { appId } = getMetaCredentials();
       if (!appId) throw new Error("Facebook App ID not configured");
 
       const scopes = SCOPES[integration] || SCOPES.facebook;
-      // Combine scopes for both if connecting instagram (needs page scopes too)
       const allScopes = integration === "instagram"
         ? [...new Set([...SCOPES.facebook, ...SCOPES.instagram])]
         : scopes;
@@ -147,14 +146,12 @@ serve(async (req) => {
         `${GRAPH_API}/me?fields=id,name,email&access_token=${longLivedToken}`
       );
       let profileName = "";
-      let profileEmail = "";
       if (profileRes.ok) {
         const profile = await profileRes.json();
         profileName = profile.name || "";
-        profileEmail = profile.email || "";
       }
 
-      // Step 4: Get pages (needed for both Facebook and Instagram)
+      // Step 4: Get pages
       let pages: Array<{ id: string; name: string; access_token: string }> = [];
       const pagesRes = await fetch(
         `${GRAPH_API}/me/accounts?fields=id,name,access_token&access_token=${longLivedToken}`
@@ -188,7 +185,7 @@ serve(async (req) => {
         }
       }
 
-      // Step 6: Store tokens securely
+      // Step 6: Store tokens securely (per-user)
       const { error: upsertError } = await supabaseAdmin
         .from("user_meta_tokens")
         .upsert({
@@ -196,11 +193,11 @@ serve(async (req) => {
           platform: integration,
           access_token: longLivedToken,
           token_type: "long_lived",
-          meta_user_id: profileName, // using name as identifier
+          meta_user_id: profileName,
           meta_user_name: profileName,
           pages: pages.map(p => ({ id: p.id, name: p.name })),
           instagram_accounts: instagramAccounts,
-          expires_at: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString(), // ~60 days
+          expires_at: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString(),
         }, { onConflict: "user_id,platform" });
 
       if (upsertError) {
@@ -208,7 +205,7 @@ serve(async (req) => {
         throw new Error("Failed to save credentials");
       }
 
-      // Also store page tokens separately for page-level operations
+      // Store page tokens separately
       for (const page of pages) {
         await supabaseAdmin
           .from("user_meta_tokens")
@@ -221,20 +218,22 @@ serve(async (req) => {
           }, { onConflict: "user_id,platform" });
       }
 
-      // Update integration status
+      // Update per-user integration status
       await supabaseAdmin
         .from("integration_connections")
         .upsert({
+          user_id: userId,
           integration_id: integration,
           status: "connected",
           last_checked_at: new Date().toISOString(),
+          last_sync_at: new Date().toISOString(),
           error_message: null,
           config: {
             profileName,
             pagesCount: pages.length,
             instagramAccounts: instagramAccounts.length,
           },
-        }, { onConflict: "integration_id" });
+        }, { onConflict: "user_id,integration_id" });
 
       const igInfo = instagramAccounts.length > 0
         ? ` + ${instagramAccounts.length} Instagram account(s)`
@@ -270,14 +269,10 @@ serve(async (req) => {
         );
       }
 
-      // Check if token is expired
       const isExpired = tokenData.expires_at && new Date(tokenData.expires_at) < new Date();
       if (isExpired) {
         return new Response(
-          JSON.stringify({
-            status: "error",
-            error: "Token expired. Please reconnect.",
-          }),
+          JSON.stringify({ status: "error", error: "Token expired. Please reconnect." }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -292,19 +287,22 @@ serve(async (req) => {
       );
     }
 
-    // ─── Disconnect ────────────────────────────────────────────────
+    // ─── Disconnect (per-user) ─────────────────────────────────────
     if (action === "disconnect") {
       const integration = body.integration as string;
 
+      // Remove tokens
       await supabaseAdmin
         .from("user_meta_tokens")
         .delete()
         .eq("user_id", userId)
         .eq("platform", integration);
 
+      // Remove per-user connection status
       await supabaseAdmin
         .from("integration_connections")
         .delete()
+        .eq("user_id", userId)
         .eq("integration_id", integration);
 
       return new Response(

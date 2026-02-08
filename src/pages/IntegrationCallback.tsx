@@ -70,16 +70,22 @@ export default function IntegrationCallback() {
 
   const exchangeCode = async (code: string, integration: string) => {
     try {
-      // Must match the redirect URI used in the auth request (published URL)
       const redirectUri = "https://cusum-brain-flow.lovable.app/integrations/callback";
 
       // Route to the correct edge function based on integration
       const metaIntegrations = ["facebook", "instagram"];
+      // "google" state means unified Google connect
+      const isGoogle = integration === "google" || [
+        "gmail", "google-calendar", "google-drive", "youtube", "google-analytics", "google-search-console"
+      ].includes(integration);
+
       const edgeFunction = metaIntegrations.includes(integration)
         ? "facebook-oauth"
         : integration === "ringcentral"
           ? "ringcentral-oauth"
-          : "google-oauth";
+          : isGoogle
+            ? "google-oauth"
+            : "google-oauth";
 
       const { data, error } = await supabase.functions.invoke(edgeFunction, {
         body: {
@@ -97,11 +103,7 @@ export default function IntegrationCallback() {
 
       // Auto-redirect after success
       setTimeout(() => {
-        if (integration === "gmail" || integration === "ringcentral") {
-          navigate("/inbox");
-        } else {
-          navigate("/integrations");
-        }
+        navigate("/integrations");
       }, 2000);
     } catch (err) {
       setStatus("error");

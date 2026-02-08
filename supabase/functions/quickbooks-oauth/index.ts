@@ -3,17 +3,44 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 const QUICKBOOKS_AUTH_URL = "https://appcenter.intuit.com/connect/oauth2";
 const QUICKBOOKS_TOKEN_URL = "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer";
-
-// QuickBooks Sandbox API (use production URL in prod)
 const QUICKBOOKS_API_BASE = "https://sandbox-quickbooks.api.intuit.com";
 
+async function verifyAuth(req: Request): Promise<string | null> {
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) return null;
+
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_ANON_KEY")!,
+    { global: { headers: { Authorization: authHeader } } }
+  );
+
+  const token = authHeader.replace("Bearer ", "");
+  const { data, error } = await supabase.auth.getClaims(token);
+  if (error || !data?.claims) return null;
+  return data.claims.sub as string;
+}
+
+/** Get the user's QuickBooks connection (using service role) */
+async function getUserQBConnection(supabase: ReturnType<typeof createClient>, userId: string) {
+  const { data: connection } = await supabase
+    .from("integration_connections")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("integration_id", "quickbooks")
+    .maybeSingle();
+
+  if (!connection || connection.status !== "connected") return null;
+  return connection;
+}
+
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -32,10 +59,10 @@ serve(async (req) => {
 
     const url = new URL(req.url);
     const pathParts = url.pathname.split("/");
-    const action = pathParts[pathParts.length - 1];
+    const pathAction = pathParts[pathParts.length - 1];
 
-    // Handle callback from QuickBooks OAuth
-    if (action === "callback") {
+    // ─── Handle callback from QuickBooks OAuth (no auth header) ────
+    if (pathAction === "callback") {
       const code = url.searchParams.get("code");
       const realmId = url.searchParams.get("realmId");
       const state = url.searchParams.get("state");
@@ -51,6 +78,19 @@ serve(async (req) => {
 
       if (!code || !realmId) {
         throw new Error("Missing code or realmId in callback");
+      }
+
+      // Extract user_id from state (format: "userId|returnUrl")
+      let userId = "";
+      let returnUrl = "";
+      if (state) {
+        const parts = state.split("|");
+        userId = parts[0] || "";
+        returnUrl = parts.slice(1).join("|") || "";
+      }
+
+      if (!userId) {
+        throw new Error("Missing user context in OAuth callback");
       }
 
       // Exchange code for tokens
@@ -75,10 +115,11 @@ serve(async (req) => {
         throw new Error(tokens.error_description || "Token exchange failed");
       }
 
-      // Store tokens in integration_connections table
+      // Store tokens per-user
       const { error: dbError } = await supabase
         .from("integration_connections")
         .upsert({
+          user_id: userId,
           integration_id: "quickbooks",
           status: "connected",
           config: {
@@ -90,7 +131,7 @@ serve(async (req) => {
           },
           last_sync_at: new Date().toISOString(),
           error_message: null,
-        }, { onConflict: "integration_id" });
+        }, { onConflict: "user_id,integration_id" });
 
       if (dbError) {
         console.error("Failed to store tokens:", dbError);
@@ -98,21 +139,30 @@ serve(async (req) => {
       }
 
       // Redirect back to integrations page
-      const redirectUrl = state || `${url.origin}/integrations`;
+      const redirectTarget = returnUrl || `${url.origin}/integrations`;
       return new Response(null, {
         status: 302,
-        headers: { Location: redirectUrl.replace("preview--", "") },
+        headers: { Location: redirectTarget.replace("preview--", "") },
       });
     }
 
-    // Parse JSON body for other actions
+    // ─── All other actions require authentication ──────────────────
+    const userId = await verifyAuth(req);
+    if (!userId) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const body = await req.json().catch(() => ({}));
 
-    // Get auth URL
+    // ─── Get auth URL ──────────────────────────────────────────────
     if (body.action === "get-auth-url") {
       const redirectUri = `${supabaseUrl}/functions/v1/quickbooks-oauth/callback`;
       const scope = "com.intuit.quickbooks.accounting";
-      const state = body.returnUrl || "";
+      // Encode user_id and return URL in state
+      const state = `${userId}|${body.returnUrl || ""}`;
 
       const authUrl = new URL(QUICKBOOKS_AUTH_URL);
       authUrl.searchParams.set("client_id", clientId);
@@ -126,28 +176,24 @@ serve(async (req) => {
       });
     }
 
-    // Check connection status
+    // ─── Check connection status (per-user) ────────────────────────
     if (body.action === "check-status") {
-      const { data: connection } = await supabase
-        .from("integration_connections")
-        .select("*")
-        .eq("integration_id", "quickbooks")
-        .single();
+      const connection = await getUserQBConnection(supabase, userId);
 
-      if (!connection || connection.status !== "connected") {
+      if (!connection) {
         return new Response(JSON.stringify({ status: "available" }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
-      const config = connection.config as { 
-        realm_id: string; 
+      const config = connection.config as {
+        realm_id: string;
         access_token: string;
         refresh_token: string;
         expires_at: number;
       };
 
-      // Check if token is expired and refresh if needed
+      // Refresh token if expired
       if (config.expires_at < Date.now()) {
         try {
           const refreshResponse = await fetch(QUICKBOOKS_TOKEN_URL, {
@@ -177,6 +223,7 @@ serve(async (req) => {
                 },
                 last_sync_at: new Date().toISOString(),
               })
+              .eq("user_id", userId)
               .eq("integration_id", "quickbooks");
           } else {
             throw new Error("Token refresh failed");
@@ -189,18 +236,19 @@ serve(async (req) => {
               status: "error",
               error_message: "Token expired, please reconnect",
             })
+            .eq("user_id", userId)
             .eq("integration_id", "quickbooks");
 
-          return new Response(JSON.stringify({ 
-            status: "error", 
-            error: "Token expired, please reconnect" 
+          return new Response(JSON.stringify({
+            status: "error",
+            error: "Token expired, please reconnect",
           }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
       }
 
-      return new Response(JSON.stringify({ 
+      return new Response(JSON.stringify({
         status: "connected",
         realmId: config.realm_id,
       }), {
@@ -208,24 +256,26 @@ serve(async (req) => {
       });
     }
 
-    // Sync customers from QuickBooks
-    if (body.action === "sync-customers") {
-      const { data: connection } = await supabase
+    // ─── Disconnect (per-user) ─────────────────────────────────────
+    if (body.action === "disconnect") {
+      await supabase
         .from("integration_connections")
-        .select("*")
-        .eq("integration_id", "quickbooks")
-        .single();
+        .delete()
+        .eq("user_id", userId)
+        .eq("integration_id", "quickbooks");
 
-      if (!connection || connection.status !== "connected") {
-        throw new Error("QuickBooks not connected");
-      }
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
-      const config = connection.config as { 
-        realm_id: string; 
-        access_token: string;
-      };
+    // ─── Sync customers from QuickBooks (per-user) ─────────────────
+    if (body.action === "sync-customers") {
+      const connection = await getUserQBConnection(supabase, userId);
+      if (!connection) throw new Error("QuickBooks not connected");
 
-      // Fetch customers from QuickBooks
+      const config = connection.config as { realm_id: string; access_token: string };
+
       const qbResponse = await fetch(
         `${QUICKBOOKS_API_BASE}/v3/company/${config.realm_id}/query?query=SELECT * FROM Customer MAXRESULTS 1000`,
         {
@@ -246,7 +296,6 @@ serve(async (req) => {
       const customers = qbData.QueryResponse?.Customer || [];
 
       let synced = 0;
-      const errors: string[] = [];
       for (const customer of customers) {
         const { error } = await supabase
           .from("customers")
@@ -259,45 +308,26 @@ serve(async (req) => {
             payment_terms: customer.SalesTermRef?.name || null,
           }, { onConflict: "quickbooks_id" });
 
-        if (error) {
-          console.error("Upsert error for customer", customer.Id, error);
-          errors.push(`${customer.Id}: ${error.message}`);
-        } else {
-          synced++;
-        }
+        if (!error) synced++;
       }
 
-      // Update last sync time
       await supabase
         .from("integration_connections")
         .update({ last_sync_at: new Date().toISOString() })
+        .eq("user_id", userId)
         .eq("integration_id", "quickbooks");
 
-      return new Response(JSON.stringify({ 
-        success: true, 
-        synced,
-        total: customers.length,
-      }), {
+      return new Response(JSON.stringify({ success: true, synced, total: customers.length }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Get company info
+    // ─── Get company info (per-user) ───────────────────────────────
     if (body.action === "get-company-info") {
-      const { data: connection } = await supabase
-        .from("integration_connections")
-        .select("*")
-        .eq("integration_id", "quickbooks")
-        .single();
+      const connection = await getUserQBConnection(supabase, userId);
+      if (!connection) throw new Error("QuickBooks not connected");
 
-      if (!connection || connection.status !== "connected") {
-        throw new Error("QuickBooks not connected");
-      }
-
-      const config = connection.config as { 
-        realm_id: string; 
-        access_token: string;
-      };
+      const config = connection.config as { realm_id: string; access_token: string };
 
       const qbResponse = await fetch(
         `${QUICKBOOKS_API_BASE}/v3/company/${config.realm_id}/companyinfo/${config.realm_id}`,
@@ -309,9 +339,7 @@ serve(async (req) => {
         }
       );
 
-      if (!qbResponse.ok) {
-        throw new Error("Failed to fetch company info");
-      }
+      if (!qbResponse.ok) throw new Error("Failed to fetch company info");
 
       const data = await qbResponse.json();
       return new Response(JSON.stringify(data.CompanyInfo), {
@@ -319,40 +347,25 @@ serve(async (req) => {
       });
     }
 
-    // Create Estimate (Quotation) in QuickBooks
+    // ─── Create Estimate (per-user) ────────────────────────────────
     if (body.action === "create-estimate") {
-      const { data: connection } = await supabase
-        .from("integration_connections")
-        .select("*")
-        .eq("integration_id", "quickbooks")
-        .single();
+      const connection = await getUserQBConnection(supabase, userId);
+      if (!connection) throw new Error("QuickBooks not connected");
 
-      if (!connection || connection.status !== "connected") {
-        throw new Error("QuickBooks not connected");
-      }
-
-      const config = connection.config as { 
-        realm_id: string; 
-        access_token: string;
-      };
-
+      const config = connection.config as { realm_id: string; access_token: string };
       const { customerId, customerName, lineItems, expirationDate, memo } = body;
 
       if (!customerId || !lineItems || lineItems.length === 0) {
         throw new Error("Customer ID and line items are required");
       }
 
-      // Build the estimate payload
       const estimatePayload = {
         CustomerRef: { value: customerId, name: customerName },
         Line: lineItems.map((item: { description: string; amount: number; quantity?: number }) => ({
           DetailType: "SalesItemLineDetail",
           Amount: item.amount * (item.quantity || 1),
           Description: item.description,
-          SalesItemLineDetail: {
-            Qty: item.quantity || 1,
-            UnitPrice: item.amount,
-          },
+          SalesItemLineDetail: { Qty: item.quantity || 1, UnitPrice: item.amount },
         })),
         ...(expirationDate && { ExpirationDate: expirationDate }),
         ...(memo && { CustomerMemo: { value: memo } }),
@@ -378,8 +391,8 @@ serve(async (req) => {
       }
 
       const estimateData = await qbResponse.json();
-      return new Response(JSON.stringify({ 
-        success: true, 
+      return new Response(JSON.stringify({
+        success: true,
         estimate: estimateData.Estimate,
         docNumber: estimateData.Estimate?.DocNumber,
       }), {
@@ -387,30 +400,18 @@ serve(async (req) => {
       });
     }
 
-    // Create Invoice in QuickBooks
+    // ─── Create Invoice (per-user) ─────────────────────────────────
     if (body.action === "create-invoice") {
-      const { data: connection } = await supabase
-        .from("integration_connections")
-        .select("*")
-        .eq("integration_id", "quickbooks")
-        .single();
+      const connection = await getUserQBConnection(supabase, userId);
+      if (!connection) throw new Error("QuickBooks not connected");
 
-      if (!connection || connection.status !== "connected") {
-        throw new Error("QuickBooks not connected");
-      }
-
-      const config = connection.config as { 
-        realm_id: string; 
-        access_token: string;
-      };
-
+      const config = connection.config as { realm_id: string; access_token: string };
       const { customerId, customerName, lineItems, dueDate, memo } = body;
 
       if (!customerId || !lineItems || lineItems.length === 0) {
         throw new Error("Customer ID and line items are required");
       }
 
-      // Build the invoice payload
       const invoicePayload = {
         CustomerRef: { value: customerId, name: customerName },
         Line: lineItems.map((item: { description: string; amount: number; quantity?: number; serviceId?: string }) => ({
@@ -447,8 +448,8 @@ serve(async (req) => {
       }
 
       const invoiceData = await qbResponse.json();
-      return new Response(JSON.stringify({ 
-        success: true, 
+      return new Response(JSON.stringify({
+        success: true,
         invoice: invoiceData.Invoice,
         docNumber: invoiceData.Invoice?.DocNumber,
         totalAmount: invoiceData.Invoice?.TotalAmt,
@@ -457,30 +458,16 @@ serve(async (req) => {
       });
     }
 
-    // Convert Estimate to Invoice
+    // ─── Convert Estimate to Invoice (per-user) ────────────────────
     if (body.action === "convert-estimate-to-invoice") {
-      const { data: connection } = await supabase
-        .from("integration_connections")
-        .select("*")
-        .eq("integration_id", "quickbooks")
-        .single();
+      const connection = await getUserQBConnection(supabase, userId);
+      if (!connection) throw new Error("QuickBooks not connected");
 
-      if (!connection || connection.status !== "connected") {
-        throw new Error("QuickBooks not connected");
-      }
-
-      const config = connection.config as { 
-        realm_id: string; 
-        access_token: string;
-      };
-
+      const config = connection.config as { realm_id: string; access_token: string };
       const { estimateId } = body;
 
-      if (!estimateId) {
-        throw new Error("Estimate ID is required");
-      }
+      if (!estimateId) throw new Error("Estimate ID is required");
 
-      // First, fetch the estimate
       const estimateRes = await fetch(
         `${QUICKBOOKS_API_BASE}/v3/company/${config.realm_id}/estimate/${estimateId}`,
         {
@@ -491,14 +478,11 @@ serve(async (req) => {
         }
       );
 
-      if (!estimateRes.ok) {
-        throw new Error("Failed to fetch estimate");
-      }
+      if (!estimateRes.ok) throw new Error("Failed to fetch estimate");
 
       const estimateData = await estimateRes.json();
       const estimate = estimateData.Estimate;
 
-      // Create invoice from estimate data
       const invoicePayload = {
         CustomerRef: estimate.CustomerRef,
         Line: estimate.Line,
@@ -525,8 +509,8 @@ serve(async (req) => {
       }
 
       const invoiceData = await invoiceRes.json();
-      return new Response(JSON.stringify({ 
-        success: true, 
+      return new Response(JSON.stringify({
+        success: true,
         invoice: invoiceData.Invoice,
         docNumber: invoiceData.Invoice?.DocNumber,
       }), {
@@ -542,7 +526,7 @@ serve(async (req) => {
   } catch (error) {
     console.error("QuickBooks OAuth error:", error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
