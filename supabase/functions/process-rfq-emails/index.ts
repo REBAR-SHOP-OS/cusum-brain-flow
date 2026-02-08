@@ -656,21 +656,26 @@ serve(async (req) => {
             leadFiles.push({ type: "link", filename: urlFilename, url: link });
           }
 
-          // 3. Update lead metadata with files
+          // 3. Always update lead metadata with email body + files
+          const leadMetadata: Record<string, unknown> = {
+            email_subject: subject,
+            email_body: emailBody.substring(0, 5000), // cap at 5k chars
+            email_from: from,
+            email_to: email.to_address || "",
+            email_date: email.received_at,
+          };
+
           if (leadFiles.length > 0) {
-            await supabaseAdmin
-              .from("leads")
-              .update({
-                metadata: {
-                  ...(typeof lead === "object" ? {} : {}),
-                  files: leadFiles,
-                  attachment_count: leadFiles.filter(f => f.type === "attachment").length,
-                  link_count: leadFiles.filter(f => f.type === "link").length,
-                },
-              })
-              .eq("id", newLead.id);
+            leadMetadata.files = leadFiles;
+            leadMetadata.attachment_count = leadFiles.filter(f => f.type === "attachment").length;
+            leadMetadata.link_count = leadFiles.filter(f => f.type === "link").length;
             console.log(`Saved ${leadFiles.length} files/links to lead ${newLead.id}`);
           }
+
+          await supabaseAdmin
+            .from("leads")
+            .update({ metadata: leadMetadata })
+            .eq("id", newLead.id);
         }
 
         // === LOG TIMELINE ACTIVITY ===
