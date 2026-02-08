@@ -28,6 +28,9 @@ const SCOPES: Record<string, string[]> = {
   "google-analytics": [
     "https://www.googleapis.com/auth/analytics.readonly",
   ],
+  "google-search-console": [
+    "https://www.googleapis.com/auth/webmasters.readonly",
+  ],
 };
 
 async function verifyAuth(req: Request): Promise<string | null> {
