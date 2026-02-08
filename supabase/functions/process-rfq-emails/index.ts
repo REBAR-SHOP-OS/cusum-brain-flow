@@ -23,7 +23,6 @@ const SKIP_SENDERS = [
 const SKIP_INTERNAL_BOTS = ["odoobot"];
 
 const INTERNAL_DOMAIN = "@rebar.shop";
-const OWN_COMPANY_NAMES = ["rebar.shop", "rebar shop", "ontario rebars", "ontariorebars"];
 
 
 interface LeadExtraction {
@@ -163,14 +162,6 @@ function shouldSkipSender(from: string, to: string): boolean {
   return false;
 }
 
-/**
- * Check if the AI-detected company is our own company (self-referencing).
- */
-function isSelfCompany(companyName: string): boolean {
-  if (!companyName) return false;
-  const normalized = companyName.toLowerCase().replace(/[^a-z0-9\s]/g, "").trim();
-  return OWN_COMPANY_NAMES.some(own => normalized.includes(own) || own.includes(normalized));
-}
 
 /**
  * Fuzzy-match a company name against existing customers.
@@ -515,13 +506,6 @@ serve(async (req) => {
           continue;
         }
 
-        // Skip if AI detected our own company as the sender company (self-referencing)
-        if (isSelfCompany(analysis.sender_company)) {
-          console.log(`Skipping self-referencing lead from ${from} (company: ${analysis.sender_company})`);
-          filtered++;
-          results.push({ emailId: email.id, from, subject, action: "filtered", lead: analysis });
-          continue;
-        }
 
         // === CUSTOMER MATCHING ===
         let customerId: string | null = null;
