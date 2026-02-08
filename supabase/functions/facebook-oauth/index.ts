@@ -287,6 +287,105 @@ serve(async (req) => {
       );
     }
 
+    // ─── Refresh / rediscover IG accounts from existing page tokens ─
+    if (action === "refresh-accounts") {
+      const integration = (body.integration as string) || "instagram";
+
+      // Find all page token rows for this user
+      const { data: pageTokenRows } = await supabaseAdmin
+        .from("user_meta_tokens")
+        .select("platform, access_token, pages")
+        .eq("user_id", userId)
+        .like("platform", "%_page_%");
+
+      if (!pageTokenRows || pageTokenRows.length === 0) {
+        return new Response(
+          JSON.stringify({ error: "No page tokens found. Please reconnect Facebook/Instagram first." }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      let instagramAccounts: Array<{ id: string; username: string; pageId: string }> = [];
+      const allPages: Array<{ id: string; name: string }> = [];
+
+      for (const row of pageTokenRows) {
+        const pages = (row.pages as Array<{ id: string; name: string }>) || [];
+        for (const page of pages) {
+          allPages.push(page);
+          try {
+            const igRes = await fetch(
+              `${GRAPH_API}/${page.id}?fields=instagram_business_account{id,username}&access_token=${row.access_token}`
+            );
+            if (igRes.ok) {
+              const igData = await igRes.json();
+              console.log(`IG discovery for page ${page.id}:`, JSON.stringify(igData));
+              if (igData.instagram_business_account) {
+                instagramAccounts.push({
+                  id: igData.instagram_business_account.id,
+                  username: igData.instagram_business_account.username || "",
+                  pageId: page.id,
+                });
+              }
+            } else {
+              const errText = await igRes.text();
+              console.error(`IG discovery failed for page ${page.id}:`, errText);
+            }
+          } catch (err) {
+            console.error(`IG discovery error for page ${page.id}:`, err);
+          }
+        }
+      }
+
+      // Use the first page token as the main token for the instagram platform row
+      const mainToken = pageTokenRows[0].access_token;
+
+      // Upsert main instagram platform row
+      const { error: upsertError } = await supabaseAdmin
+        .from("user_meta_tokens")
+        .upsert({
+          user_id: userId,
+          platform: integration,
+          access_token: mainToken,
+          token_type: "long_lived",
+          meta_user_name: allPages[0]?.name || "",
+          pages: allPages,
+          instagram_accounts: instagramAccounts,
+          expires_at: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString(),
+        }, { onConflict: "user_id,platform" });
+
+      if (upsertError) {
+        console.error("Failed to upsert main token:", upsertError);
+        throw new Error("Failed to save refreshed accounts");
+      }
+
+      // Also ensure facebook platform row exists
+      await supabaseAdmin
+        .from("user_meta_tokens")
+        .upsert({
+          user_id: userId,
+          platform: "facebook",
+          access_token: mainToken,
+          token_type: "long_lived",
+          meta_user_name: allPages[0]?.name || "",
+          pages: allPages,
+          instagram_accounts: instagramAccounts,
+          expires_at: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString(),
+        }, { onConflict: "user_id,platform" });
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          pagesFound: allPages.length,
+          instagramAccountsFound: instagramAccounts.length,
+          instagramAccounts,
+          message: instagramAccounts.length > 0
+            ? `Found ${instagramAccounts.length} Instagram Business Account(s): ${instagramAccounts.map(a => a.username || a.id).join(", ")}`
+            : "No Instagram Business Accounts linked to your Facebook Pages. Make sure your Page is connected to an Instagram Business Account in Meta Business Suite.",
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // ─── Disconnect (per-user) ─────────────────────────────────────
     if (action === "disconnect") {
       const integration = body.integration as string;
@@ -297,6 +396,13 @@ serve(async (req) => {
         .delete()
         .eq("user_id", userId)
         .eq("platform", integration);
+
+      // Also remove page tokens
+      await supabaseAdmin
+        .from("user_meta_tokens")
+        .delete()
+        .eq("user_id", userId)
+        .like("platform", `${integration}_page_%`);
 
       // Remove per-user connection status
       await supabaseAdmin
