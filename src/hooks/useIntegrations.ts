@@ -90,6 +90,62 @@ export function useIntegrations() {
         return statusData.status;
       }
 
+      // LinkedIn
+      if (integrationId === "linkedin") {
+        const { data: statusData, error: statusError } = await supabase.functions.invoke(
+          "linkedin-oauth",
+          { body: { action: "check-status" } }
+        );
+
+        if (statusError) throw new Error(statusError.message);
+
+        setIntegrations((prev) =>
+          prev.map((i) =>
+            i.id === "linkedin"
+              ? {
+                  ...i,
+                  status: statusData.status,
+                  error: statusData.error,
+                  lastSync: statusData.status === "connected" ? new Date().toLocaleTimeString() : undefined,
+                }
+              : i
+          )
+        );
+
+        if (statusData.status === "connected") {
+          toast({ title: "LinkedIn connected", description: `Connected as ${statusData.profileName}` });
+        }
+        return statusData.status;
+      }
+
+      // TikTok
+      if (integrationId === "tiktok") {
+        const { data: statusData, error: statusError } = await supabase.functions.invoke(
+          "tiktok-oauth",
+          { body: { action: "check-status" } }
+        );
+
+        if (statusError) throw new Error(statusError.message);
+
+        setIntegrations((prev) =>
+          prev.map((i) =>
+            i.id === "tiktok"
+              ? {
+                  ...i,
+                  status: statusData.status,
+                  error: statusData.error,
+                  lastSync: statusData.status === "connected" ? new Date().toLocaleTimeString() : undefined,
+                }
+              : i
+          )
+        );
+
+        if (statusData.status === "connected") {
+          toast({ title: "TikTok connected", description: `Connected as ${statusData.displayName}` });
+        }
+        return statusData.status;
+      }
+
       if (googleIntegrations.includes(integrationId)) {
         // Check status for any Google service (they share a single token)
         const { data: statusData, error: statusError } = await supabase.functions.invoke(
@@ -291,6 +347,54 @@ export function useIntegrations() {
       // Silently skip
     }
 
+    // Check LinkedIn
+    try {
+      const { data: liStatus } = await supabase.functions.invoke("linkedin-oauth", {
+        body: { action: "check-status" },
+      });
+
+      if (liStatus) {
+        setIntegrations((prev) =>
+          prev.map((i) =>
+            i.id === "linkedin"
+              ? {
+                  ...i,
+                  status: liStatus.status,
+                  error: liStatus.error,
+                  lastSync: liStatus.status === "connected" ? new Date().toLocaleTimeString() : undefined,
+                }
+              : i
+          )
+        );
+      }
+    } catch (err) {
+      // Silently skip
+    }
+
+    // Check TikTok
+    try {
+      const { data: ttStatus } = await supabase.functions.invoke("tiktok-oauth", {
+        body: { action: "check-status" },
+      });
+
+      if (ttStatus) {
+        setIntegrations((prev) =>
+          prev.map((i) =>
+            i.id === "tiktok"
+              ? {
+                  ...i,
+                  status: ttStatus.status,
+                  error: ttStatus.error,
+                  lastSync: ttStatus.status === "connected" ? new Date().toLocaleTimeString() : undefined,
+                }
+              : i
+          )
+        );
+      }
+    } catch (err) {
+      // Silently skip
+    }
+
     setLoading(false);
   }, []);
 
@@ -343,6 +447,28 @@ export function useIntegrations() {
         const { data, error } = await supabase.functions.invoke(
           "facebook-oauth",
           { body: { action: "get-auth-url", integration: integrationId, redirectUri } }
+        );
+        if (error) throw new Error(error.message);
+        openOAuthPopup(data.authUrl, integrationId);
+        return;
+      }
+
+      // LinkedIn
+      if (integrationId === "linkedin") {
+        const { data, error } = await supabase.functions.invoke(
+          "linkedin-oauth",
+          { body: { action: "get-auth-url", returnUrl: window.location.href } }
+        );
+        if (error) throw new Error(error.message);
+        openOAuthPopup(data.authUrl, integrationId);
+        return;
+      }
+
+      // TikTok
+      if (integrationId === "tiktok") {
+        const { data, error } = await supabase.functions.invoke(
+          "tiktok-oauth",
+          { body: { action: "get-auth-url", returnUrl: window.location.href } }
         );
         if (error) throw new Error(error.message);
         openOAuthPopup(data.authUrl, integrationId);
@@ -409,6 +535,34 @@ export function useIntegrations() {
         );
 
         toast({ title: "Disconnected", description: "QuickBooks has been disconnected." });
+      } else if (integrationId === "linkedin") {
+        await supabase.functions.invoke("linkedin-oauth", {
+          body: { action: "disconnect" },
+        });
+
+        setIntegrations((prev) =>
+          prev.map((i) =>
+            i.id === integrationId
+              ? { ...i, status: "available" as const, error: undefined, lastSync: undefined }
+              : i
+          )
+        );
+
+        toast({ title: "Disconnected", description: "LinkedIn has been disconnected." });
+      } else if (integrationId === "tiktok") {
+        await supabase.functions.invoke("tiktok-oauth", {
+          body: { action: "disconnect" },
+        });
+
+        setIntegrations((prev) =>
+          prev.map((i) =>
+            i.id === integrationId
+              ? { ...i, status: "available" as const, error: undefined, lastSync: undefined }
+              : i
+          )
+        );
+
+        toast({ title: "Disconnected", description: "TikTok has been disconnected." });
       } else {
         // Generic: delete from integration_connections (RLS scopes to current user)
         await supabase

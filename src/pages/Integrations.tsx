@@ -26,7 +26,7 @@ export default function Integrations() {
   const oauthIntegrations = [
     "gmail", "google-calendar", "google-drive", "youtube",
     "google-analytics", "google-search-console", "quickbooks",
-    "facebook", "instagram",
+    "facebook", "instagram", "linkedin", "tiktok",
   ];
 
   // Listen for OAuth success messages from popup
