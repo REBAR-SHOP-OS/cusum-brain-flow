@@ -39,7 +39,7 @@ export default function Integrations() {
   }, []);
 
   const handleCardClick = (integration: Integration) => {
-    const oauthIntegrations = ["gmail", "google-calendar", "google-drive", "youtube", "google-analytics", "quickbooks"];
+    const oauthIntegrations = ["gmail", "google-calendar", "google-drive", "youtube", "google-analytics", "google-search-console", "quickbooks"];
     
     if (integration.status === "connected") {
       // Test the connection
