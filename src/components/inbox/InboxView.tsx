@@ -1,10 +1,11 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
-import { RefreshCw, Settings, Loader2, Search, CheckSquare, Trash2, Archive, X, Mail, LogOut, Phone } from "lucide-react";
+import { RefreshCw, Settings, Loader2, Search, CheckSquare, Trash2, Archive, X, Mail, LogOut, Phone, LayoutGrid, List } from "lucide-react";
 import { InboxEmailList, type InboxEmail } from "./InboxEmailList";
 import { InboxEmailViewer } from "./InboxEmailViewer";
 import { InboxManagerSettings } from "./InboxManagerSettings";
 import { InboxAIToolbar, type AIAction } from "./InboxAIToolbar";
 import { InboxSummaryPanel, type InboxSummary } from "./InboxSummaryPanel";
+import { InboxKanbanBoard } from "./InboxKanbanBoard";
 import { useCommunications } from "@/hooks/useCommunications";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
@@ -86,6 +87,7 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState("all");
   const [sortByPriority, setSortByPriority] = useState(false);
+  const [viewMode, setViewMode] = useState<"list" | "kanban">("kanban");
   const [summary, setSummary] = useState<InboxSummary | null>(null);
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
   const [selectionMode, setSelectionMode] = useState(false);
@@ -428,49 +430,55 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
   };
 
   return (
-    <div className="flex h-full">
-      {/* Email List Panel */}
-      <div className={cn(
-        "bg-background border-r flex flex-col min-h-0",
-        selectedEmail ? "hidden md:flex md:w-[400px]" : "flex w-full md:w-[400px]"
-      )}>
-        {/* Header */}
-        <div className="flex items-center justify-between p-3 border-b">
-          <div className="flex items-center gap-2">
-            <h1 className="text-lg font-semibold">Inbox</h1>
-            {loading && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
-          </div>
-          <div className="flex items-center gap-1">
-            <Button
-              variant={selectionMode ? "secondary" : "ghost"}
-              size="icon"
-              className="h-8 w-8"
-              onClick={toggleSelectMode}
-              title={selectionMode ? "Exit selection" : "Select emails"}
-            >
-              {selectionMode ? <X className="w-4 h-4" /> : <CheckSquare className="w-4 h-4" />}
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              onClick={handleSync}
-              disabled={syncing}
-            >
-              <RefreshCw className={cn("w-4 h-4", syncing && "animate-spin")} />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => setShowSettings(true)}
-            >
-              <Settings className="w-4 h-4" />
-            </Button>
-          </div>
+    <div className="flex flex-col h-full">
+      {/* Top bar — always visible */}
+      <div className="flex items-center justify-between p-3 border-b shrink-0">
+        <div className="flex items-center gap-2">
+          <h1 className="text-lg font-semibold">Inbox</h1>
+          {loading && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
         </div>
+        <div className="flex items-center gap-1">
+          {/* View toggle */}
+          <div className="flex items-center border border-border rounded-md overflow-hidden mr-1">
+            <Button
+              variant={viewMode === "kanban" ? "secondary" : "ghost"}
+              size="icon"
+              className="h-7 w-7 rounded-none"
+              onClick={() => setViewMode("kanban")}
+              title="Kanban view"
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+            </Button>
+            <Button
+              variant={viewMode === "list" ? "secondary" : "ghost"}
+              size="icon"
+              className="h-7 w-7 rounded-none"
+              onClick={() => setViewMode("list")}
+              title="List view"
+            >
+              <List className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+          <Button
+            variant={selectionMode ? "secondary" : "ghost"}
+            size="icon"
+            className="h-8 w-8"
+            onClick={toggleSelectMode}
+            title={selectionMode ? "Exit selection" : "Select emails"}
+          >
+            {selectionMode ? <X className="w-4 h-4" /> : <CheckSquare className="w-4 h-4" />}
+          </Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleSync} disabled={syncing}>
+            <RefreshCw className={cn("w-4 h-4", syncing && "animate-spin")} />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setShowSettings(true)}>
+            <Settings className="w-4 h-4" />
+          </Button>
+        </div>
+      </div>
 
-        {/* Gmail connection banner */}
+      {/* Connection banners */}
+      <div className="shrink-0">
         {gmailStatus === "not_connected" && (
           <div className="px-3 py-3 border-b bg-muted/50">
             <div className="flex items-center gap-3">
@@ -485,26 +493,16 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
             </div>
           </div>
         )}
-
         {gmailStatus === "connected" && gmailEmail && (
           <div className="px-3 py-1.5 border-b bg-muted/30 flex items-center justify-between">
             <span className="text-xs text-muted-foreground">
-              <Mail className="w-3 h-3 inline mr-1" />
-              {gmailEmail}
+              <Mail className="w-3 h-3 inline mr-1" />{gmailEmail}
             </span>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 px-1.5 text-xs text-muted-foreground hover:text-destructive"
-              onClick={handleDisconnectGmail}
-              title="Disconnect Gmail"
-            >
+            <Button variant="ghost" size="sm" className="h-6 px-1.5 text-xs text-muted-foreground hover:text-destructive" onClick={handleDisconnectGmail} title="Disconnect Gmail">
               <LogOut className="w-3 h-3" />
             </Button>
           </div>
         )}
-
-        {/* RingCentral connection banner */}
         {rcStatus === "not_connected" && (
           <div className="px-3 py-3 border-b bg-muted/50">
             <div className="flex items-center gap-3">
@@ -519,171 +517,142 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
             </div>
           </div>
         )}
-
         {rcStatus === "connected" && rcEmail && (
           <div className="px-3 py-1.5 border-b bg-muted/30 flex items-center justify-between">
             <span className="text-xs text-muted-foreground">
-              <Phone className="w-3 h-3 inline mr-1" />
-              {rcEmail}
+              <Phone className="w-3 h-3 inline mr-1" />{rcEmail}
             </span>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 px-1.5 text-xs text-muted-foreground hover:text-destructive"
-              onClick={handleDisconnectRC}
-              title="Disconnect RingCentral"
-            >
+            <Button variant="ghost" size="sm" className="h-6 px-1.5 text-xs text-muted-foreground hover:text-destructive" onClick={handleDisconnectRC} title="Disconnect RingCentral">
               <LogOut className="w-3 h-3" />
             </Button>
           </div>
         )}
+      </div>
 
-        {/* AI Toolbar */}
+      {/* AI Toolbar + Search — shared between views */}
+      <div className="shrink-0">
         <InboxAIToolbar emailCount={allEmails.length} onAction={handleAIAction} />
-
-        {/* Summary Panel */}
         <InboxSummaryPanel summary={summary} onClose={() => setSummary(null)} />
 
-        {/* Search */}
-        <div className="px-3 py-2 border-b">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search emails..."
-              className="h-8 pl-8 text-xs"
-            />
-          </div>
-        </div>
+        {viewMode === "list" && (
+          <>
+            <div className="px-3 py-2 border-b">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search emails..." className="h-8 pl-8 text-xs" />
+              </div>
+            </div>
 
-        {/* Filter chips */}
-        <div className="flex items-center gap-1.5 px-3 py-2 border-b overflow-x-auto">
-          {labelFilters.map((f) => {
-            const count = f.value === "all" ? allEmails.length : (labelCounts[f.value] || 0);
-            if (f.value !== "all" && count === 0) return null;
-            return (
-              <button
-                key={f.value}
-                onClick={() => {
-                  setActiveFilter(f.value);
-                  setHiddenIds(new Set());
-                }}
-                className={cn(
-                  "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors shrink-0",
-                  activeFilter === f.value
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted text-muted-foreground hover:bg-muted/80"
-                )}
-              >
-                {f.color && <span className={cn("w-2 h-2 rounded-full", f.color)} />}
-                {f.label}
-                <Badge variant="secondary" className="text-[10px] h-4 px-1 ml-0.5">
-                  {count}
-                </Badge>
-              </button>
-            );
-          })}
-        </div>
+            {/* Filter chips */}
+            <div className="flex items-center gap-1.5 px-3 py-2 border-b overflow-x-auto">
+              {labelFilters.map((f) => {
+                const count = f.value === "all" ? allEmails.length : (labelCounts[f.value] || 0);
+                if (f.value !== "all" && count === 0) return null;
+                return (
+                  <button
+                    key={f.value}
+                    onClick={() => { setActiveFilter(f.value); setHiddenIds(new Set()); }}
+                    className={cn(
+                      "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors shrink-0",
+                      activeFilter === f.value ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/80"
+                    )}
+                  >
+                    {f.color && <span className={cn("w-2 h-2 rounded-full", f.color)} />}
+                    {f.label}
+                    <Badge variant="secondary" className="text-[10px] h-4 px-1 ml-0.5">{count}</Badge>
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
 
         {/* Hidden items banner */}
         {hiddenIds.size > 0 && (
           <div className="flex items-center justify-between px-3 py-1.5 bg-warning/10 border-b text-xs">
             <span className="text-warning-foreground">{hiddenIds.size} email(s) hidden by AI cleanup</span>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-xs h-6"
-              onClick={() => setHiddenIds(new Set())}
-            >
-              Show all
-            </Button>
+            <Button variant="ghost" size="sm" className="text-xs h-6" onClick={() => setHiddenIds(new Set())}>Show all</Button>
           </div>
         )}
+      </div>
 
-        {/* Email Count */}
-        <div className="px-3 py-1.5 text-[11px] text-muted-foreground border-b flex items-center justify-between">
-          {selectionMode ? (
-            <div className="flex items-center gap-2 w-full">
-              <Checkbox
-                checked={emails.length > 0 && selectedIds.size === emails.length}
-                onCheckedChange={selectAll}
+      {/* Main content area */}
+      {viewMode === "kanban" ? (
+        /* ── Kanban View ── */
+        <div className="flex-1 flex overflow-hidden">
+          <InboxKanbanBoard
+            emails={allEmails.filter((e) => !hiddenIds.has(e.id))}
+            onSelect={setSelectedEmail}
+            selectedId={selectedEmail?.id ?? null}
+          />
+
+          {/* Slide-over viewer for kanban */}
+          {selectedEmail && (
+            <div className="w-full md:w-[480px] border-l border-border shrink-0 overflow-hidden">
+              <InboxEmailViewer
+                email={selectedEmail}
+                onClose={() => setSelectedEmail(null)}
               />
-              <span className="text-xs font-medium">
-                {selectedIds.size > 0
-                  ? `${selectedIds.size} selected`
-                  : "Select all"}
-              </span>
-              {selectedIds.size > 0 && (
-                <div className="flex items-center gap-1 ml-auto">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2 text-xs gap-1 text-destructive hover:text-destructive"
-                    onClick={handleBulkDelete}
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    Delete
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2 text-xs gap-1"
-                    onClick={handleBulkArchive}
-                  >
-                    <Archive className="w-3.5 h-3.5" />
-                    Archive
-                  </Button>
-                </div>
-              )}
             </div>
-          ) : (
-            <>
-              <span>{emails.length} email{emails.length !== 1 ? "s" : ""}</span>
-              {sortByPriority && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-[11px] h-5 px-1.5"
-                  onClick={() => setSortByPriority(false)}
-                >
-                  Clear sort
-                </Button>
-              )}
-            </>
           )}
         </div>
+      ) : (
+        /* ── List View ── */
+        <div className="flex-1 flex overflow-hidden">
+          <div className={cn(
+            "bg-background border-r flex flex-col min-h-0",
+            selectedEmail ? "hidden md:flex md:w-[400px]" : "flex w-full md:w-[400px]"
+          )}>
+            {/* Email Count + selection bar */}
+            <div className="px-3 py-1.5 text-[11px] text-muted-foreground border-b flex items-center justify-between">
+              {selectionMode ? (
+                <div className="flex items-center gap-2 w-full">
+                  <Checkbox checked={emails.length > 0 && selectedIds.size === emails.length} onCheckedChange={selectAll} />
+                  <span className="text-xs font-medium">
+                    {selectedIds.size > 0 ? `${selectedIds.size} selected` : "Select all"}
+                  </span>
+                  {selectedIds.size > 0 && (
+                    <div className="flex items-center gap-1 ml-auto">
+                      <Button variant="ghost" size="sm" className="h-7 px-2 text-xs gap-1 text-destructive hover:text-destructive" onClick={handleBulkDelete}>
+                        <Trash2 className="w-3.5 h-3.5" />Delete
+                      </Button>
+                      <Button variant="ghost" size="sm" className="h-7 px-2 text-xs gap-1" onClick={handleBulkArchive}>
+                        <Archive className="w-3.5 h-3.5" />Archive
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <>
+                  <span>{emails.length} email{emails.length !== 1 ? "s" : ""}</span>
+                  {sortByPriority && (
+                    <Button variant="ghost" size="sm" className="text-[11px] h-5 px-1.5" onClick={() => setSortByPriority(false)}>Clear sort</Button>
+                  )}
+                </>
+              )}
+            </div>
 
-        {/* Email List */}
-        <InboxEmailList
-          emails={emails}
-          selectedId={selectedEmail?.id ?? null}
-          onSelect={setSelectedEmail}
-          selectionMode={selectionMode}
-          selectedIds={selectedIds}
-          onToggleSelect={toggleSelectId}
-          onDelete={handleDeleteEmail}
-          onArchive={handleArchiveEmail}
-        />
-      </div>
+            <InboxEmailList
+              emails={emails}
+              selectedId={selectedEmail?.id ?? null}
+              onSelect={setSelectedEmail}
+              selectionMode={selectionMode}
+              selectedIds={selectedIds}
+              onToggleSelect={toggleSelectId}
+              onDelete={handleDeleteEmail}
+              onArchive={handleArchiveEmail}
+            />
+          </div>
 
-      {/* Email Viewer */}
-      <div className={cn(
-        "flex-1 min-h-0",
-        selectedEmail ? "flex" : "hidden md:flex"
-      )}>
-        <InboxEmailViewer
-          email={selectedEmail}
-          onClose={() => setSelectedEmail(null)}
-        />
-      </div>
+          {/* Email Viewer */}
+          <div className={cn("flex-1 min-h-0", selectedEmail ? "flex" : "hidden md:flex")}>
+            <InboxEmailViewer email={selectedEmail} onClose={() => setSelectedEmail(null)} />
+          </div>
+        </div>
+      )}
 
       {/* Settings Panel */}
-      <InboxManagerSettings
-        open={showSettings}
-        onOpenChange={setShowSettings}
-        connectedEmail={userEmail}
-      />
+      <InboxManagerSettings open={showSettings} onOpenChange={setShowSettings} connectedEmail={userEmail} />
     </div>
   );
 }
