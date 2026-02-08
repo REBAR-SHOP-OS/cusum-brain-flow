@@ -420,6 +420,7 @@ export type Database = {
       }
       contacts: {
         Row: {
+          company_id: string | null
           created_at: string
           customer_id: string | null
           email: string | null
@@ -432,6 +433,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          company_id?: string | null
           created_at?: string
           customer_id?: string | null
           email?: string | null
@@ -444,6 +446,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          company_id?: string | null
           created_at?: string
           customer_id?: string | null
           email?: string | null
@@ -494,6 +497,7 @@ export type Database = {
       }
       customers: {
         Row: {
+          company_id: string | null
           company_name: string | null
           created_at: string
           credit_limit: number | null
@@ -507,6 +511,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          company_id?: string | null
           company_name?: string | null
           created_at?: string
           credit_limit?: number | null
@@ -520,6 +525,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          company_id?: string | null
           company_name?: string | null
           created_at?: string
           credit_limit?: number | null

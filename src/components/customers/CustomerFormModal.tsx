@@ -2,8 +2,9 @@ import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/lib/auth";
 import {
   Dialog,
   DialogContent,
@@ -53,8 +54,24 @@ interface CustomerFormModalProps {
 
 export function CustomerFormModal({ open, onOpenChange, customer }: CustomerFormModalProps) {
   const { toast } = useToast();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const isEditing = !!customer;
+
+  // Fetch user's company_id for multi-tenant scoping
+  const { data: userCompanyId } = useQuery({
+    queryKey: ["user_company_id", user?.id],
+    enabled: !!user,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("company_id")
+        .eq("user_id", user!.id)
+        .single();
+      if (error) return null;
+      return data?.company_id ?? null;
+    },
+  });
 
   const form = useForm<CustomerFormData>({
     resolver: zodResolver(customerSchema),
@@ -95,7 +112,7 @@ export function CustomerFormModal({ open, onOpenChange, customer }: CustomerForm
 
   const mutation = useMutation({
     mutationFn: async (data: CustomerFormData) => {
-      const payload = {
+      const basePayload = {
         name: data.name,
         company_name: data.company_name || null,
         customer_type: data.customer_type,
@@ -108,11 +125,14 @@ export function CustomerFormModal({ open, onOpenChange, customer }: CustomerForm
       if (isEditing && customer) {
         const { error } = await supabase
           .from("customers")
-          .update(payload)
+          .update(basePayload)
           .eq("id", customer.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("customers").insert(payload);
+        const { error } = await supabase.from("customers").insert({
+          ...basePayload,
+          ...(userCompanyId ? { company_id: userCompanyId } : {}),
+        });
         if (error) throw error;
       }
     },
