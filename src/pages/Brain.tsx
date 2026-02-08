@@ -38,7 +38,7 @@ function MemoryCard({ item, onClick }: { item: KnowledgeItem; onClick: () => voi
   return (
     <div
       onClick={onClick}
-      className="rounded-xl bg-card border border-border p-4 hover:border-primary/30 transition-colors cursor-pointer flex flex-col justify-between"
+      className="rounded-xl bg-card/70 backdrop-blur-sm border border-border/50 p-4 hover:border-primary/30 hover:bg-card/85 transition-all cursor-pointer flex flex-col justify-between"
     >
       <div>
         <h3 className="font-semibold text-sm mb-2 line-clamp-1">{item.title}</h3>
@@ -59,7 +59,7 @@ function ImageCard({ item, onClick }: { item: KnowledgeItem; onClick: () => void
   return (
     <div
       onClick={onClick}
-      className="rounded-xl overflow-hidden bg-card border border-border hover:border-primary/30 transition-colors cursor-pointer"
+      className="rounded-xl overflow-hidden bg-card/70 backdrop-blur-sm border border-border/50 hover:border-primary/30 hover:bg-card/85 transition-all cursor-pointer"
     >
       <div className="aspect-square relative bg-muted">
         {thumbnail ? (
@@ -83,7 +83,7 @@ function VideoCard({ item, onClick }: { item: KnowledgeItem; onClick: () => void
   return (
     <div
       onClick={onClick}
-      className="rounded-xl overflow-hidden bg-card border border-border hover:border-primary/30 transition-colors cursor-pointer"
+      className="rounded-xl overflow-hidden bg-card/70 backdrop-blur-sm border border-border/50 hover:border-primary/30 hover:bg-card/85 transition-all cursor-pointer"
     >
       <div className="relative bg-muted aspect-video">
         {thumbnail ? (
@@ -110,7 +110,7 @@ function WebpageCard({ item, onClick }: { item: KnowledgeItem; onClick: () => vo
   return (
     <div
       onClick={onClick}
-      className="rounded-xl bg-card border border-border hover:border-primary/30 transition-colors cursor-pointer"
+      className="rounded-xl bg-card/70 backdrop-blur-sm border border-border/50 hover:border-primary/30 hover:bg-card/85 transition-all cursor-pointer"
     >
       <div className="h-32 flex flex-col items-center justify-center gap-2">
         <Globe className="w-8 h-8 text-primary" />
@@ -134,7 +134,7 @@ function DocumentCard({ item, onClick }: { item: KnowledgeItem; onClick: () => v
   return (
     <div
       onClick={onClick}
-      className="rounded-xl bg-card border border-border hover:border-primary/30 transition-colors cursor-pointer"
+      className="rounded-xl bg-card/70 backdrop-blur-sm border border-border/50 hover:border-primary/30 hover:bg-card/85 transition-all cursor-pointer"
     >
       <div className="h-32 flex flex-col items-center justify-center gap-2">
         <FileText className={cn("w-8 h-8", iconColor)} />
