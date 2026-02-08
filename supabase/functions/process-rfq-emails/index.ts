@@ -148,17 +148,6 @@ function shouldSkipSender(from: string, to: string): boolean {
     if (SKIP_INTERNAL_BOTS.some((bot) => senderName.includes(bot))) return true;
   }
 
-  // Skip if BOTH from and to are @rebar.shop — purely internal emails
-  // These are internal forwards/tests with no external customer context
-  if (lowerFrom.includes(INTERNAL_DOMAIN) && lowerTo.includes(INTERNAL_DOMAIN)) {
-    const toAddresses = lowerTo.split(",").map(a => a.trim());
-    const hasExternal = toAddresses.some(a => !a.includes(INTERNAL_DOMAIN));
-    if (!hasExternal) {
-      // Pure internal — skip entirely (no external party = no lead)
-      return true;
-    }
-  }
-
   return false;
 }
 
