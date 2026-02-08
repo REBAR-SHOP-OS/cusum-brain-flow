@@ -95,3 +95,6 @@ verify_jwt = false
 
 [functions.facebook-oauth]
 verify_jwt = false
+
+[functions.facebook-data-deletion]
+verify_jwt = false
