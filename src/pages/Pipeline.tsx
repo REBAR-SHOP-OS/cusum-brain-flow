@@ -129,12 +129,12 @@ export default function Pipeline() {
         queryClient.invalidateQueries({ queryKey: ["leads"] });
         toast({
           title: `${data.created} new lead${data.created > 1 ? "s" : ""} created`,
-          description: `Scanned ${data.total} emails — ${data.filtered} filtered, ${data.skipped} already processed`,
+          description: `Scanned ${data.total} emails — ${data.prefiltered || 0} system, ${data.filtered} AI-filtered, ${data.skipped} already processed`,
         });
       } else {
         toast({
-          title: "No new leads",
-          description: `Scanned ${data.total} emails — ${data.filtered} filtered out, ${data.skipped} already processed`,
+          title: "No new leads found",
+          description: `Scanned ${data.total} emails to @rebar.shop — ${data.prefiltered || 0} system emails skipped, ${data.filtered} filtered by AI, ${data.skipped} already processed`,
         });
       }
     } catch (err) {
