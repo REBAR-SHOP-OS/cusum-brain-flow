@@ -91,6 +91,56 @@ function formatDateLabel(date: Date): string {
   return format(date, "MMMM d, yyyy");
 }
 
+/**
+ * Detect if text is plain text (no HTML tags) and convert to presentable HTML.
+ * Handles: line breaks, *bold*, numbered link refs [N] url, bare URLs
+ */
+function isPlainText(str: string): boolean {
+  // If it contains common HTML tags it's probably HTML
+  return !/<\s*(div|p|br|table|tr|td|span|a |img |h[1-6]|ul|ol|li|blockquote|strong|em|b |i )[^>]*>/i.test(str);
+}
+
+function plainTextToHtml(text: string): string {
+  let html = text;
+
+  // Escape HTML entities first
+  html = html.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+  // Remove numbered link references at the end (e.g., [1] https://...)
+  // and collect them for inline linking
+  const linkMap = new Map<string, string>();
+  html = html.replace(/\[(\d+)\]\s*(https?:\/\/[^\s]+)/g, (_, num, url) => {
+    linkMap.set(num, url);
+    return ""; // Remove from body
+  });
+
+  // Replace inline [N] references with clickable links if we have the URL
+  linkMap.forEach((url, num) => {
+    const regex = new RegExp(`\\[${num}\\]`, "g");
+    html = html.replace(regex, `<a href="${url}" target="_blank" rel="noopener noreferrer">[${num}]</a>`);
+  });
+
+  // Convert *text* to bold
+  html = html.replace(/\*([^*]+)\*/g, "<strong>$1</strong>");
+
+  // Convert bare URLs to links
+  html = html.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+
+  // Convert email addresses to mailto links
+  html = html.replace(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g, '<a href="mailto:$1">$1</a>');
+
+  // Convert newlines to <br>
+  html = html.replace(/\r?\n/g, "<br>");
+
+  // Clean up excessive <br> runs
+  html = html.replace(/(<br>){3,}/g, "<br><br>");
+
+  // Remove empty trailing lines
+  html = html.replace(/(<br>\s*)+$/, "");
+
+  return html;
+}
+
 // Assign consistent colors to senders
 const AVATAR_COLORS = [
   "bg-emerald-500", "bg-blue-500", "bg-purple-500", "bg-orange-500",
@@ -223,12 +273,15 @@ export function InboxEmailThread({ communications, currentEmailId }: InboxEmailT
                         className="p-3 bg-white text-zinc-900 text-sm [&_a]:text-blue-600 [&_a]:underline [&_img]:max-w-full [&_img]:h-auto [&_table]:border-collapse [&_td]:p-1"
                         style={{ lineHeight: "1.5" }}
                         dangerouslySetInnerHTML={{
-                          __html: DOMPurify.sanitize(entry.body, {
-                            ALLOWED_TAGS: ["p","br","strong","em","u","a","ul","ol","li","blockquote","div","span","h1","h2","h3","h4","h5","h6","img","table","thead","tbody","tr","td","th","hr","b","i","font","center","pre","code"],
-                            ALLOWED_ATTR: ["href","target","rel","src","alt","class","style","width","height","border","cellpadding","cellspacing","align","valign","color","bgcolor","colspan","rowspan"],
-                            FORBID_TAGS: ["script","iframe","object","embed","form"],
-                            FORBID_ATTR: ["onerror","onload","onclick","onmouseover"],
-                          }),
+                          __html: DOMPurify.sanitize(
+                            isPlainText(entry.body) ? plainTextToHtml(entry.body) : entry.body,
+                            {
+                              ALLOWED_TAGS: ["p","br","strong","em","u","a","ul","ol","li","blockquote","div","span","h1","h2","h3","h4","h5","h6","img","table","thead","tbody","tr","td","th","hr","b","i","font","center","pre","code"],
+                              ALLOWED_ATTR: ["href","target","rel","src","alt","class","style","width","height","border","cellpadding","cellspacing","align","valign","color","bgcolor","colspan","rowspan"],
+                              FORBID_TAGS: ["script","iframe","object","embed","form"],
+                              FORBID_ATTR: ["onerror","onload","onclick","onmouseover"],
+                            }
+                          ),
                         }}
                       />
                     </div>
