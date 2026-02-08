@@ -499,7 +499,8 @@ serve(async (req) => {
           console.log(`Keyword fast-track override for: "${subject}" (AI said no, keywords say yes)`);
           analysis.is_lead = true;
           analysis.reason = `Keyword match in subject/body (${subject}). AI originally filtered but overridden.`;
-          if (!analysis.title || analysis.title === "") analysis.title = subject;
+          // Always use the email subject for keyword-overridden leads (AI title is unreliable when it thought it wasn't a lead)
+          analysis.title = subject;
         }
 
         if (!analysis.is_lead) {
