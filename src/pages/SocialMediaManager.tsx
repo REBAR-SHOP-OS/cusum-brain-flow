@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Plus, Settings, ChevronLeft, ChevronRight,
   ThumbsUp, Palette, Users, TrendingUp, Search, Filter, X,
+  Sparkles, Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +16,7 @@ import { CreateContentDialog } from "@/components/social/CreateContentDialog";
 import { SocialCalendar } from "@/components/social/SocialCalendar";
 import { SettingsSheet } from "@/components/social/SettingsSheet";
 import { useSocialPosts, type SocialPost } from "@/hooks/useSocialPosts";
+import { useAutoGenerate } from "@/hooks/useAutoGenerate";
 
 const platformFilters = [
   { id: "all", label: "All" },
@@ -36,6 +38,7 @@ const statusFilters = [
 
 export default function SocialMediaManager() {
   const navigate = useNavigate();
+  const { generatePosts, generating } = useAutoGenerate();
   const { posts, isLoading, updatePost } = useSocialPosts();
 
   const [weekStart, setWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
@@ -106,6 +109,19 @@ export default function SocialMediaManager() {
           <h1 className="text-xl font-semibold">Social Media Manager</h1>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            onClick={() => generatePosts()}
+            disabled={generating}
+            variant="outline"
+            className="gap-2"
+          >
+            {generating ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Sparkles className="w-4 h-4" />
+            )}
+            {generating ? "Generating..." : "Auto-generate today"}
+          </Button>
           <Button onClick={() => setShowCreateContent(true)} className="bg-primary hover:bg-primary/90">
             <Plus className="w-4 h-4 mr-2" />
             Create content
@@ -248,16 +264,30 @@ export default function SocialMediaManager() {
         ) : filteredPosts.length === 0 && !searchQuery && platformFilter === "all" && statusFilter === "all" ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
-              <Plus className="w-8 h-8 text-muted-foreground" />
+              <Sparkles className="w-8 h-8 text-muted-foreground" />
             </div>
-            <h3 className="text-lg font-medium mb-2">No posts yet</h3>
+            <h3 className="text-lg font-medium mb-2">Let Pixel handle it</h3>
             <p className="text-muted-foreground text-sm max-w-md">
-              Create your first social media post to get started.
+              Click "Auto-generate today" and Pixel will create posts for all your connected platforms. You just approve!
             </p>
-            <Button className="mt-4 gap-2" onClick={() => setShowCreateContent(true)}>
-              <Plus className="w-4 h-4" />
-              Create content
-            </Button>
+            <div className="flex gap-3 mt-4">
+              <Button
+                className="gap-2"
+                onClick={() => generatePosts()}
+                disabled={generating}
+              >
+                {generating ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Sparkles className="w-4 h-4" />
+                )}
+                {generating ? "Generating..." : "Auto-generate today"}
+              </Button>
+              <Button variant="outline" className="gap-2" onClick={() => setShowCreateContent(true)}>
+                <Plus className="w-4 h-4" />
+                Create manually
+              </Button>
+            </div>
           </div>
         ) : (
           <SocialCalendar
