@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChatInput } from "@/components/chat/ChatInput";
+import { routeToAgent } from "@/lib/agentRouter";
 import { Card } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { AutomationsSection } from "@/components/integrations/AutomationsSection";
@@ -215,7 +216,8 @@ export default function Home() {
   const [inputValue, setInputValue] = useState("");
 
   const handleSend = useCallback((content: string) => {
-    navigate("/inbox-manager", { state: { initialMessage: content } });
+    const result = routeToAgent(content);
+    navigate(result.route, { state: { initialMessage: content } });
   }, [navigate]);
 
   const handleHelperClick = (helper: Helper) => {
