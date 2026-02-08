@@ -410,155 +410,158 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
   return (
     <TooltipProvider>
       <div className="flex flex-col h-full">
-        {/* ─── Unified Top Bar ─── */}
-        <div className="flex items-center gap-2 px-3 py-2 border-b shrink-0">
+        {/* ─── Single Unified Toolbar ─── */}
+        <div className="flex items-center gap-1 px-2 py-1.5 border-b shrink-0">
           {/* View toggle */}
           <div className="flex items-center border border-border rounded-md overflow-hidden">
             <Button
               variant={viewMode === "kanban" ? "secondary" : "ghost"}
               size="icon"
-              className="h-7 w-7 rounded-none"
+              className="h-6 w-6 rounded-none"
               onClick={() => setViewMode("kanban")}
               title="Kanban view"
             >
-              <LayoutGrid className="w-3.5 h-3.5" />
+              <LayoutGrid className="w-3 h-3" />
             </Button>
             <Button
               variant={viewMode === "list" ? "secondary" : "ghost"}
               size="icon"
-              className="h-7 w-7 rounded-none"
+              className="h-6 w-6 rounded-none"
               onClick={() => setViewMode("list")}
               title="List view"
             >
-              <List className="w-3.5 h-3.5" />
+              <List className="w-3 h-3" />
             </Button>
           </div>
 
+          {/* Divider */}
+          <div className="w-px h-4 bg-border shrink-0" />
+
+          {/* AI actions inline */}
+          <InboxAIToolbar emailCount={allEmails.length} onAction={handleAIAction} />
+
+          {/* Spacer */}
+          <div className="flex-1" />
+
           {/* Search — inline expandable */}
           {showSearch ? (
-            <div className="relative flex-1 max-w-xs">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+            <div className="relative max-w-[180px]">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search..."
-                className="h-7 pl-8 text-xs"
+                className="h-6 pl-7 pr-6 text-[11px]"
                 autoFocus
                 onBlur={() => { if (!search) setShowSearch(false); }}
               />
               {search && (
-                <button className="absolute right-2 top-1/2 -translate-y-1/2" onClick={() => { setSearch(""); setShowSearch(false); }}>
-                  <X className="w-3 h-3 text-muted-foreground" />
+                <button className="absolute right-1.5 top-1/2 -translate-y-1/2" onClick={() => { setSearch(""); setShowSearch(false); }}>
+                  <X className="w-2.5 h-2.5 text-muted-foreground" />
                 </button>
               )}
             </div>
           ) : (
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setShowSearch(true)}>
-              <Search className="w-3.5 h-3.5" />
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setShowSearch(true)}>
+                  <Search className="w-3 h-3" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="text-xs">Search</TooltipContent>
+            </Tooltip>
           )}
-
-          <div className="flex-1" />
 
           {/* Connection status dots */}
           <Popover>
             <PopoverTrigger asChild>
-              <button className="flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-muted transition-colors">
+              <button className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-muted transition-colors">
                 {bothLoading ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
+                  <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />
                 ) : (
                   <>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div className={cn("w-2 h-2 rounded-full", gmailConnected ? "bg-emerald-400" : "bg-muted-foreground/40")} />
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" className="text-xs">
-                        Gmail: {gmailConnected ? gmailEmail : "Not connected"}
-                      </TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div className={cn("w-2 h-2 rounded-full", rcConnected ? "bg-blue-400" : "bg-muted-foreground/40")} />
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" className="text-xs">
-                        RingCentral: {rcConnected ? rcEmail : "Not connected"}
-                      </TooltipContent>
-                    </Tooltip>
+                    <div className={cn("w-1.5 h-1.5 rounded-full", gmailConnected ? "bg-emerald-400" : "bg-muted-foreground/40")} />
+                    <div className={cn("w-1.5 h-1.5 rounded-full", rcConnected ? "bg-blue-400" : "bg-muted-foreground/40")} />
                   </>
                 )}
                 <Wifi className="w-3 h-3 text-muted-foreground" />
               </button>
             </PopoverTrigger>
-            <PopoverContent align="end" className="w-72 p-3 space-y-3">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Connections</p>
-              {/* Gmail */}
-              <div className="flex items-center gap-2.5">
-                <div className={cn("w-7 h-7 rounded-full flex items-center justify-center shrink-0", gmailConnected ? "bg-emerald-500/15" : "bg-muted")}>
-                  <Mail className={cn("w-3.5 h-3.5", gmailConnected ? "text-emerald-400" : "text-muted-foreground")} />
+            <PopoverContent align="end" className="w-64 p-2.5 space-y-2">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Connections</p>
+              <div className="flex items-center gap-2">
+                <div className={cn("w-6 h-6 rounded-full flex items-center justify-center shrink-0", gmailConnected ? "bg-emerald-500/15" : "bg-muted")}>
+                  <Mail className={cn("w-3 h-3", gmailConnected ? "text-emerald-400" : "text-muted-foreground")} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium">Gmail</p>
-                  <p className="text-[10px] text-muted-foreground truncate">
-                    {gmailConnected ? gmailEmail : "Not connected"}
-                  </p>
+                  <p className="text-[11px] font-medium">Gmail</p>
+                  <p className="text-[9px] text-muted-foreground truncate">{gmailConnected ? gmailEmail : "Not connected"}</p>
                 </div>
                 {gmailConnected ? (
-                  <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px] text-muted-foreground hover:text-destructive" onClick={handleDisconnectGmail}>
-                    <LogOut className="w-3 h-3 mr-1" />Disconnect
+                  <Button variant="ghost" size="sm" className="h-5 px-1.5 text-[9px] text-muted-foreground hover:text-destructive" onClick={handleDisconnectGmail}>
+                    <LogOut className="w-2.5 h-2.5" />
                   </Button>
                 ) : (
-                  <Button size="sm" className="h-6 px-2 text-[10px]" onClick={handleConnectGmail} disabled={connecting}>
-                    {connecting ? <Loader2 className="w-3 h-3 animate-spin" /> : "Connect"}
+                  <Button size="sm" className="h-5 px-2 text-[9px]" onClick={handleConnectGmail} disabled={connecting}>
+                    {connecting ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : "Connect"}
                   </Button>
                 )}
               </div>
-              {/* RingCentral */}
-              <div className="flex items-center gap-2.5">
-                <div className={cn("w-7 h-7 rounded-full flex items-center justify-center shrink-0", rcConnected ? "bg-blue-500/15" : "bg-muted")}>
-                  <Phone className={cn("w-3.5 h-3.5", rcConnected ? "text-blue-400" : "text-muted-foreground")} />
+              <div className="flex items-center gap-2">
+                <div className={cn("w-6 h-6 rounded-full flex items-center justify-center shrink-0", rcConnected ? "bg-blue-500/15" : "bg-muted")}>
+                  <Phone className={cn("w-3 h-3", rcConnected ? "text-blue-400" : "text-muted-foreground")} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium">RingCentral</p>
-                  <p className="text-[10px] text-muted-foreground truncate">
-                    {rcConnected ? rcEmail : "Not connected"}
-                  </p>
+                  <p className="text-[11px] font-medium">RingCentral</p>
+                  <p className="text-[9px] text-muted-foreground truncate">{rcConnected ? rcEmail : "Not connected"}</p>
                 </div>
                 {rcConnected ? (
-                  <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px] text-muted-foreground hover:text-destructive" onClick={handleDisconnectRC}>
-                    <LogOut className="w-3 h-3 mr-1" />Disconnect
+                  <Button variant="ghost" size="sm" className="h-5 px-1.5 text-[9px] text-muted-foreground hover:text-destructive" onClick={handleDisconnectRC}>
+                    <LogOut className="w-2.5 h-2.5" />
                   </Button>
                 ) : (
-                  <Button size="sm" className="h-6 px-2 text-[10px]" onClick={handleConnectRC} disabled={rcConnecting}>
-                    {rcConnecting ? <Loader2 className="w-3 h-3 animate-spin" /> : "Connect"}
+                  <Button size="sm" className="h-5 px-2 text-[9px]" onClick={handleConnectRC} disabled={rcConnecting}>
+                    {rcConnecting ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : "Connect"}
                   </Button>
                 )}
               </div>
             </PopoverContent>
           </Popover>
 
-          {/* Actions */}
-          <Button
-            variant={selectionMode ? "secondary" : "ghost"}
-            size="icon"
-            className="h-7 w-7"
-            onClick={toggleSelectMode}
-            title={selectionMode ? "Exit selection" : "Select emails"}
-          >
-            {selectionMode ? <X className="w-3.5 h-3.5" /> : <CheckSquare className="w-3.5 h-3.5" />}
-          </Button>
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleSync} disabled={syncing}>
-            <RefreshCw className={cn("w-3.5 h-3.5", syncing && "animate-spin")} />
-          </Button>
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setShowSettings(true)}>
-            <Settings className="w-3.5 h-3.5" />
-          </Button>
+          {/* Utility actions */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={selectionMode ? "secondary" : "ghost"}
+                size="icon"
+                className="h-6 w-6"
+                onClick={toggleSelectMode}
+              >
+                {selectionMode ? <X className="w-3 h-3" /> : <CheckSquare className="w-3 h-3" />}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-xs">{selectionMode ? "Exit selection" : "Select"}</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleSync} disabled={syncing}>
+                <RefreshCw className={cn("w-3 h-3", syncing && "animate-spin")} />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-xs">Sync</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setShowSettings(true)}>
+                <Settings className="w-3 h-3" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-xs">Settings</TooltipContent>
+          </Tooltip>
         </div>
 
-        {/* ─── AI Toolbar (compact) ─── */}
-        <div className="shrink-0">
-          <InboxAIToolbar emailCount={allEmails.length} onAction={handleAIAction} />
-          <InboxSummaryPanel summary={summary} onClose={() => setSummary(null)} />
-        </div>
+        {/* Summary panel (appears below toolbar when triggered) */}
+        <InboxSummaryPanel summary={summary} onClose={() => setSummary(null)} />
 
         {/* ─── List-only extras: filter chips ─── */}
         {viewMode === "list" && (

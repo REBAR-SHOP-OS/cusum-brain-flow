@@ -139,36 +139,31 @@ export default function Inbox() {
   return (
     <div className="flex flex-col h-full">
       {/* Minimal header with tab toggle */}
-      <header className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-border shrink-0">
-        <div>
-          <h1 className="text-xl font-semibold">Inbox</h1>
-          <p className="text-xs text-muted-foreground hidden sm:block">
-            AI-managed emails, calls, SMS & agents
-          </p>
-        </div>
-        <div className="flex items-center border border-border rounded-lg overflow-hidden bg-muted/50">
+      <header className="flex items-center justify-between px-3 sm:px-4 py-1.5 border-b border-border shrink-0">
+        <h1 className="text-base font-semibold">Inbox</h1>
+        <div className="flex items-center border border-border rounded-md overflow-hidden bg-muted/50">
           <Button
             variant="ghost"
             size="sm"
             className={cn(
-              "gap-1.5 text-xs rounded-none h-8 px-3",
+              "gap-1 text-[11px] rounded-none h-7 px-2.5",
               activeTab === "inbox" && "bg-background shadow-sm text-foreground"
             )}
             onClick={() => setActiveTab("inbox")}
           >
-            <InboxIcon className="w-3.5 h-3.5" />
+            <InboxIcon className="w-3 h-3" />
             Inbox
           </Button>
           <Button
             variant="ghost"
             size="sm"
             className={cn(
-              "gap-1.5 text-xs rounded-none h-8 px-3",
+              "gap-1 text-[11px] rounded-none h-7 px-2.5",
               activeTab === "agents" && "bg-background shadow-sm text-foreground"
             )}
             onClick={() => setActiveTab("agents")}
           >
-            <Bot className="w-3.5 h-3.5" />
+            <Bot className="w-3 h-3" />
             Agents
           </Button>
         </div>
