@@ -33,9 +33,10 @@ const SCOPES: Record<string, string[]> = {
   ],
 };
 
-// The stable redirect URI — the edge function itself
+// The stable redirect URI — the edge function itself, with apikey for gateway access
 function getRedirectUri(): string {
-  return `${Deno.env.get("SUPABASE_URL")}/functions/v1/google-oauth`;
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+  return `${Deno.env.get("SUPABASE_URL")}/functions/v1/google-oauth?apikey=${anonKey}`;
 }
 
 function getClientCredentials() {
