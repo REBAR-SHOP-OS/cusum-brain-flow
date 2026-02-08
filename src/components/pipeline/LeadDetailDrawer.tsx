@@ -12,7 +12,7 @@ import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { PIPELINE_STAGES } from "@/pages/Pipeline";
 import { LeadTimeline } from "./LeadTimeline";
-import { LeadEmailContent } from "./LeadEmailContent";
+import { LeadEmailThread } from "./LeadEmailThread";
 import { LeadFiles } from "./LeadFiles";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -146,7 +146,7 @@ export function LeadDetailDrawer({
             </TabsList>
 
             <TabsContent value="email" className="space-y-4 mt-0">
-              <LeadEmailContent metadata={lead.metadata} notes={lead.notes} source={lead.source} />
+              <LeadEmailThread metadata={lead.metadata} notes={lead.notes} source={lead.source} />
             </TabsContent>
 
             <TabsContent value="timeline" className="mt-0">
