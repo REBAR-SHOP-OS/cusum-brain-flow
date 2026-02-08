@@ -16,11 +16,10 @@ async function verifyAuth(req: Request): Promise<string | null> {
     { global: { headers: { Authorization: authHeader } } }
   );
 
-  const token = authHeader.replace("Bearer ", "");
-  const { data, error } = await supabase.auth.getClaims(token);
-  if (error || !data?.claims) return null;
+  const { data: { user }, error } = await supabase.auth.getUser();
+  if (error || !user) return null;
 
-  return data.claims.sub as string;
+  return user.id;
 }
 
 async function getAccessTokenForUser(userId: string, clientIp: string): Promise<string> {
