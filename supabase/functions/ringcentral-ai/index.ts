@@ -337,6 +337,24 @@ serve(async (req) => {
       );
     }
 
+    // Rate limit: 5 requests per 60 seconds per user (expensive audio analysis)
+    const svcClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+    const { data: allowed } = await svcClient.rpc("check_rate_limit", {
+      _user_id: userId,
+      _function_name: "ringcentral-ai",
+      _max_requests: 5,
+      _window_seconds: 60,
+    });
+    if (allowed === false) {
+      return new Response(JSON.stringify({ error: "Rate limit exceeded. Try again in a moment." }), {
+        status: 429,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const { recordingUri, analysisType, fromNumber, toNumber } =
       await req.json();
 
