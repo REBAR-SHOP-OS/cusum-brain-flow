@@ -67,6 +67,7 @@ export function TopBar() {
           size="sm"
           className="ml-auto gap-2 text-xs text-muted-foreground h-8 w-48 md:w-64 justify-start"
           onClick={() => setCommandOpen(true)}
+          data-tour="topbar-search"
         >
           <Search className="w-3.5 h-3.5" />
           <span>Search or command…</span>
@@ -87,7 +88,9 @@ export function TopBar() {
         )}
 
         <ThemeToggle />
-        <UserMenu />
+        <div data-tour="topbar-user">
+          <UserMenu />
+        </div>
       </header>
 
       <CommandBar open={commandOpen} onOpenChange={setCommandOpen} />

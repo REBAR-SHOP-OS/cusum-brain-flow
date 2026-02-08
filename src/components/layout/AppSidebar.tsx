@@ -21,6 +21,7 @@ interface NavItem {
   icon: React.ElementType;
   roles?: string[]; // if set, only show for these roles (admin always sees all)
   badge?: number;
+  tourId?: string;
 }
 
 export function AppSidebar() {
@@ -32,39 +33,39 @@ export function AppSidebar() {
     {
       label: "Core",
       items: [
-        { name: "Dashboard", href: "/home", icon: Home },
-        { name: "Inbox", href: "/inbox", icon: Inbox, badge: unreadCount || undefined },
-        { name: "Tasks", href: "/tasks", icon: CheckSquare },
-        { name: "Calls", href: "/phonecalls", icon: Phone },
+        { name: "Dashboard", href: "/home", icon: Home, tourId: "nav-dashboard" },
+        { name: "Inbox", href: "/inbox", icon: Inbox, badge: unreadCount || undefined, tourId: "nav-inbox" },
+        { name: "Tasks", href: "/tasks", icon: CheckSquare, tourId: "nav-tasks" },
+        { name: "Calls", href: "/phonecalls", icon: Phone, tourId: "nav-calls" },
       ],
     },
     {
       label: "Sales",
       items: [
-        { name: "Pipeline", href: "/pipeline", icon: Kanban, roles: ["admin", "sales", "office"] },
-        { name: "Customers", href: "/customers", icon: Users },
+        { name: "Pipeline", href: "/pipeline", icon: Kanban, roles: ["admin", "sales", "office"], tourId: "nav-pipeline" },
+        { name: "Customers", href: "/customers", icon: Users, tourId: "nav-customers" },
       ],
     },
     {
       label: "Operations",
       items: [
-        { name: "Shop Floor", href: "/shop-floor", icon: Factory, roles: ["admin", "workshop", "office"] },
-        { name: "Office Portal", href: "/office", icon: LayoutGrid, roles: ["admin", "office"] },
-        { name: "Inventory", href: "/office", icon: Package, roles: ["admin", "office", "workshop"] },
-        { name: "Deliveries", href: "/deliveries", icon: Truck, roles: ["admin", "field", "office"] },
+        { name: "Shop Floor", href: "/shop-floor", icon: Factory, roles: ["admin", "workshop", "office"], tourId: "nav-shop-floor" },
+        { name: "Office Portal", href: "/office", icon: LayoutGrid, roles: ["admin", "office"], tourId: "nav-office-portal" },
+        { name: "Inventory", href: "/office", icon: Package, roles: ["admin", "office", "workshop"], tourId: "nav-inventory" },
+        { name: "Deliveries", href: "/deliveries", icon: Truck, roles: ["admin", "field", "office"], tourId: "nav-deliveries" },
       ],
     },
     {
       label: "System",
       items: [
-        { name: "Brain", href: "/brain", icon: Brain },
-        { name: "Settings", href: "/settings", icon: Settings },
+        { name: "Brain", href: "/brain", icon: Brain, tourId: "nav-brain" },
+        { name: "Settings", href: "/settings", icon: Settings, tourId: "nav-settings" },
       ],
     },
     {
       label: "Admin",
       items: [
-        { name: "Admin Panel", href: "/admin", icon: Shield, roles: ["admin"] },
+        { name: "Admin Panel", href: "/admin", icon: Shield, roles: ["admin"], tourId: "nav-admin" },
       ],
     },
   ];
@@ -76,7 +77,7 @@ export function AppSidebar() {
   };
 
   return (
-    <aside className="group/sidebar w-14 hover:w-48 shrink-0 bg-sidebar border-r border-sidebar-border flex flex-col h-full transition-all duration-200 ease-in-out overflow-hidden">
+    <aside data-tour="sidebar" className="group/sidebar w-14 hover:w-48 shrink-0 bg-sidebar border-r border-sidebar-border flex flex-col h-full transition-all duration-200 ease-in-out overflow-hidden">
       <ScrollArea className="flex-1 py-2">
         {navGroups.map((group) => {
           const visibleItems = group.items.filter(isVisible);
@@ -98,6 +99,7 @@ export function AppSidebar() {
                       <TooltipTrigger asChild>
                         <Link
                           to={item.href}
+                          data-tour={item.tourId}
                           className={cn(
                             "relative h-10 rounded-lg flex items-center gap-3 px-2 transition-colors whitespace-nowrap",
                             "hover:bg-sidebar-accent",
