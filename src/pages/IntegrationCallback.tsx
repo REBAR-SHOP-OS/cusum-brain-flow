@@ -75,7 +75,7 @@ export default function IntegrationCallback() {
 
   const exchangeCode = async (code: string, integration: string) => {
     try {
-      const redirectUri = "https://cusum-brain-flow.lovable.app/integrations/callback";
+      const redirectUri = "https://erp.rebar.shop/integrations/callback";
 
       // Route to the correct edge function based on integration
       const metaIntegrations = ["facebook", "instagram"];
