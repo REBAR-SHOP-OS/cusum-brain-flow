@@ -24,7 +24,6 @@ const defaultAutomations: Automation[] = [
     enabled: true,
     color: "purple",
     icon: "social",
-    beta: true,
     route: "/social-media-manager",
   },
   {
@@ -34,7 +33,6 @@ const defaultAutomations: Automation[] = [
     enabled: true,
     color: "blue",
     icon: "inbox",
-    beta: true,
     route: "/inbox",
   },
   {
@@ -44,7 +42,6 @@ const defaultAutomations: Automation[] = [
     enabled: true,
     color: "gold",
     icon: "summary",
-    beta: true,
     route: "/daily-summarizer",
   },
   {
@@ -54,7 +51,6 @@ const defaultAutomations: Automation[] = [
     enabled: true,
     color: "blue",
     icon: "comment",
-    beta: true,
     route: "/facebook-commenter",
   },
 ];
