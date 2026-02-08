@@ -11,6 +11,8 @@ import { format } from "date-fns";
 import { useSocialPosts, type SocialPost } from "@/hooks/useSocialPosts";
 import { ImageGeneratorDialog } from "./ImageGeneratorDialog";
 import { VideoGeneratorDialog } from "./VideoGeneratorDialog";
+import { uploadSocialMediaAsset } from "@/lib/socialMediaStorage";
+import { useToast } from "@/hooks/use-toast";
 
 interface PostReviewPanelProps {
   post: SocialPost | null;
@@ -29,6 +31,7 @@ export function PostReviewPanel({
 }: PostReviewPanelProps) {
   const { updatePost, deletePost } = useSocialPosts();
   const { publishPost, publishing } = usePublishPost();
+  const { toast } = useToast();
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState("");
   const [editContent, setEditContent] = useState("");
@@ -37,6 +40,21 @@ export function PostReviewPanel({
   const [deleting, setDeleting] = useState(false);
   const [showImageGen, setShowImageGen] = useState(false);
   const [showVideoGen, setShowVideoGen] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  const handleMediaReady = async (tempUrl: string, type: "image" | "video") => {
+    setUploading(true);
+    try {
+      const permanentUrl = await uploadSocialMediaAsset(tempUrl, type);
+      updatePost.mutate({ id: post.id, image_url: permanentUrl });
+      toast({ title: `${type === "image" ? "Image" : "Video"} attached`, description: "Saved to your post permanently." });
+    } catch (err: any) {
+      console.error("Upload error:", err);
+      toast({ title: "Upload failed", description: err?.message || "Could not save media", variant: "destructive" });
+    } finally {
+      setUploading(false);
+    }
+  };
 
   if (!post) return null;
 
@@ -87,7 +105,21 @@ export function PostReviewPanel({
           {/* Preview Image / Generate Visual */}
           {post.image_url ? (
             <div className="relative rounded-lg overflow-hidden bg-muted aspect-square">
-              <img src={post.image_url} alt="Post preview" className="w-full h-full object-cover" />
+              {post.image_url.endsWith(".mp4") ? (
+                <video src={post.image_url} controls className="w-full h-full object-cover" />
+              ) : (
+                <img src={post.image_url} alt="Post preview" className="w-full h-full object-cover" />
+              )}
+            </div>
+          ) : uploading ? (
+            <div className="rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 p-6 text-center space-y-3">
+              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
+                <Loader2 className="w-6 h-6 text-primary animate-spin" />
+              </div>
+              <div>
+                <p className="text-sm font-medium">Uploading media…</p>
+                <p className="text-xs text-muted-foreground">Saving to permanent storage</p>
+              </div>
             </div>
           ) : (
             <div className="rounded-lg border-2 border-dashed border-muted-foreground/20 bg-muted/30 p-6 text-center space-y-3">
@@ -253,16 +285,16 @@ export function PostReviewPanel({
       open={showImageGen}
       onOpenChange={setShowImageGen}
       onImageReady={(url) => {
-        updatePost.mutate({ id: post.id, image_url: url });
         setShowImageGen(false);
+        handleMediaReady(url, "image");
       }}
     />
     <VideoGeneratorDialog
       open={showVideoGen}
       onOpenChange={setShowVideoGen}
       onVideoReady={(url) => {
-        updatePost.mutate({ id: post.id, image_url: url });
         setShowVideoGen(false);
+        handleMediaReady(url, "video");
       }}
     />
     </>

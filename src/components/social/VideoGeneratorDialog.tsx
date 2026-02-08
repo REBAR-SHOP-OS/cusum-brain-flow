@@ -201,12 +201,15 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
     setError(null);
     setVideoUrl(null);
 
+    // Auto-inject branding: include company logo reference
+    const brandedPrompt = `${prompt.trim()}. The video should feature a subtle gold circular coin logo watermark with a blue geometric "G" symbol in the bottom-right corner throughout.`;
+
     try {
       const { data, error: fnError } = await supabase.functions.invoke("generate-video", {
         body: {
           action: "generate",
           provider: currentModel.provider,
-          prompt: prompt.trim(),
+          prompt: brandedPrompt,
           duration: parseInt(duration),
           model: currentModel.id === "sora-2-pro" ? "sora-2-pro" : "sora-2",
         },
