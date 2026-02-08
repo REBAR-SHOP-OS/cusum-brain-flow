@@ -24,6 +24,7 @@ interface PipelineColumnProps {
   onDragEnd: () => void;
   onEdit: (lead: Lead) => void;
   onDelete: (id: string) => void;
+  onLeadClick: (lead: LeadWithCustomer) => void;
 }
 
 export function PipelineColumn({
@@ -37,6 +38,7 @@ export function PipelineColumn({
   onDragEnd,
   onEdit,
   onDelete,
+  onLeadClick,
 }: PipelineColumnProps) {
   const totalValue = leads.reduce((sum, lead) => sum + (lead.expected_value || 0), 0);
 
@@ -81,6 +83,7 @@ export function PipelineColumn({
               onDragEnd={onDragEnd}
               onEdit={onEdit}
               onDelete={onDelete}
+              onClick={onLeadClick}
             />
           ))
         )}

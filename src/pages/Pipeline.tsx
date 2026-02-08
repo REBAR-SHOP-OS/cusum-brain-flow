@@ -3,13 +3,16 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, DollarSign, Mail, Loader2 } from "lucide-react";
+import { Plus, Search, Mail, Loader2 } from "lucide-react";
 import { PipelineBoard } from "@/components/pipeline/PipelineBoard";
+import { PipelineAnalytics } from "@/components/pipeline/PipelineAnalytics";
 import { LeadFormModal } from "@/components/pipeline/LeadFormModal";
+import { LeadDetailDrawer } from "@/components/pipeline/LeadDetailDrawer";
 import { useToast } from "@/hooks/use-toast";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Lead = Tables<"leads">;
+type LeadWithCustomer = Lead & { customers: { name: string; company_name: string | null } | null };
 
 // Pipeline stages from Odoo analysis
 export const PIPELINE_STAGES = [
@@ -33,6 +36,8 @@ export default function Pipeline() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
+  const [selectedLead, setSelectedLead] = useState<LeadWithCustomer | null>(null);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isScanningRfq, setIsScanningRfq] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -51,16 +56,13 @@ export default function Pipeline() {
 
       const { data, error } = await query;
       if (error) throw error;
-      return data as (Lead & { customers: { name: string; company_name: string | null } | null })[];
+      return data as LeadWithCustomer[];
     },
   });
 
   const updateStageMutation = useMutation({
     mutationFn: async ({ id, stage }: { id: string; stage: string }) => {
-      const { error } = await supabase
-        .from("leads")
-        .update({ stage })
-        .eq("id", id);
+      const { error } = await supabase.from("leads").update({ stage }).eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -85,18 +87,12 @@ export default function Pipeline() {
     },
   });
 
-  // Group leads by stage
   const leadsByStage = useMemo(() => {
-    const grouped: Record<string, typeof leads> = {};
+    const grouped: Record<string, LeadWithCustomer[]> = {};
     PIPELINE_STAGES.forEach((stage) => {
       grouped[stage.id] = leads.filter((lead) => lead.stage === stage.id);
     });
     return grouped;
-  }, [leads]);
-
-  // Calculate pipeline totals
-  const pipelineTotal = useMemo(() => {
-    return leads.reduce((sum, lead) => sum + (lead.expected_value || 0), 0);
   }, [leads]);
 
   const handleEdit = (lead: Lead) => {
@@ -117,6 +113,15 @@ export default function Pipeline() {
 
   const handleStageChange = (leadId: string, newStage: string) => {
     updateStageMutation.mutate({ id: leadId, stage: newStage });
+    // Update selected lead in drawer if open
+    if (selectedLead?.id === leadId) {
+      setSelectedLead((prev) => prev ? { ...prev, stage: newStage } : null);
+    }
+  };
+
+  const handleLeadClick = (lead: LeadWithCustomer) => {
+    setSelectedLead(lead);
+    setIsDetailOpen(true);
   };
 
   const handleScanRfq = async () => {
@@ -134,7 +139,7 @@ export default function Pipeline() {
       } else {
         toast({
           title: "No new leads found",
-          description: `Scanned ${data.total} emails to @rebar.shop — ${data.prefiltered || 0} system emails skipped, ${data.filtered} filtered by AI, ${data.skipped} already processed`,
+          description: `Scanned ${data.total} emails — ${data.prefiltered || 0} system, ${data.filtered} filtered, ${data.skipped} already processed`,
         });
       }
     } catch (err) {
@@ -153,14 +158,14 @@ export default function Pipeline() {
     <div className="flex flex-col h-full">
       {/* Header */}
       <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-border shrink-0 gap-3 sm:gap-0">
-        <div>
-          <h1 className="text-xl font-semibold">Pipeline</h1>
-          <p className="text-sm text-muted-foreground flex items-center gap-2">
-            {leads.length} lead{leads.length !== 1 ? "s" : ""}
-            <span className="mx-1">•</span>
-            <DollarSign className="w-3 h-3" />
-            {pipelineTotal.toLocaleString()}
-          </p>
+        <div className="flex items-center gap-4 flex-wrap">
+          <div>
+            <h1 className="text-xl font-semibold">Pipeline</h1>
+            <p className="text-sm text-muted-foreground">
+              {leads.length} lead{leads.length !== 1 ? "s" : ""}
+            </p>
+          </div>
+          <PipelineAnalytics leads={leads} />
         </div>
         <div className="flex items-center gap-3 w-full sm:w-auto">
           <div className="relative flex-1 sm:flex-initial sm:w-48 lg:w-64">
@@ -198,6 +203,7 @@ export default function Pipeline() {
           onStageChange={handleStageChange}
           onEdit={handleEdit}
           onDelete={handleDelete}
+          onLeadClick={handleLeadClick}
         />
       </div>
 
@@ -206,6 +212,16 @@ export default function Pipeline() {
         open={isFormOpen}
         onOpenChange={handleFormClose}
         lead={editingLead}
+      />
+
+      {/* Detail Drawer */}
+      <LeadDetailDrawer
+        lead={selectedLead}
+        open={isDetailOpen}
+        onOpenChange={setIsDetailOpen}
+        onEdit={handleEdit}
+        onDelete={handleDelete}
+        onStageChange={handleStageChange}
       />
     </div>
   );
