@@ -36,7 +36,7 @@ export function AppSidebar() {
         { name: "Dashboard", href: "/home", icon: Home, tourId: "nav-dashboard" },
         { name: "Inbox", href: "/inbox", icon: Inbox, badge: unreadCount || undefined, tourId: "nav-inbox" },
         { name: "Tasks", href: "/tasks", icon: CheckSquare, tourId: "nav-tasks" },
-        { name: "Calls", href: "/phonecalls", icon: Phone, tourId: "nav-calls" },
+        
       ],
     },
     {
