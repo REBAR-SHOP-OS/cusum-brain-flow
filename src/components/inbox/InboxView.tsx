@@ -19,10 +19,29 @@ import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 
 // ─── Categorization ────────────────────────────────────────────────
-function categorizeEmail(from: string, subject: string, preview: string): { label: string; labelColor: string; priority: number } {
+function categorizeCommunication(
+  from: string,
+  subject: string,
+  preview: string,
+  type: "email" | "call" | "sms"
+): { label: string; labelColor: string; priority: number } {
   const fromLower = from.toLowerCase();
   const subjectLower = (subject || "").toLowerCase();
+  const previewLower = (preview || "").toLowerCase();
 
+  // Calls & SMS get priority categorization
+  if (type === "call") {
+    if (subjectLower.includes("missed")) return { label: "Urgent", labelColor: "bg-red-500", priority: 0 };
+    return { label: "To Respond", labelColor: "bg-red-400", priority: 1 };
+  }
+  if (type === "sms") {
+    if (subjectLower.includes("urgent") || previewLower.includes("urgent") || previewLower.includes("asap")) {
+      return { label: "Urgent", labelColor: "bg-red-500", priority: 0 };
+    }
+    return { label: "To Respond", labelColor: "bg-red-400", priority: 1 };
+  }
+
+  // Email categorization
   if (fromLower.includes("mailer-daemon") || fromLower.includes("postmaster") || subjectLower.includes("delivery status")) {
     return { label: "Notification", labelColor: "bg-cyan-400", priority: 4 };
   }
@@ -81,7 +100,7 @@ interface InboxViewProps {
 export function InboxView({ connectedEmail }: InboxViewProps) {
   const { user } = useAuth();
   const userEmail = connectedEmail || user?.email || "unknown";
-  const { communications, loading, sync } = useCommunications({ typeFilter: "email" });
+  const { communications, loading, sync } = useCommunications();
   const [selectedEmail, setSelectedEmail] = useState<InboxEmail | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -216,19 +235,29 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
   };
 
   // Map communications to InboxEmail format
-  const allEmails: (InboxEmail & { priority: number })[] = useMemo(() => {
+  const allEmails: (InboxEmail & { priority: number; commType: "email" | "call" | "sms" })[] = useMemo(() => {
     return communications.map((comm) => {
-      const category = categorizeEmail(comm.from, comm.subject || "", comm.preview || "");
+      const commType: "email" | "call" | "sms" = comm.type;
+      const category = categorizeCommunication(comm.from, comm.subject || "", comm.preview || "", commType);
       const meta = comm.metadata as Record<string, unknown> | null;
       const fullBody = (meta?.body as string) || comm.preview || "";
       const receivedDate = comm.receivedAt ? new Date(comm.receivedAt) : null;
+
+      // Build display subject for calls/SMS
+      let displaySubject = comm.subject || "(no subject)";
+      if (commType === "call") {
+        const duration = meta?.duration as string | undefined;
+        displaySubject = `${comm.direction === "inbound" ? "Incoming" : "Outgoing"} Call${duration ? ` (${duration})` : ""}`;
+      } else if (commType === "sms") {
+        displaySubject = comm.preview || "SMS message";
+      }
 
       return {
         id: comm.id,
         sender: extractSenderName(comm.from),
         senderEmail: extractEmail(comm.from),
         toAddress: comm.to,
-        subject: comm.subject || "(no subject)",
+        subject: displaySubject,
         preview: comm.preview || "",
         body: fullBody,
         time: receivedDate ? format(receivedDate, "h:mm a") : "",
@@ -239,6 +268,7 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
         threadId: comm.threadId || undefined,
         sourceId: comm.sourceId,
         priority: category.priority,
+        commType,
       };
     });
   }, [communications]);
