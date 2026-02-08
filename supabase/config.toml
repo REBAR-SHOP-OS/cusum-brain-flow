@@ -80,3 +80,6 @@ verify_jwt = false
 
 [functions.ringcentral-oauth]
 verify_jwt = false
+
+[functions.process-rfq-emails]
+verify_jwt = false

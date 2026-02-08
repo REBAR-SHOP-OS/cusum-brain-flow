@@ -1667,6 +1667,7 @@ export type Database = {
           probability: number | null
           quote_id: string | null
           source: string | null
+          source_email_id: string | null
           stage: string
           title: string
           updated_at: string
@@ -1686,6 +1687,7 @@ export type Database = {
           probability?: number | null
           quote_id?: string | null
           source?: string | null
+          source_email_id?: string | null
           stage?: string
           title: string
           updated_at?: string
@@ -1705,6 +1707,7 @@ export type Database = {
           probability?: number | null
           quote_id?: string | null
           source?: string | null
+          source_email_id?: string | null
           stage?: string
           title?: string
           updated_at?: string
