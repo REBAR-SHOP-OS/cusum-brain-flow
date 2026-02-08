@@ -127,6 +127,22 @@ async function getAccessTokenForUser(userId: string, clientIp: string): Promise<
   return data.access_token;
 }
 
+interface GmailAttachment {
+  filename: string;
+  mimeType: string;
+  size: number;
+  attachmentId: string;
+  partId: string;
+}
+
+interface GmailPart {
+  partId?: string;
+  mimeType: string;
+  filename?: string;
+  body?: { data?: string; size?: number; attachmentId?: string };
+  parts?: GmailPart[];
+}
+
 interface GmailMessage {
   id: string;
   threadId: string;
@@ -135,7 +151,7 @@ interface GmailMessage {
   payload: {
     headers: Array<{ name: string; value: string }>;
     body?: { data?: string };
-    parts?: Array<{ mimeType: string; body?: { data?: string } }>;
+    parts?: GmailPart[];
   };
   internalDate: string;
 }
@@ -172,6 +188,29 @@ function getBodyContent(message: GmailMessage): string {
     return decodeBase64Url(textPart.body.data);
   }
   return message.snippet;
+}
+
+function extractAttachments(payload: GmailMessage["payload"]): GmailAttachment[] {
+  const attachments: GmailAttachment[] = [];
+
+  function walkParts(parts?: GmailPart[]) {
+    if (!parts) return;
+    for (const part of parts) {
+      if (part.filename && part.filename.length > 0 && part.body?.attachmentId) {
+        attachments.push({
+          filename: part.filename,
+          mimeType: part.mimeType,
+          size: part.body.size || 0,
+          attachmentId: part.body.attachmentId,
+          partId: part.partId || "",
+        });
+      }
+      if (part.parts) walkParts(part.parts);
+    }
+  }
+
+  walkParts(payload.parts);
+  return attachments;
 }
 
 serve(async (req) => {
@@ -244,6 +283,8 @@ serve(async (req) => {
         const msgData: GmailMessage = await msgResponse.json();
         const headers = msgData.payload.headers;
 
+        const attachments = extractAttachments(msgData.payload);
+
         return {
           id: msgData.id,
           threadId: msgData.threadId,
@@ -255,6 +296,7 @@ serve(async (req) => {
           body: getBodyContent(msgData),
           internalDate: parseInt(msgData.internalDate),
           isUnread: msgData.labelIds?.includes("UNREAD") || false,
+          attachments,
         };
       })
     );
@@ -298,7 +340,18 @@ serve(async (req) => {
           received_at: new Date(msg.internalDate).toISOString(),
           direction: "inbound",
           status: msg.isUnread ? "unread" : "read",
-          metadata: { body: msg.body, date: msg.date },
+          metadata: {
+            body: msg.body,
+            date: msg.date,
+            ...(msg.attachments && msg.attachments.length > 0 ? {
+              attachments: msg.attachments.map(a => ({
+                filename: a.filename,
+                mimeType: a.mimeType,
+                size: a.size,
+                attachmentId: a.attachmentId,
+              })),
+            } : {}),
+          },
           user_id: userId,
           company_id: companyId,
         }, {
