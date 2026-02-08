@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { RefreshCw, Sparkles, Calendar, MapPin, Phone, Globe, Trash2, Pencil, Loader2, Send } from "lucide-react";
+import { RefreshCw, Sparkles, Calendar, MapPin, Phone, Globe, Trash2, Pencil, Loader2, Send, ImageIcon, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { usePublishPost } from "@/hooks/usePublishPost";
 import { Textarea } from "@/components/ui/textarea";
@@ -9,6 +9,8 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format } from "date-fns";
 import { useSocialPosts, type SocialPost } from "@/hooks/useSocialPosts";
+import { ImageGeneratorDialog } from "./ImageGeneratorDialog";
+import { VideoGeneratorDialog } from "./VideoGeneratorDialog";
 
 interface PostReviewPanelProps {
   post: SocialPost | null;
@@ -33,6 +35,8 @@ export function PostReviewPanel({
   const [editHashtags, setEditHashtags] = useState("");
   const [editPlatform, setEditPlatform] = useState("");
   const [deleting, setDeleting] = useState(false);
+  const [showImageGen, setShowImageGen] = useState(false);
+  const [showVideoGen, setShowVideoGen] = useState(false);
 
   if (!post) return null;
 
@@ -69,6 +73,7 @@ export function PostReviewPanel({
   };
 
   return (
+    <>
     <Sheet open={!!post} onOpenChange={(open) => { if (!open) { setEditing(false); onClose(); } }}>
       <SheetContent className="w-[400px] sm:w-[450px] p-0 flex flex-col">
         <SheetHeader className="p-4 border-b">
@@ -79,10 +84,40 @@ export function PostReviewPanel({
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {/* Preview Image */}
-          {post.image_url && (
+          {/* Preview Image / Generate Visual */}
+          {post.image_url ? (
             <div className="relative rounded-lg overflow-hidden bg-muted aspect-square">
               <img src={post.image_url} alt="Post preview" className="w-full h-full object-cover" />
+            </div>
+          ) : (
+            <div className="rounded-lg border-2 border-dashed border-muted-foreground/20 bg-muted/30 p-6 text-center space-y-3">
+              <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mx-auto">
+                <ImageIcon className="w-6 h-6 text-muted-foreground" />
+              </div>
+              <div>
+                <p className="text-sm font-medium">No visual attached</p>
+                <p className="text-xs text-muted-foreground">Generate an image or video for this post</p>
+              </div>
+              <div className="flex gap-2 justify-center">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => setShowImageGen(true)}
+                >
+                  <ImageIcon className="w-3.5 h-3.5" />
+                  Generate Image
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => setShowVideoGen(true)}
+                >
+                  <Video className="w-3.5 h-3.5" />
+                  Generate Video
+                </Button>
+              </div>
             </div>
           )}
 
@@ -212,5 +247,24 @@ export function PostReviewPanel({
         )}
       </SheetContent>
     </Sheet>
+
+    {/* Image & Video Generators */}
+    <ImageGeneratorDialog
+      open={showImageGen}
+      onOpenChange={setShowImageGen}
+      onImageReady={(url) => {
+        updatePost.mutate({ id: post.id, image_url: url });
+        setShowImageGen(false);
+      }}
+    />
+    <VideoGeneratorDialog
+      open={showVideoGen}
+      onOpenChange={setShowVideoGen}
+      onVideoReady={(url) => {
+        updatePost.mutate({ id: post.id, image_url: url });
+        setShowVideoGen(false);
+      }}
+    />
+    </>
   );
 }
