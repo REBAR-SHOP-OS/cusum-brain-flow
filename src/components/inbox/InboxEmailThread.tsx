@@ -4,6 +4,7 @@ import { FileText, Image, File, ExternalLink, Mail, Phone, ArrowUpRight, ArrowDo
 import { cn } from "@/lib/utils";
 import { format, isToday, isYesterday, isSameDay } from "date-fns";
 import type { Communication } from "@/hooks/useCommunications";
+import { InlineCallSummary } from "./InlineCallSummary";
 
 interface ThreadEntry {
   id: string;
@@ -16,6 +17,11 @@ interface ThreadEntry {
   date: Date;
   type: "email" | "call" | "sms";
   attachments: { name: string; url: string; type: string }[];
+  // Call-specific fields
+  duration?: number;
+  callResult?: string;
+  recordingUri?: string;
+  hasRecording?: boolean;
 }
 
 interface InboxEmailThreadProps {
@@ -171,6 +177,11 @@ export function InboxEmailThread({ communications, currentEmailId }: InboxEmailT
         date: new Date(comm.receivedAt),
         type: comm.type,
         attachments: extractAttachments(fullBody),
+        // Call metadata
+        duration: meta?.duration as number | undefined,
+        callResult: meta?.result as string | undefined,
+        recordingUri: meta?.recording_uri as string | undefined,
+        hasRecording: !!meta?.recording_id,
       };
     });
 
@@ -267,44 +278,62 @@ export function InboxEmailThread({ communications, currentEmailId }: InboxEmailT
                       <p className="text-xs font-medium text-muted-foreground mt-0.5">{entry.subject}</p>
                     )}
 
-                    {/* Body */}
-                    <div className="mt-2 rounded-lg border border-border overflow-hidden">
-                      <div
-                        className="p-3 bg-white text-zinc-900 text-sm [&_a]:text-blue-600 [&_a]:underline [&_img]:max-w-full [&_img]:h-auto [&_table]:border-collapse [&_td]:p-1"
-                        style={{ lineHeight: "1.5" }}
-                        dangerouslySetInnerHTML={{
-                          __html: DOMPurify.sanitize(
-                            isPlainText(entry.body) ? plainTextToHtml(entry.body) : entry.body,
-                            {
-                              ALLOWED_TAGS: ["p","br","strong","em","u","a","ul","ol","li","blockquote","div","span","h1","h2","h3","h4","h5","h6","img","table","thead","tbody","tr","td","th","hr","b","i","font","center","pre","code"],
-                              ALLOWED_ATTR: ["href","target","rel","src","alt","class","style","width","height","border","cellpadding","cellspacing","align","valign","color","bgcolor","colspan","rowspan"],
-                              FORBID_TAGS: ["script","iframe","object","embed","form"],
-                              FORBID_ATTR: ["onerror","onload","onclick","onmouseover"],
-                            }
-                          ),
-                        }}
-                      />
-                    </div>
-
-                    {/* Attachments */}
-                    {entry.attachments.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 mt-2">
-                        {entry.attachments.map((att, ai) => (
-                          <a
-                            key={ai}
-                            href={att.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className={cn(
-                              "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs transition-colors cursor-pointer",
-                              getAttachmentBg(att.type)
-                            )}
-                          >
-                            {getAttachmentIcon(att.type)}
-                            <span className="max-w-[160px] truncate text-foreground">{att.name}</span>
-                          </a>
-                        ))}
+                    {/* Body — branch by type */}
+                    {entry.type === "call" ? (
+                      <div className="mt-2">
+                        <InlineCallSummary
+                          direction={entry.direction}
+                          fromName={entry.from}
+                          toName={extractSenderName(entry.to)}
+                          duration={entry.duration}
+                          result={entry.callResult}
+                          recordingUri={entry.recordingUri}
+                          hasRecording={!!entry.hasRecording}
+                          date={format(entry.date, "PPp")}
+                        />
                       </div>
+                    ) : (
+                      <>
+                        {/* Email / SMS Body */}
+                        <div className="mt-2 rounded-lg border border-border overflow-hidden">
+                          <div
+                            className="p-3 bg-white text-zinc-900 text-sm [&_a]:text-blue-600 [&_a]:underline [&_img]:max-w-full [&_img]:h-auto [&_table]:border-collapse [&_td]:p-1"
+                            style={{ lineHeight: "1.5" }}
+                            dangerouslySetInnerHTML={{
+                              __html: DOMPurify.sanitize(
+                                isPlainText(entry.body) ? plainTextToHtml(entry.body) : entry.body,
+                                {
+                                  ALLOWED_TAGS: ["p","br","strong","em","u","a","ul","ol","li","blockquote","div","span","h1","h2","h3","h4","h5","h6","img","table","thead","tbody","tr","td","th","hr","b","i","font","center","pre","code"],
+                                  ALLOWED_ATTR: ["href","target","rel","src","alt","class","style","width","height","border","cellpadding","cellspacing","align","valign","color","bgcolor","colspan","rowspan"],
+                                  FORBID_TAGS: ["script","iframe","object","embed","form"],
+                                  FORBID_ATTR: ["onerror","onload","onclick","onmouseover"],
+                                }
+                              ),
+                            }}
+                          />
+                        </div>
+
+                        {/* Attachments */}
+                        {entry.attachments.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 mt-2">
+                            {entry.attachments.map((att, ai) => (
+                              <a
+                                key={ai}
+                                href={att.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className={cn(
+                                  "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs transition-colors cursor-pointer",
+                                  getAttachmentBg(att.type)
+                                )}
+                              >
+                                {getAttachmentIcon(att.type)}
+                                <span className="max-w-[160px] truncate text-foreground">{att.name}</span>
+                              </a>
+                            ))}
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>
