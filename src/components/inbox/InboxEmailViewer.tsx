@@ -72,6 +72,35 @@ function getAttachmentBg(type: string) {
   }
 }
 
+/** Detect plain text (no HTML tags) */
+function isPlainText(str: string): boolean {
+  return !/<\s*(div|p|br|table|tr|td|span|a |img |h[1-6]|ul|ol|li|blockquote|strong|em|b |i )[^>]*>/i.test(str);
+}
+
+/** Convert plain text email to presentable HTML */
+function plainTextToHtml(text: string): string {
+  let html = text;
+  html = html.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+  // Collect numbered link refs [N] url
+  const linkMap = new Map<string, string>();
+  html = html.replace(/\[(\d+)\]\s*(https?:\/\/[^\s]+)/g, (_, num, url) => {
+    linkMap.set(num, url);
+    return "";
+  });
+  linkMap.forEach((url, num) => {
+    html = html.replace(new RegExp(`\\[${num}\\]`, "g"), `<a href="${url}" target="_blank" rel="noopener noreferrer">[${num}]</a>`);
+  });
+
+  html = html.replace(/\*([^*]+)\*/g, "<strong>$1</strong>");
+  html = html.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+  html = html.replace(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g, '<a href="mailto:$1">$1</a>');
+  html = html.replace(/\r?\n/g, "<br>");
+  html = html.replace(/(<br>){3,}/g, "<br><br>");
+  html = html.replace(/(<br>\s*)+$/, "");
+  return html;
+}
+
 export function InboxEmailViewer({ email, onClose }: InboxEmailViewerProps) {
   const [replyMode, setReplyMode] = useState<ReplyMode>(null);
   const [drafting, setDrafting] = useState(false);
@@ -176,12 +205,17 @@ export function InboxEmailViewer({ email, onClose }: InboxEmailViewerProps) {
               className="p-4 bg-white text-zinc-900 [&_a]:text-blue-600 [&_a]:underline [&_img]:max-w-full [&_img]:h-auto [&_table]:border-collapse [&_td]:p-1 [&_th]:p-1"
               style={{ fontSize: '14px', lineHeight: '1.6' }}
               dangerouslySetInnerHTML={{
-                __html: DOMPurify.sanitize(email.body || email.preview || "", {
-                  ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'u', 'a', 'ul', 'ol', 'li', 'blockquote', 'div', 'span', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'img', 'table', 'thead', 'tbody', 'tr', 'td', 'th', 'hr', 'b', 'i', 'font', 'center', 'pre', 'code'],
-                  ALLOWED_ATTR: ['href', 'target', 'rel', 'src', 'alt', 'class', 'style', 'width', 'height', 'border', 'cellpadding', 'cellspacing', 'align', 'valign', 'color', 'bgcolor', 'colspan', 'rowspan'],
-                  FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form'],
-                  FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover']
-                })
+                __html: DOMPurify.sanitize(
+                  isPlainText(email.body || email.preview || "") 
+                    ? plainTextToHtml(email.body || email.preview || "")
+                    : (email.body || email.preview || ""),
+                  {
+                    ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'u', 'a', 'ul', 'ol', 'li', 'blockquote', 'div', 'span', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'img', 'table', 'thead', 'tbody', 'tr', 'td', 'th', 'hr', 'b', 'i', 'font', 'center', 'pre', 'code'],
+                    ALLOWED_ATTR: ['href', 'target', 'rel', 'src', 'alt', 'class', 'style', 'width', 'height', 'border', 'cellpadding', 'cellspacing', 'align', 'valign', 'color', 'bgcolor', 'colspan', 'rowspan'],
+                    FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form'],
+                    FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover']
+                  }
+                )
               }}
             />
           </div>
