@@ -17,16 +17,74 @@ interface VideoGeneratorDialogProps {
 
 type Status = "idle" | "submitting" | "processing" | "completed" | "failed";
 
+type Provider = "veo" | "sora";
+
+interface ModelOption {
+  id: string;
+  provider: Provider;
+  label: string;
+  description: string;
+  pricing: string;
+  maxDuration: number;
+  durationOptions: { value: string; label: string }[];
+}
+
+const modelOptions: ModelOption[] = [
+  {
+    id: "veo-3",
+    provider: "veo",
+    label: "Google Veo 3",
+    description: "High-quality cinematic video with native audio",
+    pricing: "$0.75/sec",
+    maxDuration: 8,
+    durationOptions: [
+      { value: "5", label: "5 seconds" },
+      { value: "8", label: "8 seconds" },
+    ],
+  },
+  {
+    id: "sora-2",
+    provider: "sora",
+    label: "OpenAI Sora 2",
+    description: "Fast iteration, great for social content",
+    pricing: "Usage-based",
+    maxDuration: 20,
+    durationOptions: [
+      { value: "5", label: "5 seconds" },
+      { value: "10", label: "10 seconds" },
+      { value: "15", label: "15 seconds" },
+      { value: "20", label: "20 seconds" },
+    ],
+  },
+  {
+    id: "sora-2-pro",
+    provider: "sora",
+    label: "OpenAI Sora 2 Pro",
+    description: "Production-quality, highest fidelity",
+    pricing: "Premium",
+    maxDuration: 20,
+    durationOptions: [
+      { value: "5", label: "5 seconds" },
+      { value: "10", label: "10 seconds" },
+      { value: "15", label: "15 seconds" },
+      { value: "20", label: "20 seconds" },
+    ],
+  },
+];
+
 export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: VideoGeneratorDialogProps) {
   const [prompt, setPrompt] = useState("");
+  const [selectedModel, setSelectedModel] = useState("veo-3");
   const [duration, setDuration] = useState("5");
   const [status, setStatus] = useState<Status>("idle");
   const [progress, setProgress] = useState(0);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const operationRef = useRef<string | null>(null);
+  const jobRef = useRef<{ id: string; provider: Provider } | null>(null);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { toast } = useToast();
+
+  const currentModel = modelOptions.find((m) => m.id === selectedModel) || modelOptions[0];
 
   const cleanup = useCallback(() => {
     if (pollTimerRef.current) {
@@ -39,28 +97,40 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
     return cleanup;
   }, [cleanup]);
 
+  // Reset duration when model changes if current duration exceeds max
+  useEffect(() => {
+    const maxDur = currentModel.maxDuration;
+    if (parseInt(duration) > maxDur) {
+      setDuration(String(maxDur));
+    }
+  }, [selectedModel]);
+
   const handleClose = () => {
-    if (status === "submitting" || status === "processing") return; // prevent closing during generation
+    if (status === "submitting" || status === "processing") return;
     cleanup();
     onOpenChange(false);
-    // Reset state after close animation
     setTimeout(() => {
       setPrompt("");
+      setSelectedModel("veo-3");
       setDuration("5");
       setStatus("idle");
       setProgress(0);
       setVideoUrl(null);
       setError(null);
-      operationRef.current = null;
+      jobRef.current = null;
     }, 300);
   };
 
   const pollForResult = useCallback(async () => {
-    if (!operationRef.current) return;
+    if (!jobRef.current) return;
 
     try {
       const { data, error: fnError } = await supabase.functions.invoke("generate-video", {
-        body: { action: "poll", operationName: operationRef.current },
+        body: {
+          action: "poll",
+          provider: jobRef.current.provider,
+          jobId: jobRef.current.id,
+        },
       });
 
       if (fnError) throw fnError;
@@ -68,7 +138,35 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
       if (data.status === "completed") {
         setStatus("completed");
         setProgress(100);
-        if (data.videoUrl) {
+
+        if (data.needsAuth && jobRef.current.provider === "sora") {
+          // For Sora, we need to proxy the download through our edge function
+          const downloadUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-video`;
+          // We'll use a blob fetch approach
+          try {
+            const dlResp = await fetch(downloadUrl, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+              },
+              body: JSON.stringify({
+                action: "download",
+                provider: "sora",
+                jobId: jobRef.current.id,
+              }),
+            });
+            if (dlResp.ok) {
+              const blob = await dlResp.blob();
+              const blobUrl = URL.createObjectURL(blob);
+              setVideoUrl(blobUrl);
+            } else {
+              setVideoUrl(data.videoUrl);
+            }
+          } catch {
+            setVideoUrl(data.videoUrl);
+          }
+        } else if (data.videoUrl) {
           setVideoUrl(data.videoUrl);
         } else {
           setError("Video generated but no URL returned.");
@@ -83,11 +181,10 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
         return;
       }
 
-      // Still processing — update progress and poll again
-      if (data.progress) {
+      // Still processing
+      if (data.progress != null) {
         setProgress(data.progress);
       } else {
-        // Simulate progress
         setProgress((prev) => Math.min(prev + 3, 90));
       }
       pollTimerRef.current = setTimeout(pollForResult, 5000);
@@ -108,7 +205,13 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
 
     try {
       const { data, error: fnError } = await supabase.functions.invoke("generate-video", {
-        body: { action: "generate", prompt: prompt.trim(), duration: parseInt(duration) },
+        body: {
+          action: "generate",
+          provider: currentModel.provider,
+          prompt: prompt.trim(),
+          duration: parseInt(duration),
+          model: currentModel.id === "sora-2-pro" ? "sora-2-pro" : "sora-2",
+        },
       });
 
       if (fnError) throw fnError;
@@ -119,10 +222,9 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
         return;
       }
 
-      operationRef.current = data.operationName;
+      jobRef.current = { id: data.jobId, provider: data.provider };
       setStatus("processing");
       setProgress(5);
-      // Start polling
       pollTimerRef.current = setTimeout(pollForResult, 5000);
     } catch (err) {
       console.error("Generate error:", err);
@@ -137,7 +239,7 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
     setProgress(0);
     setVideoUrl(null);
     setError(null);
-    operationRef.current = null;
+    jobRef.current = null;
   };
 
   const handleUseVideo = () => {
@@ -169,9 +271,47 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Prompt */}
+          {/* Idle — input form */}
           {status === "idle" && (
             <>
+              {/* Model selector */}
+              <div className="space-y-1.5">
+                <Label className="text-sm">Model</Label>
+                <div className="grid gap-2">
+                  {modelOptions.map((m) => (
+                    <button
+                      key={m.id}
+                      onClick={() => setSelectedModel(m.id)}
+                      className={`flex items-center gap-3 p-3 rounded-lg border text-left transition-colors ${
+                        selectedModel === m.id
+                          ? "border-primary bg-primary/5 ring-1 ring-primary/20"
+                          : "hover:bg-muted/50"
+                      }`}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-sm">{m.label}</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                            {m.pricing}
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5">{m.description}</p>
+                      </div>
+                      <div
+                        className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                          selectedModel === m.id ? "border-primary" : "border-muted-foreground/30"
+                        }`}
+                      >
+                        {selectedModel === m.id && (
+                          <div className="w-2 h-2 rounded-full bg-primary" />
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Prompt */}
               <div className="space-y-1.5">
                 <Label className="text-sm">Describe your video</Label>
                 <Textarea
@@ -206,13 +346,13 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="5">5 seconds</SelectItem>
-                    <SelectItem value="8">8 seconds</SelectItem>
+                    {currentModel.durationOptions.map((d) => (
+                      <SelectItem key={d.value} value={d.value}>
+                        {d.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">
-                  Veo 3 pricing: $0.75/second of generated video
-                </p>
               </div>
 
               {/* Generate button */}
@@ -222,7 +362,7 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
                 onClick={handleGenerate}
               >
                 <Sparkles className="w-4 h-4" />
-                Generate Video
+                Generate with {currentModel.label}
               </Button>
             </>
           )}
@@ -232,14 +372,14 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
             <div className="space-y-4 py-6">
               <div className="flex flex-col items-center text-center gap-3">
                 <div className="w-14 h-14 rounded-full bg-gradient-to-br from-violet-500/20 to-fuchsia-500/20 flex items-center justify-center">
-                  <Loader2 className="w-7 h-7 text-violet-500 animate-spin" />
+                  <Loader2 className="w-7 h-7 animate-spin text-primary" />
                 </div>
                 <div>
                   <p className="font-medium">
-                    {status === "submitting" ? "Submitting request…" : "Generating your video…"}
+                    {status === "submitting" ? "Submitting request…" : `Generating with ${currentModel.label}…`}
                   </p>
                   <p className="text-sm text-muted-foreground mt-1">
-                    This typically takes 1-2 minutes. Please keep this window open.
+                    This typically takes 1-3 minutes. Please keep this window open.
                   </p>
                 </div>
               </div>
@@ -253,7 +393,7 @@ export function VideoGeneratorDialog({ open, onOpenChange, onVideoReady }: Video
             <div className="space-y-4">
               <div className="flex items-center gap-2 text-emerald-600">
                 <CheckCircle2 className="w-5 h-5" />
-                <span className="font-medium">Video generated successfully!</span>
+                <span className="font-medium">Video generated with {currentModel.label}!</span>
               </div>
 
               <div className="rounded-lg overflow-hidden border bg-black">

@@ -7,24 +7,174 @@ const corsHeaders = {
 };
 
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
+const OPENAI_BASE = "https://api.openai.com/v1";
+
+// ─── Veo helpers ────────────────────────────────────────────
+
+async function veoGenerate(apiKey: string, prompt: string, duration: number) {
+  const model = "veo-3.0-generate-preview";
+  const url = `${GEMINI_BASE}/models/${model}:predictLongRunning?key=${apiKey}`;
+
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      instances: [{ prompt }],
+      parameters: {
+        sampleCount: 1,
+        durationSeconds: duration || 5,
+        aspectRatio: "16:9",
+        personGeneration: "allow_adult",
+      },
+    }),
+  });
+
+  if (!resp.ok) {
+    const errText = await resp.text();
+    console.error("Veo submit error:", resp.status, errText);
+    throw new Error(`Veo generation failed (${resp.status})`);
+  }
+
+  const data = await resp.json();
+  console.log("Veo operation created:", data.name);
+  return { jobId: data.name, provider: "veo" };
+}
+
+async function veoPoll(apiKey: string, operationName: string) {
+  const pollUrl = `${GEMINI_BASE}/${operationName}?key=${apiKey}`;
+  const resp = await fetch(pollUrl);
+
+  if (!resp.ok) {
+    const errText = await resp.text();
+    console.error("Veo poll error:", resp.status, errText);
+    throw new Error(`Veo polling failed (${resp.status})`);
+  }
+
+  const data = await resp.json();
+
+  if (data.done) {
+    const videos = data.response?.generatedSamples || data.result?.generatedSamples || [];
+    const videoUri = videos[0]?.video?.uri || null;
+
+    if (videoUri) {
+      const videoUrl = videoUri.includes("?")
+        ? `${videoUri}&key=${apiKey}`
+        : `${videoUri}?key=${apiKey}`;
+      return { status: "completed", videoUrl };
+    }
+
+    const error = data.error || data.response?.error;
+    if (error) {
+      return { status: "failed", error: error.message || "Video generation failed" };
+    }
+
+    return { status: "completed", videoUrl: null };
+  }
+
+  const metadata = data.metadata || {};
+  return { status: "processing", progress: metadata.percentComplete || null };
+}
+
+// ─── Sora helpers ───────────────────────────────────────────
+
+async function soraGenerate(apiKey: string, prompt: string, duration: number, model: string) {
+  // Sora API uses multipart/form-data via curl, but JSON also works with the REST API
+  const formData = new FormData();
+  formData.append("prompt", prompt);
+  formData.append("model", model || "sora-2");
+  formData.append("size", "1280x720");
+  formData.append("seconds", String(Math.min(duration || 5, 20)));
+
+  const resp = await fetch(`${OPENAI_BASE}/videos`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: formData,
+  });
+
+  if (!resp.ok) {
+    const errText = await resp.text();
+    console.error("Sora submit error:", resp.status, errText);
+    throw new Error(`Sora generation failed (${resp.status})`);
+  }
+
+  const data = await resp.json();
+  console.log("Sora job created:", data.id, "status:", data.status);
+  return { jobId: data.id, provider: "sora" };
+}
+
+async function soraPoll(apiKey: string, videoId: string) {
+  const resp = await fetch(`${OPENAI_BASE}/videos/${videoId}`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+  });
+
+  if (!resp.ok) {
+    const errText = await resp.text();
+    console.error("Sora poll error:", resp.status, errText);
+    throw new Error(`Sora polling failed (${resp.status})`);
+  }
+
+  const data = await resp.json();
+
+  if (data.status === "completed") {
+    // Build the download URL — client will fetch via our proxy action
+    const videoUrl = `${OPENAI_BASE}/videos/${videoId}/content`;
+    return { status: "completed", videoUrl, needsAuth: true };
+  }
+
+  if (data.status === "failed") {
+    return { status: "failed", error: data.error?.message || "Sora generation failed" };
+  }
+
+  // queued or in_progress
+  return { status: "processing", progress: data.progress || null };
+}
+
+async function soraDownload(apiKey: string, videoId: string) {
+  const resp = await fetch(`${OPENAI_BASE}/videos/${videoId}/content`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+  });
+
+  if (!resp.ok) {
+    throw new Error(`Sora download failed (${resp.status})`);
+  }
+
+  return new Response(resp.body, {
+    headers: {
+      "Content-Type": "video/mp4",
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    },
+  });
+}
+
+// ─── Main handler ───────────────────────────────────────────
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
-  if (!GEMINI_API_KEY) {
-    return new Response(
-      JSON.stringify({ error: "GEMINI_API_KEY is not configured" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-
   try {
-    const { action, prompt, operationName, duration } = await req.json();
+    const body = await req.json();
+    const { action, provider, prompt, jobId, duration, model } = body;
 
-    // Action: "generate" — submit a new video generation request
+    // Determine which API key to use
+    const isVeo = provider === "veo";
+    const apiKey = isVeo
+      ? Deno.env.get("GEMINI_API_KEY")
+      : Deno.env.get("GPT_API_KEY");
+
+    if (!apiKey) {
+      const keyName = isVeo ? "GEMINI_API_KEY" : "GPT_API_KEY";
+      return new Response(
+        JSON.stringify({ error: `${keyName} is not configured` }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ── Generate ──
     if (action === "generate") {
       if (!prompt || typeof prompt !== "string") {
         return new Response(
@@ -33,114 +183,50 @@ serve(async (req) => {
         );
       }
 
-      const model = "veo-3.0-generate-preview";
-      const url = `${GEMINI_BASE}/models/${model}:predictLongRunning?key=${GEMINI_API_KEY}`;
+      console.log(`[${provider}] Generating video for: "${prompt.slice(0, 80)}"`);
 
-      const body = {
-        instances: [{ prompt }],
-        parameters: {
-          sampleCount: 1,
-          durationSeconds: duration || 5,
-          aspectRatio: "16:9",
-          personGeneration: "allow_adult",
-        },
-      };
-
-      console.log("Submitting Veo generation request for prompt:", prompt.slice(0, 80));
-
-      const resp = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-
-      if (!resp.ok) {
-        const errText = await resp.text();
-        console.error("Veo submit error:", resp.status, errText);
-        return new Response(
-          JSON.stringify({ error: `Video generation failed (${resp.status})` }),
-          { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      const data = await resp.json();
-      console.log("Veo operation created:", data.name);
+      const result = isVeo
+        ? await veoGenerate(apiKey, prompt, duration)
+        : await soraGenerate(apiKey, prompt, duration, model);
 
       return new Response(
-        JSON.stringify({ operationName: data.name, status: "pending" }),
+        JSON.stringify({ ...result, status: "pending" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Action: "poll" — check the status of a pending operation
+    // ── Poll ──
     if (action === "poll") {
-      if (!operationName) {
+      if (!jobId) {
         return new Response(
-          JSON.stringify({ error: "operationName is required for polling" }),
+          JSON.stringify({ error: "jobId is required for polling" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      const pollUrl = `${GEMINI_BASE}/${operationName}?key=${GEMINI_API_KEY}`;
-      const resp = await fetch(pollUrl);
+      const result = isVeo
+        ? await veoPoll(apiKey, jobId)
+        : await soraPoll(apiKey, jobId);
 
-      if (!resp.ok) {
-        const errText = await resp.text();
-        console.error("Veo poll error:", resp.status, errText);
-        return new Response(
-          JSON.stringify({ error: `Polling failed (${resp.status})` }),
-          { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      const data = await resp.json();
-
-      if (data.done) {
-        // Extract video from the response
-        const videos = data.response?.generatedSamples || data.result?.generatedSamples || [];
-        const videoUri = videos[0]?.video?.uri || null;
-
-        if (videoUri) {
-          // Fetch the actual video data using the file URI
-          // The URI looks like: "https://generativelanguage.googleapis.com/v1beta/files/..."
-          const videoUrl = videoUri.includes("?") 
-            ? `${videoUri}&key=${GEMINI_API_KEY}` 
-            : `${videoUri}?key=${GEMINI_API_KEY}`;
-
-          return new Response(
-            JSON.stringify({ status: "completed", videoUrl }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-
-        // Check for errors in the response
-        const error = data.error || data.response?.error;
-        if (error) {
-          return new Response(
-            JSON.stringify({ status: "failed", error: error.message || "Video generation failed" }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-
-        return new Response(
-          JSON.stringify({ status: "completed", videoUrl: null, raw: data }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      // Still processing
-      const metadata = data.metadata || {};
       return new Response(
-        JSON.stringify({
-          status: "processing",
-          progress: metadata.percentComplete || null,
-        }),
+        JSON.stringify(result),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
+    // ── Download (Sora only — needs auth header proxy) ──
+    if (action === "download" && !isVeo) {
+      if (!jobId) {
+        return new Response(
+          JSON.stringify({ error: "jobId is required for download" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      return await soraDownload(apiKey, jobId);
+    }
+
     return new Response(
-      JSON.stringify({ error: 'Invalid action. Use "generate" or "poll".' }),
+      JSON.stringify({ error: 'Invalid action. Use "generate", "poll", or "download".' }),
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (e) {
