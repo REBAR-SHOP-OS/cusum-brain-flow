@@ -12,9 +12,11 @@ export default function Integrations() {
     integrations,
     loading,
     testing,
+    disconnecting,
     checkIntegrationStatus,
     checkAllStatuses,
     startOAuth,
+    disconnectIntegration,
     refreshStatuses,
   } = useIntegrations();
 
@@ -103,7 +105,9 @@ export default function Integrations() {
                   key={integration.id}
                   integration={integration}
                   onClick={() => handleCardClick(integration)}
+                  onDisconnect={disconnectIntegration}
                   testing={testing === integration.id}
+                  disconnecting={disconnecting === integration.id}
                 />
               ))}
             </div>
