@@ -1,11 +1,10 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { IntegrationCard, type Integration } from "@/components/integrations/IntegrationCard";
 import { IntegrationSetupDialog } from "@/components/integrations/IntegrationSetupDialog";
-
+import { ConnectDialog } from "@/components/integrations/ConnectDialog";
 import { useIntegrations } from "@/hooks/useIntegrations";
-import { useState } from "react";
 
 export default function Integrations() {
   const {
@@ -21,43 +20,47 @@ export default function Integrations() {
   } = useIntegrations();
 
   const [selectedIntegration, setSelectedIntegration] = useState<Integration | null>(null);
+  const [connectDialogIntegration, setConnectDialogIntegration] = useState<Integration | null>(null);
+  const [connecting, setConnecting] = useState(false);
+
+  const oauthIntegrations = [
+    "gmail", "google-calendar", "google-drive", "youtube",
+    "google-analytics", "google-search-console", "quickbooks",
+    "facebook", "instagram",
+  ];
 
   // Listen for OAuth success messages from popup
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type === "oauth-success") {
-        // Refresh statuses after OAuth completes
         refreshStatuses();
       }
     };
-
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
   }, [refreshStatuses]);
 
-  // Check statuses on mount
   useEffect(() => {
     checkAllStatuses();
   }, []);
 
   const handleCardClick = (integration: Integration) => {
-    const oauthIntegrations = ["gmail", "google-calendar", "google-drive", "youtube", "google-analytics", "google-search-console", "quickbooks", "facebook", "instagram"];
-    
     if (integration.status === "connected") {
-      // Test the connection
       checkIntegrationStatus(integration.id);
     } else if (oauthIntegrations.includes(integration.id)) {
-      // Start OAuth flow for OAuth integrations
-      startOAuth(integration.id);
+      // Show pre-connect dialog for OAuth integrations
+      setConnectDialogIntegration(integration);
     } else {
-      // Show manual setup dialog for other integrations
       setSelectedIntegration(integration);
     }
   };
 
-  const connected = integrations.filter((i) => i.status === "connected");
-  const needsAttention = integrations.filter((i) => i.status === "error");
-  const available = integrations.filter((i) => i.status === "available");
+  const handleOAuthConnect = async (integrationId: string) => {
+    setConnecting(true);
+    await startOAuth(integrationId);
+    setConnecting(false);
+    setConnectDialogIntegration(null);
+  };
 
   return (
     <div className="flex flex-col h-full">
@@ -74,63 +77,28 @@ export default function Integrations() {
       </header>
 
       <div className="flex-1 overflow-y-auto scrollbar-thin p-6">
-        {/* Needs Attention */}
-        {needsAttention.length > 0 && (
-          <section className="mb-8">
-            <h2 className="text-sm font-medium text-destructive mb-4 uppercase tracking-wide">
-              Needs Attention ({needsAttention.length})
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {needsAttention.map((integration) => (
-                <IntegrationCard
-                  key={integration.id}
-                  integration={integration}
-                  onClick={() => handleCardClick(integration)}
-                  testing={testing === integration.id}
-                />
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* Connected */}
-        {connected.length > 0 && (
-          <section className="mb-8">
-            <h2 className="text-sm font-medium text-muted-foreground mb-4 uppercase tracking-wide">
-              Connected ({connected.length})
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {connected.map((integration) => (
-                <IntegrationCard
-                  key={integration.id}
-                  integration={integration}
-                  onClick={() => handleCardClick(integration)}
-                  onDisconnect={disconnectIntegration}
-                  testing={testing === integration.id}
-                  disconnecting={disconnecting === integration.id}
-                />
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* Available */}
-        <section>
-          <h2 className="text-sm font-medium text-muted-foreground mb-4 uppercase tracking-wide">
-            Available ({available.length})
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {available.map((integration) => (
-              <IntegrationCard
-                key={integration.id}
-                integration={integration}
-                onClick={() => handleCardClick(integration)}
-                testing={testing === integration.id}
-              />
-            ))}
-          </div>
-        </section>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {integrations.map((integration) => (
+            <IntegrationCard
+              key={integration.id}
+              integration={integration}
+              onClick={() => handleCardClick(integration)}
+              onDisconnect={integration.status === "connected" ? disconnectIntegration : undefined}
+              testing={testing === integration.id}
+              disconnecting={disconnecting === integration.id}
+            />
+          ))}
+        </div>
       </div>
+
+      {/* Pre-connect dialog for OAuth integrations */}
+      <ConnectDialog
+        integration={connectDialogIntegration}
+        open={!!connectDialogIntegration}
+        onOpenChange={(open) => !open && setConnectDialogIntegration(null)}
+        onConnect={handleOAuthConnect}
+        connecting={connecting}
+      />
 
       {/* Setup Dialog for non-OAuth integrations */}
       <IntegrationSetupDialog
