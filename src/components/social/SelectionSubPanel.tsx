@@ -23,8 +23,9 @@ export function SelectionSubPanel({
   onSave,
   onBack,
 }: SelectionSubPanelProps) {
-  const [current, setCurrent] = useState(selected);
+const [current, setCurrent] = useState(selected);
 
+  // keep in sync if parent changes
   useEffect(() => setCurrent(selected), [selected]);
 
   return (
