@@ -14,6 +14,7 @@ const SCOPES: Record<string, string[]> = {
     "pages_show_list",
     "pages_read_engagement",
     "pages_manage_metadata",
+    "pages_manage_posts",
     "public_profile",
   ],
   instagram: [
@@ -21,6 +22,7 @@ const SCOPES: Record<string, string[]> = {
     "pages_read_engagement",
     "instagram_basic",
     "instagram_manage_comments",
+    "instagram_content_publish",
     "public_profile",
   ],
 };
