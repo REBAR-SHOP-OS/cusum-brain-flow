@@ -487,7 +487,20 @@ serve(async (req) => {
       const body = (meta?.body as string) || email.body_preview || "";
 
       try {
+        // === KEYWORD FAST-TRACK ===
+        // If subject contains clear lead keywords, force is_lead = true regardless of AI decision
+        const LEAD_KEYWORDS = /\b(quote|quotation|pricing|price|bid|tender|rfq|estimation|estimate|proposal|budget|cost|shop drawing|rebar.*order)\b/i;
+        const hasLeadKeyword = LEAD_KEYWORDS.test(subject) || LEAD_KEYWORDS.test(body.substring(0, 500));
+
         const analysis = await analyzeEmailWithAI(subject, from, body);
+
+        // Override AI decision if keywords match
+        if (!analysis.is_lead && hasLeadKeyword) {
+          console.log(`Keyword fast-track override for: "${subject}" (AI said no, keywords say yes)`);
+          analysis.is_lead = true;
+          analysis.reason = `Keyword match in subject/body (${subject}). AI originally filtered but overridden.`;
+          if (!analysis.title || analysis.title === "") analysis.title = subject;
+        }
 
         if (!analysis.is_lead) {
           filtered++;
