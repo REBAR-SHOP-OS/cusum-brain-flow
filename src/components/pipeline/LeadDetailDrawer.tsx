@@ -6,11 +6,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Building, Mail, Phone, Calendar, DollarSign, Pencil, Trash2,
   TrendingUp, Clock, User, FileText, Star, ArrowRight,
+  Paperclip, Download, Link2, File,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { PIPELINE_STAGES } from "@/pages/Pipeline";
 import { LeadTimeline } from "./LeadTimeline";
+import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Lead = Tables<"leads">;
@@ -133,10 +135,11 @@ export function LeadDetailDrawer({
         {/* Body */}
         <div className="p-6">
           <Tabs defaultValue="timeline" className="w-full">
-            <TabsList className="w-full grid grid-cols-4 mb-4">
+            <TabsList className="w-full grid grid-cols-5 mb-4">
               <TabsTrigger value="timeline">Timeline</TabsTrigger>
               <TabsTrigger value="details">Details</TabsTrigger>
-              <TabsTrigger value="financials">Financials</TabsTrigger>
+              <TabsTrigger value="files">Files</TabsTrigger>
+              <TabsTrigger value="financials">$</TabsTrigger>
               <TabsTrigger value="notes">Notes</TabsTrigger>
             </TabsList>
 
@@ -206,6 +209,10 @@ export function LeadDetailDrawer({
                   Stage {currentStageIndex + 1} of {PIPELINE_STAGES.length}
                 </p>
               </div>
+            </TabsContent>
+
+            <TabsContent value="files" className="space-y-4 mt-0">
+              <LeadFiles metadata={lead.metadata} />
             </TabsContent>
 
             <TabsContent value="financials" className="space-y-4 mt-0">

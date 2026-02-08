@@ -244,6 +244,109 @@ async function getNextLeadNumber(supabase: ReturnType<typeof createClient>): Pro
   return `S${String(maxNum + 1).padStart(5, "0")}`;
 }
 
+/**
+ * Extract download/file links from email body text.
+ * Matches Dropbox, Google Drive, OneDrive, SharePoint, WeTransfer, and generic file URLs.
+ */
+function extractFileLinks(body: string): string[] {
+  if (!body) return [];
+  const urlRegex = /https?:\/\/[^\s<>"')\]]+/gi;
+  const allUrls = body.match(urlRegex) || [];
+
+  const filePatterns = [
+    /dropbox\.com/i, /drive\.google\.com/i, /docs\.google\.com/i,
+    /onedrive\.live\.com/i, /sharepoint\.com/i, /wetransfer\.com/i,
+    /we\.tl\//i, /box\.com/i, /mediafire\.com/i,
+    /\.pdf$/i, /\.dwg$/i, /\.dxf$/i, /\.xlsx?$/i, /\.docx?$/i,
+    /\.zip$/i, /\.rar$/i, /\.png$/i, /\.jpg$/i, /\.jpeg$/i,
+  ];
+
+  return [...new Set(allUrls.filter(url =>
+    filePatterns.some(p => p.test(url))
+  ))].slice(0, 10); // cap at 10 links
+}
+
+/**
+ * Download a Gmail attachment and upload it to Supabase storage.
+ * Returns the storage path or null on failure.
+ */
+async function downloadAndStoreAttachment(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  userId: string,
+  messageId: string,
+  attachment: { filename: string; mimeType: string; attachmentId: string },
+  leadId: string,
+): Promise<{ path: string; filename: string; mimeType: string; size: number } | null> {
+  try {
+    // Get the user's Gmail access token
+    const { data: tokenRow } = await supabaseAdmin
+      .from("user_gmail_tokens")
+      .select("refresh_token")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (!tokenRow?.refresh_token) return null;
+
+    const clientId = Deno.env.get("GMAIL_CLIENT_ID");
+    const clientSecret = Deno.env.get("GMAIL_CLIENT_SECRET");
+    if (!clientId || !clientSecret) return null;
+
+    // Get fresh access token
+    const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: tokenRow.refresh_token.replace("jwt:", ""),
+        grant_type: "refresh_token",
+      }),
+    });
+    if (!tokenRes.ok) return null;
+    const { access_token } = await tokenRes.json();
+
+    // Download attachment from Gmail
+    const attRes = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}/attachments/${attachment.attachmentId}`,
+      { headers: { Authorization: `Bearer ${access_token}` } }
+    );
+    if (!attRes.ok) return null;
+    const attData = await attRes.json();
+
+    // Gmail returns base64url-encoded data
+    const base64Data = attData.data.replace(/-/g, "+").replace(/_/g, "/");
+    const binaryString = atob(base64Data);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+
+    // Upload to Supabase storage
+    const storagePath = `leads/${leadId}/${attachment.filename}`;
+    const { error: uploadError } = await supabaseAdmin.storage
+      .from("estimation-files")
+      .upload(storagePath, bytes, {
+        contentType: attachment.mimeType,
+        upsert: true,
+      });
+
+    if (uploadError) {
+      console.error("Storage upload error:", uploadError);
+      return null;
+    }
+
+    return {
+      path: storagePath,
+      filename: attachment.filename,
+      mimeType: attachment.mimeType,
+      size: bytes.length,
+    };
+  } catch (err) {
+    console.error(`Failed to download attachment ${attachment.filename}:`, err);
+    return null;
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -514,8 +617,64 @@ serve(async (req) => {
           continue;
         }
 
+        // === DOWNLOAD ATTACHMENTS & EXTRACT LINKS ===
+        if (newLead?.id) {
+          const leadFiles: Array<{ type: "attachment" | "link"; filename: string; url?: string; path?: string; mimeType?: string; size?: number }> = [];
+
+          // 1. Download Gmail attachments if any
+          const meta = email.metadata as Record<string, unknown> | null;
+          const emailAttachments = (meta?.attachments as Array<{ filename: string; mimeType: string; attachmentId: string; size?: number }>) || [];
+
+          if (emailAttachments.length > 0 && email.source_id) {
+            console.log(`Downloading ${emailAttachments.length} attachments for lead ${newLead.id}`);
+            for (const att of emailAttachments.slice(0, 5)) { // cap at 5
+              const stored = await downloadAndStoreAttachment(
+                supabaseAdmin, user.id, email.source_id, att, newLead.id
+              );
+              if (stored) {
+                leadFiles.push({
+                  type: "attachment",
+                  filename: stored.filename,
+                  path: stored.path,
+                  mimeType: stored.mimeType,
+                  size: stored.size,
+                });
+              }
+            }
+          }
+
+          // 2. Extract file/download links from body
+          const emailBody = (meta?.body as string) || email.body_preview || "";
+          const fileLinks = extractFileLinks(emailBody);
+          for (const link of fileLinks) {
+            const urlFilename = link.split("/").pop()?.split("?")[0] || "download";
+            leadFiles.push({ type: "link", filename: urlFilename, url: link });
+          }
+
+          // 3. Update lead metadata with files
+          if (leadFiles.length > 0) {
+            await supabaseAdmin
+              .from("leads")
+              .update({
+                metadata: {
+                  ...(typeof lead === "object" ? {} : {}),
+                  files: leadFiles,
+                  attachment_count: leadFiles.filter(f => f.type === "attachment").length,
+                  link_count: leadFiles.filter(f => f.type === "link").length,
+                },
+              })
+              .eq("id", newLead.id);
+            console.log(`Saved ${leadFiles.length} files/links to lead ${newLead.id}`);
+          }
+        }
+
         // === LOG TIMELINE ACTIVITY ===
         if (newLead?.id) {
+          const meta = email.metadata as Record<string, unknown> | null;
+          const emailAttachments = (meta?.attachments as Array<{ filename: string }>) || [];
+          const emailBody = (meta?.body as string) || email.body_preview || "";
+          const fileLinks = extractFileLinks(emailBody);
+
           await supabaseAdmin.from("lead_activities").insert({
             lead_id: newLead.id,
             company_id: profile.company_id,
@@ -527,6 +686,8 @@ serve(async (req) => {
               analysis.city ? `📍 Location: ${analysis.city}` : "",
               customerAction === "created" ? `🆕 New customer created automatically.` : `✅ Matched to existing customer.`,
               assignedTo ? `👤 Auto-assigned to ${assignedTo} (handles this customer).` : "",
+              emailAttachments.length > 0 ? `📎 ${emailAttachments.length} attachment(s): ${emailAttachments.map(a => a.filename).join(", ")}` : "",
+              fileLinks.length > 0 ? `🔗 ${fileLinks.length} download link(s) found` : "",
             ].filter(Boolean).join("\n"),
             created_by: "Blitz AI",
           });
