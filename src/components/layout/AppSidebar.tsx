@@ -1,7 +1,7 @@
 import { Link, useLocation } from "react-router-dom";
 import {
   Home, Inbox, CheckSquare, Kanban, Users, Factory, Package, Truck,
-  LayoutGrid, Brain, Settings, Shield, Plug,
+  LayoutGrid, Brain, Settings, Shield, Plug, DollarSign,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -43,6 +43,7 @@ export function AppSidebar() {
       items: [
         { name: "Pipeline", href: "/pipeline", icon: Kanban, roles: ["admin", "sales", "office"], tourId: "nav-pipeline" },
         { name: "Customers", href: "/customers", icon: Users, tourId: "nav-customers" },
+        { name: "Accounting", href: "/accounting", icon: DollarSign, roles: ["admin", "accounting", "office"], tourId: "nav-accounting" },
       ],
     },
     {

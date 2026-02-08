@@ -49,6 +49,7 @@ import TimeClock from "./pages/TimeClock";
 import TeamHub from "./pages/TeamHub";
 import NotFound from "./pages/NotFound";
 import ClearanceStation from "./pages/ClearanceStation";
+import AccountingWorkspace from "./pages/AccountingWorkspace";
 
 const queryClient = new QueryClient();
 
@@ -97,6 +98,9 @@ const App = () => (
                     {/* Sales */}
                     <Route path="/pipeline" element={<P><Pipeline /></P>} />
                     <Route path="/customers" element={<P><Customers /></P>} />
+
+                    {/* Accounting */}
+                    <Route path="/accounting" element={<P><AccountingWorkspace /></P>} />
 
                     {/* AI Agents */}
                     <Route path="/agent/:agentId" element={<P><AgentWorkspace /></P>} />
