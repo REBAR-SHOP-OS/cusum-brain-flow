@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Plus, Settings, ChevronLeft, ChevronRight,
@@ -43,7 +43,16 @@ export default function SocialMediaManager() {
   const { posts, isLoading, updatePost } = useSocialPosts();
 
   const [weekStart, setWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
-  const [selectedPost, setSelectedPost] = useState<SocialPost | null>(null);
+  const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
+
+  // Derive selectedPost from fresh query data so it updates after mutations
+  const selectedPost = useMemo(
+    () => (selectedPostId ? posts.find((p) => p.id === selectedPostId) ?? null : null),
+    [selectedPostId, posts]
+  );
+  const setSelectedPost = useCallback((post: SocialPost | null) => {
+    setSelectedPostId(post?.id ?? null);
+  }, []);
   const [showBrandKit, setShowBrandKit] = useState(false);
   const [showCreateContent, setShowCreateContent] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
