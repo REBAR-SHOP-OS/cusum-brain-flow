@@ -39,8 +39,6 @@ import { useQuery } from "@tanstack/react-query";
 import { useProjects } from "@/hooks/useProjects";
 import { useBarlists } from "@/hooks/useBarlists";
 import { createProject, createBarlist } from "@/lib/barlistService";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 
 type ManifestType = "delivery" | "pickup";
 
@@ -135,7 +133,7 @@ export function AIExtractView() {
       return [...custs, ...contacts];
     },
   });
-  const [customerOpen, setCustomerOpen] = useState(false);
+  
 
   const activeSession = sessions.find((s) => s.id === activeSessionId);
   const currentStepIndex = activeSession ? getStepIndex(activeSession.status) : -1;
@@ -674,42 +672,24 @@ export function AIExtractView() {
                 <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase mb-1.5 block">
                   Customer
                 </label>
-                <Popover open={customerOpen} onOpenChange={setCustomerOpen}>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" role="combobox" aria-expanded={customerOpen}
-                      className="w-full justify-between bg-card border-border font-normal text-left h-9">
-                      {customer || <span className="text-muted-foreground">Select customer...</span>}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[300px] p-0" align="start">
-                    <Command>
-                      <CommandInput placeholder="Search ERP contacts..." />
-                      <CommandList>
-                        <CommandEmpty>No contact found.</CommandEmpty>
-                        <CommandGroup heading="Customers">
-                          {erpContacts.filter(c => c.type === "customer").map((c) => (
-                            <CommandItem key={c.id} value={c.name} onSelect={(val) => {
-                              setCustomer(val);
-                              setCustomerOpen(false);
-                            }}>
-                              {c.name}
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                        <CommandGroup heading="Contacts">
-                          {erpContacts.filter(c => c.type === "contact").map((c) => (
-                            <CommandItem key={c.id} value={c.name} onSelect={(val) => {
-                              setCustomer(val);
-                              setCustomerOpen(false);
-                            }}>
-                              {c.name}
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
+                <Select value={customer} onValueChange={setCustomer}>
+                  <SelectTrigger className="bg-card border-border">
+                    <SelectValue placeholder="Select customer..." />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[300px]">
+                    {erpContacts.filter(c => c.type === "customer").map((c) => (
+                      <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
+                    ))}
+                    {erpContacts.filter(c => c.type === "contact").length > 0 && (
+                      <>
+                        <SelectItem value="__separator__" disabled>— Contacts —</SelectItem>
+                        {erpContacts.filter(c => c.type === "contact").map((c) => (
+                          <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
+                        ))}
+                      </>
+                    )}
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase mb-1.5 block">
