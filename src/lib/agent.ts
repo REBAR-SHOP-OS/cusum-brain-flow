@@ -1,6 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 
-export type AgentType = "sales" | "accounting" | "support" | "collections" | "estimation" | "social" | "bizdev" | "webbuilder" | "assistant" | "copywriting" | "talent" | "seo" | "growth";
+export type AgentType = "sales" | "accounting" | "support" | "collections" | "estimation" | "social" | "bizdev" | "webbuilder" | "assistant" | "copywriting" | "talent" | "seo" | "growth" | "legal";
 
 export interface ChatMessage {
   role: "user" | "assistant";

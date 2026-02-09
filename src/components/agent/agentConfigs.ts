@@ -56,6 +56,15 @@ export const agentConfigs: Record<string, AgentConfig> = {
     placeholder: "Ask about invoices, collections, tasks, emails...",
     capabilities: ["Check overdue invoices", "Monitor your emails", "Create tasks", "QuickBooks sync", "AR aging reports", "Draft collection emails"],
   },
+  legal: {
+    name: "Tally",
+    role: "Legal (55yr Ontario Lawyer)",
+    image: accountingHelper, // TODO: replace with dedicated legal helper image
+    agentType: "legal" as AgentType,
+    greeting: "Hello! I'm Tally, your in-house Legal counsel with 55 years of Ontario practice.",
+    placeholder: "Ask about contracts, compliance, liens, disputes...",
+    capabilities: ["Contract review", "Construction lien advice", "Ontario compliance (ESA, OHSA, WSIB)", "Dispute guidance", "Insurance review", "Regulatory questions"],
+  },
   estimating: {
     name: "Gauge",
     role: "Estimating",
