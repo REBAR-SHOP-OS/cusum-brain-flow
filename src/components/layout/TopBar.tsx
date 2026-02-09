@@ -32,7 +32,7 @@ export function TopBar() {
     <>
       <header className="h-12 shrink-0 border-b border-border bg-card flex items-center gap-2 px-3 z-30">
         {/* Logo */}
-        <img src={brandLogo} alt="RSOS" className="w-7 h-7 rounded-md object-contain" />
+        <img src={brandLogo} alt="RSOS" className="w-7 h-7 rounded-full object-contain" />
         <span className="text-xs font-bold tracking-wider text-foreground uppercase hidden sm:block mr-2">
           REBAR OS
         </span>
