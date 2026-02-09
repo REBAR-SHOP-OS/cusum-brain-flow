@@ -82,8 +82,97 @@ export function TagsExportView() {
     URL.revokeObjectURL(url);
   };
 
-  // Print tags
-  const handlePrint = () => window.print();
+  // Print tags — open dedicated print window to avoid CSS ancestor issues
+  const handlePrint = () => {
+    const tags = document.querySelectorAll('.rebar-tag');
+    if (!tags.length) return;
+
+    const printWindow = window.open('', '_blank', 'width=700,height=500');
+    if (!printWindow) return;
+
+    const tagsHtml = Array.from(tags).map(t => t.outerHTML).join('');
+    
+    printWindow.document.write(`<!DOCTYPE html>
+<html><head><title>Print Tags</title>
+<style>
+  @page { size: 6in 4in; margin: 0; padding: 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Courier New', monospace; background: #fff; color: #000; }
+  .rebar-tag {
+    width: 6in; height: 4in; border: 1px solid #000;
+    display: flex; flex-direction: column; overflow: hidden;
+    page-break-after: always; page-break-inside: avoid;
+    background: #fff; color: #000; box-sizing: border-box;
+  }
+  .rebar-tag * { color: #000 !important; border-color: #000 !important; }
+  .grid { display: grid; }
+  .grid-cols-5 { grid-template-columns: repeat(5, 1fr); }
+  .grid-cols-2 { grid-template-columns: repeat(2, 1fr); }
+  .flex { display: flex; }
+  .flex-col { flex-direction: column; }
+  .flex-1 { flex: 1; }
+  .items-center { align-items: center; }
+  .justify-center { justify-content: center; }
+  .justify-between { justify-content: space-between; }
+  .text-center { text-align: center; }
+  .font-bold { font-weight: 700; }
+  .font-black { font-weight: 900; }
+  .font-mono { font-family: 'Courier New', monospace; }
+  .text-lg { font-size: 1.125rem; }
+  .text-sm { font-size: 0.875rem; }
+  .text-xs { font-size: 0.75rem; }
+  .text-\\[8px\\] { font-size: 8px; }
+  .text-\\[9px\\] { font-size: 9px; }
+  .text-\\[10px\\] { font-size: 10px; }
+  .text-\\[11px\\] { font-size: 11px; }
+  .uppercase { text-transform: uppercase; }
+  .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .leading-tight { line-height: 1.25; }
+  .tracking-widest { letter-spacing: 0.1em; }
+  .tracking-wider { letter-spacing: 0.05em; }
+  .gap-1 { gap: 0.25rem; }
+  .gap-0\\.5 { gap: 0.125rem; }
+  .gap-\\[1px\\] { gap: 1px; }
+  .gap-x-3 { column-gap: 0.75rem; }
+  .gap-y-0\\.5 { row-gap: 0.125rem; }
+  .space-y-0\\.5 > * + * { margin-top: 0.125rem; }
+  .space-y-px > * + * { margin-top: 1px; }
+  .px-2 { padding-left: 0.5rem; padding-right: 0.5rem; }
+  .py-0\\.5 { padding-top: 0.125rem; padding-bottom: 0.125rem; }
+  .py-1 { padding-top: 0.25rem; padding-bottom: 0.25rem; }
+  .py-1\\.5 { padding-top: 0.375rem; padding-bottom: 0.375rem; }
+  .py-2 { padding-top: 0.5rem; padding-bottom: 0.5rem; }
+  .mb-1\\.5 { margin-bottom: 0.375rem; }
+  .ml-auto { margin-left: auto; }
+  .my-0\\.5 { margin-top: 0.125rem; margin-bottom: 0.125rem; }
+  .w-3 { width: 0.75rem; }
+  .w-8 { width: 2rem; }
+  .w-20 { width: 5rem; }
+  .h-8 { height: 2rem; }
+  .h-12 { height: 3rem; }
+  .min-h-0 { min-height: 0; }
+  .max-w-full { max-width: 100%; }
+  .max-h-full { max-height: 100%; }
+  .object-contain { object-fit: contain; }
+  .shrink-0 { flex-shrink: 0; }
+  .rounded-full { border-radius: 9999px; }
+  .border { border-width: 1px; border-style: solid; }
+  .border-2 { border-width: 2px; border-style: solid; }
+  .border-b { border-bottom-width: 1px; border-bottom-style: solid; }
+  .border-b-2 { border-bottom-width: 2px; border-bottom-style: solid; }
+  .border-r-2 { border-right-width: 2px; border-right-style: solid; }
+  .border-t { border-top-width: 1px; border-top-style: solid; }
+  .overflow-hidden { overflow: hidden; }
+  .bg-black { background: #000 !important; }
+  .bg-white { background: #fff !important; }
+  img { max-width: 100%; max-height: 100%; object-fit: contain; }
+</style>
+</head><body>${tagsHtml}</body></html>`);
+    
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => { printWindow.print(); printWindow.close(); }, 500);
+  };
 
   // Session selection screen
   if (!selectedSessionId) {
