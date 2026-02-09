@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   LayoutDashboard, FileText, Receipt, CreditCard, Users,
-  Landmark, ShieldCheck, Loader2, Plug, RefreshCw,
+  Landmark, ShieldCheck, Loader2, Plug, RefreshCw, Banknote,
 } from "lucide-react";
 import { useQuickBooksData } from "@/hooks/useQuickBooksData";
 import { AccountingDashboard } from "@/components/accounting/AccountingDashboard";
@@ -15,6 +15,7 @@ import { AccountingPayments } from "@/components/accounting/AccountingPayments";
 import { AccountingCustomers } from "@/components/accounting/AccountingCustomers";
 import { AccountingAccounts } from "@/components/accounting/AccountingAccounts";
 import { AccountingAudit } from "@/components/accounting/AccountingAudit";
+import { AccountingPayroll } from "@/components/accounting/AccountingPayroll";
 import { useIntegrations } from "@/hooks/useIntegrations";
 
 export default function AccountingWorkspace() {
@@ -113,6 +114,12 @@ export default function AccountingWorkspace() {
             <TabsTrigger value="accounts" className="text-xs sm:text-base h-9 sm:h-11 gap-1.5 sm:gap-2 px-3 sm:px-4 shrink-0">
               <Landmark className="w-4 h-4" /> Accounts
             </TabsTrigger>
+            <TabsTrigger value="payroll" className="text-xs sm:text-base h-9 sm:h-11 gap-1.5 sm:gap-2 px-3 sm:px-4 shrink-0">
+              <Banknote className="w-4 h-4" /> Payroll
+              {qb.employees.length > 0 && (
+                <Badge variant="outline" className="ml-0.5 text-xs">{qb.employees.length}</Badge>
+              )}
+            </TabsTrigger>
             <TabsTrigger value="audit" className="text-xs sm:text-base h-9 sm:h-11 gap-1.5 sm:gap-2 px-3 sm:px-4 shrink-0">
               <ShieldCheck className="w-4 h-4" /> AI Audit
             </TabsTrigger>
@@ -140,6 +147,9 @@ export default function AccountingWorkspace() {
           </TabsContent>
           <TabsContent value="audit">
             <AccountingAudit data={qb} />
+          </TabsContent>
+          <TabsContent value="payroll">
+            <AccountingPayroll data={qb} />
           </TabsContent>
         </div>
       </Tabs>

@@ -200,6 +200,18 @@ serve(async (req) => {
       case "void-invoice":
         return handleVoidInvoice(supabase, userId, body);
 
+      // ── Payroll ────────────────────────────────────────────────
+      case "list-employees":
+        return handleListEmployees(supabase, userId);
+      case "get-employee":
+        return handleGetEmployee(supabase, userId, body);
+      case "update-employee":
+        return handleUpdateEmployee(supabase, userId, body);
+      case "list-time-activities":
+        return handleListTimeActivities(supabase, userId);
+      case "create-payroll-correction":
+        return handleCreatePayrollCorrection(supabase, userId, body);
+
       default:
         return jsonRes({ error: `Unknown action: ${action}` }, 400);
     }
@@ -299,7 +311,7 @@ async function handleCallback(
 
 function handleGetAuthUrl(supabaseUrl: string, clientId: string, userId: string, body: Record<string, unknown>) {
   const redirectUri = `${supabaseUrl}/functions/v1/quickbooks-oauth/callback`;
-  const scope = "com.intuit.quickbooks.accounting";
+  const scope = "com.intuit.quickbooks.accounting com.intuit.quickbooks.payroll";
   const state = `${userId}|${body.returnUrl || ""}`;
 
   const authUrl = new URL(QUICKBOOKS_AUTH_URL);
@@ -877,4 +889,99 @@ async function handleVoidInvoice(supabase: ReturnType<typeof createClient>, user
   const payload = { Id: invoiceId, SyncToken: syncToken, sparse: true };
   const data = await qbFetch(config, "invoice?operation=void", { method: "POST", body: JSON.stringify(payload) });
   return jsonRes({ success: true, invoice: data.Invoice });
+}
+
+// ─── Payroll: List Employees ──────────────────────────────────────
+
+async function handleListEmployees(supabase: ReturnType<typeof createClient>, userId: string) {
+  const config = await getQBConfig(supabase, userId);
+  const data = await qbQuery(config, "Employee");
+  return jsonRes({ employees: data.QueryResponse?.Employee || [] });
+}
+
+// ─── Payroll: Get Employee ────────────────────────────────────────
+
+async function handleGetEmployee(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const { employeeId } = body as { employeeId: string };
+  if (!employeeId) throw new Error("Employee ID is required");
+
+  const data = await qbFetch(config, `employee/${employeeId}`);
+  return jsonRes({ employee: data.Employee });
+}
+
+// ─── Payroll: Update Employee ─────────────────────────────────────
+
+async function handleUpdateEmployee(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const { employeeId, updates } = body as { employeeId: string; updates: Record<string, unknown> };
+  if (!employeeId) throw new Error("Employee ID is required");
+
+  // Fetch current employee to get SyncToken
+  const current = await qbFetch(config, `employee/${employeeId}`);
+  const employee = current.Employee;
+
+  const payload = {
+    ...employee,
+    ...updates,
+    Id: employeeId,
+    SyncToken: employee.SyncToken,
+    sparse: true,
+  };
+
+  const data = await qbFetch(config, "employee", { method: "POST", body: JSON.stringify(payload) });
+  return jsonRes({ success: true, employee: data.Employee });
+}
+
+// ─── Payroll: List Time Activities ────────────────────────────────
+
+async function handleListTimeActivities(supabase: ReturnType<typeof createClient>, userId: string) {
+  const config = await getQBConfig(supabase, userId);
+  const data = await qbQuery(config, "TimeActivity");
+  return jsonRes({ timeActivities: data.QueryResponse?.TimeActivity || [] });
+}
+
+// ─── Payroll: Create Payroll Correction (Journal Entry) ───────────
+
+async function handleCreatePayrollCorrection(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const { employeeName, employeeId, lines, memo, txnDate } = body as {
+    employeeName: string;
+    employeeId: string;
+    lines: { accountId: string; accountName: string; amount: number; type: "debit" | "credit"; description?: string }[];
+    memo?: string;
+    txnDate?: string;
+  };
+
+  if (!employeeId || !lines || lines.length === 0) {
+    throw new Error("Employee ID and at least one journal line are required");
+  }
+
+  // Validate debits = credits
+  const totalDebits = lines.filter(l => l.type === "debit").reduce((s, l) => s + l.amount, 0);
+  const totalCredits = lines.filter(l => l.type === "credit").reduce((s, l) => s + l.amount, 0);
+  if (Math.abs(totalDebits - totalCredits) > 0.01) {
+    throw new Error(`Debits ($${totalDebits.toFixed(2)}) must equal Credits ($${totalCredits.toFixed(2)})`);
+  }
+
+  const payload = {
+    TxnDate: txnDate || new Date().toISOString().split("T")[0],
+    PrivateNote: memo || `Payroll correction for ${employeeName}`,
+    Line: lines.map(line => ({
+      DetailType: "JournalEntryLineDetail",
+      Amount: line.amount,
+      Description: line.description || `Payroll correction – ${employeeName}`,
+      JournalEntryLineDetail: {
+        PostingType: line.type === "debit" ? "Debit" : "Credit",
+        AccountRef: { value: line.accountId, name: line.accountName },
+        Entity: {
+          Type: "Employee",
+          EntityRef: { value: employeeId, name: employeeName },
+        },
+      },
+    })),
+  };
+
+  const data = await qbFetch(config, "journalentry", { method: "POST", body: JSON.stringify(payload) });
+  return jsonRes({ success: true, journalEntry: data.JournalEntry, docNumber: data.JournalEntry?.DocNumber });
 }
