@@ -65,6 +65,7 @@ export function AIExtractView() {
   // Form state
   const [manifestName, setManifestName] = useState("");
   const [customer, setCustomer] = useState("");
+  const [customerOpen, setCustomerOpen] = useState(false);
   const [siteAddress, setSiteAddress] = useState("");
   const [targetEta, setTargetEta] = useState("");
   const [manifestType, setManifestType] = useState<ManifestType>("delivery");
@@ -705,24 +706,48 @@ export function AIExtractView() {
                 <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase mb-1.5 block">
                   Customer
                 </label>
-                <Select value={customer} onValueChange={setCustomer}>
-                  <SelectTrigger className="bg-card border-border">
-                    <SelectValue placeholder="Select customer..." />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-[300px]">
-                    {erpContacts.filter(c => c.type === "customer").map((c) => (
-                      <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
-                    ))}
-                    {erpContacts.filter(c => c.type === "contact").length > 0 && (
-                      <>
-                        <SelectItem value="__separator__" disabled>— Contacts —</SelectItem>
-                        {erpContacts.filter(c => c.type === "contact").map((c) => (
-                          <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
-                        ))}
-                      </>
-                    )}
-                  </SelectContent>
-                </Select>
+                <Popover open={customerOpen} onOpenChange={setCustomerOpen}>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" role="combobox" className="w-full justify-between bg-card border-border font-normal">
+                      {customer || "Select customer..."}
+                      <ChevronRight className="ml-2 h-4 w-4 shrink-0 opacity-50 rotate-90" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[300px] p-0 z-50" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search customers & contacts..." />
+                      <CommandList className="max-h-[300px]">
+                        <CommandEmpty>No results found.</CommandEmpty>
+                        {erpContacts.filter(c => c.type === "customer").length > 0 && (
+                          <CommandGroup heading="Customers">
+                            {erpContacts.filter(c => c.type === "customer").map((c) => (
+                              <CommandItem key={c.id} value={c.name} onSelect={() => {
+                                setCustomer(c.name);
+                                setCustomerOpen(false);
+                              }}>
+                                <span>{c.name}</span>
+                                <Badge variant="outline" className="ml-auto text-[9px] px-1.5 py-0">Customer</Badge>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        )}
+                        {erpContacts.filter(c => c.type === "contact").length > 0 && (
+                          <CommandGroup heading="Contacts">
+                            {erpContacts.filter(c => c.type === "contact").map((c) => (
+                              <CommandItem key={c.id} value={c.name} onSelect={() => {
+                                setCustomer(c.name);
+                                setCustomerOpen(false);
+                              }}>
+                                <span>{c.name}</span>
+                                <Badge variant="secondary" className="ml-auto text-[9px] px-1.5 py-0">Contact</Badge>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        )}
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
               <div>
                 <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase mb-1.5 block">
