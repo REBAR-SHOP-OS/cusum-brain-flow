@@ -208,24 +208,30 @@ export function useIntegrations() {
       }
 
       if (integrationId === "ringcentral") {
-        const { data, error } = await supabase.functions.invoke("ringcentral-sync", {
-          body: { syncType: "calls", daysBack: 1 },
-        });
+        const { data: statusData, error: statusError } = await supabase.functions.invoke(
+          "ringcentral-oauth",
+          { body: { action: "check-status" } }
+        );
 
-        const status = error ? "error" : "connected";
+        if (statusError) throw new Error(statusError.message);
 
         setIntegrations((prev) =>
           prev.map((i) =>
-            i.id === integrationId
-              ? { ...i, status, error: error?.message, lastSync: error ? undefined : new Date().toLocaleTimeString() }
+            i.id === "ringcentral"
+              ? {
+                  ...i,
+                  status: statusData.status,
+                  error: statusData.error,
+                  lastSync: statusData.status === "connected" ? new Date().toLocaleTimeString() : undefined,
+                }
               : i
           )
         );
 
-        if (!error) {
-          toast({ title: "RingCentral connected", description: "Integration verified" });
+        if (statusData.status === "connected") {
+          toast({ title: "RingCentral connected", description: `Connected as ${statusData.email || "verified"}` });
         }
-        return status;
+        return statusData.status;
       }
 
       toast({ title: "No test available", description: "This integration doesn't have a test endpoint" });
@@ -325,24 +331,24 @@ export function useIntegrations() {
 
     // Check RingCentral
     try {
-      const { error } = await supabase.functions.invoke("ringcentral-sync", {
-        body: { syncType: "calls", daysBack: 1 },
+      const { data: rcData } = await supabase.functions.invoke("ringcentral-oauth", {
+        body: { action: "check-status" },
       });
 
-      const rcStatus = error ? "error" : "connected";
-
-      setIntegrations((prev) =>
-        prev.map((i) =>
-          i.id === "ringcentral"
-            ? {
-                ...i,
-                status: rcStatus as Integration["status"],
-                error: error?.message,
-                lastSync: error ? undefined : new Date().toLocaleTimeString(),
-              }
-            : i
-        )
-      );
+      if (rcData) {
+        setIntegrations((prev) =>
+          prev.map((i) =>
+            i.id === "ringcentral"
+              ? {
+                  ...i,
+                  status: rcData.status,
+                  error: rcData.error,
+                  lastSync: rcData.status === "connected" ? new Date().toLocaleTimeString() : undefined,
+                }
+              : i
+          )
+        );
+      }
     } catch (err) {
       // Silently skip
     }
@@ -469,6 +475,17 @@ export function useIntegrations() {
         const { data, error } = await supabase.functions.invoke(
           "tiktok-oauth",
           { body: { action: "get-auth-url", returnUrl: window.location.href } }
+        );
+        if (error) throw new Error(error.message);
+        openOAuthPopup(data.authUrl, integrationId);
+        return;
+      }
+
+      // RingCentral
+      if (integrationId === "ringcentral") {
+        const { data, error } = await supabase.functions.invoke(
+          "ringcentral-oauth",
+          { body: { action: "get-auth-url", redirectUri: "https://erp.rebar.shop/integrations/callback" } }
         );
         if (error) throw new Error(error.message);
         openOAuthPopup(data.authUrl, integrationId);
