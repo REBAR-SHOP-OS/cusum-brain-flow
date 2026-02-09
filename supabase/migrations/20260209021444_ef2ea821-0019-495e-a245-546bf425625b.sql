@@ -1,0 +1,1 @@
+ALTER TABLE public.customers ADD CONSTRAINT customers_quickbooks_id_key UNIQUE (quickbooks_id);
