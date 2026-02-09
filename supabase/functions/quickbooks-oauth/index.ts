@@ -311,7 +311,12 @@ async function handleCallback(
 
 function handleGetAuthUrl(supabaseUrl: string, clientId: string, userId: string, body: Record<string, unknown>) {
   const redirectUri = `${supabaseUrl}/functions/v1/quickbooks-oauth/callback`;
-  const scope = "com.intuit.quickbooks.accounting com.intuit.quickbooks.payroll";
+  // Payroll scope requires separate Intuit approval for production apps;
+  // only include it when explicitly requested to avoid invalid_scope errors.
+  const includePayroll = body.includePayroll === true;
+  const scope = includePayroll
+    ? "com.intuit.quickbooks.accounting com.intuit.quickbooks.payroll"
+    : "com.intuit.quickbooks.accounting";
   const state = `${userId}|${body.returnUrl || ""}`;
 
   const authUrl = new URL(QUICKBOOKS_AUTH_URL);
