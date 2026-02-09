@@ -179,7 +179,7 @@ serve(async (req) => {
       replyToMessageId ? { messageId: replyToMessageId, references: references || "" } : undefined
     );
 
-    const sendResponse = await fetch(
+    let sendResponse = await fetch(
       "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
       {
         method: "POST",
@@ -193,6 +193,23 @@ serve(async (req) => {
         }),
       }
     );
+
+    // If 404 with threadId, retry without it (thread may not exist in user's mailbox)
+    if (!sendResponse.ok && sendResponse.status === 404 && threadId) {
+      console.warn("Gmail 404 with threadId, retrying without threadId | userId:", userId);
+      await sendResponse.text(); // consume body
+      sendResponse = await fetch(
+        "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ raw }),
+        }
+      );
+    }
 
     if (!sendResponse.ok) {
       const errorText = await sendResponse.text();
