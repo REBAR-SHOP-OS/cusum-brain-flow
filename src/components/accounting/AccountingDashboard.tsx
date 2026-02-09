@@ -195,7 +195,7 @@ function BankAccountCard({
         </div>
 
         <div className="flex items-center justify-between text-sm mb-2">
-          <span className="text-muted-foreground">Balance</span>
+          <span className="text-muted-foreground">Book Balance</span>
           <span className="font-semibold tabular-nums text-lg">{fmt(balance)}</span>
         </div>
 
