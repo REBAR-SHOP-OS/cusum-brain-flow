@@ -132,12 +132,22 @@ export function AIExtractView() {
     queryKey: ["erp-contacts"],
     enabled: !!user,
     queryFn: async () => {
-      const [custRes, contactRes] = await Promise.all([
-        supabase.from("customers").select("id, name").order("name").limit(500),
-        supabase.from("contacts").select("id, first_name, last_name, email, customer_id").order("first_name").limit(200),
-      ]);
-      const custs = (custRes.data ?? []).map(c => ({ id: c.id, name: c.name, type: "customer" as const }));
-      const contacts = (contactRes.data ?? []).map(c => ({
+      // Paginate customers to get ALL (beyond 1000-row default limit)
+      const PAGE = 1000;
+      let allCusts: Array<{ id: string; name: string }> = [];
+      let from = 0;
+      while (true) {
+        const { data } = await supabase.from("customers").select("id, name").order("name").range(from, from + PAGE - 1);
+        if (!data || data.length === 0) break;
+        allCusts = allCusts.concat(data as Array<{ id: string; name: string }>);
+        if (data.length < PAGE) break;
+        from += PAGE;
+      }
+
+      const { data: contactData } = await supabase.from("contacts").select("id, first_name, last_name, email, customer_id").order("first_name").limit(500);
+
+      const custs = allCusts.map(c => ({ id: c.id, name: c.name, type: "customer" as const }));
+      const contacts = (contactData ?? []).map(c => ({
         id: c.id,
         name: [c.first_name, c.last_name].filter(Boolean).join(" ") + (c.email ? ` (${c.email})` : ""),
         type: "contact" as const,
