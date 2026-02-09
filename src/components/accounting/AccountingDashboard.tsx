@@ -1,46 +1,228 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  DollarSign, TrendingUp, TrendingDown, AlertTriangle,
-  RefreshCw, FileText, Receipt, CreditCard, Users,
+  FileText, Receipt, Landmark, DollarSign,
+  Plus, AlertTriangle, MoreVertical,
 } from "lucide-react";
 import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
+import { useMemo } from "react";
 
 interface Props {
   data: ReturnType<typeof useQuickBooksData>;
   onNavigate: (tab: string) => void;
 }
 
-function StatCard({
-  icon: Icon,
-  label,
-  value,
-  subtitle,
-  color,
-  onClick,
+const fmt = (n: number) =>
+  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(n);
+
+/** Simple mini bar chart for due-date distribution */
+function MiniBarChart({ data }: { data: { label: string; value: number; highlight?: boolean }[] }) {
+  const max = Math.max(...data.map((d) => d.value), 1);
+  return (
+    <div className="flex items-end gap-1.5 h-14 mt-3">
+      {data.map((d) => (
+        <div key={d.label} className="flex-1 flex flex-col items-center gap-1">
+          <div
+            className={`w-full rounded-sm min-h-[4px] transition-all ${
+              d.highlight ? "bg-primary" : "bg-muted-foreground/20"
+            }`}
+            style={{ height: `${Math.max((d.value / max) * 48, 4)}px` }}
+          />
+          <span className="text-[9px] text-muted-foreground truncate w-full text-center">{d.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function InvoicesCard({ data, onNavigate }: Props) {
+  const { invoices, overdueInvoices, totalReceivable } = data;
+  const unpaid = invoices.filter((i) => i.Balance > 0);
+  const unpaidTotal = unpaid.reduce((s, i) => s + i.Balance, 0);
+  const lateTotal = overdueInvoices.reduce((s, i) => s + i.Balance, 0);
+
+  const now = new Date();
+  const weekMs = 7 * 86400000;
+  const dueBuckets = useMemo(() => {
+    const buckets = [
+      { label: "Overdue", value: 0, highlight: false },
+      { label: "This Week", value: 0, highlight: true },
+      { label: "Next Week", value: 0, highlight: false },
+      { label: "Later", value: 0, highlight: false },
+      { label: "Not Due", value: 0, highlight: false },
+    ];
+    invoices.forEach((inv) => {
+      if (inv.Balance <= 0) return;
+      const due = new Date(inv.DueDate);
+      const diff = due.getTime() - now.getTime();
+      if (diff < 0) buckets[0].value++;
+      else if (diff < weekMs) buckets[1].value++;
+      else if (diff < weekMs * 2) buckets[2].value++;
+      else if (diff < weekMs * 4) buckets[3].value++;
+      else buckets[4].value++;
+    });
+    return buckets;
+  }, [invoices]);
+
+  return (
+    <Card className="cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all" onClick={() => onNavigate("invoices")}>
+      <CardContent className="p-5">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <FileText className="w-4 h-4 text-primary" />
+            <h3 className="font-semibold text-sm text-primary">Customer Invoices</h3>
+          </div>
+          <MoreVertical className="w-4 h-4 text-muted-foreground" />
+        </div>
+
+        <Button size="sm" variant="default" className="text-xs mb-3 gap-1.5" onClick={(e) => { e.stopPropagation(); onNavigate("invoices"); }}>
+          <Plus className="w-3 h-3" /> New Invoice
+        </Button>
+
+        <div className="space-y-1.5 text-sm">
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">{invoices.length} Invoices Total</span>
+            <span className="font-semibold tabular-nums">{fmt(totalReceivable)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-primary">{unpaid.length} Unpaid Invoices</span>
+            <span className="font-semibold tabular-nums text-primary">{fmt(unpaidTotal)}</span>
+          </div>
+          {overdueInvoices.length > 0 && (
+            <div className="flex justify-between">
+              <span className="text-destructive flex items-center gap-1">
+                <AlertTriangle className="w-3 h-3" /> {overdueInvoices.length} Late Invoices
+              </span>
+              <span className="font-semibold tabular-nums text-destructive">{fmt(lateTotal)}</span>
+            </div>
+          )}
+        </div>
+
+        <MiniBarChart data={dueBuckets} />
+      </CardContent>
+    </Card>
+  );
+}
+
+function BillsCard({ data, onNavigate }: Props) {
+  const { bills, overdueBills, totalPayable } = data;
+  const unpaid = bills.filter((b) => b.Balance > 0);
+
+  const now = new Date();
+  const weekMs = 7 * 86400000;
+  const dueBuckets = useMemo(() => {
+    const buckets = [
+      { label: "Overdue", value: 0, highlight: false },
+      { label: "This Week", value: 0, highlight: true },
+      { label: "Next Week", value: 0, highlight: false },
+      { label: "Later", value: 0, highlight: false },
+      { label: "Not Due", value: 0, highlight: false },
+    ];
+    bills.forEach((b) => {
+      if (b.Balance <= 0) return;
+      const due = new Date(b.DueDate);
+      const diff = due.getTime() - now.getTime();
+      if (diff < 0) buckets[0].value++;
+      else if (diff < weekMs) buckets[1].value++;
+      else if (diff < weekMs * 2) buckets[2].value++;
+      else if (diff < weekMs * 4) buckets[3].value++;
+      else buckets[4].value++;
+    });
+    return buckets;
+  }, [bills]);
+
+  return (
+    <Card className="cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all" onClick={() => onNavigate("bills")}>
+      <CardContent className="p-5">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Receipt className="w-4 h-4 text-primary" />
+            <h3 className="font-semibold text-sm text-primary">Vendor Bills</h3>
+          </div>
+          <MoreVertical className="w-4 h-4 text-muted-foreground" />
+        </div>
+
+        <div className="space-y-1.5 text-sm">
+          <div className="flex justify-between">
+            <span className="text-primary">{unpaid.length} Bills to Pay</span>
+            <span className="font-semibold tabular-nums">{fmt(totalPayable)}</span>
+          </div>
+          {overdueBills.length > 0 && (
+            <div className="flex justify-between">
+              <span className="text-destructive flex items-center gap-1">
+                <AlertTriangle className="w-3 h-3" /> {overdueBills.length} Overdue
+              </span>
+              <span className="font-semibold tabular-nums text-destructive">
+                {fmt(overdueBills.reduce((s, b) => s + b.Balance, 0))}
+              </span>
+            </div>
+          )}
+        </div>
+
+        <MiniBarChart data={dueBuckets} />
+      </CardContent>
+    </Card>
+  );
+}
+
+function BankAccountCard({
+  name,
+  balance,
+  color = "text-foreground",
+  onNavigate,
 }: {
-  icon: React.ElementType;
-  label: string;
-  value: string;
-  subtitle?: string;
-  color: string;
-  onClick?: () => void;
+  name: string;
+  balance: number;
+  color?: string;
+  onNavigate: () => void;
 }) {
   return (
-    <Card
-      className={`cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all ${onClick ? "" : ""}`}
-      onClick={onClick}
-    >
-      <CardContent className="p-6">
-        <div className="flex items-start justify-between">
-          <div>
-            <p className="text-sm font-medium text-muted-foreground mb-1">{label}</p>
-            <p className={`text-3xl font-bold ${color}`}>{value}</p>
-            {subtitle && <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>}
+    <Card className="cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all" onClick={onNavigate}>
+      <CardContent className="p-5">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Landmark className="w-4 h-4 text-primary" />
+            <h3 className={`font-semibold text-sm ${color}`}>{name}</h3>
           </div>
-          <div className={`p-3 rounded-xl bg-muted`}>
-            <Icon className={`w-7 h-7 ${color}`} />
+          <MoreVertical className="w-4 h-4 text-muted-foreground" />
+        </div>
+
+        <div className="flex items-center justify-between text-sm mb-2">
+          <span className="text-muted-foreground">Balance</span>
+          <span className="font-semibold tabular-nums">{fmt(balance)}</span>
+        </div>
+
+        <Button size="sm" variant="outline" className="text-xs text-primary" onClick={(e) => { e.stopPropagation(); onNavigate(); }}>
+          View Transactions
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+function CashCard({ data, onNavigate }: Props) {
+  const totalPayments = data.payments.reduce((s, p) => s + p.TotalAmt, 0);
+
+  return (
+    <Card className="cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all" onClick={() => onNavigate("payments")}>
+      <CardContent className="p-5">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <DollarSign className="w-4 h-4 text-primary" />
+            <h3 className="font-semibold text-sm text-primary">Cash</h3>
+          </div>
+          <MoreVertical className="w-4 h-4 text-muted-foreground" />
+        </div>
+
+        <Button size="sm" variant="default" className="text-xs mb-3 gap-1.5" onClick={(e) => { e.stopPropagation(); onNavigate("payments"); }}>
+          <Plus className="w-3 h-3" /> New Transaction
+        </Button>
+
+        <div className="space-y-1.5 text-sm">
+          <div className="flex justify-between">
+            <span className="text-primary">Payments</span>
+            <span className="font-semibold tabular-nums">{fmt(totalPayments)}</span>
           </div>
         </div>
       </CardContent>
@@ -48,159 +230,32 @@ function StatCard({
   );
 }
 
-const fmt = (n: number) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
-
 export function AccountingDashboard({ data, onNavigate }: Props) {
-  const {
-    totalReceivable, totalPayable, overdueInvoices, overdueBills,
-    invoices, bills, payments, customers, syncing, syncEntity,
-  } = data;
-
-  const recentPayments = payments
-    .sort((a, b) => new Date(b.TxnDate).getTime() - new Date(a.TxnDate).getTime())
-    .slice(0, 5);
+  // Extract bank-type accounts for display
+  const bankAccounts = data.accounts.filter(
+    (a) => a.AccountType === "Bank" && a.Active
+  );
 
   return (
-    <div className="space-y-6">
-      {/* Quick sync bar */}
-      <div className="flex flex-wrap items-center gap-3">
-        <Button
-          size="lg"
-          variant="outline"
-          className="h-12 text-base gap-2"
-          onClick={() => syncEntity("customers")}
-          disabled={!!syncing}
-        >
-          <RefreshCw className={`w-5 h-5 ${syncing === "customers" ? "animate-spin" : ""}`} />
-          Sync Customers
-        </Button>
-        <Button
-          size="lg"
-          variant="outline"
-          className="h-12 text-base gap-2"
-          onClick={() => syncEntity("invoices")}
-          disabled={!!syncing}
-        >
-          <RefreshCw className={`w-5 h-5 ${syncing === "invoices" ? "animate-spin" : ""}`} />
-          Sync Invoices
-        </Button>
-        <Button
-          size="lg"
-          variant="outline"
-          className="h-12 text-base gap-2"
-          onClick={() => syncEntity("vendors")}
-          disabled={!!syncing}
-        >
-          <RefreshCw className={`w-5 h-5 ${syncing === "vendors" ? "animate-spin" : ""}`} />
-          Sync Vendors
-        </Button>
-      </div>
+    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+      <InvoicesCard data={data} onNavigate={onNavigate} />
+      <BillsCard data={data} onNavigate={onNavigate} />
 
-      {/* Big stat cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-        <StatCard
-          icon={TrendingUp}
-          label="Money Coming In (AR)"
-          value={fmt(totalReceivable)}
-          subtitle={`${invoices.length} invoices`}
-          color="text-emerald-500"
-          onClick={() => onNavigate("invoices")}
-        />
-        <StatCard
-          icon={TrendingDown}
-          label="Money Going Out (AP)"
-          value={fmt(totalPayable)}
-          subtitle={`${bills.length} bills`}
-          color="text-blue-500"
-          onClick={() => onNavigate("bills")}
-        />
-        <StatCard
-          icon={AlertTriangle}
-          label="Overdue Invoices"
-          value={String(overdueInvoices.length)}
-          subtitle={overdueInvoices.length > 0 ? fmt(overdueInvoices.reduce((s, i) => s + i.Balance, 0)) : "All good! ✅"}
-          color={overdueInvoices.length > 0 ? "text-destructive" : "text-emerald-500"}
-          onClick={() => onNavigate("invoices")}
-        />
-        <StatCard
-          icon={DollarSign}
-          label="Customers"
-          value={String(customers.length)}
-          subtitle={`${payments.length} payments recorded`}
-          color="text-primary"
-          onClick={() => onNavigate("customers")}
-        />
-      </div>
-
-      {/* Overdue alerts */}
-      {overdueInvoices.length > 0 && (
-        <Card className="border-destructive/30 bg-destructive/5">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg flex items-center gap-2 text-destructive">
-              <AlertTriangle className="w-5 h-5" />
-              ⚠️ {overdueInvoices.length} Overdue Invoices Need Attention
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {overdueInvoices.slice(0, 5).map((inv) => (
-                <div key={inv.Id} className="flex items-center justify-between p-3 rounded-lg bg-background">
-                  <div>
-                    <p className="font-semibold text-base">#{inv.DocNumber} — {inv.CustomerRef?.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      Due {new Date(inv.DueDate).toLocaleDateString()} · {Math.ceil((Date.now() - new Date(inv.DueDate).getTime()) / 86400000)} days late
-                    </p>
-                  </div>
-                  <Badge variant="destructive" className="text-base px-3 py-1">
-                    {fmt(inv.Balance)}
-                  </Badge>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+      {bankAccounts.length > 0 ? (
+        bankAccounts.slice(0, 2).map((acct) => (
+          <BankAccountCard
+            key={acct.Id}
+            name={acct.Name}
+            balance={acct.CurrentBalance}
+            color="text-primary"
+            onNavigate={() => onNavigate("accounts")}
+          />
+        ))
+      ) : (
+        <BankAccountCard name="Bank Account" balance={0} onNavigate={() => onNavigate("accounts")} />
       )}
 
-      {/* Quick actions row */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-        <Button size="lg" className="h-14 text-lg gap-3" onClick={() => onNavigate("invoices")}>
-          <FileText className="w-6 h-6" /> Invoices
-        </Button>
-        <Button size="lg" className="h-14 text-lg gap-3" variant="secondary" onClick={() => onNavigate("bills")}>
-          <Receipt className="w-6 h-6" /> Bills & Vendors
-        </Button>
-        <Button size="lg" className="h-14 text-lg gap-3" variant="secondary" onClick={() => onNavigate("payments")}>
-          <CreditCard className="w-6 h-6" /> Payments
-        </Button>
-        <Button size="lg" className="h-14 text-lg gap-3" variant="secondary" onClick={() => onNavigate("audit")}>
-          <Users className="w-6 h-6" /> AI Audit
-        </Button>
-      </div>
-
-      {/* Recent payments */}
-      {recentPayments.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">💰 Recent Payments</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {recentPayments.map((pay) => (
-                <div key={pay.Id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                  <div>
-                    <p className="font-medium text-base">{pay.CustomerRef?.name || "Unknown"}</p>
-                    <p className="text-sm text-muted-foreground">{new Date(pay.TxnDate).toLocaleDateString()}</p>
-                  </div>
-                  <Badge variant="outline" className="text-base px-3 py-1 text-emerald-500 border-emerald-500/30">
-                    +{fmt(pay.TotalAmt)}
-                  </Badge>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      <CashCard data={data} onNavigate={onNavigate} />
     </div>
   );
 }
