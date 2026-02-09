@@ -186,12 +186,8 @@ export function InboxCustomerContext({ senderEmail, senderName }: InboxCustomerC
               .order("created_at", { ascending: false })
               .limit(10)
           : Promise.resolve({ data: [], error: null }),
-        // Meetings
-        supabase
-          .from("team_meetings")
-          .select("id, title, status, started_at")
-          .order("started_at", { ascending: false })
-          .limit(5),
+        // Meetings — skip if no customer/contact context (no way to filter by contact)
+        Promise.resolve({ data: [], error: null }),
       ]);
 
       // Process leads
