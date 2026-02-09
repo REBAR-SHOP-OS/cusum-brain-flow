@@ -178,6 +178,19 @@ function getHeader(headers: Array<{ name: string; value: string }>, name: string
   return headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value || "";
 }
 
+/** Strip dangerous HTML server-side before persisting (defense-in-depth). */
+function sanitizeHtmlServerSide(html: string): string {
+  // Remove script/iframe/object/embed/form tags and their content
+  let clean = html.replace(/<\s*(script|iframe|object|embed|form|applet|base|link|meta|style)\b[^>]*>[\s\S]*?<\/\s*\1\s*>/gi, "");
+  // Remove self-closing variants
+  clean = clean.replace(/<\s*(script|iframe|object|embed|form|applet|base|link|meta)\b[^>]*\/?>/gi, "");
+  // Remove event handler attributes (on*)
+  clean = clean.replace(/\s+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "");
+  // Remove javascript: / data: / vbscript: in href/src/action attributes
+  clean = clean.replace(/(href|src|action)\s*=\s*(?:"(?:javascript|data|vbscript):[^"]*"|'(?:javascript|data|vbscript):[^']*')/gi, "$1=\"\"");
+  return clean;
+}
+
 function getBodyContent(message: GmailMessage): string {
   if (message.payload.body?.data) {
     return decodeBase64Url(message.payload.body.data);
@@ -292,7 +305,7 @@ serve(async (req) => {
           subject: getHeader(headers, "Subject"),
           date: getHeader(headers, "Date"),
           snippet: msgData.snippet,
-          body: getBodyContent(msgData),
+          body: sanitizeHtmlServerSide(getBodyContent(msgData)),
           internalDate: parseInt(msgData.internalDate),
           isUnread: msgData.labelIds?.includes("UNREAD") || false,
           attachments,
