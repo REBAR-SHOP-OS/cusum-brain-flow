@@ -13,6 +13,8 @@ export interface Notification {
   linkTo: string | null;
   metadata: Record<string, unknown> | null;
   expiresAt: string | null;
+  assignedTo: string | null;
+  reminderAt: string | null;
   createdAt: string;
 }
 
@@ -32,6 +34,8 @@ export function useNotifications() {
     linkTo: row.link_to,
     metadata: row.metadata,
     expiresAt: row.expires_at,
+    assignedTo: row.assigned_to,
+    reminderAt: row.reminder_at,
     createdAt: row.created_at,
   });
 

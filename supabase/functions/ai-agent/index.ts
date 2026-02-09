@@ -600,6 +600,30 @@ async function performMultiPassAnalysis(
   };
 }
 
+// Shared instruction for all agents — notification & task creation
+const SHARED_TOOL_INSTRUCTIONS = `
+
+## 🔔 Notification & Activity Management (ALL AGENTS)
+You have the ability to create notifications, to-do items, reminders, and assign activities to team members. USE THIS PROACTIVELY.
+
+### When to Create Notifications/Tasks:
+- **Always** when you identify action items during conversation (e.g., follow up on invoice, call a customer, review a document)
+- **Always** when the user asks you to remind them about something
+- **Always** when you spot overdue items, missed deadlines, or items needing attention
+- When the user says "remind me", "don't forget", "schedule", "follow up", "task", "to-do", "assign"
+- When presenting daily priorities — create corresponding to-do items automatically
+
+### How to Use:
+- Use \`create_notifications\` tool with appropriate type: "todo" for action items, "notification" for alerts, "idea" for suggestions
+- Set priority based on urgency: "high" for overdue/critical, "normal" for standard, "low" for nice-to-have
+- Assign to specific employees when you know who should handle it (use names from availableEmployees in context)
+- Set reminder_at for time-sensitive items (use ISO 8601 format)
+- Set link_to for quick navigation (e.g., "/accounting", "/pipeline", "/inbox")
+
+### Employee Assignment:
+When assigning activities, match the employee name from the availableEmployees list in context. If no specific person is mentioned, leave it for the current user.
+`;
+
 // Agent system prompts
 const agentPrompts: Record<string, string> = {
   sales: `You are **Blitz**, the Sales Agent for REBAR SHOP OS — a rebar shop operations system run by Rebar.shop in Ontario.
@@ -1882,7 +1906,17 @@ serve(async (req) => {
       }
     }
 
-    const systemPrompt = agentPrompts[agent] || agentPrompts.sales;
+    // Fetch available employees for activity assignment
+    const { data: employees } = await svcClient
+      .from("profiles")
+      .select("id, full_name, title, department")
+      .eq("is_active", true)
+      .order("full_name");
+    mergedContext.availableEmployees = (employees || []).map((e: Record<string, unknown>) => ({
+      id: e.id, name: e.full_name, title: e.title, department: e.department,
+    }));
+
+    const systemPrompt = (agentPrompts[agent] || agentPrompts.sales) + SHARED_TOOL_INSTRUCTIONS;
     
     let contextStr = "";
     if (Object.keys(mergedContext).length > 0) {
@@ -1945,6 +1979,41 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
+    // Tool definitions for notification/task creation
+    const tools = [
+      {
+        type: "function" as const,
+        function: {
+          name: "create_notifications",
+          description: "Create one or more notifications, to-do items, reminders, or activity assignments for team members. Use this whenever you identify tasks, reminders, follow-ups, or activities that should be tracked. Always use this tool proactively when you spot items that need attention.",
+          parameters: {
+            type: "object",
+            properties: {
+              items: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    type: { type: "string", enum: ["notification", "todo", "idea"], description: "notification = alert, todo = actionable task, idea = suggestion" },
+                    title: { type: "string", description: "Clear, concise title (max 80 chars)" },
+                    description: { type: "string", description: "Details about the item" },
+                    priority: { type: "string", enum: ["low", "normal", "high"], description: "Priority level" },
+                    assigned_to_name: { type: "string", description: "Employee full name to assign to (from availableEmployees). Leave empty for the current user." },
+                    reminder_at: { type: "string", description: "ISO 8601 datetime for when to remind. Use for follow-ups, deadlines, recurring checks." },
+                    link_to: { type: "string", description: "App route to link to (e.g. /accounting, /pipeline)" },
+                  },
+                  required: ["type", "title", "priority"],
+                  additionalProperties: false,
+                },
+              },
+            },
+            required: ["items"],
+            additionalProperties: false,
+          },
+        },
+      },
+    ];
+
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -1956,6 +2025,8 @@ serve(async (req) => {
         messages,
         max_tokens: modelConfig.maxTokens,
         temperature: modelConfig.temperature,
+        tools,
+        tool_choice: "auto",
       }),
     });
 
@@ -1978,7 +2049,107 @@ serve(async (req) => {
     }
 
     const aiData = await aiResponse.json();
-    const reply = aiData.choices?.[0]?.message?.content || "I couldn't process that request.";
+    const choice = aiData.choices?.[0];
+    let reply = choice?.message?.content || "";
+    const createdNotifications: { type: string; title: string; assigned_to_name?: string }[] = [];
+
+    // Handle tool calls — create notifications in the database
+    const toolCalls = choice?.message?.tool_calls;
+    if (toolCalls && toolCalls.length > 0) {
+      for (const tc of toolCalls) {
+        if (tc.function?.name === "create_notifications") {
+          try {
+            const args = JSON.parse(tc.function.arguments);
+            const items = args.items || [];
+            
+            // Resolve employee names to profile IDs
+            const employeeList = (mergedContext.availableEmployees as { id: string; name: string }[]) || [];
+            
+            for (const item of items) {
+              let assignedTo: string | null = null;
+              
+              if (item.assigned_to_name) {
+                const match = employeeList.find((e) =>
+                  e.name.toLowerCase().includes(item.assigned_to_name.toLowerCase())
+                );
+                assignedTo = match?.id || null;
+              }
+
+              // Get the agent config info
+              const agentName = agentPrompts[agent]?.match(/\*\*(\w+)\*\*/)?.[1] || agent;
+              const agentColorMap: Record<string, string> = {
+                sales: "bg-orange-500", accounting: "bg-emerald-500", support: "bg-blue-500",
+                collections: "bg-red-500", estimation: "bg-purple-500", social: "bg-pink-500",
+                bizdev: "bg-amber-500", webbuilder: "bg-cyan-500", assistant: "bg-indigo-500",
+                copywriting: "bg-violet-500", talent: "bg-teal-500", seo: "bg-lime-500", growth: "bg-sky-500",
+              };
+
+              const { error: insertErr } = await svcClient.from("notifications").insert({
+                user_id: user.id,
+                type: item.type || "todo",
+                title: item.title,
+                description: item.description || null,
+                agent_name: agentName,
+                agent_color: agentColorMap[agent] || "bg-sky-500",
+                priority: item.priority || "normal",
+                assigned_to: assignedTo,
+                reminder_at: item.reminder_at || null,
+                link_to: item.link_to || null,
+                status: "unread",
+                metadata: { created_by_agent: agent, assigned_to_name: item.assigned_to_name || null },
+              });
+
+              if (!insertErr) {
+                createdNotifications.push({
+                  type: item.type,
+                  title: item.title,
+                  assigned_to_name: item.assigned_to_name,
+                });
+              } else {
+                console.error("Failed to create notification:", insertErr);
+              }
+            }
+          } catch (e) {
+            console.error("Failed to parse tool call:", e);
+          }
+        }
+      }
+
+      // If the AI only returned tool calls and no text, do a follow-up to get a reply
+      if (!reply && createdNotifications.length > 0) {
+        const toolResultMessages = [
+          ...messages,
+          choice.message,
+          ...toolCalls.map((tc: any) => ({
+            role: "tool" as const,
+            tool_call_id: tc.id,
+            content: JSON.stringify({ success: true, created: createdNotifications.length }),
+          })),
+        ];
+
+        const followUp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${LOVABLE_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: modelConfig.model,
+            messages: toolResultMessages,
+            max_tokens: modelConfig.maxTokens,
+            temperature: modelConfig.temperature,
+          }),
+        });
+
+        if (followUp.ok) {
+          const followUpData = await followUp.json();
+          reply = followUpData.choices?.[0]?.message?.content || reply;
+        }
+      }
+    }
+
+    // Fallback if still no reply
+    if (!reply) reply = "I couldn't process that request.";
 
     return new Response(
       JSON.stringify({ 
@@ -1986,6 +2157,7 @@ serve(async (req) => {
         context: mergedContext,
         modelUsed: modelConfig.model,
         modelReason: modelConfig.reason,
+        createdNotifications,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
