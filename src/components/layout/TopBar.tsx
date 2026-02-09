@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { Search, Sparkles, Warehouse, ChevronDown, Wrench } from "lucide-react";
+import { Search, Sparkles, Warehouse, ChevronDown, Wrench, Bell } from "lucide-react";
+import { useNotifications } from "@/hooks/useNotifications";
+import { InboxPanel } from "@/components/panels/InboxPanel";
 import { Button } from "@/components/ui/button";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -26,6 +28,8 @@ export function TopBar() {
   const { isAdmin, isOffice } = useUserRole();
   const { isSuperAdmin } = useSuperAdmin();
   const [commandOpen, setCommandOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const { unreadCount } = useNotifications();
   const currentWarehouse = warehouses.find((w) => w.id === warehouse) ?? warehouses[0];
 
   return (
@@ -87,6 +91,22 @@ export function TopBar() {
           </Button>
         )}
 
+        {/* Notifications bell */}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="relative h-8 w-8 p-0"
+          onClick={() => setNotifOpen(true)}
+          data-tour="topbar-notifications"
+        >
+          <Bell className="w-4 h-4" />
+          {unreadCount > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1">
+              {unreadCount > 9 ? "9+" : unreadCount}
+            </span>
+          )}
+        </Button>
+
         <ThemeToggle />
         <div data-tour="topbar-user">
           <UserMenu />
@@ -94,6 +114,7 @@ export function TopBar() {
       </header>
 
       <CommandBar open={commandOpen} onOpenChange={setCommandOpen} />
+      <InboxPanel isOpen={notifOpen} onClose={() => setNotifOpen(false)} />
     </>
   );
 }
