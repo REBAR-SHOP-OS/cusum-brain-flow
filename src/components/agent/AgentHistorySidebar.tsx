@@ -1,10 +1,12 @@
 import { useState } from "react";
-import { Plus, Settings, Trash2 } from "lucide-react";
+import { Plus, Settings, Trash2, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { useChatSessions, ChatSession } from "@/hooks/useChatSessions";
 import { AgentSettingsDialog } from "./AgentSettingsDialog";
+import { EisenhowerTeamReportDialog } from "./EisenhowerTeamReportDialog";
+import { useUserRole } from "@/hooks/useUserRole";
 
 interface AgentHistorySidebarProps {
   agentId: string;
@@ -27,6 +29,9 @@ export function AgentHistorySidebar({
 }: AgentHistorySidebarProps) {
   const { sessions, loading, deleteSession } = useChatSessions();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [teamReportOpen, setTeamReportOpen] = useState(false);
+  const { isAdmin } = useUserRole();
+  const isEisenhower = agentId === "eisenhower";
 
   // Filter sessions for this agent
   const agentSessions = sessions.filter(
@@ -62,7 +67,7 @@ export function AgentHistorySidebar({
         </div>
 
         {/* New Chat button */}
-        <div className="px-3 py-3">
+        <div className="px-3 py-3 space-y-2">
           <Button
             onClick={onNewChat}
             className="w-full"
@@ -71,6 +76,16 @@ export function AgentHistorySidebar({
             <Plus className="w-4 h-4 mr-2" />
             New chat
           </Button>
+          {isEisenhower && isAdmin && (
+            <Button
+              onClick={() => setTeamReportOpen(true)}
+              className="w-full"
+              variant="outline"
+            >
+              <Users className="w-4 h-4 mr-2" />
+              Team Reports
+            </Button>
+          )}
         </div>
 
         {/* Recents label */}
@@ -127,6 +142,14 @@ export function AgentHistorySidebar({
         agentName={agentName}
         agentImage={agentImage}
       />
+
+      {/* Eisenhower Team Report Dialog */}
+      {isEisenhower && (
+        <EisenhowerTeamReportDialog
+          open={teamReportOpen}
+          onOpenChange={setTeamReportOpen}
+        />
+      )}
     </>
   );
 }
