@@ -63,10 +63,12 @@ export function AccountingAgent({ onViewModeChange, viewMode: externalMode, qbSu
     }
   }, [inputValue]);
 
-  // Auto-greet Vicky with daily briefing when panel opens
+  // Auto-greet Vicky with daily briefing when panel opens and QB data is ready
   const hasGreeted = useRef(false);
   useEffect(() => {
-    if (!autoGreet || hasGreeted.current || messages.length > 0 || !qbSummary) return;
+    if (!autoGreet || hasGreeted.current || messages.length > 0) return;
+    // Wait until QB data is actually loaded (not just the hook object)
+    if (!qbSummary || qbSummary.invoices.length === 0 && qbSummary.bills.length === 0 && qbSummary.accounts.length === 0) return;
     hasGreeted.current = true;
 
     const context: Record<string, unknown> = {
@@ -92,12 +94,20 @@ export function AccountingAgent({ onViewModeChange, viewMode: externalMode, qbSu
       unpaidBillCount: qbSummary.bills.filter(b => b.Balance > 0).length,
     };
 
-    const greetMsg = "Good morning! I just logged in. Give me my daily briefing — what's urgent, what's overdue, what needs my attention today? Be visual and use tables/badges.";
+    const greetMsg = `Daily briefing request. Today is ${new Date().toLocaleDateString("en-CA", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}. Use the context data I'm providing to create a rich ADHD-friendly daily briefing for Vicky. Format requirements:
+- Start with a warm personal greeting using her name
+- Use emoji headers for each section (🚨 Urgent, 💰 Receivables, 📦 Payables, 🏦 Cash Position)
+- Use markdown tables with | headers | for overdue invoices and bills (include Customer/Vendor, Invoice#, Amount, Days Overdue)
+- Use bold for dollar amounts
+- Add a ✅ Today's Priority List at the end with numbered action items
+- Keep it scannable — short sentences, lots of whitespace
+- End with an encouraging accountability message`;
     
+    // Don't show the auto-prompt as a user message — show a friendly system-style entry instead
     const userMsg: Message = {
       id: crypto.randomUUID(),
       role: "user",
-      content: greetMsg,
+      content: "☀️ Good morning, Penny!",
       timestamp: new Date(),
     };
     setMessages([userMsg]);
@@ -123,7 +133,7 @@ export function AccountingAgent({ onViewModeChange, viewMode: externalMode, qbSu
         console.error("Penny auto-greet error:", err);
       })
       .finally(() => setIsTyping(false));
-  }, [autoGreet, qbSummary, messages.length]);
+  }, [autoGreet, qbSummary]);
 
   const handleSend = useCallback(async () => {
     if (!inputValue.trim() || isTyping) return;
