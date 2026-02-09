@@ -143,6 +143,18 @@ serve(async (req) => {
     const accessToken = await getAccessTokenForUser(userId, clientIp);
     console.log("Authenticated userId:", userId, "| sending to:", to);
 
+    // Fetch user's email signature
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+    const { data: sigRow } = await supabaseAdmin
+      .from("email_signatures")
+      .select("signature_html")
+      .eq("user_id", userId)
+      .maybeSingle();
+    const signature = sigRow?.signature_html || "";
+
     // Get user's email address
     const profileResponse = await fetch(
       "https://gmail.googleapis.com/gmail/v1/users/me/profile",
@@ -156,10 +168,13 @@ serve(async (req) => {
     const profile = await profileResponse.json();
     const fromEmail = profile.emailAddress;
 
+    // Append signature to body
+    const bodyWithSig = signature ? `${body}<br><br>${signature}` : body;
+
     const raw = createRawEmail(
       to,
       subject,
-      body,
+      bodyWithSig,
       fromEmail,
       replyToMessageId ? { messageId: replyToMessageId, references: references || "" } : undefined
     );
