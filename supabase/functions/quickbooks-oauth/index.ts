@@ -187,6 +187,8 @@ serve(async (req) => {
         return handleSyncVendors(supabase, userId);
       case "get-company-info":
         return handleGetCompanyInfo(supabase, userId);
+      case "dashboard-summary":
+        return handleDashboardSummary(supabase, userId);
       case "list-accounts":
         return handleListAccounts(supabase, userId);
       case "list-bank-accounts":
@@ -600,6 +602,27 @@ async function handleSyncVendors(supabase: ReturnType<typeof createClient>, user
 
   await updateLastSync(supabase, userId);
   return jsonRes({ success: true, synced, total: vendors.length });
+}
+
+// ─── Dashboard Summary (single call for dashboard cards) ─────────
+
+async function handleDashboardSummary(supabase: ReturnType<typeof createClient>, userId: string) {
+  const config = await getQBConfig(supabase, userId);
+  
+  // Fetch all dashboard-critical data in parallel with a single config lookup
+  const [invoicesRes, billsRes, paymentsRes, bankRes] = await Promise.all([
+    qbQuery(config, "Invoice"),
+    qbQuery(config, "Bill"),
+    qbQuery(config, "Payment"),
+    qbQuery(config, "Account", 500, "AccountType = 'Bank'"),
+  ]);
+
+  return jsonRes({
+    invoices: invoicesRes.QueryResponse?.Invoice || [],
+    bills: billsRes.QueryResponse?.Bill || [],
+    payments: paymentsRes.QueryResponse?.Payment || [],
+    accounts: bankRes.QueryResponse?.Account || [],
+  });
 }
 
 // ─── List Entities (direct from QB API) ───────────────────────────
