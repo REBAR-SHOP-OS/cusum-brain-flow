@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import {
-  Upload, Globe, FileText, Loader2, Truck, Package,
+  Upload, Globe, FileText, Loader2, Truck, Package, Brain,
   CheckCircle2, AlertCircle, Sparkles, X, ArrowRight,
   Shield, TriangleAlert, Clock, ChevronRight, History, XCircle,
   FolderOpen, Plus, GitBranch, Pencil, Save, RotateCcw,
@@ -892,10 +892,16 @@ export function AIExtractView() {
                         </Button>
                       )}
                       {processing && (
-                        <Badge variant="secondary" className="gap-1.5 text-xs py-1.5 px-3">
-                          <Loader2 className="w-3 h-3 animate-spin" />
-                          {processingStep}
-                        </Badge>
+                        <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20">
+                          <div className="relative flex items-center justify-center w-6 h-6">
+                            <div className="absolute inset-0 rounded-full bg-primary/20 animate-ping" style={{ animationDuration: '2s' }} />
+                            <div className="absolute inset-0 rounded-full bg-primary/10 animate-pulse" />
+                            <Brain className="w-4 h-4 text-primary relative z-10 animate-pulse" style={{ animationDuration: '1.5s' }} />
+                          </div>
+                          <span className="text-xs font-medium text-primary animate-pulse" style={{ animationDuration: '2s' }}>
+                            {processingStep}
+                          </span>
+                        </div>
                       )}
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={removeFile} disabled={processing}>
                         <X className="w-4 h-4" />
