@@ -17,12 +17,25 @@ interface Message {
 
 type ViewMode = "default" | "minimized" | "fullscreen";
 
+interface QBSummary {
+  totalReceivable: number;
+  totalPayable: number;
+  overdueInvoices: { Id: string; DocNumber: string; CustomerRef: { name: string }; Balance: number; DueDate: string }[];
+  overdueBills: { Id: string; DocNumber: string; VendorRef: { name: string }; Balance: number; DueDate: string }[];
+  invoices: { Balance: number; DueDate: string }[];
+  bills: { Balance: number; DueDate: string }[];
+  accounts: { Name: string; CurrentBalance: number; AccountType: string }[];
+  payments: { TotalAmt: number; TxnDate: string }[];
+}
+
 interface AccountingAgentProps {
   onViewModeChange?: (mode: ViewMode) => void;
   viewMode?: ViewMode;
+  qbSummary?: QBSummary;
+  autoGreet?: boolean;
 }
 
-export function AccountingAgent({ onViewModeChange, viewMode: externalMode }: AccountingAgentProps) {
+export function AccountingAgent({ onViewModeChange, viewMode: externalMode, qbSummary, autoGreet }: AccountingAgentProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isTyping, setIsTyping] = useState(false);
@@ -50,6 +63,68 @@ export function AccountingAgent({ onViewModeChange, viewMode: externalMode }: Ac
     }
   }, [inputValue]);
 
+  // Auto-greet Vicky with daily briefing when panel opens
+  const hasGreeted = useRef(false);
+  useEffect(() => {
+    if (!autoGreet || hasGreeted.current || messages.length > 0 || !qbSummary) return;
+    hasGreeted.current = true;
+
+    const context: Record<string, unknown> = {
+      totalReceivable: qbSummary.totalReceivable,
+      totalPayable: qbSummary.totalPayable,
+      overdueInvoiceCount: qbSummary.overdueInvoices.length,
+      overdueInvoiceTotal: qbSummary.overdueInvoices.reduce((s, i) => s + i.Balance, 0),
+      overdueInvoicesList: qbSummary.overdueInvoices.slice(0, 10).map(i => ({
+        doc: i.DocNumber, customer: i.CustomerRef.name, balance: i.Balance, due: i.DueDate,
+      })),
+      overdueBillCount: qbSummary.overdueBills.length,
+      overdueBillTotal: qbSummary.overdueBills.reduce((s, b) => s + b.Balance, 0),
+      overdueBillsList: qbSummary.overdueBills.slice(0, 10).map(b => ({
+        doc: b.DocNumber, vendor: b.VendorRef.name, balance: b.Balance, due: b.DueDate,
+      })),
+      bankAccounts: qbSummary.accounts
+        .filter(a => a.AccountType === "Bank")
+        .map(a => ({ name: a.Name, balance: a.CurrentBalance })),
+      recentPayments: qbSummary.payments.slice(0, 5).map(p => ({
+        amount: p.TotalAmt, date: p.TxnDate,
+      })),
+      unpaidInvoiceCount: qbSummary.invoices.filter(i => i.Balance > 0).length,
+      unpaidBillCount: qbSummary.bills.filter(b => b.Balance > 0).length,
+    };
+
+    const greetMsg = "Good morning! I just logged in. Give me my daily briefing — what's urgent, what's overdue, what needs my attention today? Be visual and use tables/badges.";
+    
+    const userMsg: Message = {
+      id: crypto.randomUUID(),
+      role: "user",
+      content: greetMsg,
+      timestamp: new Date(),
+    };
+    setMessages([userMsg]);
+    setIsTyping(true);
+
+    sendAgentMessage("accounting", greetMsg, [], context)
+      .then((response) => {
+        let replyContent = response.reply;
+        if (response.createdNotifications?.length) {
+          const notifSummary = response.createdNotifications
+            .map((n) => `${n.type === "todo" ? "✅" : n.type === "idea" ? "💡" : "🔔"} **${n.title}**${n.assigned_to_name ? ` → ${n.assigned_to_name}` : ""}`)
+            .join("\n");
+          replyContent += `\n\n---\n📋 **Created ${response.createdNotifications.length} item(s):**\n${notifSummary}`;
+        }
+        setMessages((prev) => [...prev, {
+          id: crypto.randomUUID(),
+          role: "agent",
+          content: replyContent,
+          timestamp: new Date(),
+        }]);
+      })
+      .catch((err) => {
+        console.error("Penny auto-greet error:", err);
+      })
+      .finally(() => setIsTyping(false));
+  }, [autoGreet, qbSummary, messages.length]);
+
   const handleSend = useCallback(async () => {
     if (!inputValue.trim() || isTyping) return;
 
@@ -69,10 +144,19 @@ export function AccountingAgent({ onViewModeChange, viewMode: externalMode }: Ac
         content: m.content,
       }));
 
+      const qbContext: Record<string, unknown> = qbSummary ? {
+        totalReceivable: qbSummary.totalReceivable,
+        totalPayable: qbSummary.totalPayable,
+        overdueInvoiceCount: qbSummary.overdueInvoices.length,
+        overdueBillCount: qbSummary.overdueBills.length,
+        unpaidInvoiceCount: qbSummary.invoices.filter(i => i.Balance > 0).length,
+      } : {};
+
       const response = await sendAgentMessage(
         "accounting",
         userMsg.content,
-        history
+        history,
+        qbContext
       );
 
       // Build reply with created notification badges
