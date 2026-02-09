@@ -1,4 +1,5 @@
 import { useState, useRef, useMemo, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import {
@@ -24,6 +25,9 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { useExtractSessions, useExtractRows, useExtractErrors } from "@/hooks/useExtractSessions";
@@ -61,11 +65,15 @@ function getStepIndex(status: string) {
 export function AIExtractView() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   // Form state
   const [manifestName, setManifestName] = useState("");
   const [customer, setCustomer] = useState("");
   const [customerOpen, setCustomerOpen] = useState(false);
+  const [showAddCustomer, setShowAddCustomer] = useState(false);
+  const [newCustomerName, setNewCustomerName] = useState("");
+  const [addingCustomer, setAddingCustomer] = useState(false);
   const [siteAddress, setSiteAddress] = useState("");
   const [targetEta, setTargetEta] = useState("");
   const [manifestType, setManifestType] = useState<ManifestType>("delivery");
@@ -154,6 +162,27 @@ export function AIExtractView() {
   const warningCount = errors.filter((e) => e.error_type === "warning").length;
 
   // ─── Handlers ────────────────────────────────────────────
+
+  const handleAddCustomer = async () => {
+    if (!newCustomerName.trim() || !profile?.company_id) return;
+    setAddingCustomer(true);
+    try {
+      const { error } = await supabase.from("customers").insert({
+        name: newCustomerName.trim(),
+        company_id: profile.company_id,
+      });
+      if (error) throw new Error(error.message);
+      await queryClient.invalidateQueries({ queryKey: ["erp-contacts"] });
+      setCustomer(newCustomerName.trim());
+      setNewCustomerName("");
+      setShowAddCustomer(false);
+      toast({ title: "Customer added", description: newCustomerName.trim() });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setAddingCustomer(false);
+    }
+  };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -706,48 +735,75 @@ export function AIExtractView() {
                 <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase mb-1.5 block">
                   Customer
                 </label>
-                <Popover open={customerOpen} onOpenChange={setCustomerOpen}>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" role="combobox" className="w-full justify-between bg-card border-border font-normal">
-                      {customer || "Select customer..."}
-                      <ChevronRight className="ml-2 h-4 w-4 shrink-0 opacity-50 rotate-90" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[300px] p-0 z-50" align="start">
-                    <Command>
-                      <CommandInput placeholder="Search customers & contacts..." />
-                      <CommandList className="max-h-[300px]">
-                        <CommandEmpty>No results found.</CommandEmpty>
-                        {erpContacts.filter(c => c.type === "customer").length > 0 && (
-                          <CommandGroup heading="Customers">
-                            {erpContacts.filter(c => c.type === "customer").map((c) => (
-                              <CommandItem key={c.id} value={c.name} onSelect={() => {
-                                setCustomer(c.name);
-                                setCustomerOpen(false);
-                              }}>
-                                <span>{c.name}</span>
-                                <Badge variant="outline" className="ml-auto text-[9px] px-1.5 py-0">Customer</Badge>
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        )}
-                        {erpContacts.filter(c => c.type === "contact").length > 0 && (
-                          <CommandGroup heading="Contacts">
-                            {erpContacts.filter(c => c.type === "contact").map((c) => (
-                              <CommandItem key={c.id} value={c.name} onSelect={() => {
-                                setCustomer(c.name);
-                                setCustomerOpen(false);
-                              }}>
-                                <span>{c.name}</span>
-                                <Badge variant="secondary" className="ml-auto text-[9px] px-1.5 py-0">Contact</Badge>
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        )}
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
+                <div className="flex gap-1.5">
+                  <Popover open={customerOpen} onOpenChange={setCustomerOpen}>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" role="combobox" className="w-full justify-between bg-card border-border font-normal">
+                        {customer || "Select customer..."}
+                        <ChevronRight className="ml-2 h-4 w-4 shrink-0 opacity-50 rotate-90" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[300px] p-0 z-50" align="start">
+                      <Command>
+                        <CommandInput placeholder="Search customers & contacts..." />
+                        <CommandList className="max-h-[300px]">
+                          <CommandEmpty>No results found.</CommandEmpty>
+                          {erpContacts.filter(c => c.type === "customer").length > 0 && (
+                            <CommandGroup heading="Customers">
+                              {erpContacts.filter(c => c.type === "customer").map((c) => (
+                                <CommandItem key={c.id} value={c.name} onSelect={() => {
+                                  setCustomer(c.name);
+                                  setCustomerOpen(false);
+                                }}>
+                                  <span>{c.name}</span>
+                                  <Badge variant="outline" className="ml-auto text-[9px] px-1.5 py-0">Customer</Badge>
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          )}
+                          {erpContacts.filter(c => c.type === "contact").length > 0 && (
+                            <CommandGroup heading="Contacts">
+                              {erpContacts.filter(c => c.type === "contact").map((c) => (
+                                <CommandItem key={c.id} value={c.name} onSelect={() => {
+                                  setCustomer(c.name);
+                                  setCustomerOpen(false);
+                                }}>
+                                  <span>{c.name}</span>
+                                  <Badge variant="secondary" className="ml-auto text-[9px] px-1.5 py-0">Contact</Badge>
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          )}
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                  <Button variant="outline" size="icon" className="h-9 w-9 shrink-0"
+                    onClick={() => setShowAddCustomer(true)}>
+                    <Plus className="w-4 h-4" />
+                  </Button>
+                </div>
+                <Dialog open={showAddCustomer} onOpenChange={setShowAddCustomer}>
+                  <DialogContent className="sm:max-w-[400px]">
+                    <DialogHeader>
+                      <DialogTitle>Add New Customer</DialogTitle>
+                    </DialogHeader>
+                    <Input
+                      placeholder="Customer name"
+                      value={newCustomerName}
+                      onChange={(e) => setNewCustomerName(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleAddCustomer()}
+                      autoFocus
+                    />
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setShowAddCustomer(false)}>Cancel</Button>
+                      <Button onClick={handleAddCustomer} disabled={!newCustomerName.trim() || addingCustomer}>
+                        {addingCustomer ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Plus className="w-4 h-4 mr-1" />}
+                        Add
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
               </div>
               <div>
                 <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase mb-1.5 block">
