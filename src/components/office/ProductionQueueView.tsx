@@ -137,13 +137,31 @@ export function ProductionQueueView() {
     queryClient.invalidateQueries({ queryKey: ["cutPlans"] });
   };
 
-  // Fetch customers for grouping
+  // Fetch customers for grouping – use project join as fallback for RLS-blocked rows
   const { data: customers } = useQuery({
-    queryKey: ["customers-for-queue"],
+    queryKey: ["customers-for-queue", projects.map(p => p.customer_id).filter(Boolean)],
     enabled: !!user,
     queryFn: async () => {
-      const { data } = await supabase.from("customers").select("id, name").order("name");
-      return (data || []) as Array<{ id: string; name: string }>;
+      // Direct customer query
+      const { data: direct } = await supabase.from("customers").select("id, name").order("name");
+      const map = new Map((direct || []).map((c: any) => [c.id, c.name]));
+
+      // Also pull customer names via projects join for any RLS-blocked customers
+      const customerIds = projects.map(p => p.customer_id).filter(Boolean) as string[];
+      const missingIds = customerIds.filter(id => !map.has(id));
+      if (missingIds.length > 0) {
+        const { data: fallback } = await supabase
+          .from("projects")
+          .select("customer_id, customers:customer_id(id, name)")
+          .in("customer_id", missingIds);
+        (fallback || []).forEach((row: any) => {
+          if (row.customers && !map.has(row.customers.id)) {
+            map.set(row.customers.id, row.customers.name);
+          }
+        });
+      }
+
+      return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
     },
   });
 
