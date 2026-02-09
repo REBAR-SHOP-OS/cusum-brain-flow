@@ -24,6 +24,10 @@ const menus: Menu[] = [
       { label: "Invoices", tab: "invoices" },
       { label: "Payments", tab: "payments" },
       { label: "Customers", tab: "customers" },
+      { type: "separator" },
+      { type: "label", label: "Documents" },
+      { label: "Invoices / Packing Slips", tab: "documents" },
+      { label: "Quotations / Estimates", tab: "documents" },
     ],
   },
   {

@@ -19,6 +19,7 @@ import { AccountingCustomers } from "@/components/accounting/AccountingCustomers
 import { AccountingAccounts } from "@/components/accounting/AccountingAccounts";
 import { AccountingAudit } from "@/components/accounting/AccountingAudit";
 import { AccountingPayroll } from "@/components/accounting/AccountingPayroll";
+import { AccountingDocuments } from "@/components/accounting/AccountingDocuments";
 import { AccountingAgent } from "@/components/accounting/AccountingAgent";
 import { useIntegrations } from "@/hooks/useIntegrations";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -154,6 +155,7 @@ export default function AccountingWorkspace() {
             {activeTab === "accounts" && <AccountingAccounts data={qb} />}
             {activeTab === "audit" && <AccountingAudit data={qb} />}
             {activeTab === "payroll" && <AccountingPayroll data={qb} />}
+            {activeTab === "documents" && <AccountingDocuments data={qb} />}
           </div>
         )}
 
