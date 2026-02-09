@@ -24,37 +24,43 @@ export function RebarTagCard({
 }: RebarTagCardProps) {
   return (
     <div
-      className="rebar-tag border-2 border-foreground/80 bg-white text-black overflow-hidden font-mono print:break-inside-avoid print:page-break-inside-avoid print:break-after-page"
+      className="rebar-tag border-2 border-foreground/80 bg-white text-black overflow-hidden font-mono flex flex-col print:break-inside-avoid print:page-break-inside-avoid print:break-after-page"
       style={{ width: "6in", height: "4in", boxSizing: "border-box" }}
     >
+      {/* === TIMESTAMP === */}
+      <div className="px-2 py-0.5 text-[8px] font-bold border-b border-foreground/40 flex justify-between shrink-0">
+        <span>{new Date().toLocaleDateString()} {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+        <span>REBAR SHOP OS – AI Rebar Fabrication</span>
+      </div>
+
       {/* === TOP HEADER ROW === */}
-      <div className="grid grid-cols-5 border-b-2 border-foreground/80">
-        <div className="border-r border-foreground/60 px-2 py-1.5 text-center">
-          <div className="text-[8px] font-bold tracking-widest uppercase">Mark</div>
-          <div className="text-sm font-black leading-tight">{mark || "—"}</div>
+      <div className="grid grid-cols-5 border-b-2 border-foreground/80 shrink-0">
+        <div className="border-r-2 border-foreground/80 px-2 py-2 text-center">
+          <div className="text-[9px] font-bold tracking-widest uppercase">Mark</div>
+          <div className="text-lg font-black leading-tight">{mark || "—"}</div>
         </div>
-        <div className="border-r border-foreground/60 px-2 py-1.5 text-center">
-          <div className="text-[8px] font-bold tracking-widest uppercase">Size</div>
-          <div className="text-sm font-black leading-tight">{size || "—"}</div>
+        <div className="border-r-2 border-foreground/80 px-2 py-2 text-center">
+          <div className="text-[9px] font-bold tracking-widest uppercase">Size</div>
+          <div className="text-lg font-black leading-tight">{size || "—"}</div>
         </div>
-        <div className="border-r border-foreground/60 px-2 py-1.5 text-center">
-          <div className="text-[8px] font-bold tracking-widest uppercase">Grade</div>
-          <div className="text-sm font-black leading-tight">{grade || "—"}</div>
+        <div className="border-r-2 border-foreground/80 px-2 py-2 text-center">
+          <div className="text-[9px] font-bold tracking-widest uppercase">Grade</div>
+          <div className="text-lg font-black leading-tight">{grade || "—"}</div>
         </div>
-        <div className="border-r border-foreground/60 px-2 py-1.5 text-center">
-          <div className="text-[8px] font-bold tracking-widest uppercase">Qty</div>
-          <div className="text-sm font-black leading-tight">{qty ?? "—"}</div>
+        <div className="border-r-2 border-foreground/80 px-2 py-2 text-center">
+          <div className="text-[9px] font-bold tracking-widest uppercase">Qty</div>
+          <div className="text-lg font-black leading-tight">{qty ?? "—"}</div>
         </div>
-        <div className="px-2 py-1.5 text-center">
-          <div className="text-[8px] font-bold tracking-widest uppercase">Length</div>
-          <div className="text-sm font-black leading-tight">{length ?? "—"}</div>
+        <div className="px-2 py-2 text-center">
+          <div className="text-[9px] font-bold tracking-widest uppercase">Length</div>
+          <div className="text-lg font-black leading-tight">{length ?? "—"}</div>
         </div>
       </div>
 
-      {/* === MAIN BODY === */}
-      <div className="grid grid-cols-[100px_1fr_1.2fr]" style={{ minHeight: 140 }}>
+      {/* === MAIN BODY — fills remaining space === */}
+      <div className="grid grid-cols-[110px_1fr_1.2fr] flex-1 min-h-0 border-b-2 border-foreground/80">
         {/* LEFT: summary fields */}
-        <div className="border-r border-foreground/60 px-2 py-1.5 text-[10px] space-y-px">
+        <div className="border-r-2 border-foreground/80 px-2 py-2 text-[11px] space-y-0.5 flex flex-col justify-center">
           <div className="flex justify-between"><span className="font-bold">Qty:</span><span className="font-black">{qty ?? ""}</span></div>
           <div className="flex justify-between"><span className="font-bold">Size:</span><span className="font-black">{size}</span></div>
           <div className="flex justify-between"><span className="font-bold">Grd:</span><span className="font-black">{grade}</span></div>
@@ -67,14 +73,14 @@ export function RebarTagCard({
         </div>
 
         {/* CENTER: shape code circle + dimensions A-R */}
-        <div className="border-r border-foreground/60 px-2 py-1.5">
+        <div className="border-r-2 border-foreground/80 px-2 py-2 flex flex-col">
           {/* Shape code badge */}
-          <div className="flex justify-center mb-1">
-            <div className="w-7 h-7 rounded-full border-2 border-black flex items-center justify-center">
-              <span className="text-[10px] font-black leading-none">{shapeType || "S"}</span>
+          <div className="flex justify-center mb-1.5">
+            <div className="w-8 h-8 rounded-full border-2 border-black flex items-center justify-center">
+              <span className="text-[11px] font-black leading-none">{shapeType || "S"}</span>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-x-3 gap-y-0 text-[10px]">
+          <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] flex-1">
             {DIM_LEFT.map((d, i) => (
               <div key={d} className="flex items-center gap-1" style={{ gridColumn: 1, gridRow: i + 1 }}>
                 <span className="font-bold w-3">{d}:</span>
@@ -91,18 +97,18 @@ export function RebarTagCard({
         </div>
 
         {/* RIGHT: ASA shape image from database */}
-        <div className="px-1 py-1 flex flex-col items-center justify-center bg-white">
+        <div className="px-2 py-2 flex flex-col items-center justify-center bg-white">
           {shapeImageUrl ? (
             <img
               src={shapeImageUrl}
               alt={`Shape ${shapeType}`}
-              className="max-w-full max-h-[120px] object-contain print:max-h-[110px]"
+              className="max-w-full max-h-full object-contain"
               crossOrigin="anonymous"
             />
           ) : shapeType ? (
             <div className="flex flex-col items-center justify-center gap-1 text-black/40">
-              <div className="w-16 h-10 border-b-2 border-black/30" />
-              <span className="text-base font-black">{shapeType}</span>
+              <div className="w-20 h-12 border-b-2 border-black/30" />
+              <span className="text-lg font-black">{shapeType}</span>
             </div>
           ) : (
             <span className="text-[10px] text-black/30 italic">No shape</span>
@@ -111,39 +117,39 @@ export function RebarTagCard({
       </div>
 
       {/* === BOTTOM INFO ROW === */}
-      <div className="grid grid-cols-[1.3fr_0.8fr_0.7fr] border-t-2 border-foreground/80 text-[9px]">
-        <div className="border-r border-foreground/60 px-2 py-1 space-y-px">
+      <div className="grid grid-cols-[1.3fr_0.8fr_0.7fr] border-b-2 border-foreground/80 text-[10px] shrink-0">
+        <div className="border-r-2 border-foreground/80 px-2 py-1.5 space-y-px">
           <div className="flex gap-1">
             <span className="font-bold">Ref:</span>
             <span className="font-black uppercase truncate">{reference || customer || "—"}</span>
           </div>
-          {address && <div className="text-[8px] truncate">{address}</div>}
+          {address && <div className="text-[9px] truncate">{address}</div>}
           <div className="flex gap-1">
             <span className="font-bold">Dwg:</span>
             <span className="font-black">{dwg || "—"}</span>
           </div>
         </div>
-        <div className="border-r border-foreground/60 px-2 py-1 space-y-px">
+        <div className="border-r-2 border-foreground/80 px-2 py-1.5 space-y-px">
           <div className="flex justify-between"><span className="font-bold">Bndl:</span><span></span></div>
           <div className="flex justify-between"><span className="font-bold">KG:</span><span className="font-black">{weight}</span></div>
           <div className="flex justify-between"><span className="font-bold">Item:</span><span className="font-black">{item}</span></div>
         </div>
-        <div className="px-2 py-1 space-y-px">
+        <div className="px-2 py-1.5 space-y-px">
           <div className="flex gap-1"><span className="font-bold">Job:</span></div>
           <div className="flex gap-1"><span className="font-bold">Dwg:</span><span className="font-black">{dwg || "—"}</span></div>
         </div>
       </div>
 
       {/* === FOOTER === */}
-      <div className="border-t-2 border-foreground/80 px-2 py-1 flex items-center justify-between">
-        <span className="text-xs font-black tracking-wider">R.S</span>
-        <span className="text-[8px] font-bold tracking-widest uppercase">REBAR.SHOP</span>
+      <div className="px-2 py-1.5 flex items-center justify-between shrink-0">
+        <span className="text-sm font-black tracking-wider">R.S</span>
+        <span className="text-[9px] font-bold tracking-widest uppercase">REBAR.SHOP</span>
         <div className="flex gap-[1px]">
           {Array.from({ length: 24 }).map((_, i) => (
             <div
               key={i}
               className="bg-black"
-              style={{ width: i % 3 === 0 ? 2 : 1, height: 16 }}
+              style={{ width: i % 3 === 0 ? 2 : 1, height: 18 }}
             />
           ))}
         </div>

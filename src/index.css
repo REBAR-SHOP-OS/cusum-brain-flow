@@ -197,12 +197,18 @@
 
 /* ============================================
    Zebra ZT411 Label Print Styles
-   4" × 6" landscape (6" wide × 4" tall)
+   4" × 6" label (6" wide × 4" tall)
    ============================================ */
 @media print {
+  /* Only apply label page size when printing tags */
+  body:has(.rebar-tag) {
+    visibility: hidden !important;
+  }
+
   @page {
     size: 6in 4in;
     margin: 0;
+    padding: 0;
   }
 
   /* Hide everything except tag cards */
@@ -228,7 +234,6 @@
     border-radius: 0 !important;
     background: #fff !important;
     color: #000 !important;
-    font-size: 10pt !important;
     margin: 0 !important;
     padding: 0 !important;
     box-shadow: none !important;
@@ -259,6 +264,11 @@
   /* Barcode bars stay black */
   .rebar-tag .bg-black {
     background: #000 !important;
+  }
+
+  /* White background for shape image area */
+  .rebar-tag .bg-white {
+    background: #fff !important;
   }
 }
 
