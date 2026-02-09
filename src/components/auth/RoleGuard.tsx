@@ -8,6 +8,8 @@ const WORKSHOP_ALLOWED = [
   "/timeclock",
   "/team-hub",
   "/settings",
+  "/inbox",
+  "/phonecalls",
 ];
 
 interface RoleGuardProps {
