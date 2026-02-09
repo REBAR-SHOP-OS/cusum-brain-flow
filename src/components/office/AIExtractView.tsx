@@ -117,14 +117,14 @@ export function AIExtractView() {
   const { projects } = useProjects(profile?.company_id || undefined);
   const { barlists } = useBarlists(selectedProjectId || undefined);
 
-  // All ERP customers + contacts for combobox
+  // All ERP customers + contacts for combobox (RLS handles company filtering)
   const { data: erpContacts = [] } = useQuery({
-    queryKey: ["erp-contacts", profile?.company_id],
-    enabled: !!profile?.company_id,
+    queryKey: ["erp-contacts"],
+    enabled: !!user,
     queryFn: async () => {
       const [custRes, contactRes] = await Promise.all([
-        supabase.from("customers").select("id, name").eq("company_id", profile!.company_id!).order("name"),
-        supabase.from("contacts").select("id, first_name, last_name, email, customer_id").eq("company_id", profile!.company_id!).order("first_name"),
+        supabase.from("customers").select("id, name").order("name").limit(500),
+        supabase.from("contacts").select("id, first_name, last_name, email, customer_id").order("first_name").limit(200),
       ]);
       const custs = (custRes.data ?? []).map(c => ({ id: c.id, name: c.name, type: "customer" as const }));
       const contacts = (contactRes.data ?? []).map(c => ({
