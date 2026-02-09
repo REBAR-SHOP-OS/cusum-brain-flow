@@ -20,6 +20,7 @@ import { AccountingAccounts } from "@/components/accounting/AccountingAccounts";
 import { AccountingAudit } from "@/components/accounting/AccountingAudit";
 import { AccountingPayroll } from "@/components/accounting/AccountingPayroll";
 import { AccountingDocuments } from "@/components/accounting/AccountingDocuments";
+import { AccountingReport } from "@/components/accounting/AccountingReport";
 import { AccountingAgent } from "@/components/accounting/AccountingAgent";
 import { useIntegrations } from "@/hooks/useIntegrations";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -156,6 +157,9 @@ export default function AccountingWorkspace() {
             {activeTab === "audit" && <AccountingAudit data={qb} />}
             {activeTab === "payroll" && <AccountingPayroll data={qb} />}
             {activeTab === "documents" && <AccountingDocuments data={qb} />}
+            {activeTab === "balance-sheet" && <AccountingReport data={qb} report="balance-sheet" />}
+            {activeTab === "profit-loss" && <AccountingReport data={qb} report="profit-loss" />}
+            {activeTab === "cash-flow" && <AccountingReport data={qb} report="cash-flow" />}
           </div>
         )}
 
