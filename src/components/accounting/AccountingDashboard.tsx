@@ -3,8 +3,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   FileText, Receipt, Landmark, DollarSign,
-  Plus, AlertTriangle, MoreVertical,
+  Plus, AlertTriangle, MoreVertical, PiggyBank, Wallet,
 } from "lucide-react";
+import type { QBAccount } from "@/hooks/useQuickBooksData";
 import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
 import { useMemo } from "react";
 
@@ -169,31 +170,47 @@ function BillsCard({ data, onNavigate }: Props) {
 function BankAccountCard({
   name,
   balance,
-  color = "text-foreground",
+  icon = "checking",
+  subAccounts,
   onNavigate,
 }: {
   name: string;
   balance: number;
-  color?: string;
+  icon?: "checking" | "savings";
+  subAccounts?: QBAccount[];
   onNavigate: () => void;
 }) {
+  const Icon = icon === "savings" ? PiggyBank : Wallet;
+  const accentColor = icon === "savings" ? "text-emerald-500" : "text-primary";
+
   return (
     <Card className="cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all" onClick={onNavigate}>
       <CardContent className="p-5">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <Landmark className="w-4 h-4 text-primary" />
-            <h3 className={`font-semibold text-sm ${color}`}>{name}</h3>
+            <Icon className={`w-4 h-4 ${accentColor}`} />
+            <h3 className={`font-semibold text-sm ${accentColor}`}>{name}</h3>
           </div>
           <MoreVertical className="w-4 h-4 text-muted-foreground" />
         </div>
 
         <div className="flex items-center justify-between text-sm mb-2">
           <span className="text-muted-foreground">Balance</span>
-          <span className="font-semibold tabular-nums">{fmt(balance)}</span>
+          <span className="font-semibold tabular-nums text-lg">{fmt(balance)}</span>
         </div>
 
-        <Button size="sm" variant="outline" className="text-xs text-primary" onClick={(e) => { e.stopPropagation(); onNavigate(); }}>
+        {subAccounts && subAccounts.length > 1 && (
+          <div className="space-y-1 mt-2 border-t pt-2">
+            {subAccounts.map((a) => (
+              <div key={a.Id} className="flex justify-between text-xs text-muted-foreground">
+                <span className="truncate mr-2">{a.Name}</span>
+                <span className="tabular-nums font-medium">{fmt(a.CurrentBalance)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <Button size="sm" variant="outline" className={`text-xs mt-2 ${accentColor}`} onClick={(e) => { e.stopPropagation(); onNavigate(); }}>
           View Transactions
         </Button>
       </CardContent>
@@ -231,29 +248,39 @@ function CashCard({ data, onNavigate }: Props) {
 }
 
 export function AccountingDashboard({ data, onNavigate }: Props) {
-  // Extract bank-type accounts for display
-  const bankAccounts = data.accounts.filter(
-    (a) => a.AccountType === "Bank" && a.Active
+  // Separate checking and savings accounts
+  const checkingAccounts = data.accounts.filter(
+    (a) => a.AccountType === "Bank" && a.Active && (a.AccountSubType === "Checking" || !a.AccountSubType)
   );
+  const savingsAccounts = data.accounts.filter(
+    (a) => a.AccountType === "Bank" && a.Active && a.AccountSubType === "Savings"
+  );
+
+  const totalChecking = checkingAccounts.reduce((s, a) => s + a.CurrentBalance, 0);
+  const totalSavings = savingsAccounts.reduce((s, a) => s + a.CurrentBalance, 0);
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
       <InvoicesCard data={data} onNavigate={onNavigate} />
       <BillsCard data={data} onNavigate={onNavigate} />
 
-      {bankAccounts.length > 0 ? (
-        bankAccounts.slice(0, 2).map((acct) => (
-          <BankAccountCard
-            key={acct.Id}
-            name={acct.Name}
-            balance={acct.CurrentBalance}
-            color="text-primary"
-            onNavigate={() => onNavigate("accounts")}
-          />
-        ))
-      ) : (
-        <BankAccountCard name="Bank Account" balance={0} onNavigate={() => onNavigate("accounts")} />
-      )}
+      {/* Checking Accounts */}
+      <BankAccountCard
+        name={checkingAccounts.length === 1 ? checkingAccounts[0].Name : "Checking"}
+        balance={checkingAccounts.length === 1 ? checkingAccounts[0].CurrentBalance : totalChecking}
+        icon="checking"
+        subAccounts={checkingAccounts.length > 1 ? checkingAccounts : undefined}
+        onNavigate={() => onNavigate("accounts")}
+      />
+
+      {/* Savings Accounts */}
+      <BankAccountCard
+        name={savingsAccounts.length === 1 ? savingsAccounts[0].Name : "Savings"}
+        balance={savingsAccounts.length === 1 ? savingsAccounts[0].CurrentBalance : totalSavings}
+        icon="savings"
+        subAccounts={savingsAccounts.length > 1 ? savingsAccounts : undefined}
+        onNavigate={() => onNavigate("accounts")}
+      />
 
       <CashCard data={data} onNavigate={onNavigate} />
     </div>
