@@ -261,3 +261,21 @@
     background: #000 !important;
   }
 }
+
+/* Print styles for document templates */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print\:shadow-none,
+  .print\:shadow-none * {
+    visibility: visible !important;
+  }
+  .print\:hidden {
+    display: none !important;
+  }
+  @page {
+    size: A4;
+    margin: 10mm;
+  }
+}
