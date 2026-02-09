@@ -108,6 +108,16 @@ const agentRoutes: AgentRoute[] = [
     ],
   },
   {
+    id: "eisenhower",
+    route: "/agent/eisenhower",
+    name: "Ike",
+    keywords: [
+      "eisenhower", "eisenhower matrix", "priority matrix", "urgent important",
+      "prioritize", "priority", "delegate", "eliminate", "do first",
+      "urgent", "important", "quadrant", "ike",
+    ],
+  },
+  {
     id: "data",
     route: "/agent/data",
     name: "Prism",
@@ -144,7 +154,7 @@ const agentRoutes: AgentRoute[] = [
     keywords: [
       "schedule", "calendar", "meeting", "reminder", "task", "todo",
       "to-do", "plan my day", "organize", "summarize", "brief",
-      "daily", "agenda", "priority", "prioritize",
+      "daily", "agenda",
     ],
   },
   {

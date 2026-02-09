@@ -41,6 +41,11 @@ export const agentSuggestions: Record<string, AgentSuggestion[]> = {
     { title: "Plan this week's social content", category: "Calendar" },
     { title: "Show post performance", category: "Analytics" },
   ],
+  eisenhower: [
+    { title: "Help me prioritize my tasks for today", category: "Prioritize" },
+    { title: "Which of my tasks should I delegate?", category: "Delegate" },
+    { title: "Build an Eisenhower Matrix from my to-do list", category: "Matrix" },
+  ],
   data: [
     { title: "Show business KPIs this month", category: "Analytics" },
     { title: "Compare this week vs last week", category: "Trends" },
