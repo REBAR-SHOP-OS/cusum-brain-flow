@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useCutPlans } from "@/hooks/useCutPlans";
+import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { 
   Pencil, RotateCcw, CheckCircle2, Trash2, 
   Clock, Activity, FolderOpen, FileText, ChevronRight, ChevronDown, Users
 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { useProjects } from "@/hooks/useProjects";
@@ -60,6 +61,24 @@ export function ProductionQueueView() {
   const { companyId } = useCompanyId();
   const { projects } = useProjects(companyId ?? undefined);
   const { barlists } = useBarlists();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const handleDeleteBarlist = async (barlistId: string) => {
+    // Delete barlist items first, then the barlist
+    const { error: itemsErr } = await supabase.from("barlist_items").delete().eq("barlist_id", barlistId);
+    if (itemsErr) {
+      toast({ title: "Error deleting barlist items", description: itemsErr.message, variant: "destructive" });
+      return;
+    }
+    const { error } = await supabase.from("barlists").delete().eq("id", barlistId);
+    if (error) {
+      toast({ title: "Error deleting barlist", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Barlist deleted" });
+    queryClient.invalidateQueries({ queryKey: ["barlists"] });
+  };
 
   // Fetch customers for grouping
   const { data: customers } = useQuery({
@@ -116,6 +135,7 @@ export function ProductionQueueView() {
               node={node}
               onDeletePlan={deletePlan}
               onEditPlan={(id) => navigate(`/cutter-planning?planId=${id}`)}
+              onDeleteBarlist={handleDeleteBarlist}
             />
           ))}
         </div>
@@ -251,10 +271,11 @@ function buildCustomerTree(
 
 // --- UI Components ---
 
-function CustomerFolder({ node, onDeletePlan, onEditPlan }: {
+function CustomerFolder({ node, onDeletePlan, onEditPlan, onDeleteBarlist }: {
   node: CustomerNode;
   onDeletePlan: (id: string) => void;
   onEditPlan: (id: string) => void;
+  onDeleteBarlist: (id: string) => void;
 }) {
   const [open, setOpen] = useState(true);
   const totalProjects = node.projects.length;
@@ -277,7 +298,7 @@ function CustomerFolder({ node, onDeletePlan, onEditPlan }: {
       <CollapsibleContent>
         <div className="ml-4 mt-1 space-y-1 border-l-2 border-primary/15 pl-3">
           {node.projects.map(proj => (
-            <ProjectFolder key={proj.projectId} node={proj} onDeletePlan={onDeletePlan} onEditPlan={onEditPlan} />
+            <ProjectFolder key={proj.projectId} node={proj} onDeletePlan={onDeletePlan} onEditPlan={onEditPlan} onDeleteBarlist={onDeleteBarlist} />
           ))}
         </div>
       </CollapsibleContent>
@@ -285,10 +306,11 @@ function CustomerFolder({ node, onDeletePlan, onEditPlan }: {
   );
 }
 
-function ProjectFolder({ node, onDeletePlan, onEditPlan }: {
+function ProjectFolder({ node, onDeletePlan, onEditPlan, onDeleteBarlist }: {
   node: ProjectNode;
   onDeletePlan: (id: string) => void;
   onEditPlan: (id: string) => void;
+  onDeleteBarlist: (id: string) => void;
 }) {
   const [open, setOpen] = useState(true);
   const totalPlans = node.barlists.reduce((s, b) => s + b.plans.length, 0) + node.loosePlans.length;
@@ -310,7 +332,7 @@ function ProjectFolder({ node, onDeletePlan, onEditPlan }: {
       <CollapsibleContent>
         <div className="ml-5 mt-0.5 space-y-1 border-l border-border pl-3">
           {node.barlists.map(bl => (
-            <BarlistFolder key={bl.barlistId} barlist={bl} onDeletePlan={onDeletePlan} onEditPlan={onEditPlan} />
+            <BarlistFolder key={bl.barlistId} barlist={bl} onDeletePlan={onDeletePlan} onEditPlan={onEditPlan} onDeleteBarlist={onDeleteBarlist} />
           ))}
           {node.loosePlans.map(plan => (
             <QueueCard key={plan.id} plan={plan} onDelete={() => onDeletePlan(plan.id)} onEdit={() => onEditPlan(plan.id)} />
@@ -321,31 +343,43 @@ function ProjectFolder({ node, onDeletePlan, onEditPlan }: {
   );
 }
 
-function BarlistFolder({ barlist, onDeletePlan, onEditPlan }: {
+function BarlistFolder({ barlist, onDeletePlan, onEditPlan, onDeleteBarlist }: {
   barlist: BarlistNode;
   onDeletePlan: (id: string) => void;
   onEditPlan: (id: string) => void;
+  onDeleteBarlist: (id: string) => void;
 }) {
   const [open, setOpen] = useState(true);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   return (
+    <>
     <Collapsible open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger asChild>
-        <button className="w-full flex items-center gap-2 p-2 rounded-md hover:bg-muted/30 transition-colors text-left">
-          {open ? <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" /> : <ChevronRight className="w-3 h-3 text-muted-foreground shrink-0" />}
-          <FileText className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-          <div className="flex flex-col min-w-0">
-            <span className="text-[11px] font-medium text-foreground truncate">{barlist.barlistName}</span>
-            {barlist.fileName && (
-              <span className="text-[10px] text-muted-foreground truncate">{barlist.fileName}</span>
-            )}
-          </div>
-          <Badge variant="outline" className="text-[9px] ml-1 shrink-0">Rev {barlist.revisionNo}</Badge>
-          <span className="text-[10px] text-muted-foreground ml-auto shrink-0">
-            {barlist.plans.length} manifest{barlist.plans.length !== 1 ? "s" : ""}
-          </span>
-        </button>
-      </CollapsibleTrigger>
+      <div className="flex items-center gap-0">
+        <CollapsibleTrigger asChild>
+          <button className="flex-1 flex items-center gap-2 p-2 rounded-md hover:bg-muted/30 transition-colors text-left">
+            {open ? <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" /> : <ChevronRight className="w-3 h-3 text-muted-foreground shrink-0" />}
+            <FileText className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+            <div className="flex flex-col min-w-0">
+              <span className="text-[11px] font-medium text-foreground truncate">{barlist.barlistName}</span>
+              {barlist.fileName && (
+                <span className="text-[10px] text-muted-foreground truncate">{barlist.fileName}</span>
+              )}
+            </div>
+            <Badge variant="outline" className="text-[9px] ml-1 shrink-0">Rev {barlist.revisionNo}</Badge>
+            <span className="text-[10px] text-muted-foreground ml-auto shrink-0">
+              {barlist.plans.length} manifest{barlist.plans.length !== 1 ? "s" : ""}
+            </span>
+          </button>
+        </CollapsibleTrigger>
+        <Button
+          variant="ghost" size="icon"
+          className="h-7 w-7 text-destructive/60 hover:text-destructive shrink-0"
+          onClick={(e) => { e.stopPropagation(); setConfirmOpen(true); }}
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </Button>
+      </div>
       <CollapsibleContent>
         <div className="ml-5 mt-0.5 space-y-1">
           {barlist.plans.length === 0 ? (
@@ -358,6 +392,22 @@ function BarlistFolder({ barlist, onDeletePlan, onEditPlan }: {
         </div>
       </CollapsibleContent>
     </Collapsible>
+
+    <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete "{barlist.barlistName}"?</AlertDialogTitle>
+          <AlertDialogDescription>This will permanently delete this barlist and all its items.</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => onDeleteBarlist(barlist.barlistId)}>
+            Delete
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
 
