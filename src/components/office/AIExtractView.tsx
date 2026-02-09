@@ -717,24 +717,51 @@ export function AIExtractView() {
           </div>
         )}
 
-        {/* Extracting state indicator */}
+        {/* Extracting state indicator — animated brain */}
         {activeSession && activeSession.status === "extracting" && !processing && (
-          <Card className="border-primary/30 bg-primary/5">
-            <CardContent className="p-10 flex flex-col items-center justify-center gap-4">
-              <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
-                <Loader2 className="w-8 h-8 text-primary animate-spin" />
+          <div className="relative flex flex-col items-center justify-center py-24 gap-6 overflow-hidden rounded-xl">
+            {/* Pulsing glow rings */}
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="w-64 h-64 rounded-full bg-primary/5 animate-ping" style={{ animationDuration: '3s' }} />
+            </div>
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="w-48 h-48 rounded-full bg-primary/10 animate-ping" style={{ animationDuration: '2s', animationDelay: '0.5s' }} />
+            </div>
+
+            {/* Brain icon with pulse */}
+            <div className="relative z-10">
+              <div className="w-28 h-28 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center animate-pulse" style={{ animationDuration: '1.5s' }}>
+                <svg viewBox="0 0 24 24" className="w-14 h-14 text-primary drop-shadow-[0_0_12px_hsl(var(--primary)/0.6)]" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2a5 5 0 0 1 4.5 2.8A4 4 0 0 1 20 9a4 4 0 0 1-1.5 3.1A5 5 0 0 1 17 17H7a5 5 0 0 1-1.5-4.9A4 4 0 0 1 4 9a4 4 0 0 1 3.5-4.2A5 5 0 0 1 12 2z" />
+                  <path d="M12 2v20" opacity="0.4" />
+                  <path d="M8 8h.01M16 8h.01M9 13a3 3 0 0 0 6 0" opacity="0.4" />
+                </svg>
               </div>
-              <div className="text-center space-y-1">
-                <h3 className="text-sm font-bold text-foreground">AI Extraction in Progress</h3>
-                <p className="text-xs text-muted-foreground">
-                  This session is being processed. It may take up to 2 minutes for large files.
-                </p>
-              </div>
-              <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => { refreshSessions(); refreshRows(); }}>
-                <Clock className="w-3.5 h-3.5" /> Refresh Status
-              </Button>
-            </CardContent>
-          </Card>
+              {/* Blinking dots around the brain */}
+              {[0, 60, 120, 180, 240, 300].map((deg, i) => (
+                <span
+                  key={deg}
+                  className="absolute w-2 h-2 rounded-full bg-primary"
+                  style={{
+                    top: `${50 - 46 * Math.cos((deg * Math.PI) / 180)}%`,
+                    left: `${50 + 46 * Math.sin((deg * Math.PI) / 180)}%`,
+                    animation: `pulse 1.2s ease-in-out ${i * 0.2}s infinite`,
+                    opacity: 0.7,
+                  }}
+                />
+              ))}
+            </div>
+
+            <div className="relative z-10 text-center space-y-1.5">
+              <h3 className="text-sm font-bold text-foreground tracking-wide">AI Brain is Thinking…</h3>
+              <p className="text-xs text-muted-foreground max-w-xs">
+                Analyzing your manifest. This may take up to 2 minutes for large files.
+              </p>
+            </div>
+            <Button variant="outline" size="sm" className="relative z-10 gap-1.5 text-xs" onClick={() => { refreshSessions(); refreshRows(); }}>
+              <Clock className="w-3.5 h-3.5" /> Refresh Status
+            </Button>
+          </div>
         )}
 
         {activeSession?.status === "approved" && (
