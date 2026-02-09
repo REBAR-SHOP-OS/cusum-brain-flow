@@ -94,6 +94,30 @@ export interface QBCreditMemo {
   TxnDate: string;
 }
 
+export interface QBEmployee {
+  Id: string;
+  DisplayName: string;
+  GivenName: string;
+  FamilyName: string;
+  PrimaryPhone?: { FreeFormNumber: string };
+  PrimaryEmailAddr?: { Address: string };
+  Active: boolean;
+  HiredDate?: string;
+  ReleasedDate?: string;
+  SSN?: string;
+  SyncToken: string;
+}
+
+export interface QBTimeActivity {
+  Id: string;
+  NameOf: string;
+  EmployeeRef?: { value: string; name: string };
+  Hours: number;
+  Minutes: number;
+  TxnDate: string;
+  Description?: string;
+}
+
 export function useQuickBooksData() {
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState<string | null>(null);
@@ -108,6 +132,8 @@ export function useQuickBooksData() {
   const [items, setItems] = useState<QBItem[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<QBPurchaseOrder[]>([]);
   const [creditMemos, setCreditMemos] = useState<QBCreditMemo[]>([]);
+  const [employees, setEmployees] = useState<QBEmployee[]>([]);
+  const [timeActivities, setTimeActivities] = useState<QBTimeActivity[]>([]);
   const [companyInfo, setCompanyInfo] = useState<Record<string, unknown> | null>(null);
   const { toast } = useToast();
 
@@ -139,7 +165,7 @@ export function useQuickBooksData() {
         return;
       }
 
-      const [inv, bil, pay, ven, cust, acct, est, info, itm, po, cm] = await Promise.allSettled([
+      const [inv, bil, pay, ven, cust, acct, est, info, itm, po, cm, emp, ta] = await Promise.allSettled([
         qbAction("list-invoices"),
         qbAction("list-bills"),
         qbAction("list-payments"),
@@ -151,6 +177,8 @@ export function useQuickBooksData() {
         qbAction("list-items"),
         qbAction("list-purchase-orders"),
         qbAction("list-credit-memos"),
+        qbAction("list-employees"),
+        qbAction("list-time-activities"),
       ]);
 
       if (inv.status === "fulfilled") setInvoices(inv.value.invoices || []);
@@ -163,6 +191,8 @@ export function useQuickBooksData() {
       if (itm.status === "fulfilled") setItems(itm.value.items || []);
       if (po.status === "fulfilled") setPurchaseOrders(po.value.purchaseOrders || []);
       if (cm.status === "fulfilled") setCreditMemos(cm.value.creditMemos || []);
+      if (emp.status === "fulfilled") setEmployees(emp.value.employees || []);
+      if (ta.status === "fulfilled") setTimeActivities(ta.value.timeActivities || []);
 
       // Load synced customers from our DB
       const { data: dbCustomers } = await supabase
@@ -218,6 +248,13 @@ export function useQuickBooksData() {
     await loadAll();
   }, [qbAction, toast, loadAll]);
 
+  const createPayrollCorrection = useCallback(async (body: Record<string, unknown>) => {
+    const data = await qbAction("create-payroll-correction", body);
+    toast({ title: "✅ Payroll correction created", description: `Journal Entry #${data.docNumber || "N/A"}` });
+    await loadAll();
+    return data;
+  }, [qbAction, toast, loadAll]);
+
   // Computed summaries
   const totalReceivable = invoices.reduce((sum, inv) => sum + (inv.Balance || 0), 0);
   const totalPayable = bills.reduce((sum, b) => sum + (b.Balance || 0), 0);
@@ -226,8 +263,8 @@ export function useQuickBooksData() {
 
   return {
     loading, syncing, connected,
-    invoices, bills, payments, vendors, customers, accounts, estimates, items, purchaseOrders, creditMemos, companyInfo,
+    invoices, bills, payments, vendors, customers, accounts, estimates, items, purchaseOrders, creditMemos, employees, timeActivities, companyInfo,
     totalReceivable, totalPayable, overdueInvoices, overdueBills,
-    checkConnection, loadAll, syncEntity, createEntity, sendInvoice, voidInvoice, qbAction,
+    checkConnection, loadAll, syncEntity, createEntity, sendInvoice, voidInvoice, createPayrollCorrection, qbAction,
   };
 }
