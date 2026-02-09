@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   LayoutDashboard, FileText, Receipt, CreditCard, Users,
   Landmark, ShieldCheck, Loader2, Plug, RefreshCw, Banknote,
-  MessageCircle, X,
+  MessageCircle, X, ShieldAlert,
 } from "lucide-react";
 import { useQuickBooksData } from "@/hooks/useQuickBooksData";
 import { AccountingDashboard } from "@/components/accounting/AccountingDashboard";
@@ -20,6 +20,7 @@ import { AccountingAudit } from "@/components/accounting/AccountingAudit";
 import { AccountingPayroll } from "@/components/accounting/AccountingPayroll";
 import { AccountingAgent } from "@/components/accounting/AccountingAgent";
 import { useIntegrations } from "@/hooks/useIntegrations";
+import { useUserRole } from "@/hooks/useUserRole";
 import accountingHelper from "@/assets/helpers/accounting-helper.png";
 
 export default function AccountingWorkspace() {
@@ -28,10 +29,44 @@ export default function AccountingWorkspace() {
   const [agentMode, setAgentMode] = useState<"default" | "minimized" | "fullscreen">("default");
   const qb = useQuickBooksData();
   const { startOAuth } = useIntegrations();
+  const { isAdmin, hasRole, isLoading: rolesLoading } = useUserRole();
+
+  const hasAccess = isAdmin || hasRole("accounting");
 
   useEffect(() => {
-    qb.loadAll();
-  }, []);
+    if (hasAccess) {
+      qb.loadAll();
+    }
+  }, [hasAccess]);
+
+  if (rolesLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center space-y-4">
+          <Loader2 className="w-12 h-12 animate-spin mx-auto text-primary" />
+          <p className="text-lg text-muted-foreground">Checking access...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!hasAccess) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Card className="max-w-lg w-full">
+          <CardContent className="p-10 text-center space-y-6">
+            <div className="p-6 rounded-2xl bg-destructive/10 w-fit mx-auto">
+              <ShieldAlert className="w-16 h-16 text-destructive" />
+            </div>
+            <h1 className="text-2xl font-bold">Access Restricted</h1>
+            <p className="text-lg text-muted-foreground">
+              The Accounting workspace is restricted. Contact an admin if you need access.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   if (qb.connected === false) {
     return (
