@@ -65,11 +65,9 @@ export function ProductionQueueView() {
   const queryClient = useQueryClient();
 
   const handleDeleteBarlist = async (barlistId: string) => {
-    const { error: itemsErr } = await supabase.from("barlist_items").delete().eq("barlist_id", barlistId);
-    if (itemsErr) {
-      toast({ title: "Error deleting barlist items", description: itemsErr.message, variant: "destructive" });
-      return;
-    }
+    // Delete work orders referencing this barlist first
+    await supabase.from("work_orders").delete().eq("barlist_id", barlistId);
+    await supabase.from("barlist_items").delete().eq("barlist_id", barlistId);
     const { error } = await supabase.from("barlists").delete().eq("id", barlistId);
     if (error) {
       toast({ title: "Error deleting barlist", description: error.message, variant: "destructive" });
@@ -79,37 +77,53 @@ export function ProductionQueueView() {
     queryClient.invalidateQueries({ queryKey: ["barlists"] });
   };
 
-  const handleDeleteProject = async (projectId: string) => {
-    // Delete all barlists (and their items) under this project, then cut plans, then the project
+  const handleDeleteProject = async (projectId: string): Promise<boolean> => {
+    // 1. Delete work orders referencing this project (and its barlists)
+    await supabase.from("work_orders").delete().eq("project_id", projectId);
+    
+    // 2. Delete barlists and their items
     const projectBarlists = barlists.filter(b => b.project_id === projectId);
     for (const b of projectBarlists) {
+      await supabase.from("work_orders").delete().eq("barlist_id", b.id);
       await supabase.from("barlist_items").delete().eq("barlist_id", b.id);
       await supabase.from("barlists").delete().eq("id", b.id);
     }
-    // Delete cut plan items then cut plans
+    
+    // 3. Delete cut plan items (incl. clearance evidence) then cut plans
     const projectPlans = plans.filter(p => p.project_id === projectId);
     for (const p of projectPlans) {
+      // Delete clearance evidence for each item
+      const { data: items } = await supabase.from("cut_plan_items").select("id").eq("cut_plan_id", p.id);
+      if (items && items.length > 0) {
+        const itemIds = items.map(i => i.id);
+        await supabase.from("clearance_evidence").delete().in("cut_plan_item_id", itemIds);
+      }
       await supabase.from("cut_plan_items").delete().eq("cut_plan_id", p.id);
       await supabase.from("cut_plans").delete().eq("id", p.id);
     }
+    
+    // 4. Delete the project itself
     const { error } = await supabase.from("projects").delete().eq("id", projectId);
     if (error) {
       toast({ title: "Error deleting project", description: error.message, variant: "destructive" });
-      return;
+      return false;
     }
     toast({ title: "Project deleted" });
     queryClient.invalidateQueries({ queryKey: ["projects"] });
     queryClient.invalidateQueries({ queryKey: ["barlists"] });
     queryClient.invalidateQueries({ queryKey: ["cutPlans"] });
+    return true;
   };
 
   const handleDeleteCustomer = async (node: CustomerNode) => {
-    // Delete everything under this customer: projects → barlists → plans
     for (const proj of node.projects) {
       if (proj.projectId === "__unassigned__") continue;
-      await handleDeleteProject(proj.projectId);
+      const ok = await handleDeleteProject(proj.projectId);
+      if (!ok) return;
     }
     if (node.customerId) {
+      // Delete contacts referencing this customer
+      await supabase.from("contacts").delete().eq("customer_id", node.customerId);
       const { error } = await supabase.from("customers").delete().eq("id", node.customerId);
       if (error) {
         toast({ title: "Error deleting customer", description: error.message, variant: "destructive" });
@@ -118,6 +132,9 @@ export function ProductionQueueView() {
     }
     toast({ title: "Customer deleted" });
     queryClient.invalidateQueries({ queryKey: ["customers-for-queue"] });
+    queryClient.invalidateQueries({ queryKey: ["projects"] });
+    queryClient.invalidateQueries({ queryKey: ["barlists"] });
+    queryClient.invalidateQueries({ queryKey: ["cutPlans"] });
   };
 
   // Fetch customers for grouping
