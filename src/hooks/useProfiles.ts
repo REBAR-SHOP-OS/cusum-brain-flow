@@ -37,11 +37,11 @@ export function useProfiles() {
     queryKey: ["profiles"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("profiles")
+        .from("profiles_safe" as any)
         .select("*")
         .order("full_name");
       if (error) throw error;
-      return data as Profile[];
+      return (data as unknown) as Profile[];
     },
   });
 

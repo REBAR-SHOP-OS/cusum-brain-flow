@@ -976,6 +976,13 @@ export type Database = {
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "employee_salaries_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: true
+            referencedRelation: "profiles_safe"
+            referencedColumns: ["id"]
+          },
         ]
       }
       estimation_learnings: {
@@ -2104,10 +2111,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "machine_runs_operator_profile_id_fkey"
+            columns: ["operator_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles_safe"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "machine_runs_supervisor_profile_id_fkey"
             columns: ["supervisor_profile_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "machine_runs_supervisor_profile_id_fkey"
+            columns: ["supervisor_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles_safe"
             referencedColumns: ["id"]
           },
           {
@@ -2168,6 +2189,13 @@ export type Database = {
             columns: ["current_operator_profile_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "machines_current_operator_profile_id_fkey"
+            columns: ["current_operator_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles_safe"
             referencedColumns: ["id"]
           },
           {
@@ -2240,6 +2268,13 @@ export type Database = {
             columns: ["assigned_to"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "profiles_safe"
             referencedColumns: ["id"]
           },
         ]
@@ -3191,6 +3226,13 @@ export type Database = {
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "team_channel_members_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles_safe"
+            referencedColumns: ["id"]
+          },
         ]
       }
       team_channels: {
@@ -3325,6 +3367,13 @@ export type Database = {
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "team_messages_sender_profile_id_fkey"
+            columns: ["sender_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles_safe"
+            referencedColumns: ["id"]
+          },
         ]
       }
       time_clock_entries: {
@@ -3361,6 +3410,13 @@ export type Database = {
             columns: ["profile_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "time_clock_entries_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles_safe"
             referencedColumns: ["id"]
           },
         ]
@@ -3675,6 +3731,57 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      profiles_safe: {
+        Row: {
+          avatar_url: string | null
+          company_id: string | null
+          created_at: string | null
+          department: string | null
+          duties: string[] | null
+          email: string | null
+          full_name: string | null
+          id: string | null
+          is_active: boolean | null
+          phone: string | null
+          preferred_language: string | null
+          title: string | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          company_id?: string | null
+          created_at?: string | null
+          department?: string | null
+          duties?: string[] | null
+          email?: never
+          full_name?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          phone?: never
+          preferred_language?: string | null
+          title?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          avatar_url?: string | null
+          company_id?: string | null
+          created_at?: string | null
+          department?: string | null
+          duties?: string[] | null
+          email?: never
+          full_name?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          phone?: never
+          preferred_language?: string | null
+          title?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
       }
       user_meta_tokens_safe: {
         Row: {
