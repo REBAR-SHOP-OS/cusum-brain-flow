@@ -498,44 +498,64 @@ async function handleSyncInvoices(supabase: ReturnType<typeof createClient>, use
   const qbData = await qbQuery(config, "Invoice");
   const invoices = qbData.QueryResponse?.Invoice || [];
 
-  let synced = 0;
-  for (const invoice of invoices) {
-    let customerId: string | null = null;
-    if (invoice.CustomerRef?.value) {
-      const { data: customer } = await supabase
-        .from("customers")
-        .select("id")
-        .eq("quickbooks_id", invoice.CustomerRef.value)
-        .maybeSingle();
-      customerId = customer?.id || null;
+  // Pre-load ALL customer QB-id → local-id mapping (paginate past 1000-row limit)
+  const customerMap = new Map<string, string>();
+  let customerPage = 0;
+  const PAGE_SIZE = 1000;
+  while (true) {
+    const { data: batch } = await supabase
+      .from("customers")
+      .select("id, quickbooks_id")
+      .not("quickbooks_id", "is", null)
+      .range(customerPage * PAGE_SIZE, (customerPage + 1) * PAGE_SIZE - 1);
+    const rows = batch || [];
+    for (const c of rows) {
+      if (c.quickbooks_id) customerMap.set(c.quickbooks_id, c.id);
     }
+    if (rows.length < PAGE_SIZE) break;
+    customerPage++;
+  }
 
-    const { error } = await supabase
-      .from("accounting_mirror")
-      .upsert({
-        quickbooks_id: invoice.Id,
+  let synced = 0;
+  const errors: string[] = [];
+  const BATCH_SIZE = 50;
+  const now = new Date().toISOString();
+
+  for (let i = 0; i < invoices.length; i += BATCH_SIZE) {
+    const batch = invoices.slice(i, i + BATCH_SIZE);
+    const records = batch.map((invoice: Record<string, unknown>) => {
+      const custRef = invoice.CustomerRef as { value?: string; name?: string } | undefined;
+      const customerId = custRef?.value ? (customerMap.get(custRef.value) || null) : null;
+      return {
+        quickbooks_id: invoice.Id as string,
         entity_type: "Invoice",
-        balance: invoice.Balance || 0,
+        balance: (invoice.Balance as number) || 0,
         customer_id: customerId,
         data: {
           DocNumber: invoice.DocNumber,
           TotalAmt: invoice.TotalAmt,
           DueDate: invoice.DueDate,
           TxnDate: invoice.TxnDate,
-          CustomerName: invoice.CustomerRef?.name,
+          CustomerName: custRef?.name,
           EmailStatus: invoice.EmailStatus,
           Balance: invoice.Balance,
           Line: invoice.Line,
         },
-        last_synced_at: new Date().toISOString(),
-      }, { onConflict: "quickbooks_id" });
+        last_synced_at: now,
+      };
+    });
 
-    if (!error) synced++;
-    else console.error(`Invoice sync error (${invoice.Id}):`, error.message);
+    const { error, count } = await supabase
+      .from("accounting_mirror")
+      .upsert(records, { onConflict: "quickbooks_id", count: "exact" });
+
+    if (!error) synced += (count || batch.length);
+    else errors.push(`Batch ${Math.floor(i / BATCH_SIZE)}: ${error.message}`);
   }
 
+  if (errors.length > 0) console.error("Invoice sync errors:", errors.slice(0, 5));
   await updateLastSync(supabase, userId);
-  return jsonRes({ success: true, synced, total: invoices.length });
+  return jsonRes({ success: true, synced, total: invoices.length, errors: errors.length });
 }
 
 // ─── Sync Vendors ──────────────────────────────────────────────────

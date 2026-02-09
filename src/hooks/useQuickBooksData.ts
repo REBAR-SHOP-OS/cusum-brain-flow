@@ -166,32 +166,34 @@ export function useQuickBooksData() {
       }
 
       // Batch QB API calls in small groups to avoid rate limiting (429)
+      // First batch: sync customers + invoices to DB, plus list payments
       const batch1 = await Promise.allSettled([
-        qbAction("list-invoices"),
-        qbAction("list-bills"),
+        qbAction("sync-customers"),
+        qbAction("sync-invoices"),
         qbAction("list-payments"),
       ]);
-      if (batch1[0].status === "fulfilled") setInvoices(batch1[0].value.invoices || []);
-      if (batch1[1].status === "fulfilled") setBills(batch1[1].value.bills || []);
+      // customers loaded from DB below; invoices loaded from QB below
       if (batch1[2].status === "fulfilled") setPayments(batch1[2].value.payments || []);
 
       const batch2 = await Promise.allSettled([
+        qbAction("list-invoices"),
+        qbAction("list-bills"),
         qbAction("list-vendors"),
-        qbAction("sync-customers"),
-        qbAction("list-accounts"),
       ]);
-      if (batch2[0].status === "fulfilled") setVendors(batch2[0].value.vendors || []);
-      if (batch2[1].status === "fulfilled") {} // customers loaded from DB below
-      if (batch2[2].status === "fulfilled") setAccounts(batch2[2].value.accounts || []);
+      if (batch2[0].status === "fulfilled") setInvoices(batch2[0].value.invoices || []);
+      if (batch2[1].status === "fulfilled") setBills(batch2[1].value.bills || []);
+      if (batch2[2].status === "fulfilled") setVendors(batch2[2].value.vendors || []);
 
       const batch3 = await Promise.allSettled([
+        qbAction("list-accounts"),
         qbAction("list-estimates"),
         qbAction("get-company-info"),
         qbAction("list-items"),
       ]);
-      if (batch3[0].status === "fulfilled") setEstimates(batch3[0].value.estimates || []);
-      if (batch3[1].status === "fulfilled") setCompanyInfo(batch3[1].value);
-      if (batch3[2].status === "fulfilled") setItems(batch3[2].value.items || []);
+      if (batch3[0].status === "fulfilled") setAccounts(batch3[0].value.accounts || []);
+      if (batch3[1].status === "fulfilled") setEstimates(batch3[1].value.estimates || []);
+      if (batch3[2].status === "fulfilled") setCompanyInfo(batch3[2].value);
+      if (batch3[3].status === "fulfilled") setItems(batch3[3].value.items || []);
 
       const batch4 = await Promise.allSettled([
         qbAction("list-purchase-orders"),
