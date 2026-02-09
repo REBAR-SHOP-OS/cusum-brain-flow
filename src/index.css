@@ -223,10 +223,10 @@
 
   .rebar-tag {
     position: relative;
-    width: 6in !important;
-    height: 4in !important;
-    max-width: 6in !important;
-    max-height: 4in !important;
+    width: 100% !important;
+    height: 100% !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
     page-break-after: always;
     page-break-inside: avoid;
     border-width: 1px !important;
@@ -238,6 +238,7 @@
     padding: 0 !important;
     box-shadow: none !important;
     overflow: hidden;
+    box-sizing: border-box !important;
   }
 
   /* Force black text and borders for thermal printing */
