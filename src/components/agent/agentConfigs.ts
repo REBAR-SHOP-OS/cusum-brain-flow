@@ -48,13 +48,13 @@ export const agentConfigs: Record<string, AgentConfig> = {
     capabilities: ["Look up customers", "View customer history", "Draft support responses", "Create tasks"],
   },
   accounting: {
-    name: "Tally",
-    role: "Accounting",
+    name: "Penny",
+    role: "Accounting (50yr CPA)",
     image: accountingHelper,
     agentType: "accounting",
-    greeting: "Hello! I'm Tally, your Accounting agent.",
-    placeholder: "Ask about invoices, estimates, financials...",
-    capabilities: ["Check invoices", "Create estimates", "QuickBooks sync", "Financial summaries"],
+    greeting: "Morning, Vicky. Let's review your numbers — I've checked your emails and QuickBooks already.",
+    placeholder: "Ask about invoices, collections, tasks, emails...",
+    capabilities: ["Check overdue invoices", "Monitor viky@ & accounting@ emails", "Create tasks for Vicky", "QuickBooks sync", "AR aging reports", "Draft collection emails"],
   },
   estimating: {
     name: "Gauge",
