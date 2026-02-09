@@ -40,7 +40,7 @@ interface LeadInfo {
 
 interface ActivityItem {
   id: string;
-  type: "email" | "call" | "sms" | "order" | "quote" | "lead" | "meeting";
+  type: "email" | "call" | "sms" | "order" | "quote" | "lead" | "meeting" | "invoice";
   title: string;
   subtitle: string | null;
   date: string;
@@ -139,7 +139,7 @@ export function InboxCustomerContext({ senderEmail, senderName }: InboxCustomerC
       }
 
       // 2. Load all data in parallel
-      const [leadsRes, commsRes, ordersRes, quotesRes, meetingsRes] = await Promise.allSettled([
+      const [leadsRes, commsRes, ordersRes, quotesRes, qbInvoicesRes] = await Promise.allSettled([
         // Leads — use proper FK relationships, not non-existent columns
         custId
           ? supabase
@@ -186,8 +186,16 @@ export function InboxCustomerContext({ senderEmail, senderName }: InboxCustomerC
               .order("created_at", { ascending: false })
               .limit(10)
           : Promise.resolve({ data: [], error: null }),
-        // Meetings — skip if no customer/contact context (no way to filter by contact)
-        Promise.resolve({ data: [], error: null }),
+        // QB Invoices from accounting_mirror
+        custId
+          ? supabase
+              .from("accounting_mirror")
+              .select("id, quickbooks_id, data, balance, created_at")
+              .eq("customer_id", custId)
+              .eq("entity_type", "Invoice")
+              .order("created_at", { ascending: false })
+              .limit(20)
+          : Promise.resolve({ data: [], error: null }),
       ]);
 
       // Process leads
@@ -254,17 +262,23 @@ export function InboxCustomerContext({ senderEmail, senderName }: InboxCustomerC
         });
       }
 
-      // Meetings → activities
-      if (meetingsRes.status === "fulfilled") {
-        const meetings = (meetingsRes.value as any).data ?? [];
-        meetings.forEach((m: any) => {
+      // QB Invoices → activities
+      if (qbInvoicesRes.status === "fulfilled") {
+        const invoices = (qbInvoicesRes.value as any).data ?? [];
+        invoices.forEach((inv: any) => {
+          const d = inv.data as Record<string, any> | null;
+          const docNum = d?.DocNumber || inv.quickbooks_id;
+          const custName = d?.CustomerName || "";
+          const totalAmt = d?.TotalAmt as number | undefined;
+          const txnDate = d?.TxnDate || inv.created_at || "";
           allActivities.push({
-            id: m.id,
-            type: "meeting",
-            title: m.title || "Meeting",
-            subtitle: m.status ? `Status: ${m.status}` : null,
-            date: m.started_at || "",
-            status: m.status,
+            id: inv.id,
+            type: "invoice",
+            title: `Invoice #${docNum}`,
+            subtitle: custName ? `${custName}` : null,
+            date: txnDate,
+            amount: totalAmt ?? null,
+            status: inv.balance > 0 ? "unpaid" : "paid",
           });
         });
       }
@@ -276,7 +290,7 @@ export function InboxCustomerContext({ senderEmail, senderName }: InboxCustomerC
       // Build stat cards
       const ordersData = ordersRes.status === "fulfilled" ? ((ordersRes.value as any).data ?? []) : [];
       const quotesData = quotesRes.status === "fulfilled" ? ((quotesRes.value as any).data ?? []) : [];
-      const meetingsData = meetingsRes.status === "fulfilled" ? ((meetingsRes.value as any).data ?? []) : [];
+      const qbInvoicesData = qbInvoicesRes.status === "fulfilled" ? ((qbInvoicesRes.value as any).data ?? []) : [];
 
       const totalOrderValue = ordersData.reduce((sum: number, o: any) => sum + (o.total_amount || 0), 0);
       const emailCount = allActivities.filter(a => a.type === "email").length;
@@ -510,6 +524,7 @@ function ActivityRow({ activity }: { activity: ActivityItem }) {
     quote: <FileText className="w-3.5 h-3.5 text-purple-400" />,
     lead: <Star className="w-3.5 h-3.5 text-pink-400" />,
     meeting: <Calendar className="w-3.5 h-3.5 text-cyan-400" />,
+    invoice: <DollarSign className="w-3.5 h-3.5 text-orange-400" />,
   };
 
   const typeBadgeMap: Record<ActivityItem["type"], { label: string; className: string }> = {
@@ -520,6 +535,7 @@ function ActivityRow({ activity }: { activity: ActivityItem }) {
     quote: { label: "Quote", className: "bg-purple-500/15 text-purple-400" },
     lead: { label: "Lead", className: "bg-pink-500/15 text-pink-400" },
     meeting: { label: "Meeting", className: "bg-cyan-500/15 text-cyan-400" },
+    invoice: { label: "Invoice", className: "bg-orange-500/15 text-orange-400" },
   };
 
   const badge = typeBadgeMap[activity.type];
