@@ -129,7 +129,7 @@ export function AIExtractView() {
 
   // All ERP customers + contacts for combobox (RLS handles company filtering)
   const { data: erpContacts = [] } = useQuery({
-    queryKey: ["erp-contacts"],
+    queryKey: ["erp-contacts-all"],
     enabled: !!user,
     queryFn: async () => {
       // Paginate customers to get ALL (beyond 1000-row default limit)
