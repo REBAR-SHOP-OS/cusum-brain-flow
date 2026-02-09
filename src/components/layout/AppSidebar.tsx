@@ -41,7 +41,7 @@ export function AppSidebar() {
     {
       label: "Sales",
       items: [
-        { name: "Pipeline", href: "/pipeline", icon: Kanban, roles: ["admin", "sales", "office"], tourId: "nav-pipeline" },
+        { name: "Pipeline", href: "/pipeline", icon: Kanban, roles: ["admin", "sales", "office", "accounting"], tourId: "nav-pipeline" },
         { name: "Customers", href: "/customers", icon: Users, tourId: "nav-customers" },
         { name: "Accounting", href: "/accounting", icon: DollarSign, roles: ["admin", "accounting", "office"], tourId: "nav-accounting" },
       ],
