@@ -413,6 +413,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "communications_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts_safe"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "communications_customer_id_fkey"
             columns: ["customer_id"]
             isOneToOne: false
@@ -420,6 +427,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      contact_access_log: {
+        Row: {
+          action: string
+          contact_count: number | null
+          contact_id: string | null
+          created_at: string
+          id: string
+          ip_address: string | null
+          metadata: Json | null
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          action: string
+          contact_count?: number | null
+          contact_id?: string | null
+          created_at?: string
+          id?: string
+          ip_address?: string | null
+          metadata?: Json | null
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          action?: string
+          contact_count?: number | null
+          contact_id?: string | null
+          created_at?: string
+          id?: string
+          ip_address?: string | null
+          metadata?: Json | null
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: []
       }
       contacts: {
         Row: {
@@ -1780,6 +1823,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "leads_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts_safe"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "leads_customer_id_fkey"
             columns: ["customer_id"]
             isOneToOne: false
@@ -2657,6 +2707,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "quotes_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts_safe"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "quotes_customer_id_fkey"
             columns: ["customer_id"]
             isOneToOne: false
@@ -3498,7 +3555,56 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      contacts_safe: {
+        Row: {
+          company_id: string | null
+          created_at: string | null
+          customer_id: string | null
+          email: string | null
+          first_name: string | null
+          id: string | null
+          is_primary: boolean | null
+          last_name: string | null
+          phone: string | null
+          role: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          company_id?: string | null
+          created_at?: string | null
+          customer_id?: string | null
+          email?: never
+          first_name?: string | null
+          id?: string | null
+          is_primary?: boolean | null
+          last_name?: string | null
+          phone?: never
+          role?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          company_id?: string | null
+          created_at?: string | null
+          customer_id?: string | null
+          email?: never
+          first_name?: string | null
+          id?: string | null
+          is_primary?: boolean | null
+          last_name?: string | null
+          phone?: never
+          role?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contacts_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       check_rate_limit: {
@@ -3538,6 +3644,15 @@ export type Database = {
       is_channel_member: {
         Args: { _channel_id: string; _user_id: string }
         Returns: boolean
+      }
+      log_contact_access: {
+        Args: {
+          _action: string
+          _contact_count?: number
+          _contact_id?: string
+          _metadata?: Json
+        }
+        Returns: undefined
       }
     }
     Enums: {
