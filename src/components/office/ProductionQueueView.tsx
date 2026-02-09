@@ -280,21 +280,25 @@ function CustomerFolder({ node, onDeletePlan, onEditPlan, onDeleteBarlist }: {
   const [open, setOpen] = useState(true);
   const totalProjects = node.projects.length;
   const totalBarlists = node.projects.reduce((s, p) => s + p.barlists.length, 0);
+  const totalManifests = node.projects.reduce((s, p) => s + p.barlists.reduce((s2, b) => s2 + b.plans.length, 0) + p.loosePlans.length, 0);
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger asChild>
-        <button className="w-full flex items-center gap-3 p-3.5 rounded-xl border border-border bg-card hover:bg-muted/30 transition-colors text-left">
-          {open ? <ChevronDown className="w-4 h-4 text-primary shrink-0" /> : <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />}
-          <Users className="w-5 h-5 text-primary shrink-0" />
-          <div className="flex-1 min-w-0">
-            <h2 className="text-sm font-bold text-foreground truncate">{node.customerName}</h2>
-            <p className="text-[10px] text-muted-foreground">
-              {totalProjects} project{totalProjects !== 1 ? "s" : ""} · {totalBarlists} barlist{totalBarlists !== 1 ? "s" : ""}
-            </p>
-          </div>
-        </button>
-      </CollapsibleTrigger>
+      <div className="flex items-center gap-0">
+        <CollapsibleTrigger asChild>
+          <button className="flex-1 flex items-center gap-3 p-3.5 rounded-xl border border-border bg-card hover:bg-muted/30 transition-colors text-left">
+            {open ? <ChevronDown className="w-4 h-4 text-primary shrink-0" /> : <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />}
+            <Users className="w-5 h-5 text-primary shrink-0" />
+            <div className="flex-1 min-w-0">
+              <h2 className="text-sm font-bold text-foreground truncate">{node.customerName}</h2>
+              <p className="text-[10px] text-muted-foreground">
+                {totalProjects} project{totalProjects !== 1 ? "s" : ""} · {totalBarlists} barlist{totalBarlists !== 1 ? "s" : ""}
+              </p>
+            </div>
+            <span className="text-xs text-muted-foreground shrink-0">{totalManifests} manifest{totalManifests !== 1 ? "s" : ""}</span>
+          </button>
+        </CollapsibleTrigger>
+      </div>
       <CollapsibleContent>
         <div className="ml-4 mt-1 space-y-1 border-l-2 border-primary/15 pl-3">
           {node.projects.map(proj => (
@@ -317,18 +321,20 @@ function ProjectFolder({ node, onDeletePlan, onEditPlan, onDeleteBarlist }: {
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger asChild>
-        <button className="w-full flex items-center gap-2.5 p-2.5 rounded-lg hover:bg-muted/30 transition-colors text-left">
-          {open ? <ChevronDown className="w-3.5 h-3.5 text-primary/70 shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
-          <FolderOpen className="w-4 h-4 text-primary/70 shrink-0" />
-          <div className="flex-1 min-w-0">
-            <span className="text-xs font-bold text-foreground truncate block">{node.projectName}</span>
-            <span className="text-[10px] text-muted-foreground">
-              {node.barlists.length} barlist{node.barlists.length !== 1 ? "s" : ""} · {totalPlans} manifest{totalPlans !== 1 ? "s" : ""}
-            </span>
-          </div>
-        </button>
-      </CollapsibleTrigger>
+      <div className="flex items-center gap-0">
+        <CollapsibleTrigger asChild>
+          <button className="flex-1 flex items-center gap-2.5 p-2.5 rounded-lg hover:bg-muted/30 transition-colors text-left">
+            {open ? <ChevronDown className="w-3.5 h-3.5 text-primary/70 shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
+            <FolderOpen className="w-4 h-4 text-primary/70 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <span className="text-xs font-bold text-foreground truncate block">{node.projectName}</span>
+              <span className="text-[10px] text-muted-foreground">
+                {node.barlists.length} barlist{node.barlists.length !== 1 ? "s" : ""} · {totalPlans} manifest{totalPlans !== 1 ? "s" : ""}
+              </span>
+            </div>
+          </button>
+        </CollapsibleTrigger>
+      </div>
       <CollapsibleContent>
         <div className="ml-5 mt-0.5 space-y-1 border-l border-border pl-3">
           {node.barlists.map(bl => (
