@@ -726,11 +726,22 @@ When user asks to create an estimate or invoice, I will:
 - Create estimates/quotations in QuickBooks
 - Create invoices in QuickBooks
 - Convert estimates to invoices
+- **Send emails from Vicky's inbox (vicky@rebar.shop)** — use the send_email tool
 - Draft collection emails for overdue accounts
 - Request QB data sync
 - Flag accounts for credit hold review
 - Generate AR aging reports
 - Create tasks for Vicky
+
+## 📧 Email Sending (CRITICAL — Vicky's Identity)
+You can send emails on behalf of Vicky from **vicky@rebar.shop** using the \`send_email\` tool.
+- Vicky's full name: **Vicky Anderson**
+- Her email: **vicky@rebar.shop**
+- ALWAYS draft the email content and show it to Vicky for approval before sending
+- NEVER send an email without explicit user confirmation (e.g., "Yes, send it", "Go ahead", "Looks good")
+- When Vicky says "email them" or "send a follow-up", draft the email first, then ask for approval
+- For collection emails, use a professional but firm tone — Penny's 50 years of CPA experience guides the wording
+- Always include proper subject lines and professional signatures
 
 ## Formatting:
 - Always show amounts with $ and 2 decimal places
@@ -1979,7 +1990,7 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
-    // Tool definitions for notification/task creation
+    // Tool definitions for notification/task creation + email sending
     const tools = [
       {
         type: "function" as const,
@@ -2012,6 +2023,25 @@ serve(async (req) => {
           },
         },
       },
+      ...(agent === "accounting" ? [{
+        type: "function" as const,
+        function: {
+          name: "send_email",
+          description: "Send an email from Vicky's inbox (vicky@rebar.shop). ONLY use this after Vicky has explicitly approved the email content. Never send without approval.",
+          parameters: {
+            type: "object",
+            properties: {
+              to: { type: "string", description: "Recipient email address" },
+              subject: { type: "string", description: "Email subject line" },
+              body: { type: "string", description: "Email body in HTML format. Include proper signature: Vicky Anderson, Rebar.shop" },
+              threadId: { type: "string", description: "Gmail thread ID if replying to an existing thread" },
+              replyToMessageId: { type: "string", description: "Message ID if this is a reply" },
+            },
+            required: ["to", "subject", "body"],
+            additionalProperties: false,
+          },
+        },
+      }] : []),
     ];
 
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -2053,10 +2083,50 @@ serve(async (req) => {
     let reply = choice?.message?.content || "";
     const createdNotifications: { type: string; title: string; assigned_to_name?: string }[] = [];
 
-    // Handle tool calls — create notifications in the database
+    // Handle tool calls — create notifications and send emails
     const toolCalls = choice?.message?.tool_calls;
+    const emailResults: { success: boolean; to?: string; error?: string }[] = [];
     if (toolCalls && toolCalls.length > 0) {
       for (const tc of toolCalls) {
+        // Handle send_email tool calls
+        if (tc.function?.name === "send_email") {
+          try {
+            const args = JSON.parse(tc.function.arguments);
+            console.log(`📧 Penny sending email to ${args.to}: ${args.subject}`);
+            
+            const emailRes = await fetch(
+              `${Deno.env.get("SUPABASE_URL")}/functions/v1/gmail-send`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "Authorization": authHeader!,
+                },
+                body: JSON.stringify({
+                  to: args.to,
+                  subject: args.subject,
+                  body: args.body,
+                  ...(args.threadId && { threadId: args.threadId }),
+                  ...(args.replyToMessageId && { replyToMessageId: args.replyToMessageId }),
+                }),
+              }
+            );
+            
+            if (emailRes.ok) {
+              const result = await emailRes.json();
+              emailResults.push({ success: true, to: args.to });
+              console.log(`✅ Email sent successfully to ${args.to}, messageId: ${result.messageId}`);
+            } else {
+              const errText = await emailRes.text();
+              emailResults.push({ success: false, to: args.to, error: errText });
+              console.error(`❌ Email send failed: ${errText}`);
+            }
+          } catch (e) {
+            console.error("Failed to send email:", e);
+            emailResults.push({ success: false, error: e instanceof Error ? e.message : "Unknown error" });
+          }
+        }
+        
         if (tc.function?.name === "create_notifications") {
           try {
             const args = JSON.parse(tc.function.arguments);
@@ -2116,14 +2186,16 @@ serve(async (req) => {
       }
 
       // If the AI only returned tool calls and no text, do a follow-up to get a reply
-      if (!reply && createdNotifications.length > 0) {
+      if (!reply && (createdNotifications.length > 0 || emailResults.length > 0)) {
         const toolResultMessages = [
           ...messages,
           choice.message,
           ...toolCalls.map((tc: any) => ({
             role: "tool" as const,
             tool_call_id: tc.id,
-            content: JSON.stringify({ success: true, created: createdNotifications.length }),
+            content: tc.function?.name === "send_email"
+              ? JSON.stringify(emailResults.find(r => true) || { success: false, error: "No result" })
+              : JSON.stringify({ success: true, created: createdNotifications.length }),
           })),
         ];
 
@@ -2158,6 +2230,7 @@ serve(async (req) => {
         modelUsed: modelConfig.model,
         modelReason: modelConfig.reason,
         createdNotifications,
+        emailsSent: emailResults.filter(r => r.success).map(r => r.to),
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
