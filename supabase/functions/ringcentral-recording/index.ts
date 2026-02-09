@@ -33,7 +33,7 @@ async function getRCAccessTokenForUser(userId: string): Promise<string> {
 
   const { data: tokenRow, error } = await supabaseAdmin
     .from("user_ringcentral_tokens")
-    .select("access_token, refresh_token, expires_at")
+    .select("access_token, refresh_token, token_expires_at")
     .eq("user_id", userId)
     .single();
 
@@ -42,7 +42,7 @@ async function getRCAccessTokenForUser(userId: string): Promise<string> {
   }
 
   // Check if token is expired and refresh if needed
-  const expiresAt = new Date(tokenRow.expires_at).getTime();
+  const expiresAt = new Date(tokenRow.token_expires_at).getTime();
   if (Date.now() < expiresAt - 60000) {
     return tokenRow.access_token;
   }
@@ -72,7 +72,7 @@ async function getRCAccessTokenForUser(userId: string): Promise<string> {
     .update({
       access_token: tokens.access_token,
       refresh_token: tokens.refresh_token,
-      expires_at: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
+      token_expires_at: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
     })
     .eq("user_id", userId);
 
