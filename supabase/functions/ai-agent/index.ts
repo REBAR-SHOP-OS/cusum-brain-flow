@@ -1335,7 +1335,7 @@ async function fetchEstimationLearnings(supabase: ReturnType<typeof createClient
   return learnings;
 }
 
-async function fetchContext(supabase: ReturnType<typeof createClient>, agent: string, userId?: string) {
+async function fetchContext(supabase: ReturnType<typeof createClient>, agent: string, userId?: string, userEmail?: string) {
   const context: Record<string, unknown> = {};
 
   try {
@@ -1378,12 +1378,15 @@ async function fetchContext(supabase: ReturnType<typeof createClient>, agent: st
         .limit(15);
       context.outstandingAR = arData;
 
-      // Fetch emails for viky@rebar.shop and accounting@rebar.shop
+      // Fetch emails for the logged-in user and accounting@rebar.shop
       try {
+        const emailFilter = userEmail
+          ? `to_address.ilike.%${userEmail}%,to_address.ilike.%accounting@rebar.shop%,from_address.ilike.%${userEmail}%,from_address.ilike.%accounting@rebar.shop%`
+          : "to_address.ilike.%accounting@rebar.shop%,from_address.ilike.%accounting@rebar.shop%";
         const { data: accountingEmails } = await supabase
           .from("communications")
           .select("id, subject, from_address, to_address, body_preview, status, source, received_at, direction")
-          .or("to_address.ilike.%viky@rebar.shop%,to_address.ilike.%accounting@rebar.shop%,from_address.ilike.%viky@rebar.shop%,from_address.ilike.%accounting@rebar.shop%")
+          .or(emailFilter)
           .order("received_at", { ascending: false })
           .limit(30);
         context.accountingEmails = accountingEmails;
@@ -1844,11 +1847,21 @@ serve(async (req) => {
       );
     }
 
-    // Rate limit: 10 requests per 60 seconds per user
+    // Fetch the logged-in user's profile for personalization
     const svcClient = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
+    const { data: userProfile } = await svcClient
+      .from("profiles")
+      .select("full_name, email")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    const userFullName = userProfile?.full_name || user.email?.split("@")[0] || "there";
+    const userFirstName = userFullName.split(" ")[0];
+    const userEmail = userProfile?.email || user.email || "";
+
+    // Rate limit: 10 requests per 60 seconds per user
     const { data: allowed } = await svcClient.rpc("check_rate_limit", {
       _user_id: user.id,
       _function_name: "ai-agent",
@@ -1862,7 +1875,7 @@ serve(async (req) => {
       });
     }
 
-    const dbContext = await fetchContext(supabase, agent);
+    const dbContext = await fetchContext(supabase, agent, user.id, userEmail);
     const mergedContext = { ...dbContext, ...userContext };
 
     // Get validation rules for OCR validation
@@ -1927,7 +1940,16 @@ serve(async (req) => {
       id: e.id, name: e.full_name, title: e.title, department: e.department,
     }));
 
-    const systemPrompt = (agentPrompts[agent] || agentPrompts.sales) + SHARED_TOOL_INSTRUCTIONS;
+    let basePrompt = agentPrompts[agent] || agentPrompts.sales;
+    // Personalize accounting prompt for the logged-in user
+    if (agent === "accounting") {
+      basePrompt = basePrompt
+        .replace(/\bVicky\b/g, userFirstName)
+        .replace(/\bVicky Anderson\b/g, userFullName)
+        .replace(/\bviky@rebar\.shop\b/g, userEmail)
+        .replace(/\bvicky@rebar\.shop\b/g, userEmail);
+    }
+    const systemPrompt = basePrompt + SHARED_TOOL_INSTRUCTIONS + `\n\n## Current User\nName: ${userFullName}\nEmail: ${userEmail}`;
     
     let contextStr = "";
     if (Object.keys(mergedContext).length > 0) {
@@ -2027,13 +2049,13 @@ serve(async (req) => {
         type: "function" as const,
         function: {
           name: "send_email",
-          description: "Send an email from Vicky's inbox (vicky@rebar.shop). ONLY use this after Vicky has explicitly approved the email content. Never send without approval.",
+          description: `Send an email from the logged-in user's inbox (${userEmail}). ONLY use this after the user has explicitly approved the email content. Never send without approval.`,
           parameters: {
             type: "object",
             properties: {
               to: { type: "string", description: "Recipient email address" },
               subject: { type: "string", description: "Email subject line" },
-              body: { type: "string", description: "Email body in HTML format. Include proper signature: Vicky Anderson, Rebar.shop" },
+              body: { type: "string", description: `Email body in HTML format. Include proper signature: ${userFullName}, Rebar.shop` },
               threadId: { type: "string", description: "Gmail thread ID if replying to an existing thread" },
               replyToMessageId: { type: "string", description: "Message ID if this is a reply" },
             },

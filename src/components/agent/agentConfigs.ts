@@ -52,9 +52,9 @@ export const agentConfigs: Record<string, AgentConfig> = {
     role: "Accounting (50yr CPA)",
     image: accountingHelper,
     agentType: "accounting",
-    greeting: "Morning, Vicky. Let's review your numbers — I've checked your emails and QuickBooks already.",
+    greeting: "Morning! Let's review your numbers — I've checked your emails and QuickBooks already.",
     placeholder: "Ask about invoices, collections, tasks, emails...",
-    capabilities: ["Check overdue invoices", "Monitor viky@ & accounting@ emails", "Create tasks for Vicky", "QuickBooks sync", "AR aging reports", "Draft collection emails"],
+    capabilities: ["Check overdue invoices", "Monitor your emails", "Create tasks", "QuickBooks sync", "AR aging reports", "Draft collection emails"],
   },
   estimating: {
     name: "Gauge",
