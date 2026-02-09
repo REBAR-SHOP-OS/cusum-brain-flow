@@ -3700,6 +3700,33 @@ export type Database = {
         }
         Relationships: []
       }
+      user_ringcentral_tokens_safe: {
+        Row: {
+          created_at: string | null
+          id: string | null
+          rc_email: string | null
+          token_expires_at: string | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string | null
+          rc_email?: string | null
+          token_expires_at?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string | null
+          rc_email?: string | null
+          token_expires_at?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       check_rate_limit: {
@@ -3712,6 +3739,14 @@ export type Database = {
         Returns: boolean
       }
       cleanup_rate_limit_entries: { Args: never; Returns: undefined }
+      get_my_rc_status: {
+        Args: never
+        Returns: {
+          is_connected: boolean
+          rc_email: string
+          token_expires_at: string
+        }[]
+      }
       get_table_stats: {
         Args: never
         Returns: {
