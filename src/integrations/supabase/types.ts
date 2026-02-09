@@ -3605,6 +3605,54 @@ export type Database = {
           },
         ]
       }
+      user_meta_tokens_safe: {
+        Row: {
+          created_at: string | null
+          expires_at: string | null
+          id: string | null
+          instagram_accounts: Json | null
+          last_used_at: string | null
+          meta_user_id: string | null
+          meta_user_name: string | null
+          pages: Json | null
+          platform: string | null
+          scopes: string[] | null
+          token_type: string | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string | null
+          instagram_accounts?: Json | null
+          last_used_at?: string | null
+          meta_user_id?: string | null
+          meta_user_name?: string | null
+          pages?: Json | null
+          platform?: string | null
+          scopes?: string[] | null
+          token_type?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string | null
+          instagram_accounts?: Json | null
+          last_used_at?: string | null
+          meta_user_id?: string | null
+          meta_user_name?: string | null
+          pages?: Json | null
+          platform?: string | null
+          scopes?: string[] | null
+          token_type?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       check_rate_limit: {
