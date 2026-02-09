@@ -137,22 +137,15 @@ export function ProductionQueueView() {
     queryClient.invalidateQueries({ queryKey: ["cutPlans"] });
   };
 
-  // Fetch customers for grouping (paginated to handle >1000 rows)
+  // Fetch only the customers referenced by projects (avoids 1000-row limit)
+  const projectCustomerIds = [...new Set(projects.map(p => p.customer_id).filter(Boolean))] as string[];
   const { data: customers } = useQuery({
-    queryKey: ["customers-for-queue"],
-    enabled: !!user,
+    queryKey: ["customers-for-queue", projectCustomerIds],
+    enabled: !!user && projectCustomerIds.length > 0,
     queryFn: async () => {
-      const all: Array<{ id: string; name: string }> = [];
-      const PAGE = 1000;
-      let from = 0;
-      while (true) {
-        const { data } = await supabase.from("customers").select("id, name").order("name").range(from, from + PAGE - 1);
-        if (!data || data.length === 0) break;
-        all.push(...(data as Array<{ id: string; name: string }>));
-        if (data.length < PAGE) break;
-        from += PAGE;
-      }
-      return all;
+      if (projectCustomerIds.length === 0) return [];
+      const { data } = await supabase.from("customers").select("id, name").in("id", projectCustomerIds);
+      return (data || []) as Array<{ id: string; name: string }>;
     },
   });
 
