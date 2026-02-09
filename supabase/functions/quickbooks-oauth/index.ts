@@ -94,8 +94,26 @@ async function qbFetch(
   return res.json();
 }
 
-function qbQuery(config: { realm_id: string; access_token: string }, entity: string, maxResults = 1000) {
-  return qbFetch(config, `query?query=SELECT * FROM ${entity} MAXRESULTS ${maxResults}`);
+async function qbQuery(config: { realm_id: string; access_token: string }, entity: string, maxResults = 1000) {
+  const allResults: unknown[] = [];
+  let startPosition = 1;
+  const pageSize = Math.min(maxResults, 1000);
+
+  while (true) {
+    const data = await qbFetch(
+      config,
+      `query?query=SELECT * FROM ${entity} STARTPOSITION ${startPosition} MAXRESULTS ${pageSize}`,
+    ) as Record<string, unknown>;
+    const response = data.QueryResponse as Record<string, unknown> | undefined;
+    const entities = (response?.[entity] as unknown[]) || [];
+    allResults.push(...entities);
+
+    // If we got fewer than the page size, we've reached the end
+    if (entities.length < pageSize || allResults.length >= maxResults) break;
+    startPosition += pageSize;
+  }
+
+  return { QueryResponse: { [entity]: allResults } };
 }
 
 function jsonRes(data: unknown, status = 200) {
@@ -443,22 +461,27 @@ async function handleSyncCustomers(supabase: ReturnType<typeof createClient>, us
 
   let synced = 0;
   const errors: string[] = [];
-  for (const customer of customers) {
-    const { error } = await supabase
-      .from("customers")
-      .upsert({
-        quickbooks_id: customer.Id,
-        name: customer.DisplayName,
-        company_name: customer.CompanyName || null,
-        company_id: companyId,
-        notes: customer.Notes || null,
-        credit_limit: customer.CreditLimit || null,
-        payment_terms: customer.SalesTermRef?.name || null,
-        status: customer.Active ? "active" : "inactive",
-      }, { onConflict: "quickbooks_id" });
+  // Batch upsert customers in chunks of 50 to avoid timeouts
+  const BATCH_SIZE = 50;
+  for (let i = 0; i < customers.length; i += BATCH_SIZE) {
+    const batch = customers.slice(i, i + BATCH_SIZE);
+    const records = batch.map((customer: Record<string, unknown>) => ({
+      quickbooks_id: customer.Id as string,
+      name: (customer.DisplayName as string) || "Unknown",
+      company_name: (customer.CompanyName as string) || null,
+      company_id: companyId,
+      notes: (customer.Notes as string) || null,
+      credit_limit: (customer.CreditLimit as number) || null,
+      payment_terms: (customer.SalesTermRef as Record<string, unknown>)?.name as string || null,
+      status: customer.Active ? "active" : "inactive",
+    }));
 
-    if (!error) synced++;
-    else errors.push(`${customer.DisplayName}: ${error.message}`);
+    const { error, count } = await supabase
+      .from("customers")
+      .upsert(records, { onConflict: "quickbooks_id", count: "exact" });
+
+    if (!error) synced += (count || batch.length);
+    else errors.push(`Batch ${Math.floor(i / BATCH_SIZE)}: ${error.message}`);
   }
 
   if (errors.length > 0) console.error("Customer sync errors:", errors.slice(0, 5));
