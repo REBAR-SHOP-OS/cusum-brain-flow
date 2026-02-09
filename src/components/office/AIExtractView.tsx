@@ -6,7 +6,7 @@ import {
   Upload, Globe, FileText, Loader2, Truck, Package, Brain,
   CheckCircle2, AlertCircle, Sparkles, X, ArrowRight,
   Shield, TriangleAlert, Clock, ChevronRight, History, XCircle,
-  FolderOpen, Plus, GitBranch, Pencil, Save, RotateCcw,
+  FolderOpen, Plus, GitBranch, Pencil, Save, RotateCcw, Trash2,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -639,8 +639,19 @@ export function AIExtractView() {
                                               setSelectedBarlistId("");
                                               setCustomer(custName);
                                               if (!manifestName) setManifestName(p.name);
-                                            }}>
-                                              {p.name}
+                                            }} className="flex items-center justify-between">
+                                              <span>{p.name}</span>
+                                              <button
+                                                className="ml-2 p-0.5 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition-colors"
+                                                onClick={async (e) => {
+                                                  e.stopPropagation();
+                                                  if (!confirm(`Delete project "${p.name}"?`)) return;
+                                                  await supabase.from("projects").delete().eq("id", p.id);
+                                                  if (selectedProjectId === p.id) { setSelectedProjectId(""); setSelectedBarlistId(""); }
+                                                }}
+                                              >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                              </button>
                                             </CommandItem>
                                           ))}
                                         </CommandGroup>
@@ -652,8 +663,19 @@ export function AIExtractView() {
                                               setSelectedProjectId(p.id);
                                               setSelectedBarlistId("");
                                               if (!manifestName) setManifestName(p.name);
-                                            }}>
-                                              {p.name}
+                                            }} className="flex items-center justify-between">
+                                              <span>{p.name}</span>
+                                              <button
+                                                className="ml-2 p-0.5 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition-colors"
+                                                onClick={async (e) => {
+                                                  e.stopPropagation();
+                                                  if (!confirm(`Delete project "${p.name}"?`)) return;
+                                                  await supabase.from("projects").delete().eq("id", p.id);
+                                                  if (selectedProjectId === p.id) { setSelectedProjectId(""); setSelectedBarlistId(""); }
+                                                }}
+                                              >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                              </button>
                                             </CommandItem>
                                           ))}
                                         </CommandGroup>
