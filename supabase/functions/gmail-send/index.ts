@@ -16,11 +16,10 @@ async function verifyAuth(req: Request): Promise<string | null> {
     { global: { headers: { Authorization: authHeader } } }
   );
 
-  const token = authHeader.replace("Bearer ", "");
-  const { data, error } = await supabase.auth.getClaims(token);
-  if (error || !data?.claims) return null;
+  const { data: { user }, error } = await supabase.auth.getUser();
+  if (error || !user) return null;
 
-  return data.claims.sub as string;
+  return user.id;
 }
 
 async function getAccessTokenForUser(userId: string, clientIp: string): Promise<string> {
@@ -142,6 +141,7 @@ serve(async (req) => {
     // Use this user's own Gmail token with IP tracking
     const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
     const accessToken = await getAccessTokenForUser(userId, clientIp);
+    console.log("Authenticated userId:", userId, "| sending to:", to);
 
     // Get user's email address
     const profileResponse = await fetch(
@@ -180,8 +180,9 @@ serve(async (req) => {
     );
 
     if (!sendResponse.ok) {
-      const error = await sendResponse.text();
-      throw new Error(`Failed to send email: ${error}`);
+      const errorText = await sendResponse.text();
+      console.error("Gmail API send failed:", sendResponse.status, errorText, "| userId:", userId, "| fromEmail:", fromEmail);
+      throw new Error(`Failed to send email: ${errorText}`);
     }
 
     const result = await sendResponse.json();
