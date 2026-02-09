@@ -60,7 +60,13 @@ async function getUserCompanyId(supabase: ReturnType<typeof createClient>, userI
   return profile.company_id;
 }
 
-async function qbFetch(config: { realm_id: string; access_token: string }, path: string, options?: RequestInit) {
+async function qbFetch(
+  config: { realm_id: string; access_token: string },
+  path: string,
+  options?: RequestInit,
+  _retries = 0,
+): Promise<unknown> {
+  const MAX_RETRIES = 4;
   const url = `${QUICKBOOKS_API_BASE}/v3/company/${config.realm_id}/${path}`;
   const res = await fetch(url, {
     ...options,
@@ -71,6 +77,15 @@ async function qbFetch(config: { realm_id: string; access_token: string }, path:
       ...options?.headers,
     },
   });
+
+  // Retry on 429 (rate limit) with exponential backoff
+  if (res.status === 429 && _retries < MAX_RETRIES) {
+    const delay = Math.min(1000 * Math.pow(2, _retries), 10000); // 1s, 2s, 4s, 8s
+    console.warn(`QB rate-limited on [${path}], retry ${_retries + 1}/${MAX_RETRIES} in ${delay}ms`);
+    await new Promise((r) => setTimeout(r, delay));
+    return qbFetch(config, path, options, _retries + 1);
+  }
+
   if (!res.ok) {
     const errorText = await res.text();
     console.error(`QB API error [${path}]:`, errorText);

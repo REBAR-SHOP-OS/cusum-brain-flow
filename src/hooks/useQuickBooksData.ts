@@ -165,34 +165,44 @@ export function useQuickBooksData() {
         return;
       }
 
-      const [inv, bil, pay, ven, cust, acct, est, info, itm, po, cm, emp, ta] = await Promise.allSettled([
+      // Batch QB API calls in small groups to avoid rate limiting (429)
+      const batch1 = await Promise.allSettled([
         qbAction("list-invoices"),
         qbAction("list-bills"),
         qbAction("list-payments"),
+      ]);
+      if (batch1[0].status === "fulfilled") setInvoices(batch1[0].value.invoices || []);
+      if (batch1[1].status === "fulfilled") setBills(batch1[1].value.bills || []);
+      if (batch1[2].status === "fulfilled") setPayments(batch1[2].value.payments || []);
+
+      const batch2 = await Promise.allSettled([
         qbAction("list-vendors"),
         qbAction("sync-customers"),
         qbAction("list-accounts"),
+      ]);
+      if (batch2[0].status === "fulfilled") setVendors(batch2[0].value.vendors || []);
+      if (batch2[1].status === "fulfilled") {} // customers loaded from DB below
+      if (batch2[2].status === "fulfilled") setAccounts(batch2[2].value.accounts || []);
+
+      const batch3 = await Promise.allSettled([
         qbAction("list-estimates"),
         qbAction("get-company-info"),
         qbAction("list-items"),
+      ]);
+      if (batch3[0].status === "fulfilled") setEstimates(batch3[0].value.estimates || []);
+      if (batch3[1].status === "fulfilled") setCompanyInfo(batch3[1].value);
+      if (batch3[2].status === "fulfilled") setItems(batch3[2].value.items || []);
+
+      const batch4 = await Promise.allSettled([
         qbAction("list-purchase-orders"),
         qbAction("list-credit-memos"),
         qbAction("list-employees"),
         qbAction("list-time-activities"),
       ]);
-
-      if (inv.status === "fulfilled") setInvoices(inv.value.invoices || []);
-      if (bil.status === "fulfilled") setBills(bil.value.bills || []);
-      if (pay.status === "fulfilled") setPayments(pay.value.payments || []);
-      if (ven.status === "fulfilled") setVendors(ven.value.vendors || []);
-      if (acct.status === "fulfilled") setAccounts(acct.value.accounts || []);
-      if (est.status === "fulfilled") setEstimates(est.value.estimates || []);
-      if (info.status === "fulfilled") setCompanyInfo(info.value);
-      if (itm.status === "fulfilled") setItems(itm.value.items || []);
-      if (po.status === "fulfilled") setPurchaseOrders(po.value.purchaseOrders || []);
-      if (cm.status === "fulfilled") setCreditMemos(cm.value.creditMemos || []);
-      if (emp.status === "fulfilled") setEmployees(emp.value.employees || []);
-      if (ta.status === "fulfilled") setTimeActivities(ta.value.timeActivities || []);
+      if (batch4[0].status === "fulfilled") setPurchaseOrders(batch4[0].value.purchaseOrders || []);
+      if (batch4[1].status === "fulfilled") setCreditMemos(batch4[1].value.creditMemos || []);
+      if (batch4[2].status === "fulfilled") setEmployees(batch4[2].value.employees || []);
+      if (batch4[3].status === "fulfilled") setTimeActivities(batch4[3].value.timeActivities || []);
 
       // Load synced customers from our DB
       const { data: dbCustomers } = await supabase
