@@ -48,8 +48,8 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const clientKey = Deno.env.get("TIKTOK_CLIENT_KEY");
-    const clientSecret = Deno.env.get("TIKTOK_CLIENT_SECRET");
+    const clientKey = Deno.env.get("TIKTOK_CLIENT_KEY")?.trim();
+    const clientSecret = Deno.env.get("TIKTOK_CLIENT_SECRET")?.trim();
 
     if (!clientKey || !clientSecret) {
       throw new Error("TikTok credentials not configured");
