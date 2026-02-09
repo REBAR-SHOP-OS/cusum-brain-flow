@@ -3508,6 +3508,7 @@ export type Database = {
       user_ringcentral_tokens: {
         Row: {
           access_token: string | null
+          code_verifier: string | null
           created_at: string
           id: string
           rc_email: string
@@ -3518,6 +3519,7 @@ export type Database = {
         }
         Insert: {
           access_token?: string | null
+          code_verifier?: string | null
           created_at?: string
           id?: string
           rc_email: string
@@ -3528,6 +3530,7 @@ export type Database = {
         }
         Update: {
           access_token?: string | null
+          code_verifier?: string | null
           created_at?: string
           id?: string
           rc_email?: string

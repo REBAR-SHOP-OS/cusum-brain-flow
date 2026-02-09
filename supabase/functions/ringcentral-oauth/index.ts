@@ -9,6 +9,20 @@ const corsHeaders = {
 
 const RC_SERVER = "https://platform.ringcentral.com";
 
+function generateCodeVerifier(): string {
+  const array = new Uint8Array(32);
+  crypto.getRandomValues(array);
+  return Array.from(array, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function computeCodeChallenge(verifier: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(verifier);
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  const base64 = btoa(String.fromCharCode(...new Uint8Array(digest)));
+  return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
 async function verifyAuth(req: Request): Promise<string | null> {
   const authHeader = req.headers.get("Authorization");
   if (!authHeader?.startsWith("Bearer ")) return null;
@@ -64,6 +78,15 @@ serve(async (req) => {
 
       if (!clientId) throw new Error("RingCentral Client ID not configured");
 
+      // Generate PKCE parameters
+      const codeVerifier = generateCodeVerifier();
+      const codeChallenge = await computeCodeChallenge(codeVerifier);
+
+      // Store code_verifier for this user
+      await supabaseAdmin
+        .from("user_ringcentral_tokens")
+        .upsert({ user_id: userId, code_verifier: codeVerifier }, { onConflict: "user_id" });
+
       // Get user's email for login hint
       const { data: userData } = await supabaseAdmin.auth.admin.getUserById(userId);
       const userEmail = userData?.user?.email || "";
@@ -73,6 +96,8 @@ serve(async (req) => {
       authUrl.searchParams.set("redirect_uri", redirectUri);
       authUrl.searchParams.set("response_type", "code");
       authUrl.searchParams.set("state", "ringcentral");
+      authUrl.searchParams.set("code_challenge", codeChallenge);
+      authUrl.searchParams.set("code_challenge_method", "S256");
       if (userEmail) authUrl.searchParams.set("login_hint", userEmail);
 
       return new Response(
@@ -90,6 +115,18 @@ serve(async (req) => {
         throw new Error("RingCentral OAuth credentials not configured");
       }
 
+      // Retrieve stored code_verifier for PKCE
+      const { data: storedData } = await supabaseAdmin
+        .from("user_ringcentral_tokens")
+        .select("code_verifier")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      const codeVerifier = storedData?.code_verifier;
+      if (!codeVerifier) {
+        throw new Error("PKCE code_verifier not found. Please restart the connection flow.");
+      }
+
       const credentials = btoa(`${clientId}:${clientSecret}`);
 
       const tokenResponse = await fetch(`${RC_SERVER}/restapi/oauth/token`, {
@@ -102,6 +139,7 @@ serve(async (req) => {
           grant_type: "authorization_code",
           code,
           redirect_uri: redirectUri,
+          code_verifier: codeVerifier,
         }),
       });
 
