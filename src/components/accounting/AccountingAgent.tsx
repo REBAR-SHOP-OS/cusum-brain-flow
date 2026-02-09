@@ -1,9 +1,10 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { Send, Loader2, Minimize2, Maximize2, Shrink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { sendAgentMessage, ChatMessage } from "@/lib/agent";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import accountingHelper from "@/assets/helpers/accounting-helper.png";
@@ -43,6 +44,11 @@ export function AccountingAgent({ onViewModeChange, viewMode: externalMode, qbSu
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { toast } = useToast();
+  const { user } = useAuth();
+  const userName = useMemo(() => {
+    const full = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "there";
+    return full.split(" ")[0]; // first name only
+  }, [user]);
 
   const mode = externalMode ?? internalMode;
 
@@ -94,8 +100,8 @@ export function AccountingAgent({ onViewModeChange, viewMode: externalMode, qbSu
       unpaidBillCount: qbSummary.bills.filter(b => b.Balance > 0).length,
     };
 
-    const greetMsg = `Daily briefing request. Today is ${new Date().toLocaleDateString("en-CA", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}. Use the context data I'm providing to create a rich ADHD-friendly daily briefing for Vicky. Format requirements:
-- Start with a warm personal greeting using her name
+    const greetMsg = `Daily briefing request. Today is ${new Date().toLocaleDateString("en-CA", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}. Use the context data I'm providing to create a rich ADHD-friendly daily briefing for ${userName}. Format requirements:
+- Start with a warm personal greeting using their name (${userName})
 - Use emoji headers for each section (🚨 Urgent, 💰 Receivables, 📦 Payables, 🏦 Cash Position)
 - Use markdown tables with | headers | for overdue invoices and bills (include Customer/Vendor, Invoice#, Amount, Days Overdue)
 - Use bold for dollar amounts
@@ -303,7 +309,7 @@ export function AccountingAgent({ onViewModeChange, viewMode: externalMode, qbSu
             </div>
             <div>
               <p className="font-semibold text-sm">
-                Morning, Vicky.
+                Morning, {userName}.
               </p>
               <p className="text-xs text-muted-foreground mt-1 max-w-xs">
                 I've checked your emails and QuickBooks. Ask me what needs attention today.
