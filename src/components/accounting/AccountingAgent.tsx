@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { sendAgentMessage, ChatMessage } from "@/lib/agent";
 import { useToast } from "@/hooks/use-toast";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import accountingHelper from "@/assets/helpers/accounting-helper.png";
 
 interface Message {
@@ -189,15 +190,15 @@ export function AccountingAgent() {
                 )}
                 <div
                   className={cn(
-                    "max-w-[85%] rounded-xl px-3 py-2 text-sm",
+                    "max-w-[85%] rounded-xl px-3 py-2 text-sm overflow-x-auto",
                     msg.role === "user"
                       ? "bg-primary text-primary-foreground"
                       : "bg-muted"
                   )}
                 >
                   {msg.role === "agent" ? (
-                    <div className="prose prose-sm dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
-                      <ReactMarkdown>{msg.content}</ReactMarkdown>
+                    <div className="prose prose-sm dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_table]:w-full [&_table]:text-xs [&_table]:border-collapse [&_th]:bg-muted/60 [&_th]:px-2 [&_th]:py-1.5 [&_th]:text-left [&_th]:font-semibold [&_th]:border [&_th]:border-border [&_td]:px-2 [&_td]:py-1.5 [&_td]:border [&_td]:border-border [&_tr:nth-child(even)]:bg-muted/30">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
                     </div>
                   ) : (
                     msg.content
