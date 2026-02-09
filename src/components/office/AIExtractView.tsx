@@ -117,17 +117,22 @@ export function AIExtractView() {
   const { projects } = useProjects(profile?.company_id || undefined);
   const { barlists } = useBarlists(selectedProjectId || undefined);
 
-  // All customers for combobox
-  const { data: customers = [] } = useQuery({
-    queryKey: ["all-customers", profile?.company_id],
+  // All ERP customers + contacts for combobox
+  const { data: erpContacts = [] } = useQuery({
+    queryKey: ["erp-contacts", profile?.company_id],
     enabled: !!profile?.company_id,
     queryFn: async () => {
-      const { data } = await supabase
-        .from("customers")
-        .select("id, name")
-        .eq("company_id", profile!.company_id!)
-        .order("name");
-      return data ?? [];
+      const [custRes, contactRes] = await Promise.all([
+        supabase.from("customers").select("id, name").eq("company_id", profile!.company_id!).order("name"),
+        supabase.from("contacts").select("id, first_name, last_name, email, customer_id").eq("company_id", profile!.company_id!).order("first_name"),
+      ]);
+      const custs = (custRes.data ?? []).map(c => ({ id: c.id, name: c.name, type: "customer" as const }));
+      const contacts = (contactRes.data ?? []).map(c => ({
+        id: c.id,
+        name: [c.first_name, c.last_name].filter(Boolean).join(" ") + (c.email ? ` (${c.email})` : ""),
+        type: "contact" as const,
+      }));
+      return [...custs, ...contacts];
     },
   });
   const [customerOpen, setCustomerOpen] = useState(false);
@@ -678,11 +683,21 @@ export function AIExtractView() {
                   </PopoverTrigger>
                   <PopoverContent className="w-[300px] p-0" align="start">
                     <Command>
-                      <CommandInput placeholder="Search customers..." />
+                      <CommandInput placeholder="Search ERP contacts..." />
                       <CommandList>
-                        <CommandEmpty>No customer found.</CommandEmpty>
-                        <CommandGroup>
-                          {customers.map((c) => (
+                        <CommandEmpty>No contact found.</CommandEmpty>
+                        <CommandGroup heading="Customers">
+                          {erpContacts.filter(c => c.type === "customer").map((c) => (
+                            <CommandItem key={c.id} value={c.name} onSelect={(val) => {
+                              setCustomer(val);
+                              setCustomerOpen(false);
+                            }}>
+                              {c.name}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                        <CommandGroup heading="Contacts">
+                          {erpContacts.filter(c => c.type === "contact").map((c) => (
                             <CommandItem key={c.id} value={c.name} onSelect={(val) => {
                               setCustomer(val);
                               setCustomerOpen(false);
