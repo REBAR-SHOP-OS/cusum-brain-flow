@@ -111,7 +111,30 @@ export function useCutPlans() {
     return true;
   };
 
-  return { plans, loading, fetchPlans, createPlan, updatePlanStatus };
+  const deletePlan = async (planId: string) => {
+    // Delete items first, then the plan
+    const { error: itemsErr } = await supabase
+      .from("cut_plan_items")
+      .delete()
+      .eq("cut_plan_id", planId);
+    if (itemsErr) {
+      toast({ title: "Error deleting plan items", description: itemsErr.message, variant: "destructive" });
+      return false;
+    }
+    const { error } = await supabase
+      .from("cut_plans")
+      .delete()
+      .eq("id", planId);
+    if (error) {
+      toast({ title: "Error deleting plan", description: error.message, variant: "destructive" });
+      return false;
+    }
+    toast({ title: "Plan deleted" });
+    await fetchPlans();
+    return true;
+  };
+
+  return { plans, loading, fetchPlans, createPlan, updatePlanStatus, deletePlan };
 }
 
 export function useCutPlanItems(planId: string | null) {

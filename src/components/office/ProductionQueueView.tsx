@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useCutPlans } from "@/hooks/useCutPlans";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,9 +9,14 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export function ProductionQueueView() {
-  const { plans, loading } = useCutPlans();
+  const { plans, loading, deletePlan } = useCutPlans();
   const { user } = useAuth();
 
   const activePlans = plans.filter(p => ["draft", "ready", "running", "queued"].includes(p.status));
@@ -66,6 +72,7 @@ export function ProductionQueueView() {
                 plan={plan}
                 projectName={matchedBarlist?.project?.name || null}
                 barlistName={matchedBarlist ? `${matchedBarlist.name} (Rev ${matchedBarlist.revision_no})` : null}
+                onDelete={() => deletePlan(plan.id)}
               />
             );
           })}
@@ -87,11 +94,14 @@ export function ProductionQueueView() {
   );
 }
 
-function QueueCard({ plan, projectName, barlistName }: {
+function QueueCard({ plan, projectName, barlistName, onDelete }: {
   plan: { id: string; name: string; status: string; project_name: string | null };
   projectName: string | null;
   barlistName: string | null;
+  onDelete: () => void;
 }) {
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
   const statusMap: Record<string, { label: string; color: string }> = {
     draft: { label: "DRAFT", color: "bg-muted text-muted-foreground" },
     ready: { label: "READY_FOR_SHIPPING", color: "bg-yellow-500/20 text-yellow-500" },
@@ -103,58 +113,85 @@ function QueueCard({ plan, projectName, barlistName }: {
   const st = statusMap[plan.status] || statusMap.draft;
 
   return (
-    <div className="flex items-center justify-between p-4 rounded-xl border border-border bg-card hover:bg-muted/30 transition-colors">
-      <div className="flex items-center gap-4">
-        <div className={`w-2.5 h-2.5 rounded-full ${plan.status === "in_progress" ? "bg-green-500" : "bg-muted-foreground/30"}`} />
-        <Badge className={`${st.color} text-[10px] tracking-wider`}>{st.label}</Badge>
-        <div>
-          <h3 className="text-sm font-bold text-foreground">{plan.name}</h3>
-          <div className="flex items-center gap-3 text-[10px] text-muted-foreground mt-0.5">
-            {projectName && (
-              <span className="flex items-center gap-1">
-                <FolderOpen className="w-3 h-3" />
-                {projectName}
-              </span>
-            )}
-            {barlistName && (
-              <span className="flex items-center gap-1">
-                <FileText className="w-3 h-3" />
-                {barlistName}
-              </span>
-            )}
-            {!projectName && !barlistName && (
-              <>
-                <span className="flex items-center gap-1"><Package className="w-3 h-3" /> Mark IDs</span>
-                <span>· Unassigned</span>
-              </>
-            )}
+    <>
+      <div className="flex items-center justify-between p-4 rounded-xl border border-border bg-card hover:bg-muted/30 transition-colors">
+        <div className="flex items-center gap-4">
+          <div className={`w-2.5 h-2.5 rounded-full ${plan.status === "in_progress" ? "bg-green-500" : "bg-muted-foreground/30"}`} />
+          <Badge className={`${st.color} text-[10px] tracking-wider`}>{st.label}</Badge>
+          <div>
+            <h3 className="text-sm font-bold text-foreground">{plan.name}</h3>
+            <div className="flex items-center gap-3 text-[10px] text-muted-foreground mt-0.5">
+              {projectName && (
+                <span className="flex items-center gap-1">
+                  <FolderOpen className="w-3 h-3" />
+                  {projectName}
+                </span>
+              )}
+              {barlistName && (
+                <span className="flex items-center gap-1">
+                  <FileText className="w-3 h-3" />
+                  {barlistName}
+                </span>
+              )}
+              {!projectName && !barlistName && (
+                <>
+                  <span className="flex items-center gap-1"><Package className="w-3 h-3" /> Mark IDs</span>
+                  <span>· Unassigned</span>
+                </>
+              )}
+            </div>
           </div>
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
+            <Settings className="w-4 h-4" />
+          </Button>
+          <Button variant="outline" size="sm" className="gap-1 text-xs h-8">
+            <Pencil className="w-3 h-3" /> Edit
+          </Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
+            <RotateCcw className="w-4 h-4" />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
+            <Barcode className="w-4 h-4" />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
+            <Star className="w-4 h-4" />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
+            <CheckCircle2 className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-destructive/60 hover:text-destructive"
+            onClick={() => setConfirmOpen(true)}
+          >
+            <Trash2 className="w-4 h-4" />
+          </Button>
         </div>
       </div>
 
-      <div className="flex items-center gap-1.5">
-        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
-          <Settings className="w-4 h-4" />
-        </Button>
-        <Button variant="outline" size="sm" className="gap-1 text-xs h-8">
-          <Pencil className="w-3 h-3" /> Edit
-        </Button>
-        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
-          <RotateCcw className="w-4 h-4" />
-        </Button>
-        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
-          <Barcode className="w-4 h-4" />
-        </Button>
-        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
-          <Star className="w-4 h-4" />
-        </Button>
-        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
-          <CheckCircle2 className="w-4 h-4" />
-        </Button>
-        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive/60 hover:text-destructive">
-          <Trash2 className="w-4 h-4" />
-        </Button>
-      </div>
-    </div>
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete "{plan.name}"?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete this manifest and all its items. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={onDelete}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
