@@ -592,6 +592,7 @@ export function AIExtractView() {
                                       <CommandItem key={p.id} value={p.name} onSelect={() => {
                                         setSelectedProjectId(p.id);
                                         setSelectedBarlistId("");
+                                        if (!manifestName) setManifestName(p.name);
                                       }}>
                                         {p.name}
                                       </CommandItem>
@@ -604,6 +605,7 @@ export function AIExtractView() {
                                       setCreateNewProject(true);
                                       setNewProjectName(c.name);
                                       setCustomer(c.name);
+                                      if (!manifestName) setManifestName(c.name);
                                       setSelectedBarlistId("");
                                     }}>
                                       + {c.name}
