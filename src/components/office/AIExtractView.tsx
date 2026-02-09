@@ -39,6 +39,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useProjects } from "@/hooks/useProjects";
 import { useBarlists } from "@/hooks/useBarlists";
 import { createProject, createBarlist } from "@/lib/barlistService";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 
 type ManifestType = "delivery" | "pickup";
 
@@ -114,6 +116,21 @@ export function AIExtractView() {
   // Project & Barlist data
   const { projects } = useProjects(profile?.company_id || undefined);
   const { barlists } = useBarlists(selectedProjectId || undefined);
+
+  // All customers for combobox
+  const { data: customers = [] } = useQuery({
+    queryKey: ["all-customers", profile?.company_id],
+    enabled: !!profile?.company_id,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("customers")
+        .select("id, name")
+        .eq("company_id", profile!.company_id!)
+        .order("name");
+      return data ?? [];
+    },
+  });
+  const [customerOpen, setCustomerOpen] = useState(false);
 
   const activeSession = sessions.find((s) => s.id === activeSessionId);
   const currentStepIndex = activeSession ? getStepIndex(activeSession.status) : -1;
@@ -652,8 +669,32 @@ export function AIExtractView() {
                 <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase mb-1.5 block">
                   Customer
                 </label>
-                <Input value={customer} onChange={(e) => setCustomer(e.target.value)}
-                  className="bg-card border-border" placeholder="e.g. ACME CONCRETE" />
+                <Popover open={customerOpen} onOpenChange={setCustomerOpen}>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" role="combobox" aria-expanded={customerOpen}
+                      className="w-full justify-between bg-card border-border font-normal text-left h-9">
+                      {customer || <span className="text-muted-foreground">Select customer...</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[300px] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search customers..." />
+                      <CommandList>
+                        <CommandEmpty>No customer found.</CommandEmpty>
+                        <CommandGroup>
+                          {customers.map((c) => (
+                            <CommandItem key={c.id} value={c.name} onSelect={(val) => {
+                              setCustomer(val);
+                              setCustomerOpen(false);
+                            }}>
+                              {c.name}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
               <div>
                 <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase mb-1.5 block">
