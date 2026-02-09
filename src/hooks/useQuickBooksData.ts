@@ -52,6 +52,7 @@ export interface QBAccount {
   Id: string;
   Name: string;
   AccountType: string;
+  AccountSubType: string;
   CurrentBalance: number;
   Active: boolean;
 }
