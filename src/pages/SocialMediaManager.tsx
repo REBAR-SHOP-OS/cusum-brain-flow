@@ -115,48 +115,52 @@ export default function SocialMediaManager() {
   return (
     <div className="flex flex-col h-full bg-background">
       {/* Header */}
-      <header className="flex items-center justify-between px-6 py-4 border-b border-border">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/integrations")}>
-            <ArrowLeft className="w-5 h-5" />
+      <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-border gap-2 sm:gap-0 shrink-0">
+        <div className="flex items-center gap-2 sm:gap-4">
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate("/integrations")}>
+            <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
           </Button>
-          <h1 className="text-xl font-semibold">Social Media Manager</h1>
+          <h1 className="text-base sm:text-xl font-semibold">Social Media</h1>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
           <Button
             onClick={() => generatePosts()}
             disabled={generating}
             variant="outline"
-            className="gap-2"
+            size="sm"
+            className="gap-1.5 flex-1 sm:flex-initial"
           >
             {generating ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
             ) : (
-              <Sparkles className="w-4 h-4" />
+              <Sparkles className="w-3.5 h-3.5" />
             )}
-            {generating ? "Generating..." : "Auto-generate today"}
+            <span className="hidden sm:inline">{generating ? "Generating..." : "Auto-generate today"}</span>
+            <span className="sm:hidden">{generating ? "..." : "Auto"}</span>
           </Button>
           <Button
             variant={showStrategy ? "default" : "outline"}
-            className="gap-2"
+            size="sm"
+            className="gap-1.5"
             onClick={() => setShowStrategy((v) => !v)}
           >
-            <BookOpen className="w-4 h-4" />
-            Strategy
+            <BookOpen className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Strategy</span>
           </Button>
-          <Button onClick={() => setShowCreateContent(true)} className="bg-primary hover:bg-primary/90">
-            <Plus className="w-4 h-4 mr-2" />
-            Create content
+          <Button onClick={() => setShowCreateContent(true)} size="sm" className="bg-primary hover:bg-primary/90 gap-1.5">
+            <Plus className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Create content</span>
+            <span className="sm:hidden">Create</span>
           </Button>
-          <Button variant="ghost" size="icon" onClick={() => setShowSettings(true)}>
-            <Settings className="w-5 h-5" />
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setShowSettings(true)}>
+            <Settings className="w-4 h-4" />
           </Button>
         </div>
       </header>
 
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6">
         {/* Quick Actions & Stats */}
-        <div className="flex flex-wrap gap-4 mb-6">
+        <div className="flex flex-col sm:flex-row flex-wrap gap-3 sm:gap-4 mb-4 sm:mb-6">
           <button
             onClick={() => {
               const firstScheduled = posts.find((p) => p.status === "scheduled");
@@ -164,7 +168,7 @@ export default function SocialMediaManager() {
             }}
             className="flex items-center gap-3 px-4 py-3 rounded-xl bg-gradient-to-br from-purple-600 to-purple-500 text-white hover:opacity-90 transition-opacity"
           >
-            <ThumbsUp className="w-5 h-5" />
+            <ThumbsUp className="w-5 h-5 shrink-0" />
             <span className="font-medium">{postsToReview} posts to review</span>
             <ArrowLeft className="w-4 h-4 rotate-[135deg]" />
           </button>
@@ -173,23 +177,23 @@ export default function SocialMediaManager() {
             onClick={() => setShowBrandKit(true)}
             className="flex items-center gap-3 px-4 py-3 rounded-xl bg-gradient-to-br from-violet-600 to-violet-500 text-white hover:opacity-90 transition-opacity"
           >
-            <Palette className="w-5 h-5" />
+            <Palette className="w-5 h-5 shrink-0" />
             <span className="font-medium">Edit your Brand Kit</span>
             <ArrowLeft className="w-4 h-4 rotate-[135deg]" />
           </button>
 
-          <div className="flex items-center gap-6 ml-auto">
+          <div className="flex items-center gap-4 sm:gap-6 sm:ml-auto">
             <div className="flex items-center gap-2">
-              <Users className="w-5 h-5 text-muted-foreground" />
+              <Users className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground" />
               <div>
-                <p className="text-2xl font-bold">{posts.filter((p) => p.status === "published").length}</p>
+                <p className="text-xl sm:text-2xl font-bold">{posts.filter((p) => p.status === "published").length}</p>
                 <p className="text-xs text-muted-foreground">Published</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <TrendingUp className="w-5 h-5 text-muted-foreground" />
+              <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground" />
               <div>
-                <p className="text-2xl font-bold">{posts.length}</p>
+                <p className="text-xl sm:text-2xl font-bold">{posts.length}</p>
                 <p className="text-xs text-muted-foreground">Total posts</p>
               </div>
             </div>
@@ -197,16 +201,16 @@ export default function SocialMediaManager() {
         </div>
 
         {/* Search & Filters */}
-        <div className="flex items-center gap-2 flex-wrap mb-4">
+        <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 scrollbar-thin mb-4">
           {searchOpen ? (
-            <div className="flex items-center gap-1 bg-card border border-border rounded-lg px-3 py-1.5">
+            <div className="flex items-center gap-1 bg-card border border-border rounded-lg px-3 py-1.5 shrink-0">
               <Search className="w-4 h-4 text-muted-foreground" />
               <Input
                 autoFocus
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search posts..."
-                className="border-0 h-7 bg-transparent p-0 text-sm focus-visible:ring-0 w-40"
+                className="border-0 h-7 bg-transparent p-0 text-sm focus-visible:ring-0 w-28 sm:w-40"
               />
               <button
                 onClick={() => { setSearchOpen(false); setSearchQuery(""); }}
@@ -216,19 +220,20 @@ export default function SocialMediaManager() {
               </button>
             </div>
           ) : (
-            <Button variant="outline" size="sm" className="gap-2" onClick={() => setSearchOpen(true)}>
+            <Button variant="outline" size="sm" className="gap-2 shrink-0" onClick={() => setSearchOpen(true)}>
               <Search className="w-4 h-4" />
-              Search
+              <span className="hidden sm:inline">Search</span>
             </Button>
           )}
 
-          {/* Status filter dropdown-like pills */}
+          {/* Status filter pills */}
           {statusFilters.map((f) => (
             <Button
               key={f.id}
               variant={statusFilter === f.id ? "default" : "outline"}
               size="sm"
               className={cn(
+                "shrink-0",
                 statusFilter === f.id ? "bg-primary text-primary-foreground" : "bg-card"
               )}
               onClick={() => setStatusFilter(f.id)}
@@ -238,13 +243,14 @@ export default function SocialMediaManager() {
           ))}
 
           {/* Platform pills */}
-          <div className="w-px h-6 bg-border mx-1" />
+          <div className="w-px h-6 bg-border mx-0.5 shrink-0" />
           {platformFilters.map((f) => (
             <Button
               key={f.id}
               variant={platformFilter === f.id ? "default" : "outline"}
               size="sm"
               className={cn(
+                "shrink-0",
                 platformFilter === f.id ? "bg-primary text-primary-foreground" : "bg-card"
               )}
               onClick={() => setPlatformFilter(f.id)}

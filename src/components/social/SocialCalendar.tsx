@@ -63,7 +63,8 @@ export function SocialCalendar({ posts, weekStart, onPostClick }: SocialCalendar
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
   return (
-    <div className="grid grid-cols-7 gap-2">
+    <div className="overflow-x-auto pb-2 scrollbar-thin">
+      <div className="grid grid-cols-7 gap-2 min-w-[700px]">
       {days.map((day) => {
         const dayPosts = posts.filter((post) => {
           if (!post.scheduled_date) return false;
@@ -122,6 +123,7 @@ export function SocialCalendar({ posts, weekStart, onPostClick }: SocialCalendar
           </div>
         );
       })}
+      </div>
     </div>
   );
 }

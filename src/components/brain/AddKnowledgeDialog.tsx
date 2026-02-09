@@ -145,9 +145,9 @@ export function AddKnowledgeDialog({ open, onOpenChange, onSuccess }: AddKnowled
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => onOpenChange(false)}>
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50" onClick={() => onOpenChange(false)}>
       <div
-        className="w-full max-w-lg max-h-[90vh] bg-card rounded-2xl shadow-xl flex flex-col overflow-hidden"
+        className="w-full sm:max-w-lg max-h-[85vh] sm:max-h-[90vh] bg-card rounded-t-2xl sm:rounded-2xl shadow-xl flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -159,11 +159,11 @@ export function AddKnowledgeDialog({ open, onOpenChange, onSuccess }: AddKnowled
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 sm:space-y-5">
           {/* Category Selector */}
           <div className="space-y-2">
             <Label>Type</Label>
-            <div className="grid grid-cols-5 gap-2">
+            <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
               {categoryOptions.map((opt) => (
                 <button
                   key={opt.value}

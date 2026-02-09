@@ -61,8 +61,8 @@ export default function Settings() {
 
   return (
     <div className="flex h-full">
-      {/* Sidebar */}
-      <div className="w-56 flex-shrink-0 border-r border-border bg-card/50 flex flex-col">
+      {/* Sidebar - hidden on mobile */}
+      <div className="hidden md:flex w-56 flex-shrink-0 border-r border-border bg-card/50 flex-col">
         {/* Workspace Header */}
         <div className="p-4 border-b border-border">
           <div className="flex items-center gap-3">
