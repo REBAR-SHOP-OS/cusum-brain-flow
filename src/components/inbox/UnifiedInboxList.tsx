@@ -159,6 +159,11 @@ export function UnifiedInboxList({
                         {formatTime(comm.receivedAt)}
                       </span>
                     </div>
+                    {comm.to && comm.type === "email" && (
+                      <p className="text-xs text-muted-foreground truncate mb-0.5">
+                        To: {parseDisplayName(comm.to)}
+                      </p>
+                    )}
                     <p className={cn("text-sm truncate", isUnread && "font-medium")}>
                       {displaySubject}
                     </p>
