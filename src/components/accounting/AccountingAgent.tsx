@@ -263,9 +263,6 @@ export function AccountingAgent({ onViewModeChange, viewMode: externalMode, qbSu
               50yr CPA
             </span>
           </h3>
-          <p className="text-xs text-muted-foreground truncate">
-            Vicky's Accountability Partner • viky@ & accounting@ inbox
-          </p>
         </div>
         <div className="flex items-center gap-0.5">
           <Button
