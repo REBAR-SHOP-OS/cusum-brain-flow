@@ -110,7 +110,7 @@ const agentRoutes: AgentRoute[] = [
   {
     id: "eisenhower",
     route: "/agent/eisenhower",
-    name: "Ike",
+    name: "Eisenhower Matrix",
     keywords: [
       "eisenhower", "eisenhower matrix", "priority matrix", "urgent important",
       "prioritize", "priority", "delegate", "eliminate", "do first",

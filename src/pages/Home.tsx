@@ -109,7 +109,7 @@ const helpers: Helper[] = [
   },
   {
     id: "eisenhower",
-    name: "Ike",
+    name: "Eisenhower Matrix",
     role: "Eisenhower Matrix",
     image: eisenhowerHelper,
     gradient: "from-amber-500 to-orange-600",
