@@ -118,12 +118,12 @@ function useMachinesCRUD() {
     enabled: !!user,
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("profiles")
+        .from("profiles_safe" as any)
         .select("id, full_name")
         .eq("is_active", true)
         .order("full_name");
       if (error) throw error;
-      return (data || []) as OperatorOption[];
+      return ((data || []) as unknown) as OperatorOption[];
     },
   });
 

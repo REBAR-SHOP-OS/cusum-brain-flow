@@ -69,12 +69,12 @@ export function useLiveMonitorData() {
     enabled: !!user,
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("profiles")
+        .from("profiles_safe" as any)
         .select("id, full_name")
         .eq("is_active", true)
         .order("full_name");
       if (error) throw error;
-      return data || [];
+      return (data as unknown) as {id: string; full_name: string}[] || [];
     },
   });
 

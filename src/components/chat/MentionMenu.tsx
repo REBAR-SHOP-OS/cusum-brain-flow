@@ -26,7 +26,7 @@ export function MentionMenu({ isOpen, filter, selectedIndex, onSelect, onClose }
     try {
       const [profilesRes, customersRes] = await Promise.all([
         supabase
-          .from("profiles")
+          .from("profiles_safe" as any)
           .select("id, full_name, title")
           .ilike("full_name", `%${filter}%`)
           .limit(5),
@@ -38,7 +38,7 @@ export function MentionMenu({ isOpen, filter, selectedIndex, onSelect, onClose }
       ]);
 
       const mentionItems: MentionItem[] = [
-        ...(profilesRes.data || []).map((p) => ({
+        ...((profilesRes.data as unknown as {id:string;full_name:string;title:string|null}[]) || []).map((p) => ({
           id: p.id,
           label: p.full_name,
           subtitle: p.title || "Team member",
