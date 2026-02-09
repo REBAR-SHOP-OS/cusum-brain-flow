@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useCutPlans } from "@/hooks/useCutPlans";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,7 @@ import {
 export function ProductionQueueView() {
   const { plans, loading, deletePlan } = useCutPlans();
   const { user } = useAuth();
+  const navigate = useNavigate();
 
   const activePlans = plans.filter(p => ["draft", "ready", "running", "queued"].includes(p.status));
 
@@ -73,6 +75,7 @@ export function ProductionQueueView() {
                 projectName={matchedBarlist?.project?.name || null}
                 barlistName={matchedBarlist ? `${matchedBarlist.name} (Rev ${matchedBarlist.revision_no})` : null}
                 onDelete={() => deletePlan(plan.id)}
+                onEdit={() => navigate(`/cutter-planning?planId=${plan.id}`)}
               />
             );
           })}
@@ -94,11 +97,12 @@ export function ProductionQueueView() {
   );
 }
 
-function QueueCard({ plan, projectName, barlistName, onDelete }: {
+function QueueCard({ plan, projectName, barlistName, onDelete, onEdit }: {
   plan: { id: string; name: string; status: string; project_name: string | null };
   projectName: string | null;
   barlistName: string | null;
   onDelete: () => void;
+  onEdit: () => void;
 }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
 
@@ -147,7 +151,7 @@ function QueueCard({ plan, projectName, barlistName, onDelete }: {
           <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
             <Settings className="w-4 h-4" />
           </Button>
-          <Button variant="outline" size="sm" className="gap-1 text-xs h-8">
+          <Button variant="outline" size="sm" className="gap-1 text-xs h-8" onClick={onEdit}>
             <Pencil className="w-3 h-3" /> Edit
           </Button>
           <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">

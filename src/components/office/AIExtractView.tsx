@@ -1,9 +1,9 @@
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef, useMemo, useCallback } from "react";
 import {
   Upload, Globe, FileText, Loader2, Truck, Package,
   CheckCircle2, AlertCircle, Sparkles, X, ArrowRight,
   Shield, TriangleAlert, Clock, ChevronRight, History, XCircle,
-  FolderOpen, Plus, GitBranch,
+  FolderOpen, Plus, GitBranch, Pencil, Save, RotateCcw,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -86,6 +86,11 @@ export function AIExtractView() {
   const [showHistory, setShowHistory] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
   const [showRejectDialog, setShowRejectDialog] = useState(false);
+
+  // Inline editing state
+  const [editingRows, setEditingRows] = useState<Record<string, Record<string, any>>>({});
+  const [isEditing, setIsEditing] = useState(false);
+  const [savingEdits, setSavingEdits] = useState(false);
 
   // Data hooks
   const { sessions, refresh: refreshSessions } = useExtractSessions();
@@ -344,6 +349,68 @@ export function AIExtractView() {
   };
 
   const dimCols = ["A", "B", "C", "D", "E", "F", "G", "H", "J", "K", "O", "R"] as const;
+
+  // ─── Inline Editing Helpers ──────────────────────────────
+  const startEditing = useCallback(() => {
+    const edits: Record<string, Record<string, any>> = {};
+    rows.forEach((row) => {
+      edits[row.id] = {
+        dwg: row.dwg ?? "",
+        grade: row.grade_mapped || row.grade || "",
+        mark: row.mark ?? "",
+        quantity: row.quantity ?? 0,
+        bar_size: row.bar_size_mapped || row.bar_size || "",
+        shape_type: row.shape_code_mapped || row.shape_type || "",
+        total_length_mm: row.total_length_mm ?? 0,
+        ...Object.fromEntries(dimCols.map(d => [`dim_${d.toLowerCase()}`, (row as any)[`dim_${d.toLowerCase()}`] ?? ""])),
+      };
+    });
+    setEditingRows(edits);
+    setIsEditing(true);
+  }, [rows]);
+
+  const cancelEditing = () => {
+    setEditingRows({});
+    setIsEditing(false);
+  };
+
+  const updateEditField = (rowId: string, field: string, value: any) => {
+    setEditingRows(prev => ({
+      ...prev,
+      [rowId]: { ...prev[rowId], [field]: value },
+    }));
+  };
+
+  const saveEdits = async () => {
+    setSavingEdits(true);
+    try {
+      const updates = Object.entries(editingRows).map(([rowId, fields]) => {
+        const updateData: Record<string, any> = {};
+        // Map editable fields to DB columns
+        if (fields.dwg !== undefined) updateData.dwg = fields.dwg || null;
+        if (fields.grade !== undefined) updateData.grade = fields.grade || null;
+        if (fields.mark !== undefined) updateData.mark = fields.mark || null;
+        if (fields.quantity !== undefined) updateData.quantity = Number(fields.quantity) || 0;
+        if (fields.bar_size !== undefined) updateData.bar_size = fields.bar_size || null;
+        if (fields.shape_type !== undefined) updateData.shape_type = fields.shape_type || null;
+        if (fields.total_length_mm !== undefined) updateData.total_length_mm = Number(fields.total_length_mm) || null;
+        dimCols.forEach(d => {
+          const key = `dim_${d.toLowerCase()}`;
+          if (fields[key] !== undefined) updateData[key] = fields[key] !== "" ? Number(fields[key]) : null;
+        });
+        return supabase.from("extract_rows").update(updateData).eq("id", rowId);
+      });
+      await Promise.all(updates);
+      await refreshRows();
+      setIsEditing(false);
+      setEditingRows({});
+      toast({ title: "Changes saved", description: `${Object.keys(editingRows).length} rows updated` });
+    } catch (err: any) {
+      toast({ title: "Save failed", description: err.message, variant: "destructive" });
+    } finally {
+      setSavingEdits(false);
+    }
+  };
 
   return (
     <ScrollArea className="h-full">
@@ -858,6 +925,31 @@ export function AIExtractView() {
         {rows.length > 0 && (
           <Card>
             <CardContent className="p-0">
+              {/* Edit toolbar */}
+              {activeSession && activeSession.status !== "approved" && activeSession.status !== "rejected" && (
+                <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-muted/30">
+                  <span className="text-xs font-bold tracking-widest text-muted-foreground uppercase">
+                    {rows.length} Line Items
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {!isEditing ? (
+                      <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={startEditing}>
+                        <Pencil className="w-3 h-3" /> Edit Rows
+                      </Button>
+                    ) : (
+                      <>
+                        <Button variant="ghost" size="sm" className="gap-1 text-xs h-8" onClick={cancelEditing} disabled={savingEdits}>
+                          <RotateCcw className="w-3 h-3" /> Cancel
+                        </Button>
+                        <Button size="sm" className="gap-1.5 text-xs h-8" onClick={saveEdits} disabled={savingEdits}>
+                          {savingEdits ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                          {savingEdits ? "Saving..." : "Save & Confirm"}
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
               <ScrollArea className="h-[55vh]">
                 <div className="min-w-[1400px]">
                   <Table>
@@ -877,38 +969,73 @@ export function AIExtractView() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {rows.map((row) => (
-                        <TableRow key={row.id} className="hover:bg-muted/30">
-                          <TableCell className="text-xs font-mono">{row.dwg || "—"}</TableCell>
-                          <TableCell className="text-xs">{row.row_index}</TableCell>
-                          <TableCell className="text-xs">{row.grade_mapped || row.grade || "—"}</TableCell>
-                          <TableCell className="text-xs font-bold text-primary">{row.mark || "—"}</TableCell>
-                          <TableCell className="text-xs text-center font-bold">{row.quantity ?? "—"}</TableCell>
-                          <TableCell className="text-xs">
-                            <Badge variant="secondary" className="text-[10px] font-bold">
-                              {row.bar_size_mapped || row.bar_size || "—"}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-xs">
-                            {(row.shape_code_mapped || row.shape_type) ? (
-                              <Badge variant="outline" className="text-[10px]">
-                                {row.shape_code_mapped || row.shape_type}
-                              </Badge>
-                            ) : (
-                              <span className="text-muted-foreground">STR</span>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-xs text-right font-mono">{row.total_length_mm ?? "—"}</TableCell>
-                          {dimCols.map((d) => {
-                            const key = `dim_${d.toLowerCase()}` as keyof typeof row;
-                            return (
-                              <TableCell key={d} className="text-xs text-right font-mono text-muted-foreground">
-                                {row[key] != null ? String(row[key]) : ""}
-                              </TableCell>
-                            );
-                          })}
-                        </TableRow>
-                      ))}
+                      {rows.map((row) => {
+                        const edit = isEditing ? editingRows[row.id] : null;
+                        return (
+                          <TableRow key={row.id} className={`hover:bg-muted/30 ${isEditing ? "bg-primary/[0.02]" : ""}`}>
+                            <TableCell className="text-xs font-mono p-1">
+                              {edit ? (
+                                <input className="w-full bg-card border border-border rounded px-1.5 py-1 text-xs font-mono" value={edit.dwg} onChange={e => updateEditField(row.id, "dwg", e.target.value)} />
+                              ) : (row.dwg || "—")}
+                            </TableCell>
+                            <TableCell className="text-xs p-1">{row.row_index}</TableCell>
+                            <TableCell className="text-xs p-1">
+                              {edit ? (
+                                <input className="w-full bg-card border border-border rounded px-1.5 py-1 text-xs" value={edit.grade} onChange={e => updateEditField(row.id, "grade", e.target.value)} />
+                              ) : (row.grade_mapped || row.grade || "—")}
+                            </TableCell>
+                            <TableCell className="text-xs font-bold text-primary p-1">
+                              {edit ? (
+                                <input className="w-full bg-card border border-border rounded px-1.5 py-1 text-xs font-bold" value={edit.mark} onChange={e => updateEditField(row.id, "mark", e.target.value)} />
+                              ) : (row.mark || "—")}
+                            </TableCell>
+                            <TableCell className="text-xs text-center font-bold p-1">
+                              {edit ? (
+                                <input type="number" className="w-full bg-card border border-border rounded px-1.5 py-1 text-xs text-center font-bold" value={edit.quantity} onChange={e => updateEditField(row.id, "quantity", e.target.value)} />
+                              ) : (row.quantity ?? "—")}
+                            </TableCell>
+                            <TableCell className="text-xs p-1">
+                              {edit ? (
+                                <input className="w-full bg-card border border-border rounded px-1.5 py-1 text-xs" value={edit.bar_size} onChange={e => updateEditField(row.id, "bar_size", e.target.value)} />
+                              ) : (
+                                <Badge variant="secondary" className="text-[10px] font-bold">
+                                  {row.bar_size_mapped || row.bar_size || "—"}
+                                </Badge>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-xs p-1">
+                              {edit ? (
+                                <input className="w-full bg-card border border-border rounded px-1.5 py-1 text-xs" value={edit.shape_type} onChange={e => updateEditField(row.id, "shape_type", e.target.value)} />
+                              ) : (
+                                (row.shape_code_mapped || row.shape_type) ? (
+                                  <Badge variant="outline" className="text-[10px]">
+                                    {row.shape_code_mapped || row.shape_type}
+                                  </Badge>
+                                ) : (
+                                  <span className="text-muted-foreground">STR</span>
+                                )
+                              )}
+                            </TableCell>
+                            <TableCell className="text-xs text-right font-mono p-1">
+                              {edit ? (
+                                <input type="number" className="w-full bg-card border border-border rounded px-1.5 py-1 text-xs text-right font-mono" value={edit.total_length_mm} onChange={e => updateEditField(row.id, "total_length_mm", e.target.value)} />
+                              ) : (row.total_length_mm ?? "—")}
+                            </TableCell>
+                            {dimCols.map((d) => {
+                              const key = `dim_${d.toLowerCase()}`;
+                              return (
+                                <TableCell key={d} className="text-xs text-right font-mono text-muted-foreground p-1">
+                                  {edit ? (
+                                    <input type="number" className="w-full bg-card border border-border rounded px-1.5 py-1 text-xs text-right font-mono" value={edit[key] ?? ""} onChange={e => updateEditField(row.id, key, e.target.value)} />
+                                  ) : (
+                                    (row as any)[key] != null ? String((row as any)[key]) : ""
+                                  )}
+                                </TableCell>
+                              );
+                            })}
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </div>
