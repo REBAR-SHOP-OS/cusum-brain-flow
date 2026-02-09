@@ -9,7 +9,10 @@ const corsHeaders = {
 
 const QUICKBOOKS_AUTH_URL = "https://appcenter.intuit.com/connect/oauth2";
 const QUICKBOOKS_TOKEN_URL = "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer";
-const QUICKBOOKS_API_BASE = "https://quickbooks.api.intuit.com";
+// Use sandbox until QB app is approved for production
+const QUICKBOOKS_API_BASE = Deno.env.get("QUICKBOOKS_ENVIRONMENT") === "production"
+  ? "https://quickbooks.api.intuit.com"
+  : "https://sandbox-quickbooks.api.intuit.com";
 
 // ─── Helpers ───────────────────────────────────────────────────────
 
