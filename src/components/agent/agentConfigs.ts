@@ -112,11 +112,11 @@ export const agentConfigs: Record<string, AgentConfig> = {
     capabilities: ["Draft social posts", "Content calendar", "Hashtag suggestions", "Platform-specific content"],
   },
   eisenhower: {
-    name: "Ike",
+    name: "Eisenhower Matrix",
     role: "Eisenhower Matrix",
     image: eisenhowerHelper,
     agentType: "eisenhower",
-    greeting: "Hello! I'm Ike, your Eisenhower Matrix strategist. Let's prioritize what truly matters.",
+    greeting: "Hello! I'm your Eisenhower Matrix strategist. Let's prioritize what truly matters.",
     placeholder: "Tell me your tasks and I'll help you prioritize...",
     capabilities: ["Categorize tasks by urgency & importance", "Build your priority matrix", "Identify tasks to delegate or eliminate", "Focus on what matters most"],
   },
