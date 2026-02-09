@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
+import { format } from "date-fns";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { ChevronDown, PanelLeftClose, PanelLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -71,7 +72,10 @@ export default function AgentWorkspace() {
     // Create session on first message if none active
     let sessionId = activeSessionId;
     if (!sessionId) {
-      sessionId = await createSession(content, config.name);
+      const sessionTitle = agentId === "eisenhower"
+        ? format(new Date(), "yyyy-MM-dd (EEE, MMM d)")
+        : content;
+      sessionId = await createSession(sessionTitle, config.name);
       setActiveSessionId(sessionId);
     }
 
