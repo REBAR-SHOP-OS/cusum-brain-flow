@@ -206,22 +206,22 @@
     padding: 0;
   }
 
-  /* Hide everything except tags */
-  body, body * {
-    visibility: hidden !important;
+  /* Reset body */
+  html, body {
     margin: 0 !important;
     padding: 0 !important;
+    background: #fff !important;
   }
 
-  .rebar-tag,
-  .rebar-tag * {
-    visibility: visible !important;
+  /* Hide everything by default */
+  body > *:not(:has(.rebar-tag)) {
+    display: none !important;
   }
 
+  /* Make all ancestors of .rebar-tag visible but unstyled */
   .rebar-tag {
-    position: absolute !important;
-    top: 0 !important;
-    left: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
     width: 6in !important;
     height: 4in !important;
     margin: 0 !important;
@@ -237,9 +237,20 @@
     page-break-inside: avoid;
   }
 
-  .rebar-tag * {
+  /* Strip layout from all ancestors so tag can fill page */
+  .rebar-tag-print-wrapper,
+  .rebar-tag-print-wrapper * {
+    all: unset !important;
+    display: block !important;
+  }
+
+  .rebar-tag, .rebar-tag * {
+    visibility: visible !important;
     color: #000 !important;
     border-color: #000 !important;
+  }
+
+  .rebar-tag * {
     background: transparent !important;
   }
 
