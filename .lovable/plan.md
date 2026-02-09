@@ -1,34 +1,38 @@
 
 
-# Fix RingCentral OAuth Connect Flow
+# Fix: Add PKCE Support to RingCentral OAuth
 
-## Problem
-When Neel clicks "Connect" on RingCentral in the Integrations page, **nothing useful happens** because:
+## Root Cause
+Your RingCentral app is configured as a **"Client-side web app"**, which **requires PKCE** (Proof Key for Code Exchange). The current edge function does not generate or send PKCE parameters, causing RingCentral to reject the token exchange with a misleading "Redirect URIs do not match" error.
 
-1. `ringcentral` is missing from the `oauthIntegrations` array, so it opens a manual credential form instead of the OAuth popup.
-2. The `startOAuth` function in `useIntegrations.ts` has no handler for `ringcentral`, so even if triggered, it would do nothing.
+## Fix (1 file)
 
-The backend edge function (`ringcentral-oauth`) already fully supports `get-auth-url` and `exchange-code` actions -- the frontend just never calls them.
+### `supabase/functions/ringcentral-oauth/index.ts`
 
-## Fix (2 files)
+**In `get-auth-url` action:**
+- Generate a random `code_verifier` (43-128 character string)
+- Compute `code_challenge` = base64url(SHA-256(code_verifier))
+- Add `code_challenge` and `code_challenge_method=S256` to the authorization URL
+- Store the `code_verifier` in the database (`user_ringcentral_tokens` table) so it can be retrieved during the token exchange step
 
-### 1. `src/pages/Integrations.tsx`
-- Add `"ringcentral"` to the `oauthIntegrations` array so clicking it opens the Connect dialog instead of the manual setup form.
+**In `exchange-code` action:**
+- Retrieve the stored `code_verifier` for the user
+- Include `code_verifier` in the token exchange POST body
 
-### 2. `src/hooks/useIntegrations.ts`
-- Add a `ringcentral` case in the `startOAuth` function that:
-  - Calls the `ringcentral-oauth` edge function with `action: "get-auth-url"` and the redirect URI.
-  - Opens the returned auth URL in a popup window.
-- Also update the RingCentral status check in `checkIntegrationStatus` and `checkAllStatuses` to use the proper `ringcentral-oauth` edge function with `action: "check-status"` (instead of calling `ringcentral-sync` which is the wrong function for status checking).
+### Database
+- Add a nullable `code_verifier` column to `user_ringcentral_tokens` to temporarily hold the PKCE verifier between the two steps
 
-### 3. `src/pages/IntegrationCallback.tsx`
-- Ensure the `ringcentral` state is already handled in the callback -- it is (line 79), so no change needed there.
+## Technical Details
 
-## Expected Result
-After this fix:
-1. Neel clicks RingCentral -> sees Connect dialog
-2. Clicks Connect -> popup opens to RingCentral login
-3. Logs in with his own RC credentials
-4. Popup closes, tokens are saved, RingCentral shows "Connected"
-5. Inbox Sync will then pull his calls
+The PKCE flow works like this:
+
+1. **Auth URL** -- Generate a random string (code_verifier), hash it (code_challenge), and send the challenge with the auth URL
+2. **Token Exchange** -- Send the original code_verifier so RingCentral can verify it matches the challenge
+
+This is a standard OAuth security requirement for client-side/SPA applications.
+
+## No Other Changes Needed
+- The redirect URIs in your RingCentral portal are already correct
+- The frontend code does not need changes
+- The callback page already handles `ringcentral` state
 
