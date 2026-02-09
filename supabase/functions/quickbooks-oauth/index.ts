@@ -494,6 +494,7 @@ async function handleSyncCustomers(supabase: ReturnType<typeof createClient>, us
 
 async function handleSyncInvoices(supabase: ReturnType<typeof createClient>, userId: string) {
   const config = await getQBConfig(supabase, userId);
+  const companyId = await getUserCompanyId(supabase, userId);
 
   const qbData = await qbQuery(config, "Invoice");
   const invoices = qbData.QueryResponse?.Invoice || [];
@@ -531,6 +532,7 @@ async function handleSyncInvoices(supabase: ReturnType<typeof createClient>, use
         entity_type: "Invoice",
         balance: (invoice.Balance as number) || 0,
         customer_id: customerId,
+        company_id: companyId,
         data: {
           DocNumber: invoice.DocNumber,
           TotalAmt: invoice.TotalAmt,
@@ -562,6 +564,7 @@ async function handleSyncInvoices(supabase: ReturnType<typeof createClient>, use
 
 async function handleSyncVendors(supabase: ReturnType<typeof createClient>, userId: string) {
   const config = await getQBConfig(supabase, userId);
+  const companyId = await getUserCompanyId(supabase, userId);
 
   const qbData = await qbQuery(config, "Vendor");
   const vendors = qbData.QueryResponse?.Vendor || [];
@@ -574,6 +577,7 @@ async function handleSyncVendors(supabase: ReturnType<typeof createClient>, user
         quickbooks_id: `vendor_${vendor.Id}`,
         entity_type: "Vendor",
         balance: vendor.Balance || 0,
+        company_id: companyId,
         data: {
           DisplayName: vendor.DisplayName,
           CompanyName: vendor.CompanyName,
