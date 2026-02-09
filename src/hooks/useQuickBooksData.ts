@@ -166,20 +166,21 @@ export function useQuickBooksData() {
         return;
       }
 
-      // Fire all API calls in parallel (2 large batches instead of 4 sequential)
+      // Phase 1: Single call for dashboard-critical data (invoices, bills, payments, bank accounts)
+      const dashboardData = await qbAction("dashboard-summary");
+      setInvoices(dashboardData.invoices || []);
+      setBills(dashboardData.bills || []);
+      setPayments(dashboardData.payments || []);
+      setAccounts(dashboardData.accounts || []);
+      setLoading(false); // Dashboard cards render immediately
+
+      // Phase 2: Load secondary data in background (no loading spinner)
       const [
-        syncCustResult, syncInvResult, paymentsResult,
-        invoicesResult, billsResult, vendorsResult,
-        bankAccountsResult, estimatesResult, companyInfoResult, itemsResult,
+        vendorsResult, estimatesResult, companyInfoResult, itemsResult,
         poResult, cmResult, empResult, taResult,
+        syncCustResult, syncInvResult,
       ] = await Promise.allSettled([
-        qbAction("sync-customers"),
-        qbAction("sync-invoices"),
-        qbAction("list-payments"),
-        qbAction("list-invoices"),
-        qbAction("list-bills"),
         qbAction("list-vendors"),
-        qbAction("list-bank-accounts"),
         qbAction("list-estimates"),
         qbAction("get-company-info"),
         qbAction("list-items"),
@@ -187,13 +188,11 @@ export function useQuickBooksData() {
         qbAction("list-credit-memos"),
         qbAction("list-employees"),
         qbAction("list-time-activities"),
+        qbAction("sync-customers"),
+        qbAction("sync-invoices"),
       ]);
 
-      if (paymentsResult.status === "fulfilled") setPayments(paymentsResult.value.payments || []);
-      if (invoicesResult.status === "fulfilled") setInvoices(invoicesResult.value.invoices || []);
-      if (billsResult.status === "fulfilled") setBills(billsResult.value.bills || []);
       if (vendorsResult.status === "fulfilled") setVendors(vendorsResult.value.vendors || []);
-      if (bankAccountsResult.status === "fulfilled") setAccounts(bankAccountsResult.value.accounts || []);
       if (estimatesResult.status === "fulfilled") setEstimates(estimatesResult.value.estimates || []);
       if (companyInfoResult.status === "fulfilled") setCompanyInfo(companyInfoResult.value);
       if (itemsResult.status === "fulfilled") setItems(itemsResult.value.items || []);
