@@ -196,34 +196,25 @@
 }
 
 /* ============================================
-   Zebra ZT411 Label Print Styles
-   4" × 6" label (6" wide × 4" tall)
+   Zebra Label Print Styles
+   Printer driver controls label size
    ============================================ */
 @media print {
-  @page {
-    size: 6in 4in;
-    margin: 0;
-    padding: 0;
+  @page { margin: 0; }
+
+  /* Hide everything except tags */
+  body * { visibility: hidden !important; }
+
+  .rebar-tag,
+  .rebar-tag * {
+    visibility: visible !important;
   }
 
-  /* Reset body */
-  html, body {
-    margin: 0 !important;
-    padding: 0 !important;
-    background: #fff !important;
-  }
-
-  /* Hide everything by default */
-  body > *:not(:has(.rebar-tag)) {
-    display: none !important;
-  }
-
-  /* Make all ancestors of .rebar-tag visible but unstyled */
   .rebar-tag {
-    display: flex !important;
-    flex-direction: column !important;
-    width: 6in !important;
-    height: 4in !important;
+    position: relative !important;
+    width: 100% !important;
+    height: auto !important;
+    max-width: none !important;
     margin: 0 !important;
     padding: 0 !important;
     border: 1px solid #000 !important;
@@ -232,48 +223,21 @@
     color: #000 !important;
     box-shadow: none !important;
     overflow: hidden !important;
-    box-sizing: border-box !important;
     page-break-after: always;
     page-break-inside: avoid;
   }
 
-  /* Strip layout from all ancestors so tag can fill page */
-  .rebar-tag-print-wrapper,
-  .rebar-tag-print-wrapper * {
-    all: unset !important;
-    display: block !important;
-  }
-
-  .rebar-tag, .rebar-tag * {
-    visibility: visible !important;
+  .rebar-tag * {
     color: #000 !important;
     border-color: #000 !important;
-  }
-
-  .rebar-tag * {
     background: transparent !important;
   }
 
-  .rebar-tag svg path,
-  .rebar-tag svg circle,
-  .rebar-tag svg text {
-    stroke: #000 !important;
-    fill: none !important;
-  }
-  .rebar-tag svg text {
-    fill: #000 !important;
-  }
-  .rebar-tag svg circle[fill] {
-    fill: #eee !important;
-  }
+  .rebar-tag .bg-black { background: #000 !important; }
+  .rebar-tag .bg-white { background: #fff !important; }
 
-  .rebar-tag .bg-black {
-    background: #000 !important;
-  }
-
-  .rebar-tag .bg-white {
-    background: #fff !important;
-  }
+  .rebar-tag svg path, .rebar-tag svg circle { stroke: #000 !important; fill: none !important; }
+  .rebar-tag svg text { fill: #000 !important; }
 }
 
 /* Print styles for document templates */
