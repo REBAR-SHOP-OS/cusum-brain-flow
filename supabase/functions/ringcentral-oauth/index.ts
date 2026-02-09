@@ -97,7 +97,7 @@ serve(async (req) => {
       // Store code_verifier for this user
       await supabaseAdmin
         .from("user_ringcentral_tokens")
-        .upsert({ user_id: userId, code_verifier: codeVerifier }, { onConflict: "user_id" });
+        .upsert({ user_id: userId, code_verifier: codeVerifier, rc_email: "", refresh_token: "pending" }, { onConflict: "user_id" });
 
       // Get user's email for login hint
       const { data: userData } = await supabaseAdmin.auth.admin.getUserById(userId);
