@@ -34,13 +34,13 @@ const menus: Menu[] = [
     label: "Vendors",
     items: [
       { label: "Bills", tab: "bills" },
-      { label: "Payments", tab: "payments" },
+      { label: "Vendor Payments", tab: "payments" },
     ],
   },
   {
     label: "Accounting",
     items: [
-      { label: "Accounts", tab: "accounts" },
+      { label: "Chart of Accounts", tab: "accounts" },
       { label: "AI Audit", tab: "audit" },
       { type: "separator" },
       { label: "Payroll", tab: "payroll" },
@@ -50,9 +50,9 @@ const menus: Menu[] = [
     label: "Reporting",
     items: [
       { type: "label", label: "Statement Reports" },
-      { label: "Balance Sheet", tab: "audit" },
-      { label: "Profit and Loss", tab: "audit" },
-      { label: "Cash Flow Statement", tab: "audit" },
+      { label: "Balance Sheet", tab: "balance-sheet" },
+      { label: "Profit and Loss", tab: "profit-loss" },
+      { label: "Cash Flow Statement", tab: "cash-flow" },
       { type: "separator" },
       { type: "label", label: "Partner Reports" },
       { label: "Aged Receivable", tab: "invoices" },
