@@ -75,10 +75,19 @@ export function AccountingAgent({ onViewModeChange, viewMode: externalMode }: Ac
         history
       );
 
+      // Build reply with created notification badges
+      let replyContent = response.reply;
+      if (response.createdNotifications && response.createdNotifications.length > 0) {
+        const notifSummary = response.createdNotifications
+          .map((n) => `${n.type === "todo" ? "✅" : n.type === "idea" ? "💡" : "🔔"} **${n.title}**${n.assigned_to_name ? ` → ${n.assigned_to_name}` : ""}`)
+          .join("\n");
+        replyContent += `\n\n---\n📋 **Created ${response.createdNotifications.length} item(s):**\n${notifSummary}`;
+      }
+
       const agentMsg: Message = {
         id: crypto.randomUUID(),
         role: "agent",
-        content: response.reply,
+        content: replyContent,
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, agentMsg]);

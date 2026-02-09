@@ -2126,6 +2126,7 @@ export type Database = {
         Row: {
           agent_color: string | null
           agent_name: string | null
+          assigned_to: string | null
           created_at: string
           description: string | null
           expires_at: string | null
@@ -2133,6 +2134,7 @@ export type Database = {
           link_to: string | null
           metadata: Json | null
           priority: string | null
+          reminder_at: string | null
           status: string | null
           title: string
           type: string
@@ -2142,6 +2144,7 @@ export type Database = {
         Insert: {
           agent_color?: string | null
           agent_name?: string | null
+          assigned_to?: string | null
           created_at?: string
           description?: string | null
           expires_at?: string | null
@@ -2149,6 +2152,7 @@ export type Database = {
           link_to?: string | null
           metadata?: Json | null
           priority?: string | null
+          reminder_at?: string | null
           status?: string | null
           title: string
           type: string
@@ -2158,6 +2162,7 @@ export type Database = {
         Update: {
           agent_color?: string | null
           agent_name?: string | null
+          assigned_to?: string | null
           created_at?: string
           description?: string | null
           expires_at?: string | null
@@ -2165,13 +2170,22 @@ export type Database = {
           link_to?: string | null
           metadata?: Json | null
           priority?: string | null
+          reminder_at?: string | null
           status?: string | null
           title?: string
           type?: string
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "notifications_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       orders: {
         Row: {

@@ -10,6 +10,7 @@ export interface ChatMessage {
 export interface AgentResponse {
   reply: string;
   context?: Record<string, unknown>;
+  createdNotifications?: { type: string; title: string; assigned_to_name?: string }[];
 }
 
 export interface AttachedFile {
