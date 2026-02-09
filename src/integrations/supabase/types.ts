@@ -17,6 +17,7 @@ export type Database = {
       accounting_mirror: {
         Row: {
           balance: number | null
+          company_id: string
           created_at: string
           customer_id: string | null
           data: Json
@@ -27,6 +28,7 @@ export type Database = {
         }
         Insert: {
           balance?: number | null
+          company_id: string
           created_at?: string
           customer_id?: string | null
           data: Json
@@ -37,6 +39,7 @@ export type Database = {
         }
         Update: {
           balance?: number | null
+          company_id?: string
           created_at?: string
           customer_id?: string | null
           data?: Json
