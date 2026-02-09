@@ -571,15 +571,29 @@ export function AIExtractView() {
                     {!createNewProject ? (
                       <div className="flex items-center gap-2">
                         <Select value={selectedProjectId} onValueChange={(v) => {
-                          setSelectedProjectId(v);
-                          setSelectedBarlistId("");
+                          if (v.startsWith("cust:")) {
+                            // Auto-create project from customer name
+                            const custName = v.replace("cust:", "");
+                            setCreateNewProject(true);
+                            setNewProjectName(custName);
+                            setCustomer(custName);
+                            setSelectedBarlistId("");
+                          } else {
+                            setSelectedProjectId(v);
+                            setSelectedBarlistId("");
+                          }
                         }}>
                           <SelectTrigger className="bg-card border-border flex-1">
                             <SelectValue placeholder="Select project..." />
                           </SelectTrigger>
-                          <SelectContent>
-                            {projects.map((p) => (
+                          <SelectContent className="max-h-[300px]">
+                            {projects.length > 0 && projects.map((p) => (
                               <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                            ))}
+                            {erpContacts.filter(c => c.type === "customer").map((c) => (
+                              <SelectItem key={`cust-${c.id}`} value={`cust:${c.name}`}>
+                                + {c.name}
+                              </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
