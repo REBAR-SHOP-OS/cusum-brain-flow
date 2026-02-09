@@ -251,8 +251,7 @@ export function AccountingAgent({ onViewModeChange, viewMode: externalMode, qbSu
   return (
     <div
       className={cn(
-        "flex flex-col border border-border rounded-xl bg-card overflow-hidden transition-all duration-300",
-        mode === "fullscreen" ? "h-full" : "h-[420px]"
+        "flex flex-col border border-border rounded-xl bg-card overflow-hidden transition-all duration-300 h-full"
       )}
     >
       {/* Header */}
