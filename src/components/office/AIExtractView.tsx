@@ -45,6 +45,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useProjects } from "@/hooks/useProjects";
 import { useBarlists } from "@/hooks/useBarlists";
 import { createProject, createBarlist } from "@/lib/barlistService";
+import brainHero from "@/assets/brain-hero.png";
 
 type ManifestType = "delivery" | "pickup";
 
@@ -465,8 +466,59 @@ export function AIExtractView() {
   };
 
   return (
-    <ScrollArea className="h-full">
-      <div className="p-6 space-y-6 max-w-[95vw] mx-auto">
+    <div className="relative h-full">
+      {/* Brain processing overlay */}
+      {processing && (
+        <div className="absolute inset-0 z-40 flex flex-col items-center justify-center pointer-events-none">
+          {/* Dark backdrop */}
+          <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" />
+          
+          {/* Outer glow */}
+          <div
+            className="absolute w-[80vw] h-[80vh] rounded-full opacity-20 blur-[80px]"
+            style={{
+              background: "radial-gradient(circle, hsl(var(--primary) / 0.6), hsl(var(--accent) / 0.2) 50%, transparent 70%)",
+              animation: "brain-extract-pulse 3s ease-in-out infinite",
+            }}
+          />
+          
+          {/* Brain image */}
+          <img
+            src={brainHero}
+            alt=""
+            className="relative w-[40vh] h-[40vh] max-w-[500px] max-h-[500px] object-contain opacity-30 select-none"
+            draggable={false}
+            style={{
+              filter: "drop-shadow(0 0 60px hsl(var(--primary) / 0.5))",
+              animation: "brain-extract-float 4s ease-in-out infinite",
+            }}
+          />
+          
+          {/* Processing step text */}
+          <div className="relative mt-6 flex flex-col items-center gap-3">
+            <div className="flex items-center gap-2.5 px-5 py-2.5 rounded-full bg-primary/10 border border-primary/20">
+              <Brain className="w-5 h-5 text-primary animate-pulse" />
+              <span className="text-sm font-medium text-primary animate-pulse" style={{ animationDuration: '2s' }}>
+                {processingStep}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        @keyframes brain-extract-pulse {
+          0%, 100% { opacity: 0.15; transform: scale(1); }
+          50% { opacity: 0.25; transform: scale(1.05); }
+        }
+        @keyframes brain-extract-float {
+          0%, 100% { transform: translateY(0) scale(1); opacity: 0.25; }
+          50% { transform: translateY(-10px) scale(1.03); opacity: 0.35; }
+        }
+      `}</style>
+
+      <ScrollArea className="h-full">
+        <div className="p-6 space-y-6 max-w-[95vw] mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -1256,6 +1308,7 @@ export function AIExtractView() {
         )}
       </div>
     </ScrollArea>
+    </div>
   );
 }
 
