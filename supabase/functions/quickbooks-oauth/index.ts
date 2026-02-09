@@ -9,7 +9,7 @@ const corsHeaders = {
 
 const QUICKBOOKS_AUTH_URL = "https://appcenter.intuit.com/connect/oauth2";
 const QUICKBOOKS_TOKEN_URL = "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer";
-const QUICKBOOKS_API_BASE = "https://sandbox-quickbooks.api.intuit.com";
+const QUICKBOOKS_API_BASE = "https://quickbooks.api.intuit.com";
 
 // ─── Helpers ───────────────────────────────────────────────────────
 
