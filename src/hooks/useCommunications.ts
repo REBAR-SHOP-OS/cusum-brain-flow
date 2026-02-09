@@ -113,17 +113,19 @@ export function useCommunications(options?: { search?: string; typeFilter?: stri
           error: { message?: string } | null 
         };
         
-        if (!error) return; // Success
-        
-        // Check if it's a "not connected" or "mismatch" response
+        // Check data-level errors (edge functions return error info in data body)
         if (data && typeof data === "object") {
           const errType = String((data as Record<string, unknown>).error || "");
           const msg = String((data as Record<string, unknown>).message || "");
-          if (errType.includes("not_connected") || errType.includes("mismatch") || msg.includes("not connected") || msg.includes("mismatch")) {
-            infos.push(msg || `${name} is not connected for your account`);
+          if (errType.includes("not_connected") || errType.includes("mismatch") || 
+              msg.includes("not connected") || msg.includes("mismatch") ||
+              errType.includes("gmail_not_connected")) {
+            // Silently ignore — user simply hasn't connected this service
             return;
           }
         }
+
+        if (!error) return; // True success
         
         errors.push(`${name}: ${error.message || "sync failed"}`);
       };
