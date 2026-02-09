@@ -103,6 +103,10 @@ export function AddKnowledgeDialog({ open, onOpenChange, onSuccess }: AddKnowled
       toast({ title: "Title is required", variant: "destructive" });
       return;
     }
+    if (!companyId) {
+      toast({ title: "Still loading your workspace, please try again", variant: "destructive" });
+      return;
+    }
 
     setSaving(true);
     try {
@@ -112,7 +116,7 @@ export function AddKnowledgeDialog({ open, onOpenChange, onSuccess }: AddKnowled
         category,
         source_url: sourceUrl.trim() || null,
         metadata: uploadedFile ? { file_name: uploadedFile.name, file_type: uploadedFile.name.split(".").pop() } : null,
-        company_id: companyId!,
+        company_id: companyId,
       });
 
       if (error) throw error;

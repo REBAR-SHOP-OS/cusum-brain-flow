@@ -29,12 +29,16 @@ export function MessageActions({ content, messageId, onRegenerate }: MessageActi
   };
 
   const handleAddToBrain = async () => {
+    if (!companyId) {
+      toast({ title: "Still loading workspace, try again", variant: "destructive" });
+      return;
+    }
     try {
       const { error } = await supabase.from("knowledge").insert({
         title: content.slice(0, 80),
         content,
         category: "agent-response",
-        company_id: companyId!,
+        company_id: companyId,
       });
       if (error) throw error;
       toast({ title: "Saved to Brain" });
