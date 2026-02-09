@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAuth } from "@/lib/auth";
 import { useCutPlans, useCutPlanItems, useRebarSizes, useCutterMachines, useMachineCapabilities, CutPlan } from "@/hooks/useCutPlans";
@@ -15,10 +15,20 @@ export default function CutterPlanning() {
   const { user } = useAuth();
   const { isAdmin, isWorkshop, isOffice } = useUserRole();
   const canWrite = isAdmin || isWorkshop;
+  const [searchParams] = useSearchParams();
 
   const { plans, loading, fetchPlans, createPlan } = useCutPlans();
   const [selectedPlan, setSelectedPlan] = useState<CutPlan | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+
+  // Auto-select plan from query param
+  useEffect(() => {
+    const planId = searchParams.get("planId");
+    if (planId && plans.length > 0 && !selectedPlan) {
+      const match = plans.find(p => p.id === planId);
+      if (match) setSelectedPlan(match);
+    }
+  }, [searchParams, plans, selectedPlan]);
 
   const { items, loading: itemsLoading, addItem, removeItem, fetchItems } = useCutPlanItems(selectedPlan?.id ?? null);
   const rebarSizes = useRebarSizes();
