@@ -25,7 +25,7 @@ export default function AgentWorkspace() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
 
-  const { createSession, addMessage, getSessionMessages } = useChatSessions();
+  const { sessions, loading: sessionsLoading, fetchSessions, createSession, addMessage, getSessionMessages, deleteSession } = useChatSessions();
   const hasConversation = messages.length > 0;
   const suggestions = agentSuggestions[agentId || "sales"] || agentSuggestions.sales;
 
@@ -77,6 +77,7 @@ export default function AgentWorkspace() {
         : content;
       sessionId = await createSession(sessionTitle, config.name);
       setActiveSessionId(sessionId);
+      // createSession already calls fetchSessions internally
     }
 
     // Persist user message
@@ -141,6 +142,9 @@ export default function AgentWorkspace() {
             activeSessionId={activeSessionId}
             onSelectSession={loadSession}
             onNewChat={handleNewChat}
+            sessions={sessions.filter((s) => s.agent_name === config.name)}
+            loading={sessionsLoading}
+            deleteSession={deleteSession}
           />
         </div>
       )}

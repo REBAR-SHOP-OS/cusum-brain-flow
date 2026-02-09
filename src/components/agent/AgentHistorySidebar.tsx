@@ -3,7 +3,7 @@ import { Plus, Settings, Trash2, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { useChatSessions, ChatSession } from "@/hooks/useChatSessions";
+import { ChatSession } from "@/hooks/useChatSessions";
 import { AgentSettingsDialog } from "./AgentSettingsDialog";
 import { EisenhowerTeamReportDialog } from "./EisenhowerTeamReportDialog";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -16,6 +16,9 @@ interface AgentHistorySidebarProps {
   activeSessionId: string | null;
   onSelectSession: (sessionId: string) => void;
   onNewChat: () => void;
+  sessions: ChatSession[];
+  loading: boolean;
+  deleteSession: (id: string) => void;
 }
 
 export function AgentHistorySidebar({
@@ -26,17 +29,17 @@ export function AgentHistorySidebar({
   activeSessionId,
   onSelectSession,
   onNewChat,
+  sessions,
+  loading,
+  deleteSession,
 }: AgentHistorySidebarProps) {
-  const { sessions, loading, deleteSession } = useChatSessions();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [teamReportOpen, setTeamReportOpen] = useState(false);
   const { isAdmin } = useUserRole();
   const isEisenhower = agentId === "eisenhower";
 
-  // Filter sessions for this agent
-  const agentSessions = sessions.filter(
-    (s) => s.agent_name === agentName
-  );
+  // Sessions are pre-filtered by parent
+  const agentSessions = sessions;
 
   return (
     <>
