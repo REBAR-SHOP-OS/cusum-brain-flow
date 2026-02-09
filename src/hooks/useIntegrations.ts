@@ -485,7 +485,7 @@ export function useIntegrations() {
       if (integrationId === "ringcentral") {
         const { data, error } = await supabase.functions.invoke(
           "ringcentral-oauth",
-          { body: { action: "get-auth-url", redirectUri: "https://erp.rebar.shop/integrations/callback" } }
+          { body: { action: "get-auth-url" } }
         );
         if (error) throw new Error(error.message);
         openOAuthPopup(data.authUrl, integrationId);
