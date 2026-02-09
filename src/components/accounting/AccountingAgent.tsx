@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { cn } from "@/lib/utils";
-import { Send, Loader2, Bot, Minimize2, Maximize2 } from "lucide-react";
+import { Send, Loader2, Minimize2, Maximize2, Shrink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { sendAgentMessage, ChatMessage } from "@/lib/agent";
 import { useToast } from "@/hooks/use-toast";
@@ -15,14 +15,28 @@ interface Message {
   timestamp: Date;
 }
 
-export function AccountingAgent() {
+type ViewMode = "default" | "minimized" | "fullscreen";
+
+interface AccountingAgentProps {
+  onViewModeChange?: (mode: ViewMode) => void;
+  viewMode?: ViewMode;
+}
+
+export function AccountingAgent({ onViewModeChange, viewMode: externalMode }: AccountingAgentProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isTyping, setIsTyping] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [internalMode, setInternalMode] = useState<ViewMode>("default");
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { toast } = useToast();
+
+  const mode = externalMode ?? internalMode;
+
+  const setMode = useCallback((newMode: ViewMode) => {
+    setInternalMode(newMode);
+    onViewModeChange?.(newMode);
+  }, [onViewModeChange]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -95,11 +109,41 @@ export function AccountingAgent() {
     "AR aging report",
   ];
 
+  // Minimized view — just the header bar
+  if (mode === "minimized") {
+    return (
+      <div className="flex items-center gap-3 px-4 py-3 border border-border rounded-xl bg-card">
+        <img
+          src={accountingHelper}
+          alt="Penny"
+          className="w-8 h-8 rounded-lg object-cover"
+        />
+        <div className="flex-1 min-w-0">
+          <h3 className="font-bold text-sm">Penny</h3>
+          <p className="text-xs text-muted-foreground truncate">
+            {messages.length > 0 ? `${messages.length} messages` : "Ready to help"}
+          </p>
+        </div>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={() => setMode("default")}
+            title="Restore"
+          >
+            <Maximize2 className="w-3.5 h-3.5" />
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className={cn(
         "flex flex-col border border-border rounded-xl bg-card overflow-hidden transition-all duration-300",
-        isExpanded ? "h-[600px]" : "h-[420px]"
+        mode === "fullscreen" ? "h-full" : "h-[420px]"
       )}
     >
       {/* Header */}
@@ -120,18 +164,30 @@ export function AccountingAgent() {
             Vicky's Accountability Partner • viky@ & accounting@ inbox
           </p>
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 shrink-0"
-          onClick={() => setIsExpanded(!isExpanded)}
-        >
-          {isExpanded ? (
-            <Minimize2 className="w-4 h-4" />
-          ) : (
-            <Maximize2 className="w-4 h-4" />
-          )}
-        </Button>
+        <div className="flex items-center gap-0.5">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={() => setMode("minimized")}
+            title="Minimize"
+          >
+            <Minimize2 className="w-3.5 h-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={() => setMode(mode === "fullscreen" ? "default" : "fullscreen")}
+            title={mode === "fullscreen" ? "Exit fullscreen" : "Fullscreen"}
+          >
+            {mode === "fullscreen" ? (
+              <Shrink className="w-3.5 h-3.5" />
+            ) : (
+              <Maximize2 className="w-3.5 h-3.5" />
+            )}
+          </Button>
+        </div>
       </div>
 
       {/* Messages */}
@@ -190,10 +246,10 @@ export function AccountingAgent() {
                 )}
                 <div
                   className={cn(
-                    "max-w-[85%] rounded-xl px-3 py-2 text-sm overflow-x-auto",
+                    "rounded-xl px-3 py-2 text-sm overflow-x-auto",
                     msg.role === "user"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted"
+                      ? "max-w-[85%] bg-primary text-primary-foreground"
+                      : mode === "fullscreen" ? "max-w-[90%] bg-muted" : "max-w-[85%] bg-muted"
                   )}
                 >
                   {msg.role === "agent" ? (
