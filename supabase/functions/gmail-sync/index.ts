@@ -191,14 +191,36 @@ function sanitizeHtmlServerSide(html: string): string {
   return clean;
 }
 
+function findPartByMime(parts: GmailPart[] | undefined, mime: string): GmailPart | undefined {
+  if (!parts) return undefined;
+  for (const part of parts) {
+    if (part.mimeType === mime && part.body?.data) return part;
+    if (part.parts) {
+      const nested = findPartByMime(part.parts, mime);
+      if (nested) return nested;
+    }
+  }
+  return undefined;
+}
+
 function getBodyContent(message: GmailMessage): string {
+  // Direct body (simple messages)
   if (message.payload.body?.data) {
     return decodeBase64Url(message.payload.body.data);
   }
-  const textPart = message.payload.parts?.find((p) => p.mimeType === "text/plain");
+
+  // Prefer HTML for rich emails
+  const htmlPart = findPartByMime(message.payload.parts, "text/html");
+  if (htmlPart?.body?.data) {
+    return decodeBase64Url(htmlPart.body.data);
+  }
+
+  // Fallback to plain text
+  const textPart = findPartByMime(message.payload.parts, "text/plain");
   if (textPart?.body?.data) {
     return decodeBase64Url(textPart.body.data);
   }
+
   return message.snippet;
 }
 
@@ -348,7 +370,9 @@ serve(async (req) => {
           from_address: msg.from,
           to_address: msg.to,
           subject: msg.subject,
-          body_preview: msg.snippet,
+          body_preview: msg.body
+            ? msg.body.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 300)
+            : msg.snippet,
           received_at: new Date(msg.internalDate).toISOString(),
           direction: "inbound",
           status: msg.isUnread ? "unread" : "read",
