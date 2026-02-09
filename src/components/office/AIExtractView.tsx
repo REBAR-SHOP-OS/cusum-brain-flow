@@ -616,19 +616,51 @@ export function AIExtractView() {
                               <CommandInput placeholder="Search projects & customers..." />
                               <CommandList className="max-h-[300px]">
                                 <CommandEmpty>No results found.</CommandEmpty>
-                                {projects.length > 0 && (
-                                  <CommandGroup heading="Projects">
-                                    {projects.map((p) => (
-                                      <CommandItem key={p.id} value={p.name} onSelect={() => {
-                                        setSelectedProjectId(p.id);
-                                        setSelectedBarlistId("");
-                                        if (!manifestName) setManifestName(p.name);
-                                      }}>
-                                        {p.name}
-                                      </CommandItem>
-                                    ))}
-                                  </CommandGroup>
-                                )}
+                                {(() => {
+                                  const customerMap = new Map(erpContacts.filter(c => c.type === "customer").map(c => [c.id, c.name]));
+                                  const grouped = new Map<string, typeof projects>();
+                                  const ungrouped: typeof projects = [];
+                                  projects.forEach(p => {
+                                    if (p.customer_id && customerMap.has(p.customer_id)) {
+                                      const name = customerMap.get(p.customer_id)!;
+                                      if (!grouped.has(name)) grouped.set(name, []);
+                                      grouped.get(name)!.push(p);
+                                    } else {
+                                      ungrouped.push(p);
+                                    }
+                                  });
+                                  return (
+                                    <>
+                                      {Array.from(grouped.entries()).map(([custName, custProjects]) => (
+                                        <CommandGroup key={custName} heading={custName}>
+                                          {custProjects.map((p) => (
+                                            <CommandItem key={p.id} value={`${custName} ${p.name}`} onSelect={() => {
+                                              setSelectedProjectId(p.id);
+                                              setSelectedBarlistId("");
+                                              setCustomer(custName);
+                                              if (!manifestName) setManifestName(p.name);
+                                            }}>
+                                              {p.name}
+                                            </CommandItem>
+                                          ))}
+                                        </CommandGroup>
+                                      ))}
+                                      {ungrouped.length > 0 && (
+                                        <CommandGroup heading="Other Projects">
+                                          {ungrouped.map((p) => (
+                                            <CommandItem key={p.id} value={p.name} onSelect={() => {
+                                              setSelectedProjectId(p.id);
+                                              setSelectedBarlistId("");
+                                              if (!manifestName) setManifestName(p.name);
+                                            }}>
+                                              {p.name}
+                                            </CommandItem>
+                                          ))}
+                                        </CommandGroup>
+                                      )}
+                                    </>
+                                  );
+                                })()}
                                 <CommandGroup heading="Customers">
                                   {erpContacts.filter(c => c.type === "customer").map((c) => (
                                     <CommandItem key={`cust-${c.id}`} value={c.name} onSelect={() => {
