@@ -28,7 +28,7 @@ import accountingHelper from "@/assets/helpers/accounting-helper.png";
 
 export default function AccountingWorkspace() {
   const [activeTab, setActiveTab] = useState("dashboard");
-  const [showAgent, setShowAgent] = useState(false);
+  const [showAgent, setShowAgent] = useState(true);
   const [agentMode, setAgentMode] = useState<"default" | "minimized" | "fullscreen">("default");
   const qb = useQuickBooksData();
   const { startOAuth } = useIntegrations();
@@ -174,6 +174,8 @@ export default function AccountingWorkspace() {
               <AccountingAgent
                 viewMode={agentMode}
                 onViewModeChange={(m) => setAgentMode(m)}
+                qbSummary={qb}
+                autoGreet
               />
             </div>
           </div>
@@ -189,6 +191,8 @@ export default function AccountingWorkspace() {
           <AccountingAgent
             viewMode={agentMode}
             onViewModeChange={(m) => setAgentMode(m)}
+            qbSummary={qb}
+            autoGreet
           />
         </div>
       )}
