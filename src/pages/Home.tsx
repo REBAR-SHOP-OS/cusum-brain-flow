@@ -60,7 +60,7 @@ const helpers: Helper[] = [
   },
   {
     id: "accounting",
-    name: "Tally",
+    name: "Penny",
     role: "Accounting",
     image: accountingHelper,
     gradient: "from-green-500 to-green-600",

@@ -35,13 +35,25 @@ const agentRoutes: AgentRoute[] = [
   {
     id: "accounting",
     route: "/agent/accounting",
-    name: "Tally",
+    name: "Penny",
     keywords: [
       "invoice", "invoic", "payment", "bill", "billing", "accounting",
       "receivable", "payable", "ar", "ap", "quickbooks", "tax", "expense",
       "profit", "loss", "p&l", "balance sheet", "cash flow", "overdue",
-      "collection", "collections", "credit", "debit", "vicky", "financial",
-      "payroll", "salary", "salaries", "wage",
+      "collection", "collections", "credit", "debit", "financial",
+      "payroll", "salary", "salaries", "wage", "penny",
+    ],
+  },
+  {
+    id: "legal",
+    route: "/agent/legal",
+    name: "Tally",
+    keywords: [
+      "legal", "lawyer", "contract", "contracts", "agreement", "liability",
+      "compliance", "regulation", "bylaw", "by-law", "lien", "liens",
+      "construction lien", "dispute", "litigation", "court", "lawsuit",
+      "ontario", "esa", "ohsa", "wsib", "permit", "zoning", "insurance",
+      "terms", "conditions", "clause", "negligence", "indemnity", "tally",
     ],
   },
   {

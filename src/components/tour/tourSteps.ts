@@ -173,7 +173,7 @@ const officeSteps: Step[] = [
     placement: "center",
     title: "🤖 Your AI Helpers",
     content:
-      "From the Dashboard, you have AI agents: Blitz (Sales), Tally (Accounting), Haven (Support), and more. Chat with them naturally — they know your data. Ask 'What invoices are overdue?' or 'Draft a follow-up email to ABC Corp'.",
+      "From the Dashboard, you have AI agents: Blitz (Sales), Penny (Accounting), Tally (Legal), Haven (Support), and more. Chat with them naturally — they know your data. Ask 'What invoices are overdue?' or 'Draft a follow-up email to ABC Corp'.",
   },
   {
     target: "body",
@@ -284,7 +284,7 @@ const adminSteps: Step[] = [
     placement: "center",
     title: "🤖 AI Agents — Your Executive Team",
     content:
-      "9 AI agents available from Dashboard:\n⚡ Blitz (Sales) • 🛡️ Haven (Support) • 💰 Tally (Accounting)\n📐 Gauge (Estimating) • 🔨 Forge (Shop Floor) • 🗺️ Atlas (Deliveries)\n📧 Relay (Email) • 📱 Pixel (Social) • 🔮 Prism (Data)\nChat naturally — they access your real data.",
+      "10 AI agents available from Dashboard:\n⚡ Blitz (Sales) • 🛡️ Haven (Support) • 💰 Penny (Accounting) • ⚖️ Tally (Legal)\n📐 Gauge (Estimating) • 🔨 Forge (Shop Floor) • 🗺️ Atlas (Deliveries)\n📧 Relay (Email) • 📱 Pixel (Social) • 🔮 Prism (Data)\nChat naturally — they access your real data.",
   },
   {
     target: "body",

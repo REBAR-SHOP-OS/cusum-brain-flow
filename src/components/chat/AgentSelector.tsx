@@ -5,10 +5,11 @@ import {
   HeadphonesIcon, 
   Receipt, 
   Ruler,
-  Share2
+  Share2,
+  Scale
 } from "lucide-react";
 
-export type AgentType = "sales" | "accounting" | "support" | "collections" | "estimation" | "social";
+export type AgentType = "sales" | "accounting" | "support" | "collections" | "estimation" | "social" | "legal";
 
 interface Agent {
   id: AgentType;
@@ -19,7 +20,8 @@ interface Agent {
 
 const agents: Agent[] = [
   { id: "sales", name: "Blitz", icon: TrendingUp, description: "Sales & Orders" },
-  { id: "accounting", name: "Tally", icon: Calculator, description: "Invoices & QB" },
+  { id: "accounting", name: "Penny", icon: Calculator, description: "Invoices & QB" },
+  { id: "legal", name: "Tally", icon: Scale, description: "Legal & Compliance" },
   { id: "support", name: "Haven", icon: HeadphonesIcon, description: "Customer Care" },
   { id: "collections", name: "Chase", icon: Receipt, description: "AR & Payments" },
   { id: "estimation", name: "Cal", icon: Ruler, description: "Job Costing" },
