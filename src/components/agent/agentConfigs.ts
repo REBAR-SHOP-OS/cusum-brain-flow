@@ -17,6 +17,7 @@ import copywritingHelper from "@/assets/helpers/copywriting-helper.png";
 import talentHelper from "@/assets/helpers/talent-helper.png";
 import seoHelper from "@/assets/helpers/seo-helper.png";
 import growthHelper from "@/assets/helpers/growth-helper.png";
+import eisenhowerHelper from "@/assets/helpers/eisenhower-helper.png";
 
 export interface AgentConfig {
   name: string;
@@ -109,6 +110,15 @@ export const agentConfigs: Record<string, AgentConfig> = {
     greeting: "Hi! I'm Pixel, your Social Media agent.",
     placeholder: "Ask about social posts, content ideas...",
     capabilities: ["Draft social posts", "Content calendar", "Hashtag suggestions", "Platform-specific content"],
+  },
+  eisenhower: {
+    name: "Ike",
+    role: "Eisenhower Matrix",
+    image: eisenhowerHelper,
+    agentType: "eisenhower",
+    greeting: "Hello! I'm Ike, your Eisenhower Matrix strategist. Let's prioritize what truly matters.",
+    placeholder: "Tell me your tasks and I'll help you prioritize...",
+    capabilities: ["Categorize tasks by urgency & importance", "Build your priority matrix", "Identify tasks to delegate or eliminate", "Focus on what matters most"],
   },
   data: {
     name: "Prism",

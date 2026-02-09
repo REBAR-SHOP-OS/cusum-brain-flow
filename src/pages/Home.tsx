@@ -31,6 +31,7 @@ import copywritingHelper from "@/assets/helpers/copywriting-helper.png";
 import talentHelper from "@/assets/helpers/talent-helper.png";
 import seoHelper from "@/assets/helpers/seo-helper.png";
 import growthHelper from "@/assets/helpers/growth-helper.png";
+import eisenhowerHelper from "@/assets/helpers/eisenhower-helper.png";
 
 interface Helper {
   id: string;
@@ -105,6 +106,14 @@ const helpers: Helper[] = [
     image: socialHelper,
     gradient: "from-purple-500 to-pink-500",
     route: "/agent/social",
+  },
+  {
+    id: "eisenhower",
+    name: "Ike",
+    role: "Eisenhower Matrix",
+    image: eisenhowerHelper,
+    gradient: "from-amber-500 to-orange-600",
+    route: "/agent/eisenhower",
   },
   {
     id: "data",
