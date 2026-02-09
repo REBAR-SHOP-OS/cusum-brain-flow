@@ -65,58 +65,61 @@ export default function AccountingWorkspace() {
   }
 
   return (
-    <div className="space-y-4 pb-6">
+    <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-3">
-            💰 Accounting Workspace
-            <Badge variant="outline" className="text-sm font-normal">QuickBooks</Badge>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-border gap-2 sm:gap-0 shrink-0">
+        <div className="min-w-0">
+          <h1 className="text-lg sm:text-2xl font-bold flex items-center gap-2 sm:gap-3">
+            💰 <span className="truncate">Accounting</span>
+            <Badge variant="outline" className="text-xs sm:text-sm font-normal shrink-0">QuickBooks</Badge>
           </h1>
-          <p className="text-muted-foreground mt-1">Everything you need. Click and confirm. Simple.</p>
+          <p className="text-muted-foreground text-xs sm:text-sm mt-0.5 sm:mt-1 hidden sm:block">Everything you need. Click and confirm. Simple.</p>
         </div>
         <Button
           variant="outline"
-          size="lg"
-          className="h-12 gap-2"
+          size="sm"
+          className="gap-2 shrink-0"
           onClick={() => qb.loadAll()}
           disabled={qb.loading}
         >
-          <RefreshCw className={`w-5 h-5 ${qb.loading ? "animate-spin" : ""}`} />
-          Refresh All
+          <RefreshCw className={`w-4 h-4 ${qb.loading ? "animate-spin" : ""}`} />
+          <span className="hidden sm:inline">Refresh All</span>
+          <span className="sm:hidden">Refresh</span>
         </Button>
       </div>
 
       {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="h-14 w-full flex flex-wrap gap-1 bg-muted/50 p-1">
-          <TabsTrigger value="dashboard" className="text-base h-11 gap-2 flex-1 min-w-[120px]">
-            <LayoutDashboard className="w-5 h-5" /> Dashboard
-          </TabsTrigger>
-          <TabsTrigger value="invoices" className="text-base h-11 gap-2 flex-1 min-w-[100px]">
-            <FileText className="w-5 h-5" /> Invoices
-            {qb.overdueInvoices.length > 0 && (
-              <Badge variant="destructive" className="ml-1 text-xs">{qb.overdueInvoices.length}</Badge>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="bills" className="text-base h-11 gap-2 flex-1 min-w-[100px]">
-            <Receipt className="w-5 h-5" /> Bills
-          </TabsTrigger>
-          <TabsTrigger value="payments" className="text-base h-11 gap-2 flex-1 min-w-[100px]">
-            <CreditCard className="w-5 h-5" /> Payments
-          </TabsTrigger>
-          <TabsTrigger value="customers" className="text-base h-11 gap-2 flex-1 min-w-[100px]">
-            <Users className="w-5 h-5" /> Customers
-          </TabsTrigger>
-          <TabsTrigger value="accounts" className="text-base h-11 gap-2 flex-1 min-w-[100px]">
-            <Landmark className="w-5 h-5" /> Accounts
-          </TabsTrigger>
-          <TabsTrigger value="audit" className="text-base h-11 gap-2 flex-1 min-w-[100px]">
-            <ShieldCheck className="w-5 h-5" /> AI Audit
-          </TabsTrigger>
-        </TabsList>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
+        <div className="overflow-x-auto scrollbar-thin border-b border-border shrink-0">
+          <TabsList className="h-12 sm:h-14 inline-flex w-max min-w-full gap-0.5 sm:gap-1 bg-muted/50 p-1 rounded-none">
+            <TabsTrigger value="dashboard" className="text-xs sm:text-base h-9 sm:h-11 gap-1.5 sm:gap-2 px-3 sm:px-4 shrink-0">
+              <LayoutDashboard className="w-4 h-4" /> <span className="hidden sm:inline">Dashboard</span><span className="sm:hidden">Home</span>
+            </TabsTrigger>
+            <TabsTrigger value="invoices" className="text-xs sm:text-base h-9 sm:h-11 gap-1.5 sm:gap-2 px-3 sm:px-4 shrink-0">
+              <FileText className="w-4 h-4" /> Invoices
+              {qb.overdueInvoices.length > 0 && (
+                <Badge variant="destructive" className="ml-0.5 text-xs">{qb.overdueInvoices.length}</Badge>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="bills" className="text-xs sm:text-base h-9 sm:h-11 gap-1.5 sm:gap-2 px-3 sm:px-4 shrink-0">
+              <Receipt className="w-4 h-4" /> Bills
+            </TabsTrigger>
+            <TabsTrigger value="payments" className="text-xs sm:text-base h-9 sm:h-11 gap-1.5 sm:gap-2 px-3 sm:px-4 shrink-0">
+              <CreditCard className="w-4 h-4" /> Payments
+            </TabsTrigger>
+            <TabsTrigger value="customers" className="text-xs sm:text-base h-9 sm:h-11 gap-1.5 sm:gap-2 px-3 sm:px-4 shrink-0">
+              <Users className="w-4 h-4" /> Customers
+            </TabsTrigger>
+            <TabsTrigger value="accounts" className="text-xs sm:text-base h-9 sm:h-11 gap-1.5 sm:gap-2 px-3 sm:px-4 shrink-0">
+              <Landmark className="w-4 h-4" /> Accounts
+            </TabsTrigger>
+            <TabsTrigger value="audit" className="text-xs sm:text-base h-9 sm:h-11 gap-1.5 sm:gap-2 px-3 sm:px-4 shrink-0">
+              <ShieldCheck className="w-4 h-4" /> AI Audit
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
-        <div className="mt-4">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
           <TabsContent value="dashboard">
             <AccountingDashboard data={qb} onNavigate={setActiveTab} />
           </TabsContent>

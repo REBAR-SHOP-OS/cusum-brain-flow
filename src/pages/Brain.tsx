@@ -227,53 +227,54 @@ export default function Brain() {
       <InteractiveBrainBg />
 
       {/* Header */}
-      <header className="flex items-center justify-between px-6 py-4 border-b border-border relative z-10">
-        <h1 className="text-2xl font-semibold">Brain AI</h1>
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon">
-            <MoreHorizontal className="w-5 h-5" />
+      <header className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-border relative z-10 gap-2">
+        <h1 className="text-lg sm:text-2xl font-semibold shrink-0">Brain AI</h1>
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          <Button variant="ghost" size="icon" className="h-8 w-8 sm:h-9 sm:w-9">
+            <MoreHorizontal className="w-4 h-4 sm:w-5 sm:h-5" />
           </Button>
-          <Button variant="outline" className="gap-2" onClick={() => setAddOpen(true)}>
-            <Plus className="w-4 h-4" />
-            Add knowledge
+          <Button variant="outline" size="sm" className="gap-1.5 sm:gap-2 text-xs sm:text-sm" onClick={() => setAddOpen(true)}>
+            <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <span className="hidden sm:inline">Add knowledge</span>
+            <span className="sm:hidden">Add</span>
           </Button>
         </div>
       </header>
 
-      <div className="flex-1 overflow-auto p-6 space-y-6 relative z-10">
+      <div className="flex-1 overflow-auto p-4 sm:p-6 space-y-4 sm:space-y-6 relative z-10">
         {/* Banner */}
         {!bannerDismissed && (
-          <div className="bg-primary/5 border border-primary/20 rounded-xl p-6 flex items-start gap-4">
-            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary/60 to-accent/60 flex items-center justify-center flex-shrink-0">
-              <BrainIcon className="w-8 h-8 text-primary-foreground" />
+          <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 sm:p-6 flex flex-col sm:flex-row items-start gap-3 sm:gap-4">
+            <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-gradient-to-br from-primary/60 to-accent/60 flex items-center justify-center flex-shrink-0">
+              <BrainIcon className="w-6 h-6 sm:w-8 sm:h-8 text-primary-foreground" />
             </div>
             <div className="flex-1">
-              <h3 className="font-semibold text-lg mb-1">How Brain AI works</h3>
-              <p className="text-muted-foreground text-sm leading-relaxed">
+              <h3 className="font-semibold text-base sm:text-lg mb-1">How Brain AI works</h3>
+              <p className="text-muted-foreground text-xs sm:text-sm leading-relaxed">
                 Think of Brain AI as your digital brain. Add your brand details, links, and files, and it will use them to understand you better.
               </p>
-              <p className="text-muted-foreground text-sm mt-1">
+              <p className="text-muted-foreground text-xs sm:text-sm mt-1">
                 The richer the info, the smarter and more helpful your AI becomes.
               </p>
             </div>
-            <Button className="flex-shrink-0" onClick={() => setBannerDismissed(true)}>
+            <Button size="sm" className="flex-shrink-0 w-full sm:w-auto" onClick={() => setBannerDismissed(true)}>
               Ok, got it!
             </Button>
           </div>
         )}
 
         {/* Filters Row */}
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
           {/* Search toggle */}
           {searchOpen ? (
-            <div className="flex items-center gap-1 bg-card border border-border rounded-lg px-3 py-1.5">
+            <div className="flex items-center gap-1 bg-card border border-border rounded-lg px-3 py-1.5 shrink-0">
               <Search className="w-4 h-4 text-muted-foreground" />
               <Input
                 autoFocus
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search brain..."
-                className="border-0 h-7 bg-transparent p-0 text-sm focus-visible:ring-0 w-40"
+                className="border-0 h-7 bg-transparent p-0 text-sm focus-visible:ring-0 w-32 sm:w-40"
               />
               <button
                 onClick={() => {
@@ -286,13 +287,13 @@ export default function Brain() {
               </button>
             </div>
           ) : (
-            <Button variant="outline" size="sm" className="gap-2" onClick={() => setSearchOpen(true)}>
+            <Button variant="outline" size="sm" className="gap-2 shrink-0" onClick={() => setSearchOpen(true)}>
               <Search className="w-4 h-4" />
               Search
             </Button>
           )}
 
-          <Button variant="outline" size="sm" className="px-2">
+          <Button variant="outline" size="sm" className="px-2 shrink-0">
             <Filter className="w-4 h-4" />
           </Button>
 
@@ -303,15 +304,15 @@ export default function Brain() {
               variant={activeFilter === filter.id ? "default" : "outline"}
               size="sm"
               className={cn(
-                "gap-2",
+                "gap-1.5 shrink-0",
                 activeFilter === filter.id
                   ? "bg-primary text-primary-foreground"
                   : "bg-card"
               )}
               onClick={() => setActiveFilter(filter.id)}
             >
-              <filter.icon className="w-4 h-4" />
-              {filter.label}
+              <filter.icon className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">{filter.label}</span>
               {counts[filter.id] !== undefined && (
                 <span className="text-xs opacity-70">({counts[filter.id]})</span>
               )}
@@ -321,7 +322,7 @@ export default function Brain() {
 
         {/* Content Grid */}
         {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             {Array.from({ length: 8 }).map((_, i) => (
               <div key={i} className="rounded-xl bg-card border border-border overflow-hidden">
                 <Skeleton className="w-full h-32" />
@@ -352,7 +353,7 @@ export default function Brain() {
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             {filteredItems.map(renderCard)}
           </div>
         )}
