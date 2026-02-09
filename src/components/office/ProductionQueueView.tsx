@@ -65,7 +65,6 @@ export function ProductionQueueView() {
   const queryClient = useQueryClient();
 
   const handleDeleteBarlist = async (barlistId: string) => {
-    // Delete barlist items first, then the barlist
     const { error: itemsErr } = await supabase.from("barlist_items").delete().eq("barlist_id", barlistId);
     if (itemsErr) {
       toast({ title: "Error deleting barlist items", description: itemsErr.message, variant: "destructive" });
@@ -78,6 +77,47 @@ export function ProductionQueueView() {
     }
     toast({ title: "Barlist deleted" });
     queryClient.invalidateQueries({ queryKey: ["barlists"] });
+  };
+
+  const handleDeleteProject = async (projectId: string) => {
+    // Delete all barlists (and their items) under this project, then cut plans, then the project
+    const projectBarlists = barlists.filter(b => b.project_id === projectId);
+    for (const b of projectBarlists) {
+      await supabase.from("barlist_items").delete().eq("barlist_id", b.id);
+      await supabase.from("barlists").delete().eq("id", b.id);
+    }
+    // Delete cut plan items then cut plans
+    const projectPlans = plans.filter(p => p.project_id === projectId);
+    for (const p of projectPlans) {
+      await supabase.from("cut_plan_items").delete().eq("cut_plan_id", p.id);
+      await supabase.from("cut_plans").delete().eq("id", p.id);
+    }
+    const { error } = await supabase.from("projects").delete().eq("id", projectId);
+    if (error) {
+      toast({ title: "Error deleting project", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Project deleted" });
+    queryClient.invalidateQueries({ queryKey: ["projects"] });
+    queryClient.invalidateQueries({ queryKey: ["barlists"] });
+    queryClient.invalidateQueries({ queryKey: ["cutPlans"] });
+  };
+
+  const handleDeleteCustomer = async (node: CustomerNode) => {
+    // Delete everything under this customer: projects → barlists → plans
+    for (const proj of node.projects) {
+      if (proj.projectId === "__unassigned__") continue;
+      await handleDeleteProject(proj.projectId);
+    }
+    if (node.customerId) {
+      const { error } = await supabase.from("customers").delete().eq("id", node.customerId);
+      if (error) {
+        toast({ title: "Error deleting customer", description: error.message, variant: "destructive" });
+        return;
+      }
+    }
+    toast({ title: "Customer deleted" });
+    queryClient.invalidateQueries({ queryKey: ["customers-for-queue"] });
   };
 
   // Fetch customers for grouping
@@ -136,6 +176,8 @@ export function ProductionQueueView() {
               onDeletePlan={deletePlan}
               onEditPlan={(id) => navigate(`/cutter-planning?planId=${id}`)}
               onDeleteBarlist={handleDeleteBarlist}
+              onDeleteProject={handleDeleteProject}
+              onDeleteCustomer={() => handleDeleteCustomer(node)}
             />
           ))}
         </div>
@@ -271,18 +313,22 @@ function buildCustomerTree(
 
 // --- UI Components ---
 
-function CustomerFolder({ node, onDeletePlan, onEditPlan, onDeleteBarlist }: {
+function CustomerFolder({ node, onDeletePlan, onEditPlan, onDeleteBarlist, onDeleteProject, onDeleteCustomer }: {
   node: CustomerNode;
   onDeletePlan: (id: string) => void;
   onEditPlan: (id: string) => void;
   onDeleteBarlist: (id: string) => void;
+  onDeleteProject: (id: string) => void;
+  onDeleteCustomer: () => void;
 }) {
   const [open, setOpen] = useState(true);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const totalProjects = node.projects.length;
   const totalBarlists = node.projects.reduce((s, p) => s + p.barlists.length, 0);
   const totalManifests = node.projects.reduce((s, p) => s + p.barlists.reduce((s2, b) => s2 + b.plans.length, 0) + p.loosePlans.length, 0);
 
   return (
+    <>
     <Collapsible open={open} onOpenChange={setOpen}>
       <div className="flex items-center gap-0">
         <CollapsibleTrigger asChild>
@@ -298,28 +344,54 @@ function CustomerFolder({ node, onDeletePlan, onEditPlan, onDeleteBarlist }: {
             <span className="text-xs text-muted-foreground shrink-0">{totalManifests} manifest{totalManifests !== 1 ? "s" : ""}</span>
           </button>
         </CollapsibleTrigger>
+        <Button
+          variant="ghost" size="icon"
+          className="h-8 w-8 text-destructive/60 hover:text-destructive shrink-0 ml-1"
+          onClick={(e) => { e.stopPropagation(); setConfirmOpen(true); }}
+        >
+          <Trash2 className="w-4 h-4" />
+        </Button>
       </div>
       <CollapsibleContent>
         <div className="ml-4 mt-1 space-y-1 border-l-2 border-primary/15 pl-3">
           {node.projects.map(proj => (
-            <ProjectFolder key={proj.projectId} node={proj} onDeletePlan={onDeletePlan} onEditPlan={onEditPlan} onDeleteBarlist={onDeleteBarlist} />
+            <ProjectFolder key={proj.projectId} node={proj} onDeletePlan={onDeletePlan} onEditPlan={onEditPlan} onDeleteBarlist={onDeleteBarlist} onDeleteProject={onDeleteProject} />
           ))}
         </div>
       </CollapsibleContent>
     </Collapsible>
+
+    <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete "{node.customerName}"?</AlertDialogTitle>
+          <AlertDialogDescription>This will permanently delete this customer and all its projects, barlists, and manifests.</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={onDeleteCustomer}>
+            Delete
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
 
-function ProjectFolder({ node, onDeletePlan, onEditPlan, onDeleteBarlist }: {
+function ProjectFolder({ node, onDeletePlan, onEditPlan, onDeleteBarlist, onDeleteProject }: {
   node: ProjectNode;
   onDeletePlan: (id: string) => void;
   onEditPlan: (id: string) => void;
   onDeleteBarlist: (id: string) => void;
+  onDeleteProject: (id: string) => void;
 }) {
   const [open, setOpen] = useState(true);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const totalPlans = node.barlists.reduce((s, b) => s + b.plans.length, 0) + node.loosePlans.length;
 
   return (
+    <>
     <Collapsible open={open} onOpenChange={setOpen}>
       <div className="flex items-center gap-0">
         <CollapsibleTrigger asChild>
@@ -334,6 +406,15 @@ function ProjectFolder({ node, onDeletePlan, onEditPlan, onDeleteBarlist }: {
             </div>
           </button>
         </CollapsibleTrigger>
+        {node.projectId !== "__unassigned__" && (
+          <Button
+            variant="ghost" size="icon"
+            className="h-7 w-7 text-destructive/60 hover:text-destructive shrink-0"
+            onClick={(e) => { e.stopPropagation(); setConfirmOpen(true); }}
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </Button>
+        )}
       </div>
       <CollapsibleContent>
         <div className="ml-5 mt-0.5 space-y-1 border-l border-border pl-3">
@@ -346,6 +427,22 @@ function ProjectFolder({ node, onDeletePlan, onEditPlan, onDeleteBarlist }: {
         </div>
       </CollapsibleContent>
     </Collapsible>
+
+    <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete "{node.projectName}"?</AlertDialogTitle>
+          <AlertDialogDescription>This will permanently delete this project and all its barlists and manifests.</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => onDeleteProject(node.projectId)}>
+            Delete
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
 
