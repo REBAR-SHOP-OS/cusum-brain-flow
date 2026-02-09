@@ -3757,6 +3757,10 @@ export type Database = {
         }
         Returns: undefined
       }
+      log_contact_bulk_access: {
+        Args: { _action?: string; _count: number }
+        Returns: undefined
+      }
     }
     Enums: {
       app_role:
