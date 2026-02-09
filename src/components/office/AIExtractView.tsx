@@ -1,4 +1,6 @@
 import { useState, useRef, useMemo, useCallback } from "react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import {
   Upload, Globe, FileText, Loader2, Truck, Package,
   CheckCircle2, AlertCircle, Sparkles, X, ArrowRight,
@@ -570,33 +572,48 @@ export function AIExtractView() {
                     </label>
                     {!createNewProject ? (
                       <div className="flex items-center gap-2">
-                        <Select value={selectedProjectId} onValueChange={(v) => {
-                          if (v.startsWith("cust:")) {
-                            // Auto-create project from customer name
-                            const custName = v.replace("cust:", "");
-                            setCreateNewProject(true);
-                            setNewProjectName(custName);
-                            setCustomer(custName);
-                            setSelectedBarlistId("");
-                          } else {
-                            setSelectedProjectId(v);
-                            setSelectedBarlistId("");
-                          }
-                        }}>
-                          <SelectTrigger className="bg-card border-border flex-1">
-                            <SelectValue placeholder="Select project..." />
-                          </SelectTrigger>
-                          <SelectContent className="max-h-[300px]">
-                            {projects.length > 0 && projects.map((p) => (
-                              <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                            ))}
-                            {erpContacts.filter(c => c.type === "customer").map((c) => (
-                              <SelectItem key={`cust-${c.id}`} value={`cust:${c.name}`}>
-                                + {c.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" role="combobox" className="flex-1 justify-between bg-card border-border text-left font-normal h-10">
+                              {selectedProjectId
+                                ? projects.find(p => p.id === selectedProjectId)?.name || "Select project..."
+                                : "Select project..."}
+                              <ChevronRight className="ml-2 h-4 w-4 shrink-0 opacity-50 rotate-90" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[400px] p-0 z-50" align="start">
+                            <Command>
+                              <CommandInput placeholder="Search projects & customers..." />
+                              <CommandList className="max-h-[300px]">
+                                <CommandEmpty>No results found.</CommandEmpty>
+                                {projects.length > 0 && (
+                                  <CommandGroup heading="Projects">
+                                    {projects.map((p) => (
+                                      <CommandItem key={p.id} value={p.name} onSelect={() => {
+                                        setSelectedProjectId(p.id);
+                                        setSelectedBarlistId("");
+                                      }}>
+                                        {p.name}
+                                      </CommandItem>
+                                    ))}
+                                  </CommandGroup>
+                                )}
+                                <CommandGroup heading="Customers">
+                                  {erpContacts.filter(c => c.type === "customer").map((c) => (
+                                    <CommandItem key={`cust-${c.id}`} value={c.name} onSelect={() => {
+                                      setCreateNewProject(true);
+                                      setNewProjectName(c.name);
+                                      setCustomer(c.name);
+                                      setSelectedBarlistId("");
+                                    }}>
+                                      + {c.name}
+                                    </CommandItem>
+                                  ))}
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
                         <Button variant="outline" size="icon" className="h-9 w-9 shrink-0"
                           onClick={() => setCreateNewProject(true)}>
                           <Plus className="w-4 h-4" />
