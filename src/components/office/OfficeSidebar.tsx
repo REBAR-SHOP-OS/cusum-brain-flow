@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import brandLogo from "@/assets/brand-logo.png";
 
 export type OfficeSection = 
   | "ceo-dashboard"
@@ -57,9 +58,7 @@ export function OfficeSidebar({ active, onNavigate }: OfficeSidebarProps) {
     <aside className="w-[180px] shrink-0 border-r border-border bg-card flex flex-col h-full">
       {/* Header */}
       <div className="px-4 py-4 flex items-center gap-2">
-        <div className="w-7 h-7 rounded-full bg-primary/20 border border-primary/40 flex items-center justify-center">
-          <LayoutGrid className="w-3.5 h-3.5 text-primary" />
-        </div>
+        <img src={brandLogo} alt="Rebar.shop" className="w-7 h-7 rounded-full object-contain" />
         <span className="text-xs font-bold tracking-wider text-foreground uppercase">Office Portal</span>
       </div>
 
