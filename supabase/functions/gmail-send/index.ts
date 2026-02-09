@@ -168,8 +168,9 @@ serve(async (req) => {
     const profile = await profileResponse.json();
     const fromEmail = profile.emailAddress;
 
-    // Append signature to body
-    const bodyWithSig = signature ? `${body}<br><br>${signature}` : body;
+    // Wrap body in modern HTML email template
+    const styledBody = `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.7;color:#1a1a1a;">${body}</div>`;
+    const bodyWithSig = signature ? `${styledBody}<br>${signature}` : styledBody;
 
     const raw = createRawEmail(
       to,

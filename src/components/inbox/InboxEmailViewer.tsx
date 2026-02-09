@@ -199,11 +199,11 @@ export function InboxEmailViewer({ email, onClose }: InboxEmailViewerProps) {
           {/* Divider */}
           <div className="border-b my-4" />
 
-          {/* Email Body — light bg container for HTML emails */}
-          <div className="rounded-lg border border-border overflow-hidden">
+          {/* Email Body — modern styled container */}
+          <div className="rounded-xl border border-border/50 overflow-hidden shadow-sm">
             <div
-              className="p-4 bg-white text-zinc-900 [&_a]:text-blue-600 [&_a]:underline [&_img]:max-w-full [&_img]:h-auto [&_table]:border-collapse [&_td]:p-1 [&_th]:p-1"
-              style={{ fontSize: '14px', lineHeight: '1.6' }}
+              className="p-6 bg-white text-zinc-800 [&_a]:text-cyan-600 [&_a]:underline [&_a:hover]:text-cyan-700 [&_img]:max-w-full [&_img]:h-auto [&_img]:rounded [&_table]:border-collapse [&_td]:p-1.5 [&_th]:p-1.5 [&_blockquote]:border-l-4 [&_blockquote]:border-cyan-300 [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:text-zinc-500 [&_h1]:text-xl [&_h1]:font-bold [&_h1]:mb-3 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:mb-2 [&_h3]:text-base [&_h3]:font-semibold [&_h3]:mb-2 [&_p]:mb-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:mb-2 [&_li]:mb-1 [&_hr]:border-zinc-200 [&_hr]:my-4 [&_pre]:bg-zinc-100 [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:overflow-x-auto [&_code]:bg-zinc-100 [&_code]:px-1 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono"
+              style={{ fontSize: '14px', lineHeight: '1.7', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' }}
               dangerouslySetInnerHTML={{
                 __html: DOMPurify.sanitize(
                   isPlainText(email.body || email.preview || "") 
