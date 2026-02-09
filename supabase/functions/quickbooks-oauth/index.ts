@@ -94,7 +94,7 @@ async function qbFetch(
   return res.json();
 }
 
-async function qbQuery(config: { realm_id: string; access_token: string }, entity: string, maxResults = 1000) {
+async function qbQuery(config: { realm_id: string; access_token: string }, entity: string, maxResults = 50000) {
   const allResults: unknown[] = [];
   let startPosition = 1;
   const pageSize = Math.min(maxResults, 1000);
