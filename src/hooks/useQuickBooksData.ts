@@ -204,11 +204,23 @@ export function useQuickBooksData() {
       if (batch4[2].status === "fulfilled") setEmployees(batch4[2].value.employees || []);
       if (batch4[3].status === "fulfilled") setTimeActivities(batch4[3].value.timeActivities || []);
 
-      // Load synced customers from our DB
-      const { data: dbCustomers } = await supabase
-        .from("customers")
-        .select("quickbooks_id, name, company_name, credit_limit, status")
-        .not("quickbooks_id", "is", null);
+      // Load synced customers from our DB (paginate past Supabase 1000-row default)
+      const allDbCustomers: typeof dbCustomersPage = [];
+      let dbPage = 0;
+      const DB_PAGE_SIZE = 1000;
+      let dbCustomersPage: { quickbooks_id: string | null; name: string; company_name: string | null; credit_limit: number | null; status: string | null }[] = [];
+      while (true) {
+        const { data: page } = await supabase
+          .from("customers")
+          .select("quickbooks_id, name, company_name, credit_limit, status")
+          .not("quickbooks_id", "is", null)
+          .range(dbPage * DB_PAGE_SIZE, (dbPage + 1) * DB_PAGE_SIZE - 1);
+        const rows = page || [];
+        allDbCustomers.push(...rows);
+        if (rows.length < DB_PAGE_SIZE) break;
+        dbPage++;
+      }
+      const dbCustomers = allDbCustomers;
       
       if (dbCustomers) {
         setCustomers(dbCustomers.map(c => ({
