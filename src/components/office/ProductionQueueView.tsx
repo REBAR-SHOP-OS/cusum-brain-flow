@@ -137,13 +137,22 @@ export function ProductionQueueView() {
     queryClient.invalidateQueries({ queryKey: ["cutPlans"] });
   };
 
-  // Fetch customers for grouping
+  // Fetch customers for grouping (paginated to handle >1000 rows)
   const { data: customers } = useQuery({
     queryKey: ["customers-for-queue"],
     enabled: !!user,
     queryFn: async () => {
-      const { data } = await supabase.from("customers").select("id, name").order("name");
-      return (data || []) as Array<{ id: string; name: string }>;
+      const all: Array<{ id: string; name: string }> = [];
+      const PAGE = 1000;
+      let from = 0;
+      while (true) {
+        const { data } = await supabase.from("customers").select("id, name").order("name").range(from, from + PAGE - 1);
+        if (!data || data.length === 0) break;
+        all.push(...(data as Array<{ id: string; name: string }>));
+        if (data.length < PAGE) break;
+        from += PAGE;
+      }
+      return all;
     },
   });
 
