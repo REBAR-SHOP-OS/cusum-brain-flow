@@ -13,7 +13,7 @@ interface AccountingNavProps {
   onNavigate: (tab: string) => void;
 }
 
-type MenuItem = { label: string; tab: string } | { type: "separator" };
+type MenuItem = { label: string; tab: string } | { type: "separator" } | { type: "label"; label: string };
 type Menu = { label: string; tab?: string; items?: MenuItem[] };
 
 const menus: Menu[] = [
@@ -40,6 +40,29 @@ const menus: Menu[] = [
       { label: "AI Audit", tab: "audit" },
       { type: "separator" },
       { label: "Payroll", tab: "payroll" },
+    ],
+  },
+  {
+    label: "Reporting",
+    items: [
+      { type: "label", label: "Statement Reports" },
+      { label: "Balance Sheet", tab: "audit" },
+      { label: "Profit and Loss", tab: "audit" },
+      { label: "Cash Flow Statement", tab: "audit" },
+      { type: "separator" },
+      { type: "label", label: "Partner Reports" },
+      { label: "Aged Receivable", tab: "invoices" },
+      { label: "Aged Payable", tab: "bills" },
+    ],
+  },
+  {
+    label: "Configuration",
+    items: [
+      { type: "label", label: "Accounting" },
+      { label: "Chart of Accounts", tab: "accounts" },
+      { type: "separator" },
+      { type: "label", label: "Payroll" },
+      { label: "Payroll & Corrections", tab: "payroll" },
     ],
   },
 ];
@@ -81,10 +104,17 @@ export function AccountingNavMenus({ activeTab, onNavigate }: AccountingNavProps
                 if ("type" in item && item.type === "separator") {
                   return <DropdownMenuSeparator key={`sep-${idx}`} />;
                 }
+                if ("type" in item && item.type === "label") {
+                  return (
+                    <DropdownMenuLabel key={`lbl-${idx}`} className="text-[10px] tracking-widest text-muted-foreground uppercase pt-2">
+                      {item.label}
+                    </DropdownMenuLabel>
+                  );
+                }
                 if ("tab" in item) {
                   return (
                     <DropdownMenuItem
-                      key={item.tab}
+                      key={`${item.tab}-${idx}`}
                       className="text-sm cursor-pointer"
                       onClick={() => onNavigate(item.tab)}
                     >
