@@ -26,13 +26,29 @@ export function ProductionQueueView() {
   const navigate = useNavigate();
   const { companyId } = useCompanyId();
   const { projects } = useProjects(companyId ?? undefined);
-  const { barlists } = useBarlists(companyId ?? undefined);
+  const { barlists } = useBarlists(); // fetch all barlists
+  // Fetch file names for barlists via extract sessions
+  const barlistIds = barlists.map(b => b.id);
+  const { data: fileNames } = useQuery({
+    queryKey: ["barlist-filenames", barlistIds],
+    enabled: barlistIds.length > 0,
+    queryFn: async () => {
+      const sessionIds = barlists.map(b => b.extract_session_id).filter(Boolean) as string[];
+      if (sessionIds.length === 0) return {};
+      const { data } = await supabase
+        .from("extract_raw_files")
+        .select("session_id, file_name")
+        .in("session_id", sessionIds);
+      const map: Record<string, string> = {};
+      (data || []).forEach((f: any) => { map[f.session_id] = f.file_name; });
+      return map;
+    },
+  });
 
   const activePlans = plans.filter(p => ["draft", "ready", "running", "queued"].includes(p.status));
 
   // Group: project → barlists → plans
-  // Build a tree: projects containing barlists containing plans
-  const tree = buildProjectTree(projects, barlists, plans);
+  const tree = buildProjectTree(projects, barlists, plans, fileNames || {});
 
   return (
     <div className="p-6 space-y-6">
@@ -88,11 +104,13 @@ interface PlanNode {
   name: string;
   status: string;
   project_name: string | null;
+  project_id: string | null;
 }
 
 interface BarlistNode {
   barlistId: string;
   barlistName: string;
+  fileName: string | null;
   revisionNo: number;
   plans: PlanNode[];
 }
@@ -101,68 +119,81 @@ interface ProjectNode {
   projectId: string | null;
   projectName: string;
   barlists: BarlistNode[];
-  // Plans not linked to any barlist
   loosePlans: PlanNode[];
 }
 
 function buildProjectTree(
   projects: Array<{ id: string; name: string }>,
-  barlists: Array<{ id: string; name: string; revision_no: number; project_id: string }>,
-  plans: PlanNode[]
+  barlists: Array<{ id: string; name: string; revision_no: number; project_id: string; extract_session_id: string | null }>,
+  plans: PlanNode[],
+  fileNames: Record<string, string>
 ): ProjectNode[] {
   const projectMap = new Map(projects.map(p => [p.id, p.name]));
+
+  // Group barlists by project
   const barlistsByProject = new Map<string, typeof barlists>();
-  
   barlists.forEach(b => {
     const pid = b.project_id || "__none__";
     if (!barlistsByProject.has(pid)) barlistsByProject.set(pid, []);
     barlistsByProject.get(pid)!.push(b);
   });
 
-  // Match plans to barlists by name similarity
-  const usedPlanIds = new Set<string>();
-  const barlistPlanMap = new Map<string, PlanNode[]>();
+  // Match plans to projects via project_id
+  const plansByProject = new Map<string, PlanNode[]>();
+  const unmatchedPlans: PlanNode[] = [];
 
-  barlists.forEach(b => {
-    const matched = plans.filter(p => {
-      if (usedPlanIds.has(p.id)) return false;
-      // Match by name or project_name
-      return p.name === b.name || p.project_name === b.name;
-    });
-    matched.forEach(p => usedPlanIds.add(p.id));
-    if (matched.length > 0) barlistPlanMap.set(b.id, matched);
+  plans.forEach(p => {
+    if (p.project_id) {
+      if (!plansByProject.has(p.project_id)) plansByProject.set(p.project_id, []);
+      plansByProject.get(p.project_id)!.push(p);
+    } else {
+      unmatchedPlans.push(p);
+    }
   });
 
   const result: ProjectNode[] = [];
 
-  // Build project nodes
-  const projectIds = new Set([
+  // All project IDs that have barlists or plans
+  const allProjectIds = new Set([
     ...barlists.map(b => b.project_id).filter(Boolean),
-    ...projects.map(p => p.id),
+    ...plans.map(p => p.project_id).filter(Boolean) as string[],
   ]);
 
-  projectIds.forEach(pid => {
+  allProjectIds.forEach(pid => {
     const pBarlists = barlistsByProject.get(pid) || [];
-    const barlistNodes: BarlistNode[] = pBarlists.map(b => ({
-      barlistId: b.id,
-      barlistName: b.name,
-      revisionNo: b.revision_no,
-      plans: barlistPlanMap.get(b.id) || [],
-    }));
+    const pPlans = plansByProject.get(pid) || [];
 
-    // Only include projects that have barlists or plans
-    if (barlistNodes.length > 0 || barlistNodes.some(bn => bn.plans.length > 0)) {
-      result.push({
-        projectId: pid,
-        projectName: projectMap.get(pid) || "Unknown Project",
-        barlists: barlistNodes,
-        loosePlans: [],
+    // Match plans to barlists by name
+    const usedPlanIds = new Set<string>();
+    const barlistNodes: BarlistNode[] = pBarlists.map(b => {
+      const matched = pPlans.filter(p => {
+        if (usedPlanIds.has(p.id)) return false;
+        return p.name === b.name || p.project_name === b.name;
       });
-    }
+      matched.forEach(p => usedPlanIds.add(p.id));
+
+      const fn = b.extract_session_id ? fileNames[b.extract_session_id] || null : null;
+
+      return {
+        barlistId: b.id,
+        barlistName: b.name,
+        fileName: fn,
+        revisionNo: b.revision_no,
+        plans: matched,
+      };
+    });
+
+    // Plans in this project not matched to any barlist
+    const loosePlans = pPlans.filter(p => !usedPlanIds.has(p.id));
+
+    result.push({
+      projectId: pid,
+      projectName: projectMap.get(pid) || "Unknown Project",
+      barlists: barlistNodes,
+      loosePlans,
+    });
   });
 
-  // Unmatched plans
-  const unmatchedPlans = plans.filter(p => !usedPlanIds.has(p.id));
   if (unmatchedPlans.length > 0) {
     result.push({
       projectId: null,
@@ -227,7 +258,12 @@ function BarlistFolder({ barlist, onDeletePlan, onEditPlan }: {
         <button className="w-full flex items-center gap-2.5 p-2.5 rounded-lg hover:bg-muted/30 transition-colors text-left">
           {open ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
           <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
-          <span className="text-xs font-medium text-foreground truncate">{barlist.barlistName}</span>
+          <div className="flex flex-col min-w-0">
+            <span className="text-xs font-medium text-foreground truncate">{barlist.barlistName}</span>
+            {barlist.fileName && (
+              <span className="text-[10px] text-muted-foreground truncate">{barlist.fileName}</span>
+            )}
+          </div>
           <Badge variant="outline" className="text-[9px] ml-1 shrink-0">Rev {barlist.revisionNo}</Badge>
           <span className="text-[10px] text-muted-foreground ml-auto shrink-0">{barlist.plans.length} manifest{barlist.plans.length !== 1 ? "s" : ""}</span>
         </button>

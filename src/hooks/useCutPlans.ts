@@ -12,6 +12,7 @@ export interface CutPlan {
   created_at: string;
   updated_at: string;
   project_name: string | null;
+  project_id: string | null;
   machine_id: string | null;
 }
 
