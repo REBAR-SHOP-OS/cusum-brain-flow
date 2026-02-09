@@ -25,36 +25,58 @@ async function verifyAuth(req: Request): Promise<string | null> {
   return data.claims.sub as string;
 }
 
-async function getRCAccessToken(): Promise<string> {
-  // Use dedicated JWT app credentials (separate from widget OAuth app)
-  const clientId = Deno.env.get("RINGCENTRAL_JWT_CLIENT_ID");
-  const clientSecret = Deno.env.get("RINGCENTRAL_JWT_CLIENT_SECRET");
-  const jwt = Deno.env.get("RINGCENTRAL_JWT");
+async function getRCAccessTokenForUser(userId: string): Promise<string> {
+  const supabaseAdmin = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  );
 
-  if (!clientId || !clientSecret || !jwt) {
-    throw new Error("RingCentral JWT app credentials not configured");
+  const { data: tokenRow, error } = await supabaseAdmin
+    .from("user_ringcentral_tokens")
+    .select("access_token, refresh_token, expires_at")
+    .eq("user_id", userId)
+    .single();
+
+  if (error || !tokenRow?.access_token) {
+    throw new Error("RingCentral not connected. Please connect RingCentral in Integrations.");
   }
 
-  const credentials = btoa(`${clientId}:${clientSecret}`);
+  // Check if token is expired and refresh if needed
+  const expiresAt = new Date(tokenRow.expires_at).getTime();
+  if (Date.now() < expiresAt - 60000) {
+    return tokenRow.access_token;
+  }
 
-  const response = await fetch(`${RC_SERVER}/restapi/oauth/token`, {
+  // Refresh the token
+  const clientId = Deno.env.get("RINGCENTRAL_CLIENT_ID");
+  const clientSecret = Deno.env.get("RINGCENTRAL_CLIENT_SECRET");
+  if (!clientId || !clientSecret) throw new Error("RC OAuth credentials not configured");
+
+  const resp = await fetch(`${RC_SERVER}/restapi/oauth/token`, {
     method: "POST",
     headers: {
-      Authorization: `Basic ${credentials}`,
+      Authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
       "Content-Type": "application/x-www-form-urlencoded",
     },
     body: new URLSearchParams({
-      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-      assertion: jwt,
+      grant_type: "refresh_token",
+      refresh_token: tokenRow.refresh_token,
     }),
   });
 
-  if (!response.ok) {
-    throw new Error(`RC token exchange failed: ${await response.text()}`);
-  }
+  if (!resp.ok) throw new Error(`Token refresh failed: ${resp.status}`);
 
-  const data = await response.json();
-  return data.access_token;
+  const tokens = await resp.json();
+  await supabaseAdmin
+    .from("user_ringcentral_tokens")
+    .update({
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token,
+      expires_at: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
+    })
+    .eq("user_id", userId);
+
+  return tokens.access_token;
 }
 
 serve(async (req) => {
@@ -106,7 +128,7 @@ serve(async (req) => {
         );
       }
 
-      const accessToken = await getRCAccessToken();
+      const accessToken = await getRCAccessTokenForUser(userId);
 
       const rcResponse = await fetch(recordingUri, {
         headers: { Authorization: `Bearer ${accessToken}` },
