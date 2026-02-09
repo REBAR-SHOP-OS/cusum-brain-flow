@@ -94,15 +94,16 @@ async function qbFetch(
   return res.json();
 }
 
-async function qbQuery(config: { realm_id: string; access_token: string }, entity: string, maxResults = 50000) {
+async function qbQuery(config: { realm_id: string; access_token: string }, entity: string, maxResults = 50000, whereClause?: string) {
   const allResults: unknown[] = [];
   let startPosition = 1;
   const pageSize = Math.min(maxResults, 1000);
+  const where = whereClause ? ` WHERE ${whereClause}` : "";
 
   while (true) {
     const data = await qbFetch(
       config,
-      `query?query=SELECT * FROM ${entity} STARTPOSITION ${startPosition} MAXRESULTS ${pageSize}`,
+      `query?query=SELECT * FROM ${entity}${where} STARTPOSITION ${startPosition} MAXRESULTS ${pageSize}`,
     ) as Record<string, unknown>;
     const response = data.QueryResponse as Record<string, unknown> | undefined;
     const entities = (response?.[entity] as unknown[]) || [];
@@ -188,6 +189,8 @@ serve(async (req) => {
         return handleGetCompanyInfo(supabase, userId);
       case "list-accounts":
         return handleListAccounts(supabase, userId);
+      case "list-bank-accounts":
+        return handleListBankAccounts(supabase, userId);
       case "list-items":
         return handleListItems(supabase, userId);
       case "list-invoices":
@@ -604,6 +607,12 @@ async function handleSyncVendors(supabase: ReturnType<typeof createClient>, user
 async function handleListAccounts(supabase: ReturnType<typeof createClient>, userId: string) {
   const config = await getQBConfig(supabase, userId);
   const data = await qbQuery(config, "Account");
+  return jsonRes({ accounts: data.QueryResponse?.Account || [] });
+}
+
+async function handleListBankAccounts(supabase: ReturnType<typeof createClient>, userId: string) {
+  const config = await getQBConfig(supabase, userId);
+  const data = await qbQuery(config, "Account", 500, "AccountType = 'Bank'");
   return jsonRes({ accounts: data.QueryResponse?.Account || [] });
 }
 

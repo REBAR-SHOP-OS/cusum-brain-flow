@@ -248,12 +248,12 @@ function CashCard({ data, onNavigate }: Props) {
 }
 
 export function AccountingDashboard({ data, onNavigate }: Props) {
-  // Separate checking and savings accounts
+  // Separate checking and savings accounts (accounts now pre-filtered to Bank type only)
   const checkingAccounts = data.accounts.filter(
-    (a) => a.AccountType === "Bank" && a.Active && (a.AccountSubType === "Checking" || !a.AccountSubType)
+    (a) => a.Active && a.AccountSubType !== "Savings"
   );
   const savingsAccounts = data.accounts.filter(
-    (a) => a.AccountType === "Bank" && a.Active && a.AccountSubType === "Savings"
+    (a) => a.Active && a.AccountSubType === "Savings"
   );
 
   const totalChecking = checkingAccounts.reduce((s, a) => s + a.CurrentBalance, 0);

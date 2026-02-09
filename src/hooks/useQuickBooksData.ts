@@ -166,46 +166,41 @@ export function useQuickBooksData() {
         return;
       }
 
-      // Batch QB API calls in small groups to avoid rate limiting (429)
-      // First batch: sync customers + invoices to DB, plus list payments
-      const batch1 = await Promise.allSettled([
+      // Fire all API calls in parallel (2 large batches instead of 4 sequential)
+      const [
+        syncCustResult, syncInvResult, paymentsResult,
+        invoicesResult, billsResult, vendorsResult,
+        bankAccountsResult, estimatesResult, companyInfoResult, itemsResult,
+        poResult, cmResult, empResult, taResult,
+      ] = await Promise.allSettled([
         qbAction("sync-customers"),
         qbAction("sync-invoices"),
         qbAction("list-payments"),
-      ]);
-      // customers loaded from DB below; invoices loaded from QB below
-      if (batch1[2].status === "fulfilled") setPayments(batch1[2].value.payments || []);
-
-      const batch2 = await Promise.allSettled([
         qbAction("list-invoices"),
         qbAction("list-bills"),
         qbAction("list-vendors"),
-      ]);
-      if (batch2[0].status === "fulfilled") setInvoices(batch2[0].value.invoices || []);
-      if (batch2[1].status === "fulfilled") setBills(batch2[1].value.bills || []);
-      if (batch2[2].status === "fulfilled") setVendors(batch2[2].value.vendors || []);
-
-      const batch3 = await Promise.allSettled([
-        qbAction("list-accounts"),
+        qbAction("list-bank-accounts"),
         qbAction("list-estimates"),
         qbAction("get-company-info"),
         qbAction("list-items"),
-      ]);
-      if (batch3[0].status === "fulfilled") setAccounts(batch3[0].value.accounts || []);
-      if (batch3[1].status === "fulfilled") setEstimates(batch3[1].value.estimates || []);
-      if (batch3[2].status === "fulfilled") setCompanyInfo(batch3[2].value);
-      if (batch3[3].status === "fulfilled") setItems(batch3[3].value.items || []);
-
-      const batch4 = await Promise.allSettled([
         qbAction("list-purchase-orders"),
         qbAction("list-credit-memos"),
         qbAction("list-employees"),
         qbAction("list-time-activities"),
       ]);
-      if (batch4[0].status === "fulfilled") setPurchaseOrders(batch4[0].value.purchaseOrders || []);
-      if (batch4[1].status === "fulfilled") setCreditMemos(batch4[1].value.creditMemos || []);
-      if (batch4[2].status === "fulfilled") setEmployees(batch4[2].value.employees || []);
-      if (batch4[3].status === "fulfilled") setTimeActivities(batch4[3].value.timeActivities || []);
+
+      if (paymentsResult.status === "fulfilled") setPayments(paymentsResult.value.payments || []);
+      if (invoicesResult.status === "fulfilled") setInvoices(invoicesResult.value.invoices || []);
+      if (billsResult.status === "fulfilled") setBills(billsResult.value.bills || []);
+      if (vendorsResult.status === "fulfilled") setVendors(vendorsResult.value.vendors || []);
+      if (bankAccountsResult.status === "fulfilled") setAccounts(bankAccountsResult.value.accounts || []);
+      if (estimatesResult.status === "fulfilled") setEstimates(estimatesResult.value.estimates || []);
+      if (companyInfoResult.status === "fulfilled") setCompanyInfo(companyInfoResult.value);
+      if (itemsResult.status === "fulfilled") setItems(itemsResult.value.items || []);
+      if (poResult.status === "fulfilled") setPurchaseOrders(poResult.value.purchaseOrders || []);
+      if (cmResult.status === "fulfilled") setCreditMemos(cmResult.value.creditMemos || []);
+      if (empResult.status === "fulfilled") setEmployees(empResult.value.employees || []);
+      if (taResult.status === "fulfilled") setTimeActivities(taResult.value.timeActivities || []);
 
       // Load synced customers from our DB (paginate past Supabase 1000-row default)
       const allDbCustomers: typeof dbCustomersPage = [];
