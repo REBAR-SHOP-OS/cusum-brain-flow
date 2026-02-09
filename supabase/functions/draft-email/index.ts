@@ -12,19 +12,34 @@ serve(async (req) => {
   }
 
   try {
-    // Auth check + rate limiting
+    // Auth check + get user profile
     const authHeader = req.headers.get("Authorization");
     let rateLimitId = "anonymous";
+    let userName = "Team Member";
+    let userTitle = "";
+
     if (authHeader?.startsWith("Bearer ")) {
       const supabase = createClient(
         Deno.env.get("SUPABASE_URL")!,
         Deno.env.get("SUPABASE_ANON_KEY")!,
         { global: { headers: { Authorization: authHeader } } }
       );
-      const token = authHeader.replace("Bearer ", "");
-      const { data: claimsData } = await supabase.auth.getClaims(token);
-      if (claimsData?.claims?.sub) {
-        rateLimitId = claimsData.claims.sub as string;
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        rateLimitId = user.id;
+
+        // Fetch profile for name & title
+        const svcClient2 = createClient(
+          Deno.env.get("SUPABASE_URL")!,
+          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+        );
+        const { data: profile } = await svcClient2
+          .from("profiles")
+          .select("full_name, title")
+          .eq("user_id", user.id)
+          .maybeSingle();
+        if (profile?.full_name) userName = profile.full_name;
+        if (profile?.title) userTitle = profile.title;
       }
     }
 
@@ -52,18 +67,21 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
-    const systemPrompt = `You are Cassie, an AI email assistant for a rebar/steel manufacturing company called Rebar.Shop. 
-You draft professional, concise email replies on behalf of the user (Sattar).
+    const titleLine = userTitle ? ` (${userTitle})` : "";
+
+    const systemPrompt = `You are Cassie, an AI email assistant for a rebar/steel manufacturing company called Rebar.Shop (Ontario Rebars Ltd.). 
+You draft professional, concise email replies on behalf of ${userName}${titleLine}.
 
 Guidelines:
 - Keep replies short and professional
 - Match the tone of the original email
 - Be direct and helpful
-- Sign off with "Best regards,\nSattar"
+- Sign off with "Best regards,\\n${userName}"
 - Don't add unnecessary pleasantries
 - If it's a support/technical email, acknowledge the information and state next steps
 - If it's a sales/marketing email, politely decline or express interest based on context
-- If it's a notification/automated email, suggest a brief acknowledgment or skip reply`;
+- If it's a notification/automated email, suggest a brief acknowledgment or skip reply
+- Do NOT include any email signature block — the system will add it automatically`;
 
     const userPrompt = `Draft a reply to this email:
 
