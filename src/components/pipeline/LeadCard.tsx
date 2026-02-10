@@ -104,6 +104,8 @@ export function LeadCard({ lead, onDragStart, onDragEnd, onEdit, onDelete, onCli
   const hasEmail = !!(meta?.odoo_email || meta?.subject);
   const revenue = (meta?.odoo_revenue as number) || lead.expected_value || 0;
   const customerName = lead.customers?.company_name || lead.customers?.name || null;
+  // Strip Odoo ref prefix (e.g. "S01411, ") to match Odoo's clean title
+  const displayTitle = lead.title.replace(/^S\d+,\s*/, "");
 
   return (
     <Card
@@ -119,7 +121,7 @@ export function LeadCard({ lead, onDragStart, onDragEnd, onEdit, onDelete, onCli
       <CardContent className="p-3 space-y-1.5">
         {/* Title */}
         <div className="flex items-start justify-between gap-1">
-          <p className="font-medium text-sm leading-tight line-clamp-2 flex-1 min-w-0">{lead.title}</p>
+          <p className="font-medium text-sm leading-tight line-clamp-2 flex-1 min-w-0">{displayTitle}</p>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
