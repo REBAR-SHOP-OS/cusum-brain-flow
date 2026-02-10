@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { 
   Factory, 
   LayoutGrid, 
@@ -8,6 +8,7 @@ import {
   PackageCheck,
   ArrowLeft
 } from "lucide-react";
+import { MyJobsCard } from "@/components/shopfloor/MyJobsCard";
 
 interface HubCard {
   label: string;
@@ -83,6 +84,11 @@ export default function ShopFloor() {
         <p className="text-xs tracking-[0.3em] text-primary/70 uppercase mb-10">
           Production Environment Active
         </p>
+
+        {/* My Jobs Card */}
+        <div className="w-full mb-6">
+          <MyJobsCard />
+        </div>
 
         {/* Cards Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 w-full">
