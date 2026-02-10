@@ -27,7 +27,7 @@ function statusBadge(text: string) {
 
 export function RichMarkdown({ content, className }: RichMarkdownProps) {
   return (
-    <div className={cn("text-sm leading-relaxed", className)}>
+    <div className={cn("text-sm leading-relaxed break-words overflow-hidden", className)}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
@@ -115,7 +115,7 @@ export function RichMarkdown({ content, className }: RichMarkdownProps) {
               );
             }
             return (
-              <td className="px-3 py-2 text-foreground/80 min-w-[80px] max-w-[320px]">{children}</td>
+              <td className="px-3 py-2 text-foreground/80 min-w-[80px] max-w-[320px] break-words">{children}</td>
             );
           },
 
@@ -127,7 +127,7 @@ export function RichMarkdown({ content, className }: RichMarkdownProps) {
             <ol className="space-y-1 my-2 ml-1 list-decimal list-inside">{children}</ol>
           ),
           li: ({ children }) => (
-            <li className="flex items-start gap-2 text-sm text-foreground/90">
+            <li className="flex items-start gap-2 text-sm text-foreground/90 min-w-0">
               <span className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 flex-shrink-0" />
               <span className="flex-1">{children}</span>
             </li>
