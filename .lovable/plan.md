@@ -1,35 +1,35 @@
 
-# Fix: Clicking a specific item opens the wrong item in Cutter Station
+# Improve Translation Writing Style
 
 ## Problem
-
-When you click on a production card (e.g., the 5100mm item "AS05"), the Cutter Station always opens at the **first item** (e.g., AS02 with 10650mm) instead of the one you clicked on. This is because `StationView.tsx` does not pass the selected item's index to `CutterStationView`.
-
-The Bender view already handles this correctly (line 56 passes `initialIndex`), but the Cutter view on line 61 does not.
+The translated output reads like a rough, literal transcription rather than polished, professional prose. The current prompts prioritize word-for-word accuracy over natural readability.
 
 ## Solution
+Enhance the system prompts in the `transcribe-translate` edge function to produce more polished, publication-quality English output.
 
-Two surgical changes:
+### Changes (single file: `supabase/functions/transcribe-translate/index.ts`)
 
-### 1. `src/pages/StationView.tsx` (line 60-62)
-Pass the correct `initialIndex` to `CutterStationView`, matching what the bender already does:
+**1. Enhance TRANSLATOR_PERSONA (line 18-31)**
+Add writing style instructions to the existing persona:
+- Produce clear, well-structured sentences with proper punctuation
+- Break long run-on speech into clean, readable sentences
+- Eliminate filler words and verbal tics (um, uh, you know) from translations
+- Use professional prose conventions: proper paragraphing, logical flow
+- Spoken language should be elevated to written-quality English without losing meaning
 
-```typescript
-if (machine.type === "cutter") {
-  const itemIndex = items.findIndex((i) => i.id === selectedItemId);
-  return (
-    <CutterStationView
-      machine={machine}
-      items={items}
-      canWrite={canWrite}
-      initialIndex={itemIndex >= 0 ? itemIndex : 0}
-    />
-  );
-}
-```
+**2. Strengthen Pass 2 reviewer prompt (line 59-78)**
+Add explicit style refinement duties:
+- Rewrite run-on sentences into clean, concise prose
+- Remove verbal filler and repetition from spoken-to-written conversion
+- Ensure the final text reads like professionally written content, not raw speech-to-text
+- Improve sentence structure, flow, and readability while preserving all meaning
+- Prioritize clarity and elegance in the final output
 
-### 2. `src/components/shopfloor/CutterStationView.tsx`
-- Add `initialIndex` to the props interface (optional, defaults to 0)
-- Use it as the initial value for `useState(initialIndex ?? 0)` instead of `useState(0)`
+## Technical Details
 
-No other files or logic are affected.
+The edge function `supabase/functions/transcribe-translate/index.ts` will be updated in two sections:
+
+1. **TRANSLATOR_PERSONA constant** -- add a new `WRITING STYLE` section with rules for clean prose output
+2. **buildPass2SystemPrompt function** -- add writing quality refinement as a core reviewer responsibility, making it step 1 (before accuracy checking)
+
+No frontend changes needed. No database changes. The function will be redeployed automatically.
