@@ -22,6 +22,9 @@ const SALES_ALLOWED = [
   "/settings",
   "/home",
   "/brain",
+  "/timeclock",
+  "/integrations",
+  "/agent",
 ];
 
 interface RoleGuardProps {
