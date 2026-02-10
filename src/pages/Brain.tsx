@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Search, Plus, MoreHorizontal, Brain as BrainIcon,
-  Image, Video, Globe, FileText, Filter, Play, X
+  Image, Video, Globe, FileText, Filter, Play, X, Database
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { AddKnowledgeDialog } from "@/components/brain/AddKnowledgeDialog";
+import { ImportDatabaseDialog } from "@/components/brain/ImportDatabaseDialog";
 import { KnowledgeDetailDialog } from "@/components/brain/KnowledgeDetailDialog";
 import { InteractiveBrainBg } from "@/components/brain/InteractiveBrainBg";
 
@@ -155,6 +156,7 @@ export default function Brain() {
   const [searchQuery, setSearchQuery] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<KnowledgeItem | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const queryClient = useQueryClient();
 
@@ -232,6 +234,11 @@ export default function Brain() {
         <div className="flex items-center gap-1.5 sm:gap-2">
           <Button variant="ghost" size="icon" className="h-8 w-8 sm:h-9 sm:w-9">
             <MoreHorizontal className="w-4 h-4 sm:w-5 sm:h-5" />
+          </Button>
+          <Button variant="outline" size="sm" className="gap-1.5 sm:gap-2 text-xs sm:text-sm" onClick={() => setImportOpen(true)}>
+            <Database className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <span className="hidden sm:inline">Import DB</span>
+            <span className="sm:hidden">Import</span>
           </Button>
           <Button variant="outline" size="sm" className="gap-1.5 sm:gap-2 text-xs sm:text-sm" onClick={() => setAddOpen(true)}>
             <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
@@ -361,6 +368,7 @@ export default function Brain() {
 
       {/* Dialogs */}
       <AddKnowledgeDialog open={addOpen} onOpenChange={setAddOpen} onSuccess={refetchKnowledge} />
+      <ImportDatabaseDialog open={importOpen} onOpenChange={setImportOpen} onSuccess={refetchKnowledge} />
       <KnowledgeDetailDialog
         item={selectedItem}
         onClose={() => setSelectedItem(null)}
