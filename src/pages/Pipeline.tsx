@@ -50,18 +50,30 @@ export default function Pipeline() {
   const { data: leads = [], isLoading } = useQuery({
     queryKey: ["leads", searchQuery],
     queryFn: async () => {
-      let query = supabase
-        .from("leads")
-        .select("*, customers(name, company_name)")
-        .order("updated_at", { ascending: false });
+      const PAGE = 1000;
+      let allLeads: LeadWithCustomer[] = [];
+      let from = 0;
 
-      if (searchQuery) {
-        query = query.or(`title.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%`);
+      while (true) {
+        let query = supabase
+          .from("leads")
+          .select("*, customers(name, company_name)")
+          .order("updated_at", { ascending: false })
+          .range(from, from + PAGE - 1);
+
+        if (searchQuery) {
+          query = query.or(`title.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%`);
+        }
+
+        const { data, error } = await query;
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        allLeads = allLeads.concat(data as LeadWithCustomer[]);
+        if (data.length < PAGE) break;
+        from += PAGE;
       }
 
-      const { data, error } = await query;
-      if (error) throw error;
-      return data as LeadWithCustomer[];
+      return allLeads;
     },
   });
 
