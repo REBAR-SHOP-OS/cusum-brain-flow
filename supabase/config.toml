@@ -125,3 +125,6 @@ verify_jwt = false
 
 [functions.meeting-live-notes]
 verify_jwt = false
+
+[functions.transcribe-translate]
+verify_jwt = false
