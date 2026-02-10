@@ -88,7 +88,54 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { lead, activities, action, userMessage } = await req.json();
+    const body = await req.json();
+    const { lead, activities, action, userMessage, pipelineStats, auditType } = body;
+
+    // ── pipeline_audit (no lead context needed) ──
+    if (action === "pipeline_audit") {
+      const auditSystemPrompt = `${systemPrompt}
+
+You are now acting as a Sales Accountability Partner. Your job is to hold the sales team accountable by identifying gaps, flagging risks, and recommending specific actions with deadlines and owner assignments.
+
+Be direct, data-driven, and constructive. Use tables and bullet points. Flag critical issues first.`;
+
+      let auditPromptBody = "";
+      const statsJson = JSON.stringify(pipelineStats || {}, null, 2);
+
+      switch (auditType) {
+        case "pipeline_audit":
+          auditPromptBody = `Run a full pipeline audit. Current pipeline stats:\n\n${statsJson}\n\nProvide: 1) Executive summary 2) Critical issues (stale leads, missing follow-ups) 3) Salesperson accountability breakdown 4) Top 5 recommended actions with owners and deadlines.`;
+          break;
+        case "stale_report":
+          auditPromptBody = `Generate a stale leads report. Stats:\n\n${statsJson}\n\nList stale leads (5+ days without update), grouped by salesperson. For each, suggest specific action and deadline.`;
+          break;
+        case "followup_gaps":
+          auditPromptBody = `Identify follow-up gaps in the pipeline. Stats:\n\n${statsJson}\n\nFlag leads missing follow-ups, leads stuck too long in a stage, and salespersons with the most gaps.`;
+          break;
+        case "revenue_forecast":
+          auditPromptBody = `Generate a revenue forecast. Stats:\n\n${statsJson}\n\nShow weighted pipeline value, best/worst case, highlight risks. Suggest actions to improve close rates.`;
+          break;
+        case "salesperson_report":
+          auditPromptBody = `Generate a team performance report. Stats:\n\n${statsJson}\n\nRank salespersons by: total leads, stale leads, pipeline value. Identify top performer and who needs coaching.`;
+          break;
+        case "custom_question":
+          auditPromptBody = `User asks about the pipeline. Stats:\n\n${statsJson}\n\nQuestion: ${userMessage || "Give me a pipeline overview."}\n\nAnswer with data. Be specific and actionable.`;
+          break;
+        default:
+          auditPromptBody = `Analyze this pipeline. Stats:\n\n${statsJson}\n\n${userMessage || "Provide an overview with key recommendations."}`;
+      }
+
+      const data = await callAI([
+        { role: "system", content: auditSystemPrompt },
+        { role: "user", content: auditPromptBody },
+      ]);
+
+      const answer = data.choices?.[0]?.message?.content || "Unable to generate report.";
+      return new Response(JSON.stringify({ answer }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const context = buildLeadContext(lead, activities);
 
     // ── suggest_actions ──
@@ -341,6 +388,8 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+
 
     // ── analyze (free-form) ──
     if (action === "analyze") {
