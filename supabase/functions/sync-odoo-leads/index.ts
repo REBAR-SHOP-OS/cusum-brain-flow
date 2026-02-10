@@ -19,8 +19,11 @@ const ODOO_STAGE_MAP: Record<string, string> = {
   "addendums": "addendums",
   "estimation - ben": "estimation_ben",
   "estimation ben": "estimation_ben",
+  "estimation-ben": "estimation_ben",
   "estimation - karthick": "estimation_karthick",
   "estimation karthick": "estimation_karthick",
+  "estimation-karthick": "estimation_karthick",
+  "estimation-karthick(mavericks)": "estimation_karthick",
   "hot enquiries": "hot_enquiries",
   "hot": "hot_enquiries",
   "quotation priority": "quotation_priority",
@@ -28,9 +31,15 @@ const ODOO_STAGE_MAP: Record<string, string> = {
   "quotation": "quotation_bids",
   "won": "won",
   "lost": "lost",
+  "loss": "lost",
   "shop drawing": "shop_drawing",
   "shop drawing approval": "shop_drawing_approval",
   "shop drawing sent for approval": "shop_drawing_approval",
+  "delivered/pickup done": "won",
+  "ready to dispatch/pickup": "won",
+  "fabrication in shop": "shop_drawing",
+  "no rebars(our of scope)": "lost",
+  "merged": "lost",
 };
 
 const TIME_LIMIT_MS = 50_000; // 50s guard
