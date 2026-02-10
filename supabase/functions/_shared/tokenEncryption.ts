@@ -7,8 +7,8 @@ const ALGORITHM = "AES-GCM";
 
 async function getKey(): Promise<CryptoKey> {
   const hex = Deno.env.get("TOKEN_ENCRYPTION_KEY");
-  if (!hex || hex.length < 32) {
-    throw new Error("TOKEN_ENCRYPTION_KEY not configured or too short");
+  if (!hex || hex.length < 8) {
+    throw new Error("TOKEN_ENCRYPTION_KEY not configured or too short (min 8 chars)");
   }
   // Derive a 256-bit key from the secret using SHA-256
   const encoder = new TextEncoder();
