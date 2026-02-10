@@ -53,7 +53,7 @@ export function CalChatThread({ messages }: CalChatThreadProps) {
           <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-primary/80 to-primary flex items-center justify-center mx-auto mb-6 shadow-lg">
             <span className="text-4xl">📐</span>
           </div>
-          <h3 className="text-xl font-bold mb-2">Cal - Senior Estimator</h3>
+          <h3 className="text-xl font-bold mb-2">Gauge - Senior Estimator</h3>
           <p className="text-muted-foreground text-sm mb-6">
             Using the <span className="font-semibold text-primary">Changy Method</span> for high-precision rebar & WWM takeoff
           </p>
