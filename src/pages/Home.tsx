@@ -18,6 +18,9 @@ import {
   Wrench,
   ListOrdered,
   RefreshCw,
+  Crown,
+  Clock,
+  MessageSquare,
 } from "lucide-react";
 import logoCoin from "@/assets/logo-coin.png";
 import { useAuth } from "@/lib/auth";
@@ -185,6 +188,30 @@ export default function Home() {
                   </div>
                   <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
                 </div>
+              </Card>
+            ))}
+          </div>
+        </div>
+
+        {/* Workspaces Section */}
+        <div className="relative z-10 w-full mb-12">
+          <h2 className="text-lg font-semibold mb-4">Workspaces</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {[
+              { label: "CEO Command", icon: Crown, route: "/office", state: { section: "ceo-dashboard" } },
+              { label: "Time Clock", icon: Clock, route: "/timeclock" },
+              { label: "Team Hub", icon: MessageSquare, route: "/team-hub" },
+            ].map((ws) => (
+              <Card
+                key={ws.label}
+                className="p-5 cursor-pointer hover:bg-muted/50 transition-colors group flex items-center gap-4"
+                onClick={() => navigate(ws.route, ws.state ? { state: ws.state } : undefined)}
+              >
+                <div className="p-2.5 rounded-lg bg-primary/10 text-primary group-hover:bg-primary/20 transition-colors">
+                  <ws.icon className="w-5 h-5" />
+                </div>
+                <span className="font-semibold">{ws.label}</span>
+                <ChevronRight className="w-4 h-4 text-muted-foreground ml-auto group-hover:text-foreground transition-colors" />
               </Card>
             ))}
           </div>
