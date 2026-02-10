@@ -198,17 +198,17 @@ export default function Home() {
           <h2 className="text-lg font-semibold mb-4">Workspaces</h2>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {[
-              { label: "CEO Command", icon: Crown, route: "/office", state: { section: "ceo-dashboard" } },
-              { label: "Time Clock", icon: Clock, route: "/timeclock" },
-              { label: "Team Hub", icon: MessageSquare, route: "/team-hub" },
+              { label: "CEO Command", icon: Crown, route: "/office", state: { section: "ceo-dashboard" }, iconBg: "bg-gradient-to-br from-amber-500/20 to-yellow-500/10 ring-1 ring-amber-500/20", iconColor: "text-amber-400" },
+              { label: "Time Clock", icon: Clock, route: "/timeclock", iconBg: "bg-gradient-to-br from-teal-500/20 to-cyan-500/10 ring-1 ring-teal-500/20", iconColor: "text-teal-400" },
+              { label: "Team Hub", icon: MessageSquare, route: "/team-hub", iconBg: "bg-gradient-to-br from-purple-500/20 to-indigo-500/10 ring-1 ring-purple-500/20", iconColor: "text-purple-400" },
             ].map((ws) => (
               <Card
                 key={ws.label}
                 className="p-5 cursor-pointer hover:bg-muted/50 transition-colors group flex items-center gap-4"
                 onClick={() => navigate(ws.route, ws.state ? { state: ws.state } : undefined)}
               >
-                <div className="p-2.5 rounded-lg bg-primary/10 text-primary group-hover:bg-primary/20 transition-colors">
-                  <ws.icon className="w-5 h-5" />
+                <div className={`p-3 rounded-lg ${ws.iconBg} transition-colors`}>
+                  <ws.icon className={`w-6 h-6 ${ws.iconColor}`} />
                 </div>
                 <span className="font-semibold">{ws.label}</span>
                 <ChevronRight className="w-4 h-4 text-muted-foreground ml-auto group-hover:text-foreground transition-colors" />
