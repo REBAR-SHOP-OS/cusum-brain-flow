@@ -1,25 +1,23 @@
 
-# Add Fullscreen / Minimize Toggle to Pipeline AI Sheet (Blitz)
+# Move PIN Lock to Protect Entire Admin Panel
 
 ## What Changes
-Add two buttons to the Blitz/Gauge sheet header: **Fullscreen** (expand to fill the entire viewport) and **Minimize** (collapse back to the default side-sheet width).
+The PIN lock (7671) currently only gates the CEO Dashboard tab. It will be moved to gate the **entire Admin Panel** -- users must enter the PIN before seeing any content (employees, CEO dashboard, etc.).
 
-## Technical Approach
+## How It Works
+- After the role check passes (confirming user is admin), show the PIN screen **before** any tabs render
+- Once unlocked, both the Employees tab and CEO Dashboard tab are accessible without further prompts
+- The CEO Dashboard tab loses its separate lock icon and PIN gate since the whole panel is already protected
 
-### File: `src/components/pipeline/PipelineAISheet.tsx`
+## Technical Details
 
-1. **New state**: `isFullscreen` boolean (default `false`)
-2. **Header buttons** (placed next to the existing close X):
-   - `Maximize2` icon -- toggles fullscreen ON
-   - `Minimize2` icon -- toggles fullscreen OFF
-   - Only the relevant button shows based on current state
-3. **SheetContent class changes**:
-   - Default: `w-full sm:max-w-lg` (current behavior)
-   - Fullscreen: `w-full sm:max-w-full h-full` -- fills the entire viewport
-4. **Reset on close**: When `open` becomes `false`, reset `isFullscreen` to `false`
+### File: `src/components/pipeline/PipelineAISheet.tsx` -- No changes
+### File: `src/pages/AdminPanel.tsx` -- Single file modification
 
-### Visual Placement
-The fullscreen/minimize button will sit in the header row, right-aligned next to the sheet's built-in close button. Uses `lucide-react` icons `Maximize2` and `Minimize2`.
+1. Rename `CEO_PIN` to `ADMIN_PIN` and `ceoUnlocked` to `panelUnlocked` for clarity
+2. Move the PIN gate UI to render **after** the `!isAdmin` check and **before** the `<Tabs>` component
+3. When `panelUnlocked` is `false`, show the full-screen PIN entry (same UI, updated title to "Admin Panel Locked")
+4. Remove the per-tab PIN lock from the CEO Dashboard tab -- it renders `<CEODashboardView />` directly
+5. Remove the `<Lock>` icon from the CEO Dashboard tab trigger since it's no longer separately locked
 
-### No other files touched
-Surgical change -- only `PipelineAISheet.tsx` is modified. No layout, sidebar, or other component changes.
+No other files are touched. Surgical change to one file only.
