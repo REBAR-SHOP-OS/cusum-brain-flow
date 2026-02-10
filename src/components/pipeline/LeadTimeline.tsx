@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   MessageSquare, Phone, Mail, Calendar, ArrowRight, Bot,
   Plus, Send, Clock, CheckCircle2, Loader2, Sparkles,
-  PhoneCall, FileText, Zap,
+  PhoneCall, FileText, Zap, Download, File, FileSpreadsheet, Image,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -85,6 +85,26 @@ export function LeadTimeline({ lead }: LeadTimelineProps) {
       return data as LeadActivity[];
     },
   });
+
+  const { data: files = [] } = useQuery({
+    queryKey: ["lead-files-timeline", lead.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("lead_files")
+        .select("*")
+        .eq("lead_id", lead.id)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Merge activities and files into a unified timeline
+  type TimelineItem = { type: "activity"; data: LeadActivity; date: Date } | { type: "file"; data: typeof files[0]; date: Date };
+  const timeline: TimelineItem[] = [
+    ...activities.map((a) => ({ type: "activity" as const, data: a, date: new Date(a.created_at) })),
+    ...files.map((f) => ({ type: "file" as const, data: f, date: new Date(f.created_at) })),
+  ].sort((a, b) => b.date.getTime() - a.date.getTime());
 
   const addActivityMutation = useMutation({
     mutationFn: async (activity: { activity_type: string; title: string; description?: string }) => {
@@ -262,39 +282,74 @@ export function LeadTimeline({ lead }: LeadTimelineProps) {
         </Button>
       )}
 
-      {/* Timeline */}
       {isLoading ? (
         <div className="flex items-center justify-center py-8">
           <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
         </div>
-      ) : activities.length === 0 ? (
+      ) : timeline.length === 0 ? (
         <p className="text-sm text-muted-foreground text-center py-8">
           No activities yet. Log a note or let AI suggest next steps.
         </p>
       ) : (
         <div className="space-y-1">
-          {activities.map((activity, idx) => {
+          {timeline.map((item, idx) => {
+            const itemDate = item.date;
+
+            // Date separator
+            const prevDate = idx > 0 ? timeline[idx - 1].date : null;
+            const showDateSep = !prevDate || format(itemDate, "yyyy-MM-dd") !== format(prevDate, "yyyy-MM-dd");
+
+            if (item.type === "file") {
+              const f = item.data;
+              const ext = f.file_name?.split(".").pop()?.toUpperCase() || "FILE";
+              const FileIcon = getFileIcon(f.mime_type || "", ext);
+              const iconColor = getFileIconColor(ext);
+
+              return (
+                <div key={`file-${f.id}`}>
+                  {showDateSep && (
+                    <div className="flex items-center gap-3 py-3">
+                      <div className="flex-1 h-px bg-border" />
+                      <span className="text-xs font-medium text-primary shrink-0">
+                        {format(itemDate, "MMMM d, yyyy")}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex gap-3 py-1 pl-11">
+                    <a
+                      href={f.file_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 px-3 py-2 rounded-md border border-border bg-secondary/50 hover:bg-secondary transition-colors group max-w-[300px]"
+                    >
+                      <FileIcon className={cn("w-5 h-5 shrink-0", iconColor)} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium truncate">{f.file_name}</p>
+                        <p className="text-[10px] text-muted-foreground">{ext}</p>
+                      </div>
+                      <Download className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 shrink-0" />
+                    </a>
+                  </div>
+                </div>
+              );
+            }
+
+            // Activity entry
+            const activity = item.data;
             const Icon = activityIcons[activity.activity_type] || MessageSquare;
             const colorClass = activityColors[activity.activity_type] || "bg-muted text-muted-foreground";
-            const activityDate = new Date(activity.created_at);
-
-            // Date separator: show when date differs from previous activity
-            const prevDate = idx > 0 ? new Date(activities[idx - 1].created_at) : null;
-            const showDateSep = !prevDate || format(activityDate, "yyyy-MM-dd") !== format(prevDate, "yyyy-MM-dd");
 
             return (
               <div key={activity.id}>
-                {/* Date separator */}
                 {showDateSep && (
                   <div className="flex items-center gap-3 py-3">
                     <div className="flex-1 h-px bg-border" />
                     <span className="text-xs font-medium text-primary shrink-0">
-                      {format(activityDate, "MMMM d, yyyy")}
+                      {format(itemDate, "MMMM d, yyyy")}
                     </span>
                   </div>
                 )}
 
-                {/* Activity entry — Odoo chatter style */}
                 <div className="flex gap-3 py-2">
                   <div className={cn("w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5", colorClass)}>
                     <Icon className="w-3.5 h-3.5" />
@@ -304,13 +359,12 @@ export function LeadTimeline({ lead }: LeadTimelineProps) {
                       <span className="text-sm font-semibold">{activity.created_by || "System"}</span>
                       {activity.activity_type === "email" && <Mail className="w-3 h-3 text-muted-foreground" />}
                       <span className="text-xs text-muted-foreground">
-                        – {formatDistanceToNow(activityDate, { addSuffix: true })}
+                        – {format(itemDate, "h:mm a")} · {formatDistanceToNow(itemDate, { addSuffix: true })}
                       </span>
                       {activity.completed_at && (
                         <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
                       )}
                     </div>
-                    {/* Title as prefix for system/stage entries */}
                     {activity.activity_type === "stage_change" && (
                       <p className="text-sm mt-1">{activity.title}</p>
                     )}
@@ -331,4 +385,20 @@ export function LeadTimeline({ lead }: LeadTimelineProps) {
       )}
     </div>
   );
+}
+
+// File icon helpers
+function getFileIcon(mime: string, ext: string) {
+  if (mime.startsWith("image/")) return Image;
+  if (["XLS", "XLSX", "CSV"].includes(ext)) return FileSpreadsheet;
+  if (ext === "PDF") return FileText;
+  return File;
+}
+
+function getFileIconColor(ext: string): string {
+  if (["XLS", "XLSX", "CSV"].includes(ext)) return "text-green-600";
+  if (ext === "PDF") return "text-red-500";
+  if (["DWG", "DXF"].includes(ext)) return "text-cyan-500";
+  if (["PNG", "JPG", "JPEG", "GIF"].includes(ext)) return "text-blue-500";
+  return "text-muted-foreground";
 }
