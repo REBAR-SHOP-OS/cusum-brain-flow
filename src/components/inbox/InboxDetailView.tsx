@@ -40,12 +40,34 @@ export function InboxDetailView({ email, onClose }: InboxDetailViewProps) {
     setLoadingThread(true);
     try {
       const senderEmail = email.senderEmail;
-      const { data, error } = await supabase
-        .from("communications")
-        .select("*")
-        .or(`from_address.ilike.%${senderEmail}%,to_address.ilike.%${senderEmail}%`)
-        .order("received_at", { ascending: false })
-        .limit(50);
+      
+      // If we have a threadId, fetch by thread first for accurate grouping
+      let data: any[] | null = null;
+      let error: any = null;
+
+      if (email.threadId) {
+        const result = await supabase
+          .from("communications")
+          .select("*")
+          .eq("thread_id", email.threadId)
+          .order("received_at", { ascending: false })
+          .limit(50);
+        data = result.data;
+        error = result.error;
+      }
+
+      // Fallback: exact email match (not substring) if no threadId or no results
+      if (!data || data.length === 0) {
+        const escapedEmail = senderEmail.replace(/[%_]/g, '\\$&');
+        const result = await supabase
+          .from("communications")
+          .select("*")
+          .or(`from_address.ilike.%<${escapedEmail}>%,from_address.eq.${senderEmail},to_address.ilike.%<${escapedEmail}>%,to_address.eq.${senderEmail}`)
+          .order("received_at", { ascending: false })
+          .limit(50);
+        data = result.data;
+        error = result.error;
+      }
 
       if (error) throw error;
 
