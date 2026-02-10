@@ -1410,6 +1410,48 @@ export type Database = {
         }
         Relationships: []
       }
+      face_enrollments: {
+        Row: {
+          created_at: string
+          enrolled_at: string
+          id: string
+          is_active: boolean
+          photo_url: string
+          profile_id: string
+        }
+        Insert: {
+          created_at?: string
+          enrolled_at?: string
+          id?: string
+          is_active?: boolean
+          photo_url: string
+          profile_id: string
+        }
+        Update: {
+          created_at?: string
+          enrolled_at?: string
+          id?: string
+          is_active?: boolean
+          photo_url?: string
+          profile_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "face_enrollments_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "face_enrollments_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       financial_access_log: {
         Row: {
           action: string

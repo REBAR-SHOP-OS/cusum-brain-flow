@@ -116,3 +116,6 @@ verify_jwt = false
 
 [functions.sync-odoo-quotations]
 verify_jwt = false
+
+[functions.face-recognize]
+verify_jwt = false
