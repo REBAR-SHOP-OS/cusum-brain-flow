@@ -218,7 +218,7 @@ export function LeadDetailDrawer({
             </TabsContent>
 
             <TabsContent value="files" className="space-y-4 mt-0">
-              <LeadFiles metadata={lead.metadata} />
+              <LeadFiles metadata={lead.metadata} leadId={lead.id} />
             </TabsContent>
 
             <TabsContent value="financials" className="space-y-4 mt-0">

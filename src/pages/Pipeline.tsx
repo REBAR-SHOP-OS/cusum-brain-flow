@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, Mail, Loader2, RefreshCw, ClipboardList } from "lucide-react";
+import { Plus, Search, Mail, Loader2, RefreshCw, ClipboardList, History } from "lucide-react";
 import { PipelineBoard } from "@/components/pipeline/PipelineBoard";
 import { PipelineAnalytics } from "@/components/pipeline/PipelineAnalytics";
 import { LeadFormModal } from "@/components/pipeline/LeadFormModal";
@@ -43,6 +43,7 @@ export default function Pipeline() {
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isScanningRfq, setIsScanningRfq] = useState(false);
   const [isSyncingOdoo, setIsSyncingOdoo] = useState(false);
+  const [isSyncingHistory, setIsSyncingHistory] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { isSyncing: isSyncingQuotations, syncQuotations } = useOdooQuotations();
@@ -203,6 +204,30 @@ export default function Pipeline() {
     }
   };
 
+  const handleSyncHistory = async () => {
+    setIsSyncingHistory(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("sync-odoo-history");
+      if (error) throw error;
+
+      queryClient.invalidateQueries({ queryKey: ["lead-activities"] });
+      queryClient.invalidateQueries({ queryKey: ["lead-files"] });
+      toast({
+        title: `History synced: ${data.messages_added} messages, ${data.files_added} files`,
+        description: `Processed ${data.leads_processed}/${data.total_leads} leads${data.remaining ? " (more remaining, run again)" : ""}`,
+      });
+    } catch (err) {
+      console.error("History sync error:", err);
+      toast({
+        title: "History sync failed",
+        description: err instanceof Error ? err.message : "Failed to sync history",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSyncingHistory(false);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -255,6 +280,16 @@ export default function Pipeline() {
           >
             {isSyncingQuotations ? <Loader2 className="w-4 h-4 animate-spin" /> : <ClipboardList className="w-4 h-4" />}
             <span className="hidden sm:inline">Sync Quotes</span>
+          </Button>
+          <Button
+            onClick={handleSyncHistory}
+            size="sm"
+            variant="outline"
+            disabled={isSyncingHistory}
+            className="gap-2"
+          >
+            {isSyncingHistory ? <Loader2 className="w-4 h-4 animate-spin" /> : <History className="w-4 h-4" />}
+            <span className="hidden sm:inline">Sync History</span>
           </Button>
           <Button onClick={() => setIsFormOpen(true)} size="sm" className="gap-2">
             <Plus className="w-4 h-4" />

@@ -33,6 +33,8 @@ const activityIcons: Record<string, React.ElementType> = {
   ai_suggestion: Bot,
   follow_up: Clock,
   internal_task: FileText,
+  comment: MessageSquare,
+  system: Zap,
 };
 
 const activityColors: Record<string, string> = {
@@ -44,6 +46,8 @@ const activityColors: Record<string, string> = {
   ai_suggestion: "bg-primary/10 text-primary",
   follow_up: "bg-orange-500/10 text-orange-500",
   internal_task: "bg-muted text-muted-foreground",
+  comment: "bg-blue-500/10 text-blue-500",
+  system: "bg-muted text-muted-foreground",
 };
 
 interface AISuggestion {

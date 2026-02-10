@@ -1773,6 +1773,7 @@ export type Database = {
           id: string
           lead_id: string
           metadata: Json | null
+          odoo_message_id: number | null
           title: string
           updated_at: string
         }
@@ -1787,6 +1788,7 @@ export type Database = {
           id?: string
           lead_id: string
           metadata?: Json | null
+          odoo_message_id?: number | null
           title: string
           updated_at?: string
         }
@@ -1801,12 +1803,63 @@ export type Database = {
           id?: string
           lead_id?: string
           metadata?: Json | null
+          odoo_message_id?: number | null
           title?: string
           updated_at?: string
         }
         Relationships: [
           {
             foreignKeyName: "lead_activities_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lead_files: {
+        Row: {
+          company_id: string
+          created_at: string
+          file_name: string
+          file_size_bytes: number | null
+          file_url: string | null
+          id: string
+          lead_id: string
+          mime_type: string | null
+          odoo_id: number | null
+          source: string | null
+          storage_path: string | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          file_name: string
+          file_size_bytes?: number | null
+          file_url?: string | null
+          id?: string
+          lead_id: string
+          mime_type?: string | null
+          odoo_id?: number | null
+          source?: string | null
+          storage_path?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          file_name?: string
+          file_size_bytes?: number | null
+          file_url?: string | null
+          id?: string
+          lead_id?: string
+          mime_type?: string | null
+          odoo_id?: number | null
+          source?: string | null
+          storage_path?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_files_lead_id_fkey"
             columns: ["lead_id"]
             isOneToOne: false
             referencedRelation: "leads"
