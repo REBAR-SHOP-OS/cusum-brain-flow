@@ -283,58 +283,50 @@ export default function Pipeline() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <header className="flex flex-col gap-3 px-4 sm:px-6 py-3 sm:py-4 border-b border-border shrink-0">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
-          <div className="flex items-center gap-4 flex-wrap">
+      <header className="px-4 sm:px-6 py-2.5 border-b border-border shrink-0 space-y-2">
+        {/* Row 1: Title, stats, search, actions */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-3 mr-auto">
             <div>
-              <h1 className="text-xl font-semibold">Pipeline</h1>
-              <p className="text-sm text-muted-foreground">
-                {filteredLeads.length}{filteredLeads.length !== leads.length ? ` / ${leads.length}` : ""} lead{filteredLeads.length !== 1 ? "s" : ""}
+              <h1 className="text-lg font-semibold leading-tight">Pipeline</h1>
+              <p className="text-xs text-muted-foreground">
+                {filteredLeads.length}{filteredLeads.length !== leads.length ? ` / ${leads.length}` : ""} leads
               </p>
             </div>
-            <PipelineAnalytics leads={filteredLeads} />
+            <div className="hidden md:flex">
+              <PipelineAnalytics leads={filteredLeads} />
+            </div>
           </div>
-        <div className="flex items-center gap-3 w-full sm:w-auto">
-          <div className="relative flex-1 sm:flex-initial sm:w-48 lg:w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+
+          <div className="relative w-40 lg:w-56">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
             <Input
-              placeholder="Search leads..."
+              placeholder="Search..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9"
+              className="pl-8 h-8 text-sm"
             />
           </div>
-          <Button
-            onClick={handleScanRfq}
-            size="sm"
-            variant="outline"
-            disabled={isScanningRfq}
-            className="gap-2"
-          >
-            {isScanningRfq ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
-            <span className="hidden sm:inline">Scan RFQ</span>
+
+          <Button onClick={handleScanRfq} size="sm" variant="ghost" disabled={isScanningRfq} className="gap-1.5 h-8 px-2.5">
+            {isScanningRfq ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Mail className="w-3.5 h-3.5" />}
+            <span className="hidden lg:inline text-xs">Scan RFQ</span>
           </Button>
-          <Button
-            onClick={handleSyncHistory}
-            size="sm"
-            variant="outline"
-            disabled={isSyncingHistory}
-            className="gap-2"
-          >
-            {isSyncingHistory ? <Loader2 className="w-4 h-4 animate-spin" /> : <History className="w-4 h-4" />}
-            <span className="hidden sm:inline">Sync History</span>
+          <Button onClick={handleSyncHistory} size="sm" variant="ghost" disabled={isSyncingHistory} className="gap-1.5 h-8 px-2.5">
+            {isSyncingHistory ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <History className="w-3.5 h-3.5" />}
+            <span className="hidden lg:inline text-xs">Sync</span>
           </Button>
-          <Button onClick={() => setIsAISheetOpen(true)} size="sm" variant="outline" className="gap-2 border-primary/30 text-primary hover:bg-primary/10">
-            <Sparkles className="w-4 h-4" />
-            <span className="hidden sm:inline">Blitz AI</span>
+          <Button onClick={() => setIsAISheetOpen(true)} size="sm" variant="ghost" className="gap-1.5 h-8 px-2.5 text-primary hover:bg-primary/10">
+            <Sparkles className="w-3.5 h-3.5" />
+            <span className="hidden lg:inline text-xs">Blitz</span>
           </Button>
-          <Button onClick={() => setIsFormOpen(true)} size="sm" className="gap-2">
-            <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline">Add Lead</span>
+          <Button onClick={() => setIsFormOpen(true)} size="sm" className="gap-1.5 h-8">
+            <Plus className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline text-xs">Add Lead</span>
           </Button>
         </div>
-        </div>
-        {/* Filter bar */}
+
+        {/* Row 2: Filters */}
         <PipelineFilters
           filters={pipelineFilters}
           onFiltersChange={setPipelineFilters}
