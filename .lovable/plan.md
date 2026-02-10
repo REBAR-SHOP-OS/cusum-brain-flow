@@ -1,32 +1,24 @@
 
 
-## Move CEO Command, Time Clock, and Team Hub to Home Dashboard
+## Make Workspace Icons More Graphical
 
-### What's Changing
+### What Changes
 
-**Remove from ShopFloor Select Interface** (`src/pages/ShopFloor.tsx`):
-- Remove the "CEO COMMAND", "TIME CLOCK", and "TEAM HUB" cards from the `hubCards` array (lines 25-49)
-- The remaining cards (Office, Shop Floor, Clearance, Loading St., Delivery, Pickup St.) stay untouched
+**File: `src/pages/Home.tsx`** (lines 196-220)
 
-**Add to Home Dashboard** (`src/pages/Home.tsx`):
-- Add a new "Workspaces" section between the Quick Actions and Automations sections
-- Three new navigation cards styled consistently with the Home page design:
-  - **CEO Command** -- navigates to `/office` with `{ section: "ceo-dashboard" }` state, Crown icon
-  - **Time Clock** -- navigates to `/timeclock`, Clock icon
-  - **Team Hub** -- navigates to `/team-hub`, MessageSquare icon
-- Cards will use a clean grid layout (3 columns on desktop, stacked on mobile) with subtle gradient borders matching the app's dark theme
+Upgrade the icon containers in the Workspaces section from plain `bg-primary/10` squares to visually rich, gradient-backed containers with larger icons and subtle glow effects:
+
+- **CEO Command**: Gold/amber gradient background (`from-amber-500/20 to-yellow-500/10`), amber-tinted icon
+- **Time Clock**: Teal/cyan gradient background (`from-teal-500/20 to-cyan-500/10`), teal-tinted icon  
+- **Team Hub**: Purple/indigo gradient background (`from-purple-500/20 to-indigo-500/10`), purple-tinted icon
+
+Each icon container will be slightly larger (`p-3` instead of `p-2.5`) with a subtle border ring (`ring-1 ring-white/10`) and the icons bumped to `w-6 h-6` for better presence.
 
 ### Technical Details
 
-**File 1: `src/pages/ShopFloor.tsx`**
-- Delete entries for CEO COMMAND (lines 25-29), TIME CLOCK (lines 41-44), and TEAM HUB (lines 45-49) from the `hubCards` array
-
-**File 2: `src/pages/Home.tsx`**
-- Import `Crown`, `Clock`, `MessageSquare` from lucide-react
-- Add a `workspaceCards` array with the three items (label, icon, route, state)
-- Render a "Workspaces" section with a 3-column card grid between Quick Actions and Automations
-- Each card uses `navigate()` on click, styled with the existing `Card` component
+Update the inline workspace array to include per-card color classes, then apply them to the icon wrapper div. Only the className strings change -- no new components, files, or dependencies.
 
 ### Scope
-- Only 2 files modified: `ShopFloor.tsx` and `Home.tsx`
-- No backend, edge function, CSS, or other component changes
+- Single file: `src/pages/Home.tsx`
+- CSS class changes only, no layout or functionality changes
+
