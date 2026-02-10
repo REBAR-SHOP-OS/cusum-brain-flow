@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { useProfiles } from "@/hooks/useProfiles";
@@ -27,18 +27,17 @@ export function FaceEnrollment({ existingCount, onComplete }: FaceEnrollmentProp
   const [photos, setPhotos] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
-  // Sync stream to video element when it changes
-  useEffect(() => {
-    const video = videoRef.current;
+  const videoCallbackRef = useCallback((video: HTMLVideoElement | null) => {
+    videoRef.current = video;
     if (video && streamRef.current) {
       video.srcObject = streamRef.current;
       video.play().catch(() => {});
     }
-  }, [cameraActive]);
+  }, []);
 
   const startCamera = useCallback(async () => {
     try {
@@ -195,7 +194,7 @@ export function FaceEnrollment({ existingCount, onComplete }: FaceEnrollmentProp
 
               <div className="relative rounded-xl overflow-hidden bg-black aspect-[4/3]">
                 {cameraActive ? (
-                  <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+                  <video ref={videoCallbackRef} autoPlay playsInline muted className="w-full h-full object-cover" />
                 ) : (
                   <div className="flex items-center justify-center h-full">
                     <Camera className="w-12 h-12 text-muted-foreground/50" />
