@@ -51,6 +51,7 @@ import NotFound from "./pages/NotFound";
 import ClearanceStation from "./pages/ClearanceStation";
 import AccountingWorkspace from "./pages/AccountingWorkspace";
 import CustomerPortal from "./pages/CustomerPortal";
+import CEOPortal from "./pages/CEOPortal";
 const queryClient = new QueryClient();
 
 /** Helper to wrap protected routes with layout + page-level error boundary */
@@ -91,6 +92,7 @@ const App = () => (
 
                     {/* Core */}
                     <Route path="/home" element={<P><Home /></P>} />
+                    <Route path="/ceo" element={<P><CEOPortal /></P>} />
                     <Route path="/inbox" element={<P><Inbox /></P>} />
                     <Route path="/tasks" element={<P><Tasks /></P>} />
                     <Route path="/phonecalls" element={<P><Phonecalls /></P>} />
