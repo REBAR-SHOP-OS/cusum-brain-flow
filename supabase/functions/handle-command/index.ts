@@ -1,68 +1,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { requireAuth, corsHeaders } from "../_shared/auth.ts";
 
 interface CommandRequest {
   input: string;
 }
 
-// Deterministic intent parsing
-function parseIntent(input: string): { intent: string; params: Record<string, string> } {
-  const lower = input.toLowerCase().trim();
-
-  // Navigation intents
-  if (/\b(go to|open|show|navigate)\b.*\b(dashboard|home)\b/.test(lower)) {
-    return { intent: "navigate", params: { page: "/home" } };
-  }
-  if (/\b(go to|open|show)\b.*\b(inbox|email)\b/.test(lower)) {
-    return { intent: "navigate", params: { page: "/inbox" } };
-  }
-  if (/\b(go to|open|show)\b.*\b(shop\s*floor|station)\b/.test(lower)) {
-    return { intent: "navigate", params: { page: "/shop-floor" } };
-  }
-  if (/\b(go to|open|show)\b.*\b(office|portal)\b/.test(lower)) {
-    return { intent: "navigate", params: { page: "/office" } };
-  }
-  if (/\b(go to|open|show)\b.*\b(deliver|logistics)\b/.test(lower)) {
-    return { intent: "navigate", params: { page: "/deliveries" } };
-  }
-  if (/\b(go to|open|show)\b.*\b(pipeline|deals|sales)\b/.test(lower)) {
-    return { intent: "navigate", params: { page: "/pipeline" } };
-  }
-  if (/\b(go to|open|show)\b.*\b(customer)\b/.test(lower)) {
-    return { intent: "navigate", params: { page: "/customers" } };
-  }
-  if (/\b(go to|open|show)\b.*\b(task)\b/.test(lower)) {
-    return { intent: "navigate", params: { page: "/tasks" } };
-  }
-  if (/\b(go to|open|show)\b.*\b(inventory|stock)\b/.test(lower)) {
-    return { intent: "navigate", params: { page: "/office" } };
-  }
-
-  // Query intents
-  if (/\b(how many|count|total)\b.*\b(order|job|work\s*order)\b/.test(lower)) {
-    return { intent: "query_orders", params: {} };
-  }
-  if (/\b(what|which)\b.*\b(machine|station)\b.*\b(idle|free|available)\b/.test(lower)) {
-    return { intent: "query_machines", params: { status: "idle" } };
-  }
-  if (/\b(what|which)\b.*\b(machine|station)\b.*\b(running|active|busy)\b/.test(lower)) {
-    return { intent: "query_machines", params: { status: "running" } };
-  }
-  if (/\bstock\b.*\b(level|check|how much)\b|\bhow much\b.*\b(stock|inventory|rebar)\b/.test(lower)) {
-    return { intent: "query_inventory", params: {} };
-  }
-  if (/\b(what|next|suggest)\b.*\b(should|do|action|step)\b/.test(lower)) {
-    return { intent: "suggest_next", params: {} };
-  }
-
-  // Fallback: AI-powered response
-  return { intent: "ai_ask", params: { question: input } };
-}
+// ... keep existing code (parseIntent function)
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -74,14 +18,14 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get user from auth header
-    const authHeader = req.headers.get("Authorization");
-    let userId: string | null = null;
-    if (authHeader) {
-      const token = authHeader.replace("Bearer ", "");
-      const anonClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!);
-      const { data: { user } } = await anonClient.auth.getUser(token);
-      userId = user?.id ?? null;
+    // Auth guard — enforce authentication
+    let userId: string;
+    try {
+      const auth = await requireAuth(req);
+      userId = auth.userId;
+    } catch (res) {
+      if (res instanceof Response) return res;
+      throw res;
     }
 
     const { input } = (await req.json()) as CommandRequest;

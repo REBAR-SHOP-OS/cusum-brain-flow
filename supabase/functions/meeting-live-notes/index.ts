@@ -1,10 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { requireAuth, corsHeaders } from "../_shared/auth.ts";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -12,6 +8,9 @@ serve(async (req) => {
   }
 
   try {
+    // Auth guard
+    try { await requireAuth(req); } catch (res) { if (res instanceof Response) return res; throw res; }
+
     const { meetingId, transcript, previousNotes } = await req.json();
     if (!meetingId || !transcript) {
       throw new Error("meetingId and transcript are required");

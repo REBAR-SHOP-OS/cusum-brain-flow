@@ -2,31 +2,9 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { encode as base64Encode } from "https://deno.land/std@0.190.0/encoding/base64.ts";
 import * as XLSX from "https://esm.sh/xlsx@0.18.5";
+import { requireAuth, corsHeaders } from "../_shared/auth.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
-
-// Map file extensions to MIME types the AI gateway accepts
-function getMimeType(fileName: string): string {
-  const ext = (fileName.split(".").pop() || "").toLowerCase();
-  const map: Record<string, string> = {
-    xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    xls: "application/vnd.ms-excel",
-    csv: "text/csv",
-    pdf: "application/pdf",
-    png: "image/png",
-    jpg: "image/jpeg",
-    jpeg: "image/jpeg",
-    gif: "image/gif",
-    webp: "image/webp",
-    bmp: "image/bmp",
-    tif: "image/tiff",
-    tiff: "image/tiff",
-  };
-  return map[ext] || "application/octet-stream";
-}
+// ... keep existing code (getMimeType function)
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -34,20 +12,14 @@ serve(async (req) => {
   }
 
   try {
-    // Auth check + rate limiting
-    const authHeader = req.headers.get("Authorization");
-    let rateLimitId = "anonymous";
-    if (authHeader?.startsWith("Bearer ")) {
-      const supabase = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_ANON_KEY")!,
-        { global: { headers: { Authorization: authHeader } } }
-      );
-      const token = authHeader.replace("Bearer ", "");
-      const { data: claimsData } = await supabase.auth.getClaims(token);
-      if (claimsData?.claims?.sub) {
-        rateLimitId = claimsData.claims.sub as string;
-      }
+    // Auth guard — enforce authentication
+    let rateLimitId: string;
+    try {
+      const auth = await requireAuth(req);
+      rateLimitId = auth.userId;
+    } catch (res) {
+      if (res instanceof Response) return res;
+      throw res;
     }
 
     const svcClient = createClient(

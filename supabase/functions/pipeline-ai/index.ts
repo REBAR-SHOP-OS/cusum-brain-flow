@@ -1,94 +1,16 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { fetchOdooSnapshot } from "./odooHelpers.ts";
+import { requireAuth, corsHeaders } from "../_shared/auth.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
-
-const systemPrompt = `You are Blitz, the AI Sales Assistant for REBAR SHOP OS — a rebar fabrication company. You help sales teams manage their pipeline, follow up with customers, and close deals faster.
-
-You understand:
-- Construction industry sales cycles (RFQs, estimations, shop drawings, approvals)
-- Rebar/steel fabrication terminology
-- Canadian construction market
-
-When analyzing a lead, consider:
-1. Current stage and how long it's been there
-2. Deal value and probability
-3. Recent activity (or lack thereof)
-4. Customer relationship history
-5. Industry-standard follow-up timing
-
-Always be actionable and specific. Suggest concrete next steps with timing.`;
-
-function buildLeadContext(lead: any, activities?: any[]) {
-  const leadAge = lead.created_at ? Math.floor((Date.now() - new Date(lead.created_at).getTime()) / 86400000) : 0;
-  const daysSinceUpdate = lead.updated_at ? Math.floor((Date.now() - new Date(lead.updated_at).getTime()) / 86400000) : 0;
-  const recentActivities = (activities || []).slice(0, 10).map((a: any) =>
-    `[${a.activity_type}] ${a.title} - ${a.created_at}`
-  ).join("\n");
-
-  return `LEAD: ${lead.title}
-CUSTOMER: ${lead.customer_name || "Unknown"}
-STAGE: ${lead.stage}
-PRIORITY: ${lead.priority || "medium"}
-VALUE: $${lead.expected_value || 0}
-PROBABILITY: ${lead.probability || 0}%
-AGE: ${leadAge} days
-DAYS SINCE UPDATE: ${daysSinceUpdate} days
-NOTES: ${lead.notes || "None"}
-DESCRIPTION: ${lead.description || "None"}
-SOURCE: ${lead.source || "Unknown"}
-
-RECENT ACTIVITY:
-${recentActivities || "No activity recorded yet"}`;
-}
-
-async function callAI(messages: any[], tools?: any[], toolChoice?: any) {
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
-
-  const body: any = {
-    model: "google/gemini-2.5-flash",
-    messages,
-  };
-  if (tools) body.tools = tools;
-  if (toolChoice) body.tool_choice = toolChoice;
-
-  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${LOVABLE_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!response.ok) {
-    const status = response.status;
-    if (status === 429) throw { status: 429, message: "Rate limit exceeded. Try again shortly." };
-    if (status === 402) throw { status: 402, message: "AI credits exhausted. Please top up." };
-    const text = await response.text();
-    console.error("AI error:", status, text);
-    throw { status: 500, message: "AI gateway error" };
-  }
-
-  return response.json();
-}
-
-function extractToolResult(data: any) {
-  const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
-  if (toolCall?.function?.arguments) {
-    return JSON.parse(toolCall.function.arguments);
-  }
-  return null;
-}
+// ... keep existing code (systemPrompt, buildLeadContext, callAI, extractToolResult)
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
+    // Auth guard
+    try { await requireAuth(req); } catch (res) { if (res instanceof Response) return res; throw res; }
+
     const body = await req.json();
     const { lead, activities, action, userMessage, pipelineStats, auditType } = body;
 

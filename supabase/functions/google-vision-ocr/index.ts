@@ -1,15 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
-
-interface VisionRequest {
-  imageUrl?: string;
-  imageBase64?: string;
-  features?: string[];
-}
+import { optionalAuth, corsHeaders } from "../_shared/auth.ts";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -17,6 +7,16 @@ serve(async (req) => {
   }
 
   try {
+    // Auth check — allow internal calls (from other edge functions) and authenticated users
+    const userId = await optionalAuth(req);
+    // Internal calls from edge functions use service anon key; external calls must have auth
+    const isInternalCall = req.headers.get("apikey") === Deno.env.get("SUPABASE_ANON_KEY");
+    if (!userId && !isInternalCall) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const credentialsJson = Deno.env.get("GOOGLE_VISION_CREDENTIALS");
     if (!credentialsJson) {
       throw new Error("GOOGLE_VISION_CREDENTIALS not configured");
