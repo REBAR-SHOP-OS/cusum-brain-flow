@@ -306,9 +306,11 @@ serve(async (req) => {
         .limit(30),
       supabase
         .from("leads")
-        .select("title, stage, expected_value, priority, source, expected_close_date")
+        .select("title, stage, expected_value, priority, source, expected_close_date, updated_at")
+        .gte("updated_at", dayStart)
+        .lte("updated_at", dayEnd)
         .order("updated_at", { ascending: false })
-        .limit(20),
+        .limit(30),
       supabase
         .from("orders")
         .select("order_number, status, total_amount, required_date, notes")
