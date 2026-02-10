@@ -13,21 +13,50 @@ import { AgentHistorySidebar } from "@/components/agent/AgentHistorySidebar";
 import { useChatSessions } from "@/hooks/useChatSessions";
 import { cn } from "@/lib/utils";
 import { agentConfigs } from "@/components/agent/agentConfigs";
+import { useAuth } from "@/lib/auth";
+import { getUserAgentMapping } from "@/lib/userAgentMap";
 
 export default function AgentWorkspace() {
   const { agentId } = useParams<{ agentId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuth();
   const config = agentConfigs[agentId || ""] || agentConfigs.sales;
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [autoBriefingSent, setAutoBriefingSent] = useState(false);
 
   const { sessions, loading: sessionsLoading, fetchSessions, createSession, addMessage, getSessionMessages, deleteSession } = useChatSessions();
   const hasConversation = messages.length > 0;
   const suggestions = agentSuggestions[agentId || "sales"] || agentSuggestions.sales;
+
+  // Check if this user has a mapping to this agent for auto-briefing
+  const mapping = getUserAgentMapping(user?.email);
+  const isUsersPrimaryAgent = mapping?.agentKey === agentId;
+
+  // Auto-briefing for mapped users on their primary agent
+  useEffect(() => {
+    if (isUsersPrimaryAgent && !autoBriefingSent && messages.length === 0 && !isLoading) {
+      const state = location.state as { initialMessage?: string } | null;
+      if (state?.initialMessage) return; // skip if coming from quick action
+      
+      setAutoBriefingSent(true);
+      let briefingPrompt = "";
+      if (mapping?.userRole === "ceo") {
+        briefingPrompt = "Give me my daily executive briefing — business health, exceptions, and anything that needs my attention across all departments.";
+      } else if (mapping?.userRole === "shop_supervisor") {
+        briefingPrompt = "Give me my shop floor briefing — machine status, today's production queue, maintenance alerts, and anything that needs my attention.";
+      } else if (mapping?.userRole === "estimator") {
+        briefingPrompt = "Give me my estimating briefing — open takeoffs, QC flags, and drawing revisions needing review.";
+      }
+      if (briefingPrompt) {
+        handleSend(briefingPrompt);
+      }
+    }
+  }, [isUsersPrimaryAgent, autoBriefingSent, messages.length, isLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load a session's messages
   const loadSession = useCallback(async (sessionId: string) => {
@@ -42,23 +71,26 @@ export default function AgentWorkspace() {
       }))
     );
     setActiveSessionId(sessionId);
+    setAutoBriefingSent(true); // don't auto-brief when loading history
   }, [getSessionMessages]);
 
   // Start a new empty chat
   const handleNewChat = useCallback(() => {
     setMessages([]);
     setActiveSessionId(null);
+    setAutoBriefingSent(true); // don't auto-brief on manual new chat
   }, []);
 
   // Auto-send initial message from Quick Actions
   useEffect(() => {
     const state = location.state as { initialMessage?: string } | null;
     if (state?.initialMessage && messages.length === 0 && !isLoading) {
-      // Clear the state so it doesn't re-fire on re-render
       window.history.replaceState({}, "");
+      setAutoBriefingSent(true);
       handleSend(state.initialMessage);
     }
   }, [location.state]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleSend = useCallback(async (content: string) => {
     const userMsg: Message = {
       id: crypto.randomUUID(),
@@ -77,12 +109,19 @@ export default function AgentWorkspace() {
         : content;
       sessionId = await createSession(sessionTitle, config.name);
       setActiveSessionId(sessionId);
-      // createSession already calls fetchSessions internally
     }
 
     // Persist user message
     if (sessionId) {
       addMessage(sessionId, "user", content);
+    }
+
+    // Build context with user role info
+    const extraContext: Record<string, unknown> = {};
+    if (mapping) {
+      extraContext.userRole = mapping.userRole;
+      if (mapping.userRole === "ceo") extraContext.isCEO = true;
+      if (mapping.userRole === "shop_supervisor") extraContext.isShopSupervisor = true;
     }
 
     try {
@@ -91,7 +130,7 @@ export default function AgentWorkspace() {
         content: m.content,
       }));
 
-      const response = await sendAgentMessage(config.agentType, content, history);
+      const response = await sendAgentMessage(config.agentType, content, history, extraContext);
 
       // Build reply with created notification badges
       let replyContent = response.reply;
@@ -127,7 +166,7 @@ export default function AgentWorkspace() {
     } finally {
       setIsLoading(false);
     }
-  }, [messages, config.agentType, config.name, activeSessionId, createSession, addMessage]);
+  }, [messages, config.agentType, config.name, activeSessionId, createSession, addMessage, mapping]);
 
   return (
     <div className="flex h-full">

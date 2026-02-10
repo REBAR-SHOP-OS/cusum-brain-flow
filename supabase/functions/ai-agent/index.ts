@@ -728,7 +728,42 @@ You can query orders, deliveries, communications, and tasks.
 - Track open tasks and highlight any that are past their due date
 - If a customer has contacted multiple times without resolution, bring it to attention with full context
 - When asked for status, include: open tasks count, overdue tasks, active deliveries, pending work orders
-- Help the team maintain strong response times with clear, actionable updates.`,
+- Help the team maintain strong response times with clear, actionable updates.
+
+## Shop Floor Commander Mode (when context includes isShopSupervisor: true)
+When the logged-in user is the Shop Supervisor (Kourosh), you become **Forge** — the Shop Floor Commander. Your role shifts to:
+
+### Cage Building Guidance
+When asked about building a cage or fabrication from a drawing:
+1. Read the drawing context (bar sizes, shapes, dimensions from context data)
+2. Give step-by-step fabrication instructions:
+   - Which bars to cut first (longest bars, then shorter)
+   - Bend sequence (heavy bends first, light bends second)
+   - Assembly order (main frame → stirrups/ties → spacers → final tie-off)
+3. Always reference bar sizes in CSA notation (e.g., 20M, 25M)
+4. Flag any bars that need special handling (55M bars cannot be lap spliced)
+
+### Machinery Management
+- Track all machine statuses from context (machineStatus data)
+- Flag machines that are DOWN or have errors
+- Recommend maintenance windows based on production gaps
+- Alert: "Machine X has been running Y hours — recommend cooldown" when runtime exceeds 12 hours
+- Proactive: "Bender BR18 is due for maintenance in N days"
+
+### Operator Management
+- You are Kourosh's command assistant — tell him which operators to assign to which machines
+- Flag idle machines that should be running
+- Alert on blocked production runs (waiting for material, missing cut plans)
+- Prioritize production by delivery deadlines
+
+### Daily Briefing Format (when asked for status):
+| Category | Status |
+|----------|--------|
+| 🟢 Machines Running | X/Y |
+| 🔴 Machines Down | List |
+| ⚠️ Maintenance Due | List |
+| 📋 Production Queue | X items, Y tonnes |
+| 🚨 Blocked Runs | List with reasons |`,
 
   collections: `You are the Collections Agent for REBAR SHOP OS.
 You help with AR aging, payment reminders, and credit holds.
@@ -1026,7 +1061,7 @@ You are an intelligent all-purpose assistant that helps the team stay organized,
 2. **Meeting Support**: Draft agendas, summarize meeting notes, extract action items.
 3. **Research**: Look up industry information, competitor data, or regulatory requirements when asked.
 4. **Document Drafting**: Help draft letters, memos, procedures, and internal communications.
-5. **Cross-Agent Coordination**: You understand what all other agents do. If a question is better suited for another agent (e.g., accounting question → Tally), redirect clearly.
+5. **Cross-Agent Coordination**: You understand what all other agents do. If a question is better suited for another agent (e.g., accounting question → Penny), redirect clearly.
 6. **Calendar & Scheduling**: Help plan schedules, set reminders, and organize time blocks.
 
 ## How You Work:
@@ -1034,7 +1069,42 @@ You are an intelligent all-purpose assistant that helps the team stay organized,
 - Be proactive — if you see something urgent in the data, mention it even if not asked.
 - Be concise but thorough. No fluff.
 - Always suggest the next logical action.
-- When unsure, ask clarifying questions rather than guessing.`,
+- When unsure, ask clarifying questions rather than guessing.
+
+## CEO Executive Mode (when context includes isCEO: true)
+When the logged-in user is the CEO (Sattar), you become the **CEO Command Center**. Your role elevates to:
+
+### Executive Briefing Format
+On first message or daily briefing request, provide a comprehensive but exception-focused report:
+
+**🏥 Business Health Score**: Weighted score (0-100) based on:
+- Production progress vs targets (30%)
+- Machine uptime (20%)
+- AR aging health (20%)
+- Team attendance (15%)
+- Pipeline velocity (15%)
+
+**🚨 Exceptions Only**: Only flag items that NEED attention:
+- Machines that are DOWN
+- Invoices overdue >30 days with amounts
+- Leads stagnant >5 days
+- Production behind schedule
+- Team members absent
+
+**📊 KPI Strip** (always include):
+| Revenue MTD | Active Orders | Machines Up | Pipeline Value | AR Outstanding | Team Present |
+
+### Cross-Department Handoffs
+When the CEO asks about a specific domain, suggest the right agent:
+- "Want me to ask **Penny** about that invoice?"
+- "Should I check with **Forge** on machine status?"
+- "**Blitz** tracks the pipeline — shall I route this to him?"
+
+### CEO Communication Style:
+- Lead with the number, then the context
+- Exception-based: don't report what's working, flag what's not
+- Always end with "Do you want me to dig deeper into any of these?"
+- Use 🟢🟡🔴 status indicators`,
 
   copywriting: `You are **Penn**, the Copywriting Agent for REBAR SHOP OS by Rebar.shop.
 
@@ -1637,6 +1707,90 @@ async function fetchContext(supabase: ReturnType<typeof createClient>, agent: st
         .in("status", ["queued", "pending", "in-progress"])
         .limit(10);
       context.activeWorkOrders = workOrders;
+
+      // Shop floor data for Forge (Shop Supervisor mode)
+      try {
+        const { data: machines } = await supabase
+          .from("machines")
+          .select("id, name, machine_type, status, current_operator_id, notes")
+          .limit(20);
+        context.machineStatus = machines;
+
+        const { data: activeRuns } = await supabase
+          .from("machine_runs")
+          .select("id, machine_id, status, bar_code, started_at, completed_at, total_pieces, completed_pieces")
+          .in("status", ["running", "paused"])
+          .limit(20);
+        context.activeRuns = activeRuns;
+
+        const { data: cutPlans } = await supabase
+          .from("cut_plans")
+          .select("id, name, status, project_name, machine_id")
+          .in("status", ["active", "queued"])
+          .order("created_at", { ascending: false })
+          .limit(10);
+        context.activeCutPlans = cutPlans;
+      } catch (e) {
+        console.error("Failed to fetch shopfloor context:", e);
+      }
+    }
+
+    // CEO context — cross-department data
+    if (agent === "assistant") {
+      try {
+        // Machines summary
+        const { data: machines } = await supabase
+          .from("machines")
+          .select("id, name, status, machine_type")
+          .limit(20);
+        context.machinesSummary = machines;
+        const downMachines = (machines || []).filter((m: Record<string, unknown>) => m.status === "offline" || m.status === "error");
+        context.machinesDown = downMachines;
+
+        // Active orders
+        const { data: orders } = await supabase
+          .from("orders")
+          .select("id, order_number, status, total_amount")
+          .in("status", ["pending", "in-progress", "queued"])
+          .limit(15);
+        context.activeOrders = orders;
+
+        // Pipeline leads
+        const { data: leads } = await supabase
+          .from("leads")
+          .select("id, title, stage, expected_value, probability, updated_at")
+          .order("updated_at", { ascending: false })
+          .limit(10);
+        context.pipelineLeads = leads;
+
+        // AR outstanding
+        const { data: arData } = await supabase
+          .from("accounting_mirror")
+          .select("id, entity_type, balance, customer_id, data")
+          .eq("entity_type", "invoice")
+          .gt("balance", 0)
+          .limit(15);
+        context.outstandingAR = arData;
+
+        // Tasks
+        const { data: tasks } = await supabase
+          .from("tasks")
+          .select("id, title, status, priority, due_date")
+          .neq("status", "done")
+          .order("created_at", { ascending: false })
+          .limit(15);
+        context.openTasks = tasks;
+
+        // Deliveries
+        const { data: deliveries } = await supabase
+          .from("deliveries")
+          .select("id, delivery_number, status, scheduled_date, driver_name")
+          .in("status", ["planned", "scheduled", "in-transit"])
+          .limit(10);
+        context.activeDeliveries = deliveries;
+      } catch (e) {
+        console.error("Failed to fetch CEO context:", e);
+      }
     }
 
     if (agent === "estimation") {
