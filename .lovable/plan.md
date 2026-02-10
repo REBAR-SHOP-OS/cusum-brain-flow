@@ -1,61 +1,58 @@
 
 
-## Fix: Ben Can't See Pipeline + Daily Summarizer Mismatch
+## Ben's Personalized Daily Summarizer
 
-### Root Cause
+Currently the Daily Summarizer shows a generic company-wide digest (financials, social media, production, ERP, etc.) that isn't relevant to Ben's estimating role. This plan makes it fully personalized for `ben@rebar.shop` with his 8 specific categories.
 
-Ben (`ben@rebar.shop`) has the **sales** role. The current RLS policy on the `leads` table requires sales users to have `assigned_to = auth.uid()` to see any leads. Out of 1,046 active leads, **zero** are assigned to Ben's user ID -- so he sees an empty pipeline.
+### What Changes
 
-The Daily Summarizer uses the service role (bypasses RLS) and shows pipeline data in the digest that Ben then can't access in the actual Pipeline page. This creates a confusing mismatch.
+**1. Frontend hook (`src/hooks/useDailyDigest.ts`)** -- Pass the logged-in user's email to the edge function so it can personalize the response.
 
-### Changes
+**2. Edge function (`supabase/functions/daily-summary/index.ts`)** -- When email is `ben@rebar.shop`, fetch Ben-specific data and use a custom AI prompt with his 8 categories:
 
-**1. Fix Pipeline RLS policy** -- Allow all sales/accounting users in the same company to see ALL leads (not just their own). This matches how the communications policy was already updated to be company-wide.
+| # | Category | What it fetches |
+|---|----------|----------------|
+| 1 | Emails | Communications to/from `ben@rebar.shop` and `estimation@rebar.shop` |
+| 2 | Estimation Ben | Active leads assigned to Ben (open estimates, takeoffs, deadlines) |
+| 3 | QC Ben | Leads/files with QC flags or validation issues tied to Ben |
+| 4 | Addendums | Communications and lead files containing "addendum" or "revision" keywords |
+| 5 | Estimation Karthick | Active leads assigned to Karthick for Ben's oversight |
+| 6 | Shop Drawings | Lead files with "shop drawing" references, in-progress status |
+| 7 | Shop Drawings for Approval | Lead files with "shop drawing" that are pending approval |
+| 8 | Eisenhower | Ben's tasks, overdue items, recent emails, calls -- his priority matrix |
 
-```sql
-DROP POLICY IF EXISTS "Sales team reads own leads" ON public.leads;
+**3. Frontend display (`src/components/daily-digest/DigestContent.tsx`)** -- Add rendering for Ben's custom sections. The AI response will include a `benCategories` array (one object per category with title, items, urgentCount) that replaces the generic financial/social/production cards.
 
-CREATE POLICY "Sales team reads leads in company"
-ON public.leads FOR SELECT TO authenticated
-USING (
-  company_id = get_user_company_id(auth.uid())
-  AND has_any_role(auth.uid(), ARRAY['admin'::app_role, 'sales'::app_role, 'accounting'::app_role])
-);
-```
+**4. Stats grid** -- For Ben, show relevant stats only: Emails, Estimates (Ben), QC Flags, Addendums, Estimates (Karthick), Shop Drawings, Pending Approval, Overdue Tasks.
 
-**2. Fix Pipeline UPDATE policy** -- Similarly allow sales/accounting to update any lead in their company (needed for drag-and-drop stage changes).
+### Technical Details
 
-```sql
-DROP POLICY IF EXISTS "Sales team updates own leads" ON public.leads;
-
-CREATE POLICY "Sales team updates leads in company"
-ON public.leads FOR UPDATE TO authenticated
-USING (
-  company_id = get_user_company_id(auth.uid())
-  AND has_any_role(auth.uid(), ARRAY['admin'::app_role, 'sales'::app_role, 'accounting'::app_role])
-);
-```
-
-**3. Daily Summarizer -- scope leads to the target date** -- Currently the leads query in the edge function fetches the latest 20 leads regardless of date. It should filter to leads updated on the target date so the digest reflects that day's pipeline activity, not just a random snapshot.
-
-Change the leads query (line ~307) from:
+**Hook change** -- Get user email from auth and pass it:
 ```typescript
-// Current: no date filter
-.order("updated_at", { ascending: false }).limit(20)
+// useDailyDigest.ts
+const { user } = useAuth();
+supabase.functions.invoke("daily-summary", { 
+  body: { date: isoDate, userEmail: user?.email } 
+});
 ```
-To:
+
+**Edge function** -- Add a `ben@rebar.shop` detection block after the generic data fetch:
 ```typescript
-// Fixed: only leads updated on the target date
-.gte("updated_at", dayStart).lte("updated_at", dayEnd)
-.order("updated_at", { ascending: false }).limit(30)
+const { date, userEmail } = await req.json();
+
+if (userEmail === "ben@rebar.shop") {
+  // Fetch Ben-specific: his emails, his leads, Karthick's leads,
+  // lead_files for addendums/shop drawings, tasks, overdue items
+  // Use a Ben-specific AI prompt with 8 categories
+  // Return { digest: { benCategories: [...], ... }, stats: { ... } }
+}
 ```
 
-### What This Fixes
+The Ben-specific AI prompt instructs the model to return JSON with:
+- `benCategories`: array of 8 objects, each with `title`, `icon`, `items` (array of summaries), `urgentCount`
+- Plus the standard `greeting`, `affirmation`, `keyTakeaways`, `calendarEvents`, `tipOfTheDay`
 
-- Ben (and all sales team members) will see **all company leads** in the Pipeline board
-- The Daily Summarizer will show only leads that had activity on the selected date, making the digest accurate and actionable
-- No more mismatch between what the digest reports and what Ben can see in the UI
+**DigestContent** -- Detect `benCategories` in the digest and render category cards with urgency badges instead of the generic financial/social/production sections.
 
-### No Frontend Changes Needed
+**DigestStats type** -- Add optional Ben-specific stat fields: `estimatesBen`, `qcFlags`, `addendums`, `estimatesKarthick`, `shopDrawings`, `pendingApproval`, `overdueTasks`.
 
-The Pipeline page and Daily Summarizer page code remain unchanged -- only the database policies and the edge function query are updated.
