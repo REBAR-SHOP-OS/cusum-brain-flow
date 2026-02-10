@@ -59,7 +59,7 @@ export function OfficeSidebar({ active, onNavigate }: OfficeSidebarProps) {
       {/* Header */}
       <div className="px-4 py-4 flex items-center gap-2">
         <img src={brandLogo} alt="Rebar.shop" className="w-7 h-7 rounded-full object-contain" />
-        <span className="text-xs font-bold tracking-wider text-foreground uppercase">Office Portal</span>
+        <span className="text-xs font-bold tracking-wider text-foreground uppercase">Office Tools</span>
       </div>
 
       <ScrollArea className="flex-1 px-2">
