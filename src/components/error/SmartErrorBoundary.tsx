@@ -77,7 +77,7 @@ export class SmartErrorBoundary extends Component<Props, State> {
     // Auto-recovery: retry with exponential backoff
     if (this.state.retryCount < maxRetries) {
       const delay = Math.min(1000 * Math.pow(2, this.state.retryCount), 8000);
-      console.log(`[SmartErrorBoundary] Auto-recovering in ${delay}ms (attempt ${this.state.retryCount + 1}/${maxRetries})`);
+      // Auto-recovering with exponential backoff
       this.setState({ isAutoRecovering: true });
 
       this.retryTimer = setTimeout(() => {

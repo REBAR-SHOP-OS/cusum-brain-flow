@@ -155,7 +155,7 @@ serve(async (req) => {
     // Use this user's own Gmail token with IP tracking
     const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
     const accessToken = await getAccessTokenForUser(userId, clientIp);
-    console.log("Authenticated userId:", userId, "| sending to:", to);
+    
 
     // Fetch user's email signature
     const supabaseAdmin = createClient(

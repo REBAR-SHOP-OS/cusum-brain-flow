@@ -412,7 +412,7 @@ serve(async (req) => {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    console.log("Scanning communications for leads...");
+    
 
     const { data: emails, error: queryError } = await supabaseAdmin
       .from("communications")
@@ -423,7 +423,7 @@ serve(async (req) => {
       .limit(200);
 
     if (queryError) throw queryError;
-    console.log(`Found ${emails?.length || 0} emails involving @rebar.shop`);
+    
 
     if (!emails?.length) {
       return new Response(
@@ -435,7 +435,7 @@ serve(async (req) => {
     // Pre-filter system/bot emails
     const candidateEmails = emails.filter((e) => !shouldSkipSender(e.from_address || "", e.to_address || ""));
     const prefiltered = emails.length - candidateEmails.length;
-    console.log(`Pre-filtered ${prefiltered} system/bot emails, ${candidateEmails.length} candidates remain`);
+    
 
     if (candidateEmails.length === 0) {
       return new Response(
@@ -522,7 +522,7 @@ serve(async (req) => {
           customerId = matchedCustomer.id;
           matchedCustomerName = matchedCustomer.company_name || matchedCustomer.name;
           customerAction = "matched";
-          console.log(`Matched customer: "${analysis.sender_company}" → "${matchedCustomerName}" (${customerId})`);
+          
         } else if (analysis.sender_company && analysis.sender_company.trim() !== "") {
           // Create new customer
           const { data: newCustomer, error: custError } = await supabaseAdmin
@@ -542,7 +542,7 @@ serve(async (req) => {
             customerAction = "created";
             // Add to local list for future matching in this batch
             customers.push(newCustomer);
-            console.log(`Created new customer: "${analysis.sender_company}" (${customerId})`);
+            
           } else {
             console.error("Failed to create customer:", custError);
           }
@@ -631,7 +631,7 @@ serve(async (req) => {
           const emailAttachments = (meta?.attachments as Array<{ filename: string; mimeType: string; attachmentId: string; size?: number }>) || [];
 
           if (emailAttachments.length > 0 && email.source_id) {
-            console.log(`Downloading ${emailAttachments.length} attachments for lead ${newLead.id}`);
+            
             for (const att of emailAttachments.slice(0, 5)) { // cap at 5
               const stored = await downloadAndStoreAttachment(
                 supabaseAdmin, user.id, email.source_id, att, newLead.id
@@ -669,7 +669,7 @@ serve(async (req) => {
             leadMetadata.files = leadFiles;
             leadMetadata.attachment_count = leadFiles.filter(f => f.type === "attachment").length;
             leadMetadata.link_count = leadFiles.filter(f => f.type === "link").length;
-            console.log(`Saved ${leadFiles.length} files/links to lead ${newLead.id}`);
+            
           }
 
           await supabaseAdmin
@@ -717,7 +717,7 @@ serve(async (req) => {
       }
     }
 
-    console.log(`Done: ${created} created, ${skipped} already processed, ${filtered} AI-filtered, ${prefiltered} pre-filtered`);
+    
 
     return new Response(
       JSON.stringify({ created, skipped, filtered, prefiltered, total: emails.length, leads: results }),
