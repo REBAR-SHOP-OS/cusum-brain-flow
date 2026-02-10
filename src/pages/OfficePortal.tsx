@@ -16,10 +16,12 @@ import { PayrollAuditView } from "@/components/office/PayrollAuditView";
 import { LiveMonitorView } from "@/components/office/LiveMonitorView";
 import { DiagnosticLogView } from "@/components/office/DiagnosticLogView";
 import { MemberAreaView } from "@/components/office/MemberAreaView";
+import { TranscribeView } from "@/components/office/TranscribeView";
 
 const sectionComponents: Record<OfficeSection, React.ComponentType> = {
   "ceo-dashboard": FallbackView,
   "ai-extract": AIExtractView,
+  "ai-transcribe": TranscribeView,
   "detailed-list": DetailedListView,
   "production-queue": ProductionQueueView,
   "inventory": InventoryView,
