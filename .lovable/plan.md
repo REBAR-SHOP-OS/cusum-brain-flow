@@ -1,86 +1,71 @@
 
 
-# Sales AI Agent - Full Pipeline Assistant Upgrade
+# Pipeline Page: Fit-to-Page Layout + Blitz AI Agent Button
 
 ## Overview
-Upgrade the Sales AI agent (Blitz) to be a comprehensive sales assistant directly integrated into the Pipeline. Currently, the AI only suggests next actions in the Lead Timeline tab. This upgrade adds a dedicated "AI Assistant" tab in the Lead Detail Drawer with full capabilities: follow-up drafting, reminder setting, quotation generation, lead scoring, email drafting, and stage recommendations.
+Two changes to the Pipeline page:
+1. **Fit to page** -- Make the pipeline board fill the full viewport height so columns stretch to fit the screen without unnecessary scrolling at the page level
+2. **Add Blitz AI Agent button** -- Add a prominent "Blitz AI" button in the Pipeline header (top-right area, near "Add Lead") that opens a side sheet with the sales accountability agent
 
 ## What Changes
 
-### 1. New "AI" Tab in Lead Detail Drawer
-Add a 7th tab to the Lead Detail Drawer called "AI" (with a Sparkles icon) that serves as Blitz's command center for each lead. It will contain:
+### 1. Fit-to-Page Layout
+- Update `Pipeline.tsx` to use `h-screen` / `flex flex-col` so the header stays fixed and the board fills remaining space
+- Update `PipelineBoard.tsx` to use `flex-1 overflow-hidden` with columns that scroll independently within their allocated height
+- This eliminates page-level scrollbar and makes it feel like a proper Kanban app
 
-- **Quick Action Buttons**: One-tap actions like "Draft Follow-Up", "Set Reminder", "Generate Quote", "Score Lead", "Suggest Next Step"
-- **AI Response Area**: Displays Blitz's responses with rich markdown
-- **Free-text Input**: Ask Blitz anything about this lead
-- Responses stream inline within the drawer
+### 2. Blitz AI Agent Button (Sales Accountability)
+Add a "Blitz AI" button with a Sparkles icon in the Pipeline header toolbar (next to "Add Lead"). Clicking it opens a **Sheet (side panel)** with a full Blitz chat interface focused on **sales team accountability**:
 
-### 2. Expand pipeline-ai Edge Function
-Add new action types to the existing `pipeline-ai` edge function:
+- **Pipeline Overview**: Blitz analyzes the full pipeline and flags issues (stale leads, missing follow-ups, unassigned opportunities)
+- **Accountability Report**: Shows which salespeople are falling behind on follow-ups, have stale leads, or are missing quotations
+- **Quick Actions**: "Run Pipeline Audit", "Stale Lead Report", "Follow-up Gaps", "Revenue Forecast"
+- **Free-text input**: Ask Blitz anything about the pipeline (e.g., "Which leads haven't been touched in 2 weeks?")
 
-- `draft_followup` (already exists, will enhance with more context)
-- `set_reminder` -- AI suggests a reminder date/message, then creates a task
-- `generate_quote` -- AI drafts quotation line items based on lead context
-- `score_lead` -- Returns a 0-100 score with reasoning
-- `recommend_stage` -- Suggests which stage the lead should move to and why
-- `draft_email` -- General email drafting for this lead (intro, check-in, proposal cover, etc.)
-- `analyze` -- Free-form question about the lead answered with full context
+The agent calls the existing `pipeline-ai` edge function with a new `pipeline_audit` action that receives aggregate pipeline stats instead of a single lead.
 
-### 3. Create LeadAIPanel Component
-New component `src/components/pipeline/LeadAIPanel.tsx` that renders inside the drawer's AI tab:
-
-- Grid of quick-action buttons at top (each triggers a specific pipeline-ai action)
-- Chat-like response area below
-- Free-text input at bottom for custom questions
-- "Create Task" button on reminder/follow-up results to save to tasks table
-- "Generate Quotation" button renders the existing QuotationTemplate with AI-suggested line items
-- Loading states with skeleton animation
-
-### 4. Reminder / Task Creation Integration
-When Blitz suggests a reminder or follow-up:
-- Show a "Create Task" button that opens the existing `CreateTaskDialog` pre-filled with AI-suggested title, description, due date, and source_ref set to the lead ID
-
-### 5. Lead Card AI Indicator
-Add a small sparkle icon on LeadCard when the lead has AI suggestions available (based on age/staleness heuristics -- leads older than 5 days without update get a subtle glow).
-
----
+### 3. Edge Function Update
+Add a `pipeline_audit` action to `pipeline-ai/index.ts` that accepts pipeline-level stats (total leads per stage, stale count, salesperson activity) and returns an accountability report with markdown formatting.
 
 ## Technical Details
 
 ### Files Modified
 
-1. **`supabase/functions/pipeline-ai/index.ts`**
-   - Add new action handlers: `score_lead`, `set_reminder`, `recommend_stage`, `draft_email`, `analyze`
-   - Each uses structured tool calling for consistent JSON output
-   - Enhance `draft_followup` with more lead context (metadata, customer info)
-   - Add `generate_quote` that returns structured line items matching QuotationData interface
+1. **`src/pages/Pipeline.tsx`**
+   - Wrap page in `h-screen flex flex-col` layout
+   - Add "Blitz AI" button next to "Add Lead" in the header
+   - Add Sheet component for the Blitz side panel
+   - Pass pipeline summary data to the agent panel
 
-2. **`src/components/pipeline/LeadDetailDrawer.tsx`**
-   - Add 7th tab "AI" with Sparkles icon
-   - Import and render `LeadAIPanel` in the new tab
-   - Update TabsList grid-cols from 6 to 7
+2. **`src/components/pipeline/PipelineBoard.tsx`**
+   - Add `flex-1 overflow-hidden` to the board container
+   - Ensure columns use `overflow-y-auto` with max height from parent
 
-3. **`src/components/pipeline/LeadCard.tsx`**
-   - Add subtle Sparkles icon for stale leads (no update in 5+ days, not won/lost)
+3. **`src/components/pipeline/PipelineColumn.tsx`** (if exists)
+   - Ensure column content scrolls independently
+
+4. **`supabase/functions/pipeline-ai/index.ts`**
+   - Add `pipeline_audit` action that accepts aggregate stats
+   - System prompt instructs Blitz to act as an accountability partner
+   - Returns structured markdown report: stale leads, missing follow-ups, salesperson rankings, recommended actions
 
 ### Files Created
 
-4. **`src/components/pipeline/LeadAIPanel.tsx`**
-   - Quick action grid (6 buttons)
-   - AI response display with markdown rendering
-   - Free-text input with send button
-   - Task creation integration via CreateTaskDialog
-   - Quote preview integration
-   - Loading/empty states
+5. **`src/components/pipeline/PipelineAISheet.tsx`**
+   - Side sheet with Blitz branding (TrendingUp icon, "Blitz - Sales Command")
+   - Quick action buttons: "Pipeline Audit", "Stale Leads", "Follow-up Gaps", "Revenue Forecast"
+   - Markdown response area for AI output
+   - Free-text input for custom questions
+   - Passes pipeline summary (lead counts by stage, stale count, top salesperson stats) to the edge function
 
-### Edge Function Changes (pipeline-ai)
-- `score_lead`: Returns `{ score: number, factors: string[], recommendation: string }`
-- `set_reminder`: Returns `{ suggested_date: string, message: string, priority: string }`
-- `recommend_stage`: Returns `{ current: string, recommended: string, reason: string, confidence: number }`
-- `draft_email`: Returns `{ subject: string, body: string, tone: string }`
-- `generate_quote`: Returns `{ items: LineItem[], notes: string, validity_days: number }`
-- `analyze`: Returns `{ answer: string }` (free-form response)
-
-### No Database Changes Required
-All features use existing tables (leads, lead_activities, tasks). The AI responses are displayed in real-time and task creation uses the existing tasks table.
+### Edge Function - pipeline_audit action
+The new action accepts:
+```
+{ 
+  pipelineStats: { total, byStage, staleCount, salespersonActivity },
+  action: "pipeline_audit",
+  userMessage?: string 
+}
+```
+Returns accountability-focused markdown report identifying gaps and recommending specific actions with owner assignments.
 
