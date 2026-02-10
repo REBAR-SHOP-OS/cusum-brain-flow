@@ -77,12 +77,12 @@ export const agentConfigs: Record<string, AgentConfig> = {
   },
   shopfloor: {
     name: "Forge",
-    role: "Shop Floor",
+    role: "Shop Floor Commander",
     image: shopfloorHelper,
     agentType: "support",
-    greeting: "I'm Forge, your Shop Floor powerhouse.",
-    placeholder: "Ask about work orders, production...",
-    capabilities: ["Track work orders", "Check machine status", "View production schedule", "Report issues"],
+    greeting: "I'm Forge, your Shop Floor Commander. I manage machines, guide cage builds, and keep maintenance on schedule.",
+    placeholder: "Ask about machines, cage builds, maintenance...",
+    capabilities: ["Guide cage fabrication from drawings", "Machine maintenance timeline", "Monitor machine status", "Production scheduling"],
   },
   delivery: {
     name: "Atlas",
@@ -149,12 +149,12 @@ export const agentConfigs: Record<string, AgentConfig> = {
   },
   assistant: {
     name: "Vizzy",
-    role: "Virtual Assistant",
+    role: "CEO Assistant",
     image: assistantHelper,
     agentType: "assistant",
-    greeting: "Hello! I'm Vizzy, your all-purpose Virtual Assistant.",
-    placeholder: "Ask me anything — scheduling, research, planning...",
-    capabilities: ["Schedule management", "Research topics", "Summarize documents", "Draft communications"],
+    greeting: "Hello! I'm Vizzy, your executive command assistant. I monitor all departments and flag what needs your attention.",
+    placeholder: "Ask about business health, exceptions, cross-department status...",
+    capabilities: ["Business health overview", "Exception-based reporting", "Cross-department coordination", "Executive briefings"],
   },
   copywriting: {
     name: "Penn",
