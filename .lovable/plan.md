@@ -1,81 +1,59 @@
 
 
-# User-Based AI Persona System: Per-Department Agent Switching
+# End-to-End Plan Status: User-Based AI Persona System
 
-## Overview
-Make the AI system fully user-aware so that when specific users log in, their entire experience -- Home page, Agent Workspace, and sidebar -- adapts to show the right AI agent for their role. Three key personas to implement now:
+## COMPLETED (Already Built and Deployed)
 
-- **sattar@rebar.shop** --> CEO Assistant (Vizzy with executive briefings, business health, cross-department oversight)
-- **kourosh@rebar.shop** --> Forge (Shop Floor Manager -- cage building instructions from drawings, machinery maintenance timelines, operator management)
-- **ben@rebar.shop** --> Gauge (already done in Pipeline sheet)
+### 1. User-to-Agent Mapping Utility
+- **File**: `src/lib/userAgentMap.ts` -- DONE
+- Maps `sattar@rebar.shop` to Vizzy (CEO), `kourosh@rebar.shop` to Forge (Shop Floor), `ben@rebar.shop` to Gauge (Estimator)
 
-## What Changes
+### 2. Home Page Personalization
+- **File**: `src/pages/Home.tsx` -- DONE
+- Role-specific hero text, quick actions, and helper card ordering per user
 
-### 1. New Utility: User-to-Agent Mapping (`src/lib/userAgentMap.ts`)
-A single source of truth that maps user emails to their primary AI agent persona:
+### 3. Agent Config Enhancement
+- **File**: `src/components/agent/agentConfigs.ts` -- DONE
+- Forge: "Shop Floor Commander" greeting with cage-build and maintenance capabilities
+- Vizzy: CEO-specific capabilities added
 
-```text
-sattar@rebar.shop  -->  "assistant" (Vizzy as CEO Assistant)
-kourosh@rebar.shop -->  "shopfloor" (Forge as Shop Supervisor)
-ben@rebar.shop     -->  "estimating" (Gauge as Estimator)
-```
+### 4. AgentWorkspace Auto-Briefing
+- **File**: `src/pages/AgentWorkspace.tsx` -- DONE
+- Proactive briefings triggered when mapped users open their primary agent
 
-This file exports a function `getUserPrimaryAgent(email: string)` that returns the agent config key, or `null` for default behavior.
+### 5. Edge Function Prompt Engineering
+- **File**: `supabase/functions/ai-agent/index.ts` -- DONE and DEPLOYED
+- Forge: cage fabrication instructions, maintenance tracking, operator management prompts
+- Vizzy: CEO executive mode with exception-based reporting and health scores
+- Context fetcher pulls machine_runs, cut_plans, accounting_mirror data
 
-### 2. Home Page Personalization (`src/pages/Home.tsx`)
-When a mapped user lands on `/home`:
-- The hero greeting changes: "How can **Forge** help you today?" instead of generic
-- The primary agent's avatar appears prominently
-- Quick Actions cards are filtered/reordered to match their domain
-- The "Your Helpers" grid highlights their primary agent first
+---
 
-For **sattar@rebar.shop (CEO)**:
-- Quick actions: "Business Health Score", "Today's exceptions", "Pipeline overview", "Team attendance"
-- Hero: "How can your **CEO Command** help you today?"
+## NOT YET STARTED (Approved but Waiting on You)
 
-For **kourosh@rebar.shop (Shop Supervisor)**:
-- Quick actions: "What machines are running?", "Build cage from drawing", "Maintenance schedule", "Today's production queue"
-- Hero: "How can **Forge** help you today?"
+### 6. Synology NAS WebDAV Integration
+- **Status**: Plan approved, but blocked -- needs your NAS to be set up and reachable
+- **What's needed from you**:
+  1. Enable WebDAV Server on your Synology (Package Center, port 5006 HTTPS)
+  2. Set up external access (static IP, Synology DDNS, or reverse proxy)
+  3. Create a `/rebar-files/drawings/` folder
+  4. Provide three values: WebDAV URL, username, password
+- **What we'll build once ready**:
+  - `supabase/functions/synology-upload/index.ts` -- proxy uploads to NAS
+  - `supabase/functions/synology-download/index.ts` -- proxy downloads from NAS
+  - Update `src/lib/storageUtils.ts` with routing logic (files >20MB or .dwg/.dxf go to Synology)
+  - Update `ChatInput.tsx` to auto-route large files
 
-### 3. Forge Agent Enhancement (`src/components/agent/agentConfigs.ts`)
-Update the Forge agent config to reflect shop supervisor capabilities:
-- New greeting: "I'm Forge, your Shop Floor Commander. I manage machines, guide cage builds, and keep maintenance on schedule."
-- Updated capabilities: "Guide cage fabrication from drawings", "Machine maintenance timeline", "Monitor machine status", "Production scheduling"
-- Change `agentType` from `"support"` to a proper type
+---
 
-### 4. Forge System Prompt Enhancement (`supabase/functions/ai-agent/index.ts`)
-Add/update the shopfloor system prompt section to include:
-- **Cage building guidance**: When Kourosh asks about a drawing or cage, Forge reads the drawing context (bar sizes, shapes, dimensions) and gives step-by-step fabrication instructions (which bars to cut first, bend sequence, assembly order)
-- **Machinery management**: Track machine status, flag overdue maintenance, suggest maintenance windows based on production gaps
-- **Operator management**: Forge knows Kourosh is the supervisor -- it tells him which operators to assign where, flags idle machines, and alerts on blocked runs
-- **Maintenance timeline**: "Machine X is due for maintenance in 3 days", "Bender BR18 has been running 14 hours -- recommend cooldown"
+## WHAT TO DO NOW
 
-### 5. CEO Assistant Prompt Enhancement (`supabase/functions/ai-agent/index.ts`)
-Upgrade the "assistant" agent prompt when context includes `isCEO: true`:
-- Cross-department health summary on first message
-- Exception-based reporting (only flag what needs attention)
-- Revenue, production, AR, and team metrics at a glance
-- Direct handoff suggestions: "Want me to ask Penny about that invoice?" or "Should I check with Forge on machine status?"
+The persona system (items 1-5) is fully built. To verify it works:
 
-### 6. AgentWorkspace Auto-Routing (`src/pages/AgentWorkspace.tsx`)
-When a mapped user opens any agent workspace, subtly enhance:
-- If kourosh opens `/agent/shopfloor`, auto-greet with a proactive shop floor briefing (similar to Penny/Blitz pattern)
-- If sattar opens `/agent/assistant`, auto-greet with CEO daily briefing
+1. **Log in as sattar@rebar.shop** -- Home should show "CEO Command" hero and executive quick actions
+2. **Log in as kourosh@rebar.shop** -- Home should show "Forge" hero and shop floor quick actions
+3. **Open the Agent Workspace** for your role -- should get a proactive briefing
+4. **Ask Forge a question** like "How do I build a cage for this drawing?" to test the enhanced prompt
 
-## Technical Details
-
-### Files to Create
-- `src/lib/userAgentMap.ts` -- User-email-to-agent mapping utility
-
-### Files to Modify
-1. **`src/pages/Home.tsx`** -- Import `useAuth` and `getUserPrimaryAgent`, personalize hero text, quick actions, and helper ordering based on logged-in user
-2. **`src/components/agent/agentConfigs.ts`** -- Update Forge config with enhanced capabilities and proper greeting; update Vizzy config with CEO-specific capabilities
-3. **`supabase/functions/ai-agent/index.ts`** -- Enhance the shopfloor/support system prompt for Forge's cage-building and maintenance logic; enhance assistant prompt for CEO mode
-4. **`src/pages/AgentWorkspace.tsx`** -- Add auto-briefing logic (like Penny/Blitz) for mapped users when they open their primary agent
-
-### No Database Changes
-Uses existing `user.email` from auth context -- no new tables needed.
-
-### Edge Function Changes
-The `ai-agent` edge function will receive a `context.userRole` or `context.isCEO` flag from the frontend to activate role-specific prompt sections. The shopfloor prompt gets a major upgrade with cage-building and maintenance instruction capabilities.
+For Synology (item 6): set up your NAS with WebDAV access, then tell me "My Synology is ready" and I'll build it immediately.
 
