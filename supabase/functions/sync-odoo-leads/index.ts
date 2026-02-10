@@ -7,7 +7,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Odoo stage keywords → pipeline stage mapping
+// Odoo stage name → pipeline stage slug
 const ODOO_STAGE_MAP: Record<string, string> = {
   "new": "new",
   "telephonic enquiries": "telephonic_enquiries",
@@ -34,129 +34,85 @@ const ODOO_STAGE_MAP: Record<string, string> = {
   "shop drawing sent for approval": "shop_drawing_approval",
 };
 
-/**
- * Parse OdooBot email to extract lead name, stage, assignee, deadline.
- *
- * Known patterns:
- * Subject: "Lead Name: Chk new lead moved to CRM stages" assigned to you
- * Subject: You have been assigned to Lead Name
- * Body: Document: "Lead Name" (Lead/Opportunity) Summary: ... Deadline: MM/DD/YYYY
- */
-interface OdooParsed {
-  leadName: string;
-  stage: string | null;
-  assignee: string | null;
-  assigneeEmail: string | null;
-  deadline: string | null;
-  type: "activity_assigned" | "lead_assigned" | "unknown";
+// ── Odoo JSON-RPC helpers ──
+
+interface OdooSession {
+  sessionId: string;
+  url: string;
 }
 
-function parseOdooEmail(subject: string, body: string, toAddress: string): OdooParsed {
-  const result: OdooParsed = {
-    leadName: "",
-    stage: null,
-    assignee: null,
-    assigneeEmail: null,
-    deadline: null,
-    type: "unknown",
-  };
+async function odooAuthenticate(): Promise<OdooSession> {
+  const url = Deno.env.get("ODOO_URL")!;          // e.g. https://crm.rebar.shop
+  const db = Deno.env.get("ODOO_DATABASE")!;
+  const login = Deno.env.get("ODOO_USERNAME")!;
+  const password = Deno.env.get("ODOO_API_KEY")!;
 
-  // Extract assignee from to_address: "Name <email>"
-  const toMatch = toAddress.match(/^([^<]+)<([^>]+)>/);
-  if (toMatch) {
-    result.assignee = toMatch[1].trim();
-    result.assigneeEmail = toMatch[2].trim().toLowerCase();
-  }
+  const res = await fetch(`${url}/web/session/authenticate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      params: { db, login, password },
+    }),
+  });
 
-  // Pattern 1: Activity assigned — "LeadName: Chk new lead moved to CRM stages" assigned to you
-  const activityMatch = subject.match(/^"(.+?):\s*Chk new lead moved to CRM stages"\s*assigned to you/i);
-  if (activityMatch) {
-    result.leadName = activityMatch[1].trim();
-    result.type = "activity_assigned";
-    // Stage comes from body: Summary line or context
-    result.stage = "new"; // default — these are "moved to CRM stages" = new in pipeline
-  }
+  if (!res.ok) throw new Error(`Odoo auth HTTP ${res.status}`);
 
-  // Pattern 2: Lead assigned — "You have been assigned to LeadName"
-  if (!result.leadName) {
-    const assignedMatch = subject.match(/^You have been assigned to\s+(.+)$/i);
-    if (assignedMatch) {
-      result.leadName = assignedMatch[1].trim();
-      result.type = "lead_assigned";
-    }
-  }
+  const json = await res.json();
+  if (json.error) throw new Error(`Odoo auth error: ${JSON.stringify(json.error)}`);
+  if (!json.result?.uid) throw new Error("Odoo auth failed – no uid returned");
 
-  // Pattern 3: Generic subject with quotes — "LeadName: Summary" assigned to you
-  if (!result.leadName) {
-    const genericMatch = subject.match(/^"(.+?)(?::.*)?"\s*assigned to you/i);
-    if (genericMatch) {
-      result.leadName = genericMatch[1].trim();
-      result.type = "activity_assigned";
-    }
-  }
+  // Extract session_id cookie
+  const setCookie = res.headers.get("set-cookie") || "";
+  const sidMatch = setCookie.match(/session_id=([^;]+)/);
+  const sessionId = sidMatch ? sidMatch[1] : "";
 
-  // Extract from body: Document: "Lead Name"
-  if (!result.leadName) {
-    const docMatch = body.match(/Document:\s*(?:&quot;|")(.+?)(?:&quot;|")/i);
-    if (docMatch) {
-      result.leadName = docMatch[1].trim();
-      result.type = "activity_assigned";
-    }
-  }
-
-  // Extract deadline from body: Deadline: MM/DD/YYYY
-  const deadlineMatch = body.match(/Deadline:\s*(\d{2}\/\d{2}\/\d{4})/);
-  if (deadlineMatch) {
-    const [month, day, year] = deadlineMatch[1].split("/");
-    result.deadline = `${year}-${month}-${day}`;
-  }
-
-  // Try to extract stage from body if mentioned
-  const stageMatch = body.match(/moved to\s+(?:stage\s+)?["']?([^"'\n]+?)["']?\s*(?:\.|$|<|\\n)/i);
-  if (stageMatch) {
-    const stageStr = stageMatch[1].trim().toLowerCase();
-    if (ODOO_STAGE_MAP[stageStr]) {
-      result.stage = ODOO_STAGE_MAP[stageStr];
-    }
-  }
-
-  return result;
+  return { sessionId, url };
 }
 
-/**
- * Fuzzy-match a lead name against existing leads.
- */
-function findExistingLead(
-  leadName: string,
-  existingLeads: Array<{ id: string; title: string; source: string | null; source_email_id: string | null }>
-): { id: string; title: string } | null {
-  if (!leadName) return null;
-  const normalize = (s: string) =>
-    s.toLowerCase().replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
+async function odooSearchRead(
+  session: OdooSession,
+  model: string,
+  fields: string[],
+  domain: unknown[] = [],
+  limit = 0,
+): Promise<unknown[]> {
+  const res = await fetch(`${session.url}/web/dataset/call_kw`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Cookie: `session_id=${session.sessionId}`,
+    },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      method: "call",
+      params: {
+        model,
+        method: "search_read",
+        args: [domain],
+        kwargs: {
+          fields,
+          limit: limit || false,
+        },
+      },
+    }),
+  });
 
-  const target = normalize(leadName);
-  if (!target) return null;
-
-  for (const lead of existingLeads) {
-    const title = normalize(lead.title);
-    // Check if the Odoo lead name appears in the existing title
-    if (title.includes(target) || target.includes(title)) return lead;
-    // Token overlap
-    const targetTokens = new Set(target.split(" ").filter(t => t.length > 2));
-    const titleTokens = new Set(title.split(" ").filter(t => t.length > 2));
-    if (targetTokens.size > 0 && titleTokens.size > 0) {
-      let overlap = 0;
-      for (const t of targetTokens) if (titleTokens.has(t)) overlap++;
-      const score = (2 * overlap) / (targetTokens.size + titleTokens.size);
-      if (score >= 0.6) return lead;
-    }
-  }
-  return null;
+  if (!res.ok) throw new Error(`Odoo ${model} HTTP ${res.status}`);
+  const json = await res.json();
+  if (json.error) throw new Error(`Odoo ${model} error: ${JSON.stringify(json.error)}`);
+  return json.result || [];
 }
 
-/**
- * Get next sequential lead number (SXXXXX format)
- */
+// ── Stage mapper ──
+
+function mapOdooStage(stageName: string): string {
+  const key = stageName.toLowerCase().trim();
+  return ODOO_STAGE_MAP[key] || "new";
+}
+
+// ── Next sequential lead number ──
+
 async function getNextLeadNumber(supabase: ReturnType<typeof createClient>): Promise<number> {
   const { data } = await supabase
     .from("leads")
@@ -176,6 +132,8 @@ async function getNextLeadNumber(supabase: ReturnType<typeof createClient>): Pro
   return maxNum + 1;
 }
 
+// ── Main handler ──
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -192,13 +150,13 @@ serve(async (req) => {
 
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
     const supabaseUser = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
+      { global: { headers: { Authorization: authHeader } } },
     );
     const { data: { user }, error: authError } = await supabaseUser.auth.getUser();
     if (authError || !user) {
@@ -224,147 +182,231 @@ serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const force = body.force === true;
 
-    // 1. Fetch all OdooBot emails from communications
-    const { data: odooEmails, error: queryError } = await supabaseAdmin
-      .from("communications")
-      .select("id, source_id, from_address, to_address, subject, body_preview, metadata, received_at")
-      .ilike("from_address", "%OdooBot%")
-      .order("received_at", { ascending: false })
-      .limit(500);
+    // 1. Authenticate with Odoo
+    console.log("Authenticating with Odoo...");
+    const session = await odooAuthenticate();
+    console.log("Odoo auth successful");
 
-    if (queryError) throw queryError;
+    // 2. Fetch stages for name mapping
+    const odooStages = await odooSearchRead(session, "crm.stage", ["id", "name"]) as Array<{ id: number; name: string }>;
+    const stageIdToName = new Map<number, string>();
+    for (const s of odooStages) stageIdToName.set(s.id, s.name);
+    console.log(`Fetched ${odooStages.length} Odoo stages`);
 
-    if (!odooEmails?.length) {
+    // 3. Fetch all leads/opportunities
+    const odooLeads = await odooSearchRead(session, "crm.lead", [
+      "id", "name", "stage_id", "partner_id", "contact_name", "email_from",
+      "phone", "mobile", "expected_revenue", "probability", "date_deadline",
+      "user_id", "description", "create_date", "write_date", "priority", "type",
+    ]) as Array<Record<string, unknown>>;
+    console.log(`Fetched ${odooLeads.length} Odoo leads`);
+
+    if (!odooLeads.length) {
       return new Response(
         JSON.stringify({ synced: 0, updated: 0, skipped: 0, total: 0, details: [] }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    // 2. Check already-processed Odoo emails
-    const odooSourceIds = odooEmails.map(e => `odoo_${e.id}`);
-    const { data: existingOdoo } = await supabaseAdmin
+    // 4. Load existing leads for dedup
+    const odooSourceIds = odooLeads.map(l => `odoo_crm_${l.id}`);
+    const { data: existingBySource } = await supabaseAdmin
       .from("leads")
-      .select("source_email_id, title, stage")
+      .select("id, title, stage, source_email_id")
       .in("source_email_id", odooSourceIds);
 
-    const processedMap = new Map<string, { title: string; stage: string }>();
-    for (const l of existingOdoo || []) {
-      if (l.source_email_id) processedMap.set(l.source_email_id, { title: l.title, stage: l.stage });
+    const sourceMap = new Map<string, { id: string; title: string; stage: string }>();
+    for (const l of existingBySource || []) {
+      if (l.source_email_id) sourceMap.set(l.source_email_id, l);
     }
-
-    // 3. Fetch all existing leads for fuzzy matching
-    const { data: allLeads } = await supabaseAdmin
-      .from("leads")
-      .select("id, title, source, source_email_id, stage")
-      .eq("company_id", profile.company_id);
-
-    const existingLeads = allLeads || [];
 
     let synced = 0;
     let updated = 0;
     let skipped = 0;
-    const details: Array<{ comm_id: string; leadName: string; action: string }> = [];
+    const details: Array<{ odoo_id: number; name: string; action: string }> = [];
 
     let currentNum = await getNextLeadNumber(supabaseAdmin);
 
-    // Group emails by lead name to avoid creating duplicates within this batch
-    const seenLeadNames = new Map<string, string>(); // normalized name → lead_id
+    for (const ol of odooLeads) {
+      const odooId = ol.id as number;
+      const sourceEmailId = `odoo_crm_${odooId}`;
+      const leadName = (ol.name as string) || "Unnamed Lead";
 
-    for (const email of odooEmails) {
-      const sourceEmailId = `odoo_${email.id}`;
+      // Stage mapping
+      const stageArr = ol.stage_id as [number, string] | false;
+      const stageName = stageArr ? stageArr[1] : "New";
+      const mappedStage = mapOdooStage(stageName);
 
-      // Skip if already processed (unless force)
-      if (!force && processedMap.has(sourceEmailId)) {
-        skipped++;
-        details.push({ comm_id: email.id, leadName: "", action: "already_processed" });
-        continue;
-      }
+      // Salesperson
+      const userArr = ol.user_id as [number, string] | false;
+      const salesperson = userArr ? userArr[1] : null;
 
-      const parsed = parseOdooEmail(
-        email.subject || "",
-        email.body_preview || "",
-        email.to_address || ""
-      );
+      // Contact / partner
+      const partnerArr = ol.partner_id as [number, string] | false;
+      const partnerName = partnerArr ? partnerArr[1] : null;
+      const contactName = (ol.contact_name as string) || partnerName || null;
+      const email = (ol.email_from as string) || null;
+      const phone = (ol.phone as string) || (ol.mobile as string) || null;
 
-      if (!parsed.leadName) {
-        skipped++;
-        details.push({ comm_id: email.id, leadName: "(unparseable)", action: "no_lead_name" });
-        continue;
-      }
+      // Revenue / probability
+      const expectedRevenue = (ol.expected_revenue as number) || 0;
+      const probability = (ol.probability as number) || 0;
+      const deadline = (ol.date_deadline as string) || null;
+      const description = (ol.description as string) || null;
 
-      // Skip "Lead Acquisition" leaderboard reports
-      if (parsed.leadName.toLowerCase() === "lead acquisition") {
-        skipped++;
-        details.push({ comm_id: email.id, leadName: parsed.leadName, action: "leaderboard_report" });
-        continue;
-      }
+      // Check if already synced
+      const existing = sourceMap.get(sourceEmailId);
 
-      // Check if we already created this lead in this batch
-      const normalizedName = parsed.leadName.toLowerCase().replace(/[^a-z0-9\s]/g, "").trim();
-      if (seenLeadNames.has(normalizedName)) {
-        skipped++;
-        details.push({ comm_id: email.id, leadName: parsed.leadName, action: "batch_duplicate" });
-        continue;
-      }
-
-      // Check if lead already exists in pipeline (fuzzy match)
-      const existingLead = findExistingLead(parsed.leadName, existingLeads);
-
-      if (existingLead) {
-        // Update stage if Odoo shows a different/newer stage
-        if (parsed.stage && parsed.stage !== "new") {
-          // Only update if the Odoo stage is more advanced
+      if (existing && !force) {
+        // Update stage + value if changed
+        if (existing.stage !== mappedStage || force) {
           const { error: updateErr } = await supabaseAdmin
             .from("leads")
             .update({
-              stage: parsed.stage,
+              stage: mappedStage,
+              expected_close_date: deadline ? new Date(deadline).toISOString() : null,
               updated_at: new Date().toISOString(),
+              metadata: {
+                odoo_id: odooId,
+                odoo_stage: stageName,
+                odoo_probability: probability,
+                odoo_revenue: expectedRevenue,
+                odoo_salesperson: salesperson,
+                synced_at: new Date().toISOString(),
+              },
             })
-            .eq("id", existingLead.id);
+            .eq("id", existing.id);
 
           if (!updateErr) {
             updated++;
-            details.push({ comm_id: email.id, leadName: parsed.leadName, action: `updated_stage_to_${parsed.stage}` });
+            details.push({ odoo_id: odooId, name: leadName, action: `updated_stage_to_${mappedStage}` });
           }
         } else {
           skipped++;
-          details.push({ comm_id: email.id, leadName: parsed.leadName, action: "exists_no_change" });
+          details.push({ odoo_id: odooId, name: leadName, action: "no_change" });
         }
-        seenLeadNames.set(normalizedName, existingLead.id);
+        continue;
+      }
+
+      if (existing && force) {
+        // Force update
+        await supabaseAdmin
+          .from("leads")
+          .update({
+            stage: mappedStage,
+            expected_close_date: deadline ? new Date(deadline).toISOString() : null,
+            notes: description ? description.substring(0, 2000) : null,
+            updated_at: new Date().toISOString(),
+            metadata: {
+              odoo_id: odooId,
+              odoo_stage: stageName,
+              odoo_probability: probability,
+              odoo_revenue: expectedRevenue,
+              odoo_salesperson: salesperson,
+              odoo_contact: contactName,
+              odoo_email: email,
+              odoo_phone: phone,
+              synced_at: new Date().toISOString(),
+            },
+          })
+          .eq("id", existing.id);
+        updated++;
+        details.push({ odoo_id: odooId, name: leadName, action: "force_updated" });
         continue;
       }
 
       // Create new lead
       const leadNumber = `S${String(currentNum).padStart(5, "0")}`;
       currentNum++;
-      const leadTitle = `${leadNumber}, ${parsed.leadName}`;
+      const leadTitle = `${leadNumber}, ${leadName}`;
+
+      // Find or create customer
+      let customerId: string | null = null;
+      if (contactName || email) {
+        // Try to find existing customer by name
+        if (partnerName) {
+          const { data: existingCustomer } = await supabaseAdmin
+            .from("customers")
+            .select("id")
+            .eq("company_id", profile.company_id)
+            .ilike("name", partnerName)
+            .limit(1)
+            .maybeSingle();
+
+          if (existingCustomer) {
+            customerId = existingCustomer.id;
+          } else {
+            const { data: newCustomer } = await supabaseAdmin
+              .from("customers")
+              .insert({
+                name: partnerName,
+                company_id: profile.company_id,
+                status: "active",
+              })
+              .select("id")
+              .single();
+            customerId = newCustomer?.id || null;
+          }
+        }
+
+        // Create contact if we have details
+        if (customerId && (contactName || email)) {
+          const nameParts = (contactName || "").split(" ");
+          const firstName = nameParts[0] || "Unknown";
+          const lastName = nameParts.slice(1).join(" ") || null;
+
+          // Check if contact already exists
+          const { data: existingContact } = await supabaseAdmin
+            .from("contacts")
+            .select("id")
+            .eq("customer_id", customerId)
+            .eq("first_name", firstName)
+            .limit(1)
+            .maybeSingle();
+
+          if (!existingContact) {
+            await supabaseAdmin.from("contacts").insert({
+              customer_id: customerId,
+              company_id: profile.company_id,
+              first_name: firstName,
+              last_name: lastName,
+              email: email,
+              phone: phone,
+              is_primary: true,
+            });
+          }
+        }
+      }
 
       const noteParts: string[] = [];
-      if (parsed.assignee) noteParts.push(`Assigned: ${parsed.assignee}`);
-      if (parsed.assigneeEmail) noteParts.push(`Assignee Email: ${parsed.assigneeEmail}`);
-      if (parsed.deadline) noteParts.push(`Deadline: ${parsed.deadline}`);
-      noteParts.push(`Odoo Type: ${parsed.type}`);
-      noteParts.push(`Source Subject: ${email.subject}`);
+      if (salesperson) noteParts.push(`Salesperson: ${salesperson}`);
+      if (probability) noteParts.push(`Probability: ${probability}%`);
+      if (expectedRevenue) noteParts.push(`Expected Revenue: $${expectedRevenue.toLocaleString()}`);
+      if (description) noteParts.push(description.substring(0, 500));
 
       const { data: newLead, error: insertError } = await supabaseAdmin
         .from("leads")
         .insert({
           title: leadTitle,
-          description: `Synced from Odoo CRM via OdooBot email notification.`,
-          stage: parsed.stage || "new",
+          description: `Synced from Odoo CRM (${stageName}).`,
+          stage: mappedStage,
           source: "odoo_sync",
           source_email_id: sourceEmailId,
-          priority: "medium",
-          expected_close_date: parsed.deadline ? new Date(parsed.deadline).toISOString() : null,
+          priority: ol.priority === "3" ? "high" : ol.priority === "2" ? "high" : "medium",
+          expected_close_date: deadline ? new Date(deadline).toISOString() : null,
           company_id: profile.company_id,
+          customer_id: customerId,
           notes: noteParts.join(" | "),
           metadata: {
-            odoo_lead_name: parsed.leadName,
-            odoo_assignee: parsed.assignee,
-            odoo_assignee_email: parsed.assigneeEmail,
-            odoo_type: parsed.type,
-            odoo_subject: email.subject,
+            odoo_id: odooId,
+            odoo_stage: stageName,
+            odoo_probability: probability,
+            odoo_revenue: expectedRevenue,
+            odoo_salesperson: salesperson,
+            odoo_contact: contactName,
+            odoo_email: email,
+            odoo_phone: phone,
+            odoo_type: ol.type,
             synced_at: new Date().toISOString(),
           },
         })
@@ -375,7 +417,7 @@ serve(async (req) => {
         console.error("Failed to insert Odoo lead:", insertError);
         if (insertError.code === "23505") {
           skipped++;
-          details.push({ comm_id: email.id, leadName: parsed.leadName, action: "duplicate_key" });
+          details.push({ odoo_id: odooId, name: leadName, action: "duplicate_key" });
         }
         continue;
       }
@@ -387,29 +429,26 @@ serve(async (req) => {
           company_id: profile.company_id,
           activity_type: "note",
           title: "Synced from Odoo CRM",
-          description: `Lead "${parsed.leadName}" imported from Odoo via OdooBot email.\n${parsed.assignee ? `👤 Assigned to: ${parsed.assignee}` : ""}\n${parsed.deadline ? `📅 Deadline: ${parsed.deadline}` : ""}`.trim(),
+          description: `Lead "${leadName}" imported from Odoo.\nStage: ${stageName}\n${salesperson ? `👤 ${salesperson}` : ""}\n${deadline ? `📅 Deadline: ${deadline}` : ""}`.trim(),
           created_by: "Blitz AI",
         });
-
-        seenLeadNames.set(normalizedName, newLead.id);
-        existingLeads.push({ id: newLead.id, title: leadTitle, source: "odoo_sync", source_email_id: sourceEmailId, stage: parsed.stage || "new" });
       }
 
       synced++;
-      details.push({ comm_id: email.id, leadName: parsed.leadName, action: "created" });
+      details.push({ odoo_id: odooId, name: leadName, action: "created" });
     }
 
-    console.log(`Odoo sync complete: ${synced} synced, ${updated} updated, ${skipped} skipped out of ${odooEmails.length} emails`);
+    console.log(`Odoo CRM sync complete: ${synced} synced, ${updated} updated, ${skipped} skipped out of ${odooLeads.length} leads`);
 
     return new Response(
-      JSON.stringify({ synced, updated, skipped, total: odooEmails.length, details }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      JSON.stringify({ synced, updated, skipped, total: odooLeads.length, details }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (error) {
     console.error("sync-odoo-leads error:", error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
 });
