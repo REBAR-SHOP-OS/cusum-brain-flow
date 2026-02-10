@@ -3,6 +3,7 @@ import { useUserRole } from "@/hooks/useUserRole";
 
 /** Routes accessible to workshop-only users (no admin/office/sales roles) */
 const WORKSHOP_ALLOWED = [
+  "/home",
   "/shop-floor",
   "/shopfloor",
   "/timeclock",
@@ -10,6 +11,8 @@ const WORKSHOP_ALLOWED = [
   "/settings",
   "/inbox",
   "/phonecalls",
+  "/agent",
+  "/tasks",
 ];
 
 /** Routes accessible to sales-only users */
