@@ -2,7 +2,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, Pencil, Trash2, DollarSign, Calendar, Building, AlertTriangle, Clock, Mail, Star, MessageSquare } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash2, DollarSign, Calendar, Building, AlertTriangle, Clock, Mail, Star, MessageSquare, Sparkles } from "lucide-react";
 import { format, formatDistanceToNow, differenceInDays } from "date-fns";
 import { cn } from "@/lib/utils";
 import type { Tables } from "@/integrations/supabase/types";
@@ -103,6 +103,7 @@ export function LeadCard({ lead, onDragStart, onDragEnd, onEdit, onDelete, onCli
   const meta = lead.metadata as Record<string, unknown> | null;
   const hasEmail = !!(meta?.odoo_email || meta?.subject);
   const revenue = (meta?.odoo_revenue as number) || lead.expected_value || 0;
+  const isStale = lead.stage !== "won" && lead.stage !== "lost" && differenceInDays(new Date(), new Date(lead.updated_at)) >= 5;
   const customerName = lead.customers?.company_name || lead.customers?.name || null;
   // Strip Odoo ref prefix (e.g. "S01411, ") to match Odoo's clean title
   const displayTitle = lead.title.replace(/^S\d+,\s*/, "");
@@ -173,6 +174,7 @@ export function LeadCard({ lead, onDragStart, onDragEnd, onEdit, onDelete, onCli
             </div>
 
             {/* Activity icons */}
+            {isStale && <span title="AI suggestions available"><Sparkles className="w-3 h-3 text-amber-400 animate-pulse" /></span>}
             {hasEmail && <Mail className="w-3 h-3 text-muted-foreground" />}
             {lead.notes && <MessageSquare className="w-3 h-3 text-muted-foreground" />}
           </div>
