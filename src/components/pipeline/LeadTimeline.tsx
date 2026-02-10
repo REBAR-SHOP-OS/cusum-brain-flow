@@ -272,42 +272,61 @@ export function LeadTimeline({ lead }: LeadTimelineProps) {
           No activities yet. Log a note or let AI suggest next steps.
         </p>
       ) : (
-        <div className="relative">
-          {/* Timeline line */}
-          <div className="absolute left-[18px] top-6 bottom-0 w-px bg-border" />
+        <div className="space-y-1">
+          {activities.map((activity, idx) => {
+            const Icon = activityIcons[activity.activity_type] || MessageSquare;
+            const colorClass = activityColors[activity.activity_type] || "bg-muted text-muted-foreground";
+            const activityDate = new Date(activity.created_at);
 
-          <div className="space-y-4">
-            {activities.map((activity) => {
-              const Icon = activityIcons[activity.activity_type] || MessageSquare;
-              const colorClass = activityColors[activity.activity_type] || "bg-muted text-muted-foreground";
+            // Date separator: show when date differs from previous activity
+            const prevDate = idx > 0 ? new Date(activities[idx - 1].created_at) : null;
+            const showDateSep = !prevDate || format(activityDate, "yyyy-MM-dd") !== format(prevDate, "yyyy-MM-dd");
 
-              return (
-                <div key={activity.id} className="flex gap-3 relative">
-                  <div className={cn("w-9 h-9 rounded-full flex items-center justify-center shrink-0 z-10", colorClass)}>
-                    <Icon className="w-4 h-4" />
+            return (
+              <div key={activity.id}>
+                {/* Date separator */}
+                {showDateSep && (
+                  <div className="flex items-center gap-3 py-3">
+                    <div className="flex-1 h-px bg-border" />
+                    <span className="text-xs font-medium text-primary shrink-0">
+                      {format(activityDate, "MMMM d, yyyy")}
+                    </span>
                   </div>
-                  <div className="flex-1 min-w-0 pb-2">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <span className="text-sm font-medium">{activity.title}</span>
+                )}
+
+                {/* Activity entry — Odoo chatter style */}
+                <div className="flex gap-3 py-2">
+                  <div className={cn("w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5", colorClass)}>
+                    <Icon className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-semibold">{activity.created_by || "System"}</span>
+                      {activity.activity_type === "email" && <Mail className="w-3 h-3 text-muted-foreground" />}
+                      <span className="text-xs text-muted-foreground">
+                        – {formatDistanceToNow(activityDate, { addSuffix: true })}
+                      </span>
                       {activity.completed_at && (
                         <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
                       )}
                     </div>
+                    {/* Title as prefix for system/stage entries */}
+                    {activity.activity_type === "stage_change" && (
+                      <p className="text-sm mt-1">{activity.title}</p>
+                    )}
                     {activity.description && (
-                      <p className="text-xs text-muted-foreground whitespace-pre-wrap mt-1">
+                      <p className="text-sm text-foreground/80 whitespace-pre-wrap mt-1 leading-relaxed">
                         {activity.description}
                       </p>
                     )}
-                    <div className="flex items-center gap-2 mt-1.5 text-xs text-muted-foreground">
-                      <span>{activity.created_by || "System"}</span>
-                      <span>•</span>
-                      <span>{formatDistanceToNow(new Date(activity.created_at), { addSuffix: true })}</span>
-                    </div>
+                    {activity.activity_type !== "stage_change" && !activity.description && (
+                      <p className="text-sm text-foreground/80 mt-0.5">{activity.title}</p>
+                    )}
                   </div>
                 </div>
-              );
-            })}
-          </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
