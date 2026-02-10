@@ -185,6 +185,7 @@ export default function TimeClock() {
             videoRef={face.videoRef as any}
             isActive={!!face.cameraStream}
             scanning={face.state === "scanning"}
+            stream={face.cameraStream}
           />
         </div>
 
@@ -268,6 +269,7 @@ export default function TimeClock() {
             videoRef={face.videoRef as any}
             isActive={!!face.cameraStream}
             scanning={face.state === "scanning"}
+            stream={face.cameraStream}
           />
 
           {face.state === "idle" && (

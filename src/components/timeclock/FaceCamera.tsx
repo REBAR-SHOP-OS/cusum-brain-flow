@@ -7,14 +7,19 @@ interface FaceCameraProps {
   isActive: boolean;
   scanning?: boolean;
   className?: string;
+  stream?: MediaStream | null;
 }
 
-export function FaceCamera({ videoRef, isActive, scanning, className }: FaceCameraProps) {
+export function FaceCamera({ videoRef, isActive, scanning, className, stream }: FaceCameraProps) {
   useEffect(() => {
-    if (videoRef.current && isActive) {
-      videoRef.current.play().catch(() => {});
+    const video = videoRef.current;
+    if (!video || !isActive) return;
+    // Ensure srcObject is set (handles race conditions)
+    if (stream && video.srcObject !== stream) {
+      video.srcObject = stream;
     }
-  }, [videoRef, isActive]);
+    video.play().catch(() => {});
+  }, [videoRef, isActive, stream]);
 
   if (!isActive) {
     return (
