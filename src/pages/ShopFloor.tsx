@@ -9,6 +9,7 @@ import {
   ArrowLeft
 } from "lucide-react";
 import { MyJobsCard } from "@/components/shopfloor/MyJobsCard";
+import { VoiceRecorderWidget } from "@/components/shopfloor/VoiceRecorderWidget";
 
 interface HubCard {
   label: string;
@@ -125,6 +126,9 @@ export default function ShopFloor() {
           Back to Entry Screen
         </Link>
       </div>
+
+      {/* Voice Recorder Widget */}
+      <VoiceRecorderWidget />
     </div>
   );
 }
