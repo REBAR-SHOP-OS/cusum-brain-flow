@@ -198,7 +198,7 @@ export default function Home() {
           <h2 className="text-lg font-semibold mb-4">Workspaces</h2>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {[
-              { label: "CEO Command", icon: Crown, route: "/office", state: { section: "ceo-dashboard" }, gradient: "from-amber-500 via-orange-500 to-yellow-600" },
+              { label: "CEO Portal", icon: Crown, route: "/office", state: { section: "ceo-dashboard" }, gradient: "from-amber-500 via-orange-500 to-yellow-600" },
               { label: "Time Clock", icon: Clock, route: "/timeclock", gradient: "from-teal-500 via-emerald-500 to-cyan-500" },
               { label: "Team Hub", icon: MessageSquare, route: "/team-hub", gradient: "from-indigo-500 via-purple-500 to-violet-500" },
             ].map((ws) => (

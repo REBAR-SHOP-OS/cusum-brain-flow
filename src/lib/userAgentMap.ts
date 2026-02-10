@@ -11,7 +11,7 @@ const userAgentMappings: Record<string, UserAgentMapping> = {
   "sattar@rebar.shop": {
     agentKey: "assistant",
     userRole: "ceo",
-    heroText: "How can your **CEO Command** help you today?",
+    heroText: "How can your **CEO Portal** help you today?",
     quickActions: [
       { title: "Business Health Score", prompt: "Give me the full business health score — production, revenue, AR, team attendance, and machine status. Highlight anything that needs my attention.", icon: "Activity", category: "Executive" },
       { title: "Today's exceptions", prompt: "Show me today's exceptions only — anything overdue, blocked, or flagged across all departments.", icon: "AlertTriangle", category: "Executive" },
@@ -33,7 +33,7 @@ const userAgentMappings: Record<string, UserAgentMapping> = {
   "neel@rebar.shop": {
     agentKey: "assistant",
     userRole: "ceo",
-    heroText: "How can your **CEO Command** help you today?",
+    heroText: "How can your **CEO Portal** help you today?",
     quickActions: [
       { title: "Business Health Score", prompt: "Give me the full business health score — production, revenue, AR, team attendance, and machine status. Highlight anything that needs my attention.", icon: "Activity", category: "Executive" },
       { title: "Today's exceptions", prompt: "Show me today's exceptions only — anything overdue, blocked, or flagged across all departments.", icon: "AlertTriangle", category: "Executive" },
