@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { fetchOdooSnapshot } from "./odooHelpers.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -92,12 +93,17 @@ serve(async (req) => {
     const { lead, activities, action, userMessage, pipelineStats, auditType } = body;
 
     // ── pipeline_audit (no lead context needed) ──
+    // Fetch live Odoo data once per request (shared across actions)
+    const odooSnapshot = await fetchOdooSnapshot();
+
     if (action === "pipeline_audit") {
       const auditSystemPrompt = `${systemPrompt}
 
 You are now acting as a Sales Accountability Partner. Your job is to hold the sales team accountable by identifying gaps, flagging risks, and recommending specific actions with deadlines and owner assignments.
 
-Be direct, data-driven, and constructive. Use tables and bullet points. Flag critical issues first.`;
+Be direct, data-driven, and constructive. Use tables and bullet points. Flag critical issues first.
+
+${odooSnapshot}`;
 
       let auditPromptBody = "";
       const statsJson = JSON.stringify(pipelineStats || {}, null, 2);
@@ -137,12 +143,13 @@ Be direct, data-driven, and constructive. Use tables and bullet points. Flag cri
     }
 
     const context = buildLeadContext(lead, activities);
+    const enrichedSystemPrompt = `${systemPrompt}\n\n${odooSnapshot}`;
 
     // ── suggest_actions ──
     if (action === "suggest_actions") {
       const prompt = `Analyze this lead and suggest 3-5 specific next actions:\n\n${context}\n\nSuggest specific, actionable next steps. For each, indicate action type, priority, timing, and reason.`;
       const data = await callAI(
-        [{ role: "system", content: systemPrompt }, { role: "user", content: prompt }],
+        [{ role: "system", content: enrichedSystemPrompt }, { role: "user", content: prompt }],
         [{
           type: "function",
           function: {
@@ -192,7 +199,7 @@ Be direct, data-driven, and constructive. Use tables and bullet points. Flag cri
     if (action === "draft_followup") {
       const prompt = `Draft a brief, professional follow-up email for this lead:\n\n${context}\n\nWrite a short, warm follow-up email (3-5 sentences) from the rebar.shop sales team. Be professional but not overly formal. Reference the specific project if possible.`;
       const data = await callAI(
-        [{ role: "system", content: systemPrompt }, { role: "user", content: prompt }],
+        [{ role: "system", content: enrichedSystemPrompt }, { role: "user", content: prompt }],
         [{
           type: "function",
           function: {
@@ -223,7 +230,7 @@ Be direct, data-driven, and constructive. Use tables and bullet points. Flag cri
     if (action === "draft_email") {
       const prompt = `Draft a professional email for this lead. The user wants: ${userMessage || "a general check-in email"}.\n\n${context}\n\nWrite the email from the rebar.shop sales team.`;
       const data = await callAI(
-        [{ role: "system", content: systemPrompt }, { role: "user", content: prompt }],
+        [{ role: "system", content: enrichedSystemPrompt }, { role: "user", content: prompt }],
         [{
           type: "function",
           function: {
@@ -254,7 +261,7 @@ Be direct, data-driven, and constructive. Use tables and bullet points. Flag cri
     if (action === "score_lead") {
       const prompt = `Score this lead from 0-100 based on likelihood to close and deal quality:\n\n${context}\n\nConsider: deal size, stage progression, activity recency, priority, probability, and time in pipeline.`;
       const data = await callAI(
-        [{ role: "system", content: systemPrompt }, { role: "user", content: prompt }],
+        [{ role: "system", content: enrichedSystemPrompt }, { role: "user", content: prompt }],
         [{
           type: "function",
           function: {
@@ -285,7 +292,7 @@ Be direct, data-driven, and constructive. Use tables and bullet points. Flag cri
     if (action === "set_reminder") {
       const prompt = `Suggest the best reminder/follow-up timing for this lead:\n\n${context}\n\nSuggest a specific date (YYYY-MM-DD), a brief reminder message, and priority level.`;
       const data = await callAI(
-        [{ role: "system", content: systemPrompt }, { role: "user", content: prompt }],
+        [{ role: "system", content: enrichedSystemPrompt }, { role: "user", content: prompt }],
         [{
           type: "function",
           function: {
@@ -316,7 +323,7 @@ Be direct, data-driven, and constructive. Use tables and bullet points. Flag cri
     if (action === "recommend_stage") {
       const prompt = `Analyze this lead and recommend whether it should be moved to a different pipeline stage:\n\n${context}\n\nAvailable stages: new, qualified, proposal, negotiation, won, lost. Suggest the best stage and explain why.`;
       const data = await callAI(
-        [{ role: "system", content: systemPrompt }, { role: "user", content: prompt }],
+        [{ role: "system", content: enrichedSystemPrompt }, { role: "user", content: prompt }],
         [{
           type: "function",
           function: {
@@ -348,7 +355,7 @@ Be direct, data-driven, and constructive. Use tables and bullet points. Flag cri
     if (action === "generate_quote") {
       const prompt = `Based on this lead's context, generate a draft quotation with line items:\n\n${context}\n\nGenerate realistic rebar fabrication line items based on the project context. Include bar sizes, quantities, and pricing typical for Canadian rebar fabrication.`;
       const data = await callAI(
-        [{ role: "system", content: systemPrompt }, { role: "user", content: prompt }],
+        [{ role: "system", content: enrichedSystemPrompt }, { role: "user", content: prompt }],
         [{
           type: "function",
           function: {
@@ -395,7 +402,7 @@ Be direct, data-driven, and constructive. Use tables and bullet points. Flag cri
     if (action === "analyze") {
       const prompt = `The user asks about this lead:\n\n${context}\n\nUser question: ${userMessage || "Give me a full analysis of this lead."}\n\nProvide a thorough, actionable answer. Use markdown formatting.`;
       const data = await callAI(
-        [{ role: "system", content: systemPrompt }, { role: "user", content: prompt }]
+        [{ role: "system", content: enrichedSystemPrompt }, { role: "user", content: prompt }]
       );
 
       const content = data.choices?.[0]?.message?.content || "Unable to analyze this lead.";
