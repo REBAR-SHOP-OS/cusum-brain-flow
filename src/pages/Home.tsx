@@ -224,7 +224,7 @@ export default function Home() {
         {/* Helpers Section */}
         <div className="relative z-10 w-full">
           <h2 className="text-lg font-semibold mb-4">Your Helpers</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+          <div className="grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4">
             {orderedHelpers.map((helper) => (
               <HelperCard
                 key={helper.id}
@@ -250,10 +250,10 @@ function HelperCard({ helper, isPrimary, onClick }: { helper: Helper; isPrimary?
         <div className="aspect-square overflow-hidden bg-muted">
           <img src={helper.image} alt={helper.name} className="w-full h-full object-cover object-top" />
         </div>
-        <div className="p-2.5 sm:p-3">
-          <h3 className="font-bold text-sm sm:text-base leading-tight">{helper.name}</h3>
-          <p className="text-[11px] sm:text-sm text-muted-foreground truncate">{helper.role}</p>
-          {isPrimary && <span className="text-[10px] sm:text-xs text-primary font-medium">Your Agent</span>}
+        <div className="p-1.5 sm:p-3">
+          <h3 className="font-bold text-xs sm:text-base leading-tight truncate">{helper.name}</h3>
+          <p className="text-[9px] sm:text-sm text-muted-foreground truncate">{helper.role}</p>
+          {isPrimary && <span className="text-[8px] sm:text-xs text-primary font-medium">Your Agent</span>}
         </div>
       </div>
     </Card>
