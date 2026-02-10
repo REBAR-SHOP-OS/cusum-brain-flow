@@ -1,29 +1,32 @@
 
 
-## Fix: Text Overflowing in Blitz AI Panel
+## Move CEO Command, Time Clock, and Team Hub to Home Dashboard
 
-### Problem
-Long text content from Blitz (especially bullet points with detailed action items) extends beyond the visible panel area, requiring horizontal scrolling. This is visible in the screenshot where sentences are cut off on the right edge.
+### What's Changing
 
-### Root Cause
-Two issues in `src/components/pipeline/PipelineAISheet.tsx` and `src/components/chat/RichMarkdown.tsx`:
+**Remove from ShopFloor Select Interface** (`src/pages/ShopFloor.tsx`):
+- Remove the "CEO COMMAND", "TIME CLOCK", and "TEAM HUB" cards from the `hubCards` array (lines 25-49)
+- The remaining cards (Office, Shop Floor, Clearance, Loading St., Delivery, Pickup St.) stay untouched
 
-1. The message bubble (line 336) uses `overflow-x-auto` which allows horizontal scroll instead of wrapping text
-2. The `RichMarkdown` component's list items and paragraphs don't enforce word-breaking for long content
-3. The agent message container has `max-w-[90%]` but no `overflow-hidden` or word-break rules
+**Add to Home Dashboard** (`src/pages/Home.tsx`):
+- Add a new "Workspaces" section between the Quick Actions and Automations sections
+- Three new navigation cards styled consistently with the Home page design:
+  - **CEO Command** -- navigates to `/office` with `{ section: "ceo-dashboard" }` state, Crown icon
+  - **Time Clock** -- navigates to `/timeclock`, Clock icon
+  - **Team Hub** -- navigates to `/team-hub`, MessageSquare icon
+- Cards will use a clean grid layout (3 columns on desktop, stacked on mobile) with subtle gradient borders matching the app's dark theme
 
-### Fix (2 files, surgical changes only)
+### Technical Details
 
-**File 1: `src/components/pipeline/PipelineAISheet.tsx`**
-- Line 336: Change `overflow-x-auto` to `overflow-hidden` and add `break-words` on the agent message div
-- This ensures long text wraps within the panel instead of overflowing
+**File 1: `src/pages/ShopFloor.tsx`**
+- Delete entries for CEO COMMAND (lines 25-29), TIME CLOCK (lines 41-44), and TEAM HUB (lines 45-49) from the `hubCards` array
 
-**File 2: `src/components/chat/RichMarkdown.tsx`**
-- Line 30: Add `break-words overflow-hidden` to the root wrapper div
-- Line 118 (td): Add `break-words` to table cells so long text in tables wraps properly
-- Line 130 (li): Add `min-w-0` to list items so flexbox children can shrink and wrap
+**File 2: `src/pages/Home.tsx`**
+- Import `Crown`, `Clock`, `MessageSquare` from lucide-react
+- Add a `workspaceCards` array with the three items (label, icon, route, state)
+- Render a "Workspaces" section with a 3-column card grid between Quick Actions and Automations
+- Each card uses `navigate()` on click, styled with the existing `Card` component
 
 ### Scope
-- No backend, edge function, layout, or other component changes
-- Only affects text wrapping behavior inside the Blitz/Gauge AI panel
-
+- Only 2 files modified: `ShopFloor.tsx` and `Home.tsx`
+- No backend, edge function, CSS, or other component changes
