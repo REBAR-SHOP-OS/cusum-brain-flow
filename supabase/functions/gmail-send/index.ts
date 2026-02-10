@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { encryptToken, decryptToken } from "../_shared/tokenEncryption.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -30,11 +31,15 @@ async function getAccessTokenForUser(userId: string, clientIp: string): Promise<
 
   const { data: tokenRow } = await supabaseAdmin
     .from("user_gmail_tokens")
-    .select("refresh_token")
+    .select("refresh_token, is_encrypted")
     .eq("user_id", userId)
     .maybeSingle();
 
   let refreshToken = tokenRow?.refresh_token;
+  // Decrypt if stored encrypted
+  if (refreshToken && tokenRow?.is_encrypted) {
+    refreshToken = await decryptToken(refreshToken);
+  }
 
   // Fallback to shared env var if user email matches
   if (!refreshToken) {
@@ -76,6 +81,15 @@ async function getAccessTokenForUser(userId: string, clientIp: string): Promise<
   }
 
   const data = await response.json();
+
+  // Token rotation: if Google issued a new refresh token, encrypt & store it
+  if (data.refresh_token) {
+    const encNew = await encryptToken(data.refresh_token);
+    await supabaseAdmin
+      .from("user_gmail_tokens")
+      .update({ refresh_token: encNew, is_encrypted: true, token_rotated_at: new Date().toISOString() })
+      .eq("user_id", userId);
+  }
 
   // Track usage for anomaly detection
   await supabaseAdmin
