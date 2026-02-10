@@ -1,23 +1,32 @@
 
 
-# Fix ben@rebar.shop Access: TimeClock, Integrations, and Gauge Agent
+## Make All Company Emails Visible to All Users
 
-## Problems
-1. Ben (sales-only role) cannot access `/timeclock` -- gets redirected to `/pipeline`
-2. Ben cannot access `/integrations` -- same redirect
-3. When Ben asks a question from the Home page, `handleSend` routes to `/agent/estimating` (Gauge), but `/agent` is not in the allowed routes, so RoleGuard kicks him back to `/pipeline`
+Currently, the `communications` table has an RLS policy that restricts each user to only see their own synced emails (`user_id = auth.uid()`). You want every team member to see **all** emails across the company.
 
-## Solution
-Add the missing route prefixes to the `SALES_ALLOWED` array in `RoleGuard.tsx`.
+### What will change
 
-## Technical Details
+1. **Database policy update** -- Replace the current SELECT policy `"Users read own communications in company"` with a new one that allows any authenticated user in the same company to read all communications for that company. The filter changes from `user_id = auth.uid()` to just `company_id = get_user_company_id(auth.uid())`.
 
-### File: `src/components/auth/RoleGuard.tsx`
+2. **No frontend code changes needed** -- The `useCommunications` hook already queries all rows from `communications` without a `user_id` filter. Once the RLS policy is relaxed, all company emails will automatically appear.
 
-Add three entries to the `SALES_ALLOWED` array:
-- `/timeclock` -- allows time clock access
-- `/integrations` -- allows integrations page access
-- `/agent` -- allows all AI agent routes (so Gauge and other helpers work from Home)
+### Technical Details
 
-No other files need changes. The Home page already correctly maps Ben to Gauge (`/agent/estimating`) -- it's just the route guard blocking access.
+**SQL migration to run:**
+
+```sql
+-- Drop the restrictive per-user SELECT policy
+DROP POLICY "Users read own communications in company" ON public.communications;
+
+-- Create a company-wide SELECT policy
+CREATE POLICY "Users read all communications in company"
+  ON public.communications
+  FOR SELECT
+  TO authenticated
+  USING (company_id = get_user_company_id(auth.uid()));
+```
+
+This keeps data isolated between companies but allows all users within the same company to see every email, call, and SMS synced by any team member.
+
+**UPDATE policy** will remain user-scoped (only the owner can mark their emails read/unread, archive, etc.). INSERT and DELETE policies also remain unchanged.
 
