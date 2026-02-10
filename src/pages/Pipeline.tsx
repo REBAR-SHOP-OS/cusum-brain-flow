@@ -8,8 +8,10 @@ import { PipelineBoard } from "@/components/pipeline/PipelineBoard";
 import { PipelineAnalytics } from "@/components/pipeline/PipelineAnalytics";
 import { LeadFormModal } from "@/components/pipeline/LeadFormModal";
 import { LeadDetailDrawer } from "@/components/pipeline/LeadDetailDrawer";
+import { PipelineFilters, DEFAULT_FILTERS, type PipelineFilterState, type GroupByOption } from "@/components/pipeline/PipelineFilters";
 import { useToast } from "@/hooks/use-toast";
 import type { Tables } from "@/integrations/supabase/types";
+import { startOfDay, startOfWeek, startOfMonth, startOfQuarter, startOfYear, subDays } from "date-fns";
 
 type Lead = Tables<"leads">;
 type LeadWithCustomer = Lead & { customers: { name: string; company_name: string | null } | null };
@@ -34,6 +36,21 @@ export const PIPELINE_STAGES = [
   { id: "shop_drawing_approval", label: "Shop Drawing Sent for Approval", color: "bg-purple-500" },
 ];
 
+function getDateCutoff(rangeId: string): Date | null {
+  const now = new Date();
+  switch (rangeId) {
+    case "today": return startOfDay(now);
+    case "this_week": return startOfWeek(now);
+    case "this_month": return startOfMonth(now);
+    case "this_quarter": return startOfQuarter(now);
+    case "this_year": return startOfYear(now);
+    case "last_7": return subDays(now, 7);
+    case "last_30": return subDays(now, 30);
+    case "last_365": return subDays(now, 365);
+    default: return null;
+  }
+}
+
 export default function Pipeline() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -42,6 +59,8 @@ export default function Pipeline() {
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isScanningRfq, setIsScanningRfq] = useState(false);
   const [isSyncingHistory, setIsSyncingHistory] = useState(false);
+  const [pipelineFilters, setPipelineFilters] = useState<PipelineFilterState>({ ...DEFAULT_FILTERS });
+  const [groupBy, setGroupBy] = useState<GroupByOption>("none");
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
@@ -103,13 +122,63 @@ export default function Pipeline() {
     },
   });
 
+  // Extract unique salespersons and sources for filter dropdowns
+  const salespersons = useMemo(() => {
+    const set = new Set<string>();
+    leads.forEach((l) => {
+      const meta = l.metadata as Record<string, unknown> | null;
+      const sp = meta?.odoo_salesperson as string;
+      if (sp) set.add(sp);
+    });
+    return Array.from(set).sort();
+  }, [leads]);
+
+  const sources = useMemo(() => {
+    const set = new Set<string>();
+    leads.forEach((l) => { if (l.source) set.add(l.source); });
+    return Array.from(set).sort();
+  }, [leads]);
+
+  // Apply client-side filters
+  const filteredLeads = useMemo(() => {
+    return leads.filter((lead) => {
+      const meta = lead.metadata as Record<string, unknown> | null;
+      const sp = (meta?.odoo_salesperson as string) || "";
+
+      if (pipelineFilters.unassigned && sp) return false;
+      if (pipelineFilters.myPipeline && !sp) return false; // would need current user mapping
+      if (pipelineFilters.won && lead.stage !== "won") return false;
+      if (pipelineFilters.lost && lead.stage !== "lost") return false;
+      if (pipelineFilters.openOpportunities && (lead.stage === "won" || lead.stage === "lost")) return false;
+      if (pipelineFilters.salesperson && sp !== pipelineFilters.salesperson) return false;
+
+      if (pipelineFilters.stage) {
+        const stageMatch = PIPELINE_STAGES.find((s) => s.label === pipelineFilters.stage);
+        if (stageMatch && lead.stage !== stageMatch.id) return false;
+      }
+
+      if (pipelineFilters.source && lead.source !== pipelineFilters.source) return false;
+
+      // Date range filters
+      if (pipelineFilters.creationDateRange) {
+        const cutoff = getDateCutoff(pipelineFilters.creationDateRange);
+        if (cutoff && new Date(lead.created_at) < cutoff) return false;
+      }
+      if (pipelineFilters.closedDateRange && lead.expected_close_date) {
+        const cutoff = getDateCutoff(pipelineFilters.closedDateRange);
+        if (cutoff && new Date(lead.expected_close_date) < cutoff) return false;
+      }
+
+      return true;
+    });
+  }, [leads, pipelineFilters]);
+
   const leadsByStage = useMemo(() => {
     const grouped: Record<string, LeadWithCustomer[]> = {};
     PIPELINE_STAGES.forEach((stage) => {
-      grouped[stage.id] = leads
+      grouped[stage.id] = filteredLeads
         .filter((lead) => lead.stage === stage.id)
         .sort((a, b) => {
-          // Sort by priority (stars) desc like Odoo, then by updated_at desc
           const getStars = (l: LeadWithCustomer) => {
             const meta = l.metadata as Record<string, unknown> | null;
             const op = meta?.odoo_priority as string | undefined;
@@ -124,7 +193,7 @@ export default function Pipeline() {
         });
     });
     return grouped;
-  }, [leads]);
+  }, [filteredLeads]);
 
   const handleEdit = (lead: Lead) => {
     setEditingLead(lead);
@@ -212,16 +281,17 @@ export default function Pipeline() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-border shrink-0 gap-3 sm:gap-0">
-        <div className="flex items-center gap-4 flex-wrap">
-          <div>
-            <h1 className="text-xl font-semibold">Pipeline</h1>
-            <p className="text-sm text-muted-foreground">
-              {leads.length} lead{leads.length !== 1 ? "s" : ""}
-            </p>
+      <header className="flex flex-col gap-3 px-4 sm:px-6 py-3 sm:py-4 border-b border-border shrink-0">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
+          <div className="flex items-center gap-4 flex-wrap">
+            <div>
+              <h1 className="text-xl font-semibold">Pipeline</h1>
+              <p className="text-sm text-muted-foreground">
+                {filteredLeads.length}{filteredLeads.length !== leads.length ? ` / ${leads.length}` : ""} lead{filteredLeads.length !== 1 ? "s" : ""}
+              </p>
+            </div>
+            <PipelineAnalytics leads={filteredLeads} />
           </div>
-          <PipelineAnalytics leads={leads} />
-        </div>
         <div className="flex items-center gap-3 w-full sm:w-auto">
           <div className="relative flex-1 sm:flex-initial sm:w-48 lg:w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -257,6 +327,16 @@ export default function Pipeline() {
             <span className="hidden sm:inline">Add Lead</span>
           </Button>
         </div>
+        </div>
+        {/* Filter bar */}
+        <PipelineFilters
+          filters={pipelineFilters}
+          onFiltersChange={setPipelineFilters}
+          groupBy={groupBy}
+          onGroupByChange={setGroupBy}
+          salespersons={salespersons}
+          sources={sources}
+        />
       </header>
 
       {/* Pipeline Board */}
