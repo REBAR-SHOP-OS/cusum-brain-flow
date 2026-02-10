@@ -1,78 +1,34 @@
 
 
-## Add "Add to Brain" and "Add to Task" Across All Conversations
+## Add Personalized AI Agent for neel@rebar.shop
 
-Currently these action buttons exist only in the AI Agent chat (`MessageActions`) and the Unified Inbox (`CommunicationViewer`). This plan adds them to every remaining conversation interface.
+Neel is a designated administrator but currently has no entry in the user-agent mapping, so he gets the generic Home page experience. This adds Neel with Vizzy (CEO Assistant) as his primary agent.
 
 ### What Changes
 
-**1. Create a shared `ContentActions` component** (`src/components/shared/ContentActions.tsx`)
-- A compact, reusable row of icon buttons: Copy, Add to Brain, Add to Task
-- Accepts `content: string` and optional `title: string` props
-- Reuses the same Brain insert logic from `MessageActions` and the same `CreateTaskDialog`
-- Can be dropped into any message bubble or content panel with one line
+**File: `src/lib/userAgentMap.ts`**
 
-**2. Surfaces that get the new buttons:**
+Add a new entry for `neel@rebar.shop` in the `userAgentMappings` object:
 
-| Surface | File | Current State | Change |
-|---------|------|---------------|--------|
-| Cal/Gauge Estimation Chat | `CalChatMessage.tsx` | No actions | Add `ContentActions` below agent messages |
-| Admin Console (Intelligence Panel) | `IntelligencePanel.tsx` | No actions | Add `ContentActions` below assistant messages |
-| TeamHub Channel Messages | `MessageThread.tsx` | Emoji/thread/more on hover | Add Brain + Task icons to hover action row |
-| Gmail Email Viewer | `EmailViewer.tsx` | Task only (custom modal) | Add Brain button next to existing task button |
-| Inbox Email Viewer | `InboxEmailViewer.tsx` | Task only | Add Brain button alongside existing `AddToTaskButton` |
-| Inbox Detail View | `InboxDetailView.tsx` | Task only | Add Brain button alongside existing `AddToTaskButton` |
-| Call Summary Dialog | `CallSummaryDialog.tsx` | Task creation built-in | Add Brain button to save summary to knowledge |
-| Call Analysis Dialog | `CallAnalysisDialog.tsx` | Tasks built-in, no Brain save | Add Brain button to save analysis to knowledge |
-| Pipeline Lead Email | `LeadEmailContent.tsx` | No actions | Add `ContentActions` below email body |
-
-**3. Files NOT changed:**
-- `ChatMessage.tsx` / `MessageActions.tsx` -- already has both
-- `CommunicationViewer.tsx` -- already has both
-
-### Technical Details
-
-**New shared component** (`src/components/shared/ContentActions.tsx`):
 ```typescript
-// Compact icon row: Copy | Brain | Task
-// Props: content, title (optional), size ("sm" | "xs")
-// Uses useCompanyId() + supabase insert to knowledge table
-// Uses CreateTaskDialog for task creation
+"neel@rebar.shop": {
+  agentKey: "assistant",
+  userRole: "ceo",
+  heroText: "How can your **CEO Command** help you today?",
+  quickActions: [
+    { title: "Business Health Score", prompt: "Give me the full business health score — production, revenue, AR, team attendance, and machine status. Highlight anything that needs my attention.", icon: "Activity", category: "Executive" },
+    { title: "Today's exceptions", prompt: "Show me today's exceptions only — anything overdue, blocked, or flagged across all departments.", icon: "AlertTriangle", category: "Executive" },
+    { title: "Pipeline overview", prompt: "Give me a pipeline summary — active leads, expected close dates, and any deals that need attention.", icon: "TrendingUp", category: "Sales" },
+    { title: "Team attendance", prompt: "Show me today's team attendance — who's clocked in, who's absent, and any patterns to watch.", icon: "Users", category: "HR" },
+  ],
+},
 ```
 
-**CalChatMessage.tsx** -- Add after the metadata timestamp block (line ~160), only for agent messages:
-```tsx
-{!isUser && message.content && (
-  <ContentActions content={message.content} title={message.content.slice(0, 80)} />
-)}
-```
+This gives Neel:
+- **Vizzy** as his primary AI agent on the Home page
+- **Personalized hero text**: "How can your CEO Command help you today?"
+- **4 executive quick actions**: Business Health Score, Today's Exceptions, Pipeline Overview, Team Attendance
+- Same configuration as Sattar since both are administrators with full system access
 
-**IntelligencePanel.tsx** -- Add inside the assistant message block (after the timestamp, line ~92):
-```tsx
-{msg.role === "assistant" && (
-  <ContentActions content={msg.content} size="xs" />
-)}
-```
+No other files need to change -- the Home page, agent workspace, and Daily Summarizer already read from `userAgentMap.ts` dynamically.
 
-**MessageThread.tsx** -- Add Brain and Task icon buttons to the existing hover actions row (lines 422-432):
-```tsx
-<Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleAddToBrain}>
-  <Brain className="w-3.5 h-3.5" />
-</Button>
-<Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setTaskOpen(true)}>
-  <CheckSquare className="w-3.5 h-3.5" />
-</Button>
-```
-
-**EmailViewer.tsx** -- Add a Brain icon button next to the existing CheckSquare task button (line 27-29).
-
-**InboxEmailViewer.tsx** and **InboxDetailView.tsx** -- Add a Brain button next to existing `AddToTaskButton` in the footer bar.
-
-**CallSummaryDialog.tsx** -- Add "Save to Brain" button next to "Create All" tasks button.
-
-**CallAnalysisDialog.tsx** -- Add "Save to Brain" button in the summary tab to persist the analysis.
-
-**LeadEmailContent.tsx** -- Add `ContentActions` below the email body section, passing the email subject + body as content.
-
-### No database or backend changes needed
-The `knowledge` table and `tasks` table already exist with proper RLS. All inserts go through the existing Supabase client.
