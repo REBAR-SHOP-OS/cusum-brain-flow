@@ -110,3 +110,6 @@ verify_jwt = false
 
 [functions.tiktok-oauth]
 verify_jwt = false
+
+[functions.sync-odoo-leads]
+verify_jwt = false
