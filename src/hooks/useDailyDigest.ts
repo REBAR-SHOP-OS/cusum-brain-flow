@@ -56,6 +56,27 @@ export interface DigestSocialMediaDigest {
   recommendations: string[];
 }
 
+export interface DigestEmployeeReport {
+  totalClocked: string;
+  totalHours: string;
+  highlights: string[];
+  concerns: string[];
+}
+
+export interface DigestProductionReport {
+  totalRuns: string;
+  totalOutput: string;
+  scrapRate: string;
+  topOperators: string[];
+  issues: string[];
+}
+
+export interface DigestErpActivity {
+  totalEvents: string;
+  mostActiveUsers: string[];
+  summary: string;
+}
+
 export interface DigestData {
   greeting: string;
   affirmation: string;
@@ -65,6 +86,9 @@ export interface DigestData {
   meetingSummaries?: DigestMeetingSummary[];
   phoneCalls?: DigestPhoneCall[];
   socialMediaDigest?: DigestSocialMediaDigest;
+  employeeReport?: DigestEmployeeReport;
+  productionReport?: DigestProductionReport;
+  erpActivity?: DigestErpActivity;
   calendarEvents: DigestCalendarEvent[];
   tipOfTheDay: DigestTip;
   randomFact: string;
@@ -82,6 +106,9 @@ export interface DigestStats {
   invoices?: number;
   overdueInvoices?: number;
   socialPosts?: number;
+  employeesClocked?: number;
+  machineRuns?: number;
+  erpEvents?: number;
 }
 
 export function useDailyDigest(date: Date) {

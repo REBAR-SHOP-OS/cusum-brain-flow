@@ -49,6 +49,18 @@ serve(async (req) => {
     const dayEnd = `${targetDate}T23:59:59.999Z`;
 
     // ── Fetch all data sources in parallel ───────────────────────────
+    // Fetch profiles for name resolution
+    const { data: profilesList } = await supabase
+      .from("profiles")
+      .select("id, user_id, full_name, department, title")
+      .eq("is_active", true);
+    const profiles = profilesList || [];
+    const profileMap: Record<string, string> = {};
+    profiles.forEach((p: any) => {
+      profileMap[p.id] = p.full_name || "Unknown";
+      if (p.user_id) profileMap[p.user_id] = p.full_name || "Unknown";
+    });
+
     const [
       emailsRes,
       tasksRes,
@@ -62,6 +74,10 @@ serve(async (req) => {
       invoicesRes,
       vendorsRes,
       socialPostsRes,
+      timeClockRes,
+      machineRunsRes,
+      eventsRes,
+      commandLogRes,
     ] = await Promise.all([
       supabase
         .from("communications")
@@ -119,20 +135,17 @@ serve(async (req) => {
         .lte("received_at", dayEnd)
         .order("received_at", { ascending: false })
         .limit(50),
-      // QuickBooks Invoices from accounting_mirror
       supabase
         .from("accounting_mirror")
         .select("quickbooks_id, data, balance, last_synced_at")
         .eq("entity_type", "Invoice")
         .order("created_at", { ascending: false })
         .limit(30),
-      // QuickBooks Vendors
       supabase
         .from("accounting_mirror")
         .select("quickbooks_id, data, balance")
         .eq("entity_type", "Vendor")
         .limit(20),
-      // Social media posts (recent 7 days for trend context)
       supabase
         .from("social_posts")
         .select("platform, title, content, status, scheduled_date, reach, impressions, likes, comments, shares, clicks, content_type, page_name")
@@ -140,6 +153,37 @@ serve(async (req) => {
         .lte("scheduled_date", targetDate)
         .order("scheduled_date", { ascending: false })
         .limit(30),
+      // Employee time clock entries
+      supabase
+        .from("time_clock_entries")
+        .select("profile_id, clock_in, clock_out, break_minutes, notes")
+        .gte("clock_in", dayStart)
+        .lte("clock_in", dayEnd)
+        .order("clock_in", { ascending: true }),
+      // Machine runs (production activity)
+      supabase
+        .from("machine_runs")
+        .select("operator_profile_id, supervisor_profile_id, process, status, started_at, ended_at, duration_seconds, input_qty, output_qty, scrap_qty, notes, machine_id")
+        .gte("started_at", dayStart)
+        .lte("started_at", dayEnd)
+        .order("started_at", { ascending: false })
+        .limit(50),
+      // ERP system events (user activity log)
+      supabase
+        .from("events")
+        .select("event_type, entity_type, actor_id, description, created_at")
+        .gte("created_at", dayStart)
+        .lte("created_at", dayEnd)
+        .order("created_at", { ascending: false })
+        .limit(100),
+      // AI command usage
+      supabase
+        .from("command_log")
+        .select("user_id, parsed_intent, result, created_at")
+        .gte("created_at", dayStart)
+        .lte("created_at", dayEnd)
+        .order("created_at", { ascending: false })
+        .limit(50),
     ]);
 
     const emails = emailsRes.data || [];
@@ -154,6 +198,10 @@ serve(async (req) => {
     const invoices = invoicesRes.data || [];
     const vendors = vendorsRes.data || [];
     const socialPosts = socialPostsRes.data || [];
+    const timeEntries = timeClockRes.data || [];
+    const machineRuns = machineRunsRes.data || [];
+    const erpEvents = eventsRes.data || [];
+    const commandLogs = commandLogRes.data || [];
 
     // ── Compute QuickBooks summary ───────────────────────────────────
     const totalAR = invoices.reduce((sum: number, inv: any) => sum + (inv.balance || 0), 0);
@@ -268,6 +316,72 @@ ${publishedPosts.length > 0
     }).join("\n")
   : "No published posts in last 7 days."
 }
+
+--- EMPLOYEE TIME CLOCK (${timeEntries.length} entries today) ---
+${timeEntries.length > 0
+  ? timeEntries.map((t: any, i: number) => {
+      const name = profileMap[t.profile_id] || t.profile_id;
+      const clockIn = t.clock_in ? new Date(t.clock_in).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : "?";
+      const clockOut = t.clock_out ? new Date(t.clock_out).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : "still clocked in";
+      const hrs = t.clock_out ? ((new Date(t.clock_out).getTime() - new Date(t.clock_in).getTime()) / 3600000).toFixed(1) : "ongoing";
+      return `${i + 1}. ${name} — In: ${clockIn} | Out: ${clockOut} | Hours: ${hrs}h${t.break_minutes ? ` | Break: ${t.break_minutes}min` : ""}${t.notes ? ` | Note: ${t.notes}` : ""}`;
+    }).join("\n")
+  : "No time clock entries today."
+}
+
+--- PRODUCTION RUNS (${machineRuns.length} machine runs today) ---
+${machineRuns.length > 0
+  ? (() => {
+      const totalOutput = machineRuns.reduce((s: number, r: any) => s + (r.output_qty || 0), 0);
+      const totalScrap = machineRuns.reduce((s: number, r: any) => s + (r.scrap_qty || 0), 0);
+      const completedRuns = machineRuns.filter((r: any) => r.status === "completed").length;
+      const operatorStats: Record<string, { runs: number; output: number }> = {};
+      machineRuns.forEach((r: any) => {
+        const name = profileMap[r.operator_profile_id] || "Unknown";
+        if (!operatorStats[name]) operatorStats[name] = { runs: 0, output: 0 };
+        operatorStats[name].runs++;
+        operatorStats[name].output += r.output_qty || 0;
+      });
+      const opLines = Object.entries(operatorStats).map(([name, s]) => `  • ${name}: ${s.runs} runs, ${s.output} pcs produced`).join("\n");
+      const runLines = machineRuns.slice(0, 10).map((r: any, i: number) => {
+        const op = profileMap[r.operator_profile_id] || "Unknown";
+        return `${i + 1}. [${r.process}] ${op} — Status: ${r.status} | In: ${r.input_qty || 0} → Out: ${r.output_qty || 0} | Scrap: ${r.scrap_qty || 0}`;
+      }).join("\n");
+      return `Summary: ${completedRuns}/${machineRuns.length} completed | Output: ${totalOutput} pcs | Scrap: ${totalScrap} pcs\nPer operator:\n${opLines}\nRecent runs:\n${runLines}`;
+    })()
+  : "No production runs today."
+}
+
+--- ERP ACTIVITY LOG (${erpEvents.length} events today) ---
+${erpEvents.length > 0
+  ? (() => {
+      const eventsByType: Record<string, number> = {};
+      const actorActivity: Record<string, number> = {};
+      erpEvents.forEach((e: any) => {
+        const key = `${e.event_type}:${e.entity_type}`;
+        eventsByType[key] = (eventsByType[key] || 0) + 1;
+        const name = profileMap[e.actor_id] || e.actor_id || "system";
+        actorActivity[name] = (actorActivity[name] || 0) + 1;
+      });
+      const eventBreakdown = Object.entries(eventsByType).map(([k, v]) => `${k} (${v})`).join(", ");
+      const userBreakdown = Object.entries(actorActivity).sort((a, b) => b[1] - a[1]).map(([name, count]) => `${name}: ${count} actions`).join(", ");
+      return `Event breakdown: ${eventBreakdown}\nUser activity: ${userBreakdown}`;
+    })()
+  : "No ERP events logged today."
+}
+
+--- AI ASSISTANT USAGE (${commandLogs.length} commands today) ---
+${commandLogs.length > 0
+  ? (() => {
+      const intentCounts: Record<string, number> = {};
+      commandLogs.forEach((c: any) => {
+        const intent = c.parsed_intent || "unknown";
+        intentCounts[intent] = (intentCounts[intent] || 0) + 1;
+      });
+      return `Commands: ${Object.entries(intentCounts).map(([k, v]) => `${k} (${v})`).join(", ")}`;
+    })()
+  : "No AI commands used today."
+}
 `;
 
     // ── Call Lovable AI ───────────────────────────────────────────────
@@ -328,6 +442,24 @@ You MUST return valid JSON with this exact structure (no markdown, no code fence
     "highlights": ["2-3 key social media observations"],
     "recommendations": ["1-2 content recommendations based on performance"]
   },
+  "employeeReport": {
+    "totalClocked": "Number of employees who clocked in",
+    "totalHours": "Total hours worked across all employees",
+    "highlights": ["Per-employee summary: name, hours, production output if applicable"],
+    "concerns": ["Any attendance or productivity concerns"]
+  },
+  "productionReport": {
+    "totalRuns": "Number of machine runs",
+    "totalOutput": "Total pieces produced",
+    "scrapRate": "Scrap percentage",
+    "topOperators": ["Top performing operators with output numbers"],
+    "issues": ["Any production issues or bottlenecks noticed"]
+  },
+  "erpActivity": {
+    "totalEvents": "Total ERP events logged",
+    "mostActiveUsers": ["Top 3 most active users with action counts"],
+    "summary": "Brief summary of what type of ERP activity happened (orders created, status changes, etc.)"
+  },
   "calendarEvents": [
     {
       "time": "Suggested time slot",
@@ -351,6 +483,10 @@ Rules:
 - Summarize all RingCentral phone calls and SMS with recommended follow-ups
 - Provide a clear financial snapshot with overdue invoice alerts
 - Analyze social media performance and provide content recommendations
+- Summarize each employee's daily activity: hours worked, production runs, key actions
+- Flag employees who didn't clock in or had very short shifts
+- Highlight top-performing operators by output quantity
+- Report ERP system usage patterns and most active users
 - If there's little data, still provide useful suggestions and planning tips
 - Keep takeaways actionable and concise
 - Suggest calendar blocks for follow-ups based on the data
@@ -426,6 +562,9 @@ Rules:
           invoices: invoices.length,
           overdueInvoices: overdueInvoices.length,
           socialPosts: publishedPosts.length,
+          employeesClocked: timeEntries.length,
+          machineRuns: machineRuns.length,
+          erpEvents: erpEvents.length,
         },
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
