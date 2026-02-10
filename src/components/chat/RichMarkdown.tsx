@@ -115,7 +115,7 @@ export function RichMarkdown({ content, className }: RichMarkdownProps) {
               );
             }
             return (
-              <td className="px-3 py-2 text-foreground/80 whitespace-nowrap">{children}</td>
+              <td className="px-3 py-2 text-foreground/80 min-w-[80px] max-w-[320px]">{children}</td>
             );
           },
 
