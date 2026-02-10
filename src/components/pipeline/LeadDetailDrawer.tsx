@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Building, Mail, Phone, Calendar, DollarSign, Pencil, Trash2,
   TrendingUp, Clock, User, FileText, Star, ArrowRight,
-  Paperclip, Download, Link2, File,
+  Paperclip, Download, Link2, File, Sparkles,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -14,6 +14,7 @@ import { PIPELINE_STAGES } from "@/pages/Pipeline";
 import { LeadTimeline } from "./LeadTimeline";
 import { LeadEmailThread } from "./LeadEmailThread";
 import { LeadFiles } from "./LeadFiles";
+import { LeadAIPanel } from "./LeadAIPanel";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Lead = Tables<"leads">;
@@ -136,13 +137,14 @@ export function LeadDetailDrawer({
         {/* Body */}
         <div className="p-6">
           <Tabs defaultValue="email" className="w-full">
-            <TabsList className="w-full grid grid-cols-6 mb-4">
+            <TabsList className="w-full grid grid-cols-7 mb-4">
               <TabsTrigger value="email">Email</TabsTrigger>
               <TabsTrigger value="timeline">Timeline</TabsTrigger>
               <TabsTrigger value="details">Details</TabsTrigger>
               <TabsTrigger value="files">Files</TabsTrigger>
               <TabsTrigger value="financials">$</TabsTrigger>
               <TabsTrigger value="notes">Notes</TabsTrigger>
+              <TabsTrigger value="ai" className="gap-1"><Sparkles className="w-3 h-3" />AI</TabsTrigger>
             </TabsList>
 
             <TabsContent value="email" className="space-y-4 mt-0">
@@ -278,6 +280,10 @@ export function LeadDetailDrawer({
               {!lead.description && !lead.notes && (
                 <p className="text-sm text-muted-foreground text-center py-8">No notes yet.</p>
               )}
+            </TabsContent>
+
+            <TabsContent value="ai" className="mt-0">
+              <LeadAIPanel lead={lead} />
             </TabsContent>
           </Tabs>
         </div>
