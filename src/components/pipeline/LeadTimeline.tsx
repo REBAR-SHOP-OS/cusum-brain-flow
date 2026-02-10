@@ -305,6 +305,32 @@ export function LeadTimeline({ lead }: LeadTimelineProps) {
               const FileIcon = getFileIcon(f.mime_type || "", ext);
               const iconColor = getFileIconColor(ext);
 
+              const isOdooFile = f.file_url?.includes("/web/content/") && f.odoo_id;
+
+              const handleDownload = async (e: React.MouseEvent) => {
+                if (!isOdooFile) return; // let browser handle non-odoo links
+                e.preventDefault();
+                try {
+                  const { data: sessionData } = await supabase.auth.getSession();
+                  const token = sessionData.session?.access_token;
+                  if (!token) return;
+                  const proxyUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/odoo-file-proxy?id=${f.odoo_id}`;
+                  const res = await fetch(proxyUrl, {
+                    headers: { Authorization: `Bearer ${token}` },
+                  });
+                  if (!res.ok) throw new Error("Download failed");
+                  const blob = await res.blob();
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = f.file_name || `file-${f.odoo_id}`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                } catch (err) {
+                  console.error("File download error:", err);
+                }
+              };
+
               return (
                 <div key={`file-${f.id}`}>
                   {showDateSep && (
@@ -316,11 +342,9 @@ export function LeadTimeline({ lead }: LeadTimelineProps) {
                     </div>
                   )}
                   <div className="flex gap-3 py-1 pl-11">
-                    <a
-                      href={f.file_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-2 px-3 py-2 rounded-md border border-border bg-secondary/50 hover:bg-secondary transition-colors group max-w-[300px]"
+                    <button
+                      onClick={handleDownload}
+                      className="flex items-center gap-2 px-3 py-2 rounded-md border border-border bg-secondary/50 hover:bg-secondary transition-colors group max-w-[300px] text-left"
                     >
                       <FileIcon className={cn("w-5 h-5 shrink-0", iconColor)} />
                       <div className="flex-1 min-w-0">
@@ -328,7 +352,7 @@ export function LeadTimeline({ lead }: LeadTimelineProps) {
                         <p className="text-[10px] text-muted-foreground">{ext}</p>
                       </div>
                       <Download className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 shrink-0" />
-                    </a>
+                    </button>
                   </div>
                 </div>
               );
