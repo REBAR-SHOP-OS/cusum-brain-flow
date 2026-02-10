@@ -47,8 +47,8 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
     }
   };
 
-  const handleAction = (item: Notification) => {
-    markActioned(item.id);
+  const handleTodoClick = (item: Notification) => {
+    if (item.status === "unread") markRead(item.id);
     if (item.linkTo) {
       navigate(item.linkTo);
       onClose();
@@ -123,7 +123,7 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
                   {todos.map((todo) => (
                     <div
                       key={todo.id}
-                      onClick={() => handleAction(todo)}
+                      onClick={() => handleTodoClick(todo)}
                       className={cn(
                         "flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors",
                         todo.status === "unread"
