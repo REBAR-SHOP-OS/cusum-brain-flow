@@ -1,34 +1,60 @@
 
 
-## Add Personalized AI Agent for neel@rebar.shop
+## Fix: Send Individual Lead Details to Blitz So It Can List Them
 
-Neel is a designated administrator but currently has no entry in the user-agent mapping, so he gets the generic Home page experience. This adds Neel with Vizzy (CEO Assistant) as his primary agent.
+### The Problem
+When Blitz reports "80 unassigned opportunities," it cannot list them because the `buildPipelineStats` function only sends summary numbers (counts by stage, by salesperson, totals). The AI never receives individual lead names or details.
 
-### What Changes
+### The Fix
 
-**File: `src/lib/userAgentMap.ts`**
+**File: `src/components/pipeline/PipelineAISheet.tsx`**
 
-Add a new entry for `neel@rebar.shop` in the `userAgentMappings` object:
+Expand the `buildPipelineStats` function to include a list of individual leads grouped by relevant criteria. Specifically:
+
+1. Add an `unassigned` array containing each unassigned lead's title, stage, value, and age in days
+2. Add a `staleLeads` array with similar detail for stale leads
+3. Cap each list at ~200 entries to stay within AI token limits
+
+This way, when a user asks "list unassigned opportunities," Blitz will have the actual lead names to enumerate.
+
+### Technical Details
+
+Update `buildPipelineStats` (lines 55-82) to also collect:
 
 ```typescript
-"neel@rebar.shop": {
-  agentKey: "assistant",
-  userRole: "ceo",
-  heroText: "How can your **CEO Command** help you today?",
-  quickActions: [
-    { title: "Business Health Score", prompt: "Give me the full business health score — production, revenue, AR, team attendance, and machine status. Highlight anything that needs my attention.", icon: "Activity", category: "Executive" },
-    { title: "Today's exceptions", prompt: "Show me today's exceptions only — anything overdue, blocked, or flagged across all departments.", icon: "AlertTriangle", category: "Executive" },
-    { title: "Pipeline overview", prompt: "Give me a pipeline summary — active leads, expected close dates, and any deals that need attention.", icon: "TrendingUp", category: "Sales" },
-    { title: "Team attendance", prompt: "Show me today's team attendance — who's clocked in, who's absent, and any patterns to watch.", icon: "Users", category: "HR" },
-  ],
-},
+const unassignedLeads: { title: string; stage: string; value: number; days: number }[] = [];
+const staleLeadsList: { title: string; stage: string; salesperson: string; daysSinceUpdate: number }[] = [];
+
+// Inside the forEach loop:
+if (sp === "Unassigned") {
+  unassignedLeads.push({
+    title: lead.title,
+    stage: lead.stage,
+    value,
+    days: daysSince,
+  });
+}
+if (daysSince >= 5 && lead.stage !== "won" && lead.stage !== "lost") {
+  staleLeadsList.push({
+    title: lead.title,
+    stage: lead.stage,
+    salesperson: sp,
+    daysSinceUpdate: daysSince,
+  });
+}
+
+// Return with the new arrays (capped at 200 each):
+return {
+  total: leads.length,
+  byStage,
+  bySalesperson,
+  staleCount,
+  totalValue,
+  weightedValue,
+  unassignedLeads: unassignedLeads.slice(0, 200),
+  staleLeadsList: staleLeadsList.slice(0, 200),
+};
 ```
 
-This gives Neel:
-- **Vizzy** as his primary AI agent on the Home page
-- **Personalized hero text**: "How can your CEO Command help you today?"
-- **4 executive quick actions**: Business Health Score, Today's Exceptions, Pipeline Overview, Team Attendance
-- Same configuration as Sattar since both are administrators with full system access
-
-No other files need to change -- the Home page, agent workspace, and Daily Summarizer already read from `userAgentMap.ts` dynamically.
+No backend or edge function changes needed -- the `pipeline-ai` function already serializes the full `pipelineStats` object into the AI prompt via `JSON.stringify`.
 
