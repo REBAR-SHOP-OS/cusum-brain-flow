@@ -198,14 +198,14 @@ export default function Home() {
           <h2 className="text-lg font-semibold mb-4">Workspaces</h2>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {[
-              { label: "CEO Portal", icon: Crown, route: "/office", state: { section: "ceo-dashboard" }, gradient: "from-amber-500 via-orange-500 to-yellow-600" },
+              { label: "CEO Portal", icon: Crown, route: "/ceo", gradient: "from-amber-500 via-orange-500 to-yellow-600" },
               { label: "Time Clock", icon: Clock, route: "/timeclock", gradient: "from-teal-500 via-emerald-500 to-cyan-500" },
               { label: "Team Hub", icon: MessageSquare, route: "/team-hub", gradient: "from-indigo-500 via-purple-500 to-violet-500" },
             ].map((ws) => (
               <div
                 key={ws.label}
                 className={`relative overflow-hidden rounded-2xl p-5 text-white cursor-pointer transition-transform hover:scale-[1.02] bg-gradient-to-br ${ws.gradient} flex items-center gap-4`}
-                onClick={() => navigate(ws.route, ws.state ? { state: ws.state } : undefined)}
+                onClick={() => navigate(ws.route)}
               >
                 <span className="relative z-10 font-bold text-lg">{ws.label}</span>
                 <ChevronRight className="w-5 h-5 text-white/70 ml-auto relative z-10" />
