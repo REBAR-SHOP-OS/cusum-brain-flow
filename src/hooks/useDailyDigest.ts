@@ -40,13 +40,31 @@ export interface DigestPhoneCall {
   action: string;
 }
 
+export interface DigestFinancialSnapshot {
+  totalAR: string;
+  overdueCount: string;
+  overdueAmount: string;
+  highlights: string[];
+  cashFlowNote: string;
+}
+
+export interface DigestSocialMediaDigest {
+  totalReach: string;
+  totalEngagement: string;
+  topPlatform: string;
+  highlights: string[];
+  recommendations: string[];
+}
+
 export interface DigestData {
   greeting: string;
   affirmation: string;
   keyTakeaways: string[];
+  financialSnapshot?: DigestFinancialSnapshot;
   emailCategories: DigestEmailCategory[];
   meetingSummaries?: DigestMeetingSummary[];
   phoneCalls?: DigestPhoneCall[];
+  socialMediaDigest?: DigestSocialMediaDigest;
   calendarEvents: DigestCalendarEvent[];
   tipOfTheDay: DigestTip;
   randomFact: string;
@@ -61,6 +79,9 @@ export interface DigestStats {
   deliveries: number;
   meetings?: number;
   phoneCalls?: number;
+  invoices?: number;
+  overdueInvoices?: number;
+  socialPosts?: number;
 }
 
 export function useDailyDigest(date: Date) {

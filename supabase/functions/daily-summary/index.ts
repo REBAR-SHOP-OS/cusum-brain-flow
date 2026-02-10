@@ -4,7 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 serve(async (req) => {
@@ -48,7 +48,7 @@ serve(async (req) => {
     const dayStart = `${targetDate}T00:00:00.000Z`;
     const dayEnd = `${targetDate}T23:59:59.999Z`;
 
-    // ── Fetch real data in parallel ──────────────────────────────────
+    // ── Fetch all data sources in parallel ───────────────────────────
     const [
       emailsRes,
       tasksRes,
@@ -59,6 +59,9 @@ serve(async (req) => {
       teamMsgsRes,
       meetingsRes,
       rcCallsRes,
+      invoicesRes,
+      vendorsRes,
+      socialPostsRes,
     ] = await Promise.all([
       supabase
         .from("communications")
@@ -101,7 +104,6 @@ serve(async (req) => {
         .lte("created_at", dayEnd)
         .order("created_at", { ascending: false })
         .limit(50),
-      // Team meetings with AI summaries
       supabase
         .from("team_meetings")
         .select("title, meeting_type, started_at, ended_at, ai_summary, participants, duration_seconds, status")
@@ -109,7 +111,6 @@ serve(async (req) => {
         .lte("started_at", dayEnd)
         .order("started_at", { ascending: false })
         .limit(20),
-      // RingCentral calls from communications
       supabase
         .from("communications")
         .select("from_address, to_address, subject, body_preview, received_at, status, source, metadata")
@@ -118,6 +119,27 @@ serve(async (req) => {
         .lte("received_at", dayEnd)
         .order("received_at", { ascending: false })
         .limit(50),
+      // QuickBooks Invoices from accounting_mirror
+      supabase
+        .from("accounting_mirror")
+        .select("quickbooks_id, data, balance, last_synced_at")
+        .eq("entity_type", "Invoice")
+        .order("created_at", { ascending: false })
+        .limit(30),
+      // QuickBooks Vendors
+      supabase
+        .from("accounting_mirror")
+        .select("quickbooks_id, data, balance")
+        .eq("entity_type", "Vendor")
+        .limit(20),
+      // Social media posts (recent 7 days for trend context)
+      supabase
+        .from("social_posts")
+        .select("platform, title, content, status, scheduled_date, reach, impressions, likes, comments, shares, clicks, content_type, page_name")
+        .gte("scheduled_date", new Date(new Date(targetDate).getTime() - 7 * 86400000).toISOString().split("T")[0])
+        .lte("scheduled_date", targetDate)
+        .order("scheduled_date", { ascending: false })
+        .limit(30),
     ]);
 
     const emails = emailsRes.data || [];
@@ -129,6 +151,31 @@ serve(async (req) => {
     const teamMessages = teamMsgsRes.data || [];
     const meetings = meetingsRes.data || [];
     const rcCalls = rcCallsRes.data || [];
+    const invoices = invoicesRes.data || [];
+    const vendors = vendorsRes.data || [];
+    const socialPosts = socialPostsRes.data || [];
+
+    // ── Compute QuickBooks summary ───────────────────────────────────
+    const totalAR = invoices.reduce((sum: number, inv: any) => sum + (inv.balance || 0), 0);
+    const overdueInvoices = invoices.filter((inv: any) => {
+      const dueDate = inv.data?.DueDate;
+      return dueDate && dueDate < targetDate && (inv.balance || 0) > 0;
+    });
+    const totalOverdue = overdueInvoices.reduce((sum: number, inv: any) => sum + (inv.balance || 0), 0);
+
+    // ── Compute social media summary ─────────────────────────────────
+    const totalReach = socialPosts.reduce((sum: number, p: any) => sum + (p.reach || 0), 0);
+    const totalImpressions = socialPosts.reduce((sum: number, p: any) => sum + (p.impressions || 0), 0);
+    const totalLikes = socialPosts.reduce((sum: number, p: any) => sum + (p.likes || 0), 0);
+    const totalComments = socialPosts.reduce((sum: number, p: any) => sum + (p.comments || 0), 0);
+    const totalShares = socialPosts.reduce((sum: number, p: any) => sum + (p.shares || 0), 0);
+    const totalClicks = socialPosts.reduce((sum: number, p: any) => sum + (p.clicks || 0), 0);
+    const publishedPosts = socialPosts.filter((p: any) => p.status === "published");
+    const scheduledPosts = socialPosts.filter((p: any) => p.status === "scheduled");
+    const platformBreakdown: Record<string, number> = {};
+    publishedPosts.forEach((p: any) => {
+      platformBreakdown[p.platform] = (platformBreakdown[p.platform] || 0) + 1;
+    });
 
     // ── Build context for AI ─────────────────────────────────────────
     const dataContext = `
@@ -136,37 +183,37 @@ serve(async (req) => {
 
 --- EMAILS (${emails.length} received today) ---
 ${emails.length > 0
-  ? emails.map((e, i) => `${i + 1}. From: ${e.from_address} | Subject: ${e.subject || "(no subject)"} | Preview: ${(e.body_preview || "").slice(0, 150)}`).join("\n")
+  ? emails.map((e: any, i: number) => `${i + 1}. From: ${e.from_address} | Subject: ${e.subject || "(no subject)"} | Preview: ${(e.body_preview || "").slice(0, 150)}`).join("\n")
   : "No emails received today."
 }
 
 --- TASKS (${tasks.length} active/due) ---
 ${tasks.length > 0
-  ? tasks.map((t, i) => `${i + 1}. [${t.priority || "normal"}] ${t.title} — Status: ${t.status || "pending"}${t.due_date ? ` | Due: ${t.due_date}` : ""}`).join("\n")
+  ? tasks.map((t: any, i: number) => `${i + 1}. [${t.priority || "normal"}] ${t.title} — Status: ${t.status || "pending"}${t.due_date ? ` | Due: ${t.due_date}` : ""}`).join("\n")
   : "No tasks due today."
 }
 
 --- SALES PIPELINE (${leads.length} active leads) ---
 ${leads.length > 0
-  ? leads.map((l, i) => `${i + 1}. ${l.title} — Stage: ${l.stage} | Value: $${l.expected_value || 0} | Priority: ${l.priority || "normal"}`).join("\n")
+  ? leads.map((l: any, i: number) => `${i + 1}. ${l.title} — Stage: ${l.stage} | Value: $${l.expected_value || 0} | Priority: ${l.priority || "normal"}`).join("\n")
   : "No active leads."
 }
 
 --- ORDERS (${orders.length} new today) ---
 ${orders.length > 0
-  ? orders.map((o, i) => `${i + 1}. #${o.order_number} — Status: ${o.status} | Amount: $${o.total_amount || 0}`).join("\n")
+  ? orders.map((o: any, i: number) => `${i + 1}. #${o.order_number} — Status: ${o.status} | Amount: $${o.total_amount || 0}`).join("\n")
   : "No new orders today."
 }
 
 --- SHOP FLOOR (${workOrders.length} work orders) ---
 ${workOrders.length > 0
-  ? workOrders.map((w, i) => `${i + 1}. WO#${w.work_order_number} — Status: ${w.status} | Station: ${w.workstation || "unassigned"}`).join("\n")
+  ? workOrders.map((w: any, i: number) => `${i + 1}. WO#${w.work_order_number} — Status: ${w.status} | Station: ${w.workstation || "unassigned"}`).join("\n")
   : "No work orders scheduled."
 }
 
 --- DELIVERIES (${deliveries.length} scheduled) ---
 ${deliveries.length > 0
-  ? deliveries.map((d, i) => `${i + 1}. ${d.delivery_number} — Status: ${d.status} | Driver: ${d.driver_name || "unassigned"}`).join("\n")
+  ? deliveries.map((d: any, i: number) => `${i + 1}. ${d.delivery_number} — Status: ${d.status} | Driver: ${d.driver_name || "unassigned"}`).join("\n")
   : "No deliveries scheduled."
 }
 
@@ -197,6 +244,30 @@ ${rcCalls.length > 0
     }).join("\n")
   : "No RingCentral calls/SMS today."
 }
+
+--- QUICKBOOKS FINANCIALS ---
+Total Accounts Receivable: $${totalAR.toFixed(2)}
+Overdue Invoices: ${overdueInvoices.length} totaling $${totalOverdue.toFixed(2)}
+${overdueInvoices.length > 0
+  ? overdueInvoices.slice(0, 10).map((inv: any, i: number) => {
+      const d = inv.data || {};
+      return `${i + 1}. Invoice #${d.DocNumber || inv.quickbooks_id} | Customer: ${d.CustomerRef?.name || "Unknown"} | Balance: $${inv.balance} | Due: ${d.DueDate || "N/A"}`;
+    }).join("\n")
+  : ""
+}
+Total Vendors on file: ${vendors.length}
+
+--- SOCIAL MEDIA (last 7 days) ---
+Published Posts: ${publishedPosts.length} | Scheduled: ${scheduledPosts.length}
+Platform breakdown: ${Object.entries(platformBreakdown).map(([k, v]) => `${k}: ${v}`).join(", ") || "N/A"}
+Total Reach: ${totalReach.toLocaleString()} | Impressions: ${totalImpressions.toLocaleString()}
+Engagement: ${totalLikes} likes, ${totalComments} comments, ${totalShares} shares, ${totalClicks} clicks
+${publishedPosts.length > 0
+  ? "Top posts:\n" + publishedPosts.slice(0, 5).map((p: any, i: number) => {
+      return `${i + 1}. [${p.platform}] ${p.title || (p.content || "").slice(0, 80)} — Reach: ${p.reach || 0} | Likes: ${p.likes || 0} | Clicks: ${p.clicks || 0}`;
+    }).join("\n")
+  : "No published posts in last 7 days."
+}
 `;
 
     // ── Call Lovable AI ───────────────────────────────────────────────
@@ -210,17 +281,24 @@ Generate a structured daily summary digest in JSON format based on real business
 
 You MUST return valid JSON with this exact structure (no markdown, no code fences):
 {
-  "greeting": "A warm personalized greeting mentioning the date",
+  "greeting": "A warm personalized greeting mentioning the date and day of week",
   "affirmation": "A motivational business affirmation relevant to the day's activities",
-  "keyTakeaways": ["Array of 3-5 key business takeaways with emoji, each a concise actionable insight"],
+  "keyTakeaways": ["Array of 3-6 key business takeaways with emoji, each a concise actionable insight covering the most important areas"],
+  "financialSnapshot": {
+    "totalAR": "Total accounts receivable amount",
+    "overdueCount": "Number of overdue invoices",
+    "overdueAmount": "Total overdue amount",
+    "highlights": ["2-3 key financial observations or actions needed"],
+    "cashFlowNote": "Brief cash flow observation or recommendation"
+  },
   "emailCategories": [
     {
-      "category": "Category name with emoji (e.g. 'Sales & Pipeline 📞')",
+      "category": "Category name with emoji",
       "emails": [
         {
           "subject": "Email subject or topic",
-          "summary": "Brief summary of issue/content",
-          "action": "Recommended action to take"
+          "summary": "Brief summary",
+          "action": "Recommended action"
         }
       ]
     }
@@ -243,6 +321,13 @@ You MUST return valid JSON with this exact structure (no markdown, no code fence
       "action": "Follow-up action needed"
     }
   ],
+  "socialMediaDigest": {
+    "totalReach": "Total reach number",
+    "totalEngagement": "Total engagement (likes+comments+shares)",
+    "topPlatform": "Best performing platform",
+    "highlights": ["2-3 key social media observations"],
+    "recommendations": ["1-2 content recommendations based on performance"]
+  },
   "calendarEvents": [
     {
       "time": "Suggested time slot",
@@ -255,7 +340,7 @@ You MUST return valid JSON with this exact structure (no markdown, no code fence
     "steps": ["Step 1", "Step 2", "Step 3"],
     "closing": "Motivational closing with emoji"
   },
-  "randomFact": "An interesting random fact"
+  "randomFact": "An interesting random fact about steel, construction, or manufacturing"
 }
 
 Rules:
@@ -264,9 +349,13 @@ Rules:
 - Include specific numbers, names, and amounts from the data
 - Include meeting summaries with key decisions and action items
 - Summarize all RingCentral phone calls and SMS with recommended follow-ups
+- Provide a clear financial snapshot with overdue invoice alerts
+- Analyze social media performance and provide content recommendations
 - If there's little data, still provide useful suggestions and planning tips
 - Keep takeaways actionable and concise
-- Suggest calendar blocks for follow-ups based on the data`;
+- Suggest calendar blocks for follow-ups based on the data
+- The financial snapshot should highlight cash flow risks
+- Social media digest should identify best performing content types`;
 
     const aiResponse = await fetch(
       "https://ai.gateway.lovable.dev/v1/chat/completions",
@@ -334,6 +423,9 @@ Rules:
           teamMessages: teamMessages.length,
           meetings: meetings.length,
           phoneCalls: rcCalls.length,
+          invoices: invoices.length,
+          overdueInvoices: overdueInvoices.length,
+          socialPosts: publishedPosts.length,
         },
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
