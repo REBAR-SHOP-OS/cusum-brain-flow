@@ -1,28 +1,24 @@
-import { useState } from "react";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { 
-  DollarSign, Calendar, Clock, Users, Download, 
-  ChevronDown, AlertTriangle, CheckCircle2 
-} from "lucide-react";
-
-// Mock payroll data
-const payrollSummary = [
-  { name: "Ali K.", role: "Cutter Operator", hours: 42.5, overtime: 2.5, rate: 28, status: "approved" },
-  { name: "James R.", role: "Bender Operator", hours: 40, overtime: 0, rate: 26, status: "approved" },
-  { name: "Mike S.", role: "Driver", hours: 38, overtime: 0, rate: 24, status: "pending" },
-  { name: "David L.", role: "Shop Floor Lead", hours: 45, overtime: 5, rate: 32, status: "flagged" },
-  { name: "Sarah T.", role: "Office Admin", hours: 40, overtime: 0, rate: 22, status: "approved" },
-];
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ChevronLeft, ChevronRight, Download, Lock, Calendar } from "lucide-react";
+import { usePayrollAudit } from "@/hooks/usePayrollAudit";
+import { useProfiles } from "@/hooks/useProfiles";
+import { PayrollOverviewTab } from "./payroll/PayrollOverviewTab";
+import { PayrollExceptionsTab } from "./payroll/PayrollExceptionsTab";
+import { PayrollComplianceTab } from "./payroll/PayrollComplianceTab";
+import { PayrollHistoryTab } from "./payroll/PayrollHistoryTab";
 
 export function PayrollAuditView() {
-  const [period, setPeriod] = useState("current");
+  const {
+    weekStart, weekEnd, prevWeek, nextWeek, currentWeek,
+    snapshots, weeklySummaries, history,
+    isLoading, historyLoading,
+    computePayroll, approveEmployee, approveAllClean, lockWeek, isLocked,
+  } = usePayrollAudit();
+  const { profiles } = useProfiles();
 
-  const totalHours = payrollSummary.reduce((s, p) => s + p.hours, 0);
-  const totalOT = payrollSummary.reduce((s, p) => s + p.overtime, 0);
-  const totalPay = payrollSummary.reduce((s, p) => s + (p.hours * p.rate) + (p.overtime * p.rate * 1.5), 0);
+  const profileList = profiles.map(p => ({ id: p.id, full_name: p.full_name, department: p.department }));
 
   return (
     <div className="flex flex-col h-full">
@@ -30,89 +26,72 @@ export function PayrollAuditView() {
       <div className="px-8 py-6 flex items-center justify-between border-b border-border">
         <div>
           <h1 className="text-2xl font-black italic text-foreground uppercase tracking-tight">Payroll Audit</h1>
-          <p className="text-[10px] tracking-[0.2em] text-primary/70 uppercase">Time Tracking & Compensation Review</p>
+          <p className="text-[10px] tracking-[0.2em] text-primary/70 uppercase">
+            Ontario-Compliant Payroll Verification
+          </p>
         </div>
         <div className="flex items-center gap-3">
-          <Button variant="outline" size="sm" className="gap-1.5 text-xs">
-            <Calendar className="w-3.5 h-3.5" /> This Week <ChevronDown className="w-3 h-3" />
-          </Button>
-          <Button variant="outline" size="sm" className="gap-1.5 text-xs">
-            <Download className="w-3.5 h-3.5" /> Export
-          </Button>
+          {/* Week Picker */}
+          <div className="flex items-center gap-1 bg-muted/50 rounded-md px-2 py-1">
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={prevWeek}>
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+            <button onClick={currentWeek} className="text-xs font-bold px-2 hover:text-primary transition-colors">
+              <Calendar className="w-3.5 h-3.5 inline mr-1" />
+              {weekStart} — {weekEnd}
+            </button>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={nextWeek}>
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+          </div>
+          {isLocked && (
+            <span className="text-[10px] tracking-widest text-primary uppercase font-bold flex items-center gap-1">
+              <Lock className="w-3.5 h-3.5" /> LOCKED
+            </span>
+          )}
         </div>
       </div>
 
       <ScrollArea className="flex-1">
-        <div className="p-8 space-y-6">
-          {/* Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Card>
-              <CardContent className="p-5">
-                <p className="text-[10px] tracking-widest text-muted-foreground uppercase mb-1">Total Staff</p>
-                <p className="text-3xl font-black italic text-foreground">{payrollSummary.length}</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-5">
-                <p className="text-[10px] tracking-widest text-muted-foreground uppercase mb-1">Total Hours</p>
-                <p className="text-3xl font-black italic text-foreground">{totalHours.toFixed(1)}</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-5">
-                <p className="text-[10px] tracking-widest text-muted-foreground uppercase mb-1">Overtime Hours</p>
-                <p className="text-3xl font-black italic text-primary">{totalOT.toFixed(1)}</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-5">
-                <p className="text-[10px] tracking-widest text-muted-foreground uppercase mb-1">Gross Payroll</p>
-                <p className="text-3xl font-black italic text-foreground">${totalPay.toFixed(0)}</p>
-              </CardContent>
-            </Card>
-          </div>
+        <div className="p-8">
+          <Tabs defaultValue="overview">
+            <TabsList className="mb-6">
+              <TabsTrigger value="overview" className="text-xs uppercase tracking-widest">Overview</TabsTrigger>
+              <TabsTrigger value="exceptions" className="text-xs uppercase tracking-widest">Exceptions</TabsTrigger>
+              <TabsTrigger value="compliance" className="text-xs uppercase tracking-widest">Compliance</TabsTrigger>
+              <TabsTrigger value="history" className="text-xs uppercase tracking-widest">History</TabsTrigger>
+            </TabsList>
 
-          {/* Payroll Table */}
-          <Card>
-            <CardContent className="p-0">
-              <div className="grid grid-cols-[1fr_120px_80px_80px_80px_100px_100px] gap-0 px-5 py-3 bg-muted/50 border-b border-border text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
-                <span>Employee</span>
-                <span>Role</span>
-                <span>Hours</span>
-                <span>OT</span>
-                <span>Rate</span>
-                <span>Gross Pay</span>
-                <span>Status</span>
-              </div>
+            <TabsContent value="overview">
+              <PayrollOverviewTab
+                summaries={weeklySummaries}
+                snapshots={snapshots}
+                profiles={profileList}
+                isLocked={isLocked}
+                onApproveEmployee={(id) => approveEmployee.mutate(id)}
+                onApproveAllClean={() => approveAllClean.mutate()}
+                onComputePayroll={() => computePayroll.mutate()}
+                onLockWeek={() => lockWeek.mutate()}
+                isComputing={computePayroll.isPending}
+              />
+            </TabsContent>
 
-              {payrollSummary.map((emp) => {
-                const gross = (emp.hours * emp.rate) + (emp.overtime * emp.rate * 1.5);
-                return (
-                  <div
-                    key={emp.name}
-                    className="grid grid-cols-[1fr_120px_80px_80px_80px_100px_100px] gap-0 px-5 py-3 border-b border-border/30 hover:bg-muted/20 items-center"
-                  >
-                    <span className="text-sm font-bold text-foreground">{emp.name}</span>
-                    <span className="text-xs text-muted-foreground">{emp.role}</span>
-                    <span className="text-sm text-foreground tabular-nums">{emp.hours}</span>
-                    <span className={`text-sm tabular-nums ${emp.overtime > 0 ? "text-primary font-bold" : "text-muted-foreground"}`}>
-                      {emp.overtime > 0 ? emp.overtime : "—"}
-                    </span>
-                    <span className="text-sm text-muted-foreground tabular-nums">${emp.rate}/hr</span>
-                    <span className="text-sm font-bold text-foreground tabular-nums">${gross.toFixed(0)}</span>
-                    <Badge
-                      variant={emp.status === "approved" ? "secondary" : emp.status === "flagged" ? "destructive" : "outline"}
-                      className="text-[9px] uppercase tracking-widest w-fit"
-                    >
-                      {emp.status === "flagged" && <AlertTriangle className="w-3 h-3 mr-1" />}
-                      {emp.status === "approved" && <CheckCircle2 className="w-3 h-3 mr-1" />}
-                      {emp.status}
-                    </Badge>
-                  </div>
-                );
-              })}
-            </CardContent>
-          </Card>
+            <TabsContent value="exceptions">
+              <PayrollExceptionsTab
+                snapshots={snapshots}
+                profiles={profileList}
+                isLocked={isLocked}
+              />
+            </TabsContent>
+
+            <TabsContent value="compliance">
+              <PayrollComplianceTab snapshots={snapshots} summaries={weeklySummaries} />
+            </TabsContent>
+
+            <TabsContent value="history">
+              <PayrollHistoryTab history={history} isLoading={historyLoading} />
+            </TabsContent>
+          </Tabs>
         </div>
       </ScrollArea>
     </div>
