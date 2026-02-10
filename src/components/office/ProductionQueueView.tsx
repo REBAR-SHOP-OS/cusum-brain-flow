@@ -139,7 +139,7 @@ export function ProductionQueueView() {
 
   // Fetch only the customers referenced by projects (avoids 1000-row limit)
   const projectCustomerIds = [...new Set(projects.map(p => p.customer_id).filter(Boolean))] as string[];
-  const { data: customers } = useQuery({
+  const { data: customers, isLoading: customersLoading } = useQuery({
     queryKey: ["customers-for-queue", projectCustomerIds],
     enabled: !!user && projectCustomerIds.length > 0,
     queryFn: async () => {
@@ -148,6 +148,7 @@ export function ProductionQueueView() {
       return (data || []) as Array<{ id: string; name: string }>;
     },
   });
+  const customersReady = projectCustomerIds.length === 0 || (!customersLoading && !!customers);
 
   // Fetch file names for barlists via extract sessions
   const { data: fileNames } = useQuery({
@@ -182,7 +183,7 @@ export function ProductionQueueView() {
         </Badge>
       </div>
 
-      {loading ? (
+      {loading || !customersReady ? (
         <p className="text-sm text-muted-foreground">Loading queue...</p>
       ) : tree.length === 0 ? (
         <p className="text-sm text-muted-foreground">No manifests in queue.</p>
@@ -297,10 +298,12 @@ function buildCustomerTree(
     const projectNodes = custProjects.map(buildProjectNode);
     // Only include if there's actual content
     const hasContent = projectNodes.some(pn => pn.barlists.length > 0 || pn.loosePlans.length > 0);
+    const resolvedName = customerMap.get(cid);
+    if (!resolvedName) return; // skip until customer data loads
     if (hasContent || projectNodes.length > 0) {
       result.push({
         customerId: cid,
-        customerName: customerMap.get(cid) || "Unknown Customer",
+        customerName: resolvedName,
         projects: projectNodes,
       });
     }
@@ -322,7 +325,7 @@ function buildCustomerTree(
 
     result.push({
       customerId: null,
-      customerName: "Unassigned",
+      customerName: "No Customer Assigned",
       projects: [...orphansWithContent, ...(looseProject ? [looseProject] : [])],
     });
   }
