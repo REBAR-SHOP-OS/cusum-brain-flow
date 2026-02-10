@@ -42,12 +42,17 @@ interface OdooSession {
 }
 
 async function odooAuthenticate(): Promise<OdooSession> {
-  const url = Deno.env.get("ODOO_URL")!;          // e.g. https://crm.rebar.shop
+  const rawUrl = Deno.env.get("ODOO_URL")!;
+  const url = rawUrl.replace(/\/+$/, ""); // strip trailing slashes
   const db = Deno.env.get("ODOO_DATABASE")!;
   const login = Deno.env.get("ODOO_USERNAME")!;
   const password = Deno.env.get("ODOO_API_KEY")!;
 
-  const res = await fetch(`${url}/web/session/authenticate`, {
+  console.log(`Odoo connect: url=${url}, db=${db}, login=${login}`);
+
+  const authUrl = `${url}/web/session/authenticate`;
+  console.log(`POST ${authUrl}`);
+  const res = await fetch(authUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
