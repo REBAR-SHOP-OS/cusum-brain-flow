@@ -58,7 +58,15 @@ export default function StationView() {
       );
     }
     if (machine.type === "cutter") {
-      return <CutterStationView machine={machine} items={items} canWrite={canWrite} />;
+      const itemIndex = items.findIndex((i) => i.id === selectedItemId);
+      return (
+        <CutterStationView
+          machine={machine}
+          items={items}
+          canWrite={canWrite}
+          initialIndex={itemIndex >= 0 ? itemIndex : 0}
+        />
+      );
     }
   }
 

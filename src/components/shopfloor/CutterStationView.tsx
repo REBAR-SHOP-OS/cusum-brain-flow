@@ -23,13 +23,14 @@ interface CutterStationViewProps {
   machine: LiveMachine;
   items: StationItem[];
   canWrite: boolean;
+  initialIndex?: number;
 }
 
 const REMNANT_THRESHOLD_MM = 300;
 
-export function CutterStationView({ machine, items, canWrite }: CutterStationViewProps) {
+export function CutterStationView({ machine, items, canWrite, initialIndex = 0 }: CutterStationViewProps) {
   const { toast } = useToast();
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [isRunning, setIsRunning] = useState(false);
   const [selectedStockLength, setSelectedStockLength] = useState(12000);
   const [operatorBars, setOperatorBars] = useState<number | null>(null);
