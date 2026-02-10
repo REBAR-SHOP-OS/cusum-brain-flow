@@ -1811,6 +1811,56 @@ async function fetchContext(supabase: ReturnType<typeof createClient>, agent: st
       context.rebarStandards = standards.rebarStandards;
       context.wwmStandards = standards.wwmStandards;
       context.validationRules = standards.validationRules;
+
+      // === MORNING BRIEFING DATA (8 categories) ===
+
+      // 1. Ben's emails (estimation + personal)
+      const { data: estEmails } = await supabase
+        .from("communications")
+        .select("id, subject, from_address, to_address, body_preview, status, received_at, direction")
+        .or("to_address.ilike.%ben@rebar.shop%,from_address.ilike.%ben@rebar.shop%,to_address.ilike.%estimation@rebar.shop%,from_address.ilike.%estimation@rebar.shop%")
+        .order("received_at", { ascending: false })
+        .limit(30);
+      context.estimationEmails = estEmails;
+      context.unreadEstEmails = (estEmails || []).filter((e: Record<string, unknown>) => e.status === "unread" || !e.status).length;
+
+      // 2-5. All active leads (for Ben, Karthick, QC filtering)
+      const { data: benLeads } = await supabase
+        .from("leads")
+        .select("id, title, stage, expected_value, probability, updated_at, notes, metadata, assigned_to")
+        .not("stage", "in", '("won","lost")')
+        .order("updated_at", { ascending: false })
+        .limit(50);
+      context.allActiveLeads = benLeads;
+
+      // 4,6,7. Lead files (for addendums + shop drawings)
+      const { data: leadFiles } = await supabase
+        .from("lead_files")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(30);
+      context.leadFiles = leadFiles;
+
+      // 8. Eisenhower sessions for current user
+      if (userId) {
+        const { data: eisSessions } = await supabase
+          .from("chat_sessions")
+          .select("id, title, updated_at")
+          .eq("user_id", userId)
+          .eq("agent_name", "Eisenhower Matrix")
+          .order("updated_at", { ascending: false })
+          .limit(3);
+        context.eisenhowerSessions = eisSessions;
+      }
+
+      // Open tasks
+      const { data: tasks } = await supabase
+        .from("tasks")
+        .select("id, title, status, priority, due_date, created_at")
+        .neq("status", "done")
+        .order("created_at", { ascending: false })
+        .limit(20);
+      context.userTasks = tasks;
     }
 
     if (agent === "sales") {
@@ -2211,14 +2261,69 @@ serve(async (req) => {
       }
     }
 
+    // === GAUGE MORNING BRIEFING: Greeting detection ===
+    let finalMessage = message;
+    let briefingModelOverride: { model: string; maxTokens: number; temperature: number; reason: string } | null = null;
+
+    const isGreeting = /^(good\s*morning|morning|hi|hello|hey|salam|salaam|صبح بخیر|سلام)/i.test(message.trim());
+    if (agent === "estimation" && isGreeting) {
+      const today = new Date().toLocaleDateString("en-CA", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+      finalMessage = `[SYSTEM BRIEFING REQUEST] The user said "${message}". Today is ${today}. 
+      
+You MUST respond with a structured morning briefing covering ALL 8 categories below using the context data provided. Reference ACTUAL data — do not fabricate.
+
+FORMAT — follow exactly:
+
+**📐 Good morning ${userFullName.split(" ")[0]}! Here's your briefing for ${today}:**
+
+### 1. 📧 Emails
+Summarize unread/important emails from context.estimationEmails. Count: ${context.unreadEstEmails || 0} unread. Show a table of top 5: | # | From | Subject | Status |
+
+### 2. 📐 Estimation — Ben
+From context.allActiveLeads, filter leads assigned to Ben. Show open estimates, pending takeoffs, deadlines. Table: | # | Project | Stage | Value | Last Updated |
+
+### 3. 🔍 QC — Ben
+From context.allActiveLeads, find any with QC flags, validation issues, or error notes. If none, say "✅ No QC issues"
+
+### 4. 📎 Addendums
+From context.estimationEmails and context.leadFiles, find items with "addendum", "revision", "rev", "ASI" keywords. List new addendums received.
+
+### 5. 📐 Estimation — Karthick
+From context.allActiveLeads, filter leads assigned to Karthick. Show his open estimates Ben should be aware of.
+
+### 6. 📋 Shop Drawings
+From context.leadFiles, find files related to "shop drawing", "SD", "fabrication". Show status of drawings in progress.
+
+### 7. ✅ Shop Drawings for Approval
+From above, filter to items pending approval/submission. If none, say "✅ All caught up"
+
+### 8. 📊 Eisenhower Matrix
+From context.eisenhowerSessions and context.userTasks, summarize yesterday's task completion and today's priorities.
+
+RULES:
+- Use tables and emoji tags for scannability
+- Bold dollar amounts and tonnage
+- SHORT sentences — max 15 words each
+- Flag urgent items with 🚨
+- End with "**🎯 Start with:** [most urgent item]"
+- If a category has no data, say "No items" — do NOT skip the section`;
+
+      briefingModelOverride = {
+        model: "google/gemini-2.5-pro",
+        maxTokens: 6000,
+        temperature: 0.2,
+        reason: "morning briefing → Pro for multi-category synthesis",
+      };
+    }
+
     const messages: ChatMessage[] = [
       { role: "system", content: systemPrompt + contextStr },
       ...history.slice(-10),
-      { role: "user", content: message },
+      { role: "user", content: finalMessage },
     ];
 
     // Intelligent model selection based on agent type & task complexity
-    const modelConfig = selectModel(agent, message, attachedFiles.length > 0, history.length);
+    const modelConfig = briefingModelOverride || selectModel(agent, message, attachedFiles.length > 0, history.length);
     console.log(`🧠 Model routing: ${agent} → ${modelConfig.model} (${modelConfig.reason})`);
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
