@@ -54,11 +54,12 @@ async function odooAuthenticate(): Promise<OdooSession> {
 
   console.log(`Odoo connect: custom=${url}, odoo.sh=${odooShUrl}, db=${db}, login=${login}`);
 
-  // Try multiple combinations: custom domain + db, odoo.sh domain + db, odoo.sh without db (auto-detect)
+  // Try multiple combinations in priority order
   const attempts: Array<{ baseUrl: string; dbParam: string | undefined }> = [
-    { baseUrl: url, dbParam: db },
-    { baseUrl: odooShUrl, dbParam: db },
-    { baseUrl: odooShUrl, dbParam: undefined },
+    { baseUrl: url, dbParam: undefined },          // custom URL, auto-detect DB from hostname
+    { baseUrl: url, dbParam: db },                  // custom URL, explicit full DB name
+    { baseUrl: odooShUrl, dbParam: db },             // odoo.sh URL, explicit full DB name
+    { baseUrl: odooShUrl, dbParam: undefined },      // odoo.sh URL, auto-detect
   ];
 
   for (const attempt of attempts) {
