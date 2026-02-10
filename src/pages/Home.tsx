@@ -224,7 +224,7 @@ export default function Home() {
         {/* Helpers Section */}
         <div className="relative z-10 w-full">
           <h2 className="text-lg font-semibold mb-4">Your Helpers</h2>
-          <div className="grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
             {orderedHelpers.map((helper) => (
               <HelperCard
                 key={helper.id}
@@ -243,15 +243,17 @@ export default function Home() {
 function HelperCard({ helper, isPrimary, onClick }: { helper: Helper; isPrimary?: boolean; onClick: () => void }) {
   return (
     <Card
-      className={`overflow-hidden cursor-pointer group hover:scale-[1.03] transition-transform duration-150 ease-out ${isPrimary ? "ring-2 ring-primary" : ""}`}
+      className={`overflow-hidden cursor-pointer group hover:scale-[1.02] active:scale-[0.98] transition-transform duration-150 ease-out ${isPrimary ? "ring-2 ring-primary" : ""}`}
       onClick={onClick}
     >
-      <div className="relative aspect-[3/4] sm:aspect-[4/5]">
-        <img src={helper.image} alt={helper.name} className="w-full h-full object-cover" />
-        <div className="absolute inset-x-0 bottom-0 bg-black/70 backdrop-blur-none p-2 sm:p-3">
-          <h3 className="font-bold text-sm sm:text-lg leading-tight text-white">{helper.name}</h3>
-          <p className="text-[10px] sm:text-sm text-white/80 truncate">{helper.role}</p>
-          {isPrimary && <span className="text-[10px] sm:text-xs text-primary font-medium">Primary</span>}
+      <div className="relative">
+        <div className="aspect-square overflow-hidden bg-muted">
+          <img src={helper.image} alt={helper.name} className="w-full h-full object-cover object-top" />
+        </div>
+        <div className="p-2.5 sm:p-3">
+          <h3 className="font-bold text-sm sm:text-base leading-tight">{helper.name}</h3>
+          <p className="text-[11px] sm:text-sm text-muted-foreground truncate">{helper.role}</p>
+          {isPrimary && <span className="text-[10px] sm:text-xs text-primary font-medium">Your Agent</span>}
         </div>
       </div>
     </Card>
