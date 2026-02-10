@@ -3,12 +3,13 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, Mail, Loader2, RefreshCw } from "lucide-react";
+import { Plus, Search, Mail, Loader2, RefreshCw, ClipboardList } from "lucide-react";
 import { PipelineBoard } from "@/components/pipeline/PipelineBoard";
 import { PipelineAnalytics } from "@/components/pipeline/PipelineAnalytics";
 import { LeadFormModal } from "@/components/pipeline/LeadFormModal";
 import { LeadDetailDrawer } from "@/components/pipeline/LeadDetailDrawer";
 import { useToast } from "@/hooks/use-toast";
+import { useOdooQuotations } from "@/hooks/useOdooQuotations";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Lead = Tables<"leads">;
@@ -44,6 +45,7 @@ export default function Pipeline() {
   const [isSyncingOdoo, setIsSyncingOdoo] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { isSyncing: isSyncingQuotations, syncQuotations } = useOdooQuotations();
 
   const { data: leads = [], isLoading } = useQuery({
     queryKey: ["leads", searchQuery],
@@ -231,6 +233,16 @@ export default function Pipeline() {
           >
             {isSyncingOdoo ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
             <span className="hidden sm:inline">Sync Odoo</span>
+          </Button>
+          <Button
+            onClick={syncQuotations}
+            size="sm"
+            variant="outline"
+            disabled={isSyncingQuotations}
+            className="gap-2"
+          >
+            {isSyncingQuotations ? <Loader2 className="w-4 h-4 animate-spin" /> : <ClipboardList className="w-4 h-4" />}
+            <span className="hidden sm:inline">Sync Quotes</span>
           </Button>
           <Button onClick={() => setIsFormOpen(true)} size="sm" className="gap-2">
             <Plus className="w-4 h-4" />
