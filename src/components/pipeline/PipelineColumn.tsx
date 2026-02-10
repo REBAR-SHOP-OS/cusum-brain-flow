@@ -1,7 +1,7 @@
-import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { LeadCard } from "./LeadCard";
+import { Plus } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Lead = Tables<"leads">;
@@ -40,38 +40,58 @@ export function PipelineColumn({
   onDelete,
   onLeadClick,
 }: PipelineColumnProps) {
-  const totalValue = leads.reduce((sum, lead) => sum + (lead.expected_value || 0), 0);
+  const totalValue = leads.reduce((sum, lead) => {
+    const meta = lead.metadata as Record<string, unknown> | null;
+    return sum + ((meta?.odoo_revenue as number) || lead.expected_value || 0);
+  }, 0);
+
+  // Revenue bar: fraction of max possible (cap at $500k for display)
+  const barFraction = Math.min(totalValue / 500_000, 1);
 
   return (
     <div
       className={cn(
-        "w-72 flex-shrink-0 rounded-lg bg-secondary/30 transition-colors",
-        isDragOver && "bg-secondary/60 ring-2 ring-primary/50"
+        "w-[280px] flex-shrink-0 rounded-lg transition-colors",
+        isDragOver ? "bg-primary/10 ring-2 ring-primary/50" : "bg-secondary/30"
       )}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
     >
-      {/* Column Header */}
-      <div className="p-3 border-b border-border/50">
-        <div className="flex items-center gap-2 mb-1">
-          <div className={cn("w-2 h-2 rounded-full", stage.color)} />
-          <h3 className="font-medium text-sm truncate flex-1">{stage.label}</h3>
-          <Badge variant="secondary" className="text-xs">
-            {leads.length}
-          </Badge>
+      {/* Column Header — Odoo style */}
+      <div className="px-3 pt-3 pb-2">
+        <div className="flex items-center justify-between mb-1.5">
+          <h3 className="font-semibold text-sm truncate flex-1">{stage.label}</h3>
+          <div className="flex items-center gap-1 shrink-0">
+            {totalValue > 0 && (
+              <span className="text-xs font-medium text-muted-foreground">
+                {totalValue >= 1_000_000
+                  ? `${(totalValue / 1_000_000).toFixed(1)}M`
+                  : totalValue >= 1000
+                    ? `${(totalValue / 1000).toFixed(0)}K`
+                    : totalValue.toLocaleString()
+                }
+              </span>
+            )}
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 min-w-[20px] justify-center">
+              {leads.length}
+            </Badge>
+          </div>
         </div>
-        {totalValue > 0 && (
-          <p className="text-xs text-muted-foreground">
-            ${totalValue.toLocaleString()}
-          </p>
-        )}
+
+        {/* Revenue progress bar */}
+        <div className="h-1 bg-secondary rounded-full overflow-hidden">
+          <div
+            className={cn("h-full rounded-full transition-all duration-500", stage.color)}
+            style={{ width: `${Math.max(barFraction * 100, leads.length > 0 ? 5 : 0)}%` }}
+          />
+        </div>
       </div>
 
       {/* Cards */}
-      <div className="p-2 space-y-2 min-h-[200px] max-h-[calc(100vh-280px)] overflow-y-auto">
+      <div className="px-2 pb-2 space-y-2 min-h-[120px] max-h-[calc(100vh-280px)] overflow-y-auto">
         {leads.length === 0 ? (
-          <p className="text-xs text-muted-foreground text-center py-8">
+          <p className="text-xs text-muted-foreground text-center py-8 opacity-50">
             Drop leads here
           </p>
         ) : (
