@@ -195,6 +195,70 @@ serve(async (req) => {
       );
     }
 
+    // ─── Connect via JWT (fallback when OAuth app doesn't support auth code) ──
+    if (action === "connect-jwt") {
+      const jwt = Deno.env.get("RINGCENTRAL_JWT");
+      const jwtClientId = Deno.env.get("RINGCENTRAL_JWT_CLIENT_ID");
+      const jwtClientSecret = Deno.env.get("RINGCENTRAL_JWT_CLIENT_SECRET");
+
+      if (!jwt || !jwtClientId || !jwtClientSecret) {
+        return new Response(
+          JSON.stringify({ error: "JWT credentials not configured" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const credentials = btoa(`${jwtClientId}:${jwtClientSecret}`);
+      const tokenRes = await fetch(`${RC_SERVER}/restapi/oauth/token`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Basic ${credentials}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({
+          grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+          assertion: jwt,
+        }),
+      });
+
+      if (!tokenRes.ok) {
+        const errText = await tokenRes.text();
+        console.error("JWT token exchange failed:", errText);
+        return new Response(
+          JSON.stringify({ error: "JWT authentication failed" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const tokens = await tokenRes.json();
+
+      // Get RC extension info
+      let rcEmail = "";
+      try {
+        const extRes = await fetch(`${RC_SERVER}/restapi/v1.0/account/~/extension/~`, {
+          headers: { Authorization: `Bearer ${tokens.access_token}` },
+        });
+        if (extRes.ok) {
+          const extData = await extRes.json();
+          rcEmail = extData.contact?.email || extData.name || "";
+        }
+      } catch { /* continue */ }
+
+      // Save tokens for the requesting user
+      await supabaseAdmin.from("user_ringcentral_tokens").upsert({
+        user_id: userId,
+        rc_email: rcEmail,
+        refresh_token: `jwt:${jwt}`,
+        access_token: tokens.access_token,
+        token_expires_at: new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString(),
+      }, { onConflict: "user_id" });
+
+      return new Response(
+        JSON.stringify({ status: "connected", email: rcEmail }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // ─── Disconnect RingCentral for current user ──────────────────
     if (action === "disconnect") {
       await supabaseAdmin
