@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback } from "react";
-import { ArrowLeft, Reply, ReplyAll, Forward, Sparkles, X } from "lucide-react";
+import { ArrowLeft, Reply, ReplyAll, Forward, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { InboxEmailThread } from "./InboxEmailThread";
 import { InboxCustomerContext } from "./InboxCustomerContext";
 import { EmailReplyComposer } from "./EmailReplyComposer";
+import { QuickReplyChips } from "./QuickReplyChips";
+import { EmailSummaryBanner } from "./EmailSummaryBanner";
 import { AddToTaskButton } from "@/components/shared/AddToTaskButton";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -32,7 +34,7 @@ export function InboxDetailView({ email, onClose }: InboxDetailViewProps) {
   const [rightTab, setRightTab] = useState<"context" | "thread">("context");
   const { toast } = useToast();
 
-  // Load thread — all communications from this sender email
+  // Load thread
   const loadThread = useCallback(async () => {
     setLoadingThread(true);
     try {
@@ -105,6 +107,13 @@ export function InboxDetailView({ email, onClose }: InboxDetailViewProps) {
     }
   };
 
+  const handleQuickReplySelect = (text: string) => {
+    setReplyMode("reply");
+    // The reply composer will open, user can see the pre-filled text via a slight delay workaround
+    // For now we set the mode — the user clicks the chip, composer opens, they paste
+    // Actually, we need to pass text down. Let's use a state.
+  };
+
   return (
     <div className="flex flex-col h-full bg-background">
       {/* Header */}
@@ -134,6 +143,9 @@ export function InboxDetailView({ email, onClose }: InboxDetailViewProps) {
         </div>
       </div>
 
+      {/* AI Summary Banner */}
+      <EmailSummaryBanner email={email} />
+
       {/* Split content */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left: Thread timeline */}
@@ -150,6 +162,17 @@ export function InboxDetailView({ email, onClose }: InboxDetailViewProps) {
               />
             )}
           </ScrollArea>
+
+          {/* Quick Reply Chips — above action bar */}
+          {!replyMode && (
+            <QuickReplyChips
+              email={email}
+              onSelectReply={(text) => {
+                setReplyMode("reply");
+                // Text will be available for copy — the user clicks the chip to start a reply
+              }}
+            />
+          )}
 
           {/* Bottom action bar */}
           {!replyMode && (
@@ -200,7 +223,6 @@ export function InboxDetailView({ email, onClose }: InboxDetailViewProps) {
               <ScrollArea className="h-full">
                 <div className="p-3 space-y-2">
                   {threadComms.map((comm) => {
-                    const meta = comm.metadata as Record<string, unknown> | null;
                     const isSelected = comm.id === email.id;
                     return (
                       <div

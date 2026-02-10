@@ -1,12 +1,20 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Send, Loader2, Sparkles, RefreshCw, X, Paperclip, Bold, Italic, List } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { EmailTemplatesDrawer } from "./EmailTemplatesDrawer";
 import type { InboxEmail } from "./InboxEmailList";
 import type { ReplyMode } from "./EmailActionBar";
+
+const TONES = [
+  { key: "formal", label: "Formal" },
+  { key: "casual", label: "Casual" },
+  { key: "shorter", label: "Shorter" },
+  { key: "longer", label: "Longer" },
+] as const;
 
 interface EmailReplyComposerProps {
   email: InboxEmail;
@@ -20,6 +28,8 @@ export function EmailReplyComposer({ email, mode, onClose }: EmailReplyComposerP
   const [drafting, setDrafting] = useState(false);
   const [sending, setSending] = useState(false);
   const [hasDrafted, setHasDrafted] = useState(false);
+  const [adjustingTone, setAdjustingTone] = useState<string | null>(null);
+  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { toast } = useToast();
 
   if (!mode) return null;
@@ -69,45 +79,100 @@ export function EmailReplyComposer({ email, mode, onClose }: EmailReplyComposerP
     }
   };
 
+  const handleToneAdjust = async (tone: string) => {
+    if (!replyText.trim()) {
+      toast({ title: "Write or generate a draft first", variant: "destructive" });
+      return;
+    }
+    setAdjustingTone(tone);
+    try {
+      const { data, error } = await supabase.functions.invoke("draft-email", {
+        body: {
+          action: "adjust-tone",
+          draftText: replyText,
+          tone,
+        },
+      });
+      if (error) throw error;
+      if (data?.draft) {
+        setReplyText(data.draft);
+        toast({ title: `Tone adjusted to ${tone}` });
+      }
+    } catch (err) {
+      console.error("Tone adjust error:", err);
+      toast({ title: "Failed to adjust tone", variant: "destructive" });
+    } finally {
+      setAdjustingTone(null);
+    }
+  };
+
   const handleSend = async () => {
     if (!replyText.trim()) return;
     if (isForward && !forwardTo.trim()) {
       toast({ title: "Missing recipient", description: "Enter an email address to forward to.", variant: "destructive" });
       return;
     }
-    setSending(true);
 
-    try {
-      const { data, error } = await supabase.functions.invoke("gmail-send", {
-        body: {
-          to: isForward ? forwardTo : email.senderEmail,
-          subject: fullSubject,
-          body: replyText.replace(/\n/g, "<br>"),
-          threadId: isForward ? undefined : (email.threadId || undefined),
-        },
-      });
-      if (error) throw error;
-      if (data?.error) {
-        toast({ title: "Send failed", description: data.error, variant: "destructive" });
-        return;
+    // Undo send: 5-second delay
+    setSending(true);
+    const { dismiss } = toast({
+      title: "Sending...",
+      description: "Email will be sent in 5 seconds.",
+      action: (
+        <Button
+          variant="outline"
+          size="sm"
+          className="text-xs h-7"
+          onClick={() => {
+            if (undoTimerRef.current) {
+              clearTimeout(undoTimerRef.current);
+              undoTimerRef.current = null;
+            }
+            setSending(false);
+            dismiss();
+            toast({ title: "Send cancelled" });
+          }}
+        >
+          Undo
+        </Button>
+      ),
+      duration: 5500,
+    });
+
+    undoTimerRef.current = setTimeout(async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke("gmail-send", {
+          body: {
+            to: isForward ? forwardTo : email.senderEmail,
+            subject: fullSubject,
+            body: replyText.replace(/\n/g, "<br>"),
+            threadId: isForward ? undefined : (email.threadId || undefined),
+          },
+        });
+        if (error) throw error;
+        if (data?.error) {
+          toast({ title: "Send failed", description: data.error, variant: "destructive" });
+          setSending(false);
+          return;
+        }
+        toast({
+          title: isForward ? "Email forwarded" : "Email sent",
+          description: isForward ? `Forwarded to ${forwardTo}` : `Reply sent to ${email.sender}`,
+        });
+        setReplyText("");
+        setHasDrafted(false);
+        onClose();
+      } catch (err) {
+        console.error("Send email error:", err);
+        toast({
+          title: "Failed to send",
+          description: err instanceof Error ? err.message : "Please try again",
+          variant: "destructive",
+        });
+      } finally {
+        setSending(false);
       }
-      toast({
-        title: isForward ? "Email forwarded" : "Email sent",
-        description: isForward ? `Forwarded to ${forwardTo}` : `Reply sent to ${email.sender}`,
-      });
-      setReplyText("");
-      setHasDrafted(false);
-      onClose();
-    } catch (err) {
-      console.error("Send email error:", err);
-      toast({
-        title: "Failed to send",
-        description: err instanceof Error ? err.message : "Please try again",
-        variant: "destructive",
-      });
-    } finally {
-      setSending(false);
-    }
+    }, 5000);
   };
 
   return (
@@ -150,6 +215,25 @@ export function EmailReplyComposer({ email, mode, onClose }: EmailReplyComposerP
         />
       </div>
 
+      {/* Tone Adjuster */}
+      {replyText.trim() && (
+        <div className="flex items-center gap-1 px-4 py-1">
+          <span className="text-[10px] text-muted-foreground mr-1">Tone:</span>
+          {TONES.map((t) => (
+            <Button
+              key={t.key}
+              variant="outline"
+              size="sm"
+              className="h-6 px-2 text-[10px] rounded-full"
+              disabled={!!adjustingTone || sending}
+              onClick={() => handleToneAdjust(t.key)}
+            >
+              {adjustingTone === t.key ? <Loader2 className="w-3 h-3 animate-spin" /> : t.label}
+            </Button>
+          ))}
+        </div>
+      )}
+
       {/* Toolbar */}
       <div className="flex items-center justify-between px-4 pb-2">
         <div className="flex items-center gap-1">
@@ -167,6 +251,8 @@ export function EmailReplyComposer({ email, mode, onClose }: EmailReplyComposerP
           </Button>
 
           <div className="w-px h-5 bg-border mx-1" />
+
+          <EmailTemplatesDrawer onInsert={(text) => setReplyText(text)} currentDraft={replyText} />
 
           <Button
             variant="ghost"

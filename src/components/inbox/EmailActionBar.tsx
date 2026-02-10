@@ -1,4 +1,4 @@
-import { Reply, Forward, ReplyAll, Sparkles, Archive, Trash2, MoreHorizontal, CheckSquare } from "lucide-react";
+import { Reply, Forward, ReplyAll, Sparkles, Archive, Trash2, MoreHorizontal, CheckSquare, Star, Clock, BookOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -7,6 +7,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
+import { SnoozePopover } from "./SnoozePopover";
+import { supabase } from "@/integrations/supabase/client";
+import { cn } from "@/lib/utils";
 
 export type ReplyMode = "reply" | "reply-all" | "forward" | null;
 
@@ -16,9 +19,18 @@ interface EmailActionBarProps {
   onSmartReply: () => void;
   onCreateTask?: () => void;
   drafting: boolean;
+  emailId?: string;
+  isStarred?: boolean;
+  onToggleStar?: () => void;
+  onSnooze?: (until: Date) => void;
+  onMarkReadUnread?: () => void;
+  isUnread?: boolean;
 }
 
-export function EmailActionBar({ activeMode, onModeChange, onSmartReply, onCreateTask, drafting }: EmailActionBarProps) {
+export function EmailActionBar({
+  activeMode, onModeChange, onSmartReply, onCreateTask, drafting,
+  emailId, isStarred, onToggleStar, onSnooze, onMarkReadUnread, isUnread,
+}: EmailActionBarProps) {
   const { toast } = useToast();
 
   const handleArchive = () => {
@@ -27,6 +39,19 @@ export function EmailActionBar({ activeMode, onModeChange, onSmartReply, onCreat
 
   const handleDelete = () => {
     toast({ title: "Deleted", description: "Email moved to trash." });
+  };
+
+  const handleMarkReadUnread = async () => {
+    if (onMarkReadUnread) {
+      onMarkReadUnread();
+      return;
+    }
+    // Fallback: update communications table directly
+    if (emailId) {
+      const newStatus = isUnread ? "read" : "unread";
+      await supabase.from("communications").update({ status: newStatus }).eq("id", emailId);
+      toast({ title: isUnread ? "Marked as read" : "Marked as unread" });
+    }
   };
 
   return (
@@ -76,6 +101,27 @@ export function EmailActionBar({ activeMode, onModeChange, onSmartReply, onCreat
 
       <div className="flex-1" />
 
+      {/* Star toggle */}
+      {onToggleStar && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8"
+          onClick={onToggleStar}
+        >
+          <Star className={cn("w-4 h-4", isStarred ? "fill-amber-400 text-amber-400" : "text-muted-foreground")} />
+        </Button>
+      )}
+
+      {/* Snooze */}
+      {onSnooze && (
+        <SnoozePopover onSnooze={onSnooze}>
+          <Button variant="ghost" size="icon" className="h-8 w-8">
+            <Clock className="w-4 h-4 text-muted-foreground" />
+          </Button>
+        </SnoozePopover>
+      )}
+
       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleArchive}>
         <Archive className="w-4 h-4 text-muted-foreground" />
       </Button>
@@ -97,14 +143,9 @@ export function EmailActionBar({ activeMode, onModeChange, onSmartReply, onCreat
               Create Task
             </DropdownMenuItem>
           )}
-          <DropdownMenuItem onClick={() => toast({ title: "Marked as unread" })}>
-            Mark as unread
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => toast({ title: "Snoozed" })}>
-            Snooze
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => toast({ title: "Starred" })}>
-            Star
+          <DropdownMenuItem onClick={handleMarkReadUnread}>
+            <BookOpen className="w-3.5 h-3.5 mr-2" />
+            {isUnread ? "Mark as read" : "Mark as unread"}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
