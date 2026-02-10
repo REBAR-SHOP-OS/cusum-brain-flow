@@ -2,6 +2,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { DollarSign, Settings, TrendingUp, Truck, AlertTriangle, Clock, User, ChevronRight } from "lucide-react";
@@ -127,7 +128,12 @@ export function ExceptionsWorkbench() {
                 </div>
                 <div className="flex gap-2 pt-2">
                   {selected.actions.map((a) => (
-                    <Button key={a.label} variant={a.type === "primary" ? "default" : "outline"} size="sm" className="text-xs">
+                    <Button key={a.label} variant={a.type === "primary" ? "default" : "outline"} size="sm" className="text-xs"
+                      onClick={() => {
+                        toast({ title: `${a.label}`, description: `Action "${a.label}" triggered for this exception.` });
+                        setSelected(null);
+                      }}
+                    >
                       {a.label}
                     </Button>
                   ))}
