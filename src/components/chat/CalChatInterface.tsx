@@ -330,7 +330,7 @@ export function CalChatInterface({ onBack }: CalChatInterfaceProps) {
               <span className="text-5xl">📐</span>
             </div>
             
-            <h1 className="text-2xl font-bold mb-2">Cal - Senior Estimator</h1>
+            <h1 className="text-2xl font-bold mb-2">Gauge - Senior Estimator</h1>
             <p className="text-muted-foreground mb-6 max-w-md">
               High-precision rebar & WWM takeoff using the <span className="text-primary font-semibold">Changy Method</span>
             </p>
