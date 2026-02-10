@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, Mail, Loader2 } from "lucide-react";
+import { Plus, Search, Mail, Loader2, RefreshCw } from "lucide-react";
 import { PipelineBoard } from "@/components/pipeline/PipelineBoard";
 import { PipelineAnalytics } from "@/components/pipeline/PipelineAnalytics";
 import { LeadFormModal } from "@/components/pipeline/LeadFormModal";
@@ -41,6 +41,7 @@ export default function Pipeline() {
   const [selectedLead, setSelectedLead] = useState<LeadWithCustomer | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isScanningRfq, setIsScanningRfq] = useState(false);
+  const [isSyncingOdoo, setIsSyncingOdoo] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -156,6 +157,38 @@ export default function Pipeline() {
     }
   };
 
+  const handleSyncOdoo = async () => {
+    setIsSyncingOdoo(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("sync-odoo-leads", {
+        body: {},
+      });
+      if (error) throw error;
+
+      if (data.synced > 0 || data.updated > 0) {
+        queryClient.invalidateQueries({ queryKey: ["leads"] });
+        toast({
+          title: `Odoo sync: ${data.synced} created, ${data.updated} updated`,
+          description: `Processed ${data.total} OdooBot emails — ${data.skipped} skipped`,
+        });
+      } else {
+        toast({
+          title: "No new Odoo leads",
+          description: `Processed ${data.total} emails — ${data.skipped} already synced`,
+        });
+      }
+    } catch (err) {
+      console.error("Odoo sync error:", err);
+      toast({
+        title: "Odoo sync failed",
+        description: err instanceof Error ? err.message : "Failed to sync Odoo leads",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSyncingOdoo(false);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -188,6 +221,16 @@ export default function Pipeline() {
           >
             {isScanningRfq ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
             <span className="hidden sm:inline">Scan RFQ</span>
+          </Button>
+          <Button
+            onClick={handleSyncOdoo}
+            size="sm"
+            variant="outline"
+            disabled={isSyncingOdoo}
+            className="gap-2"
+          >
+            {isSyncingOdoo ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+            <span className="hidden sm:inline">Sync Odoo</span>
           </Button>
           <Button onClick={() => setIsFormOpen(true)} size="sm" className="gap-2">
             <Plus className="w-4 h-4" />

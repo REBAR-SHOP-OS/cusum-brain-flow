@@ -88,11 +88,19 @@ export function LeadCard({ lead, onDragStart, onDragEnd, onEdit, onDelete, onCli
     return match ? match[1].trim() : null;
   };
 
+  const getSourceBadge = (source: string | null) => {
+    if (!source) return null;
+    if (source === "odoo_sync") return { label: "Odoo", className: "bg-purple-500/15 text-purple-700 dark:text-purple-400 border-purple-500/20" };
+    if (source.startsWith("Email:")) return { label: "Email", className: "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/20" };
+    return { label: "Manual", className: "bg-muted text-muted-foreground border-border" };
+  };
+
   const assigned = parseAssigned(lead.notes);
   const age = formatDistanceToNow(new Date(lead.created_at), { addSuffix: false });
   const signal = getCardSignal(lead);
   const isOverdue = lead.expected_close_date && new Date(lead.expected_close_date) < new Date();
   const daysSinceUpdate = differenceInDays(new Date(), new Date(lead.updated_at));
+  const sourceBadge = getSourceBadge(lead.source);
 
   return (
     <Card
@@ -116,6 +124,11 @@ export function LeadCard({ lead, onDragStart, onDragEnd, onEdit, onDelete, onCli
               )}
             </div>
             <p className="font-medium text-sm leading-tight line-clamp-2">{lead.title}</p>
+            {sourceBadge && (
+              <Badge variant="outline" className={cn("text-[10px] px-1.5 py-0 h-4 mt-0.5 w-fit", sourceBadge.className)}>
+                {sourceBadge.label}
+              </Badge>
+            )}
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
