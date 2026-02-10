@@ -43,7 +43,9 @@ interface OdooSession {
 
 async function odooAuthenticate(): Promise<OdooSession> {
   const rawUrl = Deno.env.get("ODOO_URL")!;
-  const url = rawUrl.replace(/\/web(\/login|\/database\/selector)?\/?$/, "").replace(/\/+$/, "");
+  // Strip any path – keep only the origin (protocol + host)
+  const parsed = new URL(rawUrl.trim());
+  const url = parsed.origin;
   const db = Deno.env.get("ODOO_DATABASE")!;
   const login = Deno.env.get("ODOO_USERNAME")!;
   const password = Deno.env.get("ODOO_API_KEY")!;
