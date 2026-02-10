@@ -1,84 +1,86 @@
 
-# Advanced CEO Dashboard Upgrade
+
+# Sales AI Agent - Full Pipeline Assistant Upgrade
 
 ## Overview
-Redesign the CEO Dashboard into a more advanced, data-rich executive command center with new metrics, improved visuals, and additional sections that give you full operational visibility at a glance.
+Upgrade the Sales AI agent (Blitz) to be a comprehensive sales assistant directly integrated into the Pipeline. Currently, the AI only suggests next actions in the Lead Timeline tab. This upgrade adds a dedicated "AI Assistant" tab in the Lead Detail Drawer with full capabilities: follow-up drafting, reminder setting, quotation generation, lead scoring, email drafting, and stage recommendations.
 
-## New Features and Enhancements
+## What Changes
 
-### 1. Enhanced Header with Greeting and Health Score
-- Dynamic greeting based on time of day ("Good morning, CEO")
-- Overall business health score (0-100) calculated from production progress, AR ratio, machine uptime, and pipeline velocity
-- Animated health ring indicator (green/amber/red)
-- Last refresh timestamp with manual refresh button
+### 1. New "AI" Tab in Lead Detail Drawer
+Add a 7th tab to the Lead Detail Drawer called "AI" (with a Sparkles icon) that serves as Blitz's command center for each lead. It will contain:
 
-### 2. Expanded KPI Hero Strip (6 cards instead of 4)
-- Active Orders (existing)
-- Machines Running (existing)
-- Run Time Today (existing)
-- Pipeline Value (existing)
-- **NEW: Today's Revenue** - sum of invoices paid today
-- **NEW: Team On Clock** - workers clocked in vs total, with percentage
+- **Quick Action Buttons**: One-tap actions like "Draft Follow-Up", "Set Reminder", "Generate Quote", "Score Lead", "Suggest Next Step"
+- **AI Response Area**: Displays Blitz's responses with rich markdown
+- **Free-text Input**: Ask Blitz anything about this lead
+- Responses stream inline within the drawer
 
-### 3. Production Pulse - Enhanced
-- Keep existing progress bar and machine fleet grid
-- **NEW: Tonnage tracker** - total weight produced today from machine runs
-- **NEW: Scrap rate indicator** - scrap qty vs output qty percentage
-- Color-coded machine cards with animated pulse for running machines
+### 2. Expand pipeline-ai Edge Function
+Add new action types to the existing `pipeline-ai` edge function:
 
-### 4. Financial Health - Enhanced
-- Keep existing 4 metric tiles
-- **NEW: Overdue invoices count** (invoices past due date)
-- **NEW: Cash flow indicator** - simple AR vs recent payments trend arrow
-- Add sparkline mini-charts inside metric tiles
+- `draft_followup` (already exists, will enhance with more context)
+- `set_reminder` -- AI suggests a reminder date/message, then creates a task
+- `generate_quote` -- AI drafts quotation line items based on lead context
+- `score_lead` -- Returns a 0-100 score with reasoning
+- `recommend_stage` -- Suggests which stage the lead should move to and why
+- `draft_email` -- General email drafting for this lead (intro, check-in, proposal cover, etc.)
+- `analyze` -- Free-form question about the lead answered with full context
 
-### 5. NEW: Operations Command Strip (expanded from 5 to 6)
-- Deliveries, Pickups, Comms Today, Social Posts, Team (existing)
-- **NEW: Open Tasks** - count from any tasks table if available
+### 3. Create LeadAIPanel Component
+New component `src/components/pipeline/LeadAIPanel.tsx` that renders inside the drawer's AI tab:
 
-### 6. Charts Section - Enhanced
-- 7-Day Machine Activity (existing, keep as-is)
-- Sales Pipeline horizontal bar (existing, keep as-is)
-- **NEW: Production vs Target donut chart** - pieces completed vs total target
-- **NEW: Revenue trend line** - 7-day invoice/payment trend if data available
+- Grid of quick-action buttons at top (each triggers a specific pipeline-ai action)
+- Chat-like response area below
+- Free-text input at bottom for custom questions
+- "Create Task" button on reminder/follow-up results to save to tasks table
+- "Generate Quotation" button renders the existing QuotationTemplate with AI-suggested line items
+- Loading states with skeleton animation
 
-### 7. Recent Orders - Enhanced
-- Add order date column
-- Add total value summary row at bottom
-- Clickable rows (future navigation)
+### 4. Reminder / Task Creation Integration
+When Blitz suggests a reminder or follow-up:
+- Show a "Create Task" button that opens the existing `CreateTaskDialog` pre-filled with AI-suggested title, description, due date, and source_ref set to the lead ID
 
-### 8. NEW: Alerts and Notifications Banner
-- Top-of-dashboard alert strip for critical items:
-  - Machines down
-  - Overdue deliveries
-  - Large unpaid invoices (over threshold)
-- Dismissable, color-coded (red for critical, amber for warning)
+### 5. Lead Card AI Indicator
+Add a small sparkle icon on LeadCard when the lead has AI suggestions available (based on age/staleness heuristics -- leads older than 5 days without update get a subtle glow).
 
 ---
 
 ## Technical Details
 
 ### Files Modified
-1. **`src/hooks/useCEODashboard.ts`**
-   - Add new metrics to `CEOMetrics` interface: `healthScore`, `tonnageToday`, `scrapRate`, `overdueInvoices`, `tasksOpen`, `teamOnClockPercent`, `alerts`
-   - Expand `fetchCEOMetrics` with additional queries for scrap data, overdue invoices, and alert conditions
-   - Calculate composite health score from weighted factors
 
-2. **`src/components/office/CEODashboardView.tsx`**
-   - Complete redesign of the view component with:
-     - Greeting header with health score ring
-     - 6-card KPI strip (3x2 on mobile, 6x1 on desktop)
-     - Alert banner section (conditionally rendered)
-     - Enhanced Production Pulse with tonnage
-     - Enhanced Financial Health with overdue count
-     - New donut chart for production target
-     - Expanded operations strip
-     - Enhanced recent orders table
+1. **`supabase/functions/pipeline-ai/index.ts`**
+   - Add new action handlers: `score_lead`, `set_reminder`, `recommend_stage`, `draft_email`, `analyze`
+   - Each uses structured tool calling for consistent JSON output
+   - Enhance `draft_followup` with more lead context (metadata, customer info)
+   - Add `generate_quote` that returns structured line items matching QuotationData interface
+
+2. **`src/components/pipeline/LeadDetailDrawer.tsx`**
+   - Add 7th tab "AI" with Sparkles icon
+   - Import and render `LeadAIPanel` in the new tab
+   - Update TabsList grid-cols from 6 to 7
+
+3. **`src/components/pipeline/LeadCard.tsx`**
+   - Add subtle Sparkles icon for stale leads (no update in 5+ days, not won/lost)
+
+### Files Created
+
+4. **`src/components/pipeline/LeadAIPanel.tsx`**
+   - Quick action grid (6 buttons)
+   - AI response display with markdown rendering
+   - Free-text input with send button
+   - Task creation integration via CreateTaskDialog
+   - Quote preview integration
+   - Loading/empty states
+
+### Edge Function Changes (pipeline-ai)
+- `score_lead`: Returns `{ score: number, factors: string[], recommendation: string }`
+- `set_reminder`: Returns `{ suggested_date: string, message: string, priority: string }`
+- `recommend_stage`: Returns `{ current: string, recommended: string, reason: string, confidence: number }`
+- `draft_email`: Returns `{ subject: string, body: string, tone: string }`
+- `generate_quote`: Returns `{ items: LineItem[], notes: string, validity_days: number }`
+- `analyze`: Returns `{ answer: string }` (free-form response)
 
 ### No Database Changes Required
-All new metrics are derived from existing tables already queried. The health score is a client-side calculation.
+All features use existing tables (leads, lead_activities, tasks). The AI responses are displayed in real-time and task creation uses the existing tasks table.
 
-### Performance
-- Same parallel fetch pattern (Promise.all)
-- 30-second auto-refresh maintained
-- No additional API calls -- reuse existing query data for new calculations
