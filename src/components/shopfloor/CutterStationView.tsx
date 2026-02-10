@@ -35,6 +35,7 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
   const [operatorBars, setOperatorBars] = useState<number | null>(null);
   const [manualFloorConfirmed, setManualFloorConfirmed] = useState(false);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const [completedAtRunStart, setCompletedAtRunStart] = useState<number | null>(null);
 
   const currentItem = items[currentIndex] || null;
   const { getMaxBars } = useMachineCapabilities(machine.model, "cut");
@@ -124,6 +125,8 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
     if (!currentItem) return;
     try {
       setIsRunning(true);
+      // Snapshot completed_pieces at run start so incremental saves don't double-count
+      setCompletedAtRunStart(completedPieces);
       // Initialize slot tracker with actual bars the operator chose
       slotTracker.startWithBars(bars);
 
@@ -192,12 +195,27 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
 
   // ── Record stroke ──
   const handleRecordStroke = useCallback(() => {
+    // Count active bars BEFORE the stroke (this is how many pieces this stroke produces)
+    const activeBars = slotTracker.slots.filter(s => s.status === "active").length;
     slotTracker.recordStroke();
+
+    const newCutsDone = slotTracker.totalCutsDone + activeBars;
+
+    // ── Persist progress to DB after every stroke ──
+    if (currentItem && completedAtRunStart !== null) {
+      const newCompleted = Math.min(completedAtRunStart + newCutsDone, totalPieces);
+      supabase
+        .from("cut_plan_items")
+        .update({ completed_pieces: newCompleted } as any)
+        .eq("id", currentItem.id)
+        .then(); // fire-and-forget, don't block UI
+    }
+
     toast({
       title: "Cut recorded",
-      description: `${slotTracker.totalCutsDone + 1} total cuts done`,
+      description: `${newCutsDone} total cuts done`,
     });
-  }, [slotTracker, toast]);
+  }, [slotTracker, toast, currentItem, completedAtRunStart, totalPieces]);
 
   // ── Remove bar ──
   const handleRemoveBar = useCallback(async (slotIndex: number) => {
@@ -263,7 +281,8 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
       ).length;
 
       // ── Persist completed_pieces to DB (triggers auto_advance_item_phase) ──
-      const newCompleted = Math.min(completedPieces + totalOutput, totalPieces);
+      const baseCompleted = completedAtRunStart ?? completedPieces;
+      const newCompleted = Math.min(baseCompleted + totalOutput, totalPieces);
       const { error: itemErr } = await supabase
         .from("cut_plan_items")
         .update({
@@ -299,10 +318,11 @@ export function CutterStationView({ machine, items, canWrite }: CutterStationVie
       setActiveRunId(null);
       setOperatorBars(null);
       setManualFloorConfirmed(false);
+      setCompletedAtRunStart(null);
 
       // ── Routing toast based on bend type ──
       const markLabel = currentItem.mark_number || "item";
-      const newCompletedPieces = completedPieces + totalOutput;
+      const newCompletedPieces = (completedAtRunStart ?? completedPieces) + totalOutput;
       const isMarkComplete = newCompletedPieces >= totalPieces;
 
       if (currentItem.bend_type === "bend") {
