@@ -52,6 +52,7 @@ import ClearanceStation from "./pages/ClearanceStation";
 import AccountingWorkspace from "./pages/AccountingWorkspace";
 import CustomerPortal from "./pages/CustomerPortal";
 import CEOPortal from "./pages/CEOPortal";
+import Transcribe from "./pages/Transcribe";
 const queryClient = new QueryClient();
 
 /** Helper to wrap protected routes with layout + page-level error boundary */
@@ -117,6 +118,7 @@ const App = () => (
                     <Route path="/shopfloor/live-monitor" element={<P><LiveMonitor /></P>} />
                     <Route path="/deliveries" element={<P><Deliveries /></P>} />
                     <Route path="/timeclock" element={<P><TimeClock /></P>} />
+                    <Route path="/transcribe" element={<P><Transcribe /></P>} />
                     <Route path="/team-hub" element={<P><TeamHub /></P>} />
 
                     {/* Office Portal - standalone layout but wrapped in workspace */}

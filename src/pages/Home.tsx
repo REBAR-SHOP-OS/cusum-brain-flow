@@ -202,12 +202,12 @@ export default function Home() {
               { label: "CEO Portal", icon: Crown, route: "/ceo", gradient: "from-amber-500 via-orange-500 to-yellow-600", emoji: "👑" },
               { label: "Time Clock", icon: Clock, route: "/timeclock", gradient: "from-teal-500 via-emerald-500 to-cyan-500", emoji: "⏱" },
               { label: "Team Hub", icon: MessageSquare, route: "/team-hub", gradient: "from-indigo-500 via-purple-500 to-violet-500", emoji: "💬" },
-              { label: "Transcribe", icon: Languages, route: "/office", gradient: "from-pink-500 via-rose-500 to-red-500", emoji: "🎙️", state: { section: "ai-transcribe" } },
+              { label: "Transcribe", icon: Languages, route: "/transcribe", gradient: "from-pink-500 via-rose-500 to-red-500", emoji: "🎙️" },
             ].map((ws) => (
               <div
                 key={ws.label}
                 className={`relative overflow-hidden rounded-xl p-2.5 sm:p-4 text-white cursor-pointer transition-all hover:scale-[1.03] active:scale-[0.98] bg-gradient-to-br ${ws.gradient} flex flex-col items-center gap-1 sm:flex-row sm:gap-3`}
-                onClick={() => navigate(ws.route, { state: (ws as any).state })}
+                onClick={() => navigate(ws.route)}
               >
                 <span className="text-lg sm:text-xl">{ws.emoji}</span>
                 <span className="relative z-10 font-bold text-[10px] sm:text-base text-center sm:text-left leading-tight">{ws.label}</span>
