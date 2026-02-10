@@ -144,9 +144,7 @@ export function ProductionQueueView() {
     enabled: !!user && projectCustomerIds.length > 0,
     queryFn: async () => {
       if (projectCustomerIds.length === 0) return [];
-      console.log("[PQ] fetching customers by ids:", projectCustomerIds);
       const { data, error } = await supabase.from("customers").select("id, name").in("id", projectCustomerIds);
-      console.log("[PQ] customers result:", data, "error:", error);
       return (data || []) as Array<{ id: string; name: string }>;
     },
   });

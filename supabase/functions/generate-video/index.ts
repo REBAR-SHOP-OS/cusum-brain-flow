@@ -53,7 +53,7 @@ async function veoGenerate(apiKey: string, prompt: string, duration: number) {
   }
 
   const data = await resp.json();
-  console.log("Veo operation created:", data.name);
+  
   return { jobId: data.name, provider: "veo" };
 }
 
@@ -123,7 +123,7 @@ async function soraGenerate(apiKey: string, prompt: string, duration: number, mo
   }
 
   const data = await resp.json();
-  console.log("Sora job created:", data.id, "status:", data.status);
+  
   return { jobId: data.id, provider: "sora" };
 }
 
@@ -214,7 +214,7 @@ serve(async (req) => {
         );
       }
 
-      console.log(`[${provider}] Generating video for: "${prompt.slice(0, 80)}"`);
+      
 
       const result = isVeo
         ? await veoGenerate(apiKey, prompt, duration)

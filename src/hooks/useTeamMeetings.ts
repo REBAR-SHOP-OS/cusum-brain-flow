@@ -86,7 +86,7 @@ export function useStartMeeting() {
         if (!rcvError && rcvData?.success && rcvData?.joinUrl) {
           joinUrl = rcvData.joinUrl;
           roomCode = rcvData.bridgeId || rcvData.shortId || roomCode;
-          console.log("[Meeting] RingCentral Video bridge created:", joinUrl);
+          // RingCentral Video bridge created successfully
         } else {
           console.warn("[Meeting] RingCentral Video unavailable, falling back to Jitsi:", rcvError || rcvData?.error);
         }
@@ -135,7 +135,6 @@ export function useEndMeeting() {
         body: { meetingId },
       }).then(({ data, error: fnErr }) => {
         if (fnErr) console.error("Meeting summarization failed:", fnErr);
-        else console.log("Meeting summarized:", data?.summary?.slice(0, 100));
       });
     },
     onSuccess: () => {

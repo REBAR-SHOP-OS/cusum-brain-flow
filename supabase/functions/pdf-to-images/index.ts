@@ -25,7 +25,7 @@ async function convertPdfToImages(
   const pageCount = doc.countPages();
   const pagesToProcess = Math.min(pageCount, maxPages);
   
-  console.log(`PDF has ${pageCount} pages, processing ${pagesToProcess}`);
+  
   
   const pages: string[] = [];
   
@@ -52,7 +52,7 @@ async function convertPdfToImages(
       const base64 = btoa(String.fromCharCode(...new Uint8Array(pngData)));
       pages.push(`data:image/png;base64,${base64}`);
       
-      console.log(`Converted page ${i + 1}/${pagesToProcess} (${width}x${height})`);
+      
     } catch (error) {
       console.error(`Error converting page ${i + 1}:`, error);
     }
@@ -76,7 +76,7 @@ serve(async (req) => {
       );
     }
 
-    console.log(`Fetching PDF from: ${pdfUrl}`);
+    
     
     // Fetch the PDF file
     const pdfResponse = await fetch(pdfUrl);
@@ -85,7 +85,7 @@ serve(async (req) => {
     }
     
     const pdfData = new Uint8Array(await pdfResponse.arrayBuffer());
-    console.log(`PDF size: ${pdfData.length} bytes`);
+    
     
     // Convert PDF to images
     const result = await convertPdfToImages(pdfData, maxPages, dpi);

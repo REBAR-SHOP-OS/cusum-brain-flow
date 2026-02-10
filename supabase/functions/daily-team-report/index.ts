@@ -233,7 +233,7 @@ Keep it punchy, use emojis sparingly. No JSON, just plain text.`,
       throw new Error("Failed to create notification");
     }
 
-    console.log(`Daily team report sent to ${adminUserIds.length} admins for ${today}`);
+    
 
     return new Response(
       JSON.stringify({ ok: true, adminsNotified: adminUserIds.length, employeesReported: employeeSummaries.length }),
