@@ -157,12 +157,16 @@ serve(async (req) => {
     );
   } catch (error) {
     console.error("RingCentral Video error:", error);
+    const msg = error instanceof Error ? error.message : "Unknown error";
+    // Return 200 with fallback flag so the client gracefully falls back to Jitsi
+    // instead of treating this as a fatal error
     return new Response(
       JSON.stringify({
-        error: error instanceof Error ? error.message : "Unknown error",
+        success: false,
+        error: msg,
         fallback: true,
       }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
