@@ -50,17 +50,16 @@ export function PipelineAnalytics({ leads }: PipelineAnalyticsProps) {
   }, [leads]);
 
   return (
-    <div className="flex items-center gap-4 overflow-x-auto pb-1">
+    <div className="flex items-center gap-2">
       {stats.map((stat) => (
         <div
           key={stat.label}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-secondary/50 shrink-0"
+          className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-secondary/50 shrink-0"
+          title={stat.label}
         >
-          <stat.icon className={`w-3.5 h-3.5 ${stat.accent}`} />
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-sm font-semibold">{stat.value}</span>
-            <span className="text-xs text-muted-foreground hidden lg:inline">{stat.label}</span>
-          </div>
+          <stat.icon className={`w-3 h-3 ${stat.accent}`} />
+          <span className="text-xs font-semibold">{stat.value}</span>
+          <span className="text-[10px] text-muted-foreground hidden xl:inline">{stat.label}</span>
         </div>
       ))}
     </div>
