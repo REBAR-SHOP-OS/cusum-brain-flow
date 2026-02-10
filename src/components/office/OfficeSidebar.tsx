@@ -40,7 +40,7 @@ interface OfficeSidebarProps {
 
 const officeTools: { id: OfficeSection; label: string; icon: React.ElementType }[] = [
   { id: "ai-extract", label: "AI Extract", icon: FileText },
-  { id: "ai-transcribe", label: "AI Transcribe", icon: Languages },
+  
   { id: "detailed-list", label: "Detailed List", icon: List },
   { id: "production-queue", label: "Production Queue", icon: ListOrdered },
   { id: "inventory", label: "Inventory", icon: Package },
