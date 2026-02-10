@@ -7,6 +7,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   TrendingUp, AlertTriangle, Clock, BarChart3, Send,
   Users, Target, Sparkles, Mail, DollarSign, ListChecks, Loader2,
+  Ruler, ClipboardCheck, FileSearch,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -15,7 +16,7 @@ import { RichMarkdown } from "@/components/chat/RichMarkdown";
 import type { Tables } from "@/integrations/supabase/types";
 import { differenceInDays } from "date-fns";
 import salesHelper from "@/assets/helpers/sales-helper.png";
-
+import estimatingHelper from "@/assets/helpers/estimating-helper.png";
 type Lead = Tables<"leads">;
 type LeadWithCustomer = Lead & { customers: { name: string; company_name: string | null } | null };
 
@@ -25,17 +26,30 @@ interface PipelineAISheetProps {
   leads: LeadWithCustomer[];
 }
 
-const checkingPhases = [
+const BLITZ_CHECKING_PHASES = [
   { label: "Scanning pipeline activity...", Icon: TrendingUp },
   { label: "Reviewing lead emails...", Icon: Mail },
   { label: "Prioritizing your actions...", Icon: ListChecks },
 ];
 
-const POST_BRIEFING_ACTIONS = [
+const GAUGE_CHECKING_PHASES = [
+  { label: "Scanning open estimates...", Icon: FileSearch },
+  { label: "Checking QC flags & revisions...", Icon: ClipboardCheck },
+  { label: "Building your priority list...", Icon: Ruler },
+];
+
+const BLITZ_ACTIONS = [
   { id: "stale_report", label: "Stale Leads" },
   { id: "followup_gaps", label: "Follow-up Gaps" },
   { id: "revenue_forecast", label: "Revenue Forecast" },
   { id: "salesperson_report", label: "Team Ranking" },
+];
+
+const GAUGE_ACTIONS = [
+  { id: "open_takeoffs", label: "Open Takeoffs" },
+  { id: "qc_flags", label: "QC Flags" },
+  { id: "revision_status", label: "Drawing Revisions" },
+  { id: "estimation_deadlines", label: "Deadlines" },
 ];
 
 function buildPipelineStats(leads: LeadWithCustomer[]) {
@@ -76,6 +90,14 @@ export function PipelineAISheet({ open, onOpenChange, leads }: PipelineAISheetPr
   const hasAutoFired = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
+
+  const isGauge = user?.email === "ben@rebar.shop";
+  const agentName = isGauge ? "Gauge" : "Blitz";
+  const agentAvatar = isGauge ? estimatingHelper : salesHelper;
+  const agentSubtitle = isGauge ? "Senior Structural Estimator" : "Pipeline accountability partner";
+  const agentTag = isGauge ? "Estimating & QC" : "Sales Command";
+  const checkingPhases = isGauge ? GAUGE_CHECKING_PHASES : BLITZ_CHECKING_PHASES;
+  const postBriefingActions = isGauge ? GAUGE_ACTIONS : BLITZ_ACTIONS;
 
   const userName = useMemo(() => {
     const full = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "there";
@@ -118,7 +140,30 @@ export function PipelineAISheet({ open, onOpenChange, leads }: PipelineAISheetPr
       const stats = buildPipelineStats(leads);
       const today = new Date().toLocaleDateString("en-CA", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
 
-      const briefingPrompt = `Daily sales pipeline briefing for ${userName}. Today is ${today}.
+      const briefingPrompt = isGauge
+        ? `Daily estimating & QC briefing for ${userName}. Today is ${today}.
+
+Pipeline stats: ${JSON.stringify(stats)}
+
+You are Gauge — a Senior Structural Estimator with 55 years experience. You help ${userName} stay on top of open estimates, QC checks, and drawing revisions.
+
+FORMAT REQUIREMENTS — follow exactly:
+1. Start with "📐 X items need your attention" (count real action items)
+2. Warm one-liner greeting for ${userName}
+
+3. **🚨 URGENT — QC Flags**: Estimates with errors, missing dimensions, or failed QC checks. Use a table: | # | Project/Estimate | Issue | Severity | Action |
+4. **📐 TODAY — Open Takeoffs**: Estimates in progress, takeoffs due today. Numbered list with tags [Takeoff] [Review] [Revision]
+5. **📋 THIS WEEK — Deadlines**: Estimates due this week, shop drawings needing review. Numbered list
+6. **🔍 Revision Tracker**: Drawing revisions received but not yet processed. One-line each
+7. **✅ Bottom Line**: "All estimates on track" OR "X items at risk — start with #1"
+
+RULES:
+- Tag items: [Takeoff], [Review], [Revision], [QC], [Deadline]
+- Bold all tonnage and dollar amounts
+- SHORT sentences — max 15 words
+- If 0 QC flags, say "✅ No QC issues — clean sheet!"
+- Be precise and engineering-focused, zero tolerance for errors`
+        : `Daily sales pipeline briefing for ${userName}. Today is ${today}.
 
 Pipeline stats: ${JSON.stringify(stats)}
 
@@ -190,13 +235,13 @@ RULES:
         <div className="p-4 pb-3 border-b border-border shrink-0">
           <SheetHeader className="text-left">
             <div className="flex items-center gap-3">
-              <img src={salesHelper} alt="Blitz" className="w-10 h-10 rounded-xl object-cover" />
+              <img src={agentAvatar} alt={agentName} className="w-10 h-10 rounded-xl object-cover" />
               <div>
                 <SheetTitle className="text-lg font-bold flex items-center gap-2">
-                  Blitz
-                  <span className="text-[10px] font-normal text-muted-foreground bg-muted px-1.5 py-0.5 rounded">Sales Command</span>
+                  {agentName}
+                  <span className="text-[10px] font-normal text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{agentTag}</span>
                 </SheetTitle>
-                <p className="text-xs text-muted-foreground">Pipeline accountability partner</p>
+                <p className="text-xs text-muted-foreground">{agentSubtitle}</p>
               </div>
             </div>
           </SheetHeader>
@@ -220,7 +265,7 @@ RULES:
             {/* Checking animation — no messages yet, loading */}
             {messages.length === 0 && loading && (
               <div className="flex flex-col items-center justify-center py-12 gap-5">
-                <img src={salesHelper} alt="Blitz" className="w-14 h-14 rounded-2xl object-cover" />
+                <img src={agentAvatar} alt={agentName} className="w-14 h-14 rounded-2xl object-cover" />
                 <div className="space-y-3 w-full max-w-xs">
                   {checkingPhases.map((phase, idx) => {
                     const isActive = idx === checkingPhase;
@@ -257,7 +302,7 @@ RULES:
             {messages.length === 0 && !loading && (
               <div className="text-center py-12 text-muted-foreground">
                 <Sparkles className="w-8 h-8 mx-auto mb-3 opacity-40" />
-                <p className="text-sm font-medium">Ask Blitz anything about your pipeline</p>
+                <p className="text-sm font-medium">Ask {agentName} anything about your {isGauge ? "estimates" : "pipeline"}</p>
                 <p className="text-xs mt-1">Or use a quick action below</p>
               </div>
             )}
@@ -266,7 +311,7 @@ RULES:
             {messages.map((msg, idx) => (
               <div key={idx} className={cn("flex gap-2", msg.role === "user" ? "justify-end" : "justify-start")}>
                 {msg.role === "agent" && (
-                  <img src={salesHelper} alt="Blitz" className="w-7 h-7 rounded-lg object-cover shrink-0 mt-1" />
+                  <img src={agentAvatar} alt={agentName} className="w-7 h-7 rounded-lg object-cover shrink-0 mt-1" />
                 )}
                 <div className={cn(
                   "rounded-xl px-3 py-2 text-sm overflow-x-auto",
@@ -286,7 +331,7 @@ RULES:
             {/* Post-briefing quick actions */}
             {briefingLoaded && (
               <div className="flex flex-wrap gap-1.5 pt-1">
-                {POST_BRIEFING_ACTIONS.map((action) => (
+                {postBriefingActions.map((action) => (
                   <button
                     key={action.id}
                     onClick={() => runAction(action.id)}
@@ -301,10 +346,10 @@ RULES:
             {/* Loading indicator for follow-up messages */}
             {loading && messages.length > 0 && (
               <div className="flex items-center gap-2">
-                <img src={salesHelper} alt="Blitz" className="w-7 h-7 rounded-lg object-cover" />
+                <img src={agentAvatar} alt={agentName} className="w-7 h-7 rounded-lg object-cover" />
                 <div className="bg-muted rounded-xl px-3 py-2 flex items-center gap-2">
                   <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
-                  <span className="text-xs text-muted-foreground">Blitz is analyzing...</span>
+                  <span className="text-xs text-muted-foreground">{agentName} is analyzing...</span>
                 </div>
               </div>
             )}
@@ -318,7 +363,7 @@ RULES:
             <Textarea
               value={userMessage}
               onChange={(e) => setUserMessage(e.target.value)}
-              placeholder="Ask Blitz about leads, deals, follow-ups..."
+              placeholder={isGauge ? "Ask Gauge about estimates, QC, revisions..." : "Ask Blitz about leads, deals, follow-ups..."}
               className="min-h-[40px] max-h-[100px] text-sm resize-none"
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
