@@ -1,39 +1,81 @@
 
 
-## Fix: Black Camera in Face Enrollment Dialog
+# Fix Voice Input + Build AI-Driven Meeting System
 
-### Problem
-The camera shows black because of a timing issue between when the stream is obtained and when the video element is actually in the DOM:
+## Issue 1: Microphone Button Not Working on Home Page
 
-1. `startCamera()` gets the media stream and stores it in `streamRef`
-2. At this point, `cameraActive` is still `false`, so the `<video>` element doesn't exist in the DOM yet
-3. `setCameraActive(true)` triggers a re-render that adds the `<video>` element
-4. The `useEffect` fires on `cameraActive` change, but the video DOM node may not be committed yet in the same render cycle, so `videoRef.current` can still be null
+The voice input button uses the browser's `SpeechRecognition` API (Web Speech API). On iOS Safari and some mobile browsers, this API is either unsupported or requires HTTPS + user gesture. When `isSupported` is `false`, the button returns `null` and is completely hidden -- but even when visible, the SpeechRecognition API can silently fail on mobile.
 
-### Solution
-Replace the static `videoRef` with a **callback ref** on the `<video>` element. When React mounts the video element, the callback fires immediately with the DOM node, and we assign `streamRef.current` to it right then. This eliminates any timing gap.
+**Fix:** Add a visible error state and toast notification when voice input fails, so users know what happened. Also add a fallback: if SpeechRecognition is not supported, show the button but prompt the user that their browser doesn't support it.
 
-### Changes (single file, surgical)
+## Issue 2: AI-Driven Meeting System with Recording
 
-**`src/components/timeclock/FaceEnrollment.tsx`**
+The current meeting system has the right pieces but needs to be made fully automatic ("AI-driven"). Here's what will change:
 
-1. Remove the `useEffect` sync hook (lines 34-41) -- it's unreliable
-2. Replace `videoRef = useRef<HTMLVideoElement>(null)` with a mutable ref that gets set via a callback
-3. Add a `videoCallbackRef` function that:
-   - Stores the video element in `videoRef.current`
-   - If `streamRef.current` exists, assigns it to `video.srcObject` and calls `play()`
-4. Update the `<video>` element to use `ref={videoCallbackRef}` instead of `ref={videoRef}`
+### Auto-Start Recording and Transcription
+- When a meeting starts, **automatically begin recording** (not just for the creator -- for all participants)
+- **Auto-start transcription** is already in place
+- Remove the manual record button; recording is always-on
 
-This guarantees that the moment the video element enters the DOM, it gets the stream -- no race condition possible.
+### Auto-Generate AI Notes During Meeting
+- The live notes panel already calls `meeting-live-notes` every 60s -- this stays as-is but will trigger on the first 5 entries instead of waiting for 10
 
-### Technical Detail
+### Auto-Summarize on End
+- When a meeting ends, the `summarize-meeting` edge function is already triggered automatically
+- The meeting report dialog already shows after a short delay
 
+### Changes Summary
+
+**`src/hooks/useSpeechRecognition.ts`**
+- Add error callback so the UI can show a toast when mic access is denied or API unsupported
+
+**`src/components/chat/ChatInput.tsx`**
+- Show a toast when voice input fails or is unsupported
+
+**`src/components/teamhub/MeetingRoom.tsx`**
+- Auto-start recording on mount (remove manual record button)
+- Auto-stop recording on end/leave
+- Always show the REC badge when active
+
+**`src/hooks/useMeetingRecorder.ts`**
+- Remove the `isCreator` guard so any participant can record
+- Auto-start capability
+
+**`src/components/teamhub/MeetingNotesPanel.tsx`**
+- Lower the auto-analyze threshold from 10 entries to 5
+- Start first analysis after 30 seconds instead of 60
+
+**`supabase/functions/ringcentral-video/index.ts`**
+- No changes needed -- fallback to Jitsi is already graceful
+
+## Technical Details
+
+### Voice Input Fix
 ```text
-Before (broken):
-  startCamera() --> stream ready --> videoRef is null --> setCameraActive(true) --> re-render --> useEffect fires --> videoRef MIGHT still be null
+ChatInput.tsx:
+  handleVoiceToggle() --> if !speech.isSupported --> toast("Voice input not supported on this browser")
+  speech.start() error --> toast("Microphone access denied")
 
-After (fixed):
-  startCamera() --> stream ready --> setCameraActive(true) --> re-render --> video mounts --> callback ref fires --> stream assigned immediately
+useSpeechRecognition.ts:
+  Add onError callback parameter
+  Surface "not-allowed" and "no-speech" errors
 ```
 
-No other files are affected. The canvas ref, capture logic, and upload flow remain untouched.
+### Auto-Recording Flow
+```text
+MeetingRoom mount
+  --> useEffect auto-calls startRecording()
+  --> useEffect auto-starts transcription (already done)
+  
+MeetingRoom unmount / end
+  --> stopRecording() + stopTranscription() (already done)
+  --> summarize-meeting fires (already done)
+```
+
+### Files Changed
+1. `src/hooks/useSpeechRecognition.ts` -- error surfacing
+2. `src/components/chat/ChatInput.tsx` -- toast on voice failure  
+3. `src/components/teamhub/MeetingRoom.tsx` -- auto-start recording, remove manual button
+4. `src/hooks/useMeetingRecorder.ts` -- remove creator-only guard, add auto-start
+5. `src/components/teamhub/MeetingNotesPanel.tsx` -- faster first AI analysis
+
