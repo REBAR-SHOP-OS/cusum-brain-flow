@@ -49,14 +49,13 @@ export function MeetingRoom({
     startTranscription, stopTranscription, isSupported: sttSupported,
   } = useMeetingTranscription(meeting.id, displayName, profileId, meeting.started_at);
 
-  // Audio recording (creator only)
-  const { isRecording, startRecording, stopRecording, duration } = useMeetingRecorder(
-    isCreator ? meeting.id : null
-  );
+  // Audio recording (all participants)
+  const { isRecording, startRecording, stopRecording, duration } = useMeetingRecorder(meeting.id);
 
-  // Auto-start transcription on mount
+  // Auto-start transcription + recording on mount
   useEffect(() => {
     if (sttSupported) startTranscription();
+    startRecording();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -251,19 +250,6 @@ export function MeetingRoom({
                 {isVideoOff ? <VideoOff className="w-4 h-4" /> : <Video className="w-4 h-4" />}
               </Button>
             </>
-          )}
-
-          {/* Record button (creator only) */}
-          {isCreator && (
-            <Button
-              variant={isRecording ? "destructive" : "outline"}
-              size="sm"
-              className="h-9 w-9 md:h-10 md:w-10 rounded-full p-0"
-              onClick={() => isRecording ? stopRecording() : startRecording()}
-              title={isRecording ? "Stop recording" : "Start recording"}
-            >
-              <Circle className={cn("w-4 h-4", isRecording && "fill-current animate-pulse")} />
-            </Button>
           )}
 
           <Button
