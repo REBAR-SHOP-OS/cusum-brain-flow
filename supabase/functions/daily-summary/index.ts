@@ -9,7 +9,7 @@ const corsHeaders = {
 };
 
 // Mailboxes to scan for reports
-const REPORT_MAILBOXES = ["ai@rebar.shop", "vicky@rebar.shop", "neel@rebar.shop"];
+const REPORT_MAILBOXES = ["ai@rebar.shop", "vicky@rebar.shop", "neel@rebar.shop", "ben@rebar.shop", "saurabh@rebar.shop"];
 
 // Keywords to identify report/summary emails
 const REPORT_KEYWORDS = [
