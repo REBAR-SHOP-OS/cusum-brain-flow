@@ -50,7 +50,7 @@ import TeamHub from "./pages/TeamHub";
 import NotFound from "./pages/NotFound";
 import ClearanceStation from "./pages/ClearanceStation";
 import AccountingWorkspace from "./pages/AccountingWorkspace";
-
+import CustomerPortal from "./pages/CustomerPortal";
 const queryClient = new QueryClient();
 
 /** Helper to wrap protected routes with layout + page-level error boundary */
@@ -147,6 +147,7 @@ const App = () => (
                     <Route path="/data-deletion" element={<DataDeletion />} />
                     <Route path="/terms" element={<TermsOfService />} />
                     <Route path="/terms-of-service" element={<TermsOfService />} />
+                    <Route path="/portal" element={<CustomerPortal />} />
                     <Route path="/install" element={<Install />} />
 
                     <Route path="*" element={<NotFound />} />

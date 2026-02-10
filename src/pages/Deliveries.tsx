@@ -1,13 +1,18 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompletedBundles } from "@/hooks/useCompletedBundles";
+import { useAuth } from "@/lib/auth";
+import { useUserRole } from "@/hooks/useUserRole";
 import { ReadyBundleList } from "@/components/dispatch/ReadyBundleList";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PODCaptureDialog } from "@/components/delivery/PODCaptureDialog";
+import { StopIssueDialog } from "@/components/delivery/StopIssueDialog";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Switch } from "@/components/ui/switch";
 import { 
   Truck, 
   MapPin, 
@@ -18,7 +23,9 @@ import {
   Plus,
   Calendar,
   User,
-  ArrowLeft
+  ArrowLeft,
+  Camera,
+  FileWarning
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -70,7 +77,27 @@ const stopStatusColors: Record<string, string> = {
 export default function Deliveries() {
   const [activeTab, setActiveTab] = useState("today");
   const [selectedDelivery, setSelectedDelivery] = useState<Delivery | null>(null);
+  const [driverMode, setDriverMode] = useState(false);
+  const [podStopId, setPodStopId] = useState<string | null>(null);
+  const [issueStopId, setIssueStopId] = useState<string | null>(null);
   const { bundles } = useCompletedBundles();
+  const { user } = useAuth();
+  const { isField } = useUserRole();
+  const queryClient = useQueryClient();
+
+  // Get current user's profile name for driver mode filtering
+  const { data: myProfile } = useQuery({
+    queryKey: ["my-profile-driver", user?.id],
+    enabled: !!user && driverMode,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("full_name")
+        .eq("user_id", user!.id)
+        .maybeSingle();
+      return data;
+    },
+  });
 
   const { data: deliveries = [], isLoading, error } = useQuery({
     queryKey: ["deliveries"],
@@ -101,23 +128,32 @@ export default function Deliveries() {
     enabled: !!selectedDelivery,
   });
 
+  // Apply driver mode filter
+  const filteredDeliveries = driverMode && myProfile?.full_name
+    ? deliveries.filter(d => d.driver_name === myProfile.full_name)
+    : deliveries;
+
   const today = new Date().toISOString().split("T")[0];
   
-  const todayDeliveries = deliveries.filter(d => 
+  const todayDeliveries = filteredDeliveries.filter(d => 
     d.scheduled_date?.startsWith(today)
   );
   
-  const upcomingDeliveries = deliveries.filter(d => 
+  const upcomingDeliveries = filteredDeliveries.filter(d => 
     d.scheduled_date && d.scheduled_date > today
   );
   
-  const completedDeliveries = deliveries.filter(d => 
+  const completedDeliveries = filteredDeliveries.filter(d => 
     d.status === "completed" || d.status === "delivered"
   );
 
-  const activeDeliveries = deliveries.filter(d => 
+  const activeDeliveries = filteredDeliveries.filter(d => 
     d.status === "in-transit"
   );
+
+  const refreshStops = () => {
+    queryClient.invalidateQueries({ queryKey: ["delivery-stops", selectedDelivery?.id] });
+  };
 
   if (error) {
     return (
@@ -146,10 +182,19 @@ export default function Deliveries() {
               {activeDeliveries.length} in transit • {todayDeliveries.length} today
             </p>
           </div>
-          <Button size="sm" className="gap-2">
-            <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline">New Delivery</span>
-          </Button>
+          <div className="flex items-center gap-3">
+            {/* Driver Mode Toggle */}
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-muted-foreground whitespace-nowrap">Driver Mode</label>
+              <Switch checked={driverMode} onCheckedChange={setDriverMode} />
+            </div>
+            {!driverMode && (
+              <Button size="sm" className="gap-2">
+                <Plus className="w-4 h-4" />
+                <span className="hidden sm:inline">New Delivery</span>
+              </Button>
+            )}
+          </div>
         </header>
 
         {/* Stats Bar */}
@@ -195,7 +240,7 @@ export default function Deliveries() {
               <TabsList>
                 <TabsTrigger value="today">Today ({todayDeliveries.length})</TabsTrigger>
                 <TabsTrigger value="upcoming">Upcoming ({upcomingDeliveries.length})</TabsTrigger>
-                <TabsTrigger value="all">All ({deliveries.length})</TabsTrigger>
+                <TabsTrigger value="all">All ({filteredDeliveries.length})</TabsTrigger>
               </TabsList>
             </div>
 
@@ -221,7 +266,7 @@ export default function Deliveries() {
 
             <TabsContent value="all" className="flex-1 overflow-hidden px-4 sm:px-6 pb-6">
               <DeliveryList 
-                deliveries={deliveries} 
+                deliveries={filteredDeliveries} 
                 isLoading={isLoading}
                 selectedId={selectedDelivery?.id}
                 onSelect={setSelectedDelivery}
@@ -279,7 +324,14 @@ export default function Deliveries() {
                 <ScrollArea className="h-[calc(100vh-320px)]">
                   <div className="space-y-3 pr-4">
                     {stops.map((stop, index) => (
-                      <StopCard key={stop.id} stop={stop} index={index} />
+                      <StopCard 
+                        key={stop.id} 
+                        stop={stop} 
+                        index={index}
+                        driverMode={driverMode}
+                        onPOD={() => setPodStopId(stop.id)}
+                        onIssue={() => setIssueStopId(stop.id)}
+                      />
                     ))}
                     {stops.length === 0 && (
                       <p className="text-sm text-muted-foreground text-center py-8">
@@ -304,6 +356,20 @@ export default function Deliveries() {
           </div>
         )}
       </div>
+
+      {/* POD & Issue Dialogs */}
+      <PODCaptureDialog
+        open={!!podStopId}
+        onOpenChange={(open) => !open && setPodStopId(null)}
+        stopId={podStopId || ""}
+        onComplete={refreshStops}
+      />
+      <StopIssueDialog
+        open={!!issueStopId}
+        onOpenChange={(open) => !open && setIssueStopId(null)}
+        stopId={issueStopId || ""}
+        onComplete={refreshStops}
+      />
     </div>
   );
 }
@@ -403,8 +469,15 @@ function DeliveryCard({ delivery, isSelected, onClick }: DeliveryCardProps) {
   );
 }
 
-function StopCard({ stop, index }: { stop: DeliveryStop; index: number }) {
+function StopCard({ stop, index, driverMode, onPOD, onIssue }: { 
+  stop: DeliveryStop; 
+  index: number;
+  driverMode?: boolean;
+  onPOD?: () => void;
+  onIssue?: () => void;
+}) {
   const status = (stop.status || "pending").toLowerCase();
+  const isActionable = driverMode && status !== "completed" && status !== "failed";
   
   return (
     <Card>
@@ -430,12 +503,25 @@ function StopCard({ stop, index }: { stop: DeliveryStop; index: number }) {
                 <div>Departed: {format(new Date(stop.departure_time), "h:mm a")}</div>
               )}
               {stop.pod_signature && (
-                <div className="text-green-500">✓ Signed</div>
+                <div className="text-primary">✓ Signed</div>
               )}
               {stop.exception_reason && (
                 <div className="text-destructive">{stop.exception_reason}</div>
               )}
             </div>
+            {/* Driver mode action buttons */}
+            {isActionable && (
+              <div className="flex gap-2 mt-2">
+                <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={onPOD}>
+                  <Camera className="w-3 h-3" />
+                  POD
+                </Button>
+                <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 text-destructive" onClick={onIssue}>
+                  <FileWarning className="w-3 h-3" />
+                  Issue
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       </CardContent>
