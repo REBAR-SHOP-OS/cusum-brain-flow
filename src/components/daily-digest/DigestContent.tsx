@@ -1,4 +1,4 @@
-import { ThumbsUp, ThumbsDown, Calendar, Mail, Lightbulb, Sparkles, Video, Phone, TrendingUp, Zap, DollarSign, BarChart3, AlertTriangle, Share2 } from "lucide-react";
+import { ThumbsUp, ThumbsDown, Calendar, Mail, Lightbulb, Sparkles, Video, Phone, TrendingUp, Zap, DollarSign, BarChart3, AlertTriangle, Share2, Users, Cog, Activity, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -51,6 +51,9 @@ export function DigestContent({ digest, stats, currentDate }: DigestContentProps
           <StatPill label="Invoices" value={stats.invoices ?? 0} />
           <StatPill label="Overdue" value={stats.overdueInvoices ?? 0} accent />
           <StatPill label="Posts" value={stats.socialPosts ?? 0} />
+          <StatPill label="Clocked" value={stats.employeesClocked ?? 0} />
+          <StatPill label="Runs" value={stats.machineRuns ?? 0} />
+          <StatPill label="ERP" value={stats.erpEvents ?? 0} />
           <StatPill label="Pipeline" value={stats.leads} />
         </div>
       )}
@@ -157,6 +160,112 @@ export function DigestContent({ digest, stats, currentDate }: DigestContentProps
                 <p className="text-[10px] font-semibold text-muted-foreground uppercase">Recommendations</p>
                 {digest.socialMediaDigest.recommendations.map((r, i) => (
                   <p key={i} className="text-xs text-muted-foreground">⚡ {r}</p>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Employee Report */}
+      {digest.employeeReport && (
+        <Card className="border-border/50">
+          <CardHeader className="pb-2 pt-4 px-5">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2 uppercase tracking-wider text-muted-foreground">
+              <Clock className="w-4 h-4 text-orange-500" />
+              Employee Report
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-5 pb-4 space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="bg-muted/30 rounded-lg p-3 text-center">
+                <p className="text-lg font-bold text-foreground tabular-nums">{digest.employeeReport.totalClocked}</p>
+                <p className="text-[10px] text-muted-foreground uppercase">Clocked In</p>
+              </div>
+              <div className="bg-muted/30 rounded-lg p-3 text-center">
+                <p className="text-lg font-bold text-foreground tabular-nums">{digest.employeeReport.totalHours}</p>
+                <p className="text-[10px] text-muted-foreground uppercase">Total Hours</p>
+              </div>
+            </div>
+            {digest.employeeReport.highlights.map((h, i) => (
+              <div key={i} className="flex items-start gap-2">
+                <Users className="w-3.5 h-3.5 text-orange-500 mt-0.5 shrink-0" />
+                <p className="text-xs text-foreground/80">{h}</p>
+              </div>
+            ))}
+            {digest.employeeReport.concerns.length > 0 && (
+              <div className="border-l-2 border-destructive/30 pl-3 space-y-1">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase">⚠️ Concerns</p>
+                {digest.employeeReport.concerns.map((c, i) => (
+                  <p key={i} className="text-xs text-destructive/80">{c}</p>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Production Report */}
+      {digest.productionReport && (
+        <Card className="border-border/50">
+          <CardHeader className="pb-2 pt-4 px-5">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2 uppercase tracking-wider text-muted-foreground">
+              <Cog className="w-4 h-4 text-cyan-500" />
+              Production Report
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-5 pb-4 space-y-3">
+            <div className="grid grid-cols-3 gap-2">
+              <div className="bg-muted/30 rounded-lg p-3 text-center">
+                <p className="text-lg font-bold text-foreground tabular-nums">{digest.productionReport.totalRuns}</p>
+                <p className="text-[10px] text-muted-foreground uppercase">Runs</p>
+              </div>
+              <div className="bg-primary/10 rounded-lg p-3 text-center">
+                <p className="text-lg font-bold text-primary tabular-nums">{digest.productionReport.totalOutput}</p>
+                <p className="text-[10px] text-muted-foreground uppercase">Output</p>
+              </div>
+              <div className="bg-muted/30 rounded-lg p-3 text-center">
+                <p className="text-lg font-bold text-foreground tabular-nums">{digest.productionReport.scrapRate}</p>
+                <p className="text-[10px] text-muted-foreground uppercase">Scrap %</p>
+              </div>
+            </div>
+            {digest.productionReport.topOperators.map((op, i) => (
+              <div key={i} className="flex items-start gap-2">
+                <span className="text-xs font-bold text-primary bg-primary/10 rounded-full w-5 h-5 flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
+                <p className="text-xs text-foreground/80">{op}</p>
+              </div>
+            ))}
+            {digest.productionReport.issues.length > 0 && (
+              <div className="border-l-2 border-destructive/30 pl-3 space-y-1">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase">⚠️ Issues</p>
+                {digest.productionReport.issues.map((issue, i) => (
+                  <p key={i} className="text-xs text-destructive/80">{issue}</p>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ERP Activity */}
+      {digest.erpActivity && (
+        <Card className="border-border/50">
+          <CardHeader className="pb-2 pt-4 px-5">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2 uppercase tracking-wider text-muted-foreground">
+              <Activity className="w-4 h-4 text-violet-500" />
+              ERP Activity
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-5 pb-4 space-y-3">
+            <div className="bg-muted/30 rounded-lg p-3">
+              <p className="text-sm font-bold text-foreground tabular-nums">{digest.erpActivity.totalEvents} <span className="text-xs font-normal text-muted-foreground">events logged</span></p>
+            </div>
+            <p className="text-xs text-foreground/80 leading-relaxed">{digest.erpActivity.summary}</p>
+            {digest.erpActivity.mostActiveUsers.length > 0 && (
+              <div className="border-l-2 border-violet-500/30 pl-3 space-y-1">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase">Most Active Users</p>
+                {digest.erpActivity.mostActiveUsers.map((u, i) => (
+                  <p key={i} className="text-xs text-foreground/70">👤 {u}</p>
                 ))}
               </div>
             )}
