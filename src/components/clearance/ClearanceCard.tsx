@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -23,8 +23,37 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
   const queryClient = useQueryClient();
   const [uploading, setUploading] = useState<"material" | "tag" | null>(null);
   const [verifying, setVerifying] = useState(false);
+  const [signedUrls, setSignedUrls] = useState<{ material?: string; tag?: string }>({});
   const materialRef = useRef<HTMLInputElement>(null);
   const tagRef = useRef<HTMLInputElement>(null);
+
+  // Resolve signed URLs for private bucket photos
+  useEffect(() => {
+    async function resolveUrls() {
+      const urls: { material?: string; tag?: string } = {};
+      for (const [key, storedUrl] of [["material", item.material_photo_url], ["tag", item.tag_scan_url]] as const) {
+        if (!storedUrl) continue;
+        // If it's already a signed URL or contains /object/sign/, use directly
+        if (storedUrl.includes("/object/sign/") || storedUrl.includes("token=")) {
+          urls[key] = storedUrl;
+          continue;
+        }
+        // Extract storage path from old public URLs or use as-is if it's just a path
+        let storagePath = storedUrl;
+        const publicMarker = "/object/public/clearance-photos/";
+        const idx = storedUrl.indexOf(publicMarker);
+        if (idx !== -1) {
+          storagePath = storedUrl.substring(idx + publicMarker.length);
+        }
+        const { data } = await supabase.storage
+          .from("clearance-photos")
+          .createSignedUrl(storagePath, 3600);
+        if (data?.signedUrl) urls[key] = data.signedUrl;
+      }
+      setSignedUrls(urls);
+    }
+    resolveUrls();
+  }, [item.material_photo_url, item.tag_scan_url]);
 
   const isCleared = item.evidence_status === "cleared";
 
@@ -40,11 +69,8 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
         .upload(path, file, { upsert: true });
       if (uploadErr) throw uploadErr;
 
-      const { data: urlData } = supabase.storage
-        .from("clearance-photos")
-        .getPublicUrl(path);
-
-      const photoUrl = urlData.publicUrl;
+      // Store the path reference for private bucket
+      const photoUrl = path;
       const field = type === "material" ? "material_photo_url" : "tag_scan_url";
 
       if (item.evidence_id) {
@@ -136,7 +162,7 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
       <div className="grid grid-cols-2 gap-3">
         <PhotoSlot
           label="Material"
-          url={item.material_photo_url}
+          url={signedUrls.material || null}
           loading={uploading === "material"}
           disabled={!canWrite || isCleared}
           inputRef={materialRef}
@@ -144,7 +170,7 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
         />
         <PhotoSlot
           label="Tag Scan"
-          url={item.tag_scan_url}
+          url={signedUrls.tag || null}
           loading={uploading === "tag"}
           disabled={!canWrite || isCleared}
           inputRef={tagRef}
