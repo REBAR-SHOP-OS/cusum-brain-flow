@@ -2437,6 +2437,220 @@ export type Database = {
           },
         ]
       }
+      payroll_audit_log: {
+        Row: {
+          action: string
+          actor_id: string
+          after_data: Json | null
+          before_data: Json | null
+          company_id: string
+          created_at: string
+          entity_id: string
+          entity_type: string
+          id: string
+          reason: string | null
+        }
+        Insert: {
+          action: string
+          actor_id: string
+          after_data?: Json | null
+          before_data?: Json | null
+          company_id: string
+          created_at?: string
+          entity_id: string
+          entity_type: string
+          id?: string
+          reason?: string | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string
+          after_data?: Json | null
+          before_data?: Json | null
+          company_id?: string
+          created_at?: string
+          entity_id?: string
+          entity_type?: string
+          id?: string
+          reason?: string | null
+        }
+        Relationships: []
+      }
+      payroll_daily_snapshot: {
+        Row: {
+          ai_notes: string | null
+          approved_at: string | null
+          approved_by: string | null
+          company_id: string
+          created_at: string
+          employee_type: string
+          exceptions: Json
+          expected_minutes: number
+          id: string
+          lunch_deducted_minutes: number
+          overtime_minutes: number
+          paid_break_minutes: number
+          paid_minutes: number
+          profile_id: string
+          raw_clock_in: string | null
+          raw_clock_out: string | null
+          status: string
+          work_date: string
+        }
+        Insert: {
+          ai_notes?: string | null
+          approved_at?: string | null
+          approved_by?: string | null
+          company_id: string
+          created_at?: string
+          employee_type?: string
+          exceptions?: Json
+          expected_minutes?: number
+          id?: string
+          lunch_deducted_minutes?: number
+          overtime_minutes?: number
+          paid_break_minutes?: number
+          paid_minutes?: number
+          profile_id: string
+          raw_clock_in?: string | null
+          raw_clock_out?: string | null
+          status?: string
+          work_date: string
+        }
+        Update: {
+          ai_notes?: string | null
+          approved_at?: string | null
+          approved_by?: string | null
+          company_id?: string
+          created_at?: string
+          employee_type?: string
+          exceptions?: Json
+          expected_minutes?: number
+          id?: string
+          lunch_deducted_minutes?: number
+          overtime_minutes?: number
+          paid_break_minutes?: number
+          paid_minutes?: number
+          profile_id?: string
+          raw_clock_in?: string | null
+          raw_clock_out?: string | null
+          status?: string
+          work_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payroll_daily_snapshot_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payroll_daily_snapshot_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payroll_daily_snapshot_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payroll_daily_snapshot_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payroll_weekly_summary: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          company_id: string
+          created_at: string
+          employee_type: string
+          id: string
+          locked_at: string | null
+          overtime_hours: number
+          profile_id: string
+          regular_hours: number
+          status: string
+          total_exceptions: number
+          total_paid_hours: number
+          week_end: string
+          week_start: string
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          company_id: string
+          created_at?: string
+          employee_type?: string
+          id?: string
+          locked_at?: string | null
+          overtime_hours?: number
+          profile_id: string
+          regular_hours?: number
+          status?: string
+          total_exceptions?: number
+          total_paid_hours?: number
+          week_end: string
+          week_start: string
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          company_id?: string
+          created_at?: string
+          employee_type?: string
+          id?: string
+          locked_at?: string | null
+          overtime_hours?: number
+          profile_id?: string
+          regular_hours?: number
+          status?: string
+          total_exceptions?: number
+          total_paid_hours?: number
+          week_end?: string
+          week_start?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payroll_weekly_summary_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payroll_weekly_summary_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payroll_weekly_summary_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payroll_weekly_summary_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pickup_order_items: {
         Row: {
           created_at: string
@@ -2664,6 +2878,7 @@ export type Database = {
           department: string | null
           duties: string[] | null
           email: string | null
+          employee_type: string | null
           full_name: string
           id: string
           is_active: boolean | null
@@ -2680,6 +2895,7 @@ export type Database = {
           department?: string | null
           duties?: string[] | null
           email?: string | null
+          employee_type?: string | null
           full_name: string
           id?: string
           is_active?: boolean | null
@@ -2696,6 +2912,7 @@ export type Database = {
           department?: string | null
           duties?: string[] | null
           email?: string | null
+          employee_type?: string | null
           full_name?: string
           id?: string
           is_active?: boolean | null

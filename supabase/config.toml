@@ -119,3 +119,6 @@ verify_jwt = false
 
 [functions.face-recognize]
 verify_jwt = false
+
+[functions.payroll-engine]
+verify_jwt = false
