@@ -1,4 +1,4 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { decryptToken } from "../_shared/tokenEncryption.ts";
 
@@ -254,11 +254,298 @@ serve(async (req) => {
       });
     }
 
-    const { date } = await req.json();
+    const { date, userEmail } = await req.json();
 
     const targetDate = date || new Date().toISOString().split("T")[0];
     const dayStart = `${targetDate}T00:00:00.000Z`;
     const dayEnd = `${targetDate}T23:59:59.999Z`;
+
+    // ── Ben-specific personalized digest ─────────────────────────────
+    if (userEmail === "ben@rebar.shop") {
+      // Fetch Ben-specific data in parallel
+      const [
+        benEmailsRes,
+        estEmailsRes,
+        benLeadsRes,
+        karthickLeadsRes,
+        leadFilesRes,
+        benTasksRes,
+        benCallsRes,
+      ] = await Promise.all([
+        // 1. Emails to/from ben@rebar.shop
+        supabase
+          .from("communications")
+          .select("from_address, to_address, subject, body_preview, received_at, source")
+          .or(`from_address.ilike.%ben@rebar.shop%,to_address.ilike.%ben@rebar.shop%`)
+          .gte("received_at", dayStart)
+          .lte("received_at", dayEnd)
+          .order("received_at", { ascending: false })
+          .limit(30),
+        // Emails to/from estimation@rebar.shop
+        supabase
+          .from("communications")
+          .select("from_address, to_address, subject, body_preview, received_at, source")
+          .or(`from_address.ilike.%estimation@rebar.shop%,to_address.ilike.%estimation@rebar.shop%`)
+          .gte("received_at", dayStart)
+          .lte("received_at", dayEnd)
+          .order("received_at", { ascending: false })
+          .limit(30),
+        // 2. Leads assigned to Ben
+        supabase
+          .from("leads")
+          .select("title, stage, expected_value, priority, source, expected_close_date, updated_at, assigned_to, notes")
+          .ilike("assigned_to", "%ben%")
+          .order("updated_at", { ascending: false })
+          .limit(30),
+        // 5. Leads assigned to Karthick
+        supabase
+          .from("leads")
+          .select("title, stage, expected_value, priority, source, expected_close_date, updated_at, assigned_to, notes")
+          .ilike("assigned_to", "%karthick%")
+          .order("updated_at", { ascending: false })
+          .limit(30),
+        // Lead files for shop drawings & addendums
+        supabase
+          .from("lead_files")
+          .select("file_name, file_type, lead_id, created_at, uploaded_by")
+          .gte("created_at", dayStart)
+          .lte("created_at", dayEnd)
+          .limit(50),
+        // 8. Tasks (Eisenhower)
+        supabase
+          .from("tasks")
+          .select("title, description, status, priority, due_date, agent_type, created_at")
+          .or(`created_at.gte.${dayStart},due_date.lte.${targetDate}`)
+          .limit(50),
+        // Calls involving Ben
+        supabase
+          .from("communications")
+          .select("from_address, to_address, subject, body_preview, received_at, source, metadata")
+          .eq("source", "ringcentral")
+          .gte("received_at", dayStart)
+          .lte("received_at", dayEnd)
+          .limit(30),
+      ]);
+
+      const benEmails = benEmailsRes.data || [];
+      const estEmails = estEmailsRes.data || [];
+      // Deduplicate emails
+      const allBenEmails = [...benEmails];
+      const emailIds = new Set(benEmails.map((e: any) => `${e.subject}-${e.received_at}`));
+      estEmails.forEach((e: any) => {
+        const key = `${e.subject}-${e.received_at}`;
+        if (!emailIds.has(key)) { allBenEmails.push(e); emailIds.add(key); }
+      });
+
+      const benLeads = benLeadsRes.data || [];
+      const karthickLeads = karthickLeadsRes.data || [];
+      const leadFiles = leadFilesRes.data || [];
+      const benTasks = benTasksRes.data || [];
+      const benCalls = benCallsRes.data || [];
+
+      // Filter lead files for addendums and shop drawings
+      const addendumFiles = leadFiles.filter((f: any) =>
+        /addendum|revision|rev\./i.test(f.file_name || "")
+      );
+      const shopDrawingFiles = leadFiles.filter((f: any) =>
+        /shop.?draw/i.test(f.file_name || "")
+      );
+
+      // QC flags from leads
+      const qcLeads = benLeads.filter((l: any) =>
+        /qc|quality|flag|validation|warning|error/i.test(`${l.notes || ""} ${l.stage || ""}`)
+      );
+
+      // Overdue tasks
+      const overdueTasks = benTasks.filter((t: any) =>
+        t.due_date && t.due_date < targetDate && t.status !== "done" && t.status !== "completed"
+      );
+
+      // Build data context for Ben
+      const benContext = `
+=== BEN'S PERSONALIZED DAILY DATA FOR ${targetDate} ===
+
+--- EMAILS (${allBenEmails.length} for ben@ and estimation@) ---
+${allBenEmails.length > 0
+  ? allBenEmails.map((e: any, i: number) => `${i + 1}. From: ${e.from_address} → To: ${e.to_address} | Subject: ${e.subject || "(none)"} | Preview: ${(e.body_preview || "").slice(0, 150)}`).join("\n")
+  : "No emails today."
+}
+
+--- ESTIMATION BEN (${benLeads.length} leads assigned to Ben) ---
+${benLeads.length > 0
+  ? benLeads.map((l: any, i: number) => `${i + 1}. ${l.title} — Stage: ${l.stage} | Value: $${l.expected_value || 0} | Priority: ${l.priority || "normal"} | Close: ${l.expected_close_date || "N/A"}`).join("\n")
+  : "No leads assigned to Ben."
+}
+
+--- QC FLAGS (${qcLeads.length} leads with QC/validation issues) ---
+${qcLeads.length > 0
+  ? qcLeads.map((l: any, i: number) => `${i + 1}. ${l.title} — Stage: ${l.stage} | Notes: ${(l.notes || "").slice(0, 200)}`).join("\n")
+  : "No QC flags found."
+}
+
+--- ADDENDUMS (${addendumFiles.length} addendum/revision files today) ---
+${addendumFiles.length > 0
+  ? addendumFiles.map((f: any, i: number) => `${i + 1}. ${f.file_name} (${f.file_type || "unknown"}) — uploaded ${f.created_at}`).join("\n")
+  : "No addendum files today."
+}
+
+--- ESTIMATION KARTHICK (${karthickLeads.length} leads assigned to Karthick) ---
+${karthickLeads.length > 0
+  ? karthickLeads.map((l: any, i: number) => `${i + 1}. ${l.title} — Stage: ${l.stage} | Value: $${l.expected_value || 0} | Priority: ${l.priority || "normal"}`).join("\n")
+  : "No leads assigned to Karthick."
+}
+
+--- SHOP DRAWINGS (${shopDrawingFiles.length} shop drawing files) ---
+${shopDrawingFiles.length > 0
+  ? shopDrawingFiles.map((f: any, i: number) => `${i + 1}. ${f.file_name} — uploaded ${f.created_at}`).join("\n")
+  : "No shop drawing files today."
+}
+
+--- TASKS / EISENHOWER (${benTasks.length} tasks, ${overdueTasks.length} overdue) ---
+${benTasks.length > 0
+  ? benTasks.map((t: any, i: number) => `${i + 1}. [${t.priority || "normal"}] ${t.title} — Status: ${t.status} | Due: ${t.due_date || "N/A"}${t.status !== "done" && t.due_date && t.due_date < targetDate ? " ⚠️ OVERDUE" : ""}`).join("\n")
+  : "No tasks."
+}
+
+--- CALLS (${benCalls.length} today) ---
+${benCalls.length > 0
+  ? benCalls.map((c: any, i: number) => `${i + 1}. ${c.subject || "Call"} | From: ${c.from_address} → ${c.to_address} | Preview: ${(c.body_preview || "").slice(0, 100)}`).join("\n")
+  : "No calls today."
+}
+`;
+
+      // Ben-specific AI prompt
+      const benSystemPrompt = `You are a Daily Digest AI for Ben, a Senior Rebar Estimator at Rebar.shop.
+Generate a personalized daily digest in JSON format with Ben's 8 specific work categories.
+
+Return valid JSON (no markdown fences):
+{
+  "greeting": "Personal greeting for Ben mentioning the date",
+  "affirmation": "Motivational message relevant to estimating work",
+  "keyTakeaways": ["3-5 key takeaways from Ben's day, prioritized by urgency"],
+  "benCategories": [
+    {
+      "title": "📧 Emails",
+      "icon": "Mail",
+      "items": ["Summary of each relevant email with action needed"],
+      "urgentCount": 0
+    },
+    {
+      "title": "📐 Estimation Ben",
+      "icon": "FileText",
+      "items": ["Summary of each lead/estimate Ben is working on"],
+      "urgentCount": 0
+    },
+    {
+      "title": "🔍 QC Ben",
+      "icon": "AlertTriangle",
+      "items": ["QC flags, validation warnings, issues needing review"],
+      "urgentCount": 0
+    },
+    {
+      "title": "📝 Addendums",
+      "icon": "RefreshCw",
+      "items": ["Drawing revisions, addendums received or pending"],
+      "urgentCount": 0
+    },
+    {
+      "title": "📊 Estimation Karthick",
+      "icon": "Users",
+      "items": ["Status of Karthick's estimates for Ben's oversight"],
+      "urgentCount": 0
+    },
+    {
+      "title": "📋 Shop Drawings",
+      "icon": "Layers",
+      "items": ["Shop drawings in progress or recently uploaded"],
+      "urgentCount": 0
+    },
+    {
+      "title": "✅ Shop Drawings for Approval",
+      "icon": "CheckCircle",
+      "items": ["Shop drawings pending approval or review"],
+      "urgentCount": 0
+    },
+    {
+      "title": "🎯 Eisenhower",
+      "icon": "Target",
+      "items": ["Priority matrix: urgent tasks, overdue items, calls needing follow-up"],
+      "urgentCount": 0
+    }
+  ],
+  "calendarEvents": [{"time": "9:00 AM", "title": "Suggested block", "purpose": "Why"}],
+  "tipOfTheDay": {"title": "Tip", "steps": ["Step"], "closing": "Closing"},
+  "randomFact": "Interesting fact about steel or construction"
+}
+
+Rules:
+- urgentCount = number of items in that category that need IMMEDIATE attention
+- Items should be concise, actionable summaries (not raw data)
+- Prioritize overdue items and QC flags as urgent
+- If a category has no data, include it with items: ["No activity today"] and urgentCount: 0
+- Include specific project names, values, and deadlines from the data
+- Eisenhower should synthesize tasks, overdue items, and calls into a priority matrix`;
+
+      const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+      if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+
+      const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-3-flash-preview",
+          messages: [
+            { role: "system", content: benSystemPrompt },
+            { role: "user", content: `Generate Ben's daily digest for ${targetDate}.\n\n${benContext}` },
+          ],
+          temperature: 0.7,
+        }),
+      });
+
+      if (!aiResponse.ok) {
+        const errText = await aiResponse.text();
+        console.error("AI error for Ben digest:", aiResponse.status, errText);
+        throw new Error(`AI gateway error: ${aiResponse.status}`);
+      }
+
+      const aiData = await aiResponse.json();
+      const rawContent = aiData.choices?.[0]?.message?.content || "";
+      let digest;
+      try {
+        const cleaned = rawContent.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+        digest = JSON.parse(cleaned);
+      } catch {
+        console.error("Failed to parse Ben AI response:", rawContent);
+        throw new Error("Failed to parse AI digest response");
+      }
+
+      return new Response(
+        JSON.stringify({
+          digest,
+          stats: {
+            emails: allBenEmails.length,
+            tasks: benTasks.length,
+            leads: benLeads.length,
+            orders: 0,
+            workOrders: 0,
+            deliveries: 0,
+            estimatesBen: benLeads.length,
+            qcFlags: qcLeads.length,
+            addendums: addendumFiles.length,
+            estimatesKarthick: karthickLeads.length,
+            shopDrawings: shopDrawingFiles.length,
+            pendingApproval: shopDrawingFiles.filter((f: any) => /approval|pending|review/i.test(f.file_name || "")).length,
+            overdueTasks: overdueTasks.length,
+            phoneCalls: benCalls.length,
+          },
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    // ── End Ben-specific block ───────────────────────────────────────
 
     // ── Fetch all data sources in parallel ───────────────────────────
     // Fetch profiles for name resolution
