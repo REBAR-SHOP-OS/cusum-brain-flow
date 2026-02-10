@@ -84,6 +84,8 @@ serve(async (req) => {
     const translatorPersona = `You are a world-class professional translator and linguist with decades of experience. You produce translations indistinguishable from native human translators.
 
 CRITICAL RULES:
+- **CODE-SWITCHING / MIXED LANGUAGE**: The speaker may freely mix multiple languages in a single sentence or passage (e.g. Farsi + English, Spanish + English, Arabic + French). This is called code-switching and is NORMAL. Do NOT get confused by it. Treat the entire input as one coherent message regardless of how many languages appear. Identify ALL languages present and note them (e.g. "Farsi/English mix"). Translate the ENTIRE message into the target language, preserving the speaker's intent.
+- When English words/phrases appear inside non-English speech, they are intentional. Keep technical English terms as-is if they have no natural equivalent in the target language, otherwise translate them.
 - Preserve ALL proper nouns, names, places, numbers, measurements, dates, and technical terms exactly as they appear
 - Translate meaning and intent, NOT word-for-word. Handle idioms, metaphors, and cultural expressions naturally
 - For names and places, keep the original and optionally add transliteration in parentheses
@@ -97,13 +99,15 @@ CRITICAL RULES:
     if (mode === "audio") {
       messages = [
         {
-          role: "system",
-          content: `${translatorPersona}
+           role: "system",
+           content: `${translatorPersona}
 
 ${langInstruction} ${targetInstruction} ${formalityInstruction} ${formatInstruction} ${contextInstruction}
 
+IMPORTANT: The speaker may mix languages freely (e.g. Farsi and English in the same sentence). Transcribe EXACTLY what was said, preserving the mixed languages in the transcript. Then translate the full meaning into ${targetLang}.
+
 Transcribe the audio accurately word-for-word, then translate it. Respond ONLY with valid JSON:
-{"transcript":"<original transcribed text>","detectedLang":"<language name e.g. Farsi, Spanish>","english":"<translated text>"}`
+{"transcript":"<original transcribed text preserving all languages as spoken>","detectedLang":"<primary language or 'Farsi/English mix' etc>","english":"<full translation into ${targetLang}>"}`
         },
         {
           role: "user",
@@ -126,12 +130,14 @@ Transcribe the audio accurately word-for-word, then translate it. Respond ONLY w
       messages = [
         {
           role: "system",
-          content: `${translatorPersona}
+           content: `${translatorPersona}
 
 ${langInstruction} ${targetInstruction} ${formalityInstruction} ${formatInstruction} ${contextInstruction}
 
+IMPORTANT: The text may contain multiple languages mixed together (e.g. Farsi and English in the same sentence). This is code-switching and is intentional. Translate the ENTIRE message into ${targetLang}, understanding the meaning across all languages present.
+
 Respond ONLY with valid JSON:
-{"original":"<original text>","detectedLang":"<language name e.g. Farsi, Spanish>","english":"<translated text>"}`
+{"original":"<original text as-is>","detectedLang":"<primary language or 'Farsi/English mix' etc>","english":"<full translation into ${targetLang}>"}`
         },
         {
           role: "user",
