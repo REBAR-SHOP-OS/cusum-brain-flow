@@ -1,12 +1,15 @@
-import { Paperclip, Download, Link2, File } from "lucide-react";
+import { Paperclip, Download, Link2, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { getSignedFileUrl } from "@/lib/storageUtils";
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 
 interface LeadFilesProps {
   metadata: Json | null;
+  leadId?: string;
 }
 
 interface FileAttachment {
@@ -31,14 +34,14 @@ function parseMetadata(metadata: Json | null): { attachments: FileAttachment[]; 
   return { attachments, links };
 }
 
-function formatSize(bytes: number | undefined): string {
+function formatSize(bytes: number | undefined | null): string {
   if (!bytes) return "";
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function fileIcon(mimeType?: string) {
+function fileIcon(mimeType?: string | null) {
   if (mimeType?.includes("pdf")) return "📄";
   if (mimeType?.includes("image")) return "🖼️";
   if (mimeType?.includes("dwg") || mimeType?.includes("autocad")) return "📐";
@@ -46,9 +49,25 @@ function fileIcon(mimeType?: string) {
   return "📎";
 }
 
-export function LeadFiles({ metadata }: LeadFilesProps) {
+export function LeadFiles({ metadata, leadId }: LeadFilesProps) {
   const { attachments, links } = parseMetadata(metadata);
   const [downloading, setDownloading] = useState<string | null>(null);
+
+  // Fetch Odoo-synced files from lead_files table
+  const { data: dbFiles = [] } = useQuery({
+    queryKey: ["lead-files", leadId],
+    queryFn: async () => {
+      if (!leadId) return [];
+      const { data, error } = await supabase
+        .from("lead_files")
+        .select("*")
+        .eq("lead_id", leadId)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!leadId,
+  });
 
   const handleDownload = async (att: FileAttachment) => {
     if (!att.storagePath) return;
@@ -61,7 +80,9 @@ export function LeadFiles({ metadata }: LeadFilesProps) {
     }
   };
 
-  if (attachments.length === 0 && links.length === 0) {
+  const totalFiles = attachments.length + links.length + dbFiles.length;
+
+  if (totalFiles === 0) {
     return (
       <div className="text-center py-8">
         <Paperclip className="w-8 h-8 text-muted-foreground mx-auto mb-2 opacity-40" />
@@ -72,11 +93,51 @@ export function LeadFiles({ metadata }: LeadFilesProps) {
 
   return (
     <div className="space-y-4">
+      {/* Odoo-synced files */}
+      {dbFiles.length > 0 && (
+        <div className="space-y-2">
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+            <Paperclip className="w-3 h-3" />
+            Odoo Files ({dbFiles.length})
+          </h4>
+          <div className="space-y-1.5">
+            {dbFiles.map((file) => (
+              <div
+                key={file.id}
+                className="flex items-center justify-between rounded-lg border border-border p-3 hover:bg-muted/50 transition-colors"
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span className="text-lg shrink-0">{fileIcon(file.mime_type)}</span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">{file.file_name}</p>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      {file.mime_type && <span>{file.mime_type.split("/").pop()}</span>}
+                      {file.file_size_bytes && <span>{formatSize(file.file_size_bytes)}</span>}
+                    </div>
+                  </div>
+                </div>
+                {file.file_url && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="shrink-0 gap-1"
+                    onClick={() => window.open(file.file_url!, "_blank")}
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Email attachments from metadata */}
       {attachments.length > 0 && (
         <div className="space-y-2">
           <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
             <Paperclip className="w-3 h-3" />
-            Attachments ({attachments.length})
+            Email Attachments ({attachments.length})
           </h4>
           <div className="space-y-1.5">
             {attachments.map((att, i) => (
