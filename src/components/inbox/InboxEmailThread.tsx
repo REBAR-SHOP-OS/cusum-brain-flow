@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useEffect, useRef } from "react";
 import DOMPurify from "dompurify";
 import { FileText, Image, File, ExternalLink, Mail, Phone, ArrowUpRight, ArrowDownLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -27,6 +27,7 @@ interface ThreadEntry {
 interface InboxEmailThreadProps {
   communications: Communication[];
   currentEmailId: string;
+  highlightedId?: string | null;
 }
 
 function extractSenderName(fromAddress: string): string {
@@ -160,7 +161,7 @@ function getSenderColor(email: string, colorMap: Map<string, string>): string {
   return colorMap.get(email)!;
 }
 
-export function InboxEmailThread({ communications, currentEmailId }: InboxEmailThreadProps) {
+export function InboxEmailThread({ communications, currentEmailId, highlightedId }: InboxEmailThreadProps) {
   const { entries, colorMap } = useMemo(() => {
     const map = new Map<string, string>();
     const list: ThreadEntry[] = communications.map((comm) => {
@@ -193,6 +194,17 @@ export function InboxEmailThread({ communications, currentEmailId }: InboxEmailT
     return { entries: list, colorMap: map };
   }, [communications]);
 
+  const threadRef = useRef<HTMLDivElement>(null);
+
+  // Scroll to highlighted message
+  useEffect(() => {
+    if (!highlightedId || !threadRef.current) return;
+    const el = threadRef.current.querySelector(`[data-comm-id="${highlightedId}"]`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [highlightedId]);
+
   if (entries.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-2 p-8">
@@ -214,7 +226,7 @@ export function InboxEmailThread({ communications, currentEmailId }: InboxEmailT
   });
 
   return (
-    <div className="flex flex-col gap-0 px-4 py-4">
+    <div ref={threadRef} className="flex flex-col gap-0 px-4 py-4">
       {dateGroups.map((group, gi) => (
         <div key={gi}>
           {/* Date separator */}
@@ -228,15 +240,18 @@ export function InboxEmailThread({ communications, currentEmailId }: InboxEmailT
           <div className="space-y-4">
             {group.entries.map((entry) => {
               const isCurrent = entry.id === currentEmailId;
+              const isHighlighted = entry.id === highlightedId;
               const isOutbound = entry.direction === "outbound";
               const senderColor = getSenderColor(entry.fromEmail, colorMap);
 
               return (
                 <div
                   key={entry.id}
+                  data-comm-id={entry.id}
                   className={cn(
-                    "flex gap-3",
-                    isCurrent && "ring-1 ring-primary/30 rounded-lg bg-primary/5 p-3 -mx-3"
+                    "flex gap-3 transition-all duration-500",
+                    isCurrent && "ring-1 ring-primary/30 rounded-lg bg-primary/5 p-3 -mx-3",
+                    isHighlighted && !isCurrent && "ring-2 ring-primary/50 rounded-lg bg-primary/10 p-3 -mx-3 animate-pulse"
                   )}
                 >
                   {/* Avatar */}
