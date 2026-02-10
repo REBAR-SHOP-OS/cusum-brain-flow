@@ -1,4 +1,4 @@
-import { ThumbsUp, ThumbsDown, Calendar, Mail, Lightbulb, Sparkles, Video, Phone } from "lucide-react";
+import { ThumbsUp, ThumbsDown, Calendar, Mail, Lightbulb, Sparkles, Video, Phone, TrendingUp, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -11,65 +11,68 @@ interface DigestContentProps {
   currentDate: Date;
 }
 
+function StatPill({ label, value }: { label: string; value: number }) {
+  const hasActivity = value > 0;
+  return (
+    <div className={`flex flex-col items-center gap-0.5 rounded-xl px-3 py-2.5 transition-colors ${hasActivity ? "bg-primary/10" : "bg-muted/40"}`}>
+      <span className={`text-xl font-bold tabular-nums ${hasActivity ? "text-primary" : "text-muted-foreground/60"}`}>
+        {value}
+      </span>
+      <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">{label}</span>
+    </div>
+  );
+}
+
 export function DigestContent({ digest, stats, currentDate }: DigestContentProps) {
   return (
-    <div className="max-w-3xl mx-auto p-6 space-y-8">
-      {/* Mascot & Date Header */}
-      <div className="text-center space-y-4">
-        <div className="w-48 h-48 mx-auto bg-gradient-to-br from-amber-200 via-yellow-100 to-orange-100 rounded-full flex items-center justify-center">
-          <div className="text-6xl">🧑‍🚀</div>
+    <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
+      {/* Compact Date & Greeting Hero */}
+      <div className="text-center space-y-3 pb-2">
+        <div className="w-20 h-20 mx-auto bg-gradient-to-br from-primary/20 via-primary/10 to-accent/20 rounded-2xl flex items-center justify-center shadow-sm">
+          <Zap className="w-9 h-9 text-primary" />
         </div>
-        <h2 className="text-2xl font-bold">{format(currentDate, "MMM d, yyyy")}</h2>
-        <p className="text-muted-foreground">{digest.greeting}</p>
+        <div>
+          <h2 className="text-xl font-bold tracking-tight">{format(currentDate, "EEEE, MMM d")}</h2>
+          <p className="text-sm text-muted-foreground mt-1 max-w-md mx-auto leading-relaxed">{digest.greeting}</p>
+        </div>
       </div>
 
-      {/* Stats Bar */}
+      {/* Stats Grid */}
       {stats && (
-        <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
-          {[
-            { label: "Emails", value: stats.emails },
-            { label: "Tasks", value: stats.tasks },
-            { label: "Leads", value: stats.leads },
-            { label: "Orders", value: stats.orders },
-            { label: "Work Orders", value: stats.workOrders },
-            { label: "Deliveries", value: stats.deliveries },
-            { label: "Meetings", value: stats.meetings ?? 0 },
-            { label: "Calls", value: stats.phoneCalls ?? 0 },
-          ].map((s) => (
-            <Card key={s.label} className="text-center">
-              <CardContent className="py-3 px-2">
-                <p className="text-2xl font-bold text-primary">{s.value}</p>
-                <p className="text-xs text-muted-foreground">{s.label}</p>
-              </CardContent>
-            </Card>
-          ))}
+        <div className="grid grid-cols-4 md:grid-cols-8 gap-1.5">
+          <StatPill label="Emails" value={stats.emails} />
+          <StatPill label="Tasks" value={stats.tasks} />
+          <StatPill label="Leads" value={stats.leads} />
+          <StatPill label="Orders" value={stats.orders} />
+          <StatPill label="WOs" value={stats.workOrders} />
+          <StatPill label="Delivery" value={stats.deliveries} />
+          <StatPill label="Meets" value={stats.meetings ?? 0} />
+          <StatPill label="Calls" value={stats.phoneCalls ?? 0} />
         </div>
       )}
 
-      {/* Daily Affirmation */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-amber-500" />
-            Daily Affirmation
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-muted-foreground italic">{digest.affirmation}</p>
-        </CardContent>
-      </Card>
+      {/* Affirmation — subtle accent strip */}
+      <div className="rounded-xl bg-gradient-to-r from-primary/5 via-accent/5 to-primary/5 border border-border/50 px-5 py-4">
+        <div className="flex items-start gap-3">
+          <Sparkles className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+          <p className="text-sm text-muted-foreground italic leading-relaxed">{digest.affirmation}</p>
+        </div>
+      </div>
 
       {/* Key Takeaways */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-lg">Key Takeaways</CardTitle>
+      <Card className="border-border/50">
+        <CardHeader className="pb-2 pt-4 px-5">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2 uppercase tracking-wider text-muted-foreground">
+            <TrendingUp className="w-4 h-4 text-primary" />
+            Key Takeaways
+          </CardTitle>
         </CardHeader>
-        <CardContent>
-          <ol className="space-y-3">
+        <CardContent className="px-5 pb-4">
+          <ol className="space-y-2.5">
             {digest.keyTakeaways.map((takeaway, i) => (
-              <li key={i} className="flex gap-3">
-                <span className="font-semibold text-primary shrink-0">{i + 1}.</span>
-                <span className="text-muted-foreground">{takeaway}</span>
+              <li key={i} className="flex gap-3 items-start">
+                <span className="text-xs font-bold text-primary bg-primary/10 rounded-full w-5 h-5 flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
+                <span className="text-sm text-foreground/80 leading-relaxed">{takeaway}</span>
               </li>
             ))}
           </ol>
@@ -78,23 +81,23 @@ export function DigestContent({ digest, stats, currentDate }: DigestContentProps
 
       {/* Emails Section */}
       {digest.emailCategories && digest.emailCategories.length > 0 && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Mail className="w-5 h-5 text-blue-500" />
-              Emails
+        <Card className="border-border/50">
+          <CardHeader className="pb-2 pt-4 px-5">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2 uppercase tracking-wider text-muted-foreground">
+              <Mail className="w-4 h-4 text-blue-500" />
+              Email Digest
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-6">
+          <CardContent className="px-5 pb-4 space-y-5">
             {digest.emailCategories.map((category, catIndex) => (
-              <div key={catIndex} className="space-y-3">
-                <h4 className="font-semibold text-sm">{category.category}</h4>
-                <div className="space-y-4 pl-4 border-l-2 border-muted">
+              <div key={catIndex} className="space-y-2.5">
+                <h4 className="text-xs font-semibold text-foreground/70 uppercase tracking-wide">{category.category}</h4>
+                <div className="space-y-3 pl-3 border-l-2 border-blue-500/20">
                   {category.emails.map((email, emailIndex) => (
-                    <div key={emailIndex} className="space-y-1">
-                      <p className="font-medium text-sm">{email.subject}</p>
-                      <p className="text-xs text-muted-foreground">• Issue: {email.summary}</p>
-                      <p className="text-xs text-muted-foreground">• Action: {email.action}</p>
+                    <div key={emailIndex} className="space-y-0.5">
+                      <p className="text-sm font-medium text-foreground/90">{email.subject}</p>
+                      <p className="text-xs text-muted-foreground">→ {email.summary}</p>
+                      <p className="text-xs text-primary/80 font-medium">⚡ {email.action}</p>
                     </div>
                   ))}
                 </div>
@@ -106,27 +109,27 @@ export function DigestContent({ digest, stats, currentDate }: DigestContentProps
 
       {/* Meeting Summaries */}
       {digest.meetingSummaries && digest.meetingSummaries.length > 0 && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Video className="w-5 h-5 text-purple-500" />
-              Meetings ({digest.meetingSummaries.length})
+        <Card className="border-border/50">
+          <CardHeader className="pb-2 pt-4 px-5">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2 uppercase tracking-wider text-muted-foreground">
+              <Video className="w-4 h-4 text-purple-500" />
+              Meetings
+              <Badge variant="secondary" className="text-[10px] ml-1">{digest.meetingSummaries.length}</Badge>
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="px-5 pb-4 space-y-3">
             {digest.meetingSummaries.map((meeting, i) => (
-              <div key={i} className="p-3 bg-muted/50 rounded-lg space-y-2">
-                <div className="flex items-center gap-2">
-                  <span className="font-medium text-sm">{meeting.title}</span>
-                  <Badge variant="outline" className="text-[10px]">{meeting.type}</Badge>
+              <div key={i} className="p-3 bg-muted/30 rounded-lg space-y-2 border border-border/30">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm font-medium">{meeting.title}</span>
+                  <Badge variant="outline" className="text-[10px] h-4">{meeting.type}</Badge>
                   {meeting.duration && (
-                    <span className="text-[10px] text-muted-foreground">{meeting.duration}</span>
+                    <span className="text-[10px] text-muted-foreground ml-auto">{meeting.duration}</span>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground">{meeting.summary}</p>
+                <p className="text-xs text-muted-foreground leading-relaxed">{meeting.summary}</p>
                 {meeting.actionItems && meeting.actionItems.length > 0 && (
-                  <div className="pl-3 border-l-2 border-primary/30">
-                    <p className="text-[10px] font-semibold text-muted-foreground uppercase mb-1">Action Items</p>
+                  <div className="pl-3 border-l-2 border-purple-500/30 space-y-0.5">
                     {meeting.actionItems.map((item, j) => (
                       <p key={j} className="text-xs text-muted-foreground">• {item}</p>
                     ))}
@@ -140,109 +143,103 @@ export function DigestContent({ digest, stats, currentDate }: DigestContentProps
 
       {/* Phone Calls */}
       {digest.phoneCalls && digest.phoneCalls.length > 0 && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Phone className="w-5 h-5 text-emerald-500" />
-              Phone Calls & SMS ({digest.phoneCalls.length})
+        <Card className="border-border/50">
+          <CardHeader className="pb-2 pt-4 px-5">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2 uppercase tracking-wider text-muted-foreground">
+              <Phone className="w-4 h-4 text-emerald-500" />
+              Calls & SMS
+              <Badge variant="secondary" className="text-[10px] ml-1">{digest.phoneCalls.length}</Badge>
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="px-5 pb-4 space-y-2.5">
             {digest.phoneCalls.map((call, i) => (
-              <div key={i} className="p-3 bg-muted/50 rounded-lg space-y-1">
+              <div key={i} className="p-3 bg-muted/30 rounded-lg space-y-1 border border-border/30">
                 <div className="flex items-center gap-2">
-                  <span className="font-medium text-sm">{call.contact}</span>
-                  <Badge variant="outline" className="text-[10px]">{call.direction}</Badge>
+                  <span className="text-sm font-medium">{call.contact}</span>
+                  <Badge variant={call.direction === "Inbound" ? "secondary" : "outline"} className="text-[10px] h-4">
+                    {call.direction}
+                  </Badge>
                   {call.duration && (
-                    <span className="text-[10px] text-muted-foreground">{call.duration}</span>
+                    <span className="text-[10px] text-muted-foreground ml-auto">{call.duration}</span>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground">• {call.summary}</p>
-                <p className="text-xs text-muted-foreground">• Action: {call.action}</p>
+                <p className="text-xs text-muted-foreground">→ {call.summary}</p>
+                <p className="text-xs text-primary/80 font-medium">⚡ {call.action}</p>
               </div>
             ))}
           </CardContent>
         </Card>
       )}
 
+      {/* Calendar */}
       {digest.calendarEvents && digest.calendarEvents.length > 0 && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-green-500" />
-              Calendar
+        <Card className="border-border/50">
+          <CardHeader className="pb-2 pt-4 px-5">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2 uppercase tracking-wider text-muted-foreground">
+              <Calendar className="w-4 h-4 text-green-500" />
+              Suggested Schedule
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="text-sm font-medium mb-3">Today's Events:</p>
-            <div className="space-y-3">
-              {digest.calendarEvents.map((event, i) => (
-                <div key={i} className="p-3 bg-muted/50 rounded-lg">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Badge variant="outline" className="text-xs">{event.time}</Badge>
-                    <span className="font-medium text-sm">{event.title}</span>
-                  </div>
+          <CardContent className="px-5 pb-4 space-y-2">
+            {digest.calendarEvents.map((event, i) => (
+              <div key={i} className="flex items-start gap-3 p-2.5 rounded-lg hover:bg-muted/30 transition-colors">
+                <Badge variant="outline" className="text-[10px] shrink-0 mt-0.5 tabular-nums">{event.time}</Badge>
+                <div>
+                  <p className="text-sm font-medium">{event.title}</p>
                   <p className="text-xs text-muted-foreground">{event.purpose}</p>
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
           </CardContent>
         </Card>
       )}
 
-      {/* Tips of the Day */}
+      {/* Tip of the Day */}
       {digest.tipOfTheDay && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Lightbulb className="w-5 h-5 text-yellow-500" />
-              Tips of the Day
+        <Card className="border-border/50">
+          <CardHeader className="pb-2 pt-4 px-5">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2 uppercase tracking-wider text-muted-foreground">
+              <Lightbulb className="w-4 h-4 text-yellow-500" />
+              Tip of the Day
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="font-medium text-sm">{digest.tipOfTheDay.title}</p>
-            <ol className="space-y-2 pl-4">
+          <CardContent className="px-5 pb-4 space-y-2.5">
+            <p className="text-sm font-medium">{digest.tipOfTheDay.title}</p>
+            <ol className="space-y-1.5 pl-1">
               {digest.tipOfTheDay.steps.map((step, i) => (
-                <li key={i} className="text-sm text-muted-foreground list-decimal">
+                <li key={i} className="text-xs text-muted-foreground flex gap-2">
+                  <span className="text-primary font-semibold shrink-0">{i + 1}.</span>
                   {step}
                 </li>
               ))}
             </ol>
-            <p className="text-sm text-muted-foreground italic">{digest.tipOfTheDay.closing}</p>
+            <p className="text-xs text-muted-foreground italic pt-1">{digest.tipOfTheDay.closing}</p>
           </CardContent>
         </Card>
       )}
 
-      {/* Random Facts */}
+      {/* Random Fact */}
       {digest.randomFact && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg">Random Facts</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-muted-foreground">{digest.randomFact}</p>
-          </CardContent>
-        </Card>
+        <div className="rounded-xl bg-muted/30 border border-border/40 px-5 py-3.5">
+          <p className="text-xs text-muted-foreground">
+            <span className="font-semibold text-foreground/70">💡 Did you know? </span>
+            {digest.randomFact}
+          </p>
+        </div>
       )}
 
-      {/* Feedback */}
-      <Card>
-        <CardContent className="py-4">
-          <div className="flex items-center justify-center gap-4">
-            <p className="text-sm text-muted-foreground">Do you like this summary?</p>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" className="gap-2">
-                <ThumbsUp className="w-4 h-4" />
-                Yes
-              </Button>
-              <Button variant="outline" size="sm" className="gap-2">
-                <ThumbsDown className="w-4 h-4" />
-                No
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Feedback — minimal */}
+      <div className="flex items-center justify-center gap-3 py-4">
+        <span className="text-xs text-muted-foreground">Was this helpful?</span>
+        <div className="flex gap-1.5">
+          <Button variant="ghost" size="sm" className="h-7 px-2.5 text-xs gap-1.5 hover:bg-primary/10 hover:text-primary">
+            <ThumbsUp className="w-3 h-3" /> Yes
+          </Button>
+          <Button variant="ghost" size="sm" className="h-7 px-2.5 text-xs gap-1.5 hover:bg-destructive/10 hover:text-destructive">
+            <ThumbsDown className="w-3 h-3" /> No
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
