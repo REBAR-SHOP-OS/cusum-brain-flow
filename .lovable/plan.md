@@ -1,71 +1,60 @@
 
 
-# Pipeline Page: Fit-to-Page Layout + Blitz AI Agent Button
+# Penny Auto-Briefing: Engaging Page Open Experience
 
 ## Overview
-Two changes to the Pipeline page:
-1. **Fit to page** -- Make the pipeline board fill the full viewport height so columns stretch to fit the screen without unnecessary scrolling at the page level
-2. **Add Blitz AI Agent button** -- Add a prominent "Blitz AI" button in the Pipeline header (top-right area, near "Add Lead") that opens a side sheet with the sales accountability agent
+When the Accounting page opens, instead of showing a static "Morning, SATTAR" greeting with quick-action buttons, Penny will automatically scan emails, QuickBooks data, and tasks, then present a prioritized daily action list to keep users accountable.
 
 ## What Changes
 
-### 1. Fit-to-Page Layout
-- Update `Pipeline.tsx` to use `h-screen` / `flex flex-col` so the header stays fixed and the board fills remaining space
-- Update `PipelineBoard.tsx` to use `flex-1 overflow-hidden` with columns that scroll independently within their allocated height
-- This eliminates page-level scrollbar and makes it feel like a proper Kanban app
+### 1. Replace Static Greeting with Active "Checking" Animation
+Instead of the empty state with quick-action buttons, show an animated loading sequence when the page opens:
+- Phase 1: "Checking your emails..." (with animated mail icon)
+- Phase 2: "Reviewing QuickBooks..." (with animated dollar icon)
+- Phase 3: "Building your priority list..." (with animated checklist icon)
+- Each phase lasts ~1 second with smooth transitions
+- This replaces the static greeting card entirely
 
-### 2. Blitz AI Agent Button (Sales Accountability)
-Add a "Blitz AI" button with a Sparkles icon in the Pipeline header toolbar (next to "Add Lead"). Clicking it opens a **Sheet (side panel)** with a full Blitz chat interface focused on **sales team accountability**:
+### 2. Auto-Fire Daily Briefing Immediately
+The existing `autoGreet` logic already sends a briefing request. Enhance it to:
+- Include task data from the `tasks` table (open tasks assigned to this user)
+- Include recent lead activity from `lead_activities` for sales-related accounting follow-ups
+- Request a structured **Priority Task List** format from the AI (numbered, with urgency tags)
+- The greeting prompt will explicitly ask for: overdue items first, then today's deadlines, then upcoming items
 
-- **Pipeline Overview**: Blitz analyzes the full pipeline and flags issues (stale leads, missing follow-ups, unassigned opportunities)
-- **Accountability Report**: Shows which salespeople are falling behind on follow-ups, have stale leads, or are missing quotations
-- **Quick Actions**: "Run Pipeline Audit", "Stale Lead Report", "Follow-up Gaps", "Revenue Forecast"
-- **Free-text input**: Ask Blitz anything about the pipeline (e.g., "Which leads haven't been touched in 2 weeks?")
+### 3. Enhanced Greeting Prompt
+Update the auto-greet message to request a more actionable format:
+- "Here's what needs your attention RIGHT NOW" section (red urgency)
+- Numbered priority list with clear owners and deadlines
+- Each item tagged with source (QuickBooks, Email, Task)
+- End with "You're on track" or "X items need immediate action" summary
 
-The agent calls the existing `pipeline-ai` edge function with a new `pipeline_audit` action that receives aggregate pipeline stats instead of a single lead.
-
-### 3. Edge Function Update
-Add a `pipeline_audit` action to `pipeline-ai/index.ts` that accepts pipeline-level stats (total leads per stage, stale count, salesperson activity) and returns an accountability report with markdown formatting.
+### 4. Quick Actions Still Available After Briefing
+After the briefing loads, the quick-action buttons appear below the AI response so users can drill deeper into specific areas.
 
 ## Technical Details
 
-### Files Modified
+### File Modified: `src/components/accounting/AccountingAgent.tsx`
 
-1. **`src/pages/Pipeline.tsx`**
-   - Wrap page in `h-screen flex flex-col` layout
-   - Add "Blitz AI" button next to "Add Lead" in the header
-   - Add Sheet component for the Blitz side panel
-   - Pass pipeline summary data to the agent panel
+1. **New "checking" animation state** -- Add a `checkingPhase` state (0-3) that cycles through phases before the AI response arrives:
+   - 0: "Scanning your inbox..." with Mail icon pulse
+   - 1: "Reviewing financials..." with DollarSign icon pulse  
+   - 2: "Prioritizing your tasks..." with ListChecks icon pulse
+   - Uses `setInterval` cycling every 1.2s while `isTyping` is true and messages are empty
 
-2. **`src/components/pipeline/PipelineBoard.tsx`**
-   - Add `flex-1 overflow-hidden` to the board container
-   - Ensure columns use `overflow-y-auto` with max height from parent
+2. **Enhanced auto-greet prompt** -- Update the greeting message to explicitly request:
+   - Prioritized numbered action list
+   - Urgency tags (URGENT / TODAY / THIS WEEK)
+   - Source labels (QuickBooks, Email, Task)
+   - Summary line at top ("X items need attention")
 
-3. **`src/components/pipeline/PipelineColumn.tsx`** (if exists)
-   - Ensure column content scrolls independently
+3. **Remove static empty state** -- Replace the current "Morning, USERNAME" card + 4 quick-action buttons with the animated checking sequence. Quick actions move to a row below the first AI response.
 
-4. **`supabase/functions/pipeline-ai/index.ts`**
-   - Add `pipeline_audit` action that accepts aggregate stats
-   - System prompt instructs Blitz to act as an accountability partner
-   - Returns structured markdown report: stale leads, missing follow-ups, salesperson rankings, recommended actions
+4. **Post-briefing quick actions** -- After the briefing message renders, show a compact row of follow-up buttons ("Drill into AR", "Show email details", "Create follow-up tasks") below the AI response.
 
-### Files Created
+### No Edge Function Changes
+The existing `ai-agent` function with the "accounting" agent type already handles context-rich briefings. The enhancement is purely in the prompt quality and UI presentation.
 
-5. **`src/components/pipeline/PipelineAISheet.tsx`**
-   - Side sheet with Blitz branding (TrendingUp icon, "Blitz - Sales Command")
-   - Quick action buttons: "Pipeline Audit", "Stale Leads", "Follow-up Gaps", "Revenue Forecast"
-   - Markdown response area for AI output
-   - Free-text input for custom questions
-   - Passes pipeline summary (lead counts by stage, stale count, top salesperson stats) to the edge function
-
-### Edge Function - pipeline_audit action
-The new action accepts:
-```
-{ 
-  pipelineStats: { total, byStage, staleCount, salespersonActivity },
-  action: "pipeline_audit",
-  userMessage?: string 
-}
-```
-Returns accountability-focused markdown report identifying gaps and recommending specific actions with owner assignments.
+### No Database Changes
+Uses existing `tasks` and QuickBooks data already available in the component via `qbSummary` prop.
 
