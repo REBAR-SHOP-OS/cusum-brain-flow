@@ -122,3 +122,6 @@ verify_jwt = false
 
 [functions.payroll-engine]
 verify_jwt = false
+
+[functions.meeting-live-notes]
+verify_jwt = false

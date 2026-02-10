@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -15,7 +16,7 @@ interface StartMeetingDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   channelName: string;
-  onStart: (title: string, type: "video" | "audio" | "screen_share") => Promise<void>;
+  onStart: (title: string, type: "video" | "audio" | "screen_share", isExternal?: boolean) => Promise<void>;
   isStarting: boolean;
 }
 
@@ -34,11 +35,13 @@ export function StartMeetingDialog({
 }: StartMeetingDialogProps) {
   const [title, setTitle] = useState("");
   const [selectedType, setSelectedType] = useState<"video" | "audio" | "screen_share">("video");
+  const [isExternal, setIsExternal] = useState(false);
 
   const handleStart = async () => {
-    await onStart(title.trim() || `${channelName} Meeting`, selectedType);
+    await onStart(title.trim() || `${channelName} Meeting`, selectedType, isExternal);
     setTitle("");
     setSelectedType("video");
+    setIsExternal(false);
   };
 
   return (
@@ -98,6 +101,17 @@ export function StartMeetingDialog({
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* External guests toggle */}
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                External Guests
+              </label>
+              <p className="text-[10px] text-muted-foreground/60 mt-0.5">Allow people outside your team to join</p>
+            </div>
+            <Switch checked={isExternal} onCheckedChange={setIsExternal} />
           </div>
         </div>
 

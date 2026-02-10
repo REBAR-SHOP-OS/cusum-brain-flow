@@ -9,6 +9,7 @@ import { MessageThread } from "@/components/teamhub/MessageThread";
 import { CreateChannelDialog } from "@/components/teamhub/CreateChannelDialog";
 import { StartMeetingDialog } from "@/components/teamhub/StartMeetingDialog";
 import { MeetingRoom } from "@/components/teamhub/MeetingRoom";
+import { MeetingReportDialog } from "@/components/teamhub/MeetingReportDialog";
 import { MessageSquare, Globe, Users, Sparkles, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -29,6 +30,7 @@ export default function TeamHub() {
   const [showMeetingDialog, setShowMeetingDialog] = useState(false);
   const [activeMeeting, setActiveMeeting] = useState<TeamMeeting | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [reportMeetingId, setReportMeetingId] = useState<string | null>(null);
 
   const activeChannelId = selectedChannelId || channels[0]?.id || null;
   const activeChannel = channels.find((c) => c.id === activeChannelId);
@@ -85,7 +87,7 @@ export default function TeamHub() {
     }
   };
 
-  const handleStartMeeting = async (title: string, type: "video" | "audio" | "screen_share") => {
+  const handleStartMeeting = async (title: string, type: "video" | "audio" | "screen_share", _isExternal?: boolean) => {
     if (!activeChannelId) return;
     try {
       const meeting = await startMeetingMutation.mutateAsync({
@@ -103,10 +105,13 @@ export default function TeamHub() {
 
   const handleEndMeeting = async () => {
     if (!activeMeeting) return;
+    const meetingId = activeMeeting.id;
     try {
-      await endMeetingMutation.mutateAsync(activeMeeting.id);
+      await endMeetingMutation.mutateAsync(meetingId);
       setActiveMeeting(null);
       toast.success("Meeting ended — AI is summarizing...");
+      // Show report dialog after a short delay to allow AI processing
+      setTimeout(() => setReportMeetingId(meetingId), 3000);
     } catch (err: any) {
       toast.error("Failed to end meeting", { description: err.message });
     }
@@ -251,6 +256,7 @@ export default function TeamHub() {
                   onLeave={handleLeaveMeeting}
                   onEnd={handleEndMeeting}
                   isCreator={activeMeeting.started_by === myProfile?.id}
+                  profileId={myProfile?.id || null}
                 />
               </div>
             )}
@@ -273,6 +279,13 @@ export default function TeamHub() {
         onStart={handleStartMeeting}
         isStarting={startMeetingMutation.isPending}
       />
+      {reportMeetingId && (
+        <MeetingReportDialog
+          open={!!reportMeetingId}
+          onOpenChange={(open) => { if (!open) setReportMeetingId(null); }}
+          meetingId={reportMeetingId}
+        />
+      )}
     </div>
   );
 }

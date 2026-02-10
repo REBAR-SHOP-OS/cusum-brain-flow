@@ -28,6 +28,7 @@ import { ExceptionsWorkbench } from "@/components/ceo/ExceptionsWorkbench";
 import { ARWorkbenchDrawer } from "@/components/ceo/drawers/ARWorkbenchDrawer";
 import { JobRiskDrawer } from "@/components/ceo/drawers/JobRiskDrawer";
 import { CapacityDrawer } from "@/components/ceo/drawers/CapacityDrawer";
+import { MeetingIntelligence } from "@/components/ceo/MeetingIntelligence";
 
 /* ─── Helpers ─── */
 
@@ -463,6 +464,10 @@ export function CEODashboardView() {
           </Card>
         </motion.div>
       )}
+
+      {/* ─── Drilldown Drawers ─── */}
+      {/* ─── Meeting Intelligence ─── */}
+      <MeetingIntelligence />
 
       {/* ─── Drilldown Drawers ─── */}
       <ARWorkbenchDrawer open={openDrawer === "ar"} onClose={() => setOpenDrawer(null)} outstandingAR={m.outstandingAR} unpaidInvoices={m.unpaidInvoices} />
