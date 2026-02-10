@@ -71,7 +71,8 @@ export default function AccountingWorkspace() {
     );
   }
 
-  if (qb.connected === false) {
+  // Allow documents tab even without QuickBooks
+  if (qb.connected === false && activeTab !== "documents") {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <Card className="max-w-lg w-full">
@@ -84,14 +85,23 @@ export default function AccountingWorkspace() {
               To use the Accounting Workspace, connect your QuickBooks account.
               All data stays secure and private to your account.
             </p>
-            <Button
-              size="lg"
-              className="h-14 text-lg px-8"
-              onClick={() => startOAuth("quickbooks")}
-            >
-              <Plug className="w-5 h-5 mr-2" />
-              Connect QuickBooks
-            </Button>
+            <div className="flex flex-col gap-3">
+              <Button
+                size="lg"
+                className="h-14 text-lg px-8"
+                onClick={() => startOAuth("quickbooks")}
+              >
+                <Plug className="w-5 h-5 mr-2" />
+                Connect QuickBooks
+              </Button>
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={() => setActiveTab("documents")}
+              >
+                View Odoo Quotations Instead
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>
