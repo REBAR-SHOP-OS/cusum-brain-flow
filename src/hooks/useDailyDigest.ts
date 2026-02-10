@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/lib/auth";
 
 export interface DigestEmail {
   subject: string;
@@ -77,6 +78,13 @@ export interface DigestErpActivity {
   summary: string;
 }
 
+export interface BenCategory {
+  title: string;
+  icon: string;
+  items: string[];
+  urgentCount: number;
+}
+
 export interface DigestData {
   greeting: string;
   affirmation: string;
@@ -92,6 +100,7 @@ export interface DigestData {
   calendarEvents: DigestCalendarEvent[];
   tipOfTheDay: DigestTip;
   randomFact: string;
+  benCategories?: BenCategory[];
 }
 
 export interface DigestStats {
@@ -110,6 +119,14 @@ export interface DigestStats {
   machineRuns?: number;
   erpEvents?: number;
   mailboxReports?: number;
+  // Ben-specific stats
+  estimatesBen?: number;
+  qcFlags?: number;
+  addendums?: number;
+  estimatesKarthick?: number;
+  shopDrawings?: number;
+  pendingApproval?: number;
+  overdueTasks?: number;
 }
 
 export function useDailyDigest(date: Date) {
@@ -117,6 +134,7 @@ export function useDailyDigest(date: Date) {
   const [stats, setStats] = useState<DigestStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { user } = useAuth();
 
   useEffect(() => {
     let cancelled = false;
@@ -129,7 +147,7 @@ export function useDailyDigest(date: Date) {
         const isoDate = date.toISOString().split("T")[0];
         const { data, error: fnError } = await supabase.functions.invoke(
           "daily-summary",
-          { body: { date: isoDate } }
+          { body: { date: isoDate, userEmail: user?.email } }
         );
 
         if (cancelled) return;
@@ -157,7 +175,7 @@ export function useDailyDigest(date: Date) {
 
     fetchDigest();
     return () => { cancelled = true; };
-  }, [date.toISOString().split("T")[0]]);
+  }, [date.toISOString().split("T")[0], user?.email]);
 
   return { digest, stats, loading, error, refetch: () => {
     setDigest(null);
@@ -165,7 +183,7 @@ export function useDailyDigest(date: Date) {
     setLoading(true);
     setError(null);
     const isoDate = date.toISOString().split("T")[0];
-    supabase.functions.invoke("daily-summary", { body: { date: isoDate } })
+    supabase.functions.invoke("daily-summary", { body: { date: isoDate, userEmail: user?.email } })
       .then(({ data, error: fnError }) => {
         if (fnError) throw new Error(fnError.message);
         if (data?.error) throw new Error(data.error);

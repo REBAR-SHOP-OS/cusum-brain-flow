@@ -1,9 +1,9 @@
-import { ThumbsUp, ThumbsDown, Calendar, Mail, Lightbulb, Sparkles, Video, Phone, TrendingUp, Zap, DollarSign, BarChart3, AlertTriangle, Share2, Users, Cog, Activity, Clock } from "lucide-react";
+import { ThumbsUp, ThumbsDown, Calendar, Mail, Lightbulb, Sparkles, Video, Phone, TrendingUp, Zap, DollarSign, BarChart3, AlertTriangle, Share2, Users, Cog, Activity, Clock, FileText, RefreshCw, Layers, CheckCircle, Target } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
-import type { DigestData, DigestStats } from "@/hooks/useDailyDigest";
+import type { DigestData, DigestStats, BenCategory } from "@/hooks/useDailyDigest";
 
 interface DigestContentProps {
   digest: DigestData;
@@ -23,6 +23,35 @@ function StatPill({ label, value, accent }: { label: string; value: number; acce
   );
 }
 
+const BEN_ICON_MAP: Record<string, React.ElementType> = {
+  Mail, FileText, AlertTriangle, RefreshCw, Users, Layers, CheckCircle, Target,
+};
+
+function BenCategoryCard({ category }: { category: BenCategory }) {
+  const IconComp = BEN_ICON_MAP[category.icon] || FileText;
+  return (
+    <Card className="border-border/50">
+      <CardHeader className="pb-2 pt-4 px-5">
+        <CardTitle className="text-sm font-semibold flex items-center gap-2 uppercase tracking-wider text-muted-foreground">
+          <IconComp className="w-4 h-4 text-primary" />
+          {category.title}
+          {category.urgentCount > 0 && (
+            <Badge variant="destructive" className="text-[10px] ml-1 px-1.5 py-0">{category.urgentCount} urgent</Badge>
+          )}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="px-5 pb-4 space-y-2">
+        {category.items.map((item, i) => (
+          <div key={i} className="flex items-start gap-2">
+            <span className="text-xs font-bold text-primary bg-primary/10 rounded-full w-5 h-5 flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
+            <p className="text-sm text-foreground/80 leading-relaxed">{item}</p>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
 export function DigestContent({ digest, stats, currentDate }: DigestContentProps) {
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
@@ -37,8 +66,19 @@ export function DigestContent({ digest, stats, currentDate }: DigestContentProps
         </div>
       </div>
 
-      {/* Stats Grid */}
-      {stats && (
+      {/* Stats Grid - Ben-specific or generic */}
+      {stats && digest.benCategories ? (
+        <div className="grid grid-cols-4 gap-1.5">
+          <StatPill label="Emails" value={stats.emails} />
+          <StatPill label="Est. Ben" value={stats.estimatesBen ?? 0} />
+          <StatPill label="QC Flags" value={stats.qcFlags ?? 0} accent />
+          <StatPill label="Addendums" value={stats.addendums ?? 0} />
+          <StatPill label="Est. Karthick" value={stats.estimatesKarthick ?? 0} />
+          <StatPill label="Shop Dwg" value={stats.shopDrawings ?? 0} />
+          <StatPill label="Approval" value={stats.pendingApproval ?? 0} accent />
+          <StatPill label="Overdue" value={stats.overdueTasks ?? 0} accent />
+        </div>
+      ) : stats && (
         <div className="grid grid-cols-4 md:grid-cols-6 gap-1.5">
           <StatPill label="Emails" value={stats.emails} />
           <StatPill label="Tasks" value={stats.tasks} />
@@ -86,6 +126,15 @@ export function DigestContent({ digest, stats, currentDate }: DigestContentProps
           </ol>
         </CardContent>
       </Card>
+
+      {/* Ben's 8 Categories */}
+      {digest.benCategories && digest.benCategories.length > 0 && (
+        <div className="space-y-4">
+          {digest.benCategories.map((cat, i) => (
+            <BenCategoryCard key={i} category={cat} />
+          ))}
+        </div>
+      )}
 
       {/* Financial Snapshot */}
       {digest.financialSnapshot && (
