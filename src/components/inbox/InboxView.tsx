@@ -2,12 +2,13 @@ import { useState, useMemo, useCallback, useEffect, useLayoutEffect } from "reac
 import {
   RefreshCw, Settings, Loader2, Search, CheckSquare,
   Trash2, Archive, X, Mail, LogOut, Phone, LayoutGrid,
-  List, MessageSquare, Wifi, WifiOff
+  List, MessageSquare, Wifi, WifiOff, PenSquare
 } from "lucide-react";
 import { InboxEmailList, type InboxEmail } from "./InboxEmailList";
 import { InboxEmailViewer } from "./InboxEmailViewer";
 import { InboxDetailView } from "./InboxDetailView";
 import { InboxManagerSettings } from "./InboxManagerSettings";
+import { ComposeEmailDialog } from "./ComposeEmailDialog";
 import { InboxAIToolbar, type AIAction } from "./InboxAIToolbar";
 import { InboxSummaryPanel, type InboxSummary } from "./InboxSummaryPanel";
 import { InboxKanbanBoard } from "./InboxKanbanBoard";
@@ -132,6 +133,7 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [starredIds, setStarredIds] = useState<Set<string>>(new Set());
   const [snoozedUntil, setSnoozedUntil] = useState<Map<string, Date>>(new Map());
+  const [showCompose, setShowCompose] = useState(false);
   const { toast } = useToast();
 
   // Toggle star
@@ -449,6 +451,9 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
           if (selectedEmail) setSelectedEmail(null);
           else if (showSearch) { setSearch(""); setShowSearch(false); }
           break;
+        case "c":
+          setShowCompose(true);
+          break;
       }
     };
 
@@ -538,6 +543,22 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
               <List className="w-3 h-3" />
             </Button>
           </div>
+
+          {/* Compose button */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="default"
+                size="sm"
+                className="h-6 gap-1 text-[11px] px-2"
+                onClick={() => setShowCompose(true)}
+              >
+                <PenSquare className="w-3 h-3" />
+                Compose
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-xs">Compose new email (c)</TooltipContent>
+          </Tooltip>
 
           {/* Divider */}
           <div className="w-px h-4 bg-border shrink-0" />
@@ -818,6 +839,9 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
 
         {/* Settings Panel */}
         <InboxManagerSettings open={showSettings} onOpenChange={setShowSettings} connectedEmail={userEmail} />
+
+        {/* Compose Dialog */}
+        <ComposeEmailDialog open={showCompose} onOpenChange={setShowCompose} />
       </div>
     </TooltipProvider>
   );

@@ -32,6 +32,7 @@ export function InboxDetailView({ email, onClose }: InboxDetailViewProps) {
   const [threadComms, setThreadComms] = useState<Communication[]>([]);
   const [loadingThread, setLoadingThread] = useState(true);
   const [rightTab, setRightTab] = useState<"context" | "thread">("context");
+  const [highlightedCommId, setHighlightedCommId] = useState<string | null>(null);
   const { toast } = useToast();
 
   // Load thread
@@ -159,6 +160,7 @@ export function InboxDetailView({ email, onClose }: InboxDetailViewProps) {
               <InboxEmailThread
                 communications={threadComms}
                 currentEmailId={email.id}
+                highlightedId={highlightedCommId}
               />
             )}
           </ScrollArea>
@@ -227,8 +229,13 @@ export function InboxDetailView({ email, onClose }: InboxDetailViewProps) {
                     return (
                       <div
                         key={comm.id}
+                        onClick={() => {
+                          setHighlightedCommId(comm.id);
+                          // Clear highlight after animation
+                          setTimeout(() => setHighlightedCommId(null), 2000);
+                        }}
                         className={cn(
-                          "rounded-lg border p-2.5 text-xs space-y-1 transition-colors",
+                          "rounded-lg border p-2.5 text-xs space-y-1 transition-colors cursor-pointer",
                           isSelected ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"
                         )}
                       >
