@@ -118,15 +118,20 @@ export function TranscribeView() {
 
   // --- Mic Tab ---
   const startListening = () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
+    const SpeechRecognitionAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognitionAPI) {
       toast.error("Speech recognition not supported in this browser");
       return;
     }
-    const recognition = new SpeechRecognition();
+    const recognition = new SpeechRecognitionAPI();
     recognition.continuous = true;
     recognition.interimResults = true;
-    recognition.lang = sourceLang === "auto" ? "" : sourceLang;
+    // Only set lang if not auto-detect; empty string can cause errors
+    if (sourceLang !== "auto") {
+      recognition.lang = sourceLang;
+    }
+
+    recognition.onstart = () => setIsListening(true);
 
     recognition.onresult = (event: any) => {
       let interim = "";
@@ -143,7 +148,6 @@ export function TranscribeView() {
       if (final) {
         setOriginalText(prev => prev + (prev ? " " : "") + final);
         setInterimText("");
-        // Auto-translate the final chunk
         callTranslateAPI({
           mode: "text",
           text: final,
@@ -160,19 +164,37 @@ export function TranscribeView() {
     };
 
     recognition.onerror = (event: any) => {
-      if (event.error === "not-allowed") toast.error("Microphone access denied");
-      else toast.error(`Speech error: ${event.error}`);
-      setIsListening(false);
+      if (event.error === "not-allowed") {
+        toast.error("Microphone access denied");
+        setIsListening(false);
+      } else if (event.error === "no-speech") {
+        // Don't stop — just inform briefly
+        toast.info("No speech detected, still listening…");
+      } else {
+        toast.error(`Speech error: ${event.error}`);
+      }
     };
 
-    recognition.onend = () => setIsListening(false);
-    recognition.start();
+    recognition.onend = () => {
+      // Auto-restart if still supposed to be listening
+      if (recognitionRef.current === recognition) {
+        try {
+          recognition.start();
+        } catch {
+          setIsListening(false);
+        }
+      }
+    };
+
     recognitionRef.current = recognition;
+    recognition.start();
     setIsListening(true);
   };
 
   const stopListening = () => {
-    recognitionRef.current?.stop();
+    const ref = recognitionRef.current;
+    recognitionRef.current = null;
+    ref?.stop();
     setIsListening(false);
   };
 
