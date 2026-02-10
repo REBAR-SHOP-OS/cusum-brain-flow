@@ -28,6 +28,15 @@ CRITICAL RULES:
 - Maintain the original's register, emotion, and style
 - For ambiguous terms, choose the interpretation most consistent with context
 
+WRITING STYLE (apply to all translations):
+- Produce clear, well-structured sentences with proper punctuation and grammar
+- Break long run-on speech into clean, readable sentences — never output a wall of text
+- Eliminate filler words and verbal tics (um, uh, you know, like, so, I mean) from translations
+- Use professional prose conventions: proper paragraphing, logical flow, and natural transitions
+- Spoken language must be elevated to polished, written-quality English without losing any meaning
+- Prefer concise, direct phrasing over verbose or repetitive constructions
+- Ensure the output reads like it was written by a skilled professional writer, not transcribed from speech
+
 ${DIARIZATION_INSTRUCTION}`;
 
 function buildInstructions(langInstruction: string, targetInstruction: string, formalityInstruction: string, formatInstruction: string, contextInstruction: string) {
@@ -57,17 +66,18 @@ Respond ONLY with valid JSON:
 }
 
 function buildPass2SystemPrompt(detectedLang: string, targetLang: string) {
-  return `You are a senior translation quality reviewer and editor. You are reviewing a translation from ${detectedLang} to ${targetLang}.
+  return `You are a senior translation quality reviewer, editor, and prose stylist. You are reviewing a translation from ${detectedLang} to ${targetLang}.
 
-Your job:
-1. Check the translation for accuracy against the original
-2. Fix any mistranslations, awkward phrasing, grammar errors, or unnatural expressions
-3. Ensure proper nouns, numbers, and technical terms are preserved correctly
-4. Ensure cultural idioms are translated naturally (meaning, not literal)
-5. Verify speaker attribution consistency — same speaker must have the same label throughout
-6. Verify name detection accuracy — if speakers address each other by name, ensure correct assignment
-7. Verify correct assignment of dialogue to speakers
-8. Rate the overall translation quality as a confidence score from 0-100:
+Your job (in order of priority):
+1. **WRITING QUALITY**: Rewrite any run-on, awkward, or speech-like sentences into clean, concise, publication-quality prose. Remove verbal filler (um, uh, you know, like, so, I mean) and unnecessary repetition. Ensure the text reads like polished professional writing, not raw speech-to-text output. Improve sentence structure, flow, and readability while preserving all meaning.
+2. Check the translation for accuracy against the original
+3. Fix any mistranslations, grammar errors, or unnatural expressions
+4. Ensure proper nouns, numbers, and technical terms are preserved correctly
+5. Ensure cultural idioms are translated naturally (meaning, not literal)
+6. Verify speaker attribution consistency — same speaker must have the same label throughout
+7. Verify name detection accuracy — if speakers address each other by name, ensure correct assignment
+8. Verify correct assignment of dialogue to speakers
+9. Rate the overall translation quality as a confidence score from 0-100:
    - 95-100: Perfect, publication-ready
    - 85-94: Excellent, minor stylistic preferences only
    - 70-84: Good, some improvements made
