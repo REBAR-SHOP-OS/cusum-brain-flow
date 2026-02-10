@@ -2302,6 +2302,128 @@ export type Database = {
           },
         ]
       }
+      meeting_action_items: {
+        Row: {
+          assignee_name: string | null
+          assignee_profile_id: string | null
+          company_id: string | null
+          confidence: number | null
+          created_at: string
+          due_date: string | null
+          id: string
+          meeting_id: string
+          priority: string
+          status: string
+          title: string
+        }
+        Insert: {
+          assignee_name?: string | null
+          assignee_profile_id?: string | null
+          company_id?: string | null
+          confidence?: number | null
+          created_at?: string
+          due_date?: string | null
+          id?: string
+          meeting_id: string
+          priority?: string
+          status?: string
+          title: string
+        }
+        Update: {
+          assignee_name?: string | null
+          assignee_profile_id?: string | null
+          company_id?: string | null
+          confidence?: number | null
+          created_at?: string
+          due_date?: string | null
+          id?: string
+          meeting_id?: string
+          priority?: string
+          status?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meeting_action_items_assignee_profile_id_fkey"
+            columns: ["assignee_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_action_items_assignee_profile_id_fkey"
+            columns: ["assignee_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_action_items_meeting_id_fkey"
+            columns: ["meeting_id"]
+            isOneToOne: false
+            referencedRelation: "team_meetings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meeting_transcript_entries: {
+        Row: {
+          created_at: string
+          id: string
+          is_final: boolean
+          language: string
+          meeting_id: string
+          speaker_name: string
+          speaker_profile_id: string | null
+          text: string
+          timestamp_ms: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_final?: boolean
+          language?: string
+          meeting_id: string
+          speaker_name: string
+          speaker_profile_id?: string | null
+          text: string
+          timestamp_ms?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_final?: boolean
+          language?: string
+          meeting_id?: string
+          speaker_name?: string
+          speaker_profile_id?: string | null
+          text?: string
+          timestamp_ms?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meeting_transcript_entries_meeting_id_fkey"
+            columns: ["meeting_id"]
+            isOneToOne: false
+            referencedRelation: "team_meetings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_transcript_entries_speaker_profile_id_fkey"
+            columns: ["speaker_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_transcript_entries_speaker_profile_id_fkey"
+            columns: ["speaker_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           agent_color: string | null
@@ -3605,14 +3727,19 @@ export type Database = {
           duration_seconds: number | null
           ended_at: string | null
           id: string
+          is_external: boolean
           meeting_type: string
           notes: string | null
           participants: string[] | null
+          recording_url: string | null
           room_code: string
+          share_settings: Json
           started_at: string
           started_by: string
           status: string
+          structured_report: Json | null
           title: string
+          transcript: Json | null
         }
         Insert: {
           ai_summary?: string | null
@@ -3620,14 +3747,19 @@ export type Database = {
           duration_seconds?: number | null
           ended_at?: string | null
           id?: string
+          is_external?: boolean
           meeting_type?: string
           notes?: string | null
           participants?: string[] | null
+          recording_url?: string | null
           room_code: string
+          share_settings?: Json
           started_at?: string
           started_by: string
           status?: string
+          structured_report?: Json | null
           title?: string
+          transcript?: Json | null
         }
         Update: {
           ai_summary?: string | null
@@ -3635,14 +3767,19 @@ export type Database = {
           duration_seconds?: number | null
           ended_at?: string | null
           id?: string
+          is_external?: boolean
           meeting_type?: string
           notes?: string | null
           participants?: string[] | null
+          recording_url?: string | null
           room_code?: string
+          share_settings?: Json
           started_at?: string
           started_by?: string
           status?: string
+          structured_report?: Json | null
           title?: string
+          transcript?: Json | null
         }
         Relationships: [
           {
