@@ -198,21 +198,22 @@ export default function Home() {
           <h2 className="text-lg font-semibold mb-4">Workspaces</h2>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {[
-              { label: "CEO Command", icon: Crown, route: "/office", state: { section: "ceo-dashboard" }, iconBg: "bg-gradient-to-br from-amber-500/20 to-yellow-500/10 ring-1 ring-amber-500/20", iconColor: "text-amber-400" },
-              { label: "Time Clock", icon: Clock, route: "/timeclock", iconBg: "bg-gradient-to-br from-teal-500/20 to-cyan-500/10 ring-1 ring-teal-500/20", iconColor: "text-teal-400" },
-              { label: "Team Hub", icon: MessageSquare, route: "/team-hub", iconBg: "bg-gradient-to-br from-purple-500/20 to-indigo-500/10 ring-1 ring-purple-500/20", iconColor: "text-purple-400" },
+              { label: "CEO Command", icon: Crown, route: "/office", state: { section: "ceo-dashboard" }, gradient: "from-amber-500 via-orange-500 to-yellow-600" },
+              { label: "Time Clock", icon: Clock, route: "/timeclock", gradient: "from-teal-500 via-emerald-500 to-cyan-500" },
+              { label: "Team Hub", icon: MessageSquare, route: "/team-hub", gradient: "from-indigo-500 via-purple-500 to-violet-500" },
             ].map((ws) => (
-              <Card
+              <div
                 key={ws.label}
-                className="p-5 cursor-pointer hover:bg-muted/50 transition-colors group flex items-center gap-4"
+                className={`relative overflow-hidden rounded-2xl p-5 text-white cursor-pointer transition-transform hover:scale-[1.02] bg-gradient-to-br ${ws.gradient} flex items-center gap-4`}
                 onClick={() => navigate(ws.route, ws.state ? { state: ws.state } : undefined)}
               >
-                <div className={`p-3 rounded-lg ${ws.iconBg} transition-colors`}>
-                  <ws.icon className={`w-6 h-6 ${ws.iconColor}`} />
+                <span className="relative z-10 font-bold text-lg">{ws.label}</span>
+                <ChevronRight className="w-5 h-5 text-white/70 ml-auto relative z-10" />
+                <div className="absolute right-3 bottom-3 opacity-20">
+                  <ws.icon className="w-16 h-16" strokeWidth={1} />
                 </div>
-                <span className="font-semibold">{ws.label}</span>
-                <ChevronRight className="w-4 h-4 text-muted-foreground ml-auto group-hover:text-foreground transition-colors" />
-              </Card>
+                <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent pointer-events-none" />
+              </div>
             ))}
           </div>
         </div>
