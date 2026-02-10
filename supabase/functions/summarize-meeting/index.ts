@@ -1,10 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { requireAuth, corsHeaders } from "../_shared/auth.ts";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -15,18 +11,19 @@ serve(async (req) => {
     const { meetingId } = await req.json();
     if (!meetingId) throw new Error("meetingId is required");
 
+    // Auth guard
+    let rateLimitId: string;
+    try {
+      const auth = await requireAuth(req);
+      rateLimitId = auth.userId;
+    } catch (res) {
+      if (res instanceof Response) return res;
+      throw res;
+    }
+
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceKey);
-
-    // Rate limit
-    const authHeader = req.headers.get("Authorization");
-    let rateLimitId = "anonymous";
-    if (authHeader?.startsWith("Bearer ")) {
-      const anonClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!);
-      const { data: { user } } = await anonClient.auth.getUser(authHeader.replace("Bearer ", ""));
-      if (user?.id) rateLimitId = user.id;
-    }
 
     const { data: allowed } = await supabase.rpc("check_rate_limit", {
       _user_id: rateLimitId,

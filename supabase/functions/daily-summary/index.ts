@@ -1,24 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { decryptToken } from "../_shared/tokenEncryption.ts";
+import { requireAuth, corsHeaders } from "../_shared/auth.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
-
-// Mailboxes to scan for reports
-const REPORT_MAILBOXES = ["ai@rebar.shop", "vicky@rebar.shop", "neel@rebar.shop", "ben@rebar.shop", "saurabh@rebar.shop"];
-
-// Keywords to identify report/summary emails
-const REPORT_KEYWORDS = [
-  "ringcentral", "wincher", "semrush", "call summary", "call report",
-  "weekly report", "daily report", "analytics", "performance report",
-  "seo report", "ranking", "keyword", "backlink", "traffic report",
-  "voicemail", "missed call", "fax", "recording", "transcript",
-  "campaign report", "engagement report", "social report",
-];
+// ... keep existing code (REPORT_MAILBOXES and REPORT_KEYWORDS)
 
 interface MailboxEmail {
   mailbox: string;
@@ -27,7 +12,7 @@ interface MailboxEmail {
   snippet: string;
   body: string;
   date: string;
-  source: string; // detected source: ringcentral, wincher, semrush, call-summary, other
+  source: string;
 }
 
 /** Refresh a Gmail access token from a stored refresh token */
@@ -224,21 +209,19 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
 
   try {
+    // Auth guard — enforce authentication
+    let rateLimitId: string;
+    try {
+      const auth = await requireAuth(req);
+      rateLimitId = auth.userId;
+    } catch (res) {
+      if (res instanceof Response) return res;
+      throw res;
+    }
+
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceKey);
-
-    // Auth check + rate limiting
-    const authHeader = req.headers.get("Authorization");
-    let rateLimitId = "anonymous";
-    if (authHeader?.startsWith("Bearer ")) {
-      const anonClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!);
-      const token = authHeader.replace("Bearer ", "");
-      const { data: claimsData } = await anonClient.auth.getClaims(token);
-      if (claimsData?.claims?.sub) {
-        rateLimitId = claimsData.claims.sub as string;
-      }
-    }
 
     // Rate limit: 5 requests per 60 seconds
     const { data: allowed } = await supabase.rpc("check_rate_limit", {

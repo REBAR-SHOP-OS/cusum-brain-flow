@@ -1,10 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { requireAuth, corsHeaders } from "../_shared/auth.ts";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -12,34 +8,29 @@ serve(async (req) => {
   }
 
   try {
-    // Auth check + get user profile
-    const authHeader = req.headers.get("Authorization");
-    let rateLimitId = "anonymous";
+    // Auth guard — enforce authentication + get user profile
+    let rateLimitId: string;
     let userName = "Team Member";
     let userTitle = "";
 
-    if (authHeader?.startsWith("Bearer ")) {
-      const supabase = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_ANON_KEY")!,
-        { global: { headers: { Authorization: authHeader } } }
-      );
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        rateLimitId = user.id;
+    try {
+      const auth = await requireAuth(req);
+      rateLimitId = auth.userId;
 
-        const svcClient2 = createClient(
-          Deno.env.get("SUPABASE_URL")!,
-          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-        );
-        const { data: profile } = await svcClient2
-          .from("profiles")
-          .select("full_name, title")
-          .eq("user_id", user.id)
-          .maybeSingle();
-        if (profile?.full_name) userName = profile.full_name;
-        if (profile?.title) userTitle = profile.title;
-      }
+      const svcClient2 = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      );
+      const { data: profile } = await svcClient2
+        .from("profiles")
+        .select("full_name, title")
+        .eq("user_id", rateLimitId)
+        .maybeSingle();
+      if (profile?.full_name) userName = profile.full_name;
+      if (profile?.title) userTitle = profile.title;
+    } catch (res) {
+      if (res instanceof Response) return res;
+      throw res;
     }
 
     const svcClient = createClient(

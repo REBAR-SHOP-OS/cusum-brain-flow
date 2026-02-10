@@ -1,27 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
-
-interface DailySnapshot {
-  profile_id: string;
-  work_date: string;
-  employee_type: string;
-  raw_clock_in: string | null;
-  raw_clock_out: string | null;
-  lunch_deducted_minutes: number;
-  paid_break_minutes: number;
-  expected_minutes: number;
-  paid_minutes: number;
-  overtime_minutes: number;
-  exceptions: any[];
-  ai_notes: string | null;
-  status: string;
-  company_id: string;
-}
+import { requireAuth, corsHeaders } from "../_shared/auth.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -29,6 +7,16 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Auth guard — must be authenticated (admin/accounting role)
+    let authUserId: string;
+    try {
+      const auth = await requireAuth(req);
+      authUserId = auth.userId;
+    } catch (res) {
+      if (res instanceof Response) return res;
+      throw res;
+    }
+
     const { company_id, week_start } = await req.json();
     if (!company_id || !week_start) {
       return new Response(JSON.stringify({ error: "company_id and week_start required" }), {

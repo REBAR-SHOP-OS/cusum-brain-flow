@@ -1,65 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { optionalAuth, corsHeaders } from "../_shared/auth.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
-
-interface PdfToImagesRequest {
-  pdfUrl: string;
-  maxPages?: number;
-  dpi?: number;
-}
-
-// Convert PDF to images using mupdf WASM
-async function convertPdfToImages(
-  pdfData: Uint8Array,
-  maxPages: number = 50,
-  dpi: number = 150
-): Promise<{ pages: string[]; pageCount: number }> {
-  // Import mupdf dynamically
-  const mupdf = await import("https://cdn.jsdelivr.net/npm/mupdf@0.3.0/+esm");
-  
-  // Load the PDF document
-  const doc = mupdf.Document.openDocument(pdfData, "application/pdf");
-  const pageCount = doc.countPages();
-  const pagesToProcess = Math.min(pageCount, maxPages);
-  
-  
-  
-  const pages: string[] = [];
-  
-  for (let i = 0; i < pagesToProcess; i++) {
-    try {
-      const page = doc.loadPage(i);
-      const bounds = page.getBounds();
-      
-      // Calculate pixel dimensions based on DPI
-      const scale = dpi / 72; // PDF standard is 72 DPI
-      const width = Math.floor((bounds[2] - bounds[0]) * scale);
-      const height = Math.floor((bounds[3] - bounds[1]) * scale);
-      
-      // Render page to pixmap
-      const pixmap = page.toPixmap(
-        mupdf.Matrix.scale(scale, scale),
-        mupdf.ColorSpace.DeviceRGB,
-        false,
-        true
-      );
-      
-      // Convert to PNG
-      const pngData = pixmap.asPNG();
-      const base64 = btoa(String.fromCharCode(...new Uint8Array(pngData)));
-      pages.push(`data:image/png;base64,${base64}`);
-      
-      
-    } catch (error) {
-      console.error(`Error converting page ${i + 1}:`, error);
-    }
-  }
-  
-  return { pages, pageCount };
-}
+// ... keep existing code (PdfToImagesRequest interface and convertPdfToImages function)
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -67,6 +9,15 @@ serve(async (req) => {
   }
 
   try {
+    // Auth check — allow internal edge function calls and authenticated users
+    const userId = await optionalAuth(req);
+    const isInternalCall = req.headers.get("apikey") === Deno.env.get("SUPABASE_ANON_KEY");
+    if (!userId && !isInternalCall) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const { pdfUrl, maxPages = 50, dpi = 150 }: PdfToImagesRequest = await req.json();
 
     if (!pdfUrl) {

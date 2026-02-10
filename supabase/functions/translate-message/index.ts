@@ -1,31 +1,20 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-};
+import { requireAuth, corsHeaders } from "../_shared/auth.ts";
 
 serve(async (req) => {
   if (req.method === "OPTIONS")
     return new Response(null, { headers: corsHeaders });
 
   try {
-    // Auth check + rate limiting
-    const authHeader = req.headers.get("Authorization");
-    let rateLimitId = "anonymous";
-    if (authHeader?.startsWith("Bearer ")) {
-      const supabase = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_ANON_KEY")!,
-        { global: { headers: { Authorization: authHeader } } }
-      );
-      const token = authHeader.replace("Bearer ", "");
-      const { data: claimsData } = await supabase.auth.getClaims(token);
-      if (claimsData?.claims?.sub) {
-        rateLimitId = claimsData.claims.sub as string;
-      }
+    // Auth guard — enforce authentication
+    let rateLimitId: string;
+    try {
+      const auth = await requireAuth(req);
+      rateLimitId = auth.userId;
+    } catch (res) {
+      if (res instanceof Response) return res;
+      throw res;
     }
 
     const svcClient = createClient(
