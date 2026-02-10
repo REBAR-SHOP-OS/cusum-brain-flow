@@ -1,100 +1,61 @@
 
 
-## Gauge Morning Briefing for Ben
+## Fix: Ben Can't See Pipeline + Daily Summarizer Mismatch
 
-When Ben says "good morning" (or similar greeting), Gauge will automatically gather data across 8 categories before responding with a comprehensive morning briefing.
+### Root Cause
 
-### How it works
+Ben (`ben@rebar.shop`) has the **sales** role. The current RLS policy on the `leads` table requires sales users to have `assigned_to = auth.uid()` to see any leads. Out of 1,046 active leads, **zero** are assigned to Ben's user ID -- so he sees an empty pipeline.
 
-Two changes are needed:
+The Daily Summarizer uses the service role (bypasses RLS) and shows pipeline data in the digest that Ben then can't access in the actual Pipeline page. This creates a confusing mismatch.
 
-1. **Edge function (`supabase/functions/ai-agent/index.ts`)** -- Expand the `estimation` agent's context fetching to include all 8 briefing categories, and add a greeting detection block that injects a structured morning briefing prompt.
+### Changes
 
-2. **No frontend changes needed** -- The Agent Workspace already sends messages to the `ai-agent` edge function. The briefing logic lives entirely server-side.
+**1. Fix Pipeline RLS policy** -- Allow all sales/accounting users in the same company to see ALL leads (not just their own). This matches how the communications policy was already updated to be company-wide.
 
-### The 8 Briefing Categories
+```sql
+DROP POLICY IF EXISTS "Sales team reads own leads" ON public.leads;
 
-When a greeting is detected (e.g. "good morning", "morning", "hi", "hello"), Gauge will fetch and summarize:
-
-| # | Category | Data Source | What Gauge Reports |
-|---|----------|-------------|-------------------|
-| 1 | Emails | `communications` table -- emails to/from `ben@rebar.shop` and `estimation@rebar.shop` | Unread count, flagged items, anything needing response |
-| 2 | Estimation Ben | `leads` table filtered by `assigned_to` = Ben's ID, stage not won/lost | Open estimates, pending takeoffs, deadlines |
-| 3 | QC Ben | `leads` with QC-related metadata or notes flagged | QC flags, validation warnings, items needing review |
-| 4 | Addendums | `communications` + `lead_files` -- emails/files with "addendum" or "revision" keywords | New addendums received, unprocessed revisions |
-| 5 | Estimation Karthick | `leads` filtered by Karthick's assigned_to | Karthick's open estimates, anything Ben should review |
-| 6 | Shop Drawings | `leads` or `lead_files` with "shop drawing" references, not yet approved | Shop drawings in progress, pending submission |
-| 7 | Shop Drawings for Approval | Same as above but filtered to "pending approval" status | Drawings waiting for engineer/client approval |
-| 8 | Eisenhower | `chat_sessions` table for Ben's Eisenhower sessions | Yesterday's task completion, pending priorities |
-
-### Technical Details
-
-**In `fetchContext` (line ~1796), add estimation-specific briefing data:**
-
-```typescript
-if (agent === "estimation") {
-  // Existing code stays...
-
-  // NEW: Ben's emails (estimation + personal)
-  const { data: estEmails } = await supabase
-    .from("communications")
-    .select("id, subject, from_address, to_address, body_preview, status, received_at, direction")
-    .or("to_address.ilike.%ben@rebar.shop%,from_address.ilike.%ben@rebar.shop%,to_address.ilike.%estimation@rebar.shop%,from_address.ilike.%estimation@rebar.shop%")
-    .order("received_at", { ascending: false })
-    .limit(30);
-  context.estimationEmails = estEmails;
-  context.unreadEstEmails = (estEmails || []).filter(e => e.status === "unread" || !e.status).length;
-
-  // Ben's assigned leads (estimation work)
-  const { data: benLeads } = await supabase
-    .from("leads")
-    .select("id, title, stage, expected_value, probability, updated_at, notes, metadata, assigned_to")
-    .not("stage", "in", '("won","lost")')
-    .order("updated_at", { ascending: false })
-    .limit(30);
-  context.allActiveLeads = benLeads;
-
-  // Lead files (for addendums + shop drawings)
-  const { data: leadFiles } = await supabase
-    .from("lead_files")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(30);
-  context.leadFiles = leadFiles;
-
-  // Eisenhower sessions for Ben
-  if (userId) {
-    const { data: eisSessions } = await supabase
-      .from("chat_sessions")
-      .select("id, title, updated_at")
-      .eq("user_id", userId)
-      .eq("agent_name", "Eisenhower Matrix")
-      .order("updated_at", { ascending: false })
-      .limit(3);
-    context.eisenhowerSessions = eisSessions;
-  }
-
-  // Open tasks
-  const { data: tasks } = await supabase
-    .from("tasks")
-    .select("id, title, status, priority, due_date, created_at")
-    .neq("status", "done")
-    .order("created_at", { ascending: false })
-    .limit(20);
-  context.userTasks = tasks;
-}
+CREATE POLICY "Sales team reads leads in company"
+ON public.leads FOR SELECT TO authenticated
+USING (
+  company_id = get_user_company_id(auth.uid())
+  AND has_any_role(auth.uid(), ARRAY['admin'::app_role, 'sales'::app_role, 'accounting'::app_role])
+);
 ```
 
-**Greeting detection and briefing prompt injection (before AI call, ~line 2214):**
+**2. Fix Pipeline UPDATE policy** -- Similarly allow sales/accounting to update any lead in their company (needed for drag-and-drop stage changes).
 
-When `agent === "estimation"` and the message matches a greeting pattern (`/^(good\s*morning|morning|hi|hello|hey|salam|salaam)/i`), replace the user message with a structured briefing request that instructs Gauge to cover all 8 categories using the context data already loaded.
+```sql
+DROP POLICY IF EXISTS "Sales team updates own leads" ON public.leads;
 
-The injected prompt will instruct Gauge to:
-- Present a structured morning briefing with all 8 sections
-- Use tables and emoji tags for scannability
-- Flag urgent items first
-- Be concise (ADHD-friendly format)
-- Reference actual data from context
+CREATE POLICY "Sales team updates leads in company"
+ON public.leads FOR UPDATE TO authenticated
+USING (
+  company_id = get_user_company_id(auth.uid())
+  AND has_any_role(auth.uid(), ARRAY['admin'::app_role, 'sales'::app_role, 'accounting'::app_role])
+);
+```
 
-**Model routing:** Morning briefings will use `google/gemini-2.5-pro` with higher max tokens (6000) since they require synthesizing data across multiple categories.
+**3. Daily Summarizer -- scope leads to the target date** -- Currently the leads query in the edge function fetches the latest 20 leads regardless of date. It should filter to leads updated on the target date so the digest reflects that day's pipeline activity, not just a random snapshot.
 
+Change the leads query (line ~307) from:
+```typescript
+// Current: no date filter
+.order("updated_at", { ascending: false }).limit(20)
+```
+To:
+```typescript
+// Fixed: only leads updated on the target date
+.gte("updated_at", dayStart).lte("updated_at", dayEnd)
+.order("updated_at", { ascending: false }).limit(30)
+```
+
+### What This Fixes
+
+- Ben (and all sales team members) will see **all company leads** in the Pipeline board
+- The Daily Summarizer will show only leads that had activity on the selected date, making the digest accurate and actionable
+- No more mismatch between what the digest reports and what Ben can see in the UI
+
+### No Frontend Changes Needed
+
+The Pipeline page and Daily Summarizer page code remain unchanged -- only the database policies and the edge function query are updated.
