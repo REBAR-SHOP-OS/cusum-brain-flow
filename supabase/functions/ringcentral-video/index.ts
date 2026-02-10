@@ -9,6 +9,13 @@ const corsHeaders = {
 
 const RC_SERVER = "https://platform.ringcentral.com";
 
+function supabaseAdmin() {
+  return createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  );
+}
+
 async function verifyAuth(req: Request): Promise<string | null> {
   const authHeader = req.headers.get("Authorization");
   if (!authHeader?.startsWith("Bearer ")) return null;
@@ -25,36 +32,64 @@ async function verifyAuth(req: Request): Promise<string | null> {
   return data.claims.sub as string;
 }
 
-async function getAccessToken(): Promise<string> {
-  const clientId = Deno.env.get("RINGCENTRAL_JWT_CLIENT_ID");
-  const clientSecret = Deno.env.get("RINGCENTRAL_JWT_CLIENT_SECRET");
-  const jwt = Deno.env.get("RINGCENTRAL_JWT");
+/** Get a valid RC access token for the user, refreshing if expired */
+async function getAccessTokenForUser(userId: string): Promise<string> {
+  const admin = supabaseAdmin();
 
-  if (!clientId || !clientSecret || !jwt) {
-    throw new Error("RingCentral JWT app credentials not configured");
+  const { data: tokenRow, error } = await admin
+    .from("user_ringcentral_tokens")
+    .select("access_token, refresh_token, token_expires_at")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error || !tokenRow?.refresh_token || tokenRow.refresh_token === "pending") {
+    throw new Error("RingCentral not connected. Please connect RingCentral in Integrations first.");
   }
 
-  const credentials = btoa(`${clientId}:${clientSecret}`);
+  // If token is still valid, use it
+  if (tokenRow.access_token && tokenRow.token_expires_at) {
+    const expiresAt = new Date(tokenRow.token_expires_at).getTime();
+    if (expiresAt > Date.now() + 60_000) {
+      return tokenRow.access_token;
+    }
+  }
 
-  const response = await fetch(`${RC_SERVER}/restapi/oauth/token`, {
+  // Refresh the token
+  const clientId = Deno.env.get("RINGCENTRAL_CLIENT_ID");
+  const clientSecret = Deno.env.get("RINGCENTRAL_CLIENT_SECRET");
+  if (!clientId || !clientSecret) {
+    throw new Error("RingCentral OAuth credentials not configured");
+  }
+
+  const resp = await fetch(`${RC_SERVER}/restapi/oauth/token`, {
     method: "POST",
     headers: {
-      Authorization: `Basic ${credentials}`,
+      Authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
       "Content-Type": "application/x-www-form-urlencoded",
     },
     body: new URLSearchParams({
-      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-      assertion: jwt,
+      grant_type: "refresh_token",
+      refresh_token: tokenRow.refresh_token,
     }),
   });
 
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`RingCentral token exchange failed: ${error}`);
+  if (!resp.ok) {
+    const errText = await resp.text();
+    console.error("RC token refresh failed:", errText);
+    throw new Error("RingCentral token expired. Please reconnect in Integrations.");
   }
 
-  const data = await response.json();
-  return data.access_token;
+  const tokens = await resp.json();
+  await admin
+    .from("user_ringcentral_tokens")
+    .update({
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token || tokenRow.refresh_token,
+      token_expires_at: new Date(Date.now() + (tokens.expires_in ?? 3600) * 1000).toISOString(),
+    })
+    .eq("user_id", userId);
+
+  return tokens.access_token;
 }
 
 serve(async (req) => {
@@ -74,10 +109,18 @@ serve(async (req) => {
     const body = await req.json();
     const { action, meetingName, meetingType } = body;
 
-    const accessToken = await getAccessToken();
+    let accessToken: string;
+    try {
+      accessToken = await getAccessTokenForUser(userId);
+    } catch (e) {
+      // Graceful fallback — user hasn't connected RC
+      return new Response(
+        JSON.stringify({ success: false, error: (e as Error).message, fallback: true }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     if (action === "create") {
-      // Create a RingCentral Video meeting bridge
       const bridgePayload: Record<string, unknown> = {
         name: meetingName || "Team Meeting",
         type: "Instant",
@@ -116,23 +159,24 @@ serve(async (req) => {
         const errorText = await createResponse.text();
         console.error("RCV bridge creation failed:", createResponse.status, errorText);
 
-        // If Video API isn't available, provide helpful error
         if (createResponse.status === 403) {
           return new Response(
             JSON.stringify({
-              error: "RingCentral Video permissions not enabled. Please add 'Video' permission to your RingCentral app.",
+              success: false,
+              error: "RingCentral Video permissions not enabled on your account.",
               fallback: true,
             }),
-            { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
 
-        throw new Error(`RCV bridge creation failed [${createResponse.status}]: ${errorText}`);
+        return new Response(
+          JSON.stringify({ success: false, error: `RCV bridge failed [${createResponse.status}]`, fallback: true }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
 
       const bridge = await createResponse.json();
-
-      // Extract the web join URL
       const joinUrl = bridge.discovery?.web || bridge.web || `https://v.ringcentral.com/join/${bridge.id}`;
       const hostUrl = bridge.discovery?.webHost || joinUrl;
 
@@ -157,15 +201,8 @@ serve(async (req) => {
     );
   } catch (error) {
     console.error("RingCentral Video error:", error);
-    const msg = error instanceof Error ? error.message : "Unknown error";
-    // Return 200 with fallback flag so the client gracefully falls back to Jitsi
-    // instead of treating this as a fatal error
     return new Response(
-      JSON.stringify({
-        success: false,
-        error: msg,
-        fallback: true,
-      }),
+      JSON.stringify({ success: false, error: (error as Error).message || "Unknown error", fallback: true }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
