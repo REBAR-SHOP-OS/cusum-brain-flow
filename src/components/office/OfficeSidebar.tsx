@@ -63,19 +63,6 @@ export function OfficeSidebar({ active, onNavigate }: OfficeSidebarProps) {
       </div>
 
       <ScrollArea className="flex-1 px-2">
-        {/* CEO Dashboard */}
-        <button
-          onClick={() => onNavigate("ceo-dashboard")}
-          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors mb-1 ${
-            active === "ceo-dashboard"
-              ? "bg-primary/10 text-primary font-medium"
-              : "text-muted-foreground hover:bg-muted hover:text-foreground"
-          }`}
-        >
-          <Activity className="w-4 h-4 shrink-0" />
-          <span className="text-xs">CEO Dashboard</span>
-        </button>
-
         {/* Office Tools Section */}
         <div className="mt-3 mb-1 px-3">
           <span className="text-[10px] font-semibold tracking-widest text-muted-foreground/60 uppercase">
