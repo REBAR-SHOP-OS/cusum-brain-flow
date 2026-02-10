@@ -51,7 +51,7 @@ export const agentConfigs: Record<string, AgentConfig> = {
   accounting: {
     name: "Penny",
     role: "Accounting (50yr CPA)",
-    image: accountingHelper,
+    image: socialHelper,
     agentType: "accounting",
     greeting: "Morning! Let's review your numbers — I've checked your emails and QuickBooks already.",
     placeholder: "Ask about invoices, collections, tasks, emails...",
@@ -105,7 +105,7 @@ export const agentConfigs: Record<string, AgentConfig> = {
   social: {
     name: "Pixel",
     role: "Social Media",
-    image: socialHelper,
+    image: accountingHelper,
     agentType: "social",
     greeting: "Hi! I'm Pixel, your Social Media agent.",
     placeholder: "Ask about social posts, content ideas...",
