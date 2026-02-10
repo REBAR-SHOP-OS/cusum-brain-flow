@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
-import { Mic, MicOff, Upload, FileText, Copy, Download, Trash2, ChevronDown, ChevronUp, Loader2, Languages, RefreshCw, Timer, Users } from "lucide-react";
+import { Mic, MicOff, Upload, FileText, Copy, Download, Trash2, ChevronDown, ChevronUp, Loader2, Languages, RefreshCw, Timer, Users, Volume2, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
@@ -180,6 +180,7 @@ export function TranscribeView() {
   const [confidence, setConfidence] = useState<number | null>(null);
   const [speakers, setSpeakers] = useState<string[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
 
   // Mic - ref-based accumulation
   const [isListening, setIsListening] = useState(false);
@@ -493,7 +494,36 @@ export function TranscribeView() {
     URL.revokeObjectURL(url);
   };
 
+  const LANG_TO_BCP47: Record<string, string> = {
+    English: "en-US", Spanish: "es-ES", French: "fr-FR", German: "de-DE",
+    Portuguese: "pt-BR", Italian: "it-IT", Dutch: "nl-NL", Russian: "ru-RU",
+    Chinese: "zh-CN", Japanese: "ja-JP", Korean: "ko-KR", Arabic: "ar-SA",
+    Hindi: "hi-IN", Farsi: "fa-IR", Turkish: "tr-TR", Polish: "pl-PL",
+  };
+
+  const playVoice = (text: string) => {
+    if (!("speechSynthesis" in window)) {
+      toast.error("Voice playback not supported in this browser");
+      return;
+    }
+    if (isSpeaking) {
+      window.speechSynthesis.cancel();
+      setIsSpeaking(false);
+      return;
+    }
+    // Strip speaker labels for cleaner playback
+    const cleanText = text.replace(/^.+?:\s/gm, "");
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.lang = LANG_TO_BCP47[targetLang] || "en-US";
+    utterance.onend = () => setIsSpeaking(false);
+    utterance.onerror = () => setIsSpeaking(false);
+    setIsSpeaking(true);
+    window.speechSynthesis.speak(utterance);
+  };
+
   const clearResults = () => {
+    window.speechSynthesis?.cancel();
+    setIsSpeaking(false);
     setOriginalText("");
     setEnglishText("");
     setDetectedLang("");
@@ -747,6 +777,10 @@ export function TranscribeView() {
             <div className="flex gap-2 flex-wrap">
               {englishText && (
                 <>
+                  <Button size="sm" variant="outline" className={`text-xs gap-1.5 ${isSpeaking ? "border-primary text-primary" : ""}`} onClick={() => playVoice(englishText)}>
+                    {isSpeaking ? <Square className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}
+                    {isSpeaking ? "Stop" : "Play"}
+                  </Button>
                   <Button size="sm" variant="outline" className="text-xs gap-1.5" onClick={() => copyToClipboard(englishText)}>
                     <Copy className="w-3 h-3" /> Copy
                   </Button>
