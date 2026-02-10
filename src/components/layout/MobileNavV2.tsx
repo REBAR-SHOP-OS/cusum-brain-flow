@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { Home, Inbox, CheckSquare, Factory, Menu, X, Truck, Settings, Shield, Phone, Users, Kanban, LayoutGrid, Brain, Package } from "lucide-react";
+import { Home, Inbox, CheckSquare, Factory, Menu, X, Truck, Settings, Shield, Phone, Users, Kanban, LayoutGrid, Brain, DollarSign, MessageSquare, BarChart3, Clock, Share2, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -16,8 +16,14 @@ const moreItems = [
   { name: "Pipeline", href: "/pipeline", icon: Kanban, roles: ["admin", "sales", "office"] },
   { name: "Customers", href: "/customers", icon: Users },
   { name: "Office", href: "/office", icon: LayoutGrid, roles: ["admin", "office"] },
+  { name: "Accounting", href: "/accounting", icon: DollarSign, roles: ["admin", "accounting", "office"] },
+  { name: "CEO Portal", href: "/ceo", icon: BarChart3, roles: ["admin"] },
   { name: "Deliveries", href: "/deliveries", icon: Truck },
   { name: "Calls", href: "/phonecalls", icon: Phone },
+  { name: "Team Hub", href: "/team-hub", icon: MessageSquare },
+  { name: "Time Clock", href: "/timeclock", icon: Clock },
+  { name: "Social", href: "/social", icon: Share2, roles: ["admin", "office"] },
+  { name: "Summarizer", href: "/daily-summarizer", icon: FileText, roles: ["admin", "sales", "office"] },
   { name: "Brain", href: "/brain", icon: Brain },
   { name: "Admin", href: "/admin", icon: Shield, roles: ["admin"] },
   { name: "Settings", href: "/settings", icon: Settings },
