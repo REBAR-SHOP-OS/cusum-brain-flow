@@ -1,3 +1,4 @@
+import { Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
@@ -8,6 +9,8 @@ interface InboxKanbanBoardProps {
   emails: (InboxEmail & { priority: number; commType?: "email" | "call" | "sms" })[];
   onSelect: (email: InboxEmail) => void;
   selectedId: string | null;
+  starredIds?: Set<string>;
+  onToggleStar?: (id: string) => void;
 }
 
 const KANBAN_COLUMNS = [
@@ -19,17 +22,6 @@ const KANBAN_COLUMNS = [
   { label: "Marketing", value: "Marketing", dotColor: "bg-pink-400" },
   { label: "Spam", value: "Spam", dotColor: "bg-zinc-500" },
 ];
-
-function getTypeIcon(type?: "email" | "call" | "sms") {
-  switch (type) {
-    case "call":
-      return <Phone className="w-3 h-3 text-blue-400" />;
-    case "sms":
-      return <MessageSquare className="w-3 h-3 text-green-400" />;
-    default:
-      return <Mail className="w-3 h-3 text-muted-foreground" />;
-  }
-}
 
 function getTypeBadge(type?: "email" | "call" | "sms") {
   switch (type) {
@@ -50,7 +42,18 @@ function getTypeBadge(type?: "email" | "call" | "sms") {
   }
 }
 
-export function InboxKanbanBoard({ emails, onSelect, selectedId }: InboxKanbanBoardProps) {
+function getTypeIcon(type?: "email" | "call" | "sms") {
+  switch (type) {
+    case "call":
+      return <Phone className="w-3 h-3 text-blue-400" />;
+    case "sms":
+      return <MessageSquare className="w-3 h-3 text-green-400" />;
+    default:
+      return <Mail className="w-3 h-3 text-muted-foreground" />;
+  }
+}
+
+export function InboxKanbanBoard({ emails, onSelect, selectedId, starredIds = new Set(), onToggleStar }: InboxKanbanBoardProps) {
   const emailsByLabel: Record<string, (InboxEmail & { priority: number; commType?: "email" | "call" | "sms" })[]> = {};
   KANBAN_COLUMNS.forEach((col) => {
     emailsByLabel[col.value] = [];
@@ -92,6 +95,8 @@ export function InboxKanbanBoard({ emails, onSelect, selectedId }: InboxKanbanBo
                     email={email}
                     isSelected={selectedId === email.id}
                     onClick={() => onSelect(email)}
+                    isStarred={starredIds.has(email.id)}
+                    onToggleStar={onToggleStar ? () => onToggleStar(email.id) : undefined}
                   />
                 ))}
               </div>
@@ -108,10 +113,14 @@ function KanbanCard({
   email,
   isSelected,
   onClick,
+  isStarred,
+  onToggleStar,
 }: {
   email: InboxEmail & { commType?: "email" | "call" | "sms" };
   isSelected: boolean;
   onClick: () => void;
+  isStarred?: boolean;
+  onToggleStar?: () => void;
 }) {
   const isCall = email.commType === "call";
   const isSms = email.commType === "sms";
@@ -144,6 +153,14 @@ function KanbanCard({
           <p className="text-sm font-medium truncate">{email.sender}</p>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
+          {onToggleStar && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onToggleStar(); }}
+              className="p-0.5 hover:scale-110 transition-transform"
+            >
+              <Star className={cn("w-3 h-3", isStarred ? "fill-amber-400 text-amber-400" : "text-muted-foreground/40")} />
+            </button>
+          )}
           {getTypeBadge(email.commType)}
           <span className="text-[10px] text-muted-foreground whitespace-nowrap">{email.time}</span>
         </div>

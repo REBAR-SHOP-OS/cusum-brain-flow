@@ -95,6 +95,8 @@ function extractEmail(fromAddress: string): string {
 
 const labelFilters = [
   { label: "All", value: "all" },
+  { label: "⭐ Starred", value: "starred" },
+  { label: "Follow-up", value: "follow-up", color: "bg-orange-400" },
   { label: "To Respond", value: "To Respond", color: "bg-red-400" },
   { label: "Urgent", value: "Urgent", color: "bg-red-500" },
   { label: "FYI", value: "FYI", color: "bg-amber-400" },
@@ -128,7 +130,47 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [starredIds, setStarredIds] = useState<Set<string>>(new Set());
+  const [snoozedUntil, setSnoozedUntil] = useState<Map<string, Date>>(new Map());
   const { toast } = useToast();
+
+  // Toggle star
+  const toggleStar = useCallback((id: string) => {
+    setStarredIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  // Snooze handler
+  const handleSnoozeEmail = useCallback((id: string, until: Date) => {
+    setSnoozedUntil((prev) => {
+      const next = new Map(prev);
+      next.set(id, until);
+      return next;
+    });
+  }, []);
+
+  // Un-snooze emails whose time has passed
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = new Date();
+      setSnoozedUntil((prev) => {
+        let changed = false;
+        const next = new Map(prev);
+        for (const [id, until] of next) {
+          if (until <= now) {
+            next.delete(id);
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+    }, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Gmail connection state
   const [gmailStatus, setGmailStatus] = useState<"loading" | "connected" | "not_connected">("loading");
@@ -262,9 +304,25 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
     });
   }, [communications]);
 
+  // Follow-up nudge IDs (emails > 48h old with no outbound reply)
+  const followUpIds = useMemo(() => {
+    const now = Date.now();
+    const _48h = 48 * 60 * 60 * 1000;
+    const ids = new Set<string>();
+    allEmails.forEach((e) => {
+      if (e.label === "To Respond" || e.label === "Urgent") {
+        const received = e.fullDate ? new Date(e.fullDate).getTime() : 0;
+        if (received && now - received > _48h) {
+          ids.add(e.id);
+        }
+      }
+    });
+    return ids;
+  }, [allEmails]);
+
   // Filter + sort
   const emails = useMemo(() => {
-    let filtered = allEmails.filter((e) => !hiddenIds.has(e.id));
+    let filtered = allEmails.filter((e) => !hiddenIds.has(e.id) && !snoozedUntil.has(e.id));
 
     if (search) {
       const q = search.toLowerCase();
@@ -276,7 +334,11 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
       );
     }
 
-    if (activeFilter !== "all") {
+    if (activeFilter === "starred") {
+      filtered = filtered.filter((e) => starredIds.has(e.id));
+    } else if (activeFilter === "follow-up") {
+      filtered = filtered.filter((e) => followUpIds.has(e.id));
+    } else if (activeFilter !== "all") {
       filtered = filtered.filter((e) => e.label === activeFilter);
     }
 
@@ -285,7 +347,7 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
     }
 
     return filtered;
-  }, [allEmails, search, activeFilter, sortByPriority, hiddenIds]);
+  }, [allEmails, search, activeFilter, sortByPriority, hiddenIds, snoozedUntil, starredIds, followUpIds]);
 
   // Label counts
   const labelCounts = useMemo(() => {
@@ -293,8 +355,11 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
     allEmails.forEach((e) => {
       counts[e.label] = (counts[e.label] || 0) + 1;
     });
+    counts["starred"] = starredIds.size;
+    counts["follow-up"] = followUpIds.size;
     return counts;
-  }, [allEmails]);
+  }, [allEmails, starredIds.size, followUpIds.size]);
+
 
   const handleSync = async () => {
     setSyncing(true);
@@ -353,7 +418,45 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
     setSelectionMode(false);
   }, [selectedIds, selectedEmail, toast]);
 
-  // AI Actions handler
+  // ─── Keyboard shortcuts (desktop only) ────────────────────────────
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
+
+      switch (e.key) {
+        case "j": {
+          const idx = emails.findIndex((em) => em.id === selectedEmail?.id);
+          if (idx < emails.length - 1) setSelectedEmail(emails[idx + 1]);
+          break;
+        }
+        case "k": {
+          const idx = emails.findIndex((em) => em.id === selectedEmail?.id);
+          if (idx > 0) setSelectedEmail(emails[idx - 1]);
+          break;
+        }
+        case "e":
+          if (selectedEmail) handleArchiveEmail(selectedEmail.id);
+          break;
+        case "s":
+          if (selectedEmail) toggleStar(selectedEmail.id);
+          break;
+        case "/":
+          e.preventDefault();
+          setShowSearch(true);
+          break;
+        case "Escape":
+          if (selectedEmail) setSelectedEmail(null);
+          else if (showSearch) { setSearch(""); setShowSearch(false); }
+          break;
+      }
+    };
+
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [emails, selectedEmail, handleArchiveEmail, toggleStar, showSearch]);
+
+
   const handleAIAction = async (action: AIAction) => {
     switch (action) {
       case "summarize": {
@@ -599,7 +702,14 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
           </div>
         )}
 
-        {/* ─── Main content area ─── */}
+        {/* Snoozed items banner */}
+        {snoozedUntil.size > 0 && (
+          <div className="flex items-center justify-between px-3 py-1.5 bg-primary/5 border-b text-xs shrink-0">
+            <span className="text-muted-foreground">{snoozedUntil.size} email(s) snoozed</span>
+            <Button variant="ghost" size="sm" className="text-xs h-6" onClick={() => setSnoozedUntil(new Map())}>Show all</Button>
+          </div>
+        )}
+
         {viewMode === "kanban" ? (
           selectedEmail ? (
             <InboxDetailView email={selectedEmail} onClose={() => setSelectedEmail(null)} />
@@ -633,9 +743,11 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
               </div>
               <div className="flex-1 flex overflow-hidden">
                 <InboxKanbanBoard
-                  emails={allEmails.filter((e) => !hiddenIds.has(e.id) && (kanbanTypeFilter === "all" || e.commType === kanbanTypeFilter))}
+                  emails={allEmails.filter((e) => !hiddenIds.has(e.id) && !snoozedUntil.has(e.id) && (kanbanTypeFilter === "all" || e.commType === kanbanTypeFilter))}
                   onSelect={setSelectedEmail}
                   selectedId={selectedEmail?.id ?? null}
+                  starredIds={starredIds}
+                  onToggleStar={toggleStar}
                 />
               </div>
             </div>
@@ -685,6 +797,8 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
                 onToggleSelect={toggleSelectId}
                 onDelete={handleDeleteEmail}
                 onArchive={handleArchiveEmail}
+                starredIds={starredIds}
+                onToggleStar={toggleStar}
               />
             </div>
 

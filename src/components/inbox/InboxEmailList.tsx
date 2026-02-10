@@ -1,3 +1,4 @@
+import { Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { SwipeableEmailItem } from "./SwipeableEmailItem";
@@ -28,6 +29,8 @@ interface InboxEmailListProps {
   onToggleSelect?: (id: string) => void;
   onDelete?: (id: string) => void;
   onArchive?: (id: string) => void;
+  starredIds?: Set<string>;
+  onToggleStar?: (id: string) => void;
 }
 
 export function InboxEmailList({
@@ -39,6 +42,8 @@ export function InboxEmailList({
   onToggleSelect,
   onDelete,
   onArchive,
+  starredIds = new Set(),
+  onToggleStar,
 }: InboxEmailListProps) {
   return (
     <div className="flex-1 overflow-y-auto">
@@ -91,7 +96,28 @@ export function InboxEmailList({
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-2 mb-1">
                   <span className="font-medium truncate">{email.sender}</span>
-                  <span className="text-xs text-muted-foreground whitespace-nowrap">{email.time}</span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {/* Star icon */}
+                    {onToggleStar && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onToggleStar(email.id);
+                        }}
+                        className="p-0.5 hover:scale-110 transition-transform"
+                      >
+                        <Star
+                          className={cn(
+                            "w-3.5 h-3.5 transition-colors",
+                            starredIds.has(email.id)
+                              ? "fill-amber-400 text-amber-400"
+                              : "text-muted-foreground/40 hover:text-muted-foreground"
+                          )}
+                        />
+                      </button>
+                    )}
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">{email.time}</span>
+                  </div>
                 </div>
                 <p className="text-sm font-medium mb-1 truncate">{email.subject}</p>
                 <p className="text-sm text-muted-foreground truncate">{email.preview}</p>
