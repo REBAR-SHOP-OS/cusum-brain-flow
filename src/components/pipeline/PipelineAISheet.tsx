@@ -55,6 +55,8 @@ const GAUGE_ACTIONS = [
 function buildPipelineStats(leads: LeadWithCustomer[]) {
   const byStage: Record<string, number> = {};
   const bySalesperson: Record<string, { total: number; stale: number; value: number }> = {};
+  const unassignedLeads: { title: string; stage: string; value: number; days: number }[] = [];
+  const staleLeadsList: { title: string; stage: string; salesperson: string; daysSinceUpdate: number }[] = [];
   let staleCount = 0;
   let totalValue = 0;
   let weightedValue = 0;
@@ -73,13 +75,23 @@ function buildPipelineStats(leads: LeadWithCustomer[]) {
     bySalesperson[sp].value += value;
 
     const daysSince = differenceInDays(new Date(), new Date(lead.updated_at));
+
+    if (sp === "Unassigned") {
+      unassignedLeads.push({ title: lead.title, stage: lead.stage, value, days: daysSince });
+    }
+
     if (daysSince >= 5 && lead.stage !== "won" && lead.stage !== "lost") {
       staleCount++;
       bySalesperson[sp].stale += 1;
+      staleLeadsList.push({ title: lead.title, stage: lead.stage, salesperson: sp, daysSinceUpdate: daysSince });
     }
   });
 
-  return { total: leads.length, byStage, bySalesperson, staleCount, totalValue, weightedValue };
+  return {
+    total: leads.length, byStage, bySalesperson, staleCount, totalValue, weightedValue,
+    unassignedLeads: unassignedLeads.slice(0, 200),
+    staleLeadsList: staleLeadsList.slice(0, 200),
+  };
 }
 
 export function PipelineAISheet({ open, onOpenChange, leads }: PipelineAISheetProps) {
