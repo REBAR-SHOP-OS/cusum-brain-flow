@@ -33,6 +33,7 @@ import {
   Phone,
   MonitorUp,
 } from "lucide-react";
+import { ContentActions } from "@/components/shared/ContentActions";
 import { format, isToday, isYesterday, isSameDay } from "date-fns";
 import type { TeamMessage } from "@/hooks/useTeamChat";
 import type { Profile } from "@/hooks/useProfiles";
@@ -426,6 +427,7 @@ export function MessageThread({
                         <Button variant="ghost" size="icon" className="h-6 w-6">
                           <MessageSquare className="w-3.5 h-3.5 text-muted-foreground" />
                         </Button>
+                        <ContentActions content={msg.original_text} size="xs" source="teamhub" sourceRef={msg.id} />
                         <Button variant="ghost" size="icon" className="h-6 w-6">
                           <MoreHorizontal className="w-3.5 h-3.5 text-muted-foreground" />
                         </Button>

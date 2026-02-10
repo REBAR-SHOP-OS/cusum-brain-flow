@@ -7,6 +7,7 @@ import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { useAdminChat } from "@/hooks/useAdminChat";
 import { cn } from "@/lib/utils";
 import { RichMarkdown } from "@/components/chat/RichMarkdown";
+import { ContentActions } from "@/components/shared/ContentActions";
 
 export function IntelligencePanel() {
   const { intelligencePanelOpen, setIntelligencePanelOpen } = useWorkspace();
@@ -90,6 +91,9 @@ export function IntelligencePanel() {
               <p className="text-[9px] opacity-50 mt-1">
                 {msg.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
               </p>
+              {msg.role === "assistant" && (
+                <ContentActions content={msg.content} size="xs" source="admin-console" className="mt-1" />
+              )}
             </div>
           ))}
 
