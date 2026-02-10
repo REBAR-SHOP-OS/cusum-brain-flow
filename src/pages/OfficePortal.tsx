@@ -4,7 +4,7 @@ import { Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { OfficeSidebar, OfficeSection } from "@/components/office/OfficeSidebar";
-import { CEODashboardView } from "@/components/office/CEODashboardView";
+import { AIExtractView as FallbackView } from "@/components/office/AIExtractView";
 import { AIExtractView } from "@/components/office/AIExtractView";
 import { DetailedListView } from "@/components/office/DetailedListView";
 import { ProductionQueueView } from "@/components/office/ProductionQueueView";
@@ -18,7 +18,7 @@ import { DiagnosticLogView } from "@/components/office/DiagnosticLogView";
 import { MemberAreaView } from "@/components/office/MemberAreaView";
 
 const sectionComponents: Record<OfficeSection, React.ComponentType> = {
-  "ceo-dashboard": CEODashboardView,
+  "ceo-dashboard": FallbackView,
   "ai-extract": AIExtractView,
   "detailed-list": DetailedListView,
   "production-queue": ProductionQueueView,
@@ -34,7 +34,8 @@ const sectionComponents: Record<OfficeSection, React.ComponentType> = {
 
 export default function OfficePortal() {
   const location = useLocation();
-  const initialSection = (location.state as any)?.section || "ai-extract";
+  const rawSection = (location.state as any)?.section || "ai-extract";
+  const initialSection = rawSection === "ceo-dashboard" ? "ai-extract" : rawSection;
   const [activeSection, setActiveSection] = useState<OfficeSection>(initialSection);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
