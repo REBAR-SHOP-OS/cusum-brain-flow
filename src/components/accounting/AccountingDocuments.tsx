@@ -3,12 +3,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { FileText, Package, Calculator, ClipboardList, Eye, Printer } from "lucide-react";
+import { FileText, Package, Calculator, ClipboardList, Eye, Loader2, RefreshCw } from "lucide-react";
 import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
 import { InvoiceTemplate } from "./documents/InvoiceTemplate";
 import { PackingSlipTemplate } from "./documents/PackingSlipTemplate";
 import { QuotationTemplate } from "./documents/QuotationTemplate";
 import { EstimationTemplate } from "./documents/EstimationTemplate";
+import { useOdooQuotations } from "@/hooks/useOdooQuotations";
 
 interface Props {
   data: ReturnType<typeof useQuickBooksData>;
@@ -19,10 +20,18 @@ type DocType = "invoice" | "packing-slip" | "quotation" | "estimation";
 const fmt = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
 
+const STATUS_BADGE_COLORS: Record<string, string> = {
+  "Draft Quotation": "bg-blue-500/10 text-blue-600 border-blue-200",
+  "Quotation Sent": "bg-violet-500/10 text-violet-600 border-violet-200",
+  "Sales Order": "bg-emerald-500/10 text-emerald-600 border-emerald-200",
+  "Cancelled": "bg-zinc-500/10 text-zinc-500 border-zinc-200",
+};
+
 export function AccountingDocuments({ data }: Props) {
-  const [activeDoc, setActiveDoc] = useState<DocType>("invoice");
+  const [activeDoc, setActiveDoc] = useState<DocType>("quotation");
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [previewType, setPreviewType] = useState<DocType | null>(null);
+  const { quotations, isLoading: quotationsLoading, isSyncing, syncQuotations } = useOdooQuotations();
 
   const openPreview = (type: DocType, id: string) => {
     setPreviewType(type);
@@ -125,7 +134,7 @@ export function AccountingDocuments({ data }: Props) {
   const docTabs = [
     { id: "invoice" as DocType, label: "Invoices", icon: FileText, count: data.invoices.length },
     { id: "packing-slip" as DocType, label: "Packing Slips", icon: Package, count: data.invoices.length },
-    { id: "quotation" as DocType, label: "Quotations", icon: ClipboardList, count: data.estimates.length },
+    { id: "quotation" as DocType, label: "Quotations", icon: ClipboardList, count: quotations.length || data.estimates.length },
     { id: "estimation" as DocType, label: "Estimations", icon: Calculator, count: data.estimates.length },
   ];
 
@@ -147,6 +156,17 @@ export function AccountingDocuments({ data }: Props) {
           </Button>
         ))}
       </div>
+
+      {/* Sync button for quotations */}
+      {activeDoc === "quotation" && (
+        <div className="flex items-center gap-2">
+          <Button onClick={syncQuotations} size="sm" variant="outline" disabled={isSyncing} className="gap-2">
+            {isSyncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+            Sync Odoo Quotations
+          </Button>
+          {quotationsLoading && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+        </div>
+      )}
 
       {/* Document list */}
       <ScrollArea className="h-[calc(100vh-280px)]">
@@ -178,12 +198,34 @@ export function AccountingDocuments({ data }: Props) {
             </Card>
           ))}
 
-          {(activeDoc === "quotation" || activeDoc === "estimation") && data.estimates.map((est) => (
-            <Card key={`${activeDoc}-${est.Id}`} className="hover:ring-2 hover:ring-primary/20 transition-all">
+          {activeDoc === "quotation" && quotations.length > 0 && quotations.map((q) => (
+            <Card key={q.id} className="hover:ring-2 hover:ring-primary/20 transition-all">
               <CardContent className="p-4 flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <div className="p-2 rounded-lg bg-primary/10">
-                    {activeDoc === "quotation" ? <ClipboardList className="w-5 h-5 text-primary" /> : <Calculator className="w-5 h-5 text-primary" />}
+                    <ClipboardList className="w-5 h-5 text-primary" />
+                  </div>
+                  <div>
+                    <p className="font-semibold">{q.quote_number} — {(q.metadata as Record<string, unknown>)?.odoo_customer as string || "Unknown"}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {new Date(q.created_at).toLocaleDateString()} · {fmt(Number(q.total_amount) || 0)}
+                      {q.salesperson && <span className="ml-2 text-muted-foreground">· {q.salesperson}</span>}
+                    </p>
+                  </div>
+                </div>
+                <Badge variant="outline" className={`text-xs ${STATUS_BADGE_COLORS[q.odoo_status || ""] || ""}`}>
+                  {q.odoo_status || q.status}
+                </Badge>
+              </CardContent>
+            </Card>
+          ))}
+
+          {activeDoc === "quotation" && quotations.length === 0 && data.estimates.map((est) => (
+            <Card key={`quotation-${est.Id}`} className="hover:ring-2 hover:ring-primary/20 transition-all">
+              <CardContent className="p-4 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="p-2 rounded-lg bg-primary/10">
+                    <ClipboardList className="w-5 h-5 text-primary" />
                   </div>
                   <div>
                     <p className="font-semibold">#{est.DocNumber} — {est.CustomerRef?.name}</p>
@@ -193,12 +235,29 @@ export function AccountingDocuments({ data }: Props) {
                     </p>
                   </div>
                 </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="gap-1.5"
-                  onClick={() => openPreview(activeDoc, est.Id)}
-                >
+                <Button size="sm" variant="outline" className="gap-1.5" onClick={() => openPreview("quotation", est.Id)}>
+                  <Eye className="w-3.5 h-3.5" /> View
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+
+          {activeDoc === "estimation" && data.estimates.map((est) => (
+            <Card key={`estimation-${est.Id}`} className="hover:ring-2 hover:ring-primary/20 transition-all">
+              <CardContent className="p-4 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="p-2 rounded-lg bg-primary/10">
+                    <Calculator className="w-5 h-5 text-primary" />
+                  </div>
+                  <div>
+                    <p className="font-semibold">#{est.DocNumber} — {est.CustomerRef?.name}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {new Date(est.TxnDate).toLocaleDateString()} · {fmt(est.TotalAmt)}
+                      <Badge variant="outline" className="ml-2 text-xs">{est.TxnStatus}</Badge>
+                    </p>
+                  </div>
+                </div>
+                <Button size="sm" variant="outline" className="gap-1.5" onClick={() => openPreview("estimation", est.Id)}>
                   <Eye className="w-3.5 h-3.5" /> View
                 </Button>
               </CardContent>
@@ -208,7 +267,10 @@ export function AccountingDocuments({ data }: Props) {
           {((activeDoc === "invoice" || activeDoc === "packing-slip") && data.invoices.length === 0) && (
             <p className="text-center text-muted-foreground py-12">No invoices found. Sync from QuickBooks first.</p>
           )}
-          {((activeDoc === "quotation" || activeDoc === "estimation") && data.estimates.length === 0) && (
+          {activeDoc === "quotation" && quotations.length === 0 && data.estimates.length === 0 && (
+            <p className="text-center text-muted-foreground py-12">No quotations found. Click "Sync Odoo Quotations" to import.</p>
+          )}
+          {activeDoc === "estimation" && data.estimates.length === 0 && (
             <p className="text-center text-muted-foreground py-12">No estimates found. Sync from QuickBooks first.</p>
           )}
         </div>

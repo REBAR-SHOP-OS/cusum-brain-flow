@@ -2763,42 +2763,60 @@ export type Database = {
       }
       quotes: {
         Row: {
+          company_id: string | null
           contact_id: string | null
           created_at: string
           created_by: string | null
-          customer_id: string
+          customer_id: string | null
           id: string
           margin_percent: number | null
+          metadata: Json | null
           notes: string | null
+          odoo_id: number | null
+          odoo_status: string | null
           quote_number: string
+          salesperson: string | null
+          source: string | null
           status: string | null
           total_amount: number | null
           updated_at: string
           valid_until: string | null
         }
         Insert: {
+          company_id?: string | null
           contact_id?: string | null
           created_at?: string
           created_by?: string | null
-          customer_id: string
+          customer_id?: string | null
           id?: string
           margin_percent?: number | null
+          metadata?: Json | null
           notes?: string | null
+          odoo_id?: number | null
+          odoo_status?: string | null
           quote_number: string
+          salesperson?: string | null
+          source?: string | null
           status?: string | null
           total_amount?: number | null
           updated_at?: string
           valid_until?: string | null
         }
         Update: {
+          company_id?: string | null
           contact_id?: string | null
           created_at?: string
           created_by?: string | null
-          customer_id?: string
+          customer_id?: string | null
           id?: string
           margin_percent?: number | null
+          metadata?: Json | null
           notes?: string | null
+          odoo_id?: number | null
+          odoo_status?: string | null
           quote_number?: string
+          salesperson?: string | null
+          source?: string | null
           status?: string | null
           total_amount?: number | null
           updated_at?: string
