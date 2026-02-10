@@ -333,7 +333,7 @@ RULES:
                   <img src={agentAvatar} alt={agentName} className="w-7 h-7 rounded-lg object-cover shrink-0 mt-1" />
                 )}
                 <div className={cn(
-                  "rounded-xl px-3 py-2 text-sm overflow-x-auto",
+                  "rounded-xl px-3 py-2 text-sm overflow-hidden break-words",
                   msg.role === "user"
                     ? "max-w-[85%] bg-primary text-primary-foreground"
                     : "max-w-[90%] bg-muted"
