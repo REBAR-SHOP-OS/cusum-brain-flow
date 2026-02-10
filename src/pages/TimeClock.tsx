@@ -253,17 +253,21 @@ export default function TimeClock() {
         </div>
       </header>
 
+      {/* Face Enrollment - always visible */}
+      <div className="relative z-10 w-full max-w-4xl px-6 pt-4">
+        <div className="flex items-center justify-between">
+          <FaceEnrollment existingCount={enrollmentCount} onComplete={fetchEnrollmentCount} />
+          {enrollmentCount > 0 && (
+            <Badge variant="secondary" className="text-xs">
+              {enrollmentCount} photo{enrollmentCount !== 1 ? "s" : ""} enrolled
+            </Badge>
+          )}
+        </div>
+      </div>
+
       {/* Face Mode */}
       {faceMode ? (
         <div className="relative z-10 w-full max-w-4xl px-6 py-4 space-y-4">
-          <div className="flex items-center justify-between">
-            <FaceEnrollment existingCount={enrollmentCount} onComplete={fetchEnrollmentCount} />
-            {enrollmentCount > 0 && (
-              <Badge variant="secondary" className="text-xs">
-                {enrollmentCount} photo{enrollmentCount !== 1 ? "s" : ""} enrolled
-              </Badge>
-            )}
-          </div>
 
           <FaceCamera
             videoRef={face.videoRef as any}
