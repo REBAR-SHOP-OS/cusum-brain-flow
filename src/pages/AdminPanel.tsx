@@ -21,7 +21,7 @@ import { useUserRole } from "@/hooks/useUserRole";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CEODashboardView } from "@/components/office/CEODashboardView";
 
-const CEO_PIN = "7671";
+const ADMIN_PIN = "7671";
 
 const departments = [
   { value: "admin", label: "Administration" },
@@ -56,15 +56,15 @@ export default function AdminPanel() {
   const [showAdd, setShowAdd] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("employees");
-  const [ceoUnlocked, setCeoUnlocked] = useState(false);
+  const [panelUnlocked, setPanelUnlocked] = useState(false);
   const [pinValue, setPinValue] = useState("");
   const [pinError, setPinError] = useState(false);
 
   // Check PIN on complete
   useEffect(() => {
     if (pinValue.length === 4) {
-      if (pinValue === CEO_PIN) {
-        setCeoUnlocked(true);
+      if (pinValue === ADMIN_PIN) {
+        setPanelUnlocked(true);
         setPinError(false);
       } else {
         setPinError(true);
@@ -97,6 +97,33 @@ export default function AdminPanel() {
     );
   }
 
+  if (!panelUnlocked) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center space-y-6">
+          <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
+            <Lock className="w-10 h-10 text-primary" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold mb-1">Admin Panel Locked</h2>
+            <p className="text-sm text-muted-foreground">Enter the 4-digit PIN to access</p>
+          </div>
+          <div className="flex justify-center">
+            <InputOTP maxLength={4} value={pinValue} onChange={setPinValue}>
+              <InputOTPGroup>
+                <InputOTPSlot index={0} className={pinError ? "border-destructive" : ""} />
+                <InputOTPSlot index={1} className={pinError ? "border-destructive" : ""} />
+                <InputOTPSlot index={2} className={pinError ? "border-destructive" : ""} />
+                <InputOTPSlot index={3} className={pinError ? "border-destructive" : ""} />
+              </InputOTPGroup>
+            </InputOTP>
+          </div>
+          {pinError && <p className="text-xs text-destructive">Incorrect PIN</p>}
+        </div>
+      </div>
+    );
+  }
+
   const getSalary = (profileId: string) => salaries.find((s) => s.profile_id === profileId);
 
   const handleDelete = async (id: string) => {
@@ -116,7 +143,6 @@ export default function AdminPanel() {
           <TabsTrigger value="ceo-dashboard" className="gap-1.5 text-xs">
             <Activity className="w-3.5 h-3.5" />
             CEO Dashboard
-            {!ceoUnlocked && <Lock className="w-3 h-3 ml-0.5 text-muted-foreground" />}
           </TabsTrigger>
         </TabsList>
       </div>
@@ -257,34 +283,9 @@ export default function AdminPanel() {
       </TabsContent>
 
       <TabsContent value="ceo-dashboard" className="flex-1 mt-0 overflow-hidden">
-        {ceoUnlocked ? (
-          <ScrollArea className="h-full">
-            <CEODashboardView />
-          </ScrollArea>
-        ) : (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center space-y-6">
-              <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
-                <Lock className="w-10 h-10 text-primary" />
-              </div>
-              <div>
-                <h2 className="text-xl font-bold mb-1">CEO Dashboard Locked</h2>
-                <p className="text-sm text-muted-foreground">Enter the 4-digit PIN to access</p>
-              </div>
-              <div className="flex justify-center">
-                <InputOTP maxLength={4} value={pinValue} onChange={setPinValue}>
-                  <InputOTPGroup>
-                    <InputOTPSlot index={0} className={pinError ? "border-destructive" : ""} />
-                    <InputOTPSlot index={1} className={pinError ? "border-destructive" : ""} />
-                    <InputOTPSlot index={2} className={pinError ? "border-destructive" : ""} />
-                    <InputOTPSlot index={3} className={pinError ? "border-destructive" : ""} />
-                  </InputOTPGroup>
-                </InputOTP>
-              </div>
-              {pinError && <p className="text-xs text-destructive">Incorrect PIN</p>}
-            </div>
-          </div>
-        )}
+        <ScrollArea className="h-full">
+          <CEODashboardView />
+        </ScrollArea>
       </TabsContent>
     </Tabs>
   );
