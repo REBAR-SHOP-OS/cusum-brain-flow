@@ -196,23 +196,21 @@ export default function Home() {
         {/* Workspaces Section */}
         <div className="relative z-10 w-full mb-12">
           <h2 className="text-lg font-semibold mb-4">Workspaces</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-3 gap-3">
             {[
-              { label: "CEO Portal", icon: Crown, route: "/ceo", gradient: "from-amber-500 via-orange-500 to-yellow-600" },
-              { label: "Time Clock", icon: Clock, route: "/timeclock", gradient: "from-teal-500 via-emerald-500 to-cyan-500" },
-              { label: "Team Hub", icon: MessageSquare, route: "/team-hub", gradient: "from-indigo-500 via-purple-500 to-violet-500" },
+              { label: "CEO Portal", icon: Crown, route: "/ceo", gradient: "from-amber-500 via-orange-500 to-yellow-600", emoji: "👑" },
+              { label: "Time Clock", icon: Clock, route: "/timeclock", gradient: "from-teal-500 via-emerald-500 to-cyan-500", emoji: "⏱" },
+              { label: "Team Hub", icon: MessageSquare, route: "/team-hub", gradient: "from-indigo-500 via-purple-500 to-violet-500", emoji: "💬" },
             ].map((ws) => (
               <div
                 key={ws.label}
-                className={`relative overflow-hidden rounded-2xl p-5 text-white cursor-pointer transition-transform hover:scale-[1.02] bg-gradient-to-br ${ws.gradient} flex items-center gap-4`}
+                className={`relative overflow-hidden rounded-xl p-3 sm:p-4 text-white cursor-pointer transition-all hover:scale-[1.03] active:scale-[0.98] bg-gradient-to-br ${ws.gradient} flex flex-col items-center gap-1.5 sm:flex-row sm:gap-3`}
                 onClick={() => navigate(ws.route)}
               >
-                <span className="relative z-10 font-bold text-lg">{ws.label}</span>
-                <ChevronRight className="w-5 h-5 text-white/70 ml-auto relative z-10" />
-                <div className="absolute right-3 bottom-3 opacity-20">
-                  <ws.icon className="w-16 h-16" strokeWidth={1} />
-                </div>
-                <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent pointer-events-none" />
+                <span className="text-2xl sm:text-xl">{ws.emoji}</span>
+                <span className="relative z-10 font-bold text-xs sm:text-base text-center sm:text-left leading-tight">{ws.label}</span>
+                <ChevronRight className="w-4 h-4 text-white/60 hidden sm:block ml-auto relative z-10" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/15 to-transparent pointer-events-none" />
               </div>
             ))}
           </div>
