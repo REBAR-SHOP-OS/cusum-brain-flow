@@ -481,8 +481,27 @@ export function useIntegrations() {
         return;
       }
 
-      // RingCentral
+      // RingCentral — try JWT connect first, fall back to OAuth
       if (integrationId === "ringcentral") {
+        try {
+          const { data: jwtResult, error: jwtError } = await supabase.functions.invoke(
+            "ringcentral-oauth",
+            { body: { action: "connect-jwt" } }
+          );
+          if (!jwtError && jwtResult?.status === "connected") {
+            setIntegrations((prev) =>
+              prev.map((i) =>
+                i.id === "ringcentral"
+                  ? { ...i, status: "connected" as const, error: undefined, lastSync: new Date().toLocaleTimeString() }
+                  : i
+              )
+            );
+            toast({ title: "RingCentral connected", description: `Connected as ${jwtResult.email || "verified"}` });
+            return;
+          }
+        } catch {
+          // JWT connect not available, fall back to OAuth
+        }
         const { data, error } = await supabase.functions.invoke(
           "ringcentral-oauth",
           { body: { action: "get-auth-url" } }
