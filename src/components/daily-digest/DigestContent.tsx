@@ -1,4 +1,4 @@
-import { ThumbsUp, ThumbsDown, Calendar, Mail, Lightbulb, Sparkles, Video, Phone, TrendingUp, Zap } from "lucide-react";
+import { ThumbsUp, ThumbsDown, Calendar, Mail, Lightbulb, Sparkles, Video, Phone, TrendingUp, Zap, DollarSign, BarChart3, AlertTriangle, Share2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -11,11 +11,11 @@ interface DigestContentProps {
   currentDate: Date;
 }
 
-function StatPill({ label, value }: { label: string; value: number }) {
+function StatPill({ label, value, accent }: { label: string; value: number; accent?: boolean }) {
   const hasActivity = value > 0;
   return (
-    <div className={`flex flex-col items-center gap-0.5 rounded-xl px-3 py-2.5 transition-colors ${hasActivity ? "bg-primary/10" : "bg-muted/40"}`}>
-      <span className={`text-xl font-bold tabular-nums ${hasActivity ? "text-primary" : "text-muted-foreground/60"}`}>
+    <div className={`flex flex-col items-center gap-0.5 rounded-xl px-3 py-2.5 transition-colors ${accent && hasActivity ? "bg-destructive/10" : hasActivity ? "bg-primary/10" : "bg-muted/40"}`}>
+      <span className={`text-xl font-bold tabular-nums ${accent && hasActivity ? "text-destructive" : hasActivity ? "text-primary" : "text-muted-foreground/60"}`}>
         {value}
       </span>
       <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">{label}</span>
@@ -39,7 +39,7 @@ export function DigestContent({ digest, stats, currentDate }: DigestContentProps
 
       {/* Stats Grid */}
       {stats && (
-        <div className="grid grid-cols-4 md:grid-cols-8 gap-1.5">
+        <div className="grid grid-cols-4 md:grid-cols-6 gap-1.5">
           <StatPill label="Emails" value={stats.emails} />
           <StatPill label="Tasks" value={stats.tasks} />
           <StatPill label="Leads" value={stats.leads} />
@@ -48,6 +48,10 @@ export function DigestContent({ digest, stats, currentDate }: DigestContentProps
           <StatPill label="Delivery" value={stats.deliveries} />
           <StatPill label="Meets" value={stats.meetings ?? 0} />
           <StatPill label="Calls" value={stats.phoneCalls ?? 0} />
+          <StatPill label="Invoices" value={stats.invoices ?? 0} />
+          <StatPill label="Overdue" value={stats.overdueInvoices ?? 0} accent />
+          <StatPill label="Posts" value={stats.socialPosts ?? 0} />
+          <StatPill label="Pipeline" value={stats.leads} />
         </div>
       )}
 
@@ -78,6 +82,87 @@ export function DigestContent({ digest, stats, currentDate }: DigestContentProps
           </ol>
         </CardContent>
       </Card>
+
+      {/* Financial Snapshot */}
+      {digest.financialSnapshot && (
+        <Card className="border-border/50">
+          <CardHeader className="pb-2 pt-4 px-5">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2 uppercase tracking-wider text-muted-foreground">
+              <DollarSign className="w-4 h-4 text-emerald-500" />
+              Financial Snapshot
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-5 pb-4 space-y-3">
+            <div className="grid grid-cols-3 gap-2">
+              <div className="bg-muted/30 rounded-lg p-3 text-center">
+                <p className="text-lg font-bold text-foreground tabular-nums">{digest.financialSnapshot.totalAR}</p>
+                <p className="text-[10px] text-muted-foreground uppercase">A/R Balance</p>
+              </div>
+              <div className={`rounded-lg p-3 text-center ${Number(digest.financialSnapshot.overdueCount) > 0 ? "bg-destructive/10" : "bg-muted/30"}`}>
+                <p className={`text-lg font-bold tabular-nums ${Number(digest.financialSnapshot.overdueCount) > 0 ? "text-destructive" : "text-foreground"}`}>
+                  {digest.financialSnapshot.overdueCount}
+                </p>
+                <p className="text-[10px] text-muted-foreground uppercase">Overdue</p>
+              </div>
+              <div className="bg-muted/30 rounded-lg p-3 text-center">
+                <p className="text-lg font-bold text-foreground tabular-nums">{digest.financialSnapshot.overdueAmount}</p>
+                <p className="text-[10px] text-muted-foreground uppercase">Overdue Amt</p>
+              </div>
+            </div>
+            {digest.financialSnapshot.highlights.map((h, i) => (
+              <div key={i} className="flex items-start gap-2">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-500 mt-0.5 shrink-0" />
+                <p className="text-xs text-foreground/80">{h}</p>
+              </div>
+            ))}
+            {digest.financialSnapshot.cashFlowNote && (
+              <p className="text-xs text-muted-foreground italic border-l-2 border-emerald-500/30 pl-3">{digest.financialSnapshot.cashFlowNote}</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Social Media Digest */}
+      {digest.socialMediaDigest && (
+        <Card className="border-border/50">
+          <CardHeader className="pb-2 pt-4 px-5">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2 uppercase tracking-wider text-muted-foreground">
+              <Share2 className="w-4 h-4 text-blue-500" />
+              Social Media (7-day)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-5 pb-4 space-y-3">
+            <div className="grid grid-cols-3 gap-2">
+              <div className="bg-muted/30 rounded-lg p-3 text-center">
+                <p className="text-lg font-bold text-foreground tabular-nums">{digest.socialMediaDigest.totalReach}</p>
+                <p className="text-[10px] text-muted-foreground uppercase">Reach</p>
+              </div>
+              <div className="bg-muted/30 rounded-lg p-3 text-center">
+                <p className="text-lg font-bold text-foreground tabular-nums">{digest.socialMediaDigest.totalEngagement}</p>
+                <p className="text-[10px] text-muted-foreground uppercase">Engagement</p>
+              </div>
+              <div className="bg-primary/10 rounded-lg p-3 text-center">
+                <p className="text-sm font-bold text-primary capitalize">{digest.socialMediaDigest.topPlatform}</p>
+                <p className="text-[10px] text-muted-foreground uppercase">Top Platform</p>
+              </div>
+            </div>
+            {digest.socialMediaDigest.highlights.map((h, i) => (
+              <div key={i} className="flex items-start gap-2">
+                <BarChart3 className="w-3.5 h-3.5 text-blue-500 mt-0.5 shrink-0" />
+                <p className="text-xs text-foreground/80">{h}</p>
+              </div>
+            ))}
+            {digest.socialMediaDigest.recommendations.length > 0 && (
+              <div className="border-l-2 border-blue-500/30 pl-3 space-y-1">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase">Recommendations</p>
+                {digest.socialMediaDigest.recommendations.map((r, i) => (
+                  <p key={i} className="text-xs text-muted-foreground">⚡ {r}</p>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Emails Section */}
       {digest.emailCategories && digest.emailCategories.length > 0 && (
