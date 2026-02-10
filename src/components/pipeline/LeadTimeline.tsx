@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -331,6 +331,8 @@ export function LeadTimeline({ lead }: LeadTimelineProps) {
                 }
               };
 
+              const isImage = f.mime_type?.startsWith("image/") && !f.mime_type?.includes("dwg");
+
               return (
                 <div key={`file-${f.id}`}>
                   {showDateSep && (
@@ -342,17 +344,22 @@ export function LeadTimeline({ lead }: LeadTimelineProps) {
                     </div>
                   )}
                   <div className="flex gap-3 py-1 pl-11">
-                    <button
-                      onClick={handleDownload}
-                      className="flex items-center gap-2 px-3 py-2 rounded-md border border-border bg-secondary/50 hover:bg-secondary transition-colors group max-w-[300px] text-left"
-                    >
-                      <FileIcon className={cn("w-5 h-5 shrink-0", iconColor)} />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium truncate">{f.file_name}</p>
-                        <p className="text-[10px] text-muted-foreground">{ext}</p>
-                      </div>
-                      <Download className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 shrink-0" />
-                    </button>
+                    <div className="space-y-1.5 max-w-[320px]">
+                      {isImage && isOdooFile && (
+                        <OdooImagePreview odooId={f.odoo_id!} fileName={f.file_name || "image"} />
+                      )}
+                      <button
+                        onClick={handleDownload}
+                        className="flex items-center gap-2 px-3 py-2 rounded-md border border-border bg-secondary/50 hover:bg-secondary transition-colors group w-full text-left"
+                      >
+                        <FileIcon className={cn("w-5 h-5 shrink-0", iconColor)} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium truncate">{f.file_name}</p>
+                          <p className="text-[10px] text-muted-foreground">{ext}</p>
+                        </div>
+                        <Download className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 shrink-0" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -408,6 +415,45 @@ export function LeadTimeline({ lead }: LeadTimelineProps) {
         </div>
       )}
     </div>
+  );
+}
+
+// Inline image preview for Odoo attachments
+function OdooImagePreview({ odooId, fileName }: { odooId: string | number; fileName: string }) {
+  const [src, setSrc] = useState<string | null>(null);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData.session?.access_token;
+        if (!token) return;
+        const proxyUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/odoo-file-proxy?id=${odooId}`;
+        const res = await fetch(proxyUrl, { headers: { Authorization: `Bearer ${token}` } });
+        if (!res.ok) throw new Error("fetch failed");
+        const blob = await res.blob();
+        if (!cancelled) setSrc(URL.createObjectURL(blob));
+      } catch {
+        if (!cancelled) setError(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [odooId]);
+
+  if (error || !src) {
+    if (error) return null; // silently skip broken images
+    return <div className="w-full h-24 rounded-md bg-muted animate-pulse" />;
+  }
+
+  return (
+    <img
+      src={src}
+      alt={fileName}
+      className="rounded-md border border-border max-h-48 w-auto object-contain bg-muted"
+      loading="lazy"
+    />
   );
 }
 
