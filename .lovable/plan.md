@@ -1,24 +1,36 @@
 
 
-## Make Workspace Icons More Graphical
+## Restyle Workspace Cards to Match Automations Style
 
 ### What Changes
 
-**File: `src/pages/Home.tsx`** (lines 196-220)
+**File: `src/pages/Home.tsx`** (Workspaces section, lines 196-220)
 
-Upgrade the icon containers in the Workspaces section from plain `bg-primary/10` squares to visually rich, gradient-backed containers with larger icons and subtle glow effects:
+Replace the current plain dark cards with colorful gradient cards similar to the Automations section, but with a different feel (smaller, no switch, horizontal layout).
 
-- **CEO Command**: Gold/amber gradient background (`from-amber-500/20 to-yellow-500/10`), amber-tinted icon
-- **Time Clock**: Teal/cyan gradient background (`from-teal-500/20 to-cyan-500/10`), teal-tinted icon  
-- **Team Hub**: Purple/indigo gradient background (`from-purple-500/20 to-indigo-500/10`), purple-tinted icon
+Each card gets:
+- A full gradient background (like the Automation cards)
+- A large decorative icon in the bottom-right at low opacity
+- White text on the gradient
+- Hover scale effect
 
-Each icon container will be slightly larger (`p-3` instead of `p-2.5`) with a subtle border ring (`ring-1 ring-white/10`) and the icons bumped to `w-6 h-6` for better presence.
+Color scheme (distinct from Automations):
+- **CEO Command**: Amber-to-orange gradient, Crown decorative icon
+- **Time Clock**: Teal-to-emerald gradient, Clock decorative icon
+- **Team Hub**: Indigo-to-purple gradient, MessageSquare decorative icon
 
 ### Technical Details
 
-Update the inline workspace array to include per-card color classes, then apply them to the icon wrapper div. Only the className strings change -- no new components, files, or dependencies.
+Replace the current workspace card rendering block with gradient cards that include:
+- `bg-gradient-to-br` with unique color pairs per card
+- White text (`text-white`)
+- Decorative icon positioned `absolute right-3 bottom-3 opacity-20 w-16 h-16`
+- A subtle `from-black/20 to-transparent` overlay for depth
+- `hover:scale-[1.02]` transition matching the Automations cards
+- `rounded-2xl` to match Automations rounded corners
+- No `Card` component needed -- plain divs with gradient classes (same approach as AutomationCard)
 
 ### Scope
 - Single file: `src/pages/Home.tsx`
-- CSS class changes only, no layout or functionality changes
-
+- Only the Workspaces section rendering changes
+- No new files, components, or dependencies
