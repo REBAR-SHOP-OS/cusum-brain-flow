@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { useProfiles } from "@/hooks/useProfiles";
@@ -31,6 +31,15 @@ export function FaceEnrollment({ existingCount, onComplete }: FaceEnrollmentProp
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
+  // Sync stream to video element when it changes
+  useEffect(() => {
+    const video = videoRef.current;
+    if (video && streamRef.current) {
+      video.srcObject = streamRef.current;
+      video.play().catch(() => {});
+    }
+  }, [cameraActive]);
+
   const startCamera = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -39,7 +48,7 @@ export function FaceEnrollment({ existingCount, onComplete }: FaceEnrollmentProp
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        await videoRef.current.play();
+        videoRef.current.play().catch(() => {});
       }
       setCameraActive(true);
     } catch {
