@@ -51,7 +51,7 @@ export function PipelineColumn({
   return (
     <div
       className={cn(
-        "w-[280px] flex-shrink-0 rounded-lg transition-colors",
+        "w-[280px] flex-shrink-0 rounded-lg transition-colors flex flex-col h-full",
         isDragOver ? "bg-primary/10 ring-2 ring-primary/50" : "bg-secondary/30"
       )}
       onDragOver={onDragOver}
@@ -89,7 +89,7 @@ export function PipelineColumn({
       </div>
 
       {/* Cards */}
-      <div className="px-2 pb-2 space-y-2 min-h-[120px] max-h-[calc(100vh-280px)] overflow-y-auto">
+      <div className="px-2 pb-2 space-y-2 min-h-[120px] flex-1 overflow-y-auto">
         {leads.length === 0 ? (
           <p className="text-xs text-muted-foreground text-center py-8 opacity-50">
             Drop leads here

@@ -73,7 +73,7 @@ export function PipelineBoard({
 
   return (
     <ScrollArea className="h-full">
-      <div className="flex gap-4 p-6 min-w-max">
+      <div className="flex gap-4 p-4 sm:p-6 min-w-max h-full">
         {stages.map((stage) => (
           <PipelineColumn
             key={stage.id}

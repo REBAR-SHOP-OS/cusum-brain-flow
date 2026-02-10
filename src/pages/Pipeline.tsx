@@ -3,12 +3,13 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, Mail, Loader2, History } from "lucide-react";
+import { Plus, Search, Mail, Loader2, History, Sparkles } from "lucide-react";
 import { PipelineBoard } from "@/components/pipeline/PipelineBoard";
 import { PipelineAnalytics } from "@/components/pipeline/PipelineAnalytics";
 import { LeadFormModal } from "@/components/pipeline/LeadFormModal";
 import { LeadDetailDrawer } from "@/components/pipeline/LeadDetailDrawer";
 import { PipelineFilters, DEFAULT_FILTERS, type PipelineFilterState, type GroupByOption } from "@/components/pipeline/PipelineFilters";
+import { PipelineAISheet } from "@/components/pipeline/PipelineAISheet";
 import { useToast } from "@/hooks/use-toast";
 import type { Tables } from "@/integrations/supabase/types";
 import { startOfDay, startOfWeek, startOfMonth, startOfQuarter, startOfYear, subDays } from "date-fns";
@@ -61,6 +62,7 @@ export default function Pipeline() {
   const [isSyncingHistory, setIsSyncingHistory] = useState(false);
   const [pipelineFilters, setPipelineFilters] = useState<PipelineFilterState>({ ...DEFAULT_FILTERS });
   const [groupBy, setGroupBy] = useState<GroupByOption>("none");
+  const [isAISheetOpen, setIsAISheetOpen] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
@@ -322,6 +324,10 @@ export default function Pipeline() {
             {isSyncingHistory ? <Loader2 className="w-4 h-4 animate-spin" /> : <History className="w-4 h-4" />}
             <span className="hidden sm:inline">Sync History</span>
           </Button>
+          <Button onClick={() => setIsAISheetOpen(true)} size="sm" variant="outline" className="gap-2 border-primary/30 text-primary hover:bg-primary/10">
+            <Sparkles className="w-4 h-4" />
+            <span className="hidden sm:inline">Blitz AI</span>
+          </Button>
           <Button onClick={() => setIsFormOpen(true)} size="sm" className="gap-2">
             <Plus className="w-4 h-4" />
             <span className="hidden sm:inline">Add Lead</span>
@@ -367,6 +373,13 @@ export default function Pipeline() {
         onEdit={handleEdit}
         onDelete={handleDelete}
         onStageChange={handleStageChange}
+      />
+
+      {/* Blitz AI Sheet */}
+      <PipelineAISheet
+        open={isAISheetOpen}
+        onOpenChange={setIsAISheetOpen}
+        leads={filteredLeads}
       />
     </div>
   );
