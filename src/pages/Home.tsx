@@ -247,12 +247,12 @@ function HelperCard({ helper, isPrimary, onClick }: { helper: Helper; isPrimary?
       onClick={onClick}
     >
       <div className="relative">
-        <div className="aspect-square overflow-hidden bg-muted">
-          <img src={helper.image} alt={helper.name} className="w-full h-full object-cover object-top" />
+        <div className="aspect-[3/4] sm:aspect-square overflow-hidden bg-muted">
+          <img src={helper.image} alt={helper.name} className="w-full h-full object-cover object-center sm:object-top" />
         </div>
-        <div className="p-1.5 sm:p-3">
-          <h3 className="font-bold text-xs sm:text-base leading-tight truncate">{helper.name}</h3>
-          <p className="text-[9px] sm:text-sm text-muted-foreground truncate">{helper.role}</p>
+        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-1.5 pt-6 sm:relative sm:bg-transparent sm:p-3 sm:pt-3">
+          <h3 className="font-bold text-xs sm:text-base leading-tight truncate text-white sm:text-foreground">{helper.name}</h3>
+          <p className="text-[9px] sm:text-sm text-white/70 sm:text-muted-foreground truncate">{helper.role}</p>
           {isPrimary && <span className="text-[8px] sm:text-xs text-primary font-medium">Your Agent</span>}
         </div>
       </div>
