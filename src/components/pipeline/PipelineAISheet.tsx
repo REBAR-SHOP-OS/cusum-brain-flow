@@ -7,7 +7,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   TrendingUp, AlertTriangle, Clock, BarChart3, Send,
   Users, Target, Sparkles, Mail, DollarSign, ListChecks, Loader2,
-  Ruler, ClipboardCheck, FileSearch,
+  Ruler, ClipboardCheck, FileSearch, Maximize2, Minimize2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -87,6 +87,7 @@ export function PipelineAISheet({ open, onOpenChange, leads }: PipelineAISheetPr
   const [messages, setMessages] = useState<{ role: "user" | "agent"; content: string }[]>([]);
   const [userMessage, setUserMessage] = useState("");
   const [checkingPhase, setCheckingPhase] = useState(0);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const hasAutoFired = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
@@ -129,8 +130,7 @@ export function PipelineAISheet({ open, onOpenChange, leads }: PipelineAISheetPr
   // Reset when sheet closes
   useEffect(() => {
     if (!open) {
-      // Keep messages but allow re-briefing next time
-      // hasAutoFired stays true so it doesn't re-fire on same session
+      setIsFullscreen(false);
     }
   }, [open]);
 
@@ -230,19 +230,26 @@ RULES:
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-lg p-0 flex flex-col">
+      <SheetContent className={cn("p-0 flex flex-col", isFullscreen ? "w-full sm:max-w-full" : "w-full sm:max-w-lg")}>
         {/* Header */}
         <div className="p-4 pb-3 border-b border-border shrink-0">
           <SheetHeader className="text-left">
             <div className="flex items-center gap-3">
               <img src={agentAvatar} alt={agentName} className="w-10 h-10 rounded-xl object-cover" />
-              <div>
+              <div className="flex-1">
                 <SheetTitle className="text-lg font-bold flex items-center gap-2">
                   {agentName}
                   <span className="text-[10px] font-normal text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{agentTag}</span>
                 </SheetTitle>
                 <p className="text-xs text-muted-foreground">{agentSubtitle}</p>
               </div>
+              <button
+                onClick={() => setIsFullscreen((f) => !f)}
+                className="rounded-sm opacity-70 hover:opacity-100 transition-opacity p-1"
+                aria-label={isFullscreen ? "Minimize" : "Fullscreen"}
+              >
+                {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+              </button>
             </div>
           </SheetHeader>
 
