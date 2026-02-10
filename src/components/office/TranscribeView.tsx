@@ -1,5 +1,5 @@
-import { useState, useRef, useCallback, useEffect } from "react";
-import { Mic, MicOff, Upload, FileText, Copy, Download, Trash2, ChevronDown, ChevronUp, Loader2, Languages, RefreshCw, Timer } from "lucide-react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { Mic, MicOff, Upload, FileText, Copy, Download, Trash2, ChevronDown, ChevronUp, Loader2, Languages, RefreshCw, Timer, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
@@ -83,6 +83,68 @@ interface HistoryEntry {
   mode: string;
   timestamp: Date;
   confidence?: number;
+  speakers?: string[];
+}
+
+const SPEAKER_COLORS = [
+  "text-blue-700 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/40 border-blue-300 dark:border-blue-700",
+  "text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/40 border-emerald-300 dark:border-emerald-700",
+  "text-purple-700 dark:text-purple-400 bg-purple-100 dark:bg-purple-900/40 border-purple-300 dark:border-purple-700",
+  "text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40 border-amber-300 dark:border-amber-700",
+  "text-rose-700 dark:text-rose-400 bg-rose-100 dark:bg-rose-900/40 border-rose-300 dark:border-rose-700",
+  "text-cyan-700 dark:text-cyan-400 bg-cyan-100 dark:bg-cyan-900/40 border-cyan-300 dark:border-cyan-700",
+];
+
+function parseSpeakerLines(text: string): { speaker: string; content: string }[] {
+  if (!text) return [];
+  const lines = text.split("\n").filter(Boolean);
+  return lines.map(line => {
+    const match = line.match(/^(.+?):\s(.+)$/);
+    if (match) return { speaker: match[1].trim(), content: match[2].trim() };
+    return { speaker: "", content: line };
+  });
+}
+
+function SpeakerTranscript({ text, speakers }: { text: string; speakers: string[] }) {
+  const lines = useMemo(() => parseSpeakerLines(text), [text]);
+  const hasSpeakers = speakers.length > 1 && lines.some(l => l.speaker);
+
+  if (!hasSpeakers) {
+    return <div className="text-sm whitespace-pre-wrap">{text}</div>;
+  }
+
+  const speakerColorMap: Record<string, string> = {};
+  speakers.forEach((s, i) => {
+    speakerColorMap[s] = SPEAKER_COLORS[i % SPEAKER_COLORS.length];
+  });
+
+  return (
+    <div className="space-y-1.5">
+      {lines.map((line, i) => {
+        const color = speakerColorMap[line.speaker] || SPEAKER_COLORS[0];
+        return line.speaker ? (
+          <div key={i} className="flex gap-2 items-start">
+            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold shrink-0 mt-0.5 ${color}`}>
+              {line.speaker}
+            </span>
+            <span className="text-sm">{line.content}</span>
+          </div>
+        ) : (
+          <div key={i} className="text-sm">{line.content}</div>
+        );
+      })}
+    </div>
+  );
+}
+
+function SpeakersBadge({ speakers }: { speakers: string[] }) {
+  if (!speakers || speakers.length <= 1) return null;
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/50 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+      <Users className="w-3 h-3" />
+      {speakers.length} speakers: {speakers.join(", ")}
+    </span>
+  );
 }
 
 function ConfidenceBadge({ confidence }: { confidence: number }) {
@@ -116,6 +178,7 @@ export function TranscribeView() {
   const [englishText, setEnglishText] = useState("");
   const [detectedLang, setDetectedLang] = useState("");
   const [confidence, setConfidence] = useState<number | null>(null);
+  const [speakers, setSpeakers] = useState<string[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
 
   // Mic - ref-based accumulation
@@ -300,12 +363,14 @@ export function TranscribeView() {
       setEnglishText(result.english || "");
       setDetectedLang(result.detectedLang || "");
       setConfidence(typeof result.confidence === "number" ? result.confidence : null);
+      setSpeakers(Array.isArray(result.speakers) ? result.speakers : []);
       addToHistory({
         original: fullText,
         english: result.english || "",
         detectedLang: result.detectedLang || "",
         mode: "mic",
         confidence: result.confidence,
+        speakers: result.speakers,
       });
       toast.success("Translation complete");
     } catch (err: any) {
@@ -330,6 +395,7 @@ export function TranscribeView() {
       setEnglishText(result.english || "");
       setDetectedLang(result.detectedLang || "");
       setConfidence(typeof result.confidence === "number" ? result.confidence : null);
+      setSpeakers(Array.isArray(result.speakers) ? result.speakers : []);
       toast.success("Re-translation complete");
     } catch (err: any) {
       toast.error(err.message);
@@ -363,12 +429,14 @@ export function TranscribeView() {
       setEnglishText(result.english || "");
       setDetectedLang(result.detectedLang || "");
       setConfidence(typeof result.confidence === "number" ? result.confidence : null);
+      setSpeakers(Array.isArray(result.speakers) ? result.speakers : []);
       addToHistory({
         original: result.transcript || result.original || "",
         english: result.english || "",
         detectedLang: result.detectedLang || "",
         mode: "upload",
         confidence: result.confidence,
+        speakers: result.speakers,
       });
       toast.success("Transcription complete");
     } catch (err: any) {
@@ -393,12 +461,14 @@ export function TranscribeView() {
       setEnglishText(result.english || "");
       setDetectedLang(result.detectedLang || "");
       setConfidence(typeof result.confidence === "number" ? result.confidence : null);
+      setSpeakers(Array.isArray(result.speakers) ? result.speakers : []);
       addToHistory({
         original: result.original || pasteText,
         english: result.english || "",
         detectedLang: result.detectedLang || "",
         mode: "text",
         confidence: result.confidence,
+        speakers: result.speakers,
       });
       toast.success("Translation complete");
     } catch (err: any) {
@@ -428,6 +498,7 @@ export function TranscribeView() {
     setEnglishText("");
     setDetectedLang("");
     setConfidence(null);
+    setSpeakers([]);
     setInterimText("");
     setPasteText("");
     setWordCount(0);
@@ -648,23 +719,28 @@ export function TranscribeView() {
 
             {originalText && (
               <div className="space-y-1">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Original</span>
                   {detectedLang && <Badge variant="secondary" className="text-[10px]">{detectedLang}</Badge>}
+                  <SpeakersBadge speakers={speakers} />
                 </div>
-                <div className="bg-muted/50 rounded-md p-3 text-sm whitespace-pre-wrap">{originalText}</div>
+                <div className="bg-muted/50 rounded-md p-3">
+                  <SpeakerTranscript text={originalText} speakers={speakers} />
+                </div>
               </div>
             )}
 
             {englishText && (
               <div className="space-y-1">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
                     {targetLang} Translation
                   </span>
                   {confidence !== null && <ConfidenceBadge confidence={confidence} />}
                 </div>
-                <div className="bg-primary/5 border border-primary/10 rounded-md p-3 text-sm whitespace-pre-wrap">{englishText}</div>
+                <div className="bg-primary/5 border border-primary/10 rounded-md p-3">
+                  <SpeakerTranscript text={englishText} speakers={speakers} />
+                </div>
               </div>
             )}
 
@@ -704,12 +780,18 @@ export function TranscribeView() {
                   setEnglishText(entry.english);
                   setDetectedLang(entry.detectedLang);
                   setConfidence(entry.confidence ?? null);
+                  setSpeakers(entry.speakers ?? []);
                 }}>
                   <CardContent className="p-3">
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <Badge variant="outline" className="text-[9px]">{entry.mode}</Badge>
                       <Badge variant="secondary" className="text-[9px]">{entry.detectedLang}</Badge>
                       {entry.confidence !== undefined && <ConfidenceBadge confidence={entry.confidence} />}
+                      {entry.speakers && entry.speakers.length > 1 && (
+                        <Badge variant="outline" className="text-[9px] gap-0.5">
+                          <Users className="w-2.5 h-2.5" /> {entry.speakers.length}
+                        </Badge>
+                      )}
                       <span className="text-[9px] text-muted-foreground ml-auto">
                         {entry.timestamp.toLocaleTimeString()}
                       </span>
