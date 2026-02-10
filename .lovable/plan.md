@@ -1,72 +1,29 @@
 
 
-## Give Blitz Full Read-Only Access to Odoo
+## Fix: Text Overflowing in Blitz AI Panel
 
-### The Problem
-Blitz currently only sees pre-processed stats built client-side from already-synced leads in the database. It cannot query Odoo directly, so it misses real-time data, quotation details, activities, or any Odoo model not yet synced.
+### Problem
+Long text content from Blitz (especially bullet points with detailed action items) extends beyond the visible panel area, requiring horizontal scrolling. This is visible in the screenshot where sentences are cut off on the right edge.
 
-### The Solution
-Add Odoo read-only query capability directly into the `pipeline-ai` edge function. When Blitz needs data to answer a question, it will query Odoo in real-time using the existing credentials (ODOO_URL, ODOO_API_KEY, ODOO_DATABASE, ODOO_USERNAME -- all already configured).
+### Root Cause
+Two issues in `src/components/pipeline/PipelineAISheet.tsx` and `src/components/chat/RichMarkdown.tsx`:
 
-### What Changes
+1. The message bubble (line 336) uses `overflow-x-auto` which allows horizontal scroll instead of wrapping text
+2. The `RichMarkdown` component's list items and paragraphs don't enforce word-breaking for long content
+3. The agent message container has `max-w-[90%]` but no `overflow-hidden` or word-break rules
 
-**File: `supabase/functions/pipeline-ai/index.ts`**
+### Fix (2 files, surgical changes only)
 
-1. Add `odooAuthenticate()` and `odooSearchRead()` helpers (reuse the proven pattern from `sync-odoo-leads`)
-2. Before calling the AI, fetch a rich Odoo snapshot:
-   - `crm.lead` -- all active opportunities (name, stage, salesperson, revenue, probability, partner, dates, priority)
-   - `sale.order` -- recent quotations (name, partner, amount, state, date)
-   - `crm.lead` activity summary (last activity dates)
-3. Inject this Odoo data into the AI prompt alongside the existing pipeline stats
-4. Cap data at reasonable limits (500 leads, 200 quotations) to stay within token limits
+**File 1: `src/components/pipeline/PipelineAISheet.tsx`**
+- Line 336: Change `overflow-x-auto` to `overflow-hidden` and add `break-words` on the agent message div
+- This ensures long text wraps within the panel instead of overflowing
 
-**File: `src/components/pipeline/PipelineAISheet.tsx`**
-
-5. No changes needed -- the edge function will enrich the context server-side
-
-### How It Works
-
-```text
-User asks Blitz a question
-        |
-        v
-PipelineAISheet sends request to pipeline-ai edge function
-        |
-        v
-pipeline-ai authenticates with Odoo (XML-RPC)
-        |
-        v
-Fetches live crm.lead + sale.order data (JSON-RPC)
-        |
-        v
-Combines: DB pipeline stats + live Odoo data + user question
-        |
-        v
-Sends enriched prompt to AI model
-        |
-        v
-Returns detailed, data-backed answer to Blitz UI
-```
-
-### Technical Details
-
-The Odoo query in `pipeline-ai` will fetch these fields:
-
-**crm.lead (up to 500):**
-- id, name, stage_id, partner_id, contact_name, email_from, phone, expected_revenue, probability, date_deadline, user_id, priority, create_date, write_date, type
-
-**sale.order (up to 200):**
-- id, name, partner_id, amount_total, state, date_order, user_id, validity_date
-
-The data is serialized as JSON and appended to the system prompt under an "ODOO LIVE DATA" section. The AI can then reference specific leads by name, salesperson, value, and stage when answering questions.
-
-### Security
-- Read-only access only (search_read operations)
-- Credentials stay server-side in the edge function (never exposed to client)
-- User authentication is still required via the Authorization header
+**File 2: `src/components/chat/RichMarkdown.tsx`**
+- Line 30: Add `break-words overflow-hidden` to the root wrapper div
+- Line 118 (td): Add `break-words` to table cells so long text in tables wraps properly
+- Line 130 (li): Add `min-w-0` to list items so flexbox children can shrink and wrap
 
 ### Scope
-- Only `supabase/functions/pipeline-ai/index.ts` is modified
-- No UI, CSS, layout, or other component changes
-- No changes to any other edge functions
+- No backend, edge function, layout, or other component changes
+- Only affects text wrapping behavior inside the Blitz/Gauge AI panel
 
