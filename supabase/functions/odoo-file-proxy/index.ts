@@ -7,31 +7,57 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-async function getOdooSessionCookie(): Promise<{ cookie: string; url: string }> {
+async function getOdooFileUrl(): Promise<{ url: string; apiKey: string; login: string; db: string }> {
   const rawUrl = Deno.env.get("ODOO_URL")!;
   const url = new URL(rawUrl.trim()).origin;
   const db = Deno.env.get("ODOO_DATABASE")!;
   const login = Deno.env.get("ODOO_USERNAME")!;
   const apiKey = Deno.env.get("ODOO_API_KEY")!;
+  return { url, apiKey, login, db };
+}
 
-  // Authenticate via JSON-RPC to get session cookie
-  const res = await fetch(`${url}/web/session/authenticate`, {
+async function fetchOdooFileViaJsonRpc(
+  odoo: { url: string; apiKey: string; login: string; db: string },
+  attachmentId: string,
+): Promise<{ base64: string; fileName: string; mimeType: string }> {
+  // Use JSON-RPC to read ir.attachment fields directly
+  const res = await fetch(`${odoo.url}/jsonrpc`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${odoo.apiKey}`,
+    },
     body: JSON.stringify({
       jsonrpc: "2.0",
       method: "call",
       id: Date.now(),
-      params: { db, login, password: apiKey },
+      params: {
+        service: "object",
+        method: "execute_kw",
+        args: [
+          odoo.db,
+          2, // uid placeholder, API key auth ignores this
+          odoo.apiKey,
+          "ir.attachment",
+          "read",
+          [[parseInt(attachmentId)]],
+          { fields: ["datas", "name", "mimetype"] },
+        ],
+      },
     }),
-    redirect: "manual",
   });
 
-  const setCookie = res.headers.get("set-cookie");
-  const sessionMatch = setCookie?.match(/session_id=([^;]+)/);
-  if (!sessionMatch) throw new Error("Failed to get Odoo session cookie");
+  const json = await res.json();
+  const record = json?.result?.[0];
+  if (!record || !record.datas) {
+    throw new Error(`Attachment ${attachmentId} not found or has no data`);
+  }
 
-  return { cookie: `session_id=${sessionMatch[1]}`, url };
+  return {
+    base64: record.datas,
+    fileName: record.name || `file-${attachmentId}`,
+    mimeType: record.mimetype || "application/octet-stream",
+  };
 }
 
 serve(async (req) => {
@@ -65,31 +91,22 @@ serve(async (req) => {
       });
     }
 
-    // Get Odoo session and fetch the file
-    const session = await getOdooSessionCookie();
-    const fileUrl = `${session.url}/web/content/${odooId}?download=true`;
+    // Fetch file data via JSON-RPC (reads base64 from ir.attachment)
+    const odoo = await getOdooFileUrl();
+    const file = await fetchOdooFileViaJsonRpc(odoo, odooId);
 
-    const fileRes = await fetch(fileUrl, {
-      headers: { Cookie: session.cookie },
-      redirect: "follow",
-    });
-
-    if (!fileRes.ok) {
-      return new Response(JSON.stringify({ error: `Odoo returned ${fileRes.status}` }), {
-        status: fileRes.status,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    // Decode base64 to binary
+    const binaryStr = atob(file.base64);
+    const bytes = new Uint8Array(binaryStr.length);
+    for (let i = 0; i < binaryStr.length; i++) {
+      bytes[i] = binaryStr.charCodeAt(i);
     }
 
-    const contentType = fileRes.headers.get("content-type") || "application/octet-stream";
-    const contentDisp = fileRes.headers.get("content-disposition") || "";
-    const body = await fileRes.arrayBuffer();
-
-    return new Response(body, {
+    return new Response(bytes, {
       headers: {
         ...corsHeaders,
-        "Content-Type": contentType,
-        "Content-Disposition": contentDisp || `attachment; filename="file-${odooId}"`,
+        "Content-Type": file.mimeType,
+        "Content-Disposition": `attachment; filename="${file.fileName}"`,
         "Cache-Control": "public, max-age=86400",
       },
     });
