@@ -8,6 +8,7 @@ import { EmailActionBar, type ReplyMode } from "./EmailActionBar";
 import { EmailReplyComposer } from "./EmailReplyComposer";
 import { AddToTaskButton } from "@/components/shared/AddToTaskButton";
 import { CreateTaskDialog } from "@/components/shared/CreateTaskDialog";
+import { ContentActions } from "@/components/shared/ContentActions";
 import type { InboxEmail } from "./InboxEmailList";
 
 interface InboxEmailViewerProps {
@@ -248,9 +249,15 @@ export function InboxEmailViewer({ email, onClose }: InboxEmailViewerProps) {
         </div>
       </div>
 
-      {/* Add to Task (shown when no reply composer) */}
+      {/* Add to Task + Brain (shown when no reply composer) */}
       {!replyMode && (
-        <div className="shrink-0 border-t border-border px-4 py-3">
+        <div className="shrink-0 border-t border-border px-4 py-3 flex items-center gap-2">
+          <ContentActions
+            content={`Subject: ${email.subject}\n\n${email.body || email.preview || ""}`}
+            title={email.subject}
+            source="email"
+            sourceRef={email.sourceId || email.id}
+          />
           <AddToTaskButton
             defaults={{
               title: `Follow up: ${email.subject}`,

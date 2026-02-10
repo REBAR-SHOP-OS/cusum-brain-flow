@@ -1,4 +1,5 @@
 import { Mail, User, Calendar, Paperclip } from "lucide-react";
+import { ContentActions } from "@/components/shared/ContentActions";
 import { format } from "date-fns";
 import type { Json } from "@/integrations/supabase/types";
 
@@ -98,6 +99,15 @@ export function LeadEmailContent({ metadata, notes, source }: LeadEmailContentPr
             Email body not captured. Re-scan to populate.
           </p>
         </div>
+      )}
+
+      {/* Content Actions */}
+      {(emailSubject || emailBody) && (
+        <ContentActions
+          content={`Subject: ${emailSubject || "N/A"}\n\n${emailBody || ""}`}
+          title={emailSubject || "Lead Email"}
+          source="pipeline-email"
+        />
       )}
 
       {/* Attachments */}

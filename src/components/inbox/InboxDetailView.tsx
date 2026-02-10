@@ -9,6 +9,7 @@ import { EmailReplyComposer } from "./EmailReplyComposer";
 import { QuickReplyChips } from "./QuickReplyChips";
 import { EmailSummaryBanner } from "./EmailSummaryBanner";
 import { AddToTaskButton } from "@/components/shared/AddToTaskButton";
+import { ContentActions } from "@/components/shared/ContentActions";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -201,6 +202,13 @@ export function InboxDetailView({ email, onClose }: InboxDetailViewProps) {
           {/* Bottom action bar */}
           {!replyMode && (
             <div className="shrink-0 border-t border-border px-4 py-2.5 flex items-center gap-2">
+              <ContentActions
+                content={`Subject: ${email.subject}\n\n${email.body || email.preview || ""}`}
+                title={email.subject}
+                source="email"
+                sourceRef={email.sourceId || email.id}
+                size="xs"
+              />
               <AddToTaskButton
                 defaults={{
                   title: `Follow up: ${email.subject}`,

@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils";
 import { User, FileIcon, Download, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { ContentActions } from "@/components/shared/ContentActions";
 import { Message } from "./ChatMessage";
 import { CalStepCard, CHANGY_STEPS, detectStepFromMessage } from "./CalStepProgress";
 import ReactMarkdown from "react-markdown";
@@ -158,6 +159,11 @@ export function CalChatMessage({ message }: CalChatMessageProps) {
             <span className="text-warning">Draft — needs approval</span>
           )}
         </div>
+
+        {/* Content Actions for agent messages */}
+        {!isUser && message.content && (
+          <ContentActions content={message.content} title={message.content.slice(0, 80)} source="estimation-chat" />
+        )}
       </div>
     </div>
   );

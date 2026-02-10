@@ -1,10 +1,13 @@
 import { useState } from "react";
 import DOMPurify from "dompurify";
-import { Reply, Forward, Trash2, Archive, MoreHorizontal, CheckSquare } from "lucide-react";
+import { Reply, Forward, Trash2, Archive, MoreHorizontal, CheckSquare, Brain } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { GmailMessage, parseEmailAddress, formatDate } from "@/lib/gmail";
 import { ComposeEmail } from "./ComposeEmail";
 import { CreateTaskModal } from "./CreateTaskModal";
+import { supabase } from "@/integrations/supabase/client";
+import { useCompanyId } from "@/hooks/useCompanyId";
+import { useToast } from "@/hooks/use-toast";
 
 interface EmailViewerProps {
   email: GmailMessage;
@@ -16,6 +19,22 @@ export function EmailViewer({ email, onRefresh }: EmailViewerProps) {
   const [showCreateTask, setShowCreateTask] = useState(false);
   const sender = parseEmailAddress(email.from);
   const recipient = parseEmailAddress(email.to);
+  const { companyId } = useCompanyId();
+  const { toast } = useToast();
+
+  const handleAddToBrain = async () => {
+    if (!companyId) { toast({ title: "Still loading workspace", variant: "destructive" }); return; }
+    try {
+      const { error } = await supabase.from("knowledge").insert({
+        title: (email.subject || "Email").slice(0, 80),
+        content: `Subject: ${email.subject}\nFrom: ${email.from}\nTo: ${email.to}\n\n${email.body?.replace(/<[^>]+>/g, '') || ""}`,
+        category: "email",
+        company_id: companyId,
+      });
+      if (error) throw error;
+      toast({ title: "Saved to Brain" });
+    } catch { toast({ title: "Failed to save", variant: "destructive" }); }
+  };
 
   return (
     <div className="flex flex-col h-full">
@@ -24,6 +43,9 @@ export function EmailViewer({ email, onRefresh }: EmailViewerProps) {
         <div className="flex items-start justify-between gap-4 mb-4">
           <h2 className="text-xl font-semibold">{email.subject || "(no subject)"}</h2>
           <div className="flex items-center gap-1 flex-shrink-0">
+            <Button variant="ghost" size="icon" onClick={handleAddToBrain} title="Add to Brain">
+              <Brain className="w-4 h-4" />
+            </Button>
             <Button variant="ghost" size="icon" onClick={() => setShowCreateTask(true)} title="Create Task">
               <CheckSquare className="w-4 h-4" />
             </Button>

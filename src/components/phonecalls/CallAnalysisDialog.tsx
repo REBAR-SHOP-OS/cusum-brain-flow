@@ -100,8 +100,25 @@ export function CallAnalysisDialog({
   const [error, setError] = useState<string | null>(null);
   const [savingTasks, setSavingTasks] = useState(false);
   const [tasksSaved, setTasksSaved] = useState(false);
+  const [brainSaved, setBrainSaved] = useState(false);
   const { toast } = useToast();
   const { companyId } = useCompanyId();
+
+  const handleSaveToBrain = async () => {
+    if (!result || !companyId) return;
+    try {
+      const summaryText = result.summary?.abstractiveShort?.map(s => s.value).join("\n") || result.transcription?.transcript || "";
+      const { error } = await supabase.from("knowledge").insert({
+        title: `Call Analysis: ${fromNumber} → ${toNumber}`,
+        content: summaryText,
+        category: "call-analysis",
+        company_id: companyId,
+      });
+      if (error) throw error;
+      setBrainSaved(true);
+      toast({ title: "Saved to Brain" });
+    } catch { toast({ title: "Failed to save", variant: "destructive" }); }
+  };
 
   const runAnalysis = useCallback(async () => {
     setLoading(true);
@@ -371,6 +388,13 @@ export function CallAnalysisDialog({
                       </ul>
                     </div>
                   ) : null}
+
+                  {result.summary && (
+                    <Button variant="outline" size="sm" className="gap-1.5 text-xs w-full" onClick={handleSaveToBrain} disabled={brainSaved}>
+                      <Brain className="w-3.5 h-3.5" />
+                      {brainSaved ? "Saved to Brain" : "Save to Brain"}
+                    </Button>
+                  )}
 
                   {!result.summary && (
                     <p className="text-sm text-muted-foreground italic">

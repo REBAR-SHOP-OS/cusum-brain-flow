@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { FileText, CheckSquare, Loader2, Sparkles, Plus, Check } from "lucide-react";
+import { FileText, CheckSquare, Loader2, Sparkles, Plus, Check, Brain } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -40,7 +40,25 @@ export function CallSummaryDialog({
   const [tasks, setTasks] = useState<SuggestedTask[]>([]);
   const [loading, setLoading] = useState(false);
   const [creatingTasks, setCreatingTasks] = useState<Set<number>>(new Set());
+  const [brainSaved, setBrainSaved] = useState(false);
   const { toast } = useToast();
+
+  const handleSaveToBrain = async () => {
+    if (!summary) return;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data: profile } = await supabase.from("profiles").select("company_id").eq("user_id", user!.id).maybeSingle();
+      const { error } = await supabase.from("knowledge").insert({
+        title: `Call Summary: ${fromNumber || "Unknown"} → ${toNumber || "Unknown"}`,
+        content: summary + (tasks.length ? "\n\nAction Items:\n" + tasks.map(t => `- ${t.title}: ${t.description}`).join("\n") : ""),
+        category: "call-summary",
+        company_id: profile?.company_id,
+      });
+      if (error) throw error;
+      setBrainSaved(true);
+      toast({ title: "Saved to Brain" });
+    } catch { toast({ title: "Failed to save", variant: "destructive" }); }
+  };
 
   useEffect(() => {
     if (open && transcript && !summary) {
@@ -147,9 +165,15 @@ export function CallSummaryDialog({
               {/* Summary */}
               {summary && (
                 <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <FileText className="w-4 h-4 text-primary" />
-                    <span className="text-sm font-semibold">Summary</span>
+                    <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-primary" />
+                      <span className="text-sm font-semibold">Summary</span>
+                    </div>
+                    <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={handleSaveToBrain} disabled={brainSaved}>
+                      <Brain className="w-3.5 h-3.5" />
+                      {brainSaved ? "Saved" : "Save to Brain"}
+                    </Button>
                   </div>
                   <p className="text-sm text-muted-foreground whitespace-pre-wrap bg-secondary/50 p-3 rounded-lg">
                     {summary}
