@@ -107,7 +107,7 @@ export function CEODashboardView() {
       ...data,
     }));
 
-  const visibleAlerts = m.alerts.filter((a) => !dismissedAlerts.has(a.message));
+  const visibleAlerts = (m.alerts || []).filter((a) => !dismissedAlerts.has(a.message));
   const healthColor = getHealthColor(m.healthScore);
   const healthDash = 2 * Math.PI * 42;
   const healthOffset = healthDash - (m.healthScore / 100) * healthDash;
