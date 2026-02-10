@@ -43,7 +43,6 @@ interface OdooSession {
 
 async function odooAuthenticate(): Promise<OdooSession> {
   const rawUrl = Deno.env.get("ODOO_URL")!;
-  // Strip any path – keep only the origin (protocol + host)
   const parsed = new URL(rawUrl.trim());
   const url = parsed.origin;
   const db = Deno.env.get("ODOO_DATABASE")!;
@@ -53,26 +52,43 @@ async function odooAuthenticate(): Promise<OdooSession> {
   console.log(`Odoo connect: url=${url}, db=${db}, login=${login}`);
 
   const authUrl = `${url}/web/session/authenticate`;
-  console.log(`POST ${authUrl}`);
-  const res = await fetch(authUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      params: { db, login, password },
-    }),
-  });
 
-  if (!res.ok) throw new Error(`Odoo auth HTTP ${res.status}`);
+  // Try with explicit db first, then without db (Odoo.sh auto-detects from hostname)
+  for (const tryDb of [db, undefined]) {
+    console.log(`POST ${authUrl} (db=${tryDb ?? "auto-detect"})`);
+    const params: Record<string, unknown> = { login, password };
+    if (tryDb) params.db = tryDb;
 
-  const json = await res.json();
-  if (json.error) throw new Error(`Odoo auth error: ${JSON.stringify(json.error)}`);
-  if (!json.result?.uid) throw new Error("Odoo auth failed – no uid returned");
+    const res = await fetch(authUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", params }),
+    });
 
-  // Extract session_id cookie
-  const setCookie = res.headers.get("set-cookie") || "";
-  const sidMatch = setCookie.match(/session_id=([^;]+)/);
-  const sessionId = sidMatch ? sidMatch[1] : "";
+    if (!res.ok) {
+      console.log(`Odoo auth HTTP ${res.status} with db=${tryDb ?? "auto"}`);
+      continue;
+    }
+
+    const json = await res.json();
+    if (json.error) {
+      console.log(`Odoo auth error with db=${tryDb ?? "auto"}: ${json.error?.data?.message || JSON.stringify(json.error)}`);
+      continue;
+    }
+    if (!json.result?.uid) {
+      console.log(`No uid with db=${tryDb ?? "auto"}`);
+      continue;
+    }
+
+    console.log(`Odoo auth SUCCESS with db=${tryDb ?? "auto"}, uid=${json.result.uid}`);
+
+    const setCookie = res.headers.get("set-cookie") || "";
+    const sidMatch = setCookie.match(/session_id=([^;]+)/);
+    const sessionId = sidMatch ? sidMatch[1] : "";
+    return { sessionId, url };
+  }
+
+  throw new Error(`Odoo auth failed for all db attempts (tried: "${db}", auto-detect)`);
 
   return { sessionId, url };
 }
