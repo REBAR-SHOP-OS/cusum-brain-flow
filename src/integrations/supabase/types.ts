@@ -3426,9 +3426,11 @@ export type Database = {
           created_at: string
           gmail_email: string
           id: string
+          is_encrypted: boolean
           last_used_at: string | null
           last_used_ip: string | null
           refresh_token: string
+          token_rotated_at: string | null
           updated_at: string
           user_id: string
         }
@@ -3436,9 +3438,11 @@ export type Database = {
           created_at?: string
           gmail_email: string
           id?: string
+          is_encrypted?: boolean
           last_used_at?: string | null
           last_used_ip?: string | null
           refresh_token: string
+          token_rotated_at?: string | null
           updated_at?: string
           user_id: string
         }
@@ -3446,9 +3450,11 @@ export type Database = {
           created_at?: string
           gmail_email?: string
           id?: string
+          is_encrypted?: boolean
           last_used_at?: string | null
           last_used_ip?: string | null
           refresh_token?: string
+          token_rotated_at?: string | null
           updated_at?: string
           user_id?: string
         }

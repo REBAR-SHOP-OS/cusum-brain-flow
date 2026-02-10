@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { encryptToken } from "../_shared/tokenEncryption.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -162,13 +163,16 @@ serve(async (req) => {
         googleEmail = profile.emailAddress || "";
       }
 
-      // Save refresh token per-user
+      // Encrypt and save refresh token per-user
+      const encryptedRefreshToken = await encryptToken(tokens.refresh_token);
       const { error: upsertError } = await supabaseAdmin
         .from("user_gmail_tokens")
         .upsert({
           user_id: userId,
           gmail_email: googleEmail,
-          refresh_token: tokens.refresh_token,
+          refresh_token: encryptedRefreshToken,
+          is_encrypted: true,
+          token_rotated_at: new Date().toISOString(),
         }, { onConflict: "user_id" });
 
       if (upsertError) {
@@ -248,11 +252,14 @@ serve(async (req) => {
                 const profile = await profileRes.json();
                 const gmailEmail = (profile.emailAddress || "").toLowerCase();
                 if (gmailEmail === userEmail) {
-                  // Auto-migrate token and connect all services
+                  // Auto-migrate token (encrypt it) and connect all services
+                  const encMigrated = await encryptToken(sharedToken);
                   await supabaseAdmin.from("user_gmail_tokens").upsert({
                     user_id: userId,
                     gmail_email: gmailEmail,
-                    refresh_token: sharedToken,
+                    refresh_token: encMigrated,
+                    is_encrypted: true,
+                    token_rotated_at: new Date().toISOString(),
                   }, { onConflict: "user_id" });
 
                   for (const svc of GOOGLE_SERVICES) {
