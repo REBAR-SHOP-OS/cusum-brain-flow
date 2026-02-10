@@ -12,6 +12,10 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
 
   try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, serviceKey);
+
     // Auth check + rate limiting
     const authHeader = req.headers.get("Authorization");
     let rateLimitId = "anonymous";
@@ -38,11 +42,7 @@ serve(async (req) => {
       });
     }
 
-    const { date } = await req.json(); // ISO date string e.g. "2026-02-07"
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, serviceKey);
+    const { date } = await req.json();
 
     const targetDate = date || new Date().toISOString().split("T")[0];
     const dayStart = `${targetDate}T00:00:00.000Z`;
