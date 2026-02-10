@@ -16,6 +16,7 @@ serve(async (req) => {
     let mode: string;
     let text = "";
     let sourceLang = "auto";
+    let targetLang = "English";
     let formality = "neutral";
     let contextHint = "";
     let outputFormat = "plain";
@@ -23,10 +24,10 @@ serve(async (req) => {
     let audioMime = "audio/mpeg";
 
     if (contentType.includes("multipart/form-data")) {
-      // Audio upload mode
       const formData = await req.formData();
       mode = "audio";
       sourceLang = (formData.get("sourceLang") as string) || "auto";
+      targetLang = (formData.get("targetLang") as string) || "English";
       formality = (formData.get("formality") as string) || "neutral";
       contextHint = (formData.get("context") as string) || "";
       outputFormat = (formData.get("outputFormat") as string) || "plain";
@@ -37,18 +38,17 @@ serve(async (req) => {
       audioMime = audioFile.type || "audio/mpeg";
       const arrayBuffer = await audioFile.arrayBuffer();
       const bytes = new Uint8Array(arrayBuffer);
-      // Base64 encode
       let binary = "";
       for (let i = 0; i < bytes.length; i++) {
         binary += String.fromCharCode(bytes[i]);
       }
       audioBase64 = btoa(binary);
     } else {
-      // JSON text mode
       const body = await req.json();
       mode = body.mode || "text";
       text = body.text || "";
       sourceLang = body.sourceLang || "auto";
+      targetLang = body.targetLang || "English";
       formality = body.formality || "neutral";
       contextHint = body.context || "";
       outputFormat = body.outputFormat || "plain";
@@ -78,16 +78,32 @@ serve(async (req) => {
       ? `The source language is ${sourceLang}.`
       : "Auto-detect the source language.";
 
+    const targetInstruction = `Translate to ${targetLang}.`;
+
+    // Enhanced system prompt for world-class accuracy
+    const translatorPersona = `You are a world-class professional translator and linguist with decades of experience. You produce translations indistinguishable from native human translators.
+
+CRITICAL RULES:
+- Preserve ALL proper nouns, names, places, numbers, measurements, dates, and technical terms exactly as they appear
+- Translate meaning and intent, NOT word-for-word. Handle idioms, metaphors, and cultural expressions naturally
+- For names and places, keep the original and optionally add transliteration in parentheses
+- NEVER hallucinate, add, or remove content that isn't in the original
+- NEVER add explanatory notes unless specifically asked
+- Maintain the original's register, emotion, and style
+- For ambiguous terms, choose the interpretation most consistent with context`;
+
     let messages: any[];
 
     if (mode === "audio") {
       messages = [
         {
           role: "system",
-          content: `You are an expert transcription and translation assistant. Transcribe the audio accurately, then translate it to English. ${langInstruction} ${formalityInstruction} ${formatInstruction} ${contextInstruction}
+          content: `${translatorPersona}
 
-Respond ONLY with valid JSON in this exact format:
-{"transcript":"<original transcribed text>","detectedLang":"<ISO language name e.g. Farsi, Spanish>","english":"<English translation>"}`
+${langInstruction} ${targetInstruction} ${formalityInstruction} ${formatInstruction} ${contextInstruction}
+
+Transcribe the audio accurately word-for-word, then translate it. Respond ONLY with valid JSON:
+{"transcript":"<original transcribed text>","detectedLang":"<language name e.g. Farsi, Spanish>","english":"<translated text>"}`
         },
         {
           role: "user",
@@ -101,7 +117,7 @@ Respond ONLY with valid JSON in this exact format:
             },
             {
               type: "text",
-              text: "Transcribe this audio and translate to English. Return JSON only."
+              text: `Transcribe this audio and translate to ${targetLang}. Return JSON only.`
             }
           ]
         }
@@ -110,10 +126,12 @@ Respond ONLY with valid JSON in this exact format:
       messages = [
         {
           role: "system",
-          content: `You are an expert translator. Detect the language of the input text and translate it to English. ${langInstruction} ${formalityInstruction} ${formatInstruction} ${contextInstruction}
+          content: `${translatorPersona}
 
-Respond ONLY with valid JSON in this exact format:
-{"original":"<original text>","detectedLang":"<ISO language name e.g. Farsi, Spanish>","english":"<English translation>"}`
+${langInstruction} ${targetInstruction} ${formalityInstruction} ${formatInstruction} ${contextInstruction}
+
+Respond ONLY with valid JSON:
+{"original":"<original text>","detectedLang":"<language name e.g. Farsi, Spanish>","english":"<translated text>"}`
         },
         {
           role: "user",
@@ -122,46 +140,121 @@ Respond ONLY with valid JSON in this exact format:
       ];
     }
 
-    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    // ===== PASS 1: Translate with gemini-2.5-pro =====
+    const pass1Response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: "google/gemini-2.5-pro",
         messages,
       }),
     });
 
-    if (!aiResponse.ok) {
-      if (aiResponse.status === 429) {
+    if (!pass1Response.ok) {
+      if (pass1Response.status === 429) {
         return json({ error: "Rate limit exceeded. Please try again later." }, 429);
       }
-      if (aiResponse.status === 402) {
+      if (pass1Response.status === 402) {
         return json({ error: "AI credits exhausted. Please add funds." }, 402);
       }
-      const errText = await aiResponse.text();
-      console.error("AI gateway error:", aiResponse.status, errText);
+      const errText = await pass1Response.text();
+      console.error("AI gateway error (pass 1):", pass1Response.status, errText);
       return json({ error: "AI processing failed" }, 500);
     }
 
-    const aiData = await aiResponse.json();
-    const rawContent = aiData.choices?.[0]?.message?.content || "";
+    const pass1Data = await pass1Response.json();
+    const rawContent = pass1Data.choices?.[0]?.message?.content || "";
 
-    // Parse JSON from response (strip markdown fences if present)
     let parsed: any;
     try {
       const cleaned = rawContent.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
       parsed = JSON.parse(cleaned);
     } catch {
-      // Fallback: return raw as english
       parsed = mode === "audio"
         ? { transcript: rawContent, detectedLang: "unknown", english: rawContent }
         : { original: text, detectedLang: "unknown", english: rawContent };
     }
 
-    return json(parsed);
+    // ===== PASS 2: Verify & refine translation =====
+    const originalForReview = mode === "audio" ? (parsed.transcript || "") : (parsed.original || text);
+    const translationForReview = parsed.english || "";
+
+    const pass2Messages = [
+      {
+        role: "system",
+        content: `You are a senior translation quality reviewer and editor. You are reviewing a translation from ${parsed.detectedLang || "an unknown language"} to ${targetLang}.
+
+Your job:
+1. Check the translation for accuracy against the original
+2. Fix any mistranslations, awkward phrasing, grammar errors, or unnatural expressions
+3. Ensure proper nouns, numbers, and technical terms are preserved correctly
+4. Ensure cultural idioms are translated naturally (meaning, not literal)
+5. Rate the overall translation quality as a confidence score from 0-100:
+   - 95-100: Perfect, publication-ready
+   - 85-94: Excellent, minor stylistic preferences only
+   - 70-84: Good, some improvements made
+   - 50-69: Significant corrections needed
+   - Below 50: Major issues found
+
+Respond ONLY with valid JSON:
+{"refined":"<refined translation>","confidence":<number 0-100>,"notes":"<brief note on what was changed, or 'No changes needed'>"}`
+      },
+      {
+        role: "user",
+        content: `Original text:\n${originalForReview}\n\nTranslation to review:\n${translationForReview}`
+      }
+    ];
+
+    const pass2Response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-pro",
+        messages: pass2Messages,
+      }),
+    });
+
+    let confidence = 85;
+    let refinedTranslation = translationForReview;
+    let reviewNotes = "";
+
+    if (pass2Response.ok) {
+      const pass2Data = await pass2Response.json();
+      const pass2Raw = pass2Data.choices?.[0]?.message?.content || "";
+      try {
+        const pass2Cleaned = pass2Raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+        const pass2Parsed = JSON.parse(pass2Cleaned);
+        refinedTranslation = pass2Parsed.refined || translationForReview;
+        confidence = typeof pass2Parsed.confidence === "number" ? pass2Parsed.confidence : 85;
+        reviewNotes = pass2Parsed.notes || "";
+      } catch {
+        // If pass 2 fails to parse, keep pass 1 result
+        console.error("Pass 2 parse failed, using pass 1 result");
+      }
+    } else {
+      console.error("Pass 2 failed:", pass2Response.status);
+    }
+
+    const result: any = {
+      detectedLang: parsed.detectedLang || "unknown",
+      english: refinedTranslation,
+      confidence,
+      reviewNotes,
+    };
+
+    if (mode === "audio") {
+      result.transcript = parsed.transcript || "";
+    } else {
+      result.original = parsed.original || text;
+    }
+
+    return json(result);
   } catch (e) {
     if (e instanceof Response) return e;
     console.error("transcribe-translate error:", e);

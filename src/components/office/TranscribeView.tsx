@@ -1,5 +1,5 @@
-import { useState, useRef, useCallback } from "react";
-import { Mic, MicOff, Upload, FileText, Copy, Download, Trash2, ChevronDown, ChevronUp, Loader2, Languages } from "lucide-react";
+import { useState, useRef, useCallback, useEffect } from "react";
+import { Mic, MicOff, Upload, FileText, Copy, Download, Trash2, ChevronDown, ChevronUp, Loader2, Languages, RefreshCw, Timer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
@@ -46,6 +46,35 @@ const LANGUAGES = [
   { value: "cs", label: "Czech" },
 ];
 
+const TARGET_LANGUAGES = [
+  { value: "English", label: "English" },
+  { value: "Spanish", label: "Spanish" },
+  { value: "French", label: "French" },
+  { value: "German", label: "German" },
+  { value: "Portuguese", label: "Portuguese" },
+  { value: "Italian", label: "Italian" },
+  { value: "Dutch", label: "Dutch" },
+  { value: "Russian", label: "Russian" },
+  { value: "Chinese", label: "Chinese" },
+  { value: "Japanese", label: "Japanese" },
+  { value: "Korean", label: "Korean" },
+  { value: "Arabic", label: "Arabic" },
+  { value: "Hindi", label: "Hindi" },
+  { value: "Farsi", label: "Farsi" },
+  { value: "Turkish", label: "Turkish" },
+  { value: "Polish", label: "Polish" },
+  { value: "Vietnamese", label: "Vietnamese" },
+  { value: "Thai", label: "Thai" },
+  { value: "Indonesian", label: "Indonesian" },
+  { value: "Malay", label: "Malay" },
+  { value: "Bengali", label: "Bengali" },
+  { value: "Urdu", label: "Urdu" },
+  { value: "Swahili", label: "Swahili" },
+  { value: "Hebrew", label: "Hebrew" },
+  { value: "Greek", label: "Greek" },
+  { value: "Czech", label: "Czech" },
+];
+
 interface HistoryEntry {
   id: string;
   original: string;
@@ -53,10 +82,30 @@ interface HistoryEntry {
   detectedLang: string;
   mode: string;
   timestamp: Date;
+  confidence?: number;
+}
+
+function ConfidenceBadge({ confidence }: { confidence: number }) {
+  const color = confidence >= 90 ? "text-primary bg-primary/10 border-primary/30"
+    : confidence >= 70 ? "text-accent-foreground bg-accent border-accent/30"
+    : "text-destructive bg-destructive/10 border-destructive/30";
+  const label = confidence >= 90 ? "High" : confidence >= 70 ? "Medium" : "Low";
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${color}`}>
+      {confidence}% {label}
+    </span>
+  );
+}
+
+function formatTime(seconds: number) {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
 export function TranscribeView() {
   const [sourceLang, setSourceLang] = useState("auto");
+  const [targetLang, setTargetLang] = useState("English");
   const [formality, setFormality] = useState("neutral");
   const [contextHint, setContextHint] = useState("");
   const [outputFormat, setOutputFormat] = useState("plain");
@@ -66,19 +115,44 @@ export function TranscribeView() {
   const [originalText, setOriginalText] = useState("");
   const [englishText, setEnglishText] = useState("");
   const [detectedLang, setDetectedLang] = useState("");
+  const [confidence, setConfidence] = useState<number | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Mic
+  // Mic - ref-based accumulation
   const [isListening, setIsListening] = useState(false);
   const [interimText, setInterimText] = useState("");
   const recognitionRef = useRef<any>(null);
-  const hasTranslatedRef = useRef(false);
+  const accumulatedTextRef = useRef("");
+  const [wordCount, setWordCount] = useState(0);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const stopDisabledRef = useRef(false);
 
   // Text paste
   const [pasteText, setPasteText] = useState("");
 
   // History
   const [history, setHistory] = useState<HistoryEntry[]>([]);
+
+  // Recording timer
+  useEffect(() => {
+    if (isListening) {
+      setRecordingTime(0);
+      stopDisabledRef.current = true;
+      setTimeout(() => { stopDisabledRef.current = false; }, 1000);
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingTime(prev => prev + 1);
+      }, 1000);
+    } else {
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
+    }
+    return () => {
+      if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+    };
+  }, [isListening]);
 
   const addToHistory = useCallback((entry: Omit<HistoryEntry, "id" | "timestamp">) => {
     setHistory(prev => [{
@@ -127,7 +201,6 @@ export function TranscribeView() {
     const recognition = new SpeechRecognitionAPI();
     recognition.continuous = true;
     recognition.interimResults = true;
-    // Only set lang if not auto-detect; empty string can cause errors
     if (sourceLang !== "auto") {
       recognition.lang = sourceLang;
     }
@@ -136,32 +209,28 @@ export function TranscribeView() {
 
     recognition.onresult = (event: any) => {
       let interim = "";
-      let final = "";
+      let finalText = "";
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const transcript = event.results[i][0].transcript;
         if (event.results[i].isFinal) {
-          final += transcript;
+          finalText += transcript;
         } else {
           interim += transcript;
         }
       }
       setInterimText(interim);
-      if (final) {
-        setOriginalText(prev => prev + (prev ? " " : "") + final);
+      if (finalText) {
+        accumulatedTextRef.current += (accumulatedTextRef.current ? " " : "") + finalText.trim();
+        setOriginalText(accumulatedTextRef.current);
+        const wc = accumulatedTextRef.current.split(/\s+/).filter(Boolean).length;
+        setWordCount(wc);
         setInterimText("");
-        hasTranslatedRef.current = true;
-        callTranslateAPI({
-          mode: "text",
-          text: final,
-          sourceLang,
-          formality,
-          context: contextHint,
-          outputFormat,
-        }).then(result => {
-          setEnglishText(prev => prev + (prev ? " " : "") + result.english);
-          setDetectedLang(result.detectedLang);
-          addToHistory({ original: final, english: result.english, detectedLang: result.detectedLang, mode: "mic" });
-        }).catch(err => toast.error(err.message));
+      }
+      // Update live word count including interim
+      if (interim) {
+        const totalText = accumulatedTextRef.current + " " + interim;
+        const wc = totalText.split(/\s+/).filter(Boolean).length;
+        setWordCount(wc);
       }
     };
 
@@ -170,7 +239,6 @@ export function TranscribeView() {
         toast.error("Microphone access denied");
         setIsListening(false);
       } else if (event.error === "no-speech") {
-        // Don't stop — just inform briefly
         toast.info("No speech detected, still listening…");
       } else {
         toast.error(`Speech error: ${event.error}`);
@@ -178,7 +246,6 @@ export function TranscribeView() {
     };
 
     recognition.onend = () => {
-      // Auto-restart if still supposed to be listening
       if (recognitionRef.current === recognition) {
         try {
           recognition.start();
@@ -188,52 +255,85 @@ export function TranscribeView() {
       }
     };
 
-    hasTranslatedRef.current = false;
+    // Reset state
+    accumulatedTextRef.current = "";
     recognitionRef.current = recognition;
     recognition.start();
     setIsListening(true);
     setOriginalText("");
     setEnglishText("");
     setDetectedLang("");
+    setConfidence(null);
     setInterimText("");
+    setWordCount(0);
   };
 
   const stopListening = async () => {
+    if (stopDisabledRef.current) return;
+
     const ref = recognitionRef.current;
     recognitionRef.current = null;
     ref?.stop();
     setIsListening(false);
+    setInterimText("");
 
-    // Flush any pending interim text as original and translate everything
-    setInterimText(prev => {
-      if (prev.trim()) {
-        setOriginalText(old => old + (old ? " " : "") + prev.trim());
-      }
-      return "";
-    });
+    // Grab full accumulated text from ref (no race conditions)
+    const fullText = accumulatedTextRef.current.trim();
+    if (!fullText) {
+      toast.info("No speech captured");
+      return;
+    }
 
-    // Use a small delay to let state settle, then translate all accumulated text
-    setTimeout(() => {
-      setOriginalText(currentOriginal => {
-        if (currentOriginal.trim() && !hasTranslatedRef.current) {
-          // No final chunks were translated yet — translate everything now
-          callTranslateAPI({
-            mode: "text",
-            text: currentOriginal.trim(),
-            sourceLang,
-            formality,
-            context: contextHint,
-            outputFormat,
-          }).then(result => {
-            setEnglishText(result.english || "");
-            setDetectedLang(result.detectedLang || "");
-            addToHistory({ original: currentOriginal.trim(), english: result.english || "", detectedLang: result.detectedLang || "", mode: "mic" });
-            toast.success("Translation complete");
-          }).catch(err => toast.error(err.message));
-        }
-        return currentOriginal;
+    setOriginalText(fullText);
+    toast.info("Translating full transcript…");
+
+    try {
+      const result = await callTranslateAPI({
+        mode: "text",
+        text: fullText,
+        sourceLang,
+        targetLang,
+        formality,
+        context: contextHint,
+        outputFormat,
       });
-    }, 100);
+      setEnglishText(result.english || "");
+      setDetectedLang(result.detectedLang || "");
+      setConfidence(typeof result.confidence === "number" ? result.confidence : null);
+      addToHistory({
+        original: fullText,
+        english: result.english || "",
+        detectedLang: result.detectedLang || "",
+        mode: "mic",
+        confidence: result.confidence,
+      });
+      toast.success("Translation complete");
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
+  // Re-translate button
+  const handleRetranslate = async () => {
+    const textToRetranslate = originalText.trim();
+    if (!textToRetranslate) return;
+    try {
+      const result = await callTranslateAPI({
+        mode: "text",
+        text: textToRetranslate,
+        sourceLang,
+        targetLang,
+        formality,
+        context: contextHint,
+        outputFormat,
+      });
+      setEnglishText(result.english || "");
+      setDetectedLang(result.detectedLang || "");
+      setConfidence(typeof result.confidence === "number" ? result.confidence : null);
+      toast.success("Re-translation complete");
+    } catch (err: any) {
+      toast.error(err.message);
+    }
   };
 
   // --- Upload Tab ---
@@ -252,6 +352,7 @@ export function TranscribeView() {
     const formData = new FormData();
     formData.append("audio", file);
     formData.append("sourceLang", sourceLang);
+    formData.append("targetLang", targetLang);
     formData.append("formality", formality);
     formData.append("context", contextHint);
     formData.append("outputFormat", outputFormat);
@@ -261,11 +362,13 @@ export function TranscribeView() {
       setOriginalText(result.transcript || result.original || "");
       setEnglishText(result.english || "");
       setDetectedLang(result.detectedLang || "");
+      setConfidence(typeof result.confidence === "number" ? result.confidence : null);
       addToHistory({
         original: result.transcript || result.original || "",
         english: result.english || "",
         detectedLang: result.detectedLang || "",
         mode: "upload",
+        confidence: result.confidence,
       });
       toast.success("Transcription complete");
     } catch (err: any) {
@@ -281,6 +384,7 @@ export function TranscribeView() {
         mode: "text",
         text: pasteText,
         sourceLang,
+        targetLang,
         formality,
         context: contextHint,
         outputFormat,
@@ -288,11 +392,13 @@ export function TranscribeView() {
       setOriginalText(result.original || pasteText);
       setEnglishText(result.english || "");
       setDetectedLang(result.detectedLang || "");
+      setConfidence(typeof result.confidence === "number" ? result.confidence : null);
       addToHistory({
         original: result.original || pasteText,
         english: result.english || "",
         detectedLang: result.detectedLang || "",
         mode: "text",
+        confidence: result.confidence,
       });
       toast.success("Translation complete");
     } catch (err: any) {
@@ -307,7 +413,7 @@ export function TranscribeView() {
   };
 
   const downloadTxt = () => {
-    const content = `Original (${detectedLang}):\n${originalText}\n\nEnglish Translation:\n${englishText}`;
+    const content = `Original (${detectedLang}):\n${originalText}\n\nTranslation:\n${englishText}${confidence !== null ? `\n\nConfidence: ${confidence}%` : ""}`;
     const blob = new Blob([content], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -321,8 +427,11 @@ export function TranscribeView() {
     setOriginalText("");
     setEnglishText("");
     setDetectedLang("");
+    setConfidence(null);
     setInterimText("");
     setPasteText("");
+    setWordCount(0);
+    accumulatedTextRef.current = "";
   };
 
   return (
@@ -334,7 +443,7 @@ export function TranscribeView() {
         </div>
         <div>
           <h1 className="text-xl font-bold text-foreground">AI Transcribe & Translate</h1>
-          <p className="text-xs text-muted-foreground">Transcribe any language to English with AI</p>
+          <p className="text-xs text-muted-foreground">World-class two-pass AI translation with confidence scoring</p>
         </div>
       </div>
 
@@ -367,8 +476,34 @@ export function TranscribeView() {
               <p className="text-sm text-muted-foreground">
                 {isListening ? "Listening… speak now" : "Click to start listening"}
               </p>
+
+              {/* Recording stats */}
+              {isListening && (
+                <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1">
+                    <Timer className="w-3 h-3" />
+                    {formatTime(recordingTime)}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <FileText className="w-3 h-3" />
+                    {wordCount} words
+                  </span>
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive/75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-destructive"></span>
+                  </span>
+                </div>
+              )}
+
               {interimText && (
                 <p className="text-sm italic text-muted-foreground/70 animate-pulse">{interimText}</p>
+              )}
+
+              {/* Live accumulated preview */}
+              {isListening && accumulatedTextRef.current && (
+                <div className="w-full bg-muted/30 rounded-md p-2 text-xs text-muted-foreground max-h-24 overflow-y-auto">
+                  {originalText}
+                </div>
               )}
             </CardContent>
           </Card>
@@ -425,7 +560,7 @@ export function TranscribeView() {
               />
               <Button onClick={handleTextTranslate} disabled={!pasteText.trim() || isProcessing} className="w-full">
                 {isProcessing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Languages className="w-4 h-4 mr-2" />}
-                Translate to English
+                Translate
               </Button>
             </CardContent>
           </Card>
@@ -449,6 +584,17 @@ export function TranscribeView() {
                   <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {LANGUAGES.map(l => (
+                      <SelectItem key={l.value} value={l.value} className="text-xs">{l.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Translate To</label>
+                <Select value={targetLang} onValueChange={setTargetLang}>
+                  <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {TARGET_LANGUAGES.map(l => (
                       <SelectItem key={l.value} value={l.value} className="text-xs">{l.label}</SelectItem>
                     ))}
                   </SelectContent>
@@ -496,7 +642,7 @@ export function TranscribeView() {
           <CardContent className="p-4 space-y-4">
             {isProcessing && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="w-4 h-4 animate-spin" /> Processing…
+                <Loader2 className="w-4 h-4 animate-spin" /> Processing with two-pass AI verification…
               </div>
             )}
 
@@ -512,12 +658,17 @@ export function TranscribeView() {
 
             {englishText && (
               <div className="space-y-1">
-                <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">English Translation</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                    {targetLang} Translation
+                  </span>
+                  {confidence !== null && <ConfidenceBadge confidence={confidence} />}
+                </div>
                 <div className="bg-primary/5 border border-primary/10 rounded-md p-3 text-sm whitespace-pre-wrap">{englishText}</div>
               </div>
             )}
 
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               {englishText && (
                 <>
                   <Button size="sm" variant="outline" className="text-xs gap-1.5" onClick={() => copyToClipboard(englishText)}>
@@ -527,6 +678,11 @@ export function TranscribeView() {
                     <Download className="w-3 h-3" /> Download
                   </Button>
                 </>
+              )}
+              {confidence !== null && confidence < 70 && (
+                <Button size="sm" variant="outline" className="text-xs gap-1.5 border-accent/30 text-accent-foreground" onClick={handleRetranslate} disabled={isProcessing}>
+                  <RefreshCw className="w-3 h-3" /> Re-translate
+                </Button>
               )}
               <Button size="sm" variant="ghost" className="text-xs gap-1.5 text-destructive" onClick={clearResults}>
                 <Trash2 className="w-3 h-3" /> Clear
@@ -547,11 +703,13 @@ export function TranscribeView() {
                   setOriginalText(entry.original);
                   setEnglishText(entry.english);
                   setDetectedLang(entry.detectedLang);
+                  setConfidence(entry.confidence ?? null);
                 }}>
                   <CardContent className="p-3">
                     <div className="flex items-center gap-2 mb-1">
                       <Badge variant="outline" className="text-[9px]">{entry.mode}</Badge>
                       <Badge variant="secondary" className="text-[9px]">{entry.detectedLang}</Badge>
+                      {entry.confidence !== undefined && <ConfidenceBadge confidence={entry.confidence} />}
                       <span className="text-[9px] text-muted-foreground ml-auto">
                         {entry.timestamp.toLocaleTimeString()}
                       </span>
