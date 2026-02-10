@@ -1,127 +1,132 @@
 
 
-## AI Face Recognition Time Clock System
+## Payroll Audit — Full Rebuild
 
-This plan adds camera-based facial recognition to the Time Clock, making punch-in/out fully automatic -- employees just stand in front of a camera/tablet and the system identifies them and punches them in or out.
-
----
-
-### How It Works
-
-1. **Enrollment**: Each employee captures 3 reference photos of their face (stored in a private storage bucket). Admin or the employee themselves can do this from the Time Clock page.
-
-2. **Auto-Punch**: When an employee approaches the kiosk/device, they tap "Start" and the camera captures their face. The system sends the photo + all enrolled reference photos to Lovable AI (Gemini vision model) which identifies the person and returns a confidence score.
-
-3. **Automatic Action**: If confidence is 95% or higher, the system auto-punches (in or out depending on current status). If lower, it asks the employee to confirm their identity manually.
+Replace the static mock `PayrollAuditView` with a production-grade, Ontario-compliant payroll audit system. This requires new database tables, an edge function for payroll computation, and a completely new multi-tab UI.
 
 ---
 
-### Database Changes
+### Phase 1: Database Migration
 
-**New table: `face_enrollments`**
-- `id` (uuid), `profile_id` (references profiles), `photo_url` (text -- URL in storage bucket), `enrolled_at` (timestamptz), `is_active` (boolean, default true)
-- RLS: employees can manage their own enrollments, admins can manage all
+Create the payroll tables that were planned but never built:
 
-**New storage bucket: `face-enrollments`**
-- Private bucket (not public -- face data is sensitive)
-- Authenticated users can upload to their own folder
-- Organized as `face-enrollments/{profile_id}/photo-1.jpg`
+**`payroll_daily_snapshot`**
+- `id`, `profile_id` (FK profiles), `work_date` (date), `employee_type` (text: office/workshop)
+- `raw_clock_in` (timestamptz), `raw_clock_out` (timestamptz)
+- `lunch_deducted_minutes` (int, default 30), `paid_break_minutes` (int, default 0)
+- `expected_minutes` (int, default 510 = 8.5hrs), `paid_minutes` (int)
+- `overtime_minutes` (int, default 0)
+- `exceptions` (jsonb, default '[]'), `ai_notes` (text)
+- `status` (text: auto/reviewed/approved, default 'auto')
+- `approved_by` (uuid, nullable), `approved_at` (timestamptz, nullable)
+- `company_id` (uuid), `created_at`
+- RLS: admins read/write all in company, employees read own
 
----
+**`payroll_weekly_summary`**
+- `id`, `profile_id`, `week_start` (date), `week_end` (date), `employee_type`
+- `total_paid_hours` (numeric), `regular_hours` (numeric), `overtime_hours` (numeric)
+- `total_exceptions` (int), `status` (text: draft/approved/locked, default 'draft')
+- `approved_by`, `approved_at`, `locked_at`, `company_id`, `created_at`
+- RLS: same pattern
 
-### New Edge Function: `face-recognize`
+**`payroll_audit_log`**
+- `id`, `actor_id` (uuid), `action` (text), `entity_type` (text), `entity_id` (uuid)
+- `before_data` (jsonb), `after_data` (jsonb), `reason` (text), `company_id`, `created_at`
+- RLS: admin-only read, insert via trigger/service role
 
-Receives a base64 camera capture + the employee's company context. The function:
-1. Fetches all active face enrollments for the company (photo URLs)
-2. Sends the captured image + enrolled reference images to Lovable AI (Gemini vision) with a prompt like: *"Compare this photo against these enrolled employee faces. Return the profile_id of the matching person and a confidence score 0-100. If no match, return null."*
-3. Returns `{ matched_profile_id, confidence, employee_name }`
-4. If confidence >= 95, the client auto-triggers punch-in or punch-out
-5. Logs the recognition attempt in the audit trail
+Add `employee_type` column to `profiles` table (text, nullable, values: 'office' or 'workshop') so each person's work rules are explicit.
 
----
-
-### UI Changes
-
-**File: `src/pages/TimeClock.tsx`**
-- Add a "Face ID" mode toggle at the top (switches between manual punch and camera mode)
-- In camera mode: show a full-screen camera viewfinder with a circular overlay
-- Auto-capture every few seconds or on tap
-- Show recognition result with employee name + confidence badge
-- Auto-punch with a success animation if matched
-
-**New components in `src/components/timeclock/`:**
-- `FaceCamera.tsx` -- Camera viewfinder using browser MediaDevices API (`navigator.mediaDevices.getUserMedia`). Captures frames as JPEG base64.
-- `FaceEnrollment.tsx` -- Enrollment flow: capture 3 photos, upload to storage, save references in `face_enrollments` table. Shows a guide overlay (face outline).
-- `FaceRecognitionResult.tsx` -- Shows match result with avatar, name, confidence score, and auto-punch countdown.
-
-**New hook: `src/hooks/useFaceRecognition.ts`**
-- Manages camera stream lifecycle
-- Handles capture + sends to `face-recognize` edge function
-- Returns recognition state (idle/scanning/matched/failed)
-- Auto-triggers clockIn/clockOut on successful match
+Enable realtime on `payroll_daily_snapshot`.
 
 ---
 
-### Enrollment Flow (for employees)
+### Phase 2: Payroll Engine (Edge Function)
 
-1. Employee goes to Time Clock page and taps "Enroll Face ID"
-2. Camera opens with a face outline guide
-3. Employee captures 3 photos (front, slight left, slight right)
-4. Photos upload to private `face-enrollments` storage bucket
-5. References saved in `face_enrollments` table
-6. Employee is now enrolled and can use face recognition to punch
+**New: `supabase/functions/payroll-engine/index.ts`**
 
----
+Called to compute a week's payroll for a company. For each employee with `time_clock_entries` in the date range:
 
-### Kiosk Mode
+1. Determine `employee_type` from `profiles.employee_type` (fall back to department: office -> office, workshop/field -> workshop)
+2. For each work day, find the clock-in/out pair
+3. Apply locked rules:
+   - **Office**: gross = clock_out - clock_in, deduct 30min lunch, paid = gross - 30min. Expected = 510min.
+   - **Workshop**: gross = clock_out - clock_in, deduct 30min lunch, add 30min paid breaks implicitly. paid = gross - 30min. Expected = 510min.
+4. Detect exceptions:
+   - Missing punch (clock_in with no clock_out, or no entry for a weekday)
+   - Early/late punch (outside allowed windows)
+   - Daily paid hours not equal to 8.5
+   - Lunch overlap detection
+5. Calculate weekly overtime: if total paid hours > 44, excess = overtime
+6. Generate AI notes per employee (short, actionable text)
+7. Upsert into `payroll_daily_snapshot` and `payroll_weekly_summary`
 
-The existing Time Clock page gets a "Kiosk Mode" button (fullscreen, no navigation):
-- Camera is always active
-- Continuously scans for faces
-- When a face is detected and matched, shows a greeting + auto-punches
-- Returns to scanning after 5 seconds
-- Perfect for a wall-mounted tablet at the shop entrance
-
----
-
-### Security and Privacy
-
-- Face photos stored in a **private** storage bucket (not publicly accessible)
-- AI processing happens server-side only (edge function) -- no face data stays on client
-- Recognition attempts are logged for audit
-- Employees can delete their enrollment at any time
-- Face data is never used for anything other than punch identification
+Uses Lovable AI (`gemini-2.5-flash`) for AI notes generation.
 
 ---
 
-### Technical Details
+### Phase 3: UI Rebuild
 
-**Edge function details (`face-recognize`):**
-- Uses `google/gemini-2.5-flash` (vision-capable, fast, cost-effective)
-- Sends multipart content: captured image + up to 3 reference images per enrolled employee
-- To keep payload manageable, fetches enrollment photos as signed URLs and passes them to the AI
-- Returns structured output via tool calling (profile_id + confidence)
+**Rewrite `src/components/office/PayrollAuditView.tsx`** with tabbed layout:
 
-**Camera implementation:**
-- Uses `navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })`
-- Captures frames to canvas, exports as JPEG base64 (compressed to ~100KB)
-- Works on mobile (front camera) and desktop (webcam)
+**Tab 1: Overview (Default)**
+- Week selector (Mon-Sun, defaults to current week)
+- 5 summary cards: Total Employees, Total Paid Hours, Overtime Hours, Exceptions, Compliance Status (PASS/REVIEW)
+- Employee payroll table with columns: Name, Role (Office/Workshop), Expected Hrs, Actual Paid Hrs, Regular Hrs, OT Hrs, Exceptions, Status (Clean/Needs Review/Blocked)
+- Row click expands daily breakdown
+- "Compute Payroll" button to trigger the edge function
+- "Approve All Clean" bulk action
+- "Lock Week" button (makes snapshot read-only)
 
-**config.toml addition:**
-```toml
-[functions.face-recognize]
-verify_jwt = false
-```
+**Tab 2: Exceptions**
+- Filtered list showing ONLY employees/days with issues
+- Each exception card shows: Date, Employee, What happened, AI suggestion, Confidence %, Action buttons (Approve/Reject/Ask Employee)
+- Exception types: missed punch, early/late, lunch overlap, hours mismatch, OT threshold
 
-### File Summary
+**Tab 3: Compliance**
+- Ontario compliance checklist (automated):
+  - Unpaid lunch enforced on all 5h+ shifts
+  - No time rounding detected
+  - Overtime paid after 44h/week
+  - No manual edits without approval
+  - Paid breaks correct for workshop
+- Each item shows PASS (green) or FAIL (red)
+- If any FAIL exists, payroll cannot be locked
+
+**Tab 4: History**
+- List of previously locked weeks
+- Each shows: week range, total payroll hours, status badge
+- Click to view read-only snapshot
+- Export buttons (CSV, PDF)
+
+**Header actions:**
+- Week picker (prev/next arrows + date display)
+- Export dropdown (CSV, PDF, Audit Log)
+- Lock Payroll button
+
+---
+
+### New Files
 
 | Action | File |
 |--------|------|
-| Migration | `face_enrollments` table + `face-enrollments` storage bucket |
-| New edge function | `supabase/functions/face-recognize/index.ts` |
-| New component | `src/components/timeclock/FaceCamera.tsx` |
-| New component | `src/components/timeclock/FaceEnrollment.tsx` |
-| New component | `src/components/timeclock/FaceRecognitionResult.tsx` |
-| New hook | `src/hooks/useFaceRecognition.ts` |
-| Modified | `src/pages/TimeClock.tsx` (add face mode toggle + kiosk mode) |
+| Migration | New tables + profiles column |
+| New | `supabase/functions/payroll-engine/index.ts` |
+| Rewrite | `src/components/office/PayrollAuditView.tsx` |
+| New | `src/hooks/usePayrollAudit.ts` (fetches snapshots, triggers engine, approve/lock actions) |
+| New | `src/components/office/payroll/PayrollOverviewTab.tsx` |
+| New | `src/components/office/payroll/PayrollExceptionsTab.tsx` |
+| New | `src/components/office/payroll/PayrollComplianceTab.tsx` |
+| New | `src/components/office/payroll/PayrollHistoryTab.tsx` |
+| New | `src/components/office/payroll/PayrollEmployeeRow.tsx` |
+| New | `src/components/office/payroll/PayrollExportDialog.tsx` |
 
+---
+
+### Design Principles Applied
+
+- Managers see exceptions only -- clean employees are green-lit automatically
+- Raw punch data (`time_clock_entries`) is never modified
+- All approvals and locks are logged in `payroll_audit_log`
+- Ontario compliance is checked as hard gates before locking
+- Locked payroll becomes immutable source of truth
+- Follows the existing Office Portal visual style (dark theme, uppercase headers, tracking-widest labels)
