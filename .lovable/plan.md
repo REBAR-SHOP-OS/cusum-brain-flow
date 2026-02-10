@@ -1,98 +1,86 @@
 
-# World-Class Transcription & Translation Upgrade
+# Speaker Diarization & Intelligent Name Detection
 
 ## Overview
 
-Upgrade both the backend AI engine and frontend to deliver the most accurate, production-grade transcription and translation possible. This means using the most powerful AI model, a two-pass verification pipeline, confidence scoring, and smarter speech capture on the frontend.
+Add speaker diarization (Speaker 1, Speaker 2, etc.) to the transcription system, with intelligent name detection -- if speakers mention each other's names during the conversation, automatically replace "Speaker 1" / "Speaker 2" with their actual names.
 
-## Backend Upgrades (`supabase/functions/transcribe-translate/index.ts`)
+## Backend Changes (`supabase/functions/transcribe-translate/index.ts`)
 
-### 1. Upgrade AI Model to Gemini 2.5 Pro
-Switch from `google/gemini-3-flash-preview` to `google/gemini-2.5-pro` -- the most powerful model available for translation accuracy, nuance, and context understanding.
+### 1. Update AI Prompts for Speaker Diarization
 
-### 2. Two-Pass Verification Pipeline
-- **Pass 1**: Translate with the full context, domain hints, and formality constraints
-- **Pass 2**: A second AI call reviews the translation for accuracy, grammar, and cultural nuance, returning a refined version and a confidence score (0-100)
-- This catches mistranslations, awkward phrasing, and domain-specific errors that a single pass would miss
+Update both audio and text mode prompts to instruct the AI to:
+- Identify distinct speakers by voice characteristics (tone, pitch, accent)
+- Label them initially as "Speaker 1", "Speaker 2", etc.
+- Listen for name mentions (e.g. "Hey Ali", "Thanks John", "Mr. Smith said...")
+- Replace speaker labels with detected names when found
+- Output the transcript with speaker labels on each line
 
-### 3. Enhanced System Prompt
-Upgrade the prompt to act as a professional-grade translator with:
-- Preservation of proper nouns, numbers, measurements, and technical terms
-- Handling of idioms and cultural context (translate meaning, not word-for-word)
-- Transliteration hints for names/places
-- Explicit instruction to never hallucinate or add content not in the original
+### 2. New JSON Response Format
 
-### 4. Return Confidence Score
-Add a `confidence` field (0-100) to the response so the UI can show the user how reliable the translation is.
+Change the response structure to include speaker-labeled transcript:
 
-### 5. Add `targetLang` Support
-Allow translating to any language (not just English). Default remains English but the user can pick a target.
+```text
+{
+  "transcript": "Ali: سلام، how are you?\nJohn: I'm good, Ali. Let's talk about the project.",
+  "detectedLang": "Farsi/English mix",
+  "english": "Ali: Hello, how are you?\nJohn: I'm good, Ali. Let's talk about the project.",
+  "speakers": ["Ali", "John"],
+  "confidence": 92
+}
+```
 
-## Frontend Upgrades (`src/components/office/TranscribeView.tsx`)
+If names cannot be detected, fall back to "Speaker 1", "Speaker 2".
 
-### 1. Batch Translation on Stop (Fix Current Bug Properly)
-Replace the fragile `setTimeout` + `setOriginalText` callback hack with a proper ref-based approach:
-- Accumulate all speech text in a `ref` (not just state)
-- On stop, immediately read the ref and call the API with the full accumulated text
-- No timing issues, no race conditions
+### 3. Update Pass 2 (Verification)
 
-### 2. Confidence Score Display
-- Show a color-coded confidence badge next to the translation (green >= 90, yellow >= 70, red < 70)
-- If confidence is below 70, show a "Re-translate" button that runs the verification pass again
+The reviewer pass will also verify:
+- Speaker attribution consistency (same voice = same label throughout)
+- Name detection accuracy
+- Correct assignment of dialogue to speakers
 
-### 3. Target Language Selector
-- Add a "Translate To" dropdown (default: English) in the Advanced Options
-- Supports all 30+ languages already defined
+## Frontend Changes (`src/components/office/TranscribeView.tsx`)
 
-### 4. Improved Mic UX
-- Show a live word counter while listening
-- Show elapsed recording time
-- Disable the stop button for the first 1 second to prevent accidental taps
+### 1. Speaker-Aware Transcript Display
 
-### 5. Auto-Translate on Stop
-When the user stops the mic, always translate the full accumulated text (not chunk-by-chunk). This gives the AI full context for a much more accurate translation.
+- Parse the speaker-labeled transcript and render each speaker's lines with distinct styling
+- Color-code speakers (e.g., Speaker 1 = blue, Speaker 2 = green)
+- Show speaker names as bold labels before their text
+
+### 2. Speakers Badge
+
+- Show detected speaker names/count near the confidence badge
+- Example: "2 speakers: Ali, John"
+
+### 3. History Entry Update
+
+- Update `HistoryEntry` interface to optionally include `speakers` array
+- Display speaker count in history list
 
 ## Technical Details
 
-### Edge Function Changes
+### Prompt Engineering (Key Addition)
 
-The function will make two sequential AI calls:
-
-```text
-Request --> Pass 1 (Translate with gemini-2.5-pro)
-        --> Pass 2 (Verify & refine translation, return confidence)
-        --> Response with { original, english, detectedLang, confidence, refined }
-```
-
-Pass 2 system prompt:
-- "You are a translation quality reviewer. Given the original text and its translation, check for accuracy, grammar, cultural appropriateness, and domain terminology. Return the refined translation and a confidence score 0-100."
-
-### Frontend Mic Flow (Fixed)
+The system prompt will include:
 
 ```text
-User clicks Start
-  --> SpeechRecognition starts
-  --> All text accumulated in accumulatedTextRef
-  --> Interim text shown live
-User clicks Stop
-  --> Read accumulatedTextRef.current (full text)
-  --> Single API call with full context
-  --> Show result with confidence badge
+SPEAKER DIARIZATION:
+- This audio/text may contain multiple speakers in a conversation.
+- Identify each distinct speaker and label them.
+- IMPORTANT: Listen carefully for when speakers address each other by name
+  (e.g. "Hey Ali", "Thank you Sarah", "Mr. Johnson", etc.)
+- If you detect a speaker's name, use their real name instead of "Speaker 1/2".
+- If no name is detected for a speaker, use "Speaker 1", "Speaker 2", etc.
+- Format each line as: "SpeakerName: their words here"
+- Maintain consistent speaker labels throughout the entire transcript.
+- Include a "speakers" array in your response listing all identified speakers.
 ```
+
+### Frontend Rendering
+
+Speaker lines will be parsed by splitting on newlines and detecting the `Name:` pattern, then rendered with colored badges per speaker.
 
 ### Files Modified
 
-1. **`supabase/functions/transcribe-translate/index.ts`**
-   - Switch model to `google/gemini-2.5-pro`
-   - Add two-pass verification pipeline
-   - Enhanced system prompts
-   - Add `targetLang` parameter support
-   - Return `confidence` score
-
-2. **`src/components/office/TranscribeView.tsx`**
-   - Fix mic stop with ref-based accumulation (no setTimeout hack)
-   - Add confidence badge display
-   - Add target language selector in Advanced Options
-   - Add recording timer and word counter
-   - Auto-translate full text on stop (single pass, not chunks)
-   - Add "Re-translate" button for low-confidence results
+1. `supabase/functions/transcribe-translate/index.ts` -- Add diarization instructions to prompts, update JSON schema, update Pass 2 review prompt
+2. `src/components/office/TranscribeView.tsx` -- Speaker-aware rendering, color-coded display, speakers badge, updated history interface
