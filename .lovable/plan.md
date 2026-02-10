@@ -1,120 +1,55 @@
 
-# AI Transcription & Translation Module for Office Tools
+
+# Add Voice Recorder to Command Hub
 
 ## What This Adds
 
-A new **"AI Transcribe"** section inside Office Tools that lets you:
+A compact voice recorder widget on the Command Hub (`/shop-floor`) page -- a floating microphone button that expands into a mini recorder panel. Workers can quickly record voice memos, which get transcribed and translated to English using the existing `transcribe-translate` backend function.
 
-1. **Live Microphone Transcription** -- speak in any language, get real-time English text
-2. **Audio File Upload** -- drop an MP3/WAV/M4A file, get it transcribed and translated to English
-3. **Text Paste & Translate** -- paste text in any language and get an English translation
-4. **Advanced Options** -- source language auto-detect or manual select, tone/formality control, glossary/context hints, copy/download results
+## Changes
 
-Everything is powered by the existing Lovable AI gateway (no extra API keys needed).
+### 1. New Component: `src/components/shopfloor/VoiceRecorderWidget.tsx`
 
----
+A self-contained floating widget with:
+- A circular mic button (matching the dark Command Hub theme)
+- When active, expands to show:
+  - Live waveform/pulse animation while recording
+  - Real-time interim transcription text
+  - Stop button
+  - On stop: shows the transcribed + translated English text
+  - Copy and dismiss buttons
+- Uses browser `SpeechRecognition` for live transcription
+- Calls the existing `transcribe-translate` edge function for AI translation to English
+- Styled to match the dark Command Hub aesthetic (card/50 backdrop-blur, primary accent)
 
-## New Files
+### 2. Modified: `src/pages/ShopFloor.tsx`
 
-### 1. `src/components/office/TranscribeView.tsx`
-The main UI component with three tabs:
-
-- **Mic Tab**: Live microphone transcription using browser SpeechRecognition API with real-time display, auto-detect language, and AI translation to English
-- **Upload Tab**: Drag-and-drop or file picker for audio files (sent to a backend function for transcription + translation)
-- **Text Tab**: Paste any foreign text, select source language (or auto-detect), get English translation
-
-Advanced options panel (collapsible):
-- Source language selector (auto-detect default, 30+ languages)
-- Formality level (casual / neutral / formal)
-- Context hint text field (e.g., "manufacturing terminology")
-- Output format toggle (plain text / bullet points / paragraphs)
-
-Results area:
-- Original text display
-- English translation display
-- Copy to clipboard button
-- Download as .txt button
-- History of recent transcriptions (session-local)
-
-### 2. `supabase/functions/transcribe-translate/index.ts`
-New edge function that handles two modes:
-
-**Mode 1: Text translation**
-- Receives `{ mode: "text", text: string, sourceLang?: string, formality?: string, context?: string }`
-- Uses Lovable AI (gemini-3-flash-preview) to detect language + translate to English
-- Returns `{ original: string, detectedLang: string, english: string }`
-
-**Mode 2: Audio transcription**
-- Receives audio file as FormData
-- Uses Lovable AI to transcribe audio content and translate to English
-- Returns `{ transcript: string, detectedLang: string, english: string }`
-
-Both modes support the advanced options (formality, context hints, output format).
-
----
-
-## Modified Files
-
-### 3. `src/components/office/OfficeSidebar.tsx`
-- Add `"ai-transcribe"` to the `OfficeSection` type union
-- Add entry to `officeTools` array: `{ id: "ai-transcribe", label: "AI Transcribe", icon: Languages }`
-- Import `Languages` from lucide-react
-
-### 4. `src/pages/OfficePortal.tsx`
-- Import `TranscribeView`
-- Add `"ai-transcribe": TranscribeView` to the `sectionComponents` map
-
----
+- Import and render `VoiceRecorderWidget` as a fixed-position element in the bottom-right corner of the Command Hub
+- Positioned above the "Back to Entry Screen" link
 
 ## Technical Details
 
-### TranscribeView Component Structure
+### VoiceRecorderWidget Component
 
 ```text
-TranscribeView
-  +-- Tabs: [ Microphone | Upload File | Paste Text ]
-  |
-  +-- Advanced Options (collapsible)
-  |     +-- Source Language (Select, default: Auto-detect)
-  |     +-- Formality (Select: casual/neutral/formal)
-  |     +-- Context Hint (Input)
-  |     +-- Output Format (Toggle: plain/bullets/paragraphs)
-  |
-  +-- Results Panel
-  |     +-- Original text (with detected language badge)
-  |     +-- English translation
-  |     +-- Action buttons: Copy | Download | Clear
-  |
-  +-- Session History (accordion, last 10 items)
+VoiceRecorderWidget
+  State: idle | listening | processing | result
+  
+  [idle] --> Floating mic button (bottom-right)
+  [listening] --> Expanded panel with pulse animation + interim text
+  [processing] --> Loading spinner while AI translates
+  [result] --> Shows original + English text, copy/dismiss buttons
 ```
 
-### Microphone Tab Flow
+### Integration with existing backend
+- Reuses `supabase/functions/transcribe-translate` (already deployed)
+- Same API call pattern as TranscribeView: `{ mode: "text", text, sourceLang: "auto" }`
+- No new edge functions or database changes needed
 
-```text
-User clicks "Start Listening"
-  --> Browser SpeechRecognition starts (lang = selected or auto)
-  --> Interim results shown live in "Original" panel
-  --> On final result, call transcribe-translate edge function
-  --> English translation appears in "English" panel
-  --> Entry added to session history
-```
+### Styling
+- Fixed position bottom-right corner
+- Dark glass-morphism card matching Command Hub theme
+- Primary color accent for the mic button
+- Pulse animation when actively listening
+- Compact footprint -- does not obstruct hub cards
 
-### Upload Tab Flow
-
-```text
-User drops audio file or clicks file picker
-  --> File sent to transcribe-translate edge function (FormData)
-  --> Loading spinner shown
-  --> Returns transcript + English translation
-  --> Both displayed in results panel
-```
-
-### Edge Function: `transcribe-translate/index.ts`
-
-- Auth guard via `requireAuth`
-- For text mode: AI prompt instructs the model to detect language, translate to English with specified formality/context
-- For audio mode: Since Lovable AI supports multimodal (Gemini), encode audio as base64 and send in the prompt for transcription + translation
-- Rate limiting not needed initially (auth-gated)
-
-### Supported Languages (auto-detect + manual)
-English, Farsi, Spanish, French, Arabic, Hindi, Chinese, German, Portuguese, Russian, Korean, Japanese, Turkish, Urdu, Italian, Dutch, Polish, Vietnamese, Thai, Indonesian, Malay, Filipino, Bengali, Punjabi, Tamil, Telugu, Swahili, Hebrew, Greek, Czech
