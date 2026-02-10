@@ -1,24 +1,75 @@
 
-# Fix: RingCentral "Session Expired" Error
 
-## Problem
-When you click Connect on RingCentral, the OAuth flow opens a popup that redirects to `https://erp.rebar.shop/integrations/callback`. This callback page tries to find your login session in the browser -- but because the popup is on a different domain than where you're logged in, it can't find the session and shows "Session expired."
+# Production Readiness Cleanup
 
-## Solution
-Change the RingCentral flow to match how QuickBooks works: instead of redirecting back to your app's callback page (which needs a browser session), redirect to the backend function itself. The backend function will exchange the code, save the tokens, and then redirect the popup to the callback page with a simple `?status=success` message.
+## Scope
+Surgical removal of debug artifacts and hardening of client-side code for production. No functional changes, no UI changes, no module restructuring.
 
-## Changes
+---
 
-### 1. Update the RingCentral backend function (`supabase/functions/ringcentral-oauth/index.ts`)
-- In the `get-auth-url` action: embed the user ID in the OAuth `state` parameter (e.g., `userId|ringcentral`) and set the redirect URI to the edge function URL (`/functions/v1/ringcentral-oauth/callback`)
-- Add a new `callback` handler for GET requests: parse the `code` and `state` from the URL, extract the user ID from state, exchange the code for tokens server-side, save them, and issue a 302 redirect to `https://erp.rebar.shop/integrations/callback?status=success&integration=ringcentral`
-- On error, redirect to `?status=error&message=...`
+## 1. Remove Debug `console.log` Statements (Client-Side)
 
-### 2. Update the client-side OAuth start (`src/hooks/useIntegrations.ts`)
-- Remove the `redirectUri` parameter from the RingCentral `get-auth-url` call (the edge function will determine its own redirect URI)
+The following `console.log` calls are pure debug noise and will be removed:
 
-### 3. Update RingCentral Developer Portal
-- Change the OAuth Redirect URI from `https://erp.rebar.shop/integrations/callback` to your backend function URL (will be provided after implementation)
+| File | Line(s) | Content |
+|------|---------|---------|
+| `src/components/office/ProductionQueueView.tsx` | 147, 149 | `[PQ] fetching customers...`, `[PQ] customers result...` |
+| `src/hooks/useTeamMeetings.ts` | 89, 138 | `[Meeting] RingCentral Video bridge created`, `Meeting summarized:` |
+| `src/components/error/SmartErrorBoundary.tsx` | 80 | `Auto-recovering in Xms...` |
 
-## Why This Works
-The backend function has service-role access to the database, so it doesn't need a browser session. It already knows the user ID from the state parameter. The callback page just shows a success/error message -- no code exchange needed.
+**Preserved:** All `console.error` and `console.warn` calls remain -- they serve as production diagnostics for real failures. Edge function logs also remain since they only run server-side and are essential for operational monitoring.
+
+---
+
+## 2. Guard `localStorage` Serialization
+
+Files `useGlobalErrorHandler.ts` and `SmartErrorBoundary.tsx` already have try/catch around localStorage. No changes needed -- confirmed safe.
+
+---
+
+## 3. Sanitization Audit (Confirmed Safe)
+
+All 4 `dangerouslySetInnerHTML` usages are properly guarded:
+
+- `InboxEmailThread.tsx` -- DOMPurify with strict ALLOWED_TAGS/FORBID_TAGS
+- `InboxEmailViewer.tsx` -- DOMPurify with strict config
+- `EmailViewer.tsx` -- DOMPurify with strict config
+- `chart.tsx` -- Static theme CSS only, no user input
+
+No changes needed.
+
+---
+
+## 4. Edge Function Log Cleanup (Server-Side)
+
+Remove verbose `console.log` from production edge functions while keeping error logs:
+
+| Function | Lines to Remove |
+|----------|----------------|
+| `supabase/functions/process-rfq-emails/index.ts` | 6 debug log lines (scanning, found, pre-filtered, matched, created, done) |
+| `supabase/functions/generate-video/index.ts` | 3 debug log lines (operation created, job created, generating) |
+| `supabase/functions/gmail-send/index.ts` | 1 debug log line (authenticated userId, sending to) -- **security risk: leaks PII** |
+| `supabase/functions/pdf-to-images/index.ts` | 4 debug log lines (page counts, sizes, conversions) |
+| `supabase/functions/daily-team-report/index.ts` | 1 debug log line |
+
+**Preserved:** All `console.error` calls remain for failure diagnostics.
+
+---
+
+## 5. Summary of Changes
+
+- **~20 `console.log` removals** across 8 files (3 client, 5 edge functions)
+- **0 functional changes** -- all behavior preserved
+- **0 UI changes**
+- **5 edge functions redeployed** after cleanup
+
+### Files Modified
+1. `src/components/office/ProductionQueueView.tsx`
+2. `src/hooks/useTeamMeetings.ts`
+3. `src/components/error/SmartErrorBoundary.tsx`
+4. `supabase/functions/process-rfq-emails/index.ts`
+5. `supabase/functions/generate-video/index.ts`
+6. `supabase/functions/gmail-send/index.ts`
+7. `supabase/functions/pdf-to-images/index.ts`
+8. `supabase/functions/daily-team-report/index.ts`
+
