@@ -144,19 +144,19 @@ export default function Home() {
 
   return (
     <ScrollArea className="h-full">
-      <div className="relative flex flex-col items-center px-6 py-8 max-w-6xl mx-auto">
+      <div className="relative flex flex-col items-center px-3 py-4 sm:px-6 sm:py-8 max-w-6xl mx-auto pb-20 md:pb-0">
         {/* Big logo background */}
         <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-0">
           <img src={logoCoin} alt="" className="w-[600px] h-[600px] opacity-[0.04]" />
         </div>
 
         {/* Hero Section */}
-        <div className="relative z-10 w-full max-w-2xl text-center mb-12">
+        <div className="relative z-10 w-full max-w-2xl text-center mb-6 sm:mb-12">
           <h1
-            className="text-3xl font-bold mb-2"
+            className="text-xl sm:text-3xl font-bold mb-1 sm:mb-2"
             dangerouslySetInnerHTML={{ __html: heroTitle }}
           />
-          <p className="text-muted-foreground mb-8">
+          <p className="text-xs sm:text-base text-muted-foreground mb-4 sm:mb-8">
             Your AI-powered operations assistant
           </p>
           <div className="w-full">
@@ -169,24 +169,24 @@ export default function Home() {
         </div>
 
         {/* Use Cases Section */}
-        <div className="relative z-10 w-full mb-12">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold">Quick Actions</h2>
+        <div className="relative z-10 w-full mb-6 sm:mb-12">
+          <div className="flex items-center justify-between mb-2 sm:mb-4">
+            <h2 className="text-sm sm:text-lg font-semibold">Quick Actions</h2>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
             {useCases.map((useCase) => (
               <Card
                 key={useCase.title}
-                className="p-4 cursor-pointer hover:bg-muted/50 transition-colors group"
+                className="p-3 sm:p-4 cursor-pointer hover:bg-muted/50 transition-colors group"
                 onClick={() => handleUseCaseClick(useCase)}
               >
-                <p className="font-medium mb-3 line-clamp-2">{useCase.title}</p>
+                <p className="font-medium mb-2 sm:mb-3 line-clamp-2 text-xs sm:text-base">{useCase.title}</p>
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <useCase.icon className="w-4 h-4" />
+                  <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-sm text-muted-foreground">
+                    <useCase.icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                     <span>{useCase.category}</span>
                   </div>
-                  <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+                  <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
                 </div>
               </Card>
             ))}
@@ -194,9 +194,9 @@ export default function Home() {
         </div>
 
         {/* Workspaces Section */}
-        <div className="relative z-10 w-full mb-12">
-          <h2 className="text-lg font-semibold mb-4">Workspaces</h2>
-          <div className="grid grid-cols-3 gap-3">
+        <div className="relative z-10 w-full mb-6 sm:mb-12">
+          <h2 className="text-sm sm:text-lg font-semibold mb-2 sm:mb-4">Workspaces</h2>
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
             {[
               { label: "CEO Portal", icon: Crown, route: "/ceo", gradient: "from-amber-500 via-orange-500 to-yellow-600", emoji: "👑" },
               { label: "Time Clock", icon: Clock, route: "/timeclock", gradient: "from-teal-500 via-emerald-500 to-cyan-500", emoji: "⏱" },
@@ -204,11 +204,11 @@ export default function Home() {
             ].map((ws) => (
               <div
                 key={ws.label}
-                className={`relative overflow-hidden rounded-xl p-3 sm:p-4 text-white cursor-pointer transition-all hover:scale-[1.03] active:scale-[0.98] bg-gradient-to-br ${ws.gradient} flex flex-col items-center gap-1.5 sm:flex-row sm:gap-3`}
+                className={`relative overflow-hidden rounded-xl p-2.5 sm:p-4 text-white cursor-pointer transition-all hover:scale-[1.03] active:scale-[0.98] bg-gradient-to-br ${ws.gradient} flex flex-col items-center gap-1 sm:flex-row sm:gap-3`}
                 onClick={() => navigate(ws.route)}
               >
-                <span className="text-2xl sm:text-xl">{ws.emoji}</span>
-                <span className="relative z-10 font-bold text-xs sm:text-base text-center sm:text-left leading-tight">{ws.label}</span>
+                <span className="text-lg sm:text-xl">{ws.emoji}</span>
+                <span className="relative z-10 font-bold text-[10px] sm:text-base text-center sm:text-left leading-tight">{ws.label}</span>
                 <ChevronRight className="w-4 h-4 text-white/60 hidden sm:block ml-auto relative z-10" />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/15 to-transparent pointer-events-none" />
               </div>
@@ -217,14 +217,14 @@ export default function Home() {
         </div>
 
         {/* Automations Section */}
-        <div className="relative z-10 w-full mb-12">
+        <div className="relative z-10 w-full mb-6 sm:mb-12">
           <AutomationsSection />
         </div>
 
         {/* Helpers Section */}
         <div className="relative z-10 w-full">
-          <h2 className="text-lg font-semibold mb-4">Your Helpers</h2>
-          <div className="grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4">
+          <h2 className="text-sm sm:text-lg font-semibold mb-2 sm:mb-4">Your Helpers</h2>
+          <div className="grid grid-cols-4 sm:grid-cols-3 lg:grid-cols-4 gap-1.5 sm:gap-4">
             {orderedHelpers.map((helper) => (
               <HelperCard
                 key={helper.id}
@@ -247,13 +247,13 @@ function HelperCard({ helper, isPrimary, onClick }: { helper: Helper; isPrimary?
       onClick={onClick}
     >
       <div className="relative">
-        <div className="aspect-[3/4] sm:aspect-square overflow-hidden bg-muted">
-          <img src={helper.image} alt={helper.name} className="w-full h-full object-cover object-center sm:object-top" />
+        <div className="aspect-square overflow-hidden bg-muted">
+          <img src={helper.image} alt={helper.name} className="w-full h-full object-cover object-top" />
         </div>
-        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-1.5 pt-6 sm:relative sm:bg-transparent sm:p-3 sm:pt-3">
-          <h3 className="font-bold text-xs sm:text-base leading-tight truncate text-white sm:text-foreground">{helper.name}</h3>
-          <p className="text-[9px] sm:text-sm text-white/70 sm:text-muted-foreground truncate">{helper.role}</p>
-          {isPrimary && <span className="text-[8px] sm:text-xs text-primary font-medium">Your Agent</span>}
+        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-1 pt-4 sm:relative sm:bg-transparent sm:p-3 sm:pt-3">
+          <h3 className="font-bold text-[10px] sm:text-base leading-tight truncate text-white sm:text-foreground">{helper.name}</h3>
+          <p className="text-[8px] sm:text-sm text-white/70 sm:text-muted-foreground truncate">{helper.role}</p>
+          {isPrimary && <span className="text-[7px] sm:text-xs text-primary font-medium">Your Agent</span>}
         </div>
       </div>
     </Card>
