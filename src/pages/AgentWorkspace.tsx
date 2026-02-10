@@ -168,9 +168,11 @@ export default function AgentWorkspace() {
     }
   }, [messages, config.agentType, config.name, activeSessionId, createSession, addMessage, mapping]);
 
+  const [mobileHistoryOpen, setMobileHistoryOpen] = useState(false);
+
   return (
     <div className="flex h-full">
-      {/* History Sidebar - Left */}
+      {/* History Sidebar - Left (Desktop) */}
       {sidebarOpen && (
         <div className="w-64 border-r border-border flex-shrink-0 animate-fade-in hidden md:flex flex-col">
           <AgentHistorySidebar
@@ -188,10 +190,34 @@ export default function AgentWorkspace() {
         </div>
       )}
 
+      {/* Mobile History Drawer */}
+      {mobileHistoryOpen && (
+        <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm md:hidden" onClick={() => setMobileHistoryOpen(false)}>
+          <div
+            className="absolute top-0 left-0 bottom-0 w-72 bg-card border-r border-border shadow-xl animate-fade-in flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <AgentHistorySidebar
+              agentId={agentId || "sales"}
+              agentName={config.name}
+              agentRole={config.role}
+              agentImage={config.image}
+              activeSessionId={activeSessionId}
+              onSelectSession={(id) => { loadSession(id); setMobileHistoryOpen(false); }}
+              onNewChat={() => { handleNewChat(); setMobileHistoryOpen(false); }}
+              sessions={sessions.filter((s) => s.agent_name === config.name)}
+              loading={sessionsLoading}
+              deleteSession={deleteSession}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Main Chat Panel */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top bar */}
         <div className="flex items-center gap-2 p-3 border-b border-border">
+          {/* Desktop sidebar toggle */}
           <Button
             variant="ghost"
             size="icon"
@@ -200,8 +226,21 @@ export default function AgentWorkspace() {
           >
             {sidebarOpen ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeft className="w-4 h-4" />}
           </Button>
+          {/* Mobile: always show agent identity + history toggle */}
+          <button
+            className="flex items-center gap-2 md:hidden"
+            onClick={() => setMobileHistoryOpen(true)}
+          >
+            <img src={config.image} alt={config.name} className="w-7 h-7 rounded-full object-cover" />
+            <div className="text-left">
+              <span className="text-sm font-semibold leading-none">{config.name}</span>
+              <p className="text-[10px] text-muted-foreground leading-none mt-0.5">{config.role}</p>
+            </div>
+            <PanelLeft className="w-4 h-4 text-muted-foreground" />
+          </button>
+          {/* Desktop: show agent when sidebar closed */}
           {!sidebarOpen && (
-            <div className="flex items-center gap-2">
+            <div className="items-center gap-2 hidden md:flex">
               <img src={config.image} alt={config.name} className="w-6 h-6 rounded-full object-cover" />
               <span className="text-sm font-medium">{config.name}</span>
             </div>
@@ -214,17 +253,17 @@ export default function AgentWorkspace() {
 
         {/* Content: hero or conversation */}
         {!hasConversation ? (
-          <div className="flex-1 flex flex-col items-center justify-center overflow-y-auto">
-            <div className="text-center mb-8 px-4">
-              <h1 className="text-2xl sm:text-3xl font-bold leading-tight">
+          <div className="flex-1 flex flex-col items-center justify-center overflow-y-auto px-4">
+            <div className="text-center mb-6">
+              <h1 className="text-xl sm:text-3xl font-bold leading-tight">
                 Hey, it's <span className="text-primary">{config.name}</span>.
               </h1>
-              <p className="text-xl sm:text-2xl font-semibold text-foreground mt-1">
+              <p className="text-base sm:text-2xl font-semibold text-foreground mt-1">
                 What can I help you with?
               </p>
             </div>
 
-            <div className="w-full max-w-xl px-4 mb-6">
+            <div className="w-full max-w-xl mb-4">
               <ChatInput
                 onSend={handleSend}
                 placeholder={config.placeholder}
@@ -234,7 +273,7 @@ export default function AgentWorkspace() {
               />
             </div>
 
-            <div className="flex justify-center mb-4">
+            <div className="flex justify-center mb-3">
               <ChevronDown className="w-5 h-5 text-muted-foreground animate-bounce" />
             </div>
 
