@@ -54,6 +54,7 @@ export function DigestContent({ digest, stats, currentDate }: DigestContentProps
           <StatPill label="Clocked" value={stats.employeesClocked ?? 0} />
           <StatPill label="Runs" value={stats.machineRuns ?? 0} />
           <StatPill label="ERP" value={stats.erpEvents ?? 0} />
+          <StatPill label="Reports" value={stats.mailboxReports ?? 0} />
           <StatPill label="Pipeline" value={stats.leads} />
         </div>
       )}

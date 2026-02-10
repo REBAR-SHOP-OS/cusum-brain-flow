@@ -109,6 +109,7 @@ export interface DigestStats {
   employeesClocked?: number;
   machineRuns?: number;
   erpEvents?: number;
+  mailboxReports?: number;
 }
 
 export function useDailyDigest(date: Date) {
