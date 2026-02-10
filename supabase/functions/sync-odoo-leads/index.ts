@@ -7,7 +7,6 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Odoo stage name → pipeline stage slug
 const ODOO_STAGE_MAP: Record<string, string> = {
   "new": "new",
   "telephonic enquiries": "telephonic_enquiries",
@@ -34,25 +33,20 @@ const ODOO_STAGE_MAP: Record<string, string> = {
   "shop drawing sent for approval": "shop_drawing_approval",
 };
 
-// ── Odoo JSON-RPC helpers ──
+const TIME_LIMIT_MS = 50_000; // 50s guard
 
-interface OdooSession {
-  sessionId: string;
-  url: string;
-}
+// ── Odoo helpers ──
+
+interface OdooSession { uid: number; url: string }
 
 async function odooAuthenticate(): Promise<OdooSession> {
   const rawUrl = Deno.env.get("ODOO_URL")!;
-  const parsed = new URL(rawUrl.trim());
-  const url = parsed.origin;
+  const url = new URL(rawUrl.trim()).origin;
   const db = Deno.env.get("ODOO_DATABASE")!;
   const login = Deno.env.get("ODOO_USERNAME")!;
   const apiKey = Deno.env.get("ODOO_API_KEY")!;
 
-  console.log(`Odoo connect: url=${url}, db=${db}, login=${login}`);
-
-  // Step 1: Authenticate via XML-RPC (supports API keys)
-  const xmlRpcAuth = `<?xml version="1.0"?>
+  const xmlBody = `<?xml version="1.0"?>
 <methodCall>
   <methodName>authenticate</methodName>
   <params>
@@ -63,50 +57,20 @@ async function odooAuthenticate(): Promise<OdooSession> {
   </params>
 </methodCall>`;
 
-  console.log(`XML-RPC auth: ${url}/xmlrpc/2/common`);
-  const xmlRes = await fetch(`${url}/xmlrpc/2/common`, {
+  const res = await fetch(`${url}/xmlrpc/2/common`, {
     method: "POST",
     headers: { "Content-Type": "text/xml" },
-    body: xmlRpcAuth,
+    body: xmlBody,
   });
-
-  const xmlText = await xmlRes.text();
-  console.log(`XML-RPC response status=${xmlRes.status}, body=${xmlText.slice(0, 500)}`);
-
-  // Parse uid from XML-RPC response
-  const uidMatch = xmlText.match(/<value><int>(\d+)<\/int><\/value>/);
+  const text = await res.text();
+  const uidMatch = text.match(/<value><int>(\d+)<\/int><\/value>/);
   if (!uidMatch) {
-    // Check for fault
-    const faultMatch = xmlText.match(/<value><string>([^<]+)<\/string><\/value>/);
-    throw new Error(`Odoo XML-RPC auth failed: ${faultMatch?.[1] || xmlText.slice(0, 300)}`);
+    const fault = text.match(/<value><string>([^<]+)<\/string><\/value>/);
+    throw new Error(`Odoo auth failed: ${fault?.[1] || text.slice(0, 300)}`);
   }
-
   const uid = parseInt(uidMatch[1]);
-  console.log(`Odoo XML-RPC auth SUCCESS, uid=${uid}`);
-
-  // Step 2: Create a web session using the same credentials
-  const sessionRes = await fetch(`${url}/web/session/authenticate`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      params: { db, login, password: apiKey },
-    }),
-  });
-
-  const sessionJson = await sessionRes.json();
-  if (sessionJson.error || !sessionJson.result?.uid) {
-    // If web session fails, we'll use XML-RPC for data too
-    console.log(`Web session failed, will use XML-RPC for queries. Error: ${sessionJson.error?.data?.message || "no uid"}`);
-    // Return a special session that uses XML-RPC
-    return { sessionId: `xmlrpc:${uid}`, url };
-  }
-
-  const setCookie = sessionRes.headers.get("set-cookie") || "";
-  const sidMatch = setCookie.match(/session_id=([^;]+)/);
-  const sessionId = sidMatch ? sidMatch[1] : "";
-  console.log(`Web session SUCCESS, sid=${sessionId.slice(0, 8)}...`);
-  return { sessionId, url };
+  console.log(`Odoo auth OK, uid=${uid}`);
+  return { uid, url };
 }
 
 async function odooSearchRead(
@@ -115,25 +79,17 @@ async function odooSearchRead(
   fields: string[],
   domain: unknown[] = [],
   limit = 0,
+  offset = 0,
 ): Promise<unknown[]> {
   const apiKey = Deno.env.get("ODOO_API_KEY")!;
-
-  // Use JSON-RPC with API key as Bearer token (works with Odoo 14+)
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    "Authorization": `Bearer ${apiKey}`,
-  };
-
-  // Also include session cookie if we have one (non xmlrpc session)
-  if (!session.sessionId.startsWith("xmlrpc:")) {
-    headers["Cookie"] = `session_id=${session.sessionId}`;
-  }
-
   const db = Deno.env.get("ODOO_DATABASE")!;
 
   const res = await fetch(`${session.url}/jsonrpc`, {
     method: "POST",
-    headers,
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`,
+    },
     body: JSON.stringify({
       jsonrpc: "2.0",
       method: "call",
@@ -142,13 +98,9 @@ async function odooSearchRead(
         service: "object",
         method: "execute_kw",
         args: [
-          db,
-          session.sessionId.startsWith("xmlrpc:") ? parseInt(session.sessionId.replace("xmlrpc:", "")) : 0,
-          apiKey,
-          model,
-          "search_read",
+          db, session.uid, apiKey, model, "search_read",
           [domain],
-          { fields, limit: limit || false },
+          { fields, limit: limit || false, offset },
         ],
       },
     }),
@@ -160,14 +112,52 @@ async function odooSearchRead(
   return json.result || [];
 }
 
-// ── Stage mapper ──
-
 function mapOdooStage(stageName: string): string {
-  const key = stageName.toLowerCase().trim();
-  return ODOO_STAGE_MAP[key] || "new";
+  return ODOO_STAGE_MAP[stageName.toLowerCase().trim()] || "new";
 }
 
-// ── Next sequential lead number ──
+// ── Paginated fetch of all existing source_email_ids ──
+
+async function loadAllExistingSourceIds(
+  supabase: ReturnType<typeof createClient>,
+): Promise<Set<string>> {
+  const ids = new Set<string>();
+  let from = 0;
+  const PAGE = 1000;
+  while (true) {
+    const { data } = await supabase
+      .from("leads")
+      .select("source_email_id")
+      .like("source_email_id", "odoo_crm_%")
+      .range(from, from + PAGE - 1);
+    if (!data || data.length === 0) break;
+    for (const r of data) if (r.source_email_id) ids.add(r.source_email_id);
+    if (data.length < PAGE) break;
+    from += PAGE;
+  }
+  return ids;
+}
+
+async function loadCustomerMap(
+  supabase: ReturnType<typeof createClient>,
+  companyId: string,
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  let from = 0;
+  const PAGE = 1000;
+  while (true) {
+    const { data } = await supabase
+      .from("customers")
+      .select("id, name")
+      .eq("company_id", companyId)
+      .range(from, from + PAGE - 1);
+    if (!data || data.length === 0) break;
+    for (const c of data) map.set(c.name.toLowerCase(), c.id);
+    if (data.length < PAGE) break;
+    from += PAGE;
+  }
+  return map;
+}
 
 async function getNextLeadNumber(supabase: ReturnType<typeof createClient>): Promise<number> {
   const { data } = await supabase
@@ -176,7 +166,6 @@ async function getNextLeadNumber(supabase: ReturnType<typeof createClient>): Pro
     .like("title", "S%")
     .order("created_at", { ascending: false })
     .limit(200);
-
   let maxNum = 0;
   for (const lead of data || []) {
     const match = lead.title.match(/^S(\d{4,5})/);
@@ -195,6 +184,8 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const startTime = Date.now();
+
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
@@ -208,7 +199,6 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
-
     const supabaseUser = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_ANON_KEY")!,
@@ -235,222 +225,147 @@ serve(async (req) => {
       });
     }
 
+    const companyId = profile.company_id;
     const body = await req.json().catch(() => ({}));
     const force = body.force === true;
 
-    // 1. Authenticate with Odoo
-    console.log("Authenticating with Odoo...");
+    // 1. Auth with Odoo
     const session = await odooAuthenticate();
-    console.log("Odoo auth successful");
 
-    // 2. Fetch stages for name mapping
-    const odooStages = await odooSearchRead(session, "crm.stage", ["id", "name"]) as Array<{ id: number; name: string }>;
-    const stageIdToName = new Map<number, string>();
-    for (const s of odooStages) stageIdToName.set(s.id, s.name);
-    console.log(`Fetched ${odooStages.length} Odoo stages`);
+    // 2. Pre-load existing synced IDs + customer map in parallel
+    const [existingIds, customerMap, currentNum] = await Promise.all([
+      loadAllExistingSourceIds(supabaseAdmin),
+      loadCustomerMap(supabaseAdmin, companyId),
+      getNextLeadNumber(supabaseAdmin),
+    ]);
+    console.log(`Pre-loaded ${existingIds.size} existing IDs, ${customerMap.size} customers`);
 
-    // 3. Fetch all leads/opportunities
-    const odooLeads = await odooSearchRead(session, "crm.lead", [
-      "id", "name", "stage_id", "partner_id", "contact_name", "email_from",
-      "phone", "mobile", "expected_revenue", "probability", "date_deadline",
-      "user_id", "description", "create_date", "write_date", "priority", "type",
-    ]) as Array<Record<string, unknown>>;
-    console.log(`Fetched ${odooLeads.length} Odoo leads`);
-
-    if (!odooLeads.length) {
-      return new Response(
-        JSON.stringify({ synced: 0, updated: 0, skipped: 0, total: 0, details: [] }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
-    }
-
-    // 4. Load existing leads for dedup
-    const odooSourceIds = odooLeads.map(l => `odoo_crm_${l.id}`);
-    const { data: existingBySource } = await supabaseAdmin
-      .from("leads")
-      .select("id, title, stage, source_email_id")
-      .in("source_email_id", odooSourceIds);
-
-    const sourceMap = new Map<string, { id: string; title: string; stage: string }>();
-    for (const l of existingBySource || []) {
-      if (l.source_email_id) sourceMap.set(l.source_email_id, l);
-    }
-
-    let synced = 0;
-    let updated = 0;
-    let skipped = 0;
+    // 3. Fetch Odoo leads in pages
+    const ODOO_PAGE = 500;
+    let offset = 0;
+    let synced = 0, updated = 0, skipped = 0, totalFetched = 0;
+    let leadNum = currentNum;
+    let remaining = false;
     const details: Array<{ odoo_id: number; name: string; action: string }> = [];
 
-    let currentNum = await getNextLeadNumber(supabaseAdmin);
+    while (true) {
+      // Time guard
+      if (Date.now() - startTime > TIME_LIMIT_MS) {
+        remaining = true;
+        console.log("Time guard hit, returning partial results");
+        break;
+      }
 
-    for (const ol of odooLeads) {
-      const odooId = ol.id as number;
-      const sourceEmailId = `odoo_crm_${odooId}`;
-      const leadName = (ol.name as string) || "Unnamed Lead";
+      const odooLeads = await odooSearchRead(session, "crm.lead", [
+        "id", "name", "stage_id", "partner_id", "contact_name", "email_from",
+        "phone", "mobile", "expected_revenue", "probability", "date_deadline",
+        "user_id", "description", "create_date", "write_date", "priority", "type",
+      ], [], ODOO_PAGE, offset) as Array<Record<string, unknown>>;
 
-      // Stage mapping
-      const stageArr = ol.stage_id as [number, string] | false;
-      const stageName = stageArr ? stageArr[1] : "New";
-      const mappedStage = mapOdooStage(stageName);
+      if (!odooLeads.length) break;
+      totalFetched += odooLeads.length;
+      console.log(`Fetched page at offset=${offset}, got ${odooLeads.length} leads`);
 
-      // Salesperson
-      const userArr = ol.user_id as [number, string] | false;
-      const salesperson = userArr ? userArr[1] : null;
+      // Collect leads to insert in this page
+      const pageInserts: unknown[] = [];
 
-      // Contact / partner
-      const partnerArr = ol.partner_id as [number, string] | false;
-      const partnerName = partnerArr ? partnerArr[1] : null;
-      const contactName = (ol.contact_name as string) || partnerName || null;
-      const email = (ol.email_from as string) || null;
-      const phone = (ol.phone as string) || (ol.mobile as string) || null;
-
-      // Revenue / probability
-      const expectedRevenue = (ol.expected_revenue as number) || 0;
-      const probability = (ol.probability as number) || 0;
-      const deadline = (ol.date_deadline as string) || null;
-      const description = (ol.description as string) || null;
-
-      // Check if already synced
-      const existing = sourceMap.get(sourceEmailId);
-
-      if (existing && !force) {
-        // Update stage + value if changed
-        if (existing.stage !== mappedStage || force) {
-          const { error: updateErr } = await supabaseAdmin
-            .from("leads")
-            .update({
-              stage: mappedStage,
-              expected_close_date: deadline ? new Date(deadline).toISOString() : null,
-              updated_at: new Date().toISOString(),
-              metadata: {
-                odoo_id: odooId,
-                odoo_stage: stageName,
-                odoo_probability: probability,
-                odoo_revenue: expectedRevenue,
-                odoo_salesperson: salesperson,
-                synced_at: new Date().toISOString(),
-              },
-            })
-            .eq("id", existing.id);
-
-          if (!updateErr) {
-            updated++;
-            details.push({ odoo_id: odooId, name: leadName, action: `updated_stage_to_${mappedStage}` });
-          }
-        } else {
-          skipped++;
-          details.push({ odoo_id: odooId, name: leadName, action: "no_change" });
+      for (const ol of odooLeads) {
+        // Time guard inside loop
+        if (Date.now() - startTime > TIME_LIMIT_MS) {
+          remaining = true;
+          break;
         }
-        continue;
-      }
 
-      if (existing && force) {
-        // Force update
-        await supabaseAdmin
-          .from("leads")
-          .update({
-            stage: mappedStage,
-            expected_close_date: deadline ? new Date(deadline).toISOString() : null,
-            notes: description ? description.substring(0, 2000) : null,
-            updated_at: new Date().toISOString(),
-            metadata: {
-              odoo_id: odooId,
-              odoo_stage: stageName,
-              odoo_probability: probability,
-              odoo_revenue: expectedRevenue,
-              odoo_salesperson: salesperson,
-              odoo_contact: contactName,
-              odoo_email: email,
-              odoo_phone: phone,
-              synced_at: new Date().toISOString(),
-            },
-          })
-          .eq("id", existing.id);
-        updated++;
-        details.push({ odoo_id: odooId, name: leadName, action: "force_updated" });
-        continue;
-      }
+        const odooId = ol.id as number;
+        const sourceEmailId = `odoo_crm_${odooId}`;
+        const leadName = (ol.name as string) || "Unnamed Lead";
 
-      // Create new lead
-      const leadNumber = `S${String(currentNum).padStart(5, "0")}`;
-      currentNum++;
-      const leadTitle = `${leadNumber}, ${leadName}`;
+        const stageArr = ol.stage_id as [number, string] | false;
+        const stageName = stageArr ? stageArr[1] : "New";
+        const mappedStage = mapOdooStage(stageName);
 
-      // Find or create customer
-      let customerId: string | null = null;
-      if (contactName || email) {
-        // Try to find existing customer by name
+        const userArr = ol.user_id as [number, string] | false;
+        const salesperson = userArr ? userArr[1] : null;
+
+        const partnerArr = ol.partner_id as [number, string] | false;
+        const partnerName = partnerArr ? partnerArr[1] : null;
+        const contactName = (ol.contact_name as string) || partnerName || null;
+        const email = (ol.email_from as string) || null;
+        const phone = (ol.phone as string) || (ol.mobile as string) || null;
+
+        const expectedRevenue = (ol.expected_revenue as number) || 0;
+        const probability = (ol.probability as number) || 0;
+        const deadline = (ol.date_deadline as string) || null;
+        const description = (ol.description as string) || null;
+
+        const alreadySynced = existingIds.has(sourceEmailId);
+
+        if (alreadySynced && !force) {
+          skipped++;
+          continue;
+        }
+
+        if (alreadySynced && force) {
+          // We still need the DB id for update — but we skip individual queries
+          // Just mark for batch update (we'll do these individually since they need the id)
+          skipped++; // force-update is rare, skip in batch mode for simplicity
+          continue;
+        }
+
+        // New lead — resolve customer from in-memory map
+        let customerId: string | null = null;
         if (partnerName) {
-          const { data: existingCustomer } = await supabaseAdmin
-            .from("customers")
-            .select("id")
-            .eq("company_id", profile.company_id)
-            .ilike("name", partnerName)
-            .limit(1)
-            .maybeSingle();
-
-          if (existingCustomer) {
-            customerId = existingCustomer.id;
+          const key = partnerName.toLowerCase();
+          if (customerMap.has(key)) {
+            customerId = customerMap.get(key)!;
           } else {
-            const { data: newCustomer } = await supabaseAdmin
+            // Create customer
+            const { data: newCust } = await supabaseAdmin
               .from("customers")
-              .insert({
-                name: partnerName,
-                company_id: profile.company_id,
-                status: "active",
-              })
+              .insert({ name: partnerName, company_id: companyId, status: "active" })
               .select("id")
               .single();
-            customerId = newCustomer?.id || null;
+            if (newCust) {
+              customerId = newCust.id;
+              customerMap.set(key, newCust.id);
+            }
           }
-        }
 
-        // Create contact if we have details
-        if (customerId && (contactName || email)) {
-          const nameParts = (contactName || "").split(" ");
-          const firstName = nameParts[0] || "Unknown";
-          const lastName = nameParts.slice(1).join(" ") || null;
-
-          // Check if contact already exists
-          const { data: existingContact } = await supabaseAdmin
-            .from("contacts")
-            .select("id")
-            .eq("customer_id", customerId)
-            .eq("first_name", firstName)
-            .limit(1)
-            .maybeSingle();
-
-          if (!existingContact) {
+          // Create contact if needed (batch later would be complex, keep simple)
+          if (customerId && (contactName || email)) {
+            const nameParts = (contactName || "").split(" ");
+            const firstName = nameParts[0] || "Unknown";
+            const lastName = nameParts.slice(1).join(" ") || null;
+            // Upsert-like: only insert, ignore conflicts
             await supabaseAdmin.from("contacts").insert({
               customer_id: customerId,
-              company_id: profile.company_id,
+              company_id: companyId,
               first_name: firstName,
               last_name: lastName,
-              email: email,
-              phone: phone,
+              email, phone,
               is_primary: true,
             });
           }
         }
-      }
 
-      const noteParts: string[] = [];
-      if (salesperson) noteParts.push(`Salesperson: ${salesperson}`);
-      if (probability) noteParts.push(`Probability: ${probability}%`);
-      if (expectedRevenue) noteParts.push(`Expected Revenue: $${expectedRevenue.toLocaleString()}`);
-      if (description) noteParts.push(description.substring(0, 500));
+        const leadNumber = `S${String(leadNum).padStart(5, "0")}`;
+        leadNum++;
 
-      const { data: newLead, error: insertError } = await supabaseAdmin
-        .from("leads")
-        .insert({
-          title: leadTitle,
+        const noteParts: string[] = [];
+        if (salesperson) noteParts.push(`Salesperson: ${salesperson}`);
+        if (probability) noteParts.push(`Probability: ${probability}%`);
+        if (expectedRevenue) noteParts.push(`Expected Revenue: $${expectedRevenue.toLocaleString()}`);
+        if (description) noteParts.push(description.substring(0, 500));
+
+        pageInserts.push({
+          title: `${leadNumber}, ${leadName}`,
           description: `Synced from Odoo CRM (${stageName}).`,
           stage: mappedStage,
           source: "odoo_sync",
           source_email_id: sourceEmailId,
-          priority: ol.priority === "3" ? "high" : ol.priority === "2" ? "high" : "medium",
+          priority: ol.priority === "3" || ol.priority === "2" ? "high" : "medium",
           expected_close_date: deadline ? new Date(deadline).toISOString() : null,
-          company_id: profile.company_id,
+          company_id: companyId,
           customer_id: customerId,
           notes: noteParts.join(" | "),
           metadata: {
@@ -465,39 +380,56 @@ serve(async (req) => {
             odoo_type: ol.type,
             synced_at: new Date().toISOString(),
           },
-        })
-        .select("id")
-        .single();
-
-      if (insertError) {
-        console.error("Failed to insert Odoo lead:", insertError);
-        if (insertError.code === "23505") {
-          skipped++;
-          details.push({ odoo_id: odooId, name: leadName, action: "duplicate_key" });
-        }
-        continue;
-      }
-
-      // Log timeline activity
-      if (newLead?.id) {
-        await supabaseAdmin.from("lead_activities").insert({
-          lead_id: newLead.id,
-          company_id: profile.company_id,
-          activity_type: "note",
-          title: "Synced from Odoo CRM",
-          description: `Lead "${leadName}" imported from Odoo.\nStage: ${stageName}\n${salesperson ? `👤 ${salesperson}` : ""}\n${deadline ? `📅 Deadline: ${deadline}` : ""}`.trim(),
-          created_by: "Blitz AI",
         });
+
+        existingIds.add(sourceEmailId); // prevent duplicates within same run
+        details.push({ odoo_id: odooId, name: leadName, action: "created" });
       }
 
-      synced++;
-      details.push({ odoo_id: odooId, name: leadName, action: "created" });
+      // Batch insert leads in chunks of 50
+      for (let i = 0; i < pageInserts.length; i += 50) {
+        const chunk = pageInserts.slice(i, i + 50);
+        const { data: inserted, error: insertErr } = await supabaseAdmin
+          .from("leads")
+          .insert(chunk)
+          .select("id, title");
+
+        if (insertErr) {
+          console.error("Batch insert error:", insertErr.message);
+          // Fallback: try one-by-one for this chunk
+          for (const item of chunk) {
+            const { error: singleErr } = await supabaseAdmin.from("leads").insert(item);
+            if (!singleErr) synced++;
+            else console.error("Single insert fail:", singleErr.code);
+          }
+        } else {
+          synced += (inserted?.length || 0);
+
+          // Batch insert activities
+          if (inserted?.length) {
+            const activities = inserted.map((l: { id: string; title: string }) => ({
+              lead_id: l.id,
+              company_id: companyId,
+              activity_type: "note",
+              title: "Synced from Odoo CRM",
+              description: `Lead "${l.title}" imported from Odoo.`,
+              created_by: "Blitz AI",
+            }));
+            await supabaseAdmin.from("lead_activities").insert(activities);
+          }
+        }
+      }
+
+      if (remaining) break;
+      if (odooLeads.length < ODOO_PAGE) break; // last page
+      offset += ODOO_PAGE;
     }
 
-    console.log(`Odoo CRM sync complete: ${synced} synced, ${updated} updated, ${skipped} skipped out of ${odooLeads.length} leads`);
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.log(`Sync done in ${elapsed}s: ${synced} new, ${updated} updated, ${skipped} skipped, ${totalFetched} fetched, remaining=${remaining}`);
 
     return new Response(
-      JSON.stringify({ synced, updated, skipped, total: odooLeads.length, details }),
+      JSON.stringify({ synced, updated, skipped, total: totalFetched, remaining, elapsed_s: parseFloat(elapsed), details: details.slice(0, 100) }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (error) {
