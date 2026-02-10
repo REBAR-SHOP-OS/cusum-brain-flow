@@ -2,13 +2,10 @@ import { Link, useNavigate } from "react-router-dom";
 import { 
   Factory, 
   LayoutGrid, 
-  Clock, 
-  MessageSquare, 
   ShieldCheck, 
   Truck as LoadingIcon,
   Send, 
   PackageCheck,
-  Crown,
   ArrowLeft
 } from "lucide-react";
 
@@ -22,12 +19,6 @@ interface HubCard {
 
 const hubCards: HubCard[] = [
   {
-    label: "CEO COMMAND",
-    icon: <Crown className="w-7 h-7" />,
-    to: "/office",
-    state: { section: "ceo-dashboard" },
-  },
-  {
     label: "OFFICE",
     icon: <LayoutGrid className="w-7 h-7" />,
     to: "/office",
@@ -36,16 +27,6 @@ const hubCards: HubCard[] = [
     label: "SHOP FLOOR",
     icon: <Factory className="w-7 h-7" />,
     to: "/shopfloor/station",
-  },
-  {
-    label: "TIME CLOCK",
-    icon: <Clock className="w-7 h-7" />,
-    to: "/timeclock",
-  },
-  {
-    label: "TEAM HUB",
-    icon: <MessageSquare className="w-7 h-7" />,
-    to: "/team-hub",
   },
   {
     label: "CLEARANCE",
