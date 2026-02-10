@@ -1,40 +1,54 @@
 
 
-# Speed Up Odoo CRM Import
+# Sync Odoo Quotations into the Quotation UI
 
-## Current Situation
-- **741 of 2,661** Odoo leads have been imported so far
-- The function times out (~60s limit) because each lead requires multiple DB queries (customer lookup, contact check, lead insert, activity log)
-- Re-running is safe (dedup via `source_email_id`) but slow -- each run only gets ~200 leads
+## What This Does
+Pull all 2,586 quotations from Odoo (the `sale.order` records you showed) into a local database table, then display them in the existing Quotation tab inside Accounting Documents -- matching the layout from your Odoo screen (Number, Date, Customer, Salesperson, Total, Status).
 
-## Recommended Approach: Batch Processing with Pagination
+## Steps
 
-### 1. Add pagination to Odoo fetch
-Instead of fetching all 2,661 leads at once, fetch in pages of 200. Process only un-synced ones by checking against existing `source_email_id` values upfront.
+### 1. Add columns to the `quotes` table
+The existing `quotes` table is empty and missing fields needed from Odoo. We will add:
+- `salesperson` (text) -- e.g. "Swapnil Mahajan", "Saurabh Sehgal"
+- `odoo_id` (integer, unique) -- deduplication key
+- `odoo_status` (text) -- "Quotation Sent", "Sales Order", "Cancelled"
+- `source` (text) -- to mark as "odoo_sync"
+- `metadata` (jsonb) -- store extra Odoo fields
+- `company_id` (uuid, FK to companies) -- for multi-tenant RLS
 
-### 2. Skip already-synced leads early  
-Before the main loop, load all existing `odoo_crm_*` source IDs in one query. Skip known IDs immediately without any DB writes -- this is the biggest time saver on re-runs.
+### 2. Create `sync-odoo-quotations` edge function
+A new edge function that reuses the same XML-RPC auth + JSON-RPC fetch pattern from `sync-odoo-leads`:
+- Fetches `sale.order` records from Odoo with fields: `name`, `date_order`, `partner_id`, `user_id`, `amount_total`, `state`, `company_id`
+- Uses the same batch processing architecture (pagination, pre-loaded ID cache, chunked inserts, 50s time guard)
+- Maps Odoo `state` values (`draft`, `sent`, `sale`, `cancel`) to display labels ("Draft", "Quotation Sent", "Sales Order", "Cancelled")
+- Links to existing customers by name matching (same in-memory map approach)
 
-### 3. Batch customer lookups
-Instead of querying customers one-by-one inside the loop, pre-fetch all existing customers for the company in a single query and use an in-memory map for lookups.
+### 3. Update the Quotation UI in AccountingDocuments
+- Add a data source toggle: show Odoo quotations alongside (or instead of) QuickBooks estimates
+- Fetch quotations from the `quotes` table using a React Query hook
+- Display each quotation in the list with: Number, Date, Customer, Salesperson, Total, Status badge (color-coded like Odoo)
+- Clicking "View" opens the existing QuotationTemplate with the data filled in
+- Add a "Sync Odoo Quotations" button to trigger the edge function
 
-### 4. Batch inserts where possible
-Group new leads and insert them in batches of 50 instead of one-at-a-time, dramatically reducing round-trips.
+### 4. Add "Sync Quotations" button to the Pipeline page
+Add a button next to "Sync Odoo" on the Pipeline header so users can trigger quotation sync from there too.
 
 ## Technical Details
 
-**File:** `supabase/functions/sync-odoo-leads/index.ts`
+| File | Change |
+|------|--------|
+| Migration SQL | Add columns to `quotes` table + RLS policies |
+| `supabase/functions/sync-odoo-quotations/index.ts` | New edge function for Odoo `sale.order` sync |
+| `supabase/config.toml` | Register new function with `verify_jwt = true` |
+| `src/hooks/useOdooQuotations.ts` | New hook to fetch quotes from DB + trigger sync |
+| `src/components/accounting/AccountingDocuments.tsx` | Show Odoo quotations in the Quotation tab with status badges |
+| `src/pages/Pipeline.tsx` | Add "Sync Quotations" button |
 
-| Change | Why |
-|--------|-----|
-| Add `limit` and `offset` params to `odooSearchRead` calls | Paginate Odoo fetch to avoid memory issues |
-| Pre-load all existing `source_email_id` values matching `odoo_crm_%` | Skip already-imported leads instantly on re-runs |
-| Pre-fetch all customers for `company_id` into a `Map<name, id>` | Eliminate per-lead customer query |
-| Batch `leads` inserts (groups of 50) | Reduce DB round-trips from ~2000 to ~40 |
-| Add a time guard (~50s) to return partial results before timeout | Graceful exit with progress report |
-| Return `{ remaining: true }` flag so the UI knows to re-trigger | Enable automatic continuation |
+### Status Badge Colors (matching Odoo)
+- **Quotation Sent** -- purple/violet badge
+- **Sales Order** -- green badge  
+- **Cancelled** -- gray badge
+- **Draft** -- blue badge
 
-**Estimated runs to complete:** 1-2 more runs (down from ~10+ currently)
-
-After the import completes, the sync function will remain useful for ongoing incremental syncs (new/updated leads only), which will be fast since most leads will be skipped.
-
+### Estimated Sync Performance
+Using the same batch architecture as leads: ~500 records per page, chunked inserts of 50. Should complete all 2,586 quotations in 2-3 runs max.
