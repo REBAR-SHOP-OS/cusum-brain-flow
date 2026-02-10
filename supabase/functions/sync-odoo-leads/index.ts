@@ -47,63 +47,66 @@ async function odooAuthenticate(): Promise<OdooSession> {
   const url = parsed.origin;
   const db = Deno.env.get("ODOO_DATABASE")!;
   const login = Deno.env.get("ODOO_USERNAME")!;
-  const password = Deno.env.get("ODOO_API_KEY")!;
+  const apiKey = Deno.env.get("ODOO_API_KEY")!;
 
-  // Odoo.sh canonical URL for hostname-based auto-detect
-  const odooShUrl = `https://${db}.odoo.com`;
+  console.log(`Odoo connect: url=${url}, db=${db}, login=${login}`);
 
-  console.log(`Odoo connect: custom=${url}, odoo.sh=${odooShUrl}, db=${db}, login=${login}`);
+  // Step 1: Authenticate via XML-RPC (supports API keys)
+  const xmlRpcAuth = `<?xml version="1.0"?>
+<methodCall>
+  <methodName>authenticate</methodName>
+  <params>
+    <param><value><string>${db}</string></value></param>
+    <param><value><string>${login}</string></value></param>
+    <param><value><string>${apiKey}</string></value></param>
+    <param><value><struct></struct></value></param>
+  </params>
+</methodCall>`;
 
-  // Try multiple combinations in priority order
-  const attempts: Array<{ baseUrl: string; dbParam: string | undefined }> = [
-    { baseUrl: url, dbParam: undefined },          // custom URL, auto-detect DB from hostname
-    { baseUrl: url, dbParam: db },                  // custom URL, explicit full DB name
-    { baseUrl: odooShUrl, dbParam: db },             // odoo.sh URL, explicit full DB name
-    { baseUrl: odooShUrl, dbParam: undefined },      // odoo.sh URL, auto-detect
-  ];
+  console.log(`XML-RPC auth: ${url}/xmlrpc/2/common`);
+  const xmlRes = await fetch(`${url}/xmlrpc/2/common`, {
+    method: "POST",
+    headers: { "Content-Type": "text/xml" },
+    body: xmlRpcAuth,
+  });
 
-  for (const attempt of attempts) {
-    const authUrl = `${attempt.baseUrl}/web/session/authenticate`;
-    console.log(`POST ${authUrl} (db=${attempt.dbParam ?? "auto-detect"})`);
-    const params: Record<string, unknown> = { login, password };
-    if (attempt.dbParam) params.db = attempt.dbParam;
+  const xmlText = await xmlRes.text();
+  console.log(`XML-RPC response status=${xmlRes.status}, body=${xmlText.slice(0, 500)}`);
 
-    try {
-      const res = await fetch(authUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jsonrpc: "2.0", params }),
-      });
-
-      if (!res.ok) {
-        console.log(`Odoo auth HTTP ${res.status} at ${attempt.baseUrl} db=${attempt.dbParam ?? "auto"}`);
-        continue;
-      }
-
-      const json = await res.json();
-      if (json.error) {
-        console.log(`Odoo auth error at ${attempt.baseUrl} db=${attempt.dbParam ?? "auto"}: ${json.error?.data?.message || JSON.stringify(json.error)}`);
-        continue;
-      }
-      if (!json.result?.uid) {
-        console.log(`No uid at ${attempt.baseUrl} db=${attempt.dbParam ?? "auto"}`);
-        continue;
-      }
-
-      // Success! Use the baseUrl that worked for subsequent API calls
-      console.log(`Odoo auth SUCCESS at ${attempt.baseUrl} db=${attempt.dbParam ?? "auto"}, uid=${json.result.uid}`);
-
-      const setCookie = res.headers.get("set-cookie") || "";
-      const sidMatch = setCookie.match(/session_id=([^;]+)/);
-      const sessionId = sidMatch ? sidMatch[1] : "";
-      return { sessionId, url: attempt.baseUrl };
-    } catch (e) {
-      console.log(`Odoo auth fetch error at ${attempt.baseUrl}: ${e}`);
-      continue;
-    }
+  // Parse uid from XML-RPC response
+  const uidMatch = xmlText.match(/<value><int>(\d+)<\/int><\/value>/);
+  if (!uidMatch) {
+    // Check for fault
+    const faultMatch = xmlText.match(/<value><string>([^<]+)<\/string><\/value>/);
+    throw new Error(`Odoo XML-RPC auth failed: ${faultMatch?.[1] || xmlText.slice(0, 300)}`);
   }
 
-  throw new Error(`Odoo auth failed for all attempts (custom=${url}, odoo.sh=${odooShUrl}, db=${db})`);
+  const uid = parseInt(uidMatch[1]);
+  console.log(`Odoo XML-RPC auth SUCCESS, uid=${uid}`);
+
+  // Step 2: Create a web session using the same credentials
+  const sessionRes = await fetch(`${url}/web/session/authenticate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      params: { db, login, password: apiKey },
+    }),
+  });
+
+  const sessionJson = await sessionRes.json();
+  if (sessionJson.error || !sessionJson.result?.uid) {
+    // If web session fails, we'll use XML-RPC for data too
+    console.log(`Web session failed, will use XML-RPC for queries. Error: ${sessionJson.error?.data?.message || "no uid"}`);
+    // Return a special session that uses XML-RPC
+    return { sessionId: `xmlrpc:${uid}`, url };
+  }
+
+  const setCookie = sessionRes.headers.get("set-cookie") || "";
+  const sidMatch = setCookie.match(/session_id=([^;]+)/);
+  const sessionId = sidMatch ? sidMatch[1] : "";
+  console.log(`Web session SUCCESS, sid=${sessionId.slice(0, 8)}...`);
+  return { sessionId, url };
 }
 
 async function odooSearchRead(
@@ -113,23 +116,40 @@ async function odooSearchRead(
   domain: unknown[] = [],
   limit = 0,
 ): Promise<unknown[]> {
-  const res = await fetch(`${session.url}/web/dataset/call_kw`, {
+  const apiKey = Deno.env.get("ODOO_API_KEY")!;
+
+  // Use JSON-RPC with API key as Bearer token (works with Odoo 14+)
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${apiKey}`,
+  };
+
+  // Also include session cookie if we have one (non xmlrpc session)
+  if (!session.sessionId.startsWith("xmlrpc:")) {
+    headers["Cookie"] = `session_id=${session.sessionId}`;
+  }
+
+  const db = Deno.env.get("ODOO_DATABASE")!;
+
+  const res = await fetch(`${session.url}/jsonrpc`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Cookie: `session_id=${session.sessionId}`,
-    },
+    headers,
     body: JSON.stringify({
       jsonrpc: "2.0",
       method: "call",
+      id: Date.now(),
       params: {
-        model,
-        method: "search_read",
-        args: [domain],
-        kwargs: {
-          fields,
-          limit: limit || false,
-        },
+        service: "object",
+        method: "execute_kw",
+        args: [
+          db,
+          session.sessionId.startsWith("xmlrpc:") ? parseInt(session.sessionId.replace("xmlrpc:", "")) : 0,
+          apiKey,
+          model,
+          "search_read",
+          [domain],
+          { fields, limit: limit || false },
+        ],
       },
     }),
   });
