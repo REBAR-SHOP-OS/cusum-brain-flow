@@ -1,96 +1,39 @@
 
 
-## Build CEO Portal as a Standalone Page
+## Fix: Black Camera in Face Enrollment Dialog
 
-### Current State
-- `CEODashboardView` lives inside the Admin Panel tab
-- The Home "CEO Portal" card routes to `/office` with `state: { section: "ceo-dashboard" }`, but OfficePortal redirects it to `ai-extract`
-- Daily Digest exists at `/daily-summarizer` but is not integrated into the CEO view
-- No standalone `/ceo` route exists
+### Problem
+The camera shows black because of a timing issue between when the stream is obtained and when the video element is actually in the DOM:
 
-### What We Will Build
+1. `startCamera()` gets the media stream and stores it in `streamRef`
+2. At this point, `cameraActive` is still `false`, so the `<video>` element doesn't exist in the DOM yet
+3. `setCameraActive(true)` triggers a re-render that adds the `<video>` element
+4. The `useEffect` fires on `cameraActive` change, but the video DOM node may not be committed yet in the same render cycle, so `videoRef.current` can still be null
 
-A dedicated `/ceo` route that serves as the **CEO Portal** -- a single-page executive command center combining the existing CEO Dashboard with an **Intelligent Daily Assignments** panel.
+### Solution
+Replace the static `videoRef` with a **callback ref** on the `<video>` element. When React mounts the video element, the callback fires immediately with the DOM node, and we assign `streamRef.current` to it right then. This eliminates any timing gap.
 
-#### New Components
+### Changes (single file, surgical)
 
-**1. `src/pages/CEOPortal.tsx`** -- Standalone page (no Office sidebar)
-- Full-width layout with the existing `CEODashboardView` content
-- New "Daily Assignments" section at the top, below the Health Score
-- Embedded Daily Digest summary (pulls from `daily-summary` edge function)
+**`src/components/timeclock/FaceEnrollment.tsx`**
 
-**2. `src/components/ceo/DailyAssignments.tsx`** -- New intelligent assignments panel
-- Fetches today's exceptions, overdue tasks, expiring quotes, pending approvals
-- Groups into priority tiers: "Do Now", "Review Today", "Watch This Week"
-- Each item shows: title, owner, age, one-tap actions (Approve / Delegate / Snooze)
-- Data sources: `mockExceptions` (existing) + live queries for overdue invoices, at-risk jobs, pending meeting actions
+1. Remove the `useEffect` sync hook (lines 34-41) -- it's unreliable
+2. Replace `videoRef = useRef<HTMLVideoElement>(null)` with a mutable ref that gets set via a callback
+3. Add a `videoCallbackRef` function that:
+   - Stores the video element in `videoRef.current`
+   - If `streamRef.current` exists, assigns it to `video.srcObject` and calls `play()`
+4. Update the `<video>` element to use `ref={videoCallbackRef}` instead of `ref={videoRef}`
 
-**3. `src/components/ceo/DailyBriefingCard.tsx`** -- Compact daily digest embed
-- Calls the `daily-summary` edge function for today's date
-- Shows: greeting, key takeaways (top 3), and quick stats strip
-- "View Full Briefing" link to `/daily-summarizer`
+This guarantees that the moment the video element enters the DOM, it gets the stream -- no race condition possible.
 
-#### Routing Changes
-
-| Change | Detail |
-|--------|--------|
-| New route `/ceo` | Renders `CEOPortal.tsx` inside `AppLayout` |
-| Home "CEO Portal" card | Update route from `/office` to `/ceo` (remove state prop) |
-| Admin Panel | Keep CEO Dashboard tab as-is (secondary access) |
-| Office Portal | No changes (ceo-dashboard redirect stays) |
-
-#### Layout of CEO Portal Page
+### Technical Detail
 
 ```text
-+--------------------------------------------------+
-| Header: "Good morning, CEO"   [Refresh] [Live]   |
-+--------------------------------------------------+
-| Health Score Hero (existing)                      |
-+--------------------------------------------------+
-| Daily Briefing Card (compact digest)              |
-| - Greeting + 3 key takeaways + stats strip        |
-| - [View Full Briefing ->]                         |
-+--------------------------------------------------+
-| Intelligent Daily Assignments                     |
-| [Do Now] [Review Today] [Watch This Week]         |
-| - Exception cards with one-tap actions            |
-+--------------------------------------------------+
-| KPI Grid (6 cards - existing)                     |
-+--------------------------------------------------+
-| Production Pulse | Financial Health (existing)    |
-+--------------------------------------------------+
-| Charts Row (existing)                             |
-+--------------------------------------------------+
-| Operations Strip (existing)                       |
-+--------------------------------------------------+
-| Exceptions Workbench (existing)                   |
-+--------------------------------------------------+
-| Meeting Intelligence (existing)                   |
-+--------------------------------------------------+
+Before (broken):
+  startCamera() --> stream ready --> videoRef is null --> setCameraActive(true) --> re-render --> useEffect fires --> videoRef MIGHT still be null
+
+After (fixed):
+  startCamera() --> stream ready --> setCameraActive(true) --> re-render --> video mounts --> callback ref fires --> stream assigned immediately
 ```
 
-### Technical Details
-
-**Data for Daily Assignments:**
-- Overdue invoices: query `accounting_mirror` where `balance > 0`
-- At-risk jobs: use existing `mockAtRiskJobs` data
-- Pending meeting actions: query `meeting_action_items` where `status = 'draft'`
-- Expiring quotes: query `leads` where quote is near expiry
-- Machine issues: from `machines` where `status = 'down'`
-
-**Priority classification:**
-- "Do Now": severity=critical OR age > 30 days OR machine down
-- "Review Today": severity=warning OR items expiring within 48h
-- "Watch This Week": severity=info OR upcoming capacity conflicts
-
-**Files to create:**
-1. `src/pages/CEOPortal.tsx`
-2. `src/components/ceo/DailyAssignments.tsx`
-3. `src/components/ceo/DailyBriefingCard.tsx`
-
-**Files to edit:**
-1. `src/App.tsx` -- add `/ceo` route
-2. `src/pages/Home.tsx` -- update CEO Portal card route to `/ceo`
-
-**No database changes required.** All data comes from existing tables and the existing `daily-summary` edge function.
-
+No other files are affected. The canvas ref, capture logic, and upload flow remain untouched.
