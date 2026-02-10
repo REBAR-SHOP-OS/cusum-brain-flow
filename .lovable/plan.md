@@ -1,81 +1,120 @@
 
+# AI Transcription & Translation Module for Office Tools
 
-# Fix Voice Input + Build AI-Driven Meeting System
+## What This Adds
 
-## Issue 1: Microphone Button Not Working on Home Page
+A new **"AI Transcribe"** section inside Office Tools that lets you:
 
-The voice input button uses the browser's `SpeechRecognition` API (Web Speech API). On iOS Safari and some mobile browsers, this API is either unsupported or requires HTTPS + user gesture. When `isSupported` is `false`, the button returns `null` and is completely hidden -- but even when visible, the SpeechRecognition API can silently fail on mobile.
+1. **Live Microphone Transcription** -- speak in any language, get real-time English text
+2. **Audio File Upload** -- drop an MP3/WAV/M4A file, get it transcribed and translated to English
+3. **Text Paste & Translate** -- paste text in any language and get an English translation
+4. **Advanced Options** -- source language auto-detect or manual select, tone/formality control, glossary/context hints, copy/download results
 
-**Fix:** Add a visible error state and toast notification when voice input fails, so users know what happened. Also add a fallback: if SpeechRecognition is not supported, show the button but prompt the user that their browser doesn't support it.
+Everything is powered by the existing Lovable AI gateway (no extra API keys needed).
 
-## Issue 2: AI-Driven Meeting System with Recording
+---
 
-The current meeting system has the right pieces but needs to be made fully automatic ("AI-driven"). Here's what will change:
+## New Files
 
-### Auto-Start Recording and Transcription
-- When a meeting starts, **automatically begin recording** (not just for the creator -- for all participants)
-- **Auto-start transcription** is already in place
-- Remove the manual record button; recording is always-on
+### 1. `src/components/office/TranscribeView.tsx`
+The main UI component with three tabs:
 
-### Auto-Generate AI Notes During Meeting
-- The live notes panel already calls `meeting-live-notes` every 60s -- this stays as-is but will trigger on the first 5 entries instead of waiting for 10
+- **Mic Tab**: Live microphone transcription using browser SpeechRecognition API with real-time display, auto-detect language, and AI translation to English
+- **Upload Tab**: Drag-and-drop or file picker for audio files (sent to a backend function for transcription + translation)
+- **Text Tab**: Paste any foreign text, select source language (or auto-detect), get English translation
 
-### Auto-Summarize on End
-- When a meeting ends, the `summarize-meeting` edge function is already triggered automatically
-- The meeting report dialog already shows after a short delay
+Advanced options panel (collapsible):
+- Source language selector (auto-detect default, 30+ languages)
+- Formality level (casual / neutral / formal)
+- Context hint text field (e.g., "manufacturing terminology")
+- Output format toggle (plain text / bullet points / paragraphs)
 
-### Changes Summary
+Results area:
+- Original text display
+- English translation display
+- Copy to clipboard button
+- Download as .txt button
+- History of recent transcriptions (session-local)
 
-**`src/hooks/useSpeechRecognition.ts`**
-- Add error callback so the UI can show a toast when mic access is denied or API unsupported
+### 2. `supabase/functions/transcribe-translate/index.ts`
+New edge function that handles two modes:
 
-**`src/components/chat/ChatInput.tsx`**
-- Show a toast when voice input fails or is unsupported
+**Mode 1: Text translation**
+- Receives `{ mode: "text", text: string, sourceLang?: string, formality?: string, context?: string }`
+- Uses Lovable AI (gemini-3-flash-preview) to detect language + translate to English
+- Returns `{ original: string, detectedLang: string, english: string }`
 
-**`src/components/teamhub/MeetingRoom.tsx`**
-- Auto-start recording on mount (remove manual record button)
-- Auto-stop recording on end/leave
-- Always show the REC badge when active
+**Mode 2: Audio transcription**
+- Receives audio file as FormData
+- Uses Lovable AI to transcribe audio content and translate to English
+- Returns `{ transcript: string, detectedLang: string, english: string }`
 
-**`src/hooks/useMeetingRecorder.ts`**
-- Remove the `isCreator` guard so any participant can record
-- Auto-start capability
+Both modes support the advanced options (formality, context hints, output format).
 
-**`src/components/teamhub/MeetingNotesPanel.tsx`**
-- Lower the auto-analyze threshold from 10 entries to 5
-- Start first analysis after 30 seconds instead of 60
+---
 
-**`supabase/functions/ringcentral-video/index.ts`**
-- No changes needed -- fallback to Jitsi is already graceful
+## Modified Files
+
+### 3. `src/components/office/OfficeSidebar.tsx`
+- Add `"ai-transcribe"` to the `OfficeSection` type union
+- Add entry to `officeTools` array: `{ id: "ai-transcribe", label: "AI Transcribe", icon: Languages }`
+- Import `Languages` from lucide-react
+
+### 4. `src/pages/OfficePortal.tsx`
+- Import `TranscribeView`
+- Add `"ai-transcribe": TranscribeView` to the `sectionComponents` map
+
+---
 
 ## Technical Details
 
-### Voice Input Fix
-```text
-ChatInput.tsx:
-  handleVoiceToggle() --> if !speech.isSupported --> toast("Voice input not supported on this browser")
-  speech.start() error --> toast("Microphone access denied")
+### TranscribeView Component Structure
 
-useSpeechRecognition.ts:
-  Add onError callback parameter
-  Surface "not-allowed" and "no-speech" errors
+```text
+TranscribeView
+  +-- Tabs: [ Microphone | Upload File | Paste Text ]
+  |
+  +-- Advanced Options (collapsible)
+  |     +-- Source Language (Select, default: Auto-detect)
+  |     +-- Formality (Select: casual/neutral/formal)
+  |     +-- Context Hint (Input)
+  |     +-- Output Format (Toggle: plain/bullets/paragraphs)
+  |
+  +-- Results Panel
+  |     +-- Original text (with detected language badge)
+  |     +-- English translation
+  |     +-- Action buttons: Copy | Download | Clear
+  |
+  +-- Session History (accordion, last 10 items)
 ```
 
-### Auto-Recording Flow
+### Microphone Tab Flow
+
 ```text
-MeetingRoom mount
-  --> useEffect auto-calls startRecording()
-  --> useEffect auto-starts transcription (already done)
-  
-MeetingRoom unmount / end
-  --> stopRecording() + stopTranscription() (already done)
-  --> summarize-meeting fires (already done)
+User clicks "Start Listening"
+  --> Browser SpeechRecognition starts (lang = selected or auto)
+  --> Interim results shown live in "Original" panel
+  --> On final result, call transcribe-translate edge function
+  --> English translation appears in "English" panel
+  --> Entry added to session history
 ```
 
-### Files Changed
-1. `src/hooks/useSpeechRecognition.ts` -- error surfacing
-2. `src/components/chat/ChatInput.tsx` -- toast on voice failure  
-3. `src/components/teamhub/MeetingRoom.tsx` -- auto-start recording, remove manual button
-4. `src/hooks/useMeetingRecorder.ts` -- remove creator-only guard, add auto-start
-5. `src/components/teamhub/MeetingNotesPanel.tsx` -- faster first AI analysis
+### Upload Tab Flow
 
+```text
+User drops audio file or clicks file picker
+  --> File sent to transcribe-translate edge function (FormData)
+  --> Loading spinner shown
+  --> Returns transcript + English translation
+  --> Both displayed in results panel
+```
+
+### Edge Function: `transcribe-translate/index.ts`
+
+- Auth guard via `requireAuth`
+- For text mode: AI prompt instructs the model to detect language, translate to English with specified formality/context
+- For audio mode: Since Lovable AI supports multimodal (Gemini), encode audio as base64 and send in the prompt for transcription + translation
+- Rate limiting not needed initially (auth-gated)
+
+### Supported Languages (auto-detect + manual)
+English, Farsi, Spanish, French, Arabic, Hindi, Chinese, German, Portuguese, Russian, Korean, Japanese, Turkish, Urdu, Italian, Dutch, Polish, Vietnamese, Thai, Indonesian, Malay, Filipino, Bengali, Punjabi, Tamil, Telugu, Swahili, Hebrew, Greek, Czech
