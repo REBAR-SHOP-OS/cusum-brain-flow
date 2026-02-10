@@ -72,6 +72,7 @@ export function TranscribeView() {
   const [isListening, setIsListening] = useState(false);
   const [interimText, setInterimText] = useState("");
   const recognitionRef = useRef<any>(null);
+  const hasTranslatedRef = useRef(false);
 
   // Text paste
   const [pasteText, setPasteText] = useState("");
@@ -148,6 +149,7 @@ export function TranscribeView() {
       if (final) {
         setOriginalText(prev => prev + (prev ? " " : "") + final);
         setInterimText("");
+        hasTranslatedRef.current = true;
         callTranslateAPI({
           mode: "text",
           text: final,
@@ -186,16 +188,52 @@ export function TranscribeView() {
       }
     };
 
+    hasTranslatedRef.current = false;
     recognitionRef.current = recognition;
     recognition.start();
     setIsListening(true);
+    setOriginalText("");
+    setEnglishText("");
+    setDetectedLang("");
+    setInterimText("");
   };
 
-  const stopListening = () => {
+  const stopListening = async () => {
     const ref = recognitionRef.current;
     recognitionRef.current = null;
     ref?.stop();
     setIsListening(false);
+
+    // Flush any pending interim text as original and translate everything
+    setInterimText(prev => {
+      if (prev.trim()) {
+        setOriginalText(old => old + (old ? " " : "") + prev.trim());
+      }
+      return "";
+    });
+
+    // Use a small delay to let state settle, then translate all accumulated text
+    setTimeout(() => {
+      setOriginalText(currentOriginal => {
+        if (currentOriginal.trim() && !hasTranslatedRef.current) {
+          // No final chunks were translated yet — translate everything now
+          callTranslateAPI({
+            mode: "text",
+            text: currentOriginal.trim(),
+            sourceLang,
+            formality,
+            context: contextHint,
+            outputFormat,
+          }).then(result => {
+            setEnglishText(result.english || "");
+            setDetectedLang(result.detectedLang || "");
+            addToHistory({ original: currentOriginal.trim(), english: result.english || "", detectedLang: result.detectedLang || "", mode: "mic" });
+            toast.success("Translation complete");
+          }).catch(err => toast.error(err.message));
+        }
+        return currentOriginal;
+      });
+    }, 100);
   };
 
   // --- Upload Tab ---
