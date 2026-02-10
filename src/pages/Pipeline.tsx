@@ -3,13 +3,12 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, Mail, Loader2, RefreshCw, ClipboardList, History } from "lucide-react";
+import { Plus, Search, Mail, Loader2, History } from "lucide-react";
 import { PipelineBoard } from "@/components/pipeline/PipelineBoard";
 import { PipelineAnalytics } from "@/components/pipeline/PipelineAnalytics";
 import { LeadFormModal } from "@/components/pipeline/LeadFormModal";
 import { LeadDetailDrawer } from "@/components/pipeline/LeadDetailDrawer";
 import { useToast } from "@/hooks/use-toast";
-import { useOdooQuotations } from "@/hooks/useOdooQuotations";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Lead = Tables<"leads">;
@@ -42,11 +41,10 @@ export default function Pipeline() {
   const [selectedLead, setSelectedLead] = useState<LeadWithCustomer | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isScanningRfq, setIsScanningRfq] = useState(false);
-  const [isSyncingOdoo, setIsSyncingOdoo] = useState(false);
   const [isSyncingHistory, setIsSyncingHistory] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { isSyncing: isSyncingQuotations, syncQuotations } = useOdooQuotations();
+  
 
   const { data: leads = [], isLoading } = useQuery({
     queryKey: ["leads", searchQuery],
@@ -108,7 +106,22 @@ export default function Pipeline() {
   const leadsByStage = useMemo(() => {
     const grouped: Record<string, LeadWithCustomer[]> = {};
     PIPELINE_STAGES.forEach((stage) => {
-      grouped[stage.id] = leads.filter((lead) => lead.stage === stage.id);
+      grouped[stage.id] = leads
+        .filter((lead) => lead.stage === stage.id)
+        .sort((a, b) => {
+          // Sort by priority (stars) desc like Odoo, then by updated_at desc
+          const getStars = (l: LeadWithCustomer) => {
+            const meta = l.metadata as Record<string, unknown> | null;
+            const op = meta?.odoo_priority as string | undefined;
+            if (op) return Math.min(parseInt(op) || 0, 3);
+            if (l.priority === "high") return 3;
+            if (l.priority === "medium") return 2;
+            return 0;
+          };
+          const diff = getStars(b) - getStars(a);
+          if (diff !== 0) return diff;
+          return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+        });
     });
     return grouped;
   }, [leads]);
@@ -172,38 +185,6 @@ export default function Pipeline() {
     }
   };
 
-  const handleSyncOdoo = async () => {
-    setIsSyncingOdoo(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("sync-odoo-leads", {
-        body: {},
-      });
-      if (error) throw error;
-
-      if (data.synced > 0 || data.updated > 0) {
-        queryClient.invalidateQueries({ queryKey: ["leads"] });
-        toast({
-          title: `Odoo sync: ${data.synced} created, ${data.updated} updated`,
-          description: `Processed ${data.total} OdooBot emails — ${data.skipped} skipped`,
-        });
-      } else {
-        toast({
-          title: "No new Odoo leads",
-          description: `Processed ${data.total} emails — ${data.skipped} already synced`,
-        });
-      }
-    } catch (err) {
-      console.error("Odoo sync error:", err);
-      toast({
-        title: "Odoo sync failed",
-        description: err instanceof Error ? err.message : "Failed to sync Odoo leads",
-        variant: "destructive",
-      });
-    } finally {
-      setIsSyncingOdoo(false);
-    }
-  };
-
   const handleSyncHistory = async () => {
     setIsSyncingHistory(true);
     try {
@@ -260,26 +241,6 @@ export default function Pipeline() {
           >
             {isScanningRfq ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
             <span className="hidden sm:inline">Scan RFQ</span>
-          </Button>
-          <Button
-            onClick={handleSyncOdoo}
-            size="sm"
-            variant="outline"
-            disabled={isSyncingOdoo}
-            className="gap-2"
-          >
-            {isSyncingOdoo ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-            <span className="hidden sm:inline">Sync Odoo</span>
-          </Button>
-          <Button
-            onClick={syncQuotations}
-            size="sm"
-            variant="outline"
-            disabled={isSyncingQuotations}
-            className="gap-2"
-          >
-            {isSyncingQuotations ? <Loader2 className="w-4 h-4 animate-spin" /> : <ClipboardList className="w-4 h-4" />}
-            <span className="hidden sm:inline">Sync Quotes</span>
           </Button>
           <Button
             onClick={handleSyncHistory}
