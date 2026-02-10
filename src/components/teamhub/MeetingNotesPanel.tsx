@@ -75,10 +75,10 @@ export function MeetingNotesPanel({
     }
   }, [meetingId, entries, notes]);
 
-  // Auto-analyze every 60s or every 10 new entries
+  // Auto-analyze every 30s or every 5 new entries
   useEffect(() => {
     const diff = entries.length - lastAnalyzedCountRef.current;
-    if (diff >= 10) {
+    if (diff >= 5) {
       analyzeNotes();
       return;
     }
@@ -87,7 +87,7 @@ export function MeetingNotesPanel({
       if (entries.length > lastAnalyzedCountRef.current) {
         analyzeNotes();
       }
-    }, 60000);
+    }, 30000);
 
     return () => clearInterval(timer);
   }, [entries.length, analyzeNotes]);

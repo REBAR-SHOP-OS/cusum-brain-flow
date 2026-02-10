@@ -51,7 +51,9 @@ export function ChatInput({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
-  const speech = useSpeechRecognition();
+  const speech = useSpeechRecognition({
+    onError: (error) => toast({ title: "Voice Input", description: error, variant: "destructive" }),
+  });
 
   // Auto-resize textarea
   useEffect(() => {
@@ -147,10 +149,12 @@ export function ChatInput({
   const handleVoiceToggle = useCallback(() => {
     if (speech.isListening) {
       speech.stop();
+    } else if (!speech.isSupported) {
+      toast({ title: "Voice Input", description: "Voice input is not supported on this browser. Try Chrome on desktop.", variant: "destructive" });
     } else {
       speech.start();
     }
-  }, [speech]);
+  }, [speech, toast]);
 
   // File upload logic
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {

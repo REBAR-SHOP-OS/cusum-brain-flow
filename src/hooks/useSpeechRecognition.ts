@@ -7,6 +7,10 @@ interface TranscriptEntry {
   isFinal: boolean;
 }
 
+interface UseSpeechRecognitionOptions {
+  onError?: (error: string) => void;
+}
+
 interface UseSpeechRecognitionReturn {
   isListening: boolean;
   transcripts: TranscriptEntry[];
@@ -18,7 +22,7 @@ interface UseSpeechRecognitionReturn {
   isSupported: boolean;
 }
 
-export function useSpeechRecognition(): UseSpeechRecognitionReturn {
+export function useSpeechRecognition(options?: UseSpeechRecognitionOptions): UseSpeechRecognitionReturn {
   const [isListening, setIsListening] = useState(false);
   const [transcripts, setTranscripts] = useState<TranscriptEntry[]>([]);
   const [interimText, setInterimText] = useState("");
@@ -62,10 +66,17 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
       if (interim) setInterimText(interim);
     };
 
-    recognition.onerror = (event) => {
+    recognition.onerror = (event: any) => {
       console.error("Speech recognition error:", event.error);
       if (event.error === "not-allowed") {
         setIsListening(false);
+        options?.onError?.("Microphone access denied. Please allow microphone permissions.");
+      } else if (event.error === "no-speech") {
+        options?.onError?.("No speech detected. Please try again.");
+      } else if (event.error === "network") {
+        options?.onError?.("Network error during speech recognition.");
+      } else {
+        options?.onError?.(`Speech recognition error: ${event.error}`);
       }
     };
 
