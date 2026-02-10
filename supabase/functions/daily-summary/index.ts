@@ -1,11 +1,223 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { decryptToken } from "../_shared/tokenEncryption.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
+
+// Mailboxes to scan for reports
+const REPORT_MAILBOXES = ["ai@rebar.shop", "vicky@rebar.shop", "neel@rebar.shop"];
+
+// Keywords to identify report/summary emails
+const REPORT_KEYWORDS = [
+  "ringcentral", "wincher", "semrush", "call summary", "call report",
+  "weekly report", "daily report", "analytics", "performance report",
+  "seo report", "ranking", "keyword", "backlink", "traffic report",
+  "voicemail", "missed call", "fax", "recording", "transcript",
+  "campaign report", "engagement report", "social report",
+];
+
+interface MailboxEmail {
+  mailbox: string;
+  from: string;
+  subject: string;
+  snippet: string;
+  body: string;
+  date: string;
+  source: string; // detected source: ringcentral, wincher, semrush, call-summary, other
+}
+
+/** Refresh a Gmail access token from a stored refresh token */
+async function refreshGmailToken(refreshToken: string): Promise<string | null> {
+  const clientId = Deno.env.get("GMAIL_CLIENT_ID");
+  const clientSecret = Deno.env.get("GMAIL_CLIENT_SECRET");
+  if (!clientId || !clientSecret) return null;
+
+  const res = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: refreshToken,
+      grant_type: "refresh_token",
+    }),
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data.access_token || null;
+}
+
+/** Detect the source service from email sender/subject */
+function detectEmailSource(from: string, subject: string): string {
+  const combined = `${from} ${subject}`.toLowerCase();
+  if (combined.includes("ringcentral") || combined.includes("ring central")) return "ringcentral";
+  if (combined.includes("wincher")) return "wincher";
+  if (combined.includes("semrush") || combined.includes("sem rush")) return "semrush";
+  if (combined.includes("call summary") || combined.includes("call report") || combined.includes("transcript")) return "call-summary";
+  if (combined.includes("google analytics") || combined.includes("search console")) return "google-analytics";
+  return "report";
+}
+
+/** Fetch recent emails from a single Gmail account via API */
+async function fetchMailboxEmails(
+  accessToken: string,
+  mailbox: string,
+  targetDate: string
+): Promise<MailboxEmail[]> {
+  const results: MailboxEmail[] = [];
+  try {
+    // Search for emails from today and yesterday to catch overnight reports
+    const query = `newer_than:2d`;
+    const listRes = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=30&q=${encodeURIComponent(query)}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    if (!listRes.ok) {
+      console.warn(`Failed to list emails for ${mailbox}:`, listRes.status);
+      return results;
+    }
+    const listData = await listRes.json();
+    if (!listData.messages?.length) return results;
+
+    // Fetch up to 15 messages in parallel
+    const msgIds = listData.messages.slice(0, 15);
+    const msgPromises = msgIds.map(async (msg: { id: string }) => {
+      const msgRes = await fetch(
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      if (!msgRes.ok) return null;
+      return msgRes.json();
+    });
+
+    const messages = await Promise.all(msgPromises);
+
+    for (const msgData of messages) {
+      if (!msgData) continue;
+      const headers = msgData.payload?.headers || [];
+      const getH = (name: string) => headers.find((h: any) => h.name.toLowerCase() === name.toLowerCase())?.value || "";
+      const from = getH("From");
+      const subject = getH("Subject");
+      const date = getH("Date");
+
+      // Check if this is a report-type email
+      const combined = `${from} ${subject}`.toLowerCase();
+      const isReport = REPORT_KEYWORDS.some(kw => combined.includes(kw));
+      if (!isReport) continue;
+
+      // Extract body text
+      let body = msgData.snippet || "";
+      const extractText = (parts: any[]): string => {
+        for (const part of parts || []) {
+          if (part.mimeType === "text/plain" && part.body?.data) {
+            try {
+              const decoded = atob(part.body.data.replace(/-/g, "+").replace(/_/g, "/"));
+              return decoded.slice(0, 2000);
+            } catch { /* skip */ }
+          }
+          if (part.parts) {
+            const nested = extractText(part.parts);
+            if (nested) return nested;
+          }
+        }
+        return "";
+      };
+
+      if (msgData.payload?.parts) {
+        const extracted = extractText(msgData.payload.parts);
+        if (extracted) body = extracted;
+      } else if (msgData.payload?.body?.data) {
+        try {
+          body = atob(msgData.payload.body.data.replace(/-/g, "+").replace(/_/g, "/")).slice(0, 2000);
+        } catch { /* use snippet */ }
+      }
+
+      results.push({
+        mailbox,
+        from,
+        subject,
+        snippet: msgData.snippet || "",
+        body: body.slice(0, 2000),
+        date,
+        source: detectEmailSource(from, subject),
+      });
+    }
+  } catch (err) {
+    console.warn(`Error fetching emails for ${mailbox}:`, err);
+  }
+  return results;
+}
+
+/** Fetch report emails from all configured mailboxes */
+async function fetchAllMailboxReports(
+  supabase: any,
+  targetDate: string
+): Promise<MailboxEmail[]> {
+  const allEmails: MailboxEmail[] = [];
+
+  // Get tokens for all report mailboxes
+  const { data: tokenRows } = await supabase
+    .from("user_gmail_tokens")
+    .select("user_id, gmail_email, refresh_token, is_encrypted");
+
+  if (!tokenRows?.length) {
+    console.warn("No Gmail tokens found for report mailboxes");
+    return allEmails;
+  }
+
+  // Also look up profiles to match emails to mailboxes
+  const { data: profileRows } = await supabase
+    .from("profiles")
+    .select("user_id, email");
+
+  const emailToUserId: Record<string, string> = {};
+  (profileRows || []).forEach((p: any) => {
+    if (p.email) emailToUserId[p.email.toLowerCase()] = p.user_id;
+  });
+
+  // For each report mailbox, find matching token and fetch emails
+  const fetchPromises = REPORT_MAILBOXES.map(async (mailbox) => {
+    // Find token by gmail_email or by profile email match
+    let tokenRow = tokenRows.find((t: any) => t.gmail_email?.toLowerCase() === mailbox);
+    if (!tokenRow) {
+      const userId = emailToUserId[mailbox];
+      if (userId) {
+        tokenRow = tokenRows.find((t: any) => t.user_id === userId);
+      }
+    }
+    if (!tokenRow) {
+      console.warn(`No Gmail token found for ${mailbox}`);
+      return [];
+    }
+
+    let refreshToken = tokenRow.refresh_token;
+    if (tokenRow.is_encrypted) {
+      try {
+        refreshToken = await decryptToken(refreshToken);
+      } catch {
+        console.warn(`Failed to decrypt token for ${mailbox}`);
+        return [];
+      }
+    }
+
+    const accessToken = await refreshGmailToken(refreshToken);
+    if (!accessToken) {
+      console.warn(`Failed to refresh token for ${mailbox}`);
+      return [];
+    }
+
+    return fetchMailboxEmails(accessToken, mailbox, targetDate);
+  });
+
+  const results = await Promise.all(fetchPromises);
+  results.forEach(emails => allEmails.push(...emails));
+
+  return allEmails;
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS")
@@ -203,6 +415,22 @@ serve(async (req) => {
     const erpEvents = eventsRes.data || [];
     const commandLogs = commandLogRes.data || [];
 
+    // ── Fetch report emails from all mailboxes (ai@, vicky@, neel@) ──
+    let mailboxReports: MailboxEmail[] = [];
+    try {
+      mailboxReports = await fetchAllMailboxReports(supabase, targetDate);
+      console.log(`Fetched ${mailboxReports.length} report emails from ${REPORT_MAILBOXES.join(", ")}`);
+    } catch (err) {
+      console.warn("Failed to fetch mailbox reports:", err);
+    }
+
+    // Group reports by source
+    const reportsBySource: Record<string, MailboxEmail[]> = {};
+    mailboxReports.forEach(r => {
+      if (!reportsBySource[r.source]) reportsBySource[r.source] = [];
+      reportsBySource[r.source].push(r);
+    });
+
     // ── Compute QuickBooks summary ───────────────────────────────────
     const totalAR = invoices.reduce((sum: number, inv: any) => sum + (inv.balance || 0), 0);
     const overdueInvoices = invoices.filter((inv: any) => {
@@ -382,6 +610,21 @@ ${commandLogs.length > 0
     })()
   : "No AI commands used today."
 }
+
+--- MAILBOX REPORTS FROM ai@rebar.shop, vicky@rebar.shop, neel@rebar.shop (${mailboxReports.length} reports found) ---
+${mailboxReports.length > 0
+  ? (() => {
+      const sections: string[] = [];
+      for (const [source, reports] of Object.entries(reportsBySource)) {
+        sections.push(`\n📬 ${source.toUpperCase()} REPORTS (${reports.length}):`);
+        reports.forEach((r, i) => {
+          sections.push(`${i + 1}. [${r.mailbox}] From: ${r.from}\n   Subject: ${r.subject}\n   Content: ${r.body.replace(/\n/g, " ").slice(0, 500)}`);
+        });
+      }
+      return sections.join("\n");
+    })()
+  : "No report emails found in ai@rebar.shop, vicky@rebar.shop, or neel@rebar.shop mailboxes."
+}
 `;
 
     // ── Call Lovable AI ───────────────────────────────────────────────
@@ -487,6 +730,13 @@ Rules:
 - Flag employees who didn't clock in or had very short shifts
 - Highlight top-performing operators by output quantity
 - Report ERP system usage patterns and most active users
+- IMPORTANT: Carefully analyze all MAILBOX REPORTS from ai@rebar.shop, vicky@rebar.shop, and neel@rebar.shop
+  - Extract key metrics from RingCentral reports (call volumes, missed calls, voicemails)
+  - Extract SEO metrics from Wincher reports (keyword rankings, position changes, visibility scores)
+  - Extract marketing insights from SEMrush reports (traffic, backlinks, domain authority, keyword gaps)
+  - Extract AI call summary insights (customer sentiment, common requests, escalations)
+  - Include Google Analytics / Search Console data if found in emails (impressions, clicks, CTR, top pages)
+  - Integrate these external report findings into the relevant digest sections
 - If there's little data, still provide useful suggestions and planning tips
 - Keep takeaways actionable and concise
 - Suggest calendar blocks for follow-ups based on the data
@@ -565,6 +815,7 @@ Rules:
           employeesClocked: timeEntries.length,
           machineRuns: machineRuns.length,
           erpEvents: erpEvents.length,
+          mailboxReports: mailboxReports.length,
         },
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
