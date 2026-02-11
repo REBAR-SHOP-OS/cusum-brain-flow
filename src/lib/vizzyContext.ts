@@ -3,7 +3,7 @@ import type { VizzyBusinessSnapshot } from "@/hooks/useVizzyContext";
 export function buildVizzyContext(snap: VizzyBusinessSnapshot): string {
   const fmt = (n: number) =>
     n.toLocaleString("en-US", { style: "currency", currency: "USD" });
-  const { financials: f, production: p, crm, customers: c, deliveries: d, team, recentEvents } = snap;
+  const { financials: f, production: p, crm, customers: c, deliveries: d, team, recentEvents, brainKnowledge } = snap;
 
   const bankAccounts = f.accounts
     .filter((a) => a.AccountType === "Bank" && a.Active)
@@ -35,6 +35,13 @@ export function buildVizzyContext(snap: VizzyBusinessSnapshot): string {
   const eventsList = recentEvents
     .slice(0, 10)
     .map((e) => `  • [${e.event_type}] ${e.entity_type}: ${e.description || "No description"}`)
+    .join("\n");
+
+  const brainList = brainKnowledge
+    .map((k) => {
+      const preview = k.content ? k.content.slice(0, 200).replace(/\n/g, " ") : "(document — no text preview)";
+      return `  • [${k.category}] ${k.title}: ${preview}`;
+    })
     .join("\n");
 
   const qbWarning = !snap.financials.qbConnected ? `
@@ -92,6 +99,10 @@ ${hotLeadsList || "    None"}
 
 📋 RECENT ACTIVITY
 ${eventsList || "  No recent events"}
+
+🧠 ERP BRAIN — KNOWLEDGE BASE (${brainKnowledge.length} entries)
+Use this knowledge to answer questions about company processes, standards, pricing, strategies, and meeting history.
+${brainList || "  No knowledge entries"}
 
 ═══ ERP TOOLS (you can MODIFY the business) ═══
 You have client tools to execute ERP actions. The CEO must approve each action via on-screen dialog.
