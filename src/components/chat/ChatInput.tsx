@@ -324,28 +324,6 @@ export function ChatInput({
           {/* Bottom toolbar */}
           <div className="flex items-center gap-0.5 px-2 pb-2">
             {/* Left actions */}
-            {showFileUpload && (
-              <>
-                <input ref={fileInputRef} type="file" multiple onChange={handleFileSelect} className="hidden" />
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={isUploading}
-                      className={cn(
-                        "p-2 text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-muted/50",
-                        isUploading && "opacity-50 cursor-not-allowed"
-                      )}
-                    >
-                      {isUploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Paperclip className="w-5 h-5" />}
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top">Attach files</TooltipContent>
-                </Tooltip>
-              </>
-            )}
-
             <EmojiPicker onSelect={handleEmojiSelect} disabled={disabled} />
             <VoiceInputButton isListening={speech.isListening} isSupported={speech.isSupported} onToggle={handleVoiceToggle} disabled={disabled} />
             <QuickTemplates onSelect={handleTemplateSelect} disabled={disabled} />
@@ -388,20 +366,39 @@ export function ChatInput({
             </Tooltip>
 
             {onLiveChatClick && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={onLiveChatClick}
+                    className="p-2 text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-muted/50"
+                  >
+                    <Headset className="w-5 h-5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top">Voice Chat</TooltipContent>
+              </Tooltip>
+            )}
+
+            {showFileUpload && (
               <>
+                <input ref={fileInputRef} type="file" multiple onChange={handleFileSelect} className="hidden" />
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <button
                       type="button"
-                      onClick={onLiveChatClick}
-                      className="p-2 text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-muted/50"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isUploading}
+                      className={cn(
+                        "p-2 text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-muted/50",
+                        isUploading && "opacity-50 cursor-not-allowed"
+                      )}
                     >
-                      <Headset className="w-5 h-5" />
+                      {isUploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Paperclip className="w-5 h-5" />}
                     </button>
                   </TooltipTrigger>
-                  <TooltipContent side="top">Voice Chat</TooltipContent>
+                  <TooltipContent side="top">Attach files</TooltipContent>
                 </Tooltip>
-
               </>
             )}
 
