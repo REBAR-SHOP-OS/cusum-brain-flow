@@ -2587,7 +2587,8 @@ serve(async (req) => {
       );
     }
 
-    const { agent, message, history = [], context: userContext, attachedFiles = [] }: AgentRequest = await req.json();
+    const { agent, message: rawMessage, history = [], context: userContext, attachedFiles = [] }: AgentRequest = await req.json();
+    let message = rawMessage;
 
     if (!agent || !message) {
       return new Response(
