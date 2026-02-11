@@ -1,18 +1,35 @@
 
 
-## Update ELEVENLABS_AGENT_ID Secret
+## Add a `/vizzy` Route for Siri Shortcut Access
 
-### What we'll do
-Update the `ELEVENLABS_AGENT_ID` secret with your new agent ID (`agent_2601kh594s8tes1v8axk4c9vg7x7`), then redeploy and test the Voice Vizzy connection.
+### Goal
+Create a dedicated `/vizzy` page at `www.erp.rebar.shop/vizzy` that automatically starts the Voice Vizzy session on load. This lets you create a Siri Shortcut that says "Hey Siri, open Vizzy" and lands you straight into a voice conversation.
 
-### Steps
+### What will be built
 
-1. **Update the secret** -- Replace `ELEVENLABS_AGENT_ID` with `agent_2601kh594s8tes1v8axk4c9vg7x7`
-2. **Redeploy** the `elevenlabs-conversation-token` edge function
-3. **Test** the function to confirm a valid conversation token is returned (no more 502 or agent_not_found errors)
+1. **New page: `src/pages/VizzyPage.tsx`**
+   - A full-screen, minimal page (no sidebar/topbar clutter)
+   - Auto-starts the ElevenLabs voice session as soon as the page loads
+   - Shows the same Jarvis-style overlay (brain icon, transcript, speaking indicator)
+   - Includes a close/back button that navigates to `/home`
+   - Protected route (requires login)
+   - Still gated to `sattar@rebar.shop` only
+
+2. **Route registration in `App.tsx`**
+   - Add `/vizzy` as a protected route (without AppLayout wrapper so it's a clean full-screen experience)
+
+3. **Siri Shortcut setup (manual, on your iPhone)**
+   - Open the Shortcuts app
+   - Create a new shortcut: "Open URL" with `https://erp.rebar.shop/vizzy`
+   - Name it "Vizzy" -- then say "Hey Siri, Vizzy" to launch it
 
 ### Technical details
-- The secret update will be done via the secrets tool
-- No code changes are needed -- the edge function already reads `ELEVENLABS_AGENT_ID` from environment variables
-- Once the token endpoint works, the Voice Vizzy mic button (visible only to sattar@rebar.shop) will connect successfully
+
+- The new `VizzyPage` component will reuse the same `useConversation` hook and ElevenLabs token flow from the existing `VoiceVizzy` component
+- Auto-start will be triggered via a `useEffect` on mount (with a guard to prevent double-start)
+- The page will be registered as a standalone protected route without the `AppLayout` wrapper:
+  ```
+  <Route path="/vizzy" element={<ProtectedRoute><VizzyPage /></ProtectedRoute>} />
+  ```
+- No changes to the existing `VoiceVizzy` component or edge function -- this is additive only
 
