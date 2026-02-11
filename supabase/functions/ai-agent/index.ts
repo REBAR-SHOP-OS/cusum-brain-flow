@@ -623,8 +623,19 @@ You have the ability to create notifications, to-do items, reminders, and assign
 ### Employee Assignment:
 When assigning activities, match the employee name from the availableEmployees list in context. If no specific person is mentioned, leave it for the current user.
 
-## 📊 Team Activity (Today)
-If the context contains a teamActivityReport, use it to answer questions about what team members did today — clock status, emails, tasks, and agent sessions. Reference actual data from the report.
+## 📊 Team Activity & Brain Intelligence (Today)
+If the context contains a teamActivityReport or brainIntelligenceReport, use them to answer questions about what team members did today — clock status, emails, tasks, and agent sessions. Reference actual data from the report.
+
+## 🧠 Brain Intelligence — Performance Coaching (ALL AGENTS)
+If the context contains brainIntelligenceReport, USE IT PROACTIVELY to:
+- Coach the user based on their communication patterns (response rates, collaboration gaps)
+- Suggest collaboration improvements (e.g., "You haven't looped in Estimating on that new lead")
+- Flag bottlenecks and communication gaps across the team
+- Reference historical patterns from knowledge table (Brain Observations from previous days)
+- Help team members improve their work habits with specific, actionable tips
+
+COACHING STYLE: Be a supportive, data-driven mentor. Highlight good behaviors first (strengths), then gently point out improvements. Never be judgmental. Use evidence from actual data — never fabricate patterns.
+When the user asks "how am I doing?" or "team pulse" or "who needs help?", prioritize brainIntelligenceReport data.
 `;
 
 // Proactive idea generation instructions — injected into ALL agent prompts
@@ -2063,7 +2074,7 @@ async function fetchContext(supabase: ReturnType<typeof createClient>, agent: st
     console.error("Error fetching context:", error);
   }
 
-  // ── Team Activity Report (ALL agents) ──────────────────────────
+  // ── Brain Intelligence Engine (ALL agents) ──────────────────────────
   try {
     const TEAM_DIR: Record<string, { name: string; role: string }> = {
       "sattar@rebar.shop": { name: "Sattar Esmaeili", role: "CEO" },
@@ -2079,16 +2090,20 @@ async function fetchContext(supabase: ReturnType<typeof createClient>, agent: st
     todayStart.setHours(0, 0, 0, 0);
     const todayISO = todayStart.toISOString();
 
-    const [clockRes, sessionsRes, commsRes, tasksRes] = await Promise.all([
+    // Expanded parallel queries — now includes chat messages and communication content
+    const [clockRes, sessionsRes, commsRes, tasksRes, chatMsgsRes] = await Promise.all([
       supabase.from("time_clock_entries").select("id, profile_id, clock_in, clock_out").gte("clock_in", todayISO).limit(200),
       supabase.from("chat_sessions").select("id, user_id, agent_name, created_at").gte("created_at", todayISO).limit(200),
-      supabase.from("communications").select("id, direction, from_address, to_address, user_id").gte("created_at", todayISO).limit(200),
-      supabase.from("tasks").select("id, status, assigned_to, created_at").gte("created_at", todayISO).limit(200),
+      supabase.from("communications").select("id, direction, from_address, to_address, subject, body_preview, user_id").gte("created_at", todayISO).limit(200),
+      supabase.from("tasks").select("id, title, status, priority, assigned_to, created_at, due_date").gte("created_at", todayISO).limit(200),
+      supabase.from("chat_messages").select("content, role, session_id, created_at").eq("role", "user").gte("created_at", todayISO).order("created_at", { ascending: false }).limit(300),
     ]);
 
     // Build profiles lookup: profile_id → email
     const profileIds = new Set<string>();
     for (const e of clockRes.data || []) if (e.profile_id) profileIds.add(e.profile_id);
+    // Also collect assigned_to from tasks
+    for (const t of tasksRes.data || []) if (t.assigned_to) profileIds.add(t.assigned_to);
     let profileMap: Record<string, string> = {}; // profile_id → email
     if (profileIds.size > 0) {
       const { data: profs } = await supabase
@@ -2099,10 +2114,11 @@ async function fetchContext(supabase: ReturnType<typeof createClient>, agent: st
       for (const p of profs || []) if (p.email) profileMap[p.id] = p.email.toLowerCase();
     }
 
-    // Also map user_id → email for sessions
+    // Map user_id → email for sessions
     const sessionUserIds = new Set<string>();
     for (const s of sessionsRes.data || []) if (s.user_id) sessionUserIds.add(s.user_id);
     let userIdEmailMap: Record<string, string> = {}; // user_id → email
+    let userIdToSessionIds: Record<string, string[]> = {};
     if (sessionUserIds.size > 0) {
       const { data: uProfs } = await supabase
         .from("profiles")
@@ -2111,23 +2127,50 @@ async function fetchContext(supabase: ReturnType<typeof createClient>, agent: st
         .limit(50);
       for (const p of uProfs || []) if (p.email) userIdEmailMap[p.user_id] = p.email.toLowerCase();
     }
+    // Map session_id → user_email for chat messages
+    const sessionIdToEmail: Record<string, string> = {};
+    for (const s of sessionsRes.data || []) {
+      const email = userIdEmailMap[s.user_id];
+      if (email) sessionIdToEmail[s.id] = email;
+    }
 
-    // Determine if caller is restricted (workshop/field only)
+    // Determine if caller is restricted
     const callerRoles = userRolesList || [];
     const isCallerRestricted = callerRoles.length > 0 &&
       !callerRoles.some(r => ["admin", "accounting", "office", "sales"].includes(r));
 
-    // Build per-person activity
-    type PersonActivity = { name: string; role: string; clock: string; emailsSent: number; emailsReceived: number; tasksCreated: number; tasksCompleted: number; agentSessions: number; agents: string[] };
-    const activity: Record<string, PersonActivity> = {};
+    // Build per-person deep activity
+    type BrainPersonActivity = {
+      name: string; role: string; clock: string; punctual: boolean;
+      emailsSent: number; emailsReceived: number;
+      emailSubjectsSent: string[]; emailSubjectsReceived: string[];
+      collabMap: Record<string, number>; // email → count of interactions
+      tasksOpen: number; tasksDone: number; tasksOverdue: number;
+      agentSessions: number; agents: string[];
+      aiTopics: string[]; // truncated user messages to agents
+      responseScore: number; // received > 0 ? sent/received ratio : 1
+    };
+    const activity: Record<string, BrainPersonActivity> = {};
     for (const [email, info] of Object.entries(TEAM_DIR)) {
-      activity[email] = { name: info.name, role: info.role, clock: "Not clocked in", emailsSent: 0, emailsReceived: 0, tasksCreated: 0, tasksCompleted: 0, agentSessions: 0, agents: [] };
+      activity[email] = {
+        name: info.name, role: info.role, clock: "Not clocked in", punctual: true,
+        emailsSent: 0, emailsReceived: 0,
+        emailSubjectsSent: [], emailSubjectsReceived: [],
+        collabMap: {},
+        tasksOpen: 0, tasksDone: 0, tasksOverdue: 0,
+        agentSessions: 0, agents: [],
+        aiTopics: [],
+        responseScore: 1,
+      };
     }
 
-    // Clock entries
+    // Clock entries + punctuality
     for (const e of clockRes.data || []) {
       const email = profileMap[e.profile_id];
       if (email && activity[email]) {
+        const clockInDate = new Date(e.clock_in);
+        const clockInHour = clockInDate.getHours() + clockInDate.getMinutes() / 60;
+        activity[email].punctual = clockInHour <= 8.5; // before 8:30 AM
         if (e.clock_out) {
           const inT = new Date(e.clock_in).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
           const outT = new Date(e.clock_out).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
@@ -2139,17 +2182,31 @@ async function fetchContext(supabase: ReturnType<typeof createClient>, agent: st
       }
     }
 
-    // Communications
+    // Communications — extract content + collaboration map
     for (const c of commsRes.data || []) {
       const from = (c.from_address || "").toLowerCase();
       const to = (c.to_address || "").toLowerCase();
+      const subject = (c.subject || "").slice(0, 80);
       for (const email of Object.keys(activity)) {
-        if (from.includes(email.split("@")[0])) activity[email].emailsSent++;
-        if (to.includes(email.split("@")[0])) activity[email].emailsReceived++;
+        const prefix = email.split("@")[0];
+        if (from.includes(prefix)) {
+          activity[email].emailsSent++;
+          if (subject) activity[email].emailSubjectsSent.push(subject);
+          // Collaboration: who did they email?
+          for (const otherEmail of Object.keys(activity)) {
+            if (otherEmail !== email && to.includes(otherEmail.split("@")[0])) {
+              activity[email].collabMap[otherEmail] = (activity[email].collabMap[otherEmail] || 0) + 1;
+            }
+          }
+        }
+        if (to.includes(prefix)) {
+          activity[email].emailsReceived++;
+          if (subject) activity[email].emailSubjectsReceived.push(subject);
+        }
       }
     }
 
-    // Chat sessions
+    // Chat sessions + AI topics from messages
     for (const s of sessionsRes.data || []) {
       const email = userIdEmailMap[s.user_id];
       if (email && activity[email]) {
@@ -2159,37 +2216,152 @@ async function fetchContext(supabase: ReturnType<typeof createClient>, agent: st
         }
       }
     }
+    // Extract AI topics from chat messages
+    for (const msg of chatMsgsRes.data || []) {
+      const email = sessionIdToEmail[msg.session_id];
+      if (email && activity[email] && activity[email].aiTopics.length < 5) {
+        activity[email].aiTopics.push((msg.content || "").slice(0, 150));
+      }
+    }
 
-    // Tasks
+    // Tasks — including overdue detection
+    const now = new Date();
     for (const t of tasksRes.data || []) {
-      // assigned_to is profile_id; map to email
       if (t.assigned_to && profileMap[t.assigned_to]) {
         const email = profileMap[t.assigned_to];
         if (activity[email]) {
-          if (t.status === "done") activity[email].tasksCompleted++;
-          else activity[email].tasksCreated++;
+          if (t.status === "done" || t.status === "completed") {
+            activity[email].tasksDone++;
+          } else {
+            activity[email].tasksOpen++;
+            if (t.due_date && new Date(t.due_date) < now) {
+              activity[email].tasksOverdue++;
+            }
+          }
         }
       }
     }
 
-    // Format report
-    let report = "📊 TEAM ACTIVITY REPORT (Today)\n";
+    // Compute response scores
+    for (const a of Object.values(activity)) {
+      a.responseScore = a.emailsReceived > 0 ? Math.round((a.emailsSent / a.emailsReceived) * 100) : 100;
+      // Cap display subjects
+      a.emailSubjectsSent = a.emailSubjectsSent.slice(0, 5);
+      a.emailSubjectsReceived = a.emailSubjectsReceived.slice(0, 5);
+    }
+
+    // ── Cross-team intelligence ──
+    const totalInternalEmails = Object.values(activity).reduce((s, a) => s + Object.values(a.collabMap).reduce((x, y) => x + y, 0), 0);
+    const bottlenecks: string[] = [];
+    const gaps: string[] = [];
+    for (const [email, a] of Object.entries(activity)) {
+      const unanswered = a.emailsReceived - a.emailsSent;
+      if (unanswered >= 4) bottlenecks.push(`${a.name} has ${unanswered} unanswered emails`);
+    }
+    // Detect collaboration gaps (Sales should loop Estimating on new leads)
+    const salesEmails = Object.keys(activity).filter(e => activity[e].role === "Sales");
+    const estimatorEmails = Object.keys(activity).filter(e => activity[e].role === "Estimator");
+    for (const se of salesEmails) {
+      for (const ee of estimatorEmails) {
+        if (!activity[se].collabMap[ee] && activity[se].emailsSent > 3) {
+          gaps.push(`${activity[se].name} (Sales) hasn't communicated with ${activity[ee].name} (Estimator) today`);
+        }
+      }
+    }
+
+    // Compute team pulse score (0-100)
+    const activeMembers = Object.values(activity).filter(a => a.emailsSent + a.emailsReceived + a.agentSessions + a.tasksOpen + a.tasksDone > 0);
+    const avgResponseScore = activeMembers.length > 0 ? Math.round(activeMembers.reduce((s, a) => s + a.responseScore, 0) / activeMembers.length) : 50;
+    const overdueCount = Object.values(activity).reduce((s, a) => s + a.tasksOverdue, 0);
+    const teamPulse = Math.max(0, Math.min(100, avgResponseScore - (overdueCount * 5) - (bottlenecks.length * 5) + (totalInternalEmails > 5 ? 10 : 0)));
+
+    // ── Build brain intelligence report ──
+    let brainReport = `🧠 BRAIN INTELLIGENCE REPORT (Today)\n\n`;
+    brainReport += `TEAM PULSE: ${teamPulse}/100\n`;
+    brainReport += `- Communication Health: ${totalInternalEmails} internal emails, ${activeMembers.length}/${Object.keys(TEAM_DIR).length} members active\n`;
+    if (bottlenecks.length > 0) brainReport += `- ⚠️ Bottlenecks: ${bottlenecks.join("; ")}\n`;
+    if (gaps.length > 0) brainReport += `- 🔗 Gaps: ${gaps.join("; ")}\n`;
+    brainReport += `\nPER-PERSON INTELLIGENCE:\n`;
+
     for (const [email, a] of Object.entries(activity)) {
       const isSelf = email === (userEmail || "").toLowerCase();
       if (isCallerRestricted && !isSelf) {
-        // Restricted users only see clock status for others
-        report += `👤 ${a.name} (${a.role}) — Clock: ${a.clock}\n`;
-      } else {
-        report += `👤 ${a.name} (${a.role})\n`;
-        report += `   Clock: ${a.clock}\n`;
-        report += `   Emails: ${a.emailsSent} sent, ${a.emailsReceived} received\n`;
-        report += `   Tasks: ${a.tasksCreated} open, ${a.tasksCompleted} done\n`;
-        report += `   Agents: ${a.agentSessions} session${a.agentSessions !== 1 ? "s" : ""}${a.agents.length > 0 ? ` (${a.agents.join(", ")})` : ""}\n`;
+        brainReport += `\n👤 ${a.name} (${a.role}) — Clock: ${a.clock}\n`;
+        continue;
       }
+      brainReport += `\n👤 ${a.name} (${a.role})\n`;
+      brainReport += `   Clock: ${a.clock}${!a.punctual ? " ⚠️ Late" : ""}\n`;
+      brainReport += `   Emails: ${a.emailsSent} sent, ${a.emailsReceived} received | Response: ${a.responseScore}%\n`;
+      if (a.emailSubjectsSent.length > 0) brainReport += `   Key sent: ${a.emailSubjectsSent.slice(0, 3).join(", ")}\n`;
+      brainReport += `   Tasks: ${a.tasksOpen} open, ${a.tasksDone} done${a.tasksOverdue > 0 ? `, 🚨 ${a.tasksOverdue} overdue` : ""}\n`;
+      brainReport += `   AI Agents: ${a.agentSessions} session${a.agentSessions !== 1 ? "s" : ""}${a.agents.length > 0 ? ` (${a.agents.join(", ")})` : ""}\n`;
+      if (a.aiTopics.length > 0) brainReport += `   AI Topics: "${a.aiTopics.slice(0, 3).map(t => t.slice(0, 60)).join('", "')}"\n`;
+      // Collaboration map
+      const collabEntries = Object.entries(a.collabMap).sort((x, y) => y[1] - x[1]).slice(0, 3);
+      if (collabEntries.length > 0) {
+        brainReport += `   Collab: ${collabEntries.map(([e, c]) => `${activity[e]?.name || e}(${c})`).join(", ")}\n`;
+      }
+      // Auto-coaching
+      const coaching: string[] = [];
+      if (a.responseScore < 50 && a.emailsReceived > 2) coaching.push("Low email response rate — prioritize replies");
+      if (a.tasksOverdue > 0) coaching.push(`${a.tasksOverdue} overdue task(s) — review deadlines`);
+      if (!a.punctual) coaching.push("Late clock-in — aim for 8:30 AM");
+      if (a.emailsReceived > 5 && a.emailsSent === 0) coaching.push("Many emails received but none sent — follow up");
+      if (a.agentSessions === 0 && a.emailsSent + a.emailsReceived > 3) coaching.push("No AI agent usage — try agents to boost productivity");
+      if (coaching.length > 0) brainReport += `   💡 Coaching: ${coaching.join("; ")}\n`;
+
+      // Strengths
+      const strengths: string[] = [];
+      if (a.responseScore >= 80 && a.emailsReceived > 2) strengths.push("Strong email responsiveness");
+      if (a.tasksDone >= 3) strengths.push(`Completed ${a.tasksDone} tasks today`);
+      if (a.agentSessions >= 3) strengths.push("Active AI tool user");
+      if (a.punctual && a.clock !== "Not clocked in") strengths.push("On-time attendance");
+      if (collabEntries.length >= 2) strengths.push("Good cross-team collaboration");
+      if (strengths.length > 0) brainReport += `   ✅ Strengths: ${strengths.join("; ")}\n`;
     }
-    context.teamActivityReport = report;
+
+    context.teamActivityReport = brainReport;
+    context.brainIntelligenceReport = brainReport;
+    context.teamPulseScore = teamPulse;
+
+    // ── Save daily Brain Observation to knowledge table (async, non-blocking) ──
+    try {
+      const todayDate = todayStart.toISOString().slice(0, 10);
+      const observationTitle = `Brain Observation — ${todayDate}`;
+      // Check if already saved today
+      const { data: existing } = await supabase
+        .from("knowledge")
+        .select("id")
+        .eq("title", observationTitle)
+        .maybeSingle();
+      if (!existing) {
+        // Build condensed observation (max 2000 chars)
+        let observation = `Team Pulse: ${teamPulse}/100. Active: ${activeMembers.length}/${Object.keys(TEAM_DIR).length}.\n`;
+        for (const [, a] of Object.entries(activity)) {
+          if (a.emailsSent + a.emailsReceived + a.agentSessions + a.tasksDone > 0) {
+            observation += `${a.name}: ${a.emailsSent}s/${a.emailsReceived}r emails, ${a.tasksDone} tasks done, resp ${a.responseScore}%`;
+            if (a.tasksOverdue > 0) observation += `, ${a.tasksOverdue} overdue`;
+            if (!a.punctual) observation += `, late`;
+            observation += "\n";
+          }
+        }
+        if (bottlenecks.length > 0) observation += `Bottlenecks: ${bottlenecks.join("; ")}\n`;
+        if (gaps.length > 0) observation += `Gaps: ${gaps.join("; ")}\n`;
+        observation = observation.slice(0, 2000);
+
+        await supabase.from("knowledge").insert({
+          title: observationTitle,
+          content: observation,
+          category: "memory",
+          source: "brain-intelligence",
+        }).then(() => console.log("Brain observation saved")).catch(() => {});
+      }
+    } catch (obsErr) {
+      console.warn("Brain observation save failed (non-fatal):", obsErr);
+    }
+
   } catch (teamErr) {
-    console.warn("Team activity report failed (non-fatal):", teamErr);
+    console.warn("Brain Intelligence Engine failed (non-fatal):", teamErr);
   }
 
   return context;
