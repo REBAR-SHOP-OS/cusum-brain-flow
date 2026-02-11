@@ -1,12 +1,13 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Calendar } from "lucide-react";
-import { format, subDays } from "date-fns";
+import { format, subDays, startOfDay, startOfWeek, startOfMonth, startOfQuarter, startOfYear, endOfDay } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarPicker } from "@/components/ui/calendar";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
 interface Transaction {
@@ -30,12 +31,64 @@ interface Props {
 const fmt = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
 
+const REPORT_PERIODS = [
+  { value: "today", label: "Today" },
+  { value: "this-week", label: "This Week" },
+  { value: "this-month", label: "This Month" },
+  { value: "this-quarter", label: "This Quarter" },
+  { value: "this-year", label: "This Year" },
+  { value: "90-days", label: "Since 90 days ago" },
+  { value: "365-days", label: "Since 365 days ago" },
+  { value: "all", label: "All Dates" },
+  { value: "custom", label: "Custom" },
+] as const;
+
+const TXN_TYPES = [
+  "All",
+  "Expense",
+  "Payment",
+  "Deposit",
+  "Bill Payment",
+  "Bill Payment (Cheque)",
+  "Sales Receipt",
+  "Refund",
+  "Transfer",
+  "Journal Entry",
+] as const;
+
+function computeDatesForPeriod(period: string): { start: Date; end: Date } {
+  const now = new Date();
+  const end = endOfDay(now);
+  switch (period) {
+    case "today": return { start: startOfDay(now), end };
+    case "this-week": return { start: startOfWeek(now, { weekStartsOn: 0 }), end };
+    case "this-month": return { start: startOfMonth(now), end };
+    case "this-quarter": return { start: startOfQuarter(now), end };
+    case "this-year": return { start: startOfYear(now), end };
+    case "365-days": return { start: subDays(now, 365), end };
+    case "all": return { start: new Date(2000, 0, 1), end };
+    case "90-days":
+    default: return { start: subDays(now, 90), end };
+  }
+}
+
 export function AccountQuickReportDrawer({ open, onClose, account, qbAction }: Props) {
   const [loading, setLoading] = useState(false);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [beginBalance, setBeginBalance] = useState(0);
+  const [period, setPeriod] = useState("90-days");
   const [startDate, setStartDate] = useState<Date>(subDays(new Date(), 90));
   const [endDate, setEndDate] = useState<Date>(new Date());
+  const [typeFilter, setTypeFilter] = useState("All");
+
+  // Sync dates when period changes (unless custom)
+  useEffect(() => {
+    if (period !== "custom") {
+      const { start, end } = computeDatesForPeriod(period);
+      setStartDate(start);
+      setEndDate(end);
+    }
+  }, [period]);
 
   useEffect(() => {
     if (!open || !account) return;
@@ -63,6 +116,13 @@ export function AccountQuickReportDrawer({ open, onClose, account, qbAction }: P
     return () => { cancelled = true; };
   }, [open, account?.Id, startDate, endDate, qbAction]);
 
+  const filteredTransactions = useMemo(() => {
+    if (typeFilter === "All") return transactions;
+    return transactions.filter((t) => t.type === typeFilter);
+  }, [transactions, typeFilter]);
+
+  const isCustom = period === "custom";
+
   return (
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
       <SheetContent side="right" className="sm:max-w-4xl w-full overflow-y-auto p-0">
@@ -81,12 +141,47 @@ export function AccountQuickReportDrawer({ open, onClose, account, qbAction }: P
             </div>
           </div>
 
-          {/* Date range */}
-          <div className="flex items-center gap-2 mt-3 flex-wrap">
-            <span className="text-sm text-muted-foreground">From</span>
-            <DatePick value={startDate} onChange={setStartDate} />
-            <span className="text-sm text-muted-foreground">To</span>
-            <DatePick value={endDate} onChange={setEndDate} />
+          {/* Toolbar row */}
+          <div className="flex items-center gap-3 mt-3 flex-wrap">
+            {/* Report Period */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm text-muted-foreground whitespace-nowrap">Report period</span>
+              <Select value={period} onValueChange={setPeriod}>
+                <SelectTrigger className="h-8 w-[180px] text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {REPORT_PERIODS.map((p) => (
+                    <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Date pickers — always visible for custom, otherwise show read-only dates */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm text-muted-foreground">From</span>
+              <DatePick value={startDate} onChange={(d) => { setPeriod("custom"); setStartDate(d); }} />
+              <span className="text-sm text-muted-foreground">To</span>
+              <DatePick value={endDate} onChange={(d) => { setPeriod("custom"); setEndDate(d); }} />
+            </div>
+
+            <div className="h-6 w-px bg-border mx-1 hidden sm:block" />
+
+            {/* Transaction Type Filter */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm text-muted-foreground whitespace-nowrap">Type</span>
+              <Select value={typeFilter} onValueChange={setTypeFilter}>
+                <SelectTrigger className="h-8 w-[180px] text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {TXN_TYPES.map((t) => (
+                    <SelectItem key={t} value={t}>{t}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </SheetHeader>
 
@@ -106,24 +201,25 @@ export function AccountQuickReportDrawer({ open, onClose, account, qbAction }: P
                   <TableHead className="text-sm">#</TableHead>
                   <TableHead className="text-sm">Name</TableHead>
                   <TableHead className="text-sm">Memo / Description</TableHead>
-                  <TableHead className="text-sm">Account</TableHead>
+                  <TableHead className="text-sm">Distribution Account</TableHead>
+                  <TableHead className="text-sm text-center">Cleared</TableHead>
                   <TableHead className="text-sm text-right">Amount</TableHead>
                   <TableHead className="text-sm text-right">Balance</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 <TableRow className="bg-muted/40 font-medium">
-                  <TableCell colSpan={7} className="text-sm">Beginning Balance</TableCell>
+                  <TableCell colSpan={8} className="text-sm">Beginning Balance</TableCell>
                   <TableCell className="text-right text-sm font-semibold">{fmt(beginBalance)}</TableCell>
                 </TableRow>
-                {transactions.length === 0 && !loading && (
+                {filteredTransactions.length === 0 && !loading && (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                       No transactions found for this period
                     </TableCell>
                   </TableRow>
                 )}
-                {transactions.map((t, i) => (
+                {filteredTransactions.map((t, i) => (
                   <TableRow key={i} className="text-sm">
                     <TableCell className="whitespace-nowrap">{t.date}</TableCell>
                     <TableCell>{t.type}</TableCell>
@@ -131,6 +227,7 @@ export function AccountQuickReportDrawer({ open, onClose, account, qbAction }: P
                     <TableCell className="font-medium max-w-[140px] truncate">{t.name || "—"}</TableCell>
                     <TableCell className="max-w-[180px] truncate text-muted-foreground">{t.memo || "—"}</TableCell>
                     <TableCell className="max-w-[140px] truncate">{t.account || "—"}</TableCell>
+                    <TableCell className="text-center text-muted-foreground">---</TableCell>
                     <TableCell className={cn("text-right font-semibold", t.amount < 0 ? "text-destructive" : "text-primary")}>
                       {fmt(t.amount)}
                     </TableCell>
