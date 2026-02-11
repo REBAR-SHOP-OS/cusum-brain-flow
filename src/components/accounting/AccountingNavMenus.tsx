@@ -43,7 +43,8 @@ const menus: Menu[] = [
       { label: "Chart of Accounts", tab: "accounts" },
       { label: "AI Audit", tab: "audit" },
       { type: "separator" },
-      { label: "Payroll", tab: "payroll" },
+      { label: "Payroll Corrections", tab: "payroll" },
+      { label: "Payroll Audit", tab: "payroll-audit" },
     ],
   },
   {
@@ -66,7 +67,8 @@ const menus: Menu[] = [
       { label: "Chart of Accounts", tab: "accounts" },
       { type: "separator" },
       { type: "label", label: "Payroll" },
-      { label: "Payroll & Corrections", tab: "payroll" },
+      { label: "Payroll Corrections", tab: "payroll" },
+      { label: "Payroll Audit", tab: "payroll-audit" },
     ],
   },
 ];
