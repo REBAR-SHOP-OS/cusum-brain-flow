@@ -65,11 +65,14 @@ export function useProfiles() {
     },
   });
 
+  const { companyId: myCompanyId } = useCompanyId();
+
   const createProfile = useMutation({
     mutationFn: async (profile: Omit<Profile, "id" | "created_at" | "updated_at">) => {
+      if (!myCompanyId) throw new Error("Company ID not found");
       const { data, error } = await supabase
         .from("profiles")
-        .insert(profile)
+        .insert({ ...profile, company_id: myCompanyId } as any)
         .select()
         .single();
       if (error) throw error;
