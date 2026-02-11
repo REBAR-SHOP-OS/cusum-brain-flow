@@ -1,51 +1,48 @@
 
 
-## Add Visible "Thinking" Indicator to Agent Chat
+## Fix Penny Chat Scroll
 
 ### Problem
-When an agent is processing, the only feedback is a tiny "thinking..." text in the top bar that's easy to miss. There's no inline typing indicator in the chat thread itself -- it looks like nothing is happening.
+The Penny agent panel can't scroll its message list. This is a classic CSS flexbox issue: a flex child with `overflow-y-auto` won't scroll unless its parent has `min-h-0` to allow it to shrink below its content size.
 
-### Solution
-Add an animated typing/thinking indicator bubble inside the chat thread, appearing right after the user's message while the agent is working. This matches the pattern already used in the Admin Console and Live Chat widget (which show a `Loader2` spinner with "Thinking..." text).
+### Fix
 
-### Changes
+**File: `src/components/accounting/AccountingAgent.tsx`**
 
-**File: `src/components/chat/ChatThread.tsx`**
-- Accept a new `isLoading` prop (boolean)
-- When `isLoading` is true, render a thinking indicator at the bottom of the message list (before the scroll anchor)
-- The indicator will be an agent-styled bubble with:
-  - A Bot avatar (matching existing agent messages)
-  - An animated three-dot bouncing indicator inside the bubble
-  - Text: "Thinking..." in muted style
-
-**File: `src/pages/AgentWorkspace.tsx`**
-- Pass `isLoading` to `ChatThread`:
-  ```
-  <ChatThread messages={messages} isLoading={isLoading} />
-  ```
-- Keep the existing top-bar "thinking..." text as a secondary indicator
-
-**File: `src/components/chat/CalChatInterface.tsx`**
-- No changes needed -- it already has a typing indicator (lines 454-462), though it could be improved later
-
-### Typing Indicator Design
-
+Line 262 — the outer flex container:
 ```
-[Bot icon]  [...   ]
-            Thinking...
+// Before
+<div className="flex flex-col border border-border rounded-xl bg-card overflow-hidden transition-all duration-300 h-full">
+
+// After
+<div className="flex flex-col border border-border rounded-xl bg-card overflow-hidden transition-all duration-300 h-full min-h-0">
 ```
 
-The three dots will use a CSS animation (already available via Tailwind `animate-pulse` or a custom bounce), giving clear visual feedback that the agent is working.
+Also on the messages div (line 283), add `min-h-0` for safety:
+```
+// Before
+<div className="flex-1 overflow-y-auto p-3 space-y-3">
 
-### What Does NOT Change
-- No database changes
-- No edge function changes
-- No changes to message handling logic
-- Admin Console and Live Chat already have their own indicators
+// After  
+<div className="flex-1 overflow-y-auto p-3 space-y-3 min-h-0">
+```
+
+**File: `src/pages/AccountingWorkspace.tsx`**
+
+The wrapper div around `AccountingAgent` (around line 156) should also ensure `min-h-0` and `overflow-hidden`:
+```
+// Before
+<div className="w-full">
+
+// After
+<div className="w-full h-full min-h-0 overflow-hidden">
+```
+
+Same for the mobile overlay container.
 
 ### Files Modified
 | File | Change |
 |------|--------|
-| `src/components/chat/ChatThread.tsx` | Add `isLoading` prop and thinking indicator bubble |
-| `src/pages/AgentWorkspace.tsx` | Pass `isLoading` to `ChatThread` |
+| `src/components/accounting/AccountingAgent.tsx` | Add `min-h-0` to flex column and messages div |
+| `src/pages/AccountingWorkspace.tsx` | Add `h-full min-h-0 overflow-hidden` to agent wrapper divs |
 
