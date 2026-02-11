@@ -25,6 +25,7 @@ export interface VizzyBusinessSnapshot {
   deliveries: { scheduledToday: number; inTransit: number };
   team: { totalStaff: number };
   recentEvents: any[];
+  brainKnowledge: { title: string; category: string; content: string | null }[];
 }
 
 export function useVizzyContext() {
@@ -58,9 +59,11 @@ export function useVizzyContext() {
       const profilesP = supabase.from("profiles").select("id, full_name").not("full_name", "is", null) as any;
       const eventsP = supabase.from("events").select("id, event_type, entity_type, description, created_at")
         .order("created_at", { ascending: false }).limit(20) as any;
+      const knowledgeP = supabase.from("knowledge").select("title, category, content")
+        .order("created_at", { ascending: false }).limit(50) as any;
 
-      const [qbData, cutPlansRes, cutItemsRes, machinesRes, leadsRes, customersRes, deliveriesRes, profilesRes, eventsRes] = await Promise.all([
-        qbPromise, cutPlansP, cutItemsP, machinesP, leadsP, customersP, deliveriesP, profilesP, eventsP,
+      const [qbData, cutPlansRes, cutItemsRes, machinesRes, leadsRes, customersRes, deliveriesRes, profilesRes, eventsRes, knowledgeRes] = await Promise.all([
+        qbPromise, cutPlansP, cutItemsP, machinesP, leadsP, customersP, deliveriesP, profilesP, eventsP, knowledgeP,
       ]);
 
       const cutPlans = cutPlansRes.data || [];
@@ -71,6 +74,7 @@ export function useVizzyContext() {
       const deliveries = deliveriesRes.data || [];
       const profiles = profilesRes.data || [];
       const events = eventsRes.data || [];
+      const knowledge = (knowledgeRes.data || []) as { title: string; category: string; content: string | null }[];
 
       // Compute financials — use QB data if available, otherwise fall back to accounting_mirror
       let invoices = qbData?.invoices || [];
@@ -137,6 +141,7 @@ export function useVizzyContext() {
         },
         team: { totalStaff: profiles.length },
         recentEvents: events,
+        brainKnowledge: knowledge,
       };
 
       setSnapshot(snap);
