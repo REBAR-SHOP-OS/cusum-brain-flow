@@ -1,29 +1,62 @@
 
 
-## Add Team Directory to Vizzy's Context
+## Add Team Activity Report to All Agents (Role-Aware)
 
-### Problem
-Vizzy doesn't know who's who on the team. When the CEO mentions "Vicky" or "Saurabh," Vizzy can't connect the name to their email, role, or department because there's no team directory in her context.
+### What This Does
+Every AI agent will receive a per-person "Team Activity Report" showing what each team member did today — clock-in/out, emails sent/received, tasks created/completed, and agent sessions used. This data is injected into the agent's context so it can answer questions like "what did Vicky do today?" regardless of which agent you're talking to.
 
-### Changes
+### Role-Based Scoping
+- **Admin / Office / Sales / Accounting**: See full activity for all team members (emails, tasks, agent sessions, time clock)
+- **Workshop / Field**: See only team clock-in/out status and their own activity — no email counts, task details, or financial context for others
 
-**File: `src/lib/vizzyContext.ts`**
+### What Changes
 
-Add a hardcoded **TEAM DIRECTORY** section near the top of the system prompt so Vizzy always knows every team member by name, email, and role:
+**Single file: `supabase/functions/ai-agent/index.ts`**
 
+Add a new block inside the `fetchContext` function (after line ~2064, before the `return context` statement) that runs for ALL agents:
+
+1. **Fetch today's data** (4 parallel queries, all limited + date-filtered):
+   - `time_clock_entries` (today) joined via profile lookup
+   - `chat_sessions` (today) for agent session counts
+   - `communications` (today) for email volume
+   - `tasks` created or completed today
+
+2. **Build per-person activity map** using the hardcoded team directory:
+   ```
+   { name, role, clockStatus, emailsSent, emailsReceived, tasksCreated, tasksCompleted, agentSessions }
+   ```
+
+3. **Inject into context** as `context.teamActivityReport` — a formatted text block (not raw data) to keep token count small
+
+4. **Role guard**: If user has only workshop/field roles, strip email and task counts — only show clock status
+
+### Prompt Injection
+
+Append a small instruction to the shared `SHARED_TOOL_INSTRUCTIONS` block:
 ```
-🏢 TEAM DIRECTORY
-  • Sattar Esmaeili (sattar@rebar.shop) — CEO
-  • Neel Mahajan (neel@rebar.shop) — CEO / Co-founder
-  • Vicky Anderson (vicky@rebar.shop) — Accountant
-  • Saurabh Seghal (saurabh@rebar.shop) — Sales
-  • Ben Rajabifar (ben@rebar.shop) — Estimator
-  • Kourosh Zand (kourosh@rebar.shop) — Shop Supervisor
-  • Radin Lachini (radin@rebar.shop) — AI Manager
+## Team Activity (Today)
+{teamActivityReport}
+
+Use this data to answer questions about what team members did today.
 ```
 
-This will be placed right after the "TEAM" section (line ~98) so Vizzy can cross-reference names with time clock data and agent activity. When the CEO asks "what did Vicky do today?", Vizzy will know Vicky = vicky@rebar.shop = Accountant, and can look up her clock-in times and agent sessions accordingly.
+### Safety Guards
+- All queries use `.limit(200)` and filter to today's date only
+- Queries run in a `Promise.all` inside a try/catch — failure logs a warning and returns empty data (no crash)
+- No schema changes, no new tables, no UI changes
+- Role filtering happens server-side before injecting into prompt
+- Total added token budget: ~300-500 tokens (formatted summary, not raw JSON)
 
-### Technical Notes
-- Single file change, ~10 lines added to the prompt string
-- No schema or hook changes needed
+### Team Directory (Hardcoded, matching Vizzy)
+Maps emails to names for cross-referencing:
+- sattar@rebar.shop = Sattar Esmaeili (CEO)
+- neel@rebar.shop = Neel Mahajan (Co-founder)
+- vicky@rebar.shop = Vicky Anderson (Accountant)
+- saurabh@rebar.shop = Saurabh Seghal (Sales)
+- ben@rebar.shop = Ben Rajabifar (Estimator)
+- kourosh@rebar.shop = Kourosh Zand (Shop Supervisor)
+- radin@rebar.shop = Radin Lachini (AI Manager)
+
+### Files Modified
+- `supabase/functions/ai-agent/index.ts` — add ~60 lines to `fetchContext` + ~5 lines to prompt assembly
+
