@@ -125,9 +125,15 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0 }
   const handleLockAndStart = async (stockLength: number, bars: number) => {
     if (!currentItem) return;
     try {
-      setIsRunning(true);
-      // Snapshot completed_pieces at run start so incremental saves don't double-count
-      setCompletedAtRunStart(completedPieces);
+    setIsRunning(true);
+      // Fetch fresh completed_pieces from DB to avoid stale realtime data
+      const { data: freshRow } = await supabase
+        .from("cut_plan_items")
+        .select("completed_pieces")
+        .eq("id", currentItem.id)
+        .single();
+      const freshCompleted = freshRow?.completed_pieces ?? completedPieces;
+      setCompletedAtRunStart(freshCompleted);
       // Initialize slot tracker with actual bars the operator chose
       slotTracker.startWithBars(bars);
 
