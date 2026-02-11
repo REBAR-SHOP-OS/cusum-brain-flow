@@ -1,21 +1,17 @@
 
-## Add Vendor List to Accounting Workspace
+
+## Fix Chart of Accounts - Show All Accounts with Full Info
 
 ### Problem
-The Vendors dropdown menu has no "Vendors" list page. There's no way to see all vendors. The data is already being fetched (`list-vendors` in `useQuickBooksData`), it just needs a UI component and a nav link.
+The Chart of Accounts only shows 4 Bank accounts because the dashboard-summary endpoint filters to `AccountType = 'Bank'`. The full account list (all types like Income, Expense, Equity, etc.) is never loaded. The table is also missing the Account Sub-Type column.
 
-### What Will Change
+### Changes
 
-**1. New file: `src/components/accounting/AccountingVendors.tsx`**
-- A vendor list component matching the same style as `AccountingCustomers.tsx`
-- Search bar to filter by name or company
-- Table with columns: Name, Company, Phone, Email, Balance, Status
-- Sorted alphabetically by `DisplayName` (case-insensitive)
-- Enriched with bill stats (open balance, overdue count) from `data.bills`
+**1. `src/hooks/useQuickBooksData.ts`**
+- In the Phase 2 background loading section, add a call to `list-accounts` (the endpoint already exists in the edge function)
+- Update `setAccounts` with the full list, replacing the bank-only subset from dashboard-summary
 
-**2. Update: `src/components/accounting/AccountingNavMenus.tsx`**
-- Add "Vendors" menu item to the Vendors dropdown (alongside Bills and Vendor Payments)
-
-**3. Update: `src/pages/AccountingWorkspace.tsx`**
-- Import `AccountingVendors`
-- Add rendering for `activeTab === "vendors"`
+**2. `src/components/accounting/AccountingAccounts.tsx`**
+- Add an "Account Sub-Type" column to the table between Account Name and Balance
+- Display `a.AccountSubType` in the new column
+- Sort accounts alphabetically within each group by Name
