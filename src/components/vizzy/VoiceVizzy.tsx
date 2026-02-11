@@ -5,7 +5,7 @@ import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { AnimatePresence, motion } from "framer-motion";
-import { useQuickBooksData } from "@/hooks/useQuickBooksData";
+import { useVizzyContext } from "@/hooks/useVizzyContext";
 import { buildVizzyContext } from "@/lib/vizzyContext";
 
 const ALLOWED_EMAIL = "sattar@rebar.shop";
@@ -21,19 +21,29 @@ export function VoiceVizzy() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const qb = useQuickBooksData();
-  const qbLoadedRef = useRef(false);
+  const { loadFullContext } = useVizzyContext();
 
-  // Pre-load QB data once
+  // Pre-load context once
+  const loadedRef = useRef(false);
   useEffect(() => {
-    if (!user || user.email !== ALLOWED_EMAIL || qbLoadedRef.current) return;
-    qbLoadedRef.current = true;
-    qb.loadAll().catch(() => {});
-  }, [user]);
+    if (!user || user.email !== ALLOWED_EMAIL || loadedRef.current) return;
+    loadedRef.current = true;
+    loadFullContext().catch(() => {});
+  }, [user, loadFullContext]);
 
   const conversation = useConversation({
     onConnect: () => console.warn("Vizzy voice connected"),
-    onDisconnect: () => setIsConnecting(false),
+    onDisconnect: () => {
+      setIsConnecting(false);
+      // Save transcript on disconnect
+      if (user && transcript.length > 0) {
+        supabase.from("vizzy_interactions").insert({
+          user_id: user.id,
+          transcript: transcript as any,
+          session_ended_at: new Date().toISOString(),
+        }).then(({ error }) => { if (error) console.error(error); });
+      }
+    },
     onMessage: (message: any) => {
       if (message.type === "user_transcript") {
         setTranscript((prev) => [
@@ -64,21 +74,16 @@ export function VoiceVizzy() {
 
       await conversation.startSession({ conversationToken: data.token, connectionType: "webrtc" });
 
-      // Inject live financial context
-      const ctx = buildVizzyContext({
-        totalReceivable: qb.totalReceivable,
-        totalPayable: qb.totalPayable,
-        overdueInvoices: qb.overdueInvoices,
-        overdueBills: qb.overdueBills,
-        accounts: qb.accounts,
-        payments: qb.payments,
-      });
-      conversation.sendContextualUpdate(ctx);
+      // Inject full business context
+      const snap = await loadFullContext();
+      if (snap) {
+        conversation.sendContextualUpdate(buildVizzyContext(snap));
+      }
     } catch (err) {
       console.error("Failed to start Vizzy voice:", err);
       setIsConnecting(false);
     }
-  }, [conversation]);
+  }, [conversation, loadFullContext]);
 
   const stop = useCallback(async () => {
     await conversation.endSession();
