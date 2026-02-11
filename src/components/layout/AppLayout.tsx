@@ -42,7 +42,7 @@ export function AppLayout({ children }: AppLayoutProps) {
         <MobileNavV2 />
 
         {/* Voice Vizzy — Jarvis mode (sattar only) */}
-        <SmartErrorBoundary level="component" maxAutoRetries={1}>
+        <SmartErrorBoundary level="component" maxAutoRetries={0}>
           <VoiceVizzy />
         </SmartErrorBoundary>
       </div>

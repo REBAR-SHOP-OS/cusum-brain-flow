@@ -21,38 +21,12 @@ export default function VizzyPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
+  const transcriptRef = useRef<TranscriptEntry[]>([]);
   const [status, setStatus] = useState<"starting" | "connected" | "error">("starting");
   const scrollRef = useRef<HTMLDivElement>(null);
   const startedRef = useRef(false);
-  const sessionIdRef = useRef<string | null>(null);
+  const sessionActiveRef = useRef(false);
   const { loadFullContext } = useVizzyContext();
-
-  const conversation = useConversation({
-    onConnect: () => setStatus("connected"),
-    onDisconnect: () => {
-      // Save transcript on disconnect
-      saveTranscript(transcript);
-      navigate("/home");
-    },
-    onMessage: (message: any) => {
-      if (message.type === "user_transcript") {
-        setTranscript((prev) => [
-          ...prev,
-          { role: "user", text: message.user_transcription_event?.user_transcript ?? "", id: crypto.randomUUID() },
-        ]);
-      } else if (message.type === "agent_response") {
-        setTranscript((prev) => [
-          ...prev,
-          { role: "agent", text: message.agent_response_event?.agent_response ?? "", id: crypto.randomUUID() },
-        ]);
-      }
-      setTimeout(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" }), 50);
-    },
-    onError: (error: any) => {
-      console.error("Vizzy voice error:", error);
-      setStatus("error");
-    },
-  });
 
   const saveTranscript = useCallback(async (entries: TranscriptEntry[]) => {
     if (!user || entries.length === 0) return;
@@ -67,13 +41,43 @@ export default function VizzyPage() {
     }
   }, [user]);
 
-  const stop = useCallback(async () => {
-    await saveTranscript(transcript);
-    await conversation.endSession();
-    navigate("/home");
-  }, [conversation, navigate, transcript, saveTranscript]);
+  const conversation = useConversation({
+    onConnect: () => {
+      sessionActiveRef.current = true;
+      setStatus("connected");
+    },
+    onDisconnect: () => {
+      sessionActiveRef.current = false;
+      saveTranscript(transcriptRef.current);
+      navigate("/home");
+    },
+    onMessage: (message: any) => {
+      if (message.type === "user_transcript") {
+        const entry: TranscriptEntry = { role: "user", text: message.user_transcription_event?.user_transcript ?? "", id: crypto.randomUUID() };
+        setTranscript((prev) => { const next = [...prev, entry]; transcriptRef.current = next; return next; });
+      } else if (message.type === "agent_response") {
+        const entry: TranscriptEntry = { role: "agent", text: message.agent_response_event?.agent_response ?? "", id: crypto.randomUUID() };
+        setTranscript((prev) => { const next = [...prev, entry]; transcriptRef.current = next; return next; });
+      }
+      setTimeout(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" }), 50);
+    },
+    onError: (error: any) => {
+      console.error("Vizzy voice error:", error);
+      setStatus("error");
+    },
+  });
 
-  // Auto-start on mount
+  const stop = useCallback(async () => {
+    try {
+      await saveTranscript(transcriptRef.current);
+      await conversation.endSession();
+    } catch (err) {
+      console.error("Error ending Vizzy session:", err);
+    }
+    navigate("/home");
+  }, [conversation, navigate, saveTranscript]);
+
+  // Auto-start on mount — conversation is NOT in deps to avoid re-triggers
   useEffect(() => {
     if (startedRef.current) return;
     if (!user || user.email !== ALLOWED_EMAIL) return;
@@ -97,7 +101,6 @@ export default function VizzyPage() {
           },
         });
 
-        // Inject full business context
         if (snap) {
           conversation.sendContextualUpdate(buildVizzyContext(snap));
         }
@@ -106,7 +109,8 @@ export default function VizzyPage() {
         setStatus("error");
       }
     })();
-  }, [user, conversation, loadFullContext]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, loadFullContext]);
 
   // Gate
   if (!user || user.email !== ALLOWED_EMAIL) {
