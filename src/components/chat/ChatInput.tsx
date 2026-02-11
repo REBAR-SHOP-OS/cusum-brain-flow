@@ -322,7 +322,7 @@ export function ChatInput({
           {/* Bottom toolbar */}
           <div className="flex items-center gap-0.5 px-2 pb-2">
             {/* Left actions */}
-            {showFileUpload ? (
+            {showFileUpload && (
               <>
                 <input ref={fileInputRef} type="file" multiple onChange={handleFileSelect} className="hidden" />
                 <Tooltip>
@@ -342,15 +342,6 @@ export function ChatInput({
                   <TooltipContent side="top">Attach files</TooltipContent>
                 </Tooltip>
               </>
-            ) : (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button type="button" className="p-2 text-muted-foreground opacity-40 cursor-not-allowed rounded-md">
-                    <Paperclip className="w-5 h-5" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="top">File upload not available</TooltipContent>
-              </Tooltip>
             )}
 
             <EmojiPicker onSelect={handleEmojiSelect} disabled={disabled} />
