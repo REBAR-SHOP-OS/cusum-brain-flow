@@ -62,9 +62,10 @@ function isIgnoredError(message: string): boolean {
     "AbortError",
     "The user aborted",
     "NetworkError",
-    "Failed to fetch", // often just connectivity
+    "Failed to fetch",
     "Load failed",
     "cancelled",
+    "error_type",
   ];
   return ignored.some((pattern) => message.includes(pattern));
 }

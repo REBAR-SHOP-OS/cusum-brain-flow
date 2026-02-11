@@ -16,8 +16,15 @@ interface TranscriptEntry {
   id: string;
 }
 
+/** Outer gate — only mounts the inner component for the allowed user */
 export function VoiceVizzy() {
   const { user } = useAuth();
+  if (!user || user.email !== ALLOWED_EMAIL) return null;
+  return <VoiceVizzyInner userId={user.id} />;
+}
+
+/** Inner component — useConversation only initialises when mounted */
+function VoiceVizzyInner({ userId }: { userId: string }) {
   const [isConnecting, setIsConnecting] = useState(false);
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -26,19 +33,18 @@ export function VoiceVizzy() {
   // Pre-load context once
   const loadedRef = useRef(false);
   useEffect(() => {
-    if (!user || user.email !== ALLOWED_EMAIL || loadedRef.current) return;
+    if (loadedRef.current) return;
     loadedRef.current = true;
     loadFullContext().catch(() => {});
-  }, [user, loadFullContext]);
+  }, [loadFullContext]);
 
   const conversation = useConversation({
     onConnect: () => console.warn("Vizzy voice connected"),
     onDisconnect: () => {
       setIsConnecting(false);
-      // Save transcript on disconnect
-      if (user && transcript.length > 0) {
+      if (transcript.length > 0) {
         supabase.from("vizzy_interactions").insert({
-          user_id: user.id,
+          user_id: userId,
           transcript: transcript as any,
           session_ended_at: new Date().toISOString(),
         }).then(({ error }) => { if (error) console.error(error); });
@@ -68,21 +74,15 @@ export function VoiceVizzy() {
     setTranscript([]);
     try {
       await navigator.mediaDevices.getUserMedia({ audio: true });
-
       const { data, error } = await supabase.functions.invoke("elevenlabs-conversation-token");
       if (error || !data?.token) throw new Error(error?.message ?? "No token received");
 
       await conversation.startSession({
         conversationToken: data.token,
         connectionType: "webrtc",
-        overrides: {
-          agent: {
-            language: "",
-          },
-        },
+        overrides: { agent: { language: "" } },
       });
 
-      // Inject full business context
       const snap = await loadFullContext();
       if (snap) {
         conversation.sendContextualUpdate(buildVizzyContext(snap));
@@ -97,12 +97,8 @@ export function VoiceVizzy() {
     await conversation.endSession();
   }, [conversation]);
 
-  // Gate: only sattar sees this
-  if (!user || user.email !== ALLOWED_EMAIL) return null;
-
   return (
     <>
-      {/* Floating mic button */}
       {!isActive && (
         <button
           onClick={start}
@@ -120,7 +116,6 @@ export function VoiceVizzy() {
         </button>
       )}
 
-      {/* Full-screen Jarvis overlay */}
       <AnimatePresence>
         {isActive && (
           <motion.div
@@ -129,7 +124,6 @@ export function VoiceVizzy() {
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/90 backdrop-blur-sm"
           >
-            {/* End button */}
             <button
               onClick={stop}
               className="absolute top-6 right-6 p-3 rounded-full bg-destructive text-destructive-foreground hover:bg-destructive/80 transition-colors"
@@ -138,7 +132,6 @@ export function VoiceVizzy() {
               <X className="w-6 h-6" />
             </button>
 
-            {/* Avatar with glow */}
             <div className="relative mb-8">
               <div
                 className={cn(
@@ -158,12 +151,10 @@ export function VoiceVizzy() {
               )}
             </div>
 
-            {/* Status */}
             <p className="text-lg font-medium text-white/80 mb-6">
               {conversation.isSpeaking ? "Vizzy is speaking..." : "Listening..."}
             </p>
 
-            {/* Transcript */}
             <div
               ref={scrollRef}
               className="w-full max-w-lg max-h-60 overflow-y-auto px-6 space-y-3 scrollbar-thin"
