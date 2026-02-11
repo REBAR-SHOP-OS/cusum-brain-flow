@@ -1,4 +1,4 @@
-import { ThumbsUp, ThumbsDown, Calendar, Mail, Lightbulb, Sparkles, Video, Phone, TrendingUp, Zap, DollarSign, BarChart3, AlertTriangle, Share2, Users, Cog, Activity, Clock, FileText, RefreshCw, Layers, CheckCircle, Target } from "lucide-react";
+import { ThumbsUp, ThumbsDown, Calendar, Mail, Lightbulb, Sparkles, Video, Phone, TrendingUp, Zap, DollarSign, BarChart3, AlertTriangle, Share2, Users, Cog, Activity, Clock, FileText, RefreshCw, Layers, CheckCircle, Target, Bot, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -95,6 +95,7 @@ export function DigestContent({ digest, stats, currentDate }: DigestContentProps
           <StatPill label="Runs" value={stats.machineRuns ?? 0} />
           <StatPill label="ERP" value={stats.erpEvents ?? 0} />
           <StatPill label="Reports" value={stats.mailboxReports ?? 0} />
+          <StatPill label="AI" value={stats.agentInteractions ?? 0} />
           <StatPill label="Pipeline" value={stats.leads} />
         </div>
       )}
@@ -319,6 +320,68 @@ export function DigestContent({ digest, stats, currentDate }: DigestContentProps
                     <p className="text-[10px] font-semibold text-muted-foreground uppercase">Most Active Users</p>
                     {digest.erpActivity.mostActiveUsers.map((u, i) => (
                       <p key={i} className="text-xs text-foreground/70">👤 {u}</p>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Agent Activity Report */}
+          {digest.agentActivityReport && (
+            <Card className="border-border/50">
+              <CardHeader className="pb-2 pt-4 px-5">
+                <CardTitle className="text-sm font-semibold flex items-center gap-2 uppercase tracking-wider text-muted-foreground">
+                  <Bot className="w-4 h-4 text-indigo-500" />
+                  Agent & Human Activity
+                  <Badge variant="secondary" className="text-[10px] ml-1">{digest.agentActivityReport.totalInteractions} interactions</Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-5 pb-4 space-y-4">
+                {/* Agent Breakdown */}
+                {digest.agentActivityReport.agentBreakdown?.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">🤖 AI Agents</p>
+                    {digest.agentActivityReport.agentBreakdown.map((agent, i) => (
+                      <div key={i} className="p-3 bg-muted/30 rounded-lg space-y-1.5 border border-border/30">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Bot className="w-3.5 h-3.5 text-indigo-500" />
+                          <span className="text-sm font-medium">{agent.agent}</span>
+                          <Badge variant="outline" className="text-[10px] h-4">{agent.interactions} uses</Badge>
+                          {agent.tasksCreated > 0 && (
+                            <Badge variant="secondary" className="text-[10px] h-4">{agent.tasksCreated} tasks</Badge>
+                          )}
+                        </div>
+                        {agent.highlights?.map((h, j) => (
+                          <p key={j} className="text-xs text-muted-foreground pl-5">• {h}</p>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Human Activity */}
+                {digest.agentActivityReport.humanActivity?.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">👤 Human Activity via AI</p>
+                    {digest.agentActivityReport.humanActivity.map((human, i) => (
+                      <div key={i} className="p-3 bg-muted/30 rounded-lg space-y-1.5 border border-border/30">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <User className="w-3.5 h-3.5 text-primary" />
+                          <span className="text-sm font-medium">{human.name}</span>
+                          <Badge variant="outline" className="text-[10px] h-4">{human.totalCommands} commands</Badge>
+                        </div>
+                        {human.agentsUsed?.length > 0 && (
+                          <div className="flex gap-1 pl-5 flex-wrap">
+                            {human.agentsUsed.map((a, j) => (
+                              <Badge key={j} variant="secondary" className="text-[10px] h-4 capitalize">{a}</Badge>
+                            ))}
+                          </div>
+                        )}
+                        {human.highlights?.map((h, j) => (
+                          <p key={j} className="text-xs text-muted-foreground pl-5">• {h}</p>
+                        ))}
+                      </div>
                     ))}
                   </div>
                 )}

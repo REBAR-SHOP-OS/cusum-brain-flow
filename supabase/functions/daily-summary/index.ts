@@ -883,6 +883,55 @@ ${commandLogs.length > 0
   : "No AI commands used today."
 }
 
+--- AGENT & HUMAN ACTIVITY REPORT ---
+${(() => {
+  // Group chat messages by agent type from today's tasks (agent_type field)
+  const agentTaskCounts: Record<string, number> = {};
+  tasks.forEach((t: any) => {
+    if (t.agent_type) {
+      agentTaskCounts[t.agent_type] = (agentTaskCounts[t.agent_type] || 0) + 1;
+    }
+  });
+
+  // Group command_log by user for human activity
+  const humanCommands: Record<string, { count: number; intents: Set<string> }> = {};
+  commandLogs.forEach((c: any) => {
+    const name = profileMap[c.user_id] || c.user_id || "Unknown";
+    if (!humanCommands[name]) humanCommands[name] = { count: 0, intents: new Set() };
+    humanCommands[name].count++;
+    if (c.parsed_intent) humanCommands[name].intents.add(c.parsed_intent);
+  });
+
+  const agentNames: Record<string, string> = {
+    sales: "Blitz (Sales)", accounting: "Penny (Accounting)", support: "Haven (Support)",
+    collections: "Chase (Collections)", estimation: "Cal (Estimation)", social: "Pixel (Social)",
+    eisenhower: "Eisenhower (Priority)", bizdev: "Spark (BizDev)", webbuilder: "WebBuilder",
+    assistant: "Assistant (CEO)", copywriting: "Copywriter", talent: "Talent", seo: "SEO",
+    growth: "Growth", legal: "Tally (Legal)"
+  };
+
+  let report = `Agent tasks created today:\n`;
+  if (Object.keys(agentTaskCounts).length > 0) {
+    report += Object.entries(agentTaskCounts).map(([agent, count]) =>
+      `  • ${agentNames[agent] || agent}: ${count} tasks created`
+    ).join("\n");
+  } else {
+    report += "  No agent-created tasks today.";
+  }
+
+  report += `\n\nHuman AI usage today (${Object.keys(humanCommands).length} users):\n`;
+  if (Object.keys(humanCommands).length > 0) {
+    report += Object.entries(humanCommands).map(([name, data]) =>
+      `  • ${name}: ${data.count} commands (${[...data.intents].join(", ")})`
+    ).join("\n");
+  } else {
+    report += "  No human AI usage today.";
+  }
+
+  return report;
+})()
+}
+
 --- MAILBOX REPORTS FROM ai@rebar.shop, vicky@rebar.shop, neel@rebar.shop (${mailboxReports.length} reports found) ---
 ${mailboxReports.length > 0
   ? (() => {
@@ -974,6 +1023,25 @@ You MUST return valid JSON with this exact structure (no markdown, no code fence
     "totalEvents": "Total ERP events logged",
     "mostActiveUsers": ["Top 3 most active users with action counts"],
     "summary": "Brief summary of what type of ERP activity happened (orders created, status changes, etc.)"
+  },
+  "agentActivityReport": {
+    "totalInteractions": "Total AI agent interactions today (commands + tasks)",
+    "agentBreakdown": [
+      {
+        "agent": "Agent display name (e.g. Blitz, Penny, Cal)",
+        "interactions": 3,
+        "tasksCreated": 2,
+        "highlights": ["Key actions or outcomes from this agent today"]
+      }
+    ],
+    "humanActivity": [
+      {
+        "name": "Employee name",
+        "agentsUsed": ["penny", "blitz"],
+        "totalCommands": 5,
+        "highlights": ["What this person accomplished via AI assistants today"]
+      }
+    ]
   },
   "calendarEvents": [
     {
@@ -1088,6 +1156,7 @@ Rules:
           machineRuns: machineRuns.length,
           erpEvents: erpEvents.length,
           mailboxReports: mailboxReports.length,
+          agentInteractions: commandLogs.length + tasks.filter((t: any) => t.agent_type).length,
         },
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
