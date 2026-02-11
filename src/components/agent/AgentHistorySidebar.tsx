@@ -122,18 +122,13 @@ export function AgentHistorySidebar({
                     : "text-foreground/80 hover:bg-muted"
                 )}
               >
-                <div className="flex-1 min-w-0">
-                  <span className="block truncate">{session.title}</span>
-                  {session.agent_name && (
-                    <span className="text-[10px] text-muted-foreground">{session.agent_name}</span>
-                  )}
-                </div>
+                <span className="flex-1 truncate">{session.title}</span>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     deleteSession(session.id);
                   }}
-                  className="opacity-0 group-hover:opacity-100 p-1 hover:text-destructive transition-all flex-shrink-0"
+                  className="opacity-0 group-hover:opacity-100 p-1 hover:text-destructive transition-all"
                 >
                   <Trash2 className="w-3 h-3" />
                 </button>
