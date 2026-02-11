@@ -1,51 +1,113 @@
 
-## Fix: External Users Not Visible in Team Members
 
-### Root Cause
+## Optimize Pixel Social Media Agent with Document Strategy
 
-When `ryle.lachini@gmail.com` signed up, the `handle_new_user()` database trigger created their profile **without a `company_id`**. The admin's RLS policy for reading profiles requires `company_id = get_user_company_id(admin)`, so profiles with NULL `company_id` are invisible.
+### Summary
 
-### The Fix (2 steps)
+Integrate the content strategy from your uploaded document into the Pixel social media system. This adds the specific daily schedule (5 posts/day at fixed times), product catalog, company details, bilingual requirements, and image rules -- applied **only** to the social media agent and auto-generate function.
 
-**Step 1 -- Fix the existing broken profile (one-time data fix)**
+### What Changes
 
-Run a migration to set the correct `company_id` on the orphaned profile:
+**1. Update Pixel agent system prompt** (`supabase/functions/ai-agent/index.ts`, social section ~line 1061-1113)
 
-```sql
-UPDATE profiles
-SET company_id = 'a0000000-0000-0000-0000-000000000001'
-WHERE email = 'ryle.lachini@gmail.com'
-  AND company_id IS NULL;
-```
+Add these rules from your document to the existing Pixel system prompt:
 
-**Step 2 -- Fix the trigger so future signups get a company_id automatically**
+- **Daily 5-post schedule with fixed times:**
+  - 06:30 AM -- Motivational / self-care / start of work day
+  - 07:30 AM -- Creative promotional post
+  - 08:00 AM -- Inspirational (emphasizing strength and scale)
+  - 12:30 PM -- Inspirational (emphasizing innovation and efficiency)
+  - 02:30 PM -- Creative promotional for company products
 
-Update `handle_new_user()` to assign a default company_id. Since this is a single-tenant system (one company), it will use the existing company ID:
+- **Allowed product catalog** (random selection per post):
+  - Rebar Fiberglass Straight, Rebar Stirrups, Rebar Cages, Rebar Hooks, Rebar Hooked Anchor Bar, Wire Mesh, Rebar Dowels, Standard Dowels 4x16, Circular Ties/Bars, Rebar Straight
 
-```sql
-CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
-AS $$
-BEGIN
-  INSERT INTO public.profiles (user_id, full_name, email, company_id)
-  VALUES (
-    NEW.id,
-    COALESCE(NEW.raw_user_meta_data->>'full_name', split_part(NEW.email, '@', 1)),
-    NEW.email,
-    'a0000000-0000-0000-0000-000000000001'
-  );
-  RETURN NEW;
-END;
-$$;
-```
+- **Company details baked into prompts:**
+  - Address: 9 Cedar Ave, Thornhill, Ontario
+  - Phone: 647-260-9403
+  - Web: www.rebar.shop
 
-### What This Fixes
-- The admin will immediately see `ryle.lachini@gmail.com` in the People / Team Members list
-- All future user signups will automatically get the correct company assignment
-- No code changes needed -- this is purely a database-level fix
+- **Content rules:**
+  - All content must be in English
+  - Farsi translation shown but NOT uploaded
+  - Company logo MUST appear in every image
+  - Images must be realistic (construction-focused), inspired by nature, minimalist art
+  - Captions should be scientific, promotional, beautiful language
+  - Each of the 5 posts must feature a DIFFERENT product
+  - Hashtags required on every post
+
+- **Regeneration guidance:** Instruct Pixel that users can request regeneration of individual images/captions
+
+**2. Update auto-generate-post edge function** (`supabase/functions/auto-generate-post/index.ts`)
+
+Replace the current generic schedule with the 5 fixed time slots from the document:
+
+- Generate exactly 5 posts per day (not per-platform)
+- Each post assigned to a specific time slot (06:30, 07:30, 08:00, 12:30, 14:30)
+- Each post randomly picks a different product from the allowed catalog
+- Image prompts include "must include REBAR.SHOP logo" instruction
+- `scheduled_date` set to the correct time for each post
+
+**3. Save strategy as Brain knowledge** (one-time database insert)
+
+Insert the full content strategy document into the `knowledge` table with:
+- `category: "social-strategy"`
+- `title: "Pixel Daily Content Strategy"`
+- Content: the full rules (schedule, products, brand guidelines, bilingual requirements)
+
+This way the Pixel agent can reference it from Brain context.
 
 ### Files Modified
-- Database migration only (no frontend file changes)
+
+| File | Scope | What Changes |
+|------|-------|-------------|
+| `supabase/functions/ai-agent/index.ts` | Lines ~1061-1113 (social prompt only) | Add daily schedule, product catalog, company info, image rules, bilingual requirement |
+| `supabase/functions/auto-generate-post/index.ts` | Full file | Generate 5 posts at fixed times, random product per post, logo requirement in image prompts |
+| Database migration | One-time insert | Save strategy doc to `knowledge` table |
+
+### What Is NOT Changed
+- All other agents remain untouched
+- No frontend UI changes needed
+- No changes to social-publish or other edge functions
+
+### Technical Details
+
+**ai-agent social prompt addition** (appended to existing prompt):
+
+```
+## DAILY CONTENT SCHEDULE (5 Posts Per Day)
+| Time | Theme |
+|------|-------|
+| 06:30 AM | Motivational / self-care / start of work day |
+| 07:30 AM | Creative promotional post |
+| 08:00 AM | Inspirational - strength & scale |
+| 12:30 PM | Inspirational - innovation & efficiency |
+| 02:30 PM | Creative product promotional |
+
+## ALLOWED PRODUCTS (rotate randomly, each post different)
+Rebar Fiberglass Straight, Rebar Stirrups, Rebar Cages, Rebar Hooks,
+Rebar Hooked Anchor Bar, Wire Mesh, Rebar Dowels, Standard Dowels 4x16,
+Circular Ties/Bars, Rebar Straight
+
+## MANDATORY IMAGE RULES
+- Company logo (REBAR.SHOP) MUST appear in every image
+- Images must be REALISTIC (construction scenes, shop floor, products)
+- Inspired by nature + minimalist art aesthetic
+- Scientific and promotional text overlays inside images
+
+## BILINGUAL RULE
+- All content created in English
+- Provide Farsi translation for display only (not for upload)
+
+## COMPANY INFO (include in every post)
+Address: 9 Cedar Ave, Thornhill, Ontario
+Phone: 647-260-9403
+Web: www.rebar.shop
+```
+
+**auto-generate-post changes:**
+- Replace `platforms` loop with a `timeSlots` array of 5 entries
+- Each slot picks a random product from the catalog
+- Image prompt includes logo requirement
+- `scheduled_date` computed as `postDate + timeSlot offset`
+
