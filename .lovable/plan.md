@@ -1,151 +1,84 @@
 
 
-## Brain AI Genius Mode — Communication Intelligence + Employee Coaching
+## Fix: Live Microphone Translation (Record Real Audio Instead of Browser Speech API)
 
-### What This Does
-Transforms the existing Brain AI from a static knowledge storage into an **active intelligence layer** that:
-1. Automatically ingests and analyzes ALL team communications (emails, agent chats, tasks)
-2. Learns each person's communication patterns, strengths, and gaps
-3. Generates real-time coaching insights accessible to every AI agent
-4. Proactively creates "Brain Observations" — stored as knowledge items — so the AI remembers patterns across days
+### The Problem
+The Microphone tab uses the browser's built-in `SpeechRecognition` API, which:
+- Only works well for English
+- Produces garbage or nothing for Farsi, Hindi, Georgian, Arabic, Turkish, Urdu, and other languages
+- Cannot do speaker diarization or confidence scoring
 
-### How It Works
+The Upload File tab works perfectly because it sends actual audio to the AI-powered backend for transcription.
+
+### The Fix
+Replace the browser `SpeechRecognition` approach with `MediaRecorder` — capture real audio from the microphone, then send it to the same `transcribe-translate` backend function that file uploads use.
+
+### Changes to `src/components/office/TranscribeView.tsx`
+
+**Remove**: All `SpeechRecognition` logic (`recognitionRef`, `accumulatedTextRef`, `interimText`, `onresult` handler, auto-restart on `onend`)
+
+**Add**: `MediaRecorder`-based recording:
 
 ```text
-[communications]  [chat_sessions]  [tasks]  [time_clock]
-       |                |             |           |
-       v                v             v           v
-   ┌──────────────────────────────────────────────┐
-   │     BRAIN INTELLIGENCE LAYER                 │
-   │  (runs inside ai-agent fetchContext)         │
-   │                                              │
-   │  1. Read today's raw data per person          │
-   │  2. Analyze communication quality             │
-   │  3. Detect collaboration patterns             │
-   │  4. Score responsiveness & follow-through     │
-   │  5. Generate coaching tips                    │
-   │  6. Save observations to knowledge table      │
-   │  7. Inject intelligence into ALL agents       │
-   └──────────────────────────────────────────────┘
-           |                          |
-           v                          v
-   [Every agent gets              [knowledge table
-    team intelligence              stores patterns
-    in their context]              across days]
+[User clicks "Start Recording"]
+       |
+       v
+  navigator.mediaDevices.getUserMedia({ audio: true })
+       |
+       v
+  MediaRecorder collects audio chunks
+  Timer shows elapsed time
+  Visual pulse animation indicates recording
+       |
+  [User clicks "Stop & Translate"]
+       |
+       v
+  Combine chunks into audio Blob
+  Create FormData with the audio blob
+  Send to transcribe-translate (same as file upload)
+       |
+       v
+  Display results: original transcript, English translation,
+  confidence score, speaker diarization
 ```
 
-### Changes Overview
+**Specific code changes:**
 
-**File 1: `supabase/functions/ai-agent/index.ts`** (~80 lines added to fetchContext)
+1. **`startListening` function** — Replace SpeechRecognition with:
+   - `navigator.mediaDevices.getUserMedia({ audio: true })` to get mic stream
+   - Create `MediaRecorder` with webm/opus format
+   - Collect chunks in array via `ondataavailable`
+   - Start recording timer
 
-Upgrade the existing Team Activity Report block (lines 2066-2193) to become a full **Brain Intelligence Engine**:
+2. **`stopListening` function** — Replace text accumulation with:
+   - Stop MediaRecorder
+   - Combine chunks into a single audio Blob
+   - Build FormData (same format as file upload)
+   - Call `callTranslateAPI(formData, true)` — same path as file upload
+   - Display results
 
-**Step 1 — Deeper data collection** (expand existing parallel queries)
-- Add `chat_messages` query: fetch today's user messages (role="user") from `chat_sessions`, truncated to 150 chars each, limit 300
-- Add `communications` body_preview + subject (already fetched but only counting — now extract actual content)
-- Keep existing clock, sessions, tasks queries
+3. **Remove unused state**: `interimText`, `accumulatedTextRef`, `wordCount` display during recording (replaced by timer-only display)
 
-**Step 2 — Per-person communication analysis** (new logic block)
-For each team member, compute:
-- **Response score**: ratio of emails received vs sent (are they responsive?)
-- **Collaboration map**: who they emailed most today (shows team interaction patterns)
-- **AI engagement**: what topics they asked agents about (shows what they're working on)
-- **Task velocity**: created vs completed ratio
-- **Communication quality flags**: unanswered emails (received but no reply), overdue tasks
+4. **UI during recording**: Show a simple recording indicator with elapsed time and a pulsing mic icon (no live transcript preview since the AI processes audio after stop)
 
-**Step 3 — Cross-team intelligence** (new logic block)
-- **Communication gaps**: detect pairs who should be talking but aren't (e.g., Sales got a new lead but hasn't looped in Estimating)
-- **Bottleneck detection**: if one person has many unanswered emails, flag as potential bottleneck
-- **Collaboration score**: overall team interaction density
+5. **Recording indicator text**: Change from "Listening..." to "Recording... speak in any language" to make it clear all languages are supported
 
-**Step 4 — Build brain intelligence report** (replaces current simple text report)
-Format as structured text injected into context:
-```
-BRAIN INTELLIGENCE REPORT (Today)
+### What This Fixes
+- Farsi, Hindi, Georgian, Arabic, Turkish, Urdu, and ALL other languages now work from the microphone
+- Speaker diarization works for mic recordings (multiple speakers detected)
+- Confidence scores are generated for mic recordings
+- Same high-quality two-pass Gemini pipeline used for both mic and file upload
 
-TEAM PULSE: 78/100
-- Communication Health: Active (23 internal emails, 4 cross-dept threads)
-- Bottleneck: Vicky has 6 unanswered emails
-- Gap: Saurabh (Sales) hasn't looped Ben (Estimating) on 2 new leads
-
-PER-PERSON INTELLIGENCE:
-
-Sattar Esmaeili (CEO)
-  Response: 4/5 emails answered | Collaboration: vicky(3), saurabh(2), external(5)
-  AI Topics: "pipeline review", "overdue invoices"
-  Coaching: Strong follow-through today. Consider delegating external email replies.
-
-Vicky Anderson (Accountant)
-  Response: 2/8 emails answered | Collaboration: sattar(3), external(5)
-  AI Topics: "AR aging", "invoice status"
-  Coaching: 6 unanswered emails — prioritize customer replies before EOD.
-
-Saurabh Seghal (Sales)
-  Response: 7/7 answered | Collaboration: external(6), neel(1)
-  AI Topics: "lead scoring", "quote follow-up"
-  Coaching: Excellent responsiveness. Loop Ben in on new project leads.
-```
-
-**Step 5 — Save brain observations to knowledge table** (new async block)
-After building the intelligence report, save a daily summary as a `knowledge` item:
-- Category: "memory"
-- Title: "Brain Observation — {date}"
-- Content: condensed per-person patterns + team health
-- This means the AI remembers patterns across days and can say "Vicky has been slow on email replies for 3 days"
-
-**Step 6 — Update prompt injection** (modify SHARED_TOOL_INSTRUCTIONS)
-Add instruction block telling all agents:
-```
-## Brain Intelligence (Today)
-{brainIntelligenceReport}
-
-USE THIS DATA TO:
-- Proactively coach the user based on their patterns
-- Suggest collaboration improvements
-- Flag bottlenecks and communication gaps
-- Reference historical patterns from knowledge table
-- Help team members improve their work habits
-
-COACHING STYLE: Be a supportive, data-driven mentor. Highlight good behaviors
-first, then gently point out improvements. Never be judgmental.
-```
-
-**File 2: `supabase/functions/email-activity-report/index.ts`** (~40 lines changed)
-
-Upgrade the AI summarization prompt to include coaching analysis:
-- Change the prompt from simple "extract notes and action items" to:
-  - Analyze communication patterns (response time, follow-through)
-  - Identify strengths (fast replies, proactive outreach)
-  - Identify improvements (unanswered emails, missed follow-ups)
-  - Score performance (0-100)
-  - Generate 2-3 specific coaching tips
-- Upgrade HTML templates to include coaching sections with color coding
-
-### What Every Agent Can Now Do
-After this change, ANY agent (Blitz, Penny, Forge, etc.) can answer:
-- "How is the team doing today?" — shows team pulse score + per-person summary
-- "Who needs help?" — highlights bottlenecks and unanswered communications
-- "How am I doing?" — shows the user's own responsiveness and coaching tips
-- "Is Saurabh following up on leads?" — checks his email patterns and AI usage
-- "Who talked to whom today?" — shows the collaboration map
-- "What has Vicky been working on?" — shows her agent topics and email subjects
-
-### Role-Based Scoping (preserved)
-- Admin/Office/Sales/Accounting: See full intelligence for all team members
-- Workshop/Field: See only their own coaching data + team clock status
-- Knowledge observations saved with company_id for multi-tenant isolation
-
-### Safety Guards
-- All queries use `.limit()` and today-only date filters
-- Chat messages truncated to 150 chars (no full conversations leaked)
-- Email previews truncated to 100 chars
-- Knowledge observations are max 2000 chars (condensed summary)
-- Only saves 1 observation per day (checks for existing before inserting)
-- Total added token budget to agent context: ~500-800 tokens
-- All wrapped in try/catch — failure returns existing simple report as fallback
-- No schema changes, no new tables, no UI changes
+### What Changes for the User
+- Instead of seeing live interim text while speaking, they see a recording timer
+- After stopping, there's a brief processing delay (same as file upload) before results appear
+- All languages work perfectly from the microphone
 
 ### Files Modified
-- `supabase/functions/ai-agent/index.ts` — upgrade Team Activity block + update SHARED_TOOL_INSTRUCTIONS
-- `supabase/functions/email-activity-report/index.ts` — upgrade AI prompt + HTML template for coaching
+- `src/components/office/TranscribeView.tsx` — Replace SpeechRecognition with MediaRecorder (~40 lines changed)
+
+### No Other Changes
+- No edge function changes needed (reuses existing `transcribe-translate`)
+- No schema changes
+- No new dependencies
 
