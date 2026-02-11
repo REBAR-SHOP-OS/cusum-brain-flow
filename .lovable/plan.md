@@ -1,26 +1,19 @@
 
 
-## Fix: Make Vizzy Actually Stay Silent
+## Fix: Link Vicky's Auth Account to Her Profile
 
 ### Problem
-Setting volume to 0 and sending one contextual update isn't enough. The ElevenLabs agent treats contextual updates as suggestions, not commands. It keeps generating speech (just muted), and its idle-detection logic prompts it to check in with "Sattar, are you there?" because it thinks you stopped talking.
+Vicky has an auth account (`vicky@rebar.shop`) and she has admin + accounting roles assigned. However, her profile record in the `profiles` table has `user_id = NULL` -- it was never linked to her auth account.
 
-### Solution -- Three-Layer Silence Enforcement
+Because of this, the RLS policy "Admins can read all company profiles" calls `get_user_company_id(auth.uid())` which returns NULL (no profile found for her auth user), so the company_id comparison fails and she sees zero profiles.
 
-1. **Repeated contextual reinforcement**: Every time Vizzy generates an `agent_response` while in silent mode, immediately send another contextual update reminding her to stay silent. This prevents drift.
-
-2. **User activity pings**: Start a periodic timer (every 15 seconds) that calls `conversation.sendUserActivity()` during silent mode. This tells the ElevenLabs system the user is still engaged, preventing the "are you there?" idle prompts.
-
-3. **Stronger contextual update wording**: Make the instruction more forceful and explicit about not checking in.
+### Solution
+A single database update to link Vicky's auth user ID to her existing profile record.
 
 ### Technical Details
 
-**File: `src/pages/VizzyPage.tsx`**
+**Database migration (1 statement):**
+- Update the `profiles` row for "Vicky Anderson" (id: `e82c7ca3-126f-4f88-a368-4774aa8d450e`) to set `user_id = 'c612f0e6-41bd-4775-9ce2-f57aeb20bdb2'`
 
-- Add a `silentIntervalRef` to hold the periodic activity ping timer
-- When silent mode activates:
-  - Start a `setInterval` every 15s calling `conversation.sendUserActivity()`
-  - Send stronger contextual update: *"SYSTEM OVERRIDE: CEO activated silent mode. You MUST NOT speak, respond, or check in. Do NOT ask if they are there. Remain completely silent. Only speak when CEO says your name 'Vizzy'."*
-- In the `agent_response` handler: if `silentMode` is true, immediately send another contextual update reinforcing silence
-- When silent mode deactivates: clear the activity ping interval
-- On unmount/session end: clear the interval
+No code changes needed. Once the profile is linked, the existing RLS policies will work correctly and Vicky will see all company profiles in Team Hub.
+
