@@ -1,11 +1,13 @@
 import { useRef, useEffect } from "react";
+import { Bot } from "lucide-react";
 import { ChatMessage, Message } from "./ChatMessage";
 
 interface ChatThreadProps {
   messages: Message[];
+  isLoading?: boolean;
 }
 
-export function ChatThread({ messages }: ChatThreadProps) {
+export function ChatThread({ messages, isLoading }: ChatThreadProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -33,6 +35,21 @@ export function ChatThread({ messages }: ChatThreadProps) {
       {messages.map((message) => (
         <ChatMessage key={message.id} message={message} />
       ))}
+      {isLoading && (
+        <div className="flex gap-3 items-start animate-fade-in">
+          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+            <Bot className="w-4 h-4 text-primary" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <div className="bg-secondary/50 rounded-2xl px-4 py-3 flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:0ms]" />
+              <span className="w-2 h-2 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:150ms]" />
+              <span className="w-2 h-2 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:300ms]" />
+            </div>
+            <span className="text-xs text-muted-foreground ml-1">Thinking...</span>
+          </div>
+        </div>
+      )}
       <div ref={bottomRef} />
     </div>
   );
