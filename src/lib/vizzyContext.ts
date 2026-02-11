@@ -37,6 +37,13 @@ export function buildVizzyContext(snap: VizzyBusinessSnapshot): string {
     .map((e) => `  • [${e.event_type}] ${e.entity_type}: ${e.description || "No description"}`)
     .join("\n");
 
+  const qbWarning = !snap.financials.qbConnected ? `
+⚠️ QUICKBOOKS DISCONNECTED
+Financial data is loaded from a cached mirror — it may be stale.
+IMPORTANT: Tell the CEO early in the conversation that QuickBooks needs to be reconnected
+via Settings → Integrations. Urge them to reconnect so you can provide real-time numbers.
+` : "";
+
   return `YOU ARE VIZZY — the CEO's personal AI assistant (like Jarvis for Iron Man).
 You are MULTILINGUAL. You MUST respond in whatever language the CEO speaks to you.
 If the CEO speaks Farsi (Persian), respond in Farsi with an Iranian accent and natural conversational tone — like a native Tehran speaker. Use informal/colloquial Farsi when appropriate (e.g. "چطوری" not just "حالتان چطور است").
@@ -46,7 +53,7 @@ Log every question the CEO asks mentally — you are building their daily journe
 Be proactive: flag risks, suggest actions, connect dots across departments.
 Speak like a trusted advisor — concise, direct, confident.
 
-═══ LIVE BUSINESS SNAPSHOT (${new Date().toLocaleString()}) ═══
+${qbWarning}═══ LIVE BUSINESS SNAPSHOT (${new Date().toLocaleString()}) ═══
 
 📊 FINANCIALS
   Accounts Receivable: ${fmt(f.totalReceivable)}
