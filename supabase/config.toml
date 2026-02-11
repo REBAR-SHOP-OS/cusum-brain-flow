@@ -143,3 +143,6 @@ verify_jwt = false
 
 [functions.comms-alerts]
 verify_jwt = false
+
+[functions.relay-pipeline]
+verify_jwt = false

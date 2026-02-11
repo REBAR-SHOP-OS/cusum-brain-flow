@@ -18,6 +18,14 @@ export interface InboxEmail {
   isUnread?: boolean;
   threadId?: string;
   sourceId?: string;
+  // AI Relay fields
+  aiCategory?: string | null;
+  aiUrgency?: string | null;
+  aiActionRequired?: boolean | null;
+  aiActionSummary?: string | null;
+  aiDraft?: string | null;
+  aiPriorityData?: Record<string, unknown> | null;
+  resolvedAt?: string | null;
 }
 
 interface InboxEmailListProps {
