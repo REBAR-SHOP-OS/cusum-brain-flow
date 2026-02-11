@@ -131,3 +131,9 @@ verify_jwt = false
 
 [functions.elevenlabs-conversation-token]
 verify_jwt = false
+
+[functions.vizzy-photo-analyze]
+verify_jwt = false
+
+[functions.vizzy-erp-action]
+verify_jwt = false
