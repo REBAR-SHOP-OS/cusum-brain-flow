@@ -1,35 +1,41 @@
 
 
-## Add a `/vizzy` Route for Siri Shortcut Access
+## Connect Voice Vizzy to Your Real Business Data
 
-### Goal
-Create a dedicated `/vizzy` page at `www.erp.rebar.shop/vizzy` that automatically starts the Voice Vizzy session on load. This lets you create a Siri Shortcut that says "Hey Siri, open Vizzy" and lands you straight into a voice conversation.
+### Problem
+Voice Vizzy is powered by ElevenLabs' AI agent, which has no access to your database or QuickBooks. When you ask about revenue, it makes up numbers.
 
-### What will be built
+### Solution
+When the Vizzy voice session starts, we pull your live QuickBooks summary (revenue, AR, AP, bank balances, overdue invoices) and inject it into the conversation as context. Vizzy will then reference your real numbers.
 
-1. **New page: `src/pages/VizzyPage.tsx`**
-   - A full-screen, minimal page (no sidebar/topbar clutter)
-   - Auto-starts the ElevenLabs voice session as soon as the page loads
-   - Shows the same Jarvis-style overlay (brain icon, transcript, speaking indicator)
-   - Includes a close/back button that navigates to `/home`
-   - Protected route (requires login)
-   - Still gated to `sattar@rebar.shop` only
+### How it works
 
-2. **Route registration in `App.tsx`**
-   - Add `/vizzy` as a protected route (without AppLayout wrapper so it's a clean full-screen experience)
+1. **Update `VizzyPage.tsx` and `VoiceVizzy.tsx`** to fetch QuickBooks data before starting the ElevenLabs session
+2. After the session connects, call `conversation.sendContextualUpdate(...)` with a formatted summary of your financials
+3. Vizzy will receive this context and use real numbers instead of hallucinating
 
-3. **Siri Shortcut setup (manual, on your iPhone)**
-   - Open the Shortcuts app
-   - Create a new shortcut: "Open URL" with `https://erp.rebar.shop/vizzy`
-   - Name it "Vizzy" -- then say "Hey Siri, Vizzy" to launch it
+### What data Vizzy will know
+- Total Accounts Receivable and Accounts Payable
+- Overdue invoices (count, total, top customers)
+- Overdue bills (count, total, top vendors)
+- Bank account balances
+- Recent payments received
 
 ### Technical details
 
-- The new `VizzyPage` component will reuse the same `useConversation` hook and ElevenLabs token flow from the existing `VoiceVizzy` component
-- Auto-start will be triggered via a `useEffect` on mount (with a guard to prevent double-start)
-- The page will be registered as a standalone protected route without the `AppLayout` wrapper:
-  ```
-  <Route path="/vizzy" element={<ProtectedRoute><VizzyPage /></ProtectedRoute>} />
-  ```
-- No changes to the existing `VoiceVizzy` component or edge function -- this is additive only
+**In both `VizzyPage.tsx` and `VoiceVizzy.tsx`:**
 
+- Import and call `useQuickBooksData` hook to get `loadAll`, `totalReceivable`, `totalPayable`, `overdueInvoices`, `overdueBills`, `accounts`, `payments`
+- After `conversation.startSession(...)` succeeds, build a context string with the real financial data and call:
+  ```
+  conversation.sendContextualUpdate(contextString)
+  ```
+- The context string will include a preamble telling the agent: "You have access to live financial data. Use ONLY these numbers. Never make up financial figures."
+
+**Edge function (`elevenlabs-conversation-token`)**: No changes needed -- the data injection happens client-side after the session starts.
+
+**No new dependencies or secrets required** -- we reuse the existing `useQuickBooksData` hook and the ElevenLabs SDK's built-in `sendContextualUpdate` method.
+
+### Files changed
+- `src/pages/VizzyPage.tsx` -- add QB data fetch and contextual update
+- `src/components/vizzy/VoiceVizzy.tsx` -- add QB data fetch and contextual update
