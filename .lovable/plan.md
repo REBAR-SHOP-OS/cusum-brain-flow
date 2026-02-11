@@ -1,35 +1,50 @@
 
-## Fix: Vizzy ElevenLabs SDK Error on CEO Portal
 
-### Problem
-The ElevenLabs `@elevenlabs/react` SDK fires an internal error event where it tries to read `error_type` from an undefined object. This happens inside the SDK's `handleErrorEvent` method before it reaches the `onError` callback in `VoiceVizzy.tsx`. The `VoiceVizzy` component is mounted globally via `AppLayout.tsx`, so the error appears on every page including `/ceo`.
+## Stabilize Voice Vizzy
 
-### Root Cause
-The `useConversation` hook from `@elevenlabs/react` initializes a WebSocket/WebRTC connection handler that listens for error events. When no active session exists, certain internal messages arrive with undefined payloads, causing the SDK to crash on `error_type` access.
+### Problems Identified
 
-### Solution
+1. **Stale closure in `onDisconnect`** -- The `transcript` state captured in the `useConversation` config is always the initial empty array, so transcripts are never saved on disconnect.
+2. **Config object recreated every render** -- The options object passed to `useConversation` is not stable, potentially causing SDK re-initialization.
+3. **SmartErrorBoundary remounts on retry** -- When the boundary auto-retries, it remounts `VoiceVizzyInner`, creating a NEW SDK instance while the old WebRTC connection may still be alive. This causes the "double connected" logs.
+4. **No safe guards around `endSession`** -- If the SDK is already crashed/disconnected, `endSession()` throws an unhandled error.
+5. **VizzyPage has `conversation` in useEffect deps** -- `useConversation` returns a new object reference each render, causing the auto-start effect to re-trigger.
 
-**1. Wrap `VoiceVizzy` in the SmartErrorBoundary (component-level)**  
-In `src/components/layout/AppLayout.tsx`, wrap `<VoiceVizzy />` with `<SmartErrorBoundary level="component">` so SDK crashes are contained and don't bubble up as unhandled rejections.
+### Fix Plan
 
-**2. Guard `useConversation` initialization**  
-In `src/components/vizzy/VoiceVizzy.tsx`, defer calling `useConversation()` until the user is actually the allowed user (`sattar@rebar.shop`). Currently, the hook initializes for ALL users, which triggers SDK internals even when Vizzy won't be used.
+**File: `src/components/vizzy/VoiceVizzy.tsx`**
+- Use a `transcriptRef` (useRef) alongside the state to always have the latest transcript available in the `onDisconnect` callback
+- Wrap `endSession()` in try/catch in the `stop` callback
+- Add a `sessionActiveRef` guard to prevent double-starting
 
-**3. Suppress the specific unhandled rejection**  
-In `src/hooks/useGlobalErrorHandler.ts`, add `"error_type"` to the `isIgnoredError` list so this known SDK bug doesn't show a toast to the user.
+**File: `src/pages/VizzyPage.tsx`**
+- Same `transcriptRef` pattern for the `onDisconnect` and `saveTranscript` callbacks
+- Remove `conversation` from the `useEffect` dependency array (it's a stable ref from the hook but the object identity changes -- use a ref to call `startSession`)
+- Wrap `endSession()` in try/catch
+- Add a `sessionActiveRef` to prevent race conditions
+
+**File: `src/components/layout/AppLayout.tsx`**
+- Change `SmartErrorBoundary` to `maxAutoRetries={0}` for VoiceVizzy -- auto-retrying a voice SDK component causes duplicate sessions. On error, just silently hide it instead of remounting.
 
 ### Technical Details
 
-- **File: `src/components/layout/AppLayout.tsx`**  
-  Import `SmartErrorBoundary`, wrap `<VoiceVizzy />`:
-  ```tsx
-  <SmartErrorBoundary level="component" maxAutoRetries={1}>
-    <VoiceVizzy />
-  </SmartErrorBoundary>
-  ```
+```text
+VoiceVizzy.tsx changes:
+  - Add: const transcriptRef = useRef<TranscriptEntry[]>([])
+  - In setTranscript calls, also update transcriptRef.current
+  - In onDisconnect, read from transcriptRef.current instead of transcript
+  - In stop(), wrap endSession in try/catch
+  - Add sessionActiveRef to prevent double start
 
-- **File: `src/components/vizzy/VoiceVizzy.tsx`**  
-  Move the allowed-email gate above `useConversation` by splitting into two components: an outer gate component and an inner component that only mounts (and thus only calls `useConversation`) when the user is authorized.
+VizzyPage.tsx changes:
+  - Same transcriptRef pattern
+  - Store conversation methods in a ref to avoid useEffect re-runs
+  - Wrap endSession in try/catch
+  - Add sessionActiveRef guard
 
-- **File: `src/hooks/useGlobalErrorHandler.ts`**  
-  Add `"error_type"` to the ignored error patterns array.
+AppLayout.tsx changes:
+  - maxAutoRetries={0} on the VoiceVizzy boundary
+```
+
+These are all surgical fixes -- no UI changes, no new dependencies, no changes to other components.
+
