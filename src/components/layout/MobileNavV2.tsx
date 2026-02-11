@@ -1,8 +1,10 @@
 import { Link, useLocation } from "react-router-dom";
-import { Home, Inbox, CheckSquare, Factory, Menu, X, Truck, Settings, Shield, Phone, Users, Kanban, LayoutGrid, Brain, DollarSign, MessageSquare, BarChart3, Clock, Share2, FileText } from "lucide-react";
+import { Home, Inbox, CheckSquare, Factory, Menu, X, Truck, Settings, Shield, Phone, Users, Kanban, LayoutGrid, Brain, DollarSign, MessageSquare, BarChart3, Clock, Share2, FileText, Bot } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useAuth } from "@/lib/auth";
+import { useCustomerPortalData } from "@/hooks/useCustomerPortalData";
 
 const primaryNav = [
   { name: "Home", href: "/home", icon: Home },
@@ -33,6 +35,42 @@ export function MobileNavV2() {
   const location = useLocation();
   const [showMore, setShowMore] = useState(false);
   const { roles, isAdmin } = useUserRole();
+  const { user } = useAuth();
+  const email = user?.email || "";
+  const isInternal = email.endsWith("@rebar.shop");
+  const { hasAccess: isLinkedCustomer } = useCustomerPortalData();
+  const isExternalEmployee = !isInternal && !!email && !isLinkedCustomer;
+
+  // External employees get a simple 3-item nav
+  if (isExternalEmployee) {
+    const extNav = [
+      { name: "Clock", href: "/timeclock", icon: Clock },
+      { name: "Team", href: "/team-hub", icon: MessageSquare },
+      { name: "HR", href: "/agent/talent", icon: Bot },
+    ];
+    return (
+      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-card border-t border-border md:hidden safe-area-bottom">
+        <div className="flex items-center justify-around h-14">
+          {extNav.map((item) => {
+            const isActive = location.pathname.startsWith(item.href);
+            return (
+              <Link
+                key={item.name}
+                to={item.href}
+                className={cn(
+                  "flex flex-col items-center gap-0.5 py-1 px-3 transition-colors",
+                  isActive ? "text-primary" : "text-muted-foreground"
+                )}
+              >
+                <item.icon className="w-5 h-5" />
+                <span className="text-[10px] font-medium">{item.name}</span>
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
+    );
+  }
 
   const isMoreActive = moreItems.some((item) => location.pathname === item.href);
 

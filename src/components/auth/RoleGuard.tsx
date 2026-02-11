@@ -63,7 +63,16 @@ export function RoleGuard({ children }: RoleGuardProps) {
     if (isLinkedCustomer) {
       return <Navigate to="/portal" replace />;
     }
-    // Not a customer → fall through to workshop/role logic below
+
+    // External employee (not a customer) → lock to Time Clock, Team Hub, HR Agent only
+    const EXTERNAL_EMPLOYEE_ALLOWED = ["/timeclock", "/team-hub", "/agent/talent"];
+    const isAllowedExternal = EXTERNAL_EMPLOYEE_ALLOWED.some((p) =>
+      location.pathname.startsWith(p)
+    );
+    if (!isAllowedExternal) {
+      return <Navigate to="/timeclock" replace />;
+    }
+    return <>{children}</>;
   }
 
   // If user has any elevated role, allow everything
