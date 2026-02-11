@@ -406,7 +406,7 @@ export function ChatInput({
                   <TooltipTrigger asChild>
                     <button
                       type="button"
-                      onClick={() => window.dispatchEvent(new Event("open-live-chat"))}
+                      onClick={() => window.dispatchEvent(new Event("toggle-live-chat"))}
                       className="p-2 text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-muted/50"
                     >
                       <MessageCircle className="w-5 h-5" />

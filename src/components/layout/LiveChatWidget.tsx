@@ -9,11 +9,11 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 export function LiveChatWidget() {
   const [open, setOpen] = useState(false);
 
-  // Listen for external open requests
+  // Listen for external toggle requests
   useEffect(() => {
-    const handler = () => setOpen(true);
-    window.addEventListener("open-live-chat", handler);
-    return () => window.removeEventListener("open-live-chat", handler);
+    const handler = () => setOpen((prev) => !prev);
+    window.addEventListener("toggle-live-chat", handler);
+    return () => window.removeEventListener("toggle-live-chat", handler);
   }, []);
   const [input, setInput] = useState("");
   const { messages, isStreaming, sendMessage, clearChat, cancelStream } = useAdminChat();
