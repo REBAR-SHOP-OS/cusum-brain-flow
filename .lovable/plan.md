@@ -1,24 +1,21 @@
 
-
-## Sort Customers Alphabetically
+## Add Vendor List to Accounting Workspace
 
 ### Problem
-The Customers table in the Accounting workspace displays 1,946 customers in an unsorted order (e.g., "BOB HILL" appears before "Level Ltd" before "LIBERTY STONE"). They should be sorted A-Z by name.
+The Vendors dropdown menu has no "Vendors" list page. There's no way to see all vendors. The data is already being fetched (`list-vendors` in `useQuickBooksData`), it just needs a UI component and a nav link.
 
-### Solution
-Add a `.sort()` call on the `enriched` array in `AccountingCustomers.tsx` to sort by `DisplayName` alphabetically (case-insensitive).
+### What Will Change
 
-### Technical Details
+**1. New file: `src/components/accounting/AccountingVendors.tsx`**
+- A vendor list component matching the same style as `AccountingCustomers.tsx`
+- Search bar to filter by name or company
+- Table with columns: Name, Company, Phone, Email, Balance, Status
+- Sorted alphabetically by `DisplayName` (case-insensitive)
+- Enriched with bill stats (open balance, overdue count) from `data.bills`
 
-**File: `src/components/accounting/AccountingCustomers.tsx`**
+**2. Update: `src/components/accounting/AccountingNavMenus.tsx`**
+- Add "Vendors" menu item to the Vendors dropdown (alongside Bills and Vendor Payments)
 
-After the `enriched` array is built (around line 32), add a sort:
-
-```typescript
-enriched.sort((a, b) => a.DisplayName.localeCompare(b.DisplayName, undefined, { sensitivity: 'base' }));
-```
-
-This uses `localeCompare` with `sensitivity: 'base'` so that "bob" and "BOB" sort together correctly regardless of case.
-
-One line change, no new dependencies.
-
+**3. Update: `src/pages/AccountingWorkspace.tsx`**
+- Import `AccountingVendors`
+- Add rendering for `activeTab === "vendors"`
