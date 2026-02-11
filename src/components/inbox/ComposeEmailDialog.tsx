@@ -11,21 +11,26 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { EmailTemplatesDrawer } from "./EmailTemplatesDrawer";
+import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import {
   Send,
   Loader2,
   Sparkles,
   RefreshCw,
-  X,
   Bold,
   Italic,
   List,
   Paperclip,
+  Mic,
+  MicOff,
+  Wand2,
 } from "lucide-react";
 
 const TONES = [
   { key: "formal", label: "Formal" },
   { key: "casual", label: "Casual" },
+  { key: "friendly", label: "Friendly" },
+  { key: "urgent", label: "Urgent" },
   { key: "shorter", label: "Shorter" },
   { key: "longer", label: "Longer" },
 ] as const;
@@ -39,21 +44,67 @@ export function ComposeEmailDialog({ open, onOpenChange }: ComposeEmailDialogPro
   const [to, setTo] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
+  const [prompt, setPrompt] = useState("");
   const [drafting, setDrafting] = useState(false);
   const [sending, setSending] = useState(false);
+  const [polishing, setPolishing] = useState(false);
   const [hasDrafted, setHasDrafted] = useState(false);
   const [adjustingTone, setAdjustingTone] = useState<string | null>(null);
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { toast } = useToast();
 
+  const speech = useSpeechRecognition({
+    onError: (err) => toast({ title: "Voice error", description: err, variant: "destructive" }),
+  });
+
+  // Sync speech transcript into prompt field
+  const currentTranscript = speech.fullTranscript + (speech.interimText ? ` ${speech.interimText}` : "");
+
   const reset = () => {
     setTo("");
     setSubject("");
     setBody("");
+    setPrompt("");
     setHasDrafted(false);
     setDrafting(false);
     setSending(false);
+    setPolishing(false);
     setAdjustingTone(null);
+    speech.reset();
+  };
+
+  const handlePromptGenerate = async () => {
+    const promptText = prompt.trim() || currentTranscript.trim();
+    if (!promptText) {
+      toast({ title: "Enter a prompt first", variant: "destructive" });
+      return;
+    }
+    setDrafting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("draft-email", {
+        body: {
+          action: "prompt-to-draft",
+          prompt: promptText,
+          recipientName: to || undefined,
+          emailSubject: subject || undefined,
+        },
+      });
+      if (error) throw error;
+      if (data?.draft) {
+        setBody(data.draft);
+        setHasDrafted(true);
+        speech.reset();
+        toast({ title: "Draft generated from prompt" });
+      }
+    } catch (err) {
+      toast({
+        title: "Failed to generate draft",
+        description: err instanceof Error ? err.message : "Please try again",
+        variant: "destructive",
+      });
+    } finally {
+      setDrafting(false);
+    }
   };
 
   const handleAiDraft = async () => {
@@ -85,6 +136,28 @@ export function ComposeEmailDialog({ open, onOpenChange }: ComposeEmailDialogPro
       });
     } finally {
       setDrafting(false);
+    }
+  };
+
+  const handlePolish = async () => {
+    if (!body.trim()) {
+      toast({ title: "Write or generate a draft first", variant: "destructive" });
+      return;
+    }
+    setPolishing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("draft-email", {
+        body: { action: "polish", draftText: body },
+      });
+      if (error) throw error;
+      if (data?.draft) {
+        setBody(data.draft);
+        toast({ title: "Email polished ✨" });
+      }
+    } catch {
+      toast({ title: "Failed to polish", variant: "destructive" });
+    } finally {
+      setPolishing(false);
     }
   };
 
@@ -204,6 +277,44 @@ export function ComposeEmailDialog({ open, onOpenChange }: ComposeEmailDialogPro
           </div>
         </div>
 
+        {/* AI Prompt Input */}
+        <div className="px-4 py-2 border-b border-border bg-muted/20">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-3.5 h-3.5 text-primary shrink-0" />
+            <Input
+              value={speech.isListening ? currentTranscript : prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              placeholder="Describe what you want to say..."
+              className="h-7 text-xs border-0 bg-transparent p-0 focus-visible:ring-0"
+              disabled={speech.isListening}
+            />
+            {speech.isSupported && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 shrink-0"
+                onClick={() => speech.isListening ? speech.stop() : speech.start()}
+              >
+                {speech.isListening ? (
+                  <MicOff className="w-3.5 h-3.5 text-destructive" />
+                ) : (
+                  <Mic className="w-3.5 h-3.5 text-muted-foreground" />
+                )}
+              </Button>
+            )}
+            <Button
+              variant="default"
+              size="sm"
+              className="h-7 text-xs shrink-0 gap-1"
+              onClick={handlePromptGenerate}
+              disabled={drafting || sending || (!prompt.trim() && !currentTranscript.trim())}
+            >
+              {drafting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+              Generate
+            </Button>
+          </div>
+        </div>
+
         {/* Body */}
         <div className="px-4 py-2">
           <Textarea
@@ -214,9 +325,9 @@ export function ComposeEmailDialog({ open, onOpenChange }: ComposeEmailDialogPro
           />
         </div>
 
-        {/* Tone Adjuster */}
+        {/* Tone Adjuster + Polish */}
         {body.trim() && (
-          <div className="flex items-center gap-1 px-4 py-1">
+          <div className="flex items-center gap-1 px-4 py-1 flex-wrap">
             <span className="text-[10px] text-muted-foreground mr-1">Tone:</span>
             {TONES.map((t) => (
               <Button
@@ -224,12 +335,23 @@ export function ComposeEmailDialog({ open, onOpenChange }: ComposeEmailDialogPro
                 variant="outline"
                 size="sm"
                 className="h-6 px-2 text-[10px] rounded-full"
-                disabled={!!adjustingTone || sending}
+                disabled={!!adjustingTone || sending || polishing}
                 onClick={() => handleToneAdjust(t.key)}
               >
                 {adjustingTone === t.key ? <Loader2 className="w-3 h-3 animate-spin" /> : t.label}
               </Button>
             ))}
+            <div className="w-px h-4 bg-border mx-1" />
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-6 px-2 text-[10px] rounded-full gap-1"
+              disabled={!!adjustingTone || sending || polishing}
+              onClick={handlePolish}
+            >
+              {polishing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
+              Polish
+            </Button>
           </div>
         )}
 

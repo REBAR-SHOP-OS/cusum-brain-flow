@@ -1,17 +1,20 @@
 import { useState, useRef } from "react";
-import { Send, Loader2, Sparkles, RefreshCw, X, Paperclip, Bold, Italic, List } from "lucide-react";
+import { Send, Loader2, Sparkles, RefreshCw, X, Paperclip, Bold, Italic, List, Wand2, Mic, MicOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { EmailTemplatesDrawer } from "./EmailTemplatesDrawer";
+import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import type { InboxEmail } from "./InboxEmailList";
 import type { ReplyMode } from "./EmailActionBar";
 
 const TONES = [
   { key: "formal", label: "Formal" },
   { key: "casual", label: "Casual" },
+  { key: "friendly", label: "Friendly" },
+  { key: "urgent", label: "Urgent" },
   { key: "shorter", label: "Shorter" },
   { key: "longer", label: "Longer" },
 ] as const;
@@ -27,10 +30,15 @@ export function EmailReplyComposer({ email, mode, onClose }: EmailReplyComposerP
   const [forwardTo, setForwardTo] = useState("");
   const [drafting, setDrafting] = useState(false);
   const [sending, setSending] = useState(false);
+  const [polishing, setPolishing] = useState(false);
   const [hasDrafted, setHasDrafted] = useState(false);
   const [adjustingTone, setAdjustingTone] = useState<string | null>(null);
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { toast } = useToast();
+
+  const speech = useSpeechRecognition({
+    onError: (err) => toast({ title: "Voice error", description: err, variant: "destructive" }),
+  });
 
   if (!mode) return null;
 
@@ -79,6 +87,28 @@ export function EmailReplyComposer({ email, mode, onClose }: EmailReplyComposerP
     }
   };
 
+  const handlePolish = async () => {
+    if (!replyText.trim()) {
+      toast({ title: "Write or generate a draft first", variant: "destructive" });
+      return;
+    }
+    setPolishing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("draft-email", {
+        body: { action: "polish", draftText: replyText },
+      });
+      if (error) throw error;
+      if (data?.draft) {
+        setReplyText(data.draft);
+        toast({ title: "Email polished ✨" });
+      }
+    } catch {
+      toast({ title: "Failed to polish", variant: "destructive" });
+    } finally {
+      setPolishing(false);
+    }
+  };
+
   const handleToneAdjust = async (tone: string) => {
     if (!replyText.trim()) {
       toast({ title: "Write or generate a draft first", variant: "destructive" });
@@ -87,22 +117,30 @@ export function EmailReplyComposer({ email, mode, onClose }: EmailReplyComposerP
     setAdjustingTone(tone);
     try {
       const { data, error } = await supabase.functions.invoke("draft-email", {
-        body: {
-          action: "adjust-tone",
-          draftText: replyText,
-          tone,
-        },
+        body: { action: "adjust-tone", draftText: replyText, tone },
       });
       if (error) throw error;
       if (data?.draft) {
         setReplyText(data.draft);
         toast({ title: `Tone adjusted to ${tone}` });
       }
-    } catch (err) {
-      console.error("Tone adjust error:", err);
+    } catch {
       toast({ title: "Failed to adjust tone", variant: "destructive" });
     } finally {
       setAdjustingTone(null);
+    }
+  };
+
+  const handleVoiceToggle = () => {
+    if (speech.isListening) {
+      speech.stop();
+      // Append transcript to reply text
+      if (speech.fullTranscript.trim()) {
+        setReplyText((prev) => (prev ? `${prev} ${speech.fullTranscript}` : speech.fullTranscript));
+        speech.reset();
+      }
+    } else {
+      speech.start();
     }
   };
 
@@ -113,7 +151,6 @@ export function EmailReplyComposer({ email, mode, onClose }: EmailReplyComposerP
       return;
     }
 
-    // Undo send: 5-second delay
     setSending(true);
     const { dismiss } = toast({
       title: "Sending...",
@@ -213,11 +250,14 @@ export function EmailReplyComposer({ email, mode, onClose }: EmailReplyComposerP
           placeholder={isForward ? "Add a message..." : "Write your reply..."}
           className="min-h-[80px] max-h-[140px] bg-card/50 border-border/50 resize-none text-sm"
         />
+        {speech.isListening && speech.interimText && (
+          <p className="text-xs text-muted-foreground italic mt-1">{speech.interimText}</p>
+        )}
       </div>
 
-      {/* Tone Adjuster */}
+      {/* Tone Adjuster + Polish */}
       {replyText.trim() && (
-        <div className="flex items-center gap-1 px-4 py-1">
+        <div className="flex items-center gap-1 px-4 py-1 flex-wrap">
           <span className="text-[10px] text-muted-foreground mr-1">Tone:</span>
           {TONES.map((t) => (
             <Button
@@ -225,12 +265,23 @@ export function EmailReplyComposer({ email, mode, onClose }: EmailReplyComposerP
               variant="outline"
               size="sm"
               className="h-6 px-2 text-[10px] rounded-full"
-              disabled={!!adjustingTone || sending}
+              disabled={!!adjustingTone || sending || polishing}
               onClick={() => handleToneAdjust(t.key)}
             >
               {adjustingTone === t.key ? <Loader2 className="w-3 h-3 animate-spin" /> : t.label}
             </Button>
           ))}
+          <div className="w-px h-4 bg-border mx-1" />
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-6 px-2 text-[10px] rounded-full gap-1"
+            disabled={!!adjustingTone || sending || polishing}
+            onClick={handlePolish}
+          >
+            {polishing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
+            Polish
+          </Button>
         </div>
       )}
 
@@ -251,6 +302,21 @@ export function EmailReplyComposer({ email, mode, onClose }: EmailReplyComposerP
           </Button>
 
           <div className="w-px h-5 bg-border mx-1" />
+
+          {speech.isSupported && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={handleVoiceToggle}
+            >
+              {speech.isListening ? (
+                <MicOff className="w-3.5 h-3.5 text-destructive" />
+              ) : (
+                <Mic className="w-3.5 h-3.5 text-muted-foreground" />
+              )}
+            </Button>
+          )}
 
           <EmailTemplatesDrawer onInsert={(text) => setReplyText(text)} currentDraft={replyText} />
 

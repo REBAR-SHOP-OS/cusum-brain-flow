@@ -142,6 +142,76 @@ serve(async (req) => {
       });
     }
 
+    // ─── Action: polish ───────────────────────────────────────────
+    if (action === "polish") {
+      const { draftText } = body;
+
+      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash-lite",
+          messages: [
+            { role: "system", content: "You are an email editor. Polish the following email draft: fix grammar, tighten phrasing, improve clarity. Do NOT change the meaning, tone, or intent. Return ONLY the polished text." },
+            { role: "user", content: draftText },
+          ],
+          max_tokens: 800,
+          temperature: 0.3,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("AI gateway error:", response.status, errorText);
+        throw new Error(`AI gateway error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const polished = data.choices?.[0]?.message?.content || draftText;
+
+      return new Response(JSON.stringify({ draft: polished }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ─── Action: prompt-to-draft ────────────────────────────────────
+    if (action === "prompt-to-draft") {
+      const { prompt, recipientName, emailSubject } = body;
+
+      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash-lite",
+          messages: [
+            { role: "system", content: `You are Cassie, an AI email assistant for ${userName}${titleLine} at Rebar.Shop (Ontario Rebars Ltd.). Write a complete email body from a short prompt. Be professional and concise. Sign off with "Best regards,\\n${userName}". Return ONLY the email body text.` },
+            { role: "user", content: `Write an email${recipientName ? ` to ${recipientName}` : ""}${emailSubject ? ` about: ${emailSubject}` : ""}.\n\nWhat I want to say: ${prompt}` },
+          ],
+          max_tokens: 800,
+          temperature: 0.4,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("AI gateway error:", response.status, errorText);
+        throw new Error(`AI gateway error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const draft = data.choices?.[0]?.message?.content || "";
+
+      return new Response(JSON.stringify({ draft }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // ─── Action: adjust-tone ────────────────────────────────────────
     if (action === "adjust-tone") {
       const { draftText, tone } = body;
@@ -150,6 +220,8 @@ serve(async (req) => {
         casual: "Rewrite the following email draft in a casual, friendly tone. Keep the same meaning and information.",
         shorter: "Rewrite the following email draft to be more concise. Cut unnecessary words while keeping all key information.",
         longer: "Expand the following email draft with more detail and context. Add appropriate professional pleasantries.",
+        friendly: "Rewrite the following email draft in a warm, friendly tone. Keep the same meaning but make it personable and approachable.",
+        urgent: "Rewrite the following email draft with an urgent, action-oriented tone. Emphasize deadlines and importance. Keep the same meaning.",
       };
 
       const instruction = toneInstructions[tone] || toneInstructions.formal;

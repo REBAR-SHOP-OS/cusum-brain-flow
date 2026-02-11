@@ -1,14 +1,37 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Mail, BarChart3, Truck, Factory, Brain, Calculator, Users, Shield } from "lucide-react";
+import { ArrowRight, Mail, BarChart3, Truck, Factory, Brain, Calculator, Users, Shield, CheckCircle2 } from "lucide-react";
+import { AnimatedCounter } from "@/components/ceo/AnimatedCounter";
 import logoCoin from "@/assets/logo-coin.png";
 import brainHero from "@/assets/brain-hero.png";
+
+const STATS = [
+  { value: 10000, suffix: "+", label: "Tons Processed", prefix: "" },
+  { value: 500, suffix: "+", label: "Projects Delivered", prefix: "" },
+  { value: 99.2, suffix: "%", label: "Uptime", prefix: "", decimals: 1 },
+  { value: 17, suffix: "", label: "AI Agents", prefix: "" },
+];
+
+const FEATURES = [
+  { icon: <Calculator className="w-7 h-7" />, title: "AI Rebar Estimating", description: "Upload drawings (PDF/DWG) and get precise takeoffs using CSA G30.18 standards and the Changy Method." },
+  { icon: <Factory className="w-7 h-7" />, title: "Shop Floor Tracking", description: "Real-time machine monitoring, cut plans, bending queues, and production status for your entire floor." },
+  { icon: <Truck className="w-7 h-7" />, title: "Delivery Management", description: "Schedule routes, track drivers, capture proof-of-delivery signatures, and manage dispatch." },
+  { icon: <BarChart3 className="w-7 h-7" />, title: "Sales Pipeline & CRM", description: "Track leads, quotes, and deals with AI follow-up reminders. Never lose a rebar bid again." },
+  { icon: <Mail className="w-7 h-7" />, title: "AI-Powered Inbox", description: "Email, calls, and SMS unified. AI summarizes conversations, drafts replies, and extracts action items." },
+  { icon: <Brain className="w-7 h-7" />, title: "AI Agent Team", description: "Specialized AI agents for sales, accounting, estimating, support, social media, and more." },
+];
+
+const STEPS = [
+  { num: "01", title: "Sign Up", description: "Create your account in 60 seconds. No credit card required." },
+  { num: "02", title: "Configure", description: "Connect Gmail, QuickBooks, and set up your machines and team." },
+  { num: "03", title: "Operate", description: "AI agents start working. Track production, manage bids, and deliver." },
+];
 
 export default function Landing() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b border-border" role="banner">
+      <header className="border-b border-border sticky top-0 z-50 bg-background/95 backdrop-blur" role="banner">
         <nav className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between" aria-label="Main navigation">
           <div className="flex items-center gap-2">
             <img src={logoCoin} alt="REBAR SHOP OS logo" className="w-8 h-8 rounded-lg" width={32} height={32} />
@@ -27,123 +50,152 @@ export default function Landing() {
 
       <main>
         {/* Hero */}
-        <section className="relative py-20 px-6 overflow-hidden" aria-label="Hero">
+        <section className="relative py-24 md:py-32 px-6 overflow-hidden" aria-label="Hero">
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <img 
-              src={brainHero} 
-              alt="" 
-              className="w-full h-full object-cover opacity-[0.15]" 
-              loading="lazy"
-              aria-hidden="true"
-            />
-            <div className="absolute inset-0 bg-gradient-to-b from-background/40 via-transparent to-background" />
+            <img src={brainHero} alt="" className="w-full h-full object-cover opacity-[0.08]" loading="lazy" aria-hidden="true" />
+            <div className="absolute inset-0 bg-gradient-to-b from-background/60 via-background/30 to-background" />
           </div>
-          <div className="relative max-w-4xl mx-auto text-center">
-            <h1 className="text-4xl md:text-5xl font-bold text-foreground mb-6">
-              AI-Powered Rebar Fabrication & Shop Management Software
+          <div className="relative max-w-5xl mx-auto text-center">
+            <h1 className="text-4xl md:text-6xl font-extrabold text-foreground mb-6 leading-tight tracking-tight">
+              AI-Powered Rebar Fabrication<br className="hidden md:block" /> & Shop Management
             </h1>
-            <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
-              REBAR SHOP OS streamlines rebar estimating, shop floor production, delivery tracking,
-              sales pipeline, and accounting — all powered by AI agents built for reinforcing steel contractors.
+            <p className="text-lg md:text-xl text-muted-foreground mb-10 max-w-2xl mx-auto">
+              From takeoff to delivery — streamline estimating, production, sales, and accounting
+              with AI agents built for reinforcing steel contractors.
             </p>
-            <div className="flex items-center justify-center gap-4">
+            <div className="flex items-center justify-center gap-4 mb-16">
               <Link to="/signup">
-                <Button size="lg">Start Free <ArrowRight className="w-4 h-4 ml-2" /></Button>
+                <Button size="lg" className="text-base px-8">Start Free <ArrowRight className="w-4 h-4 ml-2" /></Button>
               </Link>
               <a href="https://rebar.shop" target="_blank" rel="noopener noreferrer">
-                <Button size="lg" variant="outline">Visit Rebar.shop</Button>
+                <Button size="lg" variant="outline" className="text-base px-8">Visit Rebar.shop</Button>
               </a>
             </div>
+
+            {/* Animated Stats */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-3xl mx-auto">
+              {STATS.map((s) => (
+                <div key={s.label} className="text-center">
+                  <div className="text-3xl md:text-4xl font-bold text-primary">
+                    <AnimatedCounter value={s.value} prefix={s.prefix} suffix={s.suffix} decimals={s.decimals || 0} />
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-1">{s.label}</p>
+                </div>
+              ))}
+            </div>
           </div>
         </section>
 
-        {/* Core Features */}
-        <section className="py-16 px-6 bg-muted/30" aria-label="Features">
+        {/* Feature Grid */}
+        <section className="py-20 px-6 bg-muted/30" aria-label="Features">
           <div className="max-w-6xl mx-auto">
-            <h2 className="text-2xl font-bold text-foreground text-center mb-4">
-              Everything Rebar Fabricators Need to Operate
+            <h2 className="text-3xl font-bold text-foreground text-center mb-4">
+              Everything Rebar Fabricators Need
             </h2>
-            <p className="text-muted-foreground text-center mb-12 max-w-2xl mx-auto">
-              From takeoff to delivery — manage your entire rebar shop with AI-powered agents
-              that follow CSA G30.18 and RSIC standards.
+            <p className="text-muted-foreground text-center mb-14 max-w-2xl mx-auto">
+              Six integrated modules powered by AI agents that follow CSA G30.18 and RSIC standards.
             </p>
-            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <FeatureCard 
-                icon={<Calculator className="w-6 h-6" />}
-                title="AI Rebar Estimating"
-                description="Upload drawings (PDF/DWG) and get precise takeoffs using CSA G30.18 standards and the Changy Method."
-              />
-              <FeatureCard 
-                icon={<Factory className="w-6 h-6" />}
-                title="Shop Floor Tracking"
-                description="Real-time machine monitoring, cut plans, bending queues, and production status for your entire floor."
-              />
-              <FeatureCard 
-                icon={<Truck className="w-6 h-6" />}
-                title="Delivery Management"
-                description="Schedule routes, track drivers, capture proof-of-delivery signatures, and manage dispatch."
-              />
-              <FeatureCard 
-                icon={<BarChart3 className="w-6 h-6" />}
-                title="Sales Pipeline & CRM"
-                description="Track leads, quotes, and deals with AI follow-up reminders. Never lose a rebar bid again."
-              />
-            </div>
-            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mt-6">
-              <FeatureCard 
-                icon={<Mail className="w-6 h-6" />}
-                title="Unified Inbox"
-                description="Email, phone calls, and SMS in one place. AI summarizes conversations and extracts action items."
-              />
-              <FeatureCard 
-                icon={<Brain className="w-6 h-6" />}
-                title="AI Agent Team"
-                description="9 specialized AI agents for sales, accounting, estimating, support, social media, and more."
-              />
-              <FeatureCard 
-                icon={<Users className="w-6 h-6" />}
-                title="Team Accountability"
-                description="Daily briefings, KPI tracking, and automated follow-up reminders for every team member."
-              />
-              <FeatureCard 
-                icon={<Shield className="w-6 h-6" />}
-                title="QuickBooks Integration"
-                description="Sync invoices, track AR aging, and manage collections — all connected to your accounting."
-              />
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {FEATURES.map((f) => (
+                <article key={f.title} className="p-7 rounded-xl border border-border bg-card hover:shadow-lg transition-shadow">
+                  <div className="w-14 h-14 rounded-xl bg-primary/10 flex items-center justify-center text-primary mb-5" aria-hidden="true">
+                    {f.icon}
+                  </div>
+                  <h3 className="text-lg font-semibold text-foreground mb-2">{f.title}</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{f.description}</p>
+                </article>
+              ))}
             </div>
           </div>
         </section>
 
-        {/* Industries / Use Cases */}
+        {/* Mid-page CTA */}
+        <section className="py-16 px-6 bg-primary/5" aria-label="Call to action">
+          <div className="max-w-3xl mx-auto text-center">
+            <h2 className="text-2xl font-bold text-foreground mb-4">Ready to modernize your rebar shop?</h2>
+            <p className="text-muted-foreground mb-8">Join fabricators across Ontario using AI to cut waste, speed up production, and win more bids.</p>
+            <Link to="/signup">
+              <Button size="lg" className="text-base px-10">Get Started Free <ArrowRight className="w-4 h-4 ml-2" /></Button>
+            </Link>
+          </div>
+        </section>
+
+        {/* How It Works */}
+        <section className="py-20 px-6" aria-label="How it works">
+          <div className="max-w-5xl mx-auto">
+            <h2 className="text-3xl font-bold text-foreground text-center mb-14">
+              Up and Running in 3 Steps
+            </h2>
+            <div className="grid md:grid-cols-3 gap-8">
+              {STEPS.map((s) => (
+                <div key={s.num} className="text-center">
+                  <div className="w-16 h-16 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-2xl font-bold mx-auto mb-5">
+                    {s.num}
+                  </div>
+                  <h3 className="text-lg font-semibold text-foreground mb-2">{s.title}</h3>
+                  <p className="text-sm text-muted-foreground">{s.description}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Trust / Standards */}
+        <section className="py-16 px-6 bg-muted/30" aria-label="Trust">
+          <div className="max-w-4xl mx-auto text-center">
+            <h2 className="text-2xl font-bold text-foreground mb-8">Built for Canadian Steel Standards</h2>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+              {[
+                "CSA G30.18 Compliant",
+                "RSIC 2018 Standards",
+                "QuickBooks Integration",
+                "Gmail & Calendar Sync",
+              ].map((badge) => (
+                <div key={badge} className="flex items-center gap-2 justify-center p-4 rounded-lg border border-border bg-card">
+                  <CheckCircle2 className="w-5 h-5 text-primary shrink-0" />
+                  <span className="text-sm font-medium text-foreground">{badge}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Use Cases */}
         <section className="py-16 px-6" aria-label="Use cases">
           <div className="max-w-4xl mx-auto text-center">
             <h2 className="text-2xl font-bold text-foreground mb-4">
               Built for Reinforcing Steel Contractors in Ontario
             </h2>
             <p className="text-muted-foreground mb-8 max-w-2xl mx-auto">
-              Whether you're a rebar fabricator, steel detailer, or construction supplier — REBAR SHOP OS
-              connects with Gmail, Google Calendar, QuickBooks, RingCentral, and more to keep your
-              entire operation running smoothly.
+              Whether you're a rebar fabricator, steel detailer, or construction supplier.
             </p>
             <div className="grid md:grid-cols-3 gap-6 text-left">
-              <div className="p-5 rounded-lg border border-border bg-card">
-                <h3 className="font-semibold text-foreground mb-2">Rebar Fabricators</h3>
-                <p className="text-sm text-muted-foreground">
-                  Manage cut plans, bending schedules, inventory, and machine queues from one dashboard.
-                </p>
-              </div>
-              <div className="p-5 rounded-lg border border-border bg-card">
-                <h3 className="font-semibold text-foreground mb-2">Steel Detailers</h3>
-                <p className="text-sm text-muted-foreground">
-                  Upload structural drawings and get AI-powered rebar takeoffs following RSIC 2018 standards.
-                </p>
-              </div>
-              <div className="p-5 rounded-lg border border-border bg-card">
-                <h3 className="font-semibold text-foreground mb-2">Construction Suppliers</h3>
-                <p className="text-sm text-muted-foreground">
-                  Track orders, manage deliveries, and keep customers informed with real-time status updates.
-                </p>
-              </div>
+              {[
+                { title: "Rebar Fabricators", desc: "Manage cut plans, bending schedules, inventory, and machine queues from one dashboard." },
+                { title: "Steel Detailers", desc: "Upload structural drawings and get AI-powered rebar takeoffs following RSIC 2018 standards." },
+                { title: "Construction Suppliers", desc: "Track orders, manage deliveries, and keep customers informed with real-time status updates." },
+              ].map((c) => (
+                <div key={c.title} className="p-6 rounded-xl border border-border bg-card">
+                  <h3 className="font-semibold text-foreground mb-2">{c.title}</h3>
+                  <p className="text-sm text-muted-foreground">{c.desc}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Bottom CTA */}
+        <section className="py-20 px-6 bg-primary/5" aria-label="Final call to action">
+          <div className="max-w-3xl mx-auto text-center">
+            <h2 className="text-3xl font-bold text-foreground mb-4">Start Building Smarter Today</h2>
+            <p className="text-muted-foreground mb-8">No credit card required. Set up in under 5 minutes.</p>
+            <div className="flex items-center justify-center gap-4">
+              <Link to="/signup">
+                <Button size="lg" className="text-base px-10">Create Free Account <ArrowRight className="w-4 h-4 ml-2" /></Button>
+              </Link>
+              <Link to="/login">
+                <Button size="lg" variant="outline" className="text-base px-8">Sign In</Button>
+              </Link>
             </div>
           </div>
         </section>
@@ -167,17 +219,5 @@ export default function Landing() {
         </div>
       </footer>
     </div>
-  );
-}
-
-function FeatureCard({ icon, title, description }: { icon: React.ReactNode; title: string; description: string }) {
-  return (
-    <article className="p-6 rounded-lg border border-border bg-card">
-      <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center text-primary mb-4" aria-hidden="true">
-        {icon}
-      </div>
-      <h3 className="font-semibold text-foreground mb-2">{title}</h3>
-      <p className="text-sm text-muted-foreground">{description}</p>
-    </article>
   );
 }
