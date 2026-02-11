@@ -1,29 +1,37 @@
 
 
-## Vizzy Alerts CEO When QuickBooks Is Disconnected
+## Revert Vizzy to Avatar-Centered Voice UI (No Chat Transcript)
 
 ### What Changes
-When Vizzy loads business data and detects that QuickBooks is not connected (falling back to the mirror table), she will proactively tell the CEO about it during the conversation.
 
-### How It Works
+Replace the current chat-bubble layout with the original centered avatar design shown in your screenshot: a large brain icon in the center, "Vizzy is speaking..." / "Listening..." status text below it, dark overlay background -- while keeping all the new features (mute, volume, reconnect, timer, quotation drafting).
 
-1. **Track QB connection status in the snapshot** -- Add a `qbConnected: boolean` field to the `VizzyBusinessSnapshot` interface in `src/hooks/useVizzyContext.ts`. Set it to `true` when the QB edge function returns data, `false` when it falls back to the mirror table.
+### Layout
 
-2. **Include the warning in Vizzy's context prompt** -- Update `src/lib/vizzyContext.ts` (`buildVizzyContext`) to check `snap.financials.qbConnected`. When `false`, inject a prominent warning block like:
+- **Full-screen dark overlay** with blurred background
+- **Centered brain avatar** (large circle, pulsing ring when speaking)
+- **Status text** below avatar: "Connecting...", "Vizzy is speaking...", "Listening...", "Reconnecting..."
+- **Close (X) button** top-right corner (red circle, like screenshot)
+- **Bottom control bar** with: Mute mic, Volume slider, Reconnect button, Timer display, Camera button (bottom-left)
+- **No chat transcript** -- remove all the message bubbles and scroll area
+- **Quotation cards** appear as a floating overlay/dialog in the center when Vizzy drafts one, with Approve/Dismiss buttons
 
-```
-⚠️ QUICKBOOKS DISCONNECTED
-Financial data is loaded from a cached mirror — it may be stale.
-IMPORTANT: Tell the CEO that QuickBooks needs to be reconnected
-via Settings → Integrations. Mention this early in the conversation.
-```
+### Technical Details
 
-3. **No change when QB is connected** -- When `qbConnected` is `true`, no warning appears and Vizzy behaves as normal with live data.
+**File: `src/pages/VizzyPage.tsx`** (full rewrite of the UI portion only, logic stays)
+
+1. Remove the header bar, chat transcript scroll area, and bottom status bar
+2. Replace with:
+   - Fixed full-screen container with `bg-black/90 backdrop-blur`
+   - Centered `motion.div` for the brain avatar with animated ring (scales/glows when `conversation.isSpeaking`)
+   - Status label below avatar
+   - Red X button positioned top-right
+   - Bottom toolbar row with mic mute, volume, reconnect, timer icons
+   - Camera button bottom-left (for photo analysis)
+3. Quotation card renders as a centered floating card (like a modal overlay) instead of inline chat bubble
+4. All existing logic preserved: transcript tracking (kept in refs for memory/persistence), reconnect, mute, volume, quotation client tool, session save
 
 ### Files Modified
 
-- `src/hooks/useVizzyContext.ts` -- Add `qbConnected` to the snapshot interface and set it based on the QB fetch result.
-- `src/lib/vizzyContext.ts` -- Add a conditional warning section in the context string when `qbConnected` is `false`.
+- `src/pages/VizzyPage.tsx` -- Rewrite the render/return JSX to match the avatar-centered design; keep all hooks and logic intact
 
-### Result
-Next time Vizzy starts a session and QuickBooks is disconnected, she will proactively say something like: "Hey boss, heads up — QuickBooks isn't connected right now. I'm using cached financial data, so the numbers might be a bit stale. You can reconnect it in Settings under Integrations."
