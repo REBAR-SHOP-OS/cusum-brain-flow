@@ -1,10 +1,12 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useConversation } from "@elevenlabs/react";
 import { Mic, X } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { AnimatePresence, motion } from "framer-motion";
+import { useQuickBooksData } from "@/hooks/useQuickBooksData";
+import { buildVizzyContext } from "@/lib/vizzyContext";
 
 const ALLOWED_EMAIL = "sattar@rebar.shop";
 
@@ -19,6 +21,15 @@ export function VoiceVizzy() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const qb = useQuickBooksData();
+  const qbLoadedRef = useRef(false);
+
+  // Pre-load QB data once
+  useEffect(() => {
+    if (!user || user.email !== ALLOWED_EMAIL || qbLoadedRef.current) return;
+    qbLoadedRef.current = true;
+    qb.loadAll().catch(() => {});
+  }, [user]);
 
   const conversation = useConversation({
     onConnect: () => console.warn("Vizzy voice connected"),
@@ -52,6 +63,17 @@ export function VoiceVizzy() {
       if (error || !data?.token) throw new Error(error?.message ?? "No token received");
 
       await conversation.startSession({ conversationToken: data.token, connectionType: "webrtc" });
+
+      // Inject live financial context
+      const ctx = buildVizzyContext({
+        totalReceivable: qb.totalReceivable,
+        totalPayable: qb.totalPayable,
+        overdueInvoices: qb.overdueInvoices,
+        overdueBills: qb.overdueBills,
+        accounts: qb.accounts,
+        payments: qb.payments,
+      });
+      conversation.sendContextualUpdate(ctx);
     } catch (err) {
       console.error("Failed to start Vizzy voice:", err);
       setIsConnecting(false);

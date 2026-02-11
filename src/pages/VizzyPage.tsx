@@ -6,6 +6,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
+import { useQuickBooksData } from "@/hooks/useQuickBooksData";
+import { buildVizzyContext } from "@/lib/vizzyContext";
 
 const ALLOWED_EMAIL = "sattar@rebar.shop";
 
@@ -21,6 +23,7 @@ export default function VizzyPage() {
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
   const [status, setStatus] = useState<"starting" | "connected" | "error">("starting");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const { loadAll, totalReceivable, totalPayable, overdueInvoices, overdueBills, accounts, payments } = useQuickBooksData();
   const startedRef = useRef(false);
 
   const conversation = useConversation({
@@ -59,10 +62,18 @@ export default function VizzyPage() {
 
     (async () => {
       try {
-        await navigator.mediaDevices.getUserMedia({ audio: true });
+        // Load QB data and start voice session in parallel
+        const [, micStream] = await Promise.all([
+          loadAll().catch(() => {}),
+          navigator.mediaDevices.getUserMedia({ audio: true }),
+        ]);
         const { data, error } = await supabase.functions.invoke("elevenlabs-conversation-token");
         if (error || !data?.token) throw new Error(error?.message ?? "No token received");
         await conversation.startSession({ conversationToken: data.token, connectionType: "webrtc" });
+
+        // Inject live financial context
+        const ctx = buildVizzyContext({ totalReceivable, totalPayable, overdueInvoices, overdueBills, accounts, payments });
+        conversation.sendContextualUpdate(ctx);
       } catch (err) {
         console.error("Failed to start Vizzy voice:", err);
         setStatus("error");
