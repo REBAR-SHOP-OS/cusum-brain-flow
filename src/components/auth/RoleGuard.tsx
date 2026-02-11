@@ -52,9 +52,7 @@ export function RoleGuard({ children }: RoleGuardProps) {
   // For external users, check if they're a linked customer
   const { hasAccess: isLinkedCustomer, isLoading: customerLoading } = useCustomerPortalData();
 
-  if (isLoading || roles.length === 0) return <>{children}</>;
-
-  // External user routing
+  // External user routing — must run BEFORE role-based checks
   if (!isInternal && email) {
     // Still loading customer link — don't flash wrong page
     if (customerLoading) return <>{children}</>;
@@ -74,6 +72,9 @@ export function RoleGuard({ children }: RoleGuardProps) {
     }
     return <>{children}</>;
   }
+
+  // Internal users: wait for roles to load
+  if (isLoading) return <>{children}</>;
 
   // If user has any elevated role, allow everything
   if (isAdmin) return <>{children}</>;
