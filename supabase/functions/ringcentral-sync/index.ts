@@ -109,8 +109,17 @@ async function getAccessTokenForUser(
     });
 
     if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`RingCentral token refresh failed: ${error}`);
+      const errorText = await response.text();
+      // If refresh token is expired/revoked, clean up and treat as disconnected
+      if (errorText.includes("invalid_grant") || errorText.includes("Token not found")) {
+        console.warn("RingCentral refresh token expired, clearing stale tokens for user", userId);
+        await supabaseAdmin
+          .from("user_ringcentral_tokens")
+          .delete()
+          .eq("user_id", userId);
+        throw new Error("not_connected");
+      }
+      throw new Error(`RingCentral token refresh failed: ${errorText}`);
     }
 
     const tokens = await response.json();
