@@ -89,7 +89,14 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0 }
   const computedPiecesPerBar = runPlan?.piecesPerBar || (currentItem ? Math.floor(selectedStockLength / currentItem.cut_length_mm) : 1);
   const totalPieces = currentItem?.total_pieces || 0;
   const completedPieces = currentItem?.completed_pieces || 0;
-  const remainingPieces = totalPieces - completedPieces;
+
+  // SINGLE SOURCE OF TRUTH: during a run, use snapshot + local tracker;
+  // when idle, use whatever the DB/realtime says
+  const effectiveCompleted = completedAtRunStart != null
+    ? completedAtRunStart + slotTracker.totalCutsDone
+    : completedPieces;
+
+  const remainingPieces = totalPieces - effectiveCompleted;
   const barsStillNeeded = computedPiecesPerBar > 0 ? Math.ceil(remainingPieces / computedPiecesPerBar) : 0;
   const barsForThisRun = operatorBars ?? runPlan?.barsThisRun ?? barsStillNeeded;
   const isDone = remainingPieces <= 0;
@@ -466,7 +473,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0 }
               <CardContent className="p-4 text-center">
                 <Hash className="w-5 h-5 text-secondary-foreground mx-auto mb-2" />
                 <p className="text-3xl font-black font-mono text-foreground">
-                  {(completedAtRunStart != null ? completedAtRunStart : completedPieces) + slotTracker.totalCutsDone}
+                  {effectiveCompleted}
                   <span className="text-lg text-muted-foreground">/{totalPieces}</span>
                 </p>
                 <p className="text-[10px] text-muted-foreground tracking-wider uppercase mt-1">Pieces Done</p>
