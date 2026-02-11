@@ -9,6 +9,7 @@ import { useNavigate } from "react-router-dom";
 import { Mic } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LiveChatWidget } from "./LiveChatWidget";
+import { VoiceChatOverlay } from "@/components/chat/VoiceChatOverlay";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -52,6 +53,7 @@ export function AppLayout({ children }: AppLayoutProps) {
 
         {/* Live Chat Widget */}
         <LiveChatWidget />
+        <VoiceChatOverlay />
 
         {/* Floating mic → opens /vizzy (sattar only) */}
         {showVizzyButton && (
