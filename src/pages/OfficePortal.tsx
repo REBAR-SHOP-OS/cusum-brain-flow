@@ -12,10 +12,6 @@ import { InventoryView } from "@/components/office/InventoryView";
 import { OptimizationView } from "@/components/office/OptimizationView";
 import { TagsExportView } from "@/components/office/TagsExportView";
 import { PackingSlipsView } from "@/components/office/PackingSlipsView";
-import { PayrollAuditView } from "@/components/office/PayrollAuditView";
-import { LiveMonitorView } from "@/components/office/LiveMonitorView";
-import { DiagnosticLogView } from "@/components/office/DiagnosticLogView";
-import { MemberAreaView } from "@/components/office/MemberAreaView";
 import { TranscribeView } from "@/components/office/TranscribeView";
 
 const sectionComponents: Record<OfficeSection, React.ComponentType> = {
@@ -28,10 +24,6 @@ const sectionComponents: Record<OfficeSection, React.ComponentType> = {
   "optimization": OptimizationView,
   "tags-export": TagsExportView,
   "packing-slips": PackingSlipsView,
-  "payroll-audit": PayrollAuditView,
-  "live-monitor": LiveMonitorView,
-  "diagnostic-log": DiagnosticLogView,
-  "member-area": MemberAreaView,
 };
 
 export default function OfficePortal() {

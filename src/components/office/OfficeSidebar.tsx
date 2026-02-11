@@ -27,11 +27,7 @@ export type OfficeSection =
   | "inventory"
   | "optimization"
   | "tags-export"
-  | "packing-slips"
-  | "payroll-audit"
-  | "live-monitor"
-  | "diagnostic-log"
-  | "member-area";
+  | "packing-slips";
 
 interface OfficeSidebarProps {
   active: OfficeSection;
@@ -49,11 +45,7 @@ const officeTools: { id: OfficeSection; label: string; icon: React.ElementType }
   { id: "packing-slips", label: "Packing Slips", icon: FileBox },
 ];
 
-const bottomItems: { id: OfficeSection; label: string; icon: React.ElementType }[] = [
-  { id: "live-monitor", label: "Live Monitor", icon: Activity },
-  { id: "diagnostic-log", label: "Diagnostic Log", icon: Terminal },
-  { id: "member-area", label: "Member Area", icon: Users },
-];
+const bottomItems: { id: OfficeSection; label: string; icon: React.ElementType }[] = [];
 
 export function OfficeSidebar({ active, onNavigate }: OfficeSidebarProps) {
   return (
