@@ -121,10 +121,17 @@ function VoiceVizzyInner({ userId }: { userId: string }) {
         overrides: { agent: { language: "" } },
       });
 
-      const snap = await loadFullContext();
-      if (snap) {
-        conversation.sendContextualUpdate(buildVizzyContext(snap));
-      }
+      // Delay contextual update to avoid "Invalid message received" error
+      setTimeout(async () => {
+        try {
+          const snap = await loadFullContext();
+          if (snap && sessionActiveRef.current) {
+            conversation.sendContextualUpdate(buildVizzyContext(snap));
+          }
+        } catch (e) {
+          console.warn("Failed to send Vizzy context:", e);
+        }
+      }, 3000);
     } catch (err) {
       console.error("Failed to start Vizzy voice:", err);
       setIsConnecting(false);
