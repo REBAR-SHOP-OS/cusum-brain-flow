@@ -1,38 +1,31 @@
 
 
-## Fix: Switch Vizzy from WebRTC to WebSocket Connection
+## Fix: Vizzy's Empty Business Context (Race Condition)
 
 ### Root Cause
-Every connection attempt fails because `livekit.rtc.elevenlabs.io/rtc/v1/validate` returns **404**. This is the WebRTC validation endpoint. The WebSocket transport uses a different server path entirely and should work.
+`useVizzyContext` calls `qb.loadAll()` which sets React state internally (`setInvoices(...)`, etc.), then immediately reads `qb.totalReceivable`, `qb.accounts`, etc. But React state updates don't take effect until the next render -- so every value is still at its initial default (0, empty arrays). Vizzy receives a context full of zeros and "None" entries, so she makes things up or gives generic answers.
 
-### What Changes
+### The Fix
+Bypass the QuickBooks React hook entirely inside `loadFullContext`. Instead, call the QuickBooks edge function directly from Supabase to get raw financial data, then build the snapshot from those raw results -- no React state dependency.
 
-**1. Edge function: Switch from conversation token to signed URL**
+### Changes
 
-The WebSocket connection uses a `signedUrl` instead of a `conversationToken`. The API endpoint is different:
-- Current (WebRTC): `https://api.elevenlabs.io/v1/convai/conversation/token`
-- New (WebSocket): `https://api.elevenlabs.io/v1/convai/conversation/get-signed-url`
+**File: `src/hooks/useVizzyContext.ts`**
 
-File: `supabase/functions/elevenlabs-conversation-token/index.ts`
-- Change the ElevenLabs API call to use `get-signed-url` endpoint
-- Return `signed_url` instead of `token`
+Replace the QuickBooks hook dependency with a direct Supabase function call:
 
-**2. VoiceVizzy.tsx: Use signedUrl with websocket**
+1. Remove the `useQuickBooksData()` import/usage from this hook
+2. Inside `loadFullContext`, call `supabase.functions.invoke("quickbooks-oauth", { body: { action: "dashboard-summary" } })` directly to get invoices, bills, payments, and accounts as raw data
+3. Compute `totalReceivable`, `totalPayable`, `overdueInvoices`, `overdueBills` from those raw arrays right there -- not from React state
+4. Remove the `loadedRef` cache so context is always fresh on each session start
 
-File: `src/components/vizzy/VoiceVizzy.tsx`
-- Change `startSession` call to use `signedUrl` instead of `conversationToken`
-- Change `connectionType` from `"webrtc"` to `"websocket"`
-- Update the response field name from `data.token` to `data.signed_url`
+**File: `src/components/vizzy/VoiceVizzy.tsx`**
 
-**3. VizzyPage.tsx: Same change**
+Remove the pre-load `useEffect` that eagerly calls `loadFullContext()` on mount (since there's no longer a cache to warm, this just wastes a call). The context will be loaded fresh when the session actually starts.
 
-File: `src/pages/VizzyPage.tsx`
-- Same `signedUrl` + `websocket` changes as VoiceVizzy
-
-### Why This Should Work
-WebSocket and WebRTC use completely different server infrastructure. The 404 is specific to the LiveKit RTC server. WebSocket connections go through a standard WebSocket endpoint that is not affected.
+### Why This Works
+By reading raw API data instead of React state values, we guarantee the snapshot has actual numbers. No more race condition, no more zeros, no more hallucinated data.
 
 ### Files Modified
-- `supabase/functions/elevenlabs-conversation-token/index.ts`
+- `src/hooks/useVizzyContext.ts`
 - `src/components/vizzy/VoiceVizzy.tsx`
-- `src/pages/VizzyPage.tsx`
