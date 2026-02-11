@@ -47,16 +47,19 @@ export function FixRequestQueue() {
     toast.success("Marked as resolved");
   };
 
-  if (requests.length === 0) return null;
-
   return (
     <div className="rounded-xl border border-border bg-card p-4 space-y-3">
       <div className="flex items-center gap-2">
         <Bug className="w-5 h-5 text-destructive" />
         <h3 className="font-semibold text-sm">Vizzy Fix Requests</h3>
-        <span className="ml-auto text-xs text-muted-foreground">{requests.length} open</span>
+        {requests.length > 0 && (
+          <span className="ml-auto text-xs text-muted-foreground">{requests.length} open</span>
+        )}
       </div>
 
+      {requests.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No open fix requests — tell Vizzy to log one from the shop floor.</p>
+      ) : (
       <div className="space-y-2 max-h-64 overflow-y-auto">
         {requests.map((req) => (
           <div key={req.id} className="flex items-start gap-3 rounded-lg bg-muted/50 p-3 text-sm">
@@ -88,6 +91,7 @@ export function FixRequestQueue() {
           </div>
         ))}
       </div>
+      )}
     </div>
   );
 }
