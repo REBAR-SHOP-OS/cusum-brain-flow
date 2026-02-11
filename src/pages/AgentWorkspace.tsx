@@ -287,7 +287,7 @@ export default function AgentWorkspace() {
           </div>
         ) : (
           <>
-            <ChatThread messages={messages} />
+            <ChatThread messages={messages} isLoading={isLoading} />
             <ChatInput
               onSend={handleSend}
               placeholder={config.placeholder}
