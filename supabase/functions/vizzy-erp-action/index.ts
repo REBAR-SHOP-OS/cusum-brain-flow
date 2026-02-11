@@ -109,6 +109,19 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case "log_fix_request": {
+        const { description, affected_area, photo_url } = params;
+        const { data, error } = await supabaseAdmin.from("vizzy_fix_requests").insert({
+          user_id: userId,
+          description,
+          affected_area: affected_area || null,
+          photo_url: photo_url || null,
+        }).select().single();
+        if (error) throw error;
+        result = { success: true, message: `Fix request logged: ${description.slice(0, 60)}`, data };
+        break;
+      }
+
       default:
         return new Response(JSON.stringify({ error: `Unknown action: ${action}` }), { status: 400, headers: corsHeaders });
     }

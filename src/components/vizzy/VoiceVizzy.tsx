@@ -98,6 +98,9 @@ function VoiceVizzyInner({ userId }: { userId: string }) {
       log_event: async (params: { entity_type: string; event_type: string; description: string }) => {
         return executeErpAction("create_event", `Log event: ${params.description}`, params);
       },
+      log_fix_request: async (params: { description: string; affected_area?: string }) => {
+        return executeErpAction("log_fix_request", `Log fix request: ${params.description}`, params);
+      },
     },
     onConnect: () => {
       sessionActiveRef.current = true;
