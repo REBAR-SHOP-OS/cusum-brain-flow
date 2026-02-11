@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useConversation } from "@elevenlabs/react";
-import { X, ArrowLeft, Mic, MicOff, Volume2, WifiOff, Phone, Send, FileText, Check, XCircle } from "lucide-react";
+import { X, Mic, MicOff, Volume2, WifiOff, Camera } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
@@ -11,6 +11,7 @@ import { buildVizzyContext } from "@/lib/vizzyContext";
 import type { VizzyBusinessSnapshot } from "@/hooks/useVizzyContext";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
+import { FileText, Check, XCircle } from "lucide-react";
 
 const ALLOWED_EMAIL = "sattar@rebar.shop";
 const MAX_RETRIES = 2;
@@ -41,7 +42,7 @@ export default function VizzyPage() {
   const [volume, setVolume] = useState(80);
   const [showVolume, setShowVolume] = useState(false);
   const [elapsed, setElapsed] = useState(0);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const [activeQuotation, setActiveQuotation] = useState<{ id: string; draft: QuotationDraft } | null>(null);
   const startedRef = useRef(false);
   const sessionActiveRef = useRef(false);
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -94,15 +95,16 @@ export default function VizzyPage() {
   const reconnectRef = useRef<() => void>(() => {});
 
   const addQuotationCard = useCallback((draft: QuotationDraft) => {
+    const id = crypto.randomUUID();
     const entry: TranscriptEntry = {
       role: "agent",
       text: `Quotation draft for ${draft.customerName}`,
-      id: crypto.randomUUID(),
+      id,
       type: "quotation",
       quotation: draft,
     };
     setTranscript((prev) => { const next = [...prev, entry]; transcriptRef.current = next; return next; });
-    setTimeout(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" }), 50);
+    setActiveQuotation({ id, draft });
   }, []);
 
   const conversation = useConversation({
@@ -141,7 +143,6 @@ export default function VizzyPage() {
       }
       if (retryCountRef.current < MAX_RETRIES) {
         retryCountRef.current += 1;
-        console.warn(`Vizzy dropped, retrying (${retryCountRef.current}/${MAX_RETRIES})...`);
         setStatus("reconnecting");
         setTimeout(() => reconnectRef.current(), 1500);
       } else {
@@ -167,7 +168,6 @@ export default function VizzyPage() {
         };
         setTranscript((prev) => { const next = [...prev, entry]; transcriptRef.current = next; return next; });
       }
-      setTimeout(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" }), 50);
     },
     onError: (error: any) => {
       console.error("Vizzy voice error:", error);
@@ -250,6 +250,7 @@ export default function VizzyPage() {
       transcriptRef.current = next;
       return next;
     });
+    setActiveQuotation(null);
     if (newStatus === "approved") {
       conversation.sendContextualUpdate(`CEO APPROVED the quotation draft. Proceed to finalize and send it.`);
     } else {
@@ -265,288 +266,195 @@ export default function VizzyPage() {
     );
   }
 
+  const statusLabel =
+    status === "starting" ? "Connecting..." :
+    status === "reconnecting" ? "Reconnecting..." :
+    status === "error" ? "Connection lost" :
+    conversation.isSpeaking ? "Vizzy is speaking..." : "Listening...";
+
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col bg-background">
-      {/* Header bar */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-card">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate("/home")}
-            className="p-2 rounded-lg hover:bg-muted transition-colors"
-            aria-label="Back"
-          >
-            <ArrowLeft className="w-5 h-5 text-foreground" />
-          </button>
-          <div className="flex items-center gap-2">
-            <div className={cn(
-              "w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center ring-2 transition-all",
-              conversation.isSpeaking ? "ring-primary shadow-lg" : "ring-primary/30"
-            )}>
-              <span className="text-lg">🧠</span>
-            </div>
-            <div>
-              <h1 className="text-sm font-semibold text-foreground">Vizzy</h1>
-              <p className="text-xs text-muted-foreground">
-                {status === "starting" && "Connecting..."}
-                {status === "reconnecting" && "Reconnecting..."}
-                {status === "error" && "Disconnected"}
-                {status === "connected" && (conversation.isSpeaking ? "Speaking" : "Listening")}
-              </p>
-            </div>
-          </div>
-        </div>
+    <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/90 backdrop-blur-md">
+      {/* Close button — top right */}
+      <button
+        onClick={stop}
+        className="absolute top-5 right-5 w-10 h-10 rounded-full bg-destructive flex items-center justify-center hover:bg-destructive/80 transition-colors z-10"
+        aria-label="Close"
+      >
+        <X className="w-5 h-5 text-destructive-foreground" />
+      </button>
 
-        <div className="flex items-center gap-2">
-          {/* Timer */}
-          {status === "connected" && (
-            <span className="text-xs tabular-nums text-muted-foreground font-mono bg-muted px-2 py-1 rounded">
-              {formatTime(elapsed)}
-            </span>
-          )}
-
-          {/* Volume */}
-          <div className="relative">
-            <button
-              onClick={() => setShowVolume(!showVolume)}
-              className="p-2 rounded-lg hover:bg-muted transition-colors"
-              aria-label="Volume"
-            >
-              <Volume2 className="w-4 h-4 text-foreground" />
-            </button>
-            <AnimatePresence>
-              {showVolume && (
-                <motion.div
-                  initial={{ opacity: 0, y: -4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -4 }}
-                  className="absolute right-0 top-full mt-1 bg-popover border border-border rounded-lg p-3 shadow-lg z-10 w-40"
-                >
-                  <Slider
-                    value={[volume]}
-                    onValueChange={([v]) => setVolume(v)}
-                    min={0}
-                    max={100}
-                    step={5}
-                    className="w-full"
-                  />
-                  <p className="text-xs text-muted-foreground text-center mt-1">{volume}%</p>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-
-          {/* Mute */}
-          <button
-            onClick={() => {
-              const next = !muted;
-              setMuted(next);
-              mediaStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = !next; });
-            }}
-            className={cn(
-              "p-2 rounded-lg transition-colors",
-              muted ? "bg-destructive/20 text-destructive" : "hover:bg-muted text-foreground"
-            )}
-            aria-label={muted ? "Unmute" : "Mute"}
-          >
-            {muted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-          </button>
-
-          {/* Reconnect */}
-          {(status === "error" || status === "reconnecting") && (
-            <button
-              onClick={manualReconnect}
-              className="p-2 rounded-lg hover:bg-muted transition-colors text-foreground"
-              aria-label="Reconnect"
-            >
-              <WifiOff className="w-4 h-4" />
-            </button>
-          )}
-
-          {/* End */}
-          {(status === "connected" || status === "reconnecting") && (
-            <button
-              onClick={stop}
-              className="p-2 rounded-lg bg-destructive text-destructive-foreground hover:bg-destructive/80 transition-colors"
-              aria-label="End"
-            >
-              <Phone className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Voice activity indicator */}
+      {/* Timer — top left */}
       {status === "connected" && (
-        <div className="h-1 bg-muted">
-          <motion.div
-            className="h-full bg-primary"
-            animate={{
-              scaleX: conversation.isSpeaking ? [0.3, 1, 0.3] : muted ? 0 : 0.1,
-              opacity: conversation.isSpeaking ? 1 : 0.4,
-            }}
-            transition={{ duration: conversation.isSpeaking ? 0.8 : 0.3, repeat: conversation.isSpeaking ? Infinity : 0 }}
-            style={{ transformOrigin: "left" }}
-          />
+        <div className="absolute top-5 left-5 z-10">
+          <span className="text-sm tabular-nums text-white/60 font-mono bg-white/10 px-3 py-1.5 rounded-full">
+            {formatTime(elapsed)}
+          </span>
         </div>
       )}
 
-      {/* Chat transcript */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
-        {transcript.length === 0 && status === "connected" && (
-          <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-            <span className="text-4xl mb-3">🧠</span>
-            <p className="text-sm">Vizzy is listening. Start talking...</p>
-          </div>
-        )}
-
-        {transcript.map((entry) => {
-          // Quotation card
-          if (entry.type === "quotation" && entry.quotation) {
-            const q = entry.quotation;
-            const subtotal = q.items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
-            return (
-              <div key={entry.id} className="mr-auto max-w-[90%]">
-                <div className="bg-card border border-border rounded-xl p-4 shadow-sm">
-                  <div className="flex items-center gap-2 mb-3">
-                    <FileText className="w-4 h-4 text-primary" />
-                    <span className="text-sm font-semibold text-foreground">Quotation Draft</span>
-                    <span className={cn(
-                      "text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full font-medium",
-                      q.status === "draft" && "bg-amber-500/20 text-amber-600",
-                      q.status === "approved" && "bg-emerald-500/20 text-emerald-600",
-                      q.status === "dismissed" && "bg-destructive/20 text-destructive",
-                    )}>
-                      {q.status}
-                    </span>
-                  </div>
-                  <div className="space-y-1 text-sm">
-                    <p><span className="text-muted-foreground">Customer:</span> <span className="font-medium text-foreground">{q.customerName}</span></p>
-                    {q.projectName && <p><span className="text-muted-foreground">Project:</span> <span className="text-foreground">{q.projectName}</span></p>}
-                  </div>
-                  <div className="mt-3 border-t border-border pt-2">
-                    {q.items.map((item, idx) => (
-                      <div key={idx} className="flex justify-between text-xs py-1">
-                        <span className="text-foreground">{item.description}</span>
-                        <span className="text-muted-foreground tabular-nums">
-                          {item.quantity} × ${item.unitPrice.toFixed(2)} = ${(item.quantity * item.unitPrice).toFixed(2)}
-                        </span>
-                      </div>
-                    ))}
-                    <div className="flex justify-between text-sm font-semibold pt-2 border-t border-border mt-2">
-                      <span className="text-foreground">Total</span>
-                      <span className="text-foreground tabular-nums">${subtotal.toFixed(2)}</span>
-                    </div>
-                  </div>
-                  {q.notes && <p className="text-xs text-muted-foreground mt-2 italic">{q.notes}</p>}
-                  {q.status === "draft" && (
-                    <div className="flex gap-2 mt-3">
-                      <Button
-                        size="sm"
-                        className="gap-1 h-8 text-xs"
-                        onClick={() => updateQuotationStatus(entry.id, "approved")}
-                      >
-                        <Check className="w-3 h-3" /> Approve & Send
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="gap-1 h-8 text-xs"
-                        onClick={() => updateQuotationStatus(entry.id, "dismissed")}
-                      >
-                        <XCircle className="w-3 h-3" /> Dismiss
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
+      {/* Center avatar */}
+      <div className="flex flex-col items-center gap-6">
+        <motion.div
+          className={cn(
+            "w-32 h-32 rounded-full flex items-center justify-center",
+            "bg-gradient-to-br from-primary/30 to-primary/10",
+            "ring-4 transition-all duration-300",
+            conversation.isSpeaking
+              ? "ring-primary shadow-[0_0_60px_rgba(var(--primary),0.4)]"
+              : status === "error"
+              ? "ring-destructive/50"
+              : "ring-white/20"
+          )}
+          animate={
+            conversation.isSpeaking
+              ? { scale: [1, 1.08, 1] }
+              : status === "reconnecting"
+              ? { opacity: [0.5, 1, 0.5] }
+              : { scale: 1 }
           }
+          transition={{
+            duration: conversation.isSpeaking ? 1.5 : 2,
+            repeat: conversation.isSpeaking || status === "reconnecting" ? Infinity : 0,
+            ease: "easeInOut",
+          }}
+        >
+          <span className="text-6xl">🧠</span>
+        </motion.div>
 
-          // Regular message
-          return (
-            <div
-              key={entry.id}
-              className={cn(
-                "max-w-[80%]",
-                entry.role === "user" ? "ml-auto" : "mr-auto"
-              )}
-            >
-              <div className={cn(
-                "px-4 py-2.5 rounded-2xl text-sm",
-                entry.role === "user"
-                  ? "bg-primary text-primary-foreground rounded-br-md"
-                  : "bg-muted text-foreground rounded-bl-md"
-              )}>
-                {entry.text}
-              </div>
-              <span className="text-[10px] text-muted-foreground mt-0.5 block px-1">
-                {entry.role === "user" ? "You" : "Vizzy"}
-              </span>
-            </div>
-          );
-        })}
+        <div className="text-center">
+          <h1 className="text-xl font-semibold text-white mb-1">Vizzy</h1>
+          <p className="text-sm text-white/50">{statusLabel}</p>
+        </div>
 
-        {/* Reconnecting indicator */}
-        {status === "reconnecting" && (
-          <div className="mr-auto">
-            <div className="bg-muted px-4 py-2 rounded-2xl rounded-bl-md">
-              <motion.div
-                className="flex gap-1"
-                animate={{ opacity: [0.4, 1, 0.4] }}
-                transition={{ duration: 1.5, repeat: Infinity }}
-              >
-                <div className="w-2 h-2 rounded-full bg-primary" />
-                <div className="w-2 h-2 rounded-full bg-primary" />
-                <div className="w-2 h-2 rounded-full bg-primary" />
-              </motion.div>
-            </div>
-            <span className="text-[10px] text-muted-foreground mt-0.5 block px-1">Reconnecting...</span>
-          </div>
+        {/* Error retry */}
+        {status === "error" && (
+          <button
+            onClick={manualReconnect}
+            className="text-sm text-primary hover:underline"
+          >
+            Tap to reconnect
+          </button>
         )}
       </div>
 
-      {/* Bottom status bar */}
-      <div className="px-4 py-3 border-t border-border bg-card">
-        <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-          {status === "starting" && (
-            <>
+      {/* Quotation floating card */}
+      <AnimatePresence>
+        {activeQuotation && activeQuotation.draft.status === "draft" && (
+          <motion.div
+            initial={{ opacity: 0, y: 40, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 40, scale: 0.95 }}
+            className="absolute inset-x-4 bottom-28 max-w-md mx-auto bg-card border border-border rounded-2xl p-5 shadow-2xl z-20"
+          >
+            <div className="flex items-center gap-2 mb-3">
+              <FileText className="w-4 h-4 text-primary" />
+              <span className="text-sm font-semibold text-foreground">Quotation Draft</span>
+              <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full font-medium bg-amber-500/20 text-amber-600">
+                draft
+              </span>
+            </div>
+            <div className="space-y-1 text-sm">
+              <p><span className="text-muted-foreground">Customer:</span> <span className="font-medium text-foreground">{activeQuotation.draft.customerName}</span></p>
+              {activeQuotation.draft.projectName && (
+                <p><span className="text-muted-foreground">Project:</span> <span className="text-foreground">{activeQuotation.draft.projectName}</span></p>
+              )}
+            </div>
+            <div className="mt-3 border-t border-border pt-2">
+              {activeQuotation.draft.items.map((item, idx) => (
+                <div key={idx} className="flex justify-between text-xs py-1">
+                  <span className="text-foreground">{item.description}</span>
+                  <span className="text-muted-foreground tabular-nums">
+                    {item.quantity} × ${item.unitPrice.toFixed(2)} = ${(item.quantity * item.unitPrice).toFixed(2)}
+                  </span>
+                </div>
+              ))}
+              <div className="flex justify-between text-sm font-semibold pt-2 border-t border-border mt-2">
+                <span className="text-foreground">Total</span>
+                <span className="text-foreground tabular-nums">
+                  ${activeQuotation.draft.items.reduce((s, i) => s + i.quantity * i.unitPrice, 0).toFixed(2)}
+                </span>
+              </div>
+            </div>
+            {activeQuotation.draft.notes && (
+              <p className="text-xs text-muted-foreground mt-2 italic">{activeQuotation.draft.notes}</p>
+            )}
+            <div className="flex gap-2 mt-4">
+              <Button size="sm" className="gap-1 h-9 flex-1" onClick={() => updateQuotationStatus(activeQuotation.id, "approved")}>
+                <Check className="w-3.5 h-3.5" /> Approve & Send
+              </Button>
+              <Button size="sm" variant="outline" className="gap-1 h-9 flex-1" onClick={() => updateQuotationStatus(activeQuotation.id, "dismissed")}>
+                <XCircle className="w-3.5 h-3.5" /> Dismiss
+              </Button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Bottom control bar */}
+      <div className="absolute bottom-6 inset-x-0 flex items-center justify-center gap-4 px-6">
+        {/* Camera */}
+        <button
+          className="p-3 rounded-full bg-white/10 hover:bg-white/20 transition-colors text-white"
+          aria-label="Camera"
+        >
+          <Camera className="w-5 h-5" />
+        </button>
+
+        {/* Volume */}
+        <div className="relative">
+          <button
+            onClick={() => setShowVolume(!showVolume)}
+            className="p-3 rounded-full bg-white/10 hover:bg-white/20 transition-colors text-white"
+            aria-label="Volume"
+          >
+            <Volume2 className="w-5 h-5" />
+          </button>
+          <AnimatePresence>
+            {showVolume && (
               <motion.div
-                className="w-2 h-2 rounded-full bg-primary"
-                animate={{ scale: [1, 1.3, 1] }}
-                transition={{ duration: 1, repeat: Infinity }}
-              />
-              <span>Connecting to Vizzy...</span>
-            </>
-          )}
-          {status === "connected" && (
-            <>
-              <div className={cn(
-                "w-2 h-2 rounded-full",
-                muted ? "bg-destructive" : "bg-emerald-500"
-              )} />
-              <span>{muted ? "Microphone muted" : "Voice session active"}</span>
-            </>
-          )}
-          {status === "error" && (
-            <>
-              <div className="w-2 h-2 rounded-full bg-destructive" />
-              <span>Connection lost</span>
-              <button onClick={manualReconnect} className="text-primary hover:underline text-xs ml-2">
-                Retry
-              </button>
-            </>
-          )}
-          {status === "reconnecting" && (
-            <>
-              <motion.div
-                className="w-2 h-2 rounded-full bg-amber-500"
-                animate={{ opacity: [0.4, 1, 0.4] }}
-                transition={{ duration: 1, repeat: Infinity }}
-              />
-              <span>Reconnecting...</span>
-            </>
-          )}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 8 }}
+                className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-popover border border-border rounded-xl p-3 shadow-lg z-10 w-40"
+              >
+                <Slider
+                  value={[volume]}
+                  onValueChange={([v]) => setVolume(v)}
+                  min={0} max={100} step={5}
+                  className="w-full"
+                />
+                <p className="text-xs text-muted-foreground text-center mt-1">{volume}%</p>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
+
+        {/* Mute */}
+        <button
+          onClick={() => {
+            const next = !muted;
+            setMuted(next);
+            mediaStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = !next; });
+          }}
+          className={cn(
+            "p-3 rounded-full transition-colors",
+            muted ? "bg-destructive text-destructive-foreground" : "bg-white/10 hover:bg-white/20 text-white"
+          )}
+          aria-label={muted ? "Unmute" : "Mute"}
+        >
+          {muted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+        </button>
+
+        {/* Reconnect */}
+        {(status === "error" || status === "reconnecting") && (
+          <button
+            onClick={manualReconnect}
+            className="p-3 rounded-full bg-white/10 hover:bg-white/20 transition-colors text-white"
+            aria-label="Reconnect"
+          >
+            <WifiOff className="w-5 h-5" />
+          </button>
+        )}
       </div>
     </div>
   );
