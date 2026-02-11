@@ -1,45 +1,61 @@
 
+## Cutter and Bender Bug Audit — 4 Issues Found
 
-## Fix: Cutter Queue "Reset to 0" Race Condition
+### Bug 1: `handleCompleteRun` has stale `completedAtRunStart` (CRITICAL)
+**Location**: `CutterStationView.tsx` line 356
 
-### Root Cause (confirmed)
-Line 130 in `CutterStationView.tsx`:
+`completedAtRunStart` is NOT in the `useCallback` dependency array of `handleCompleteRun`. This means when `handleLockAndStart` sets `completedAtRunStart` to the fresh DB value, `handleCompleteRun` still holds the OLD value (null) from the previous render — because none of its listed deps changed at the same time.
+
+Line 291 then does: `const baseCompleted = completedAtRunStart ?? completedPieces` — with stale `completedAtRunStart = null`, it falls back to `completedPieces` which may also be stale. This can cause the final DB write to save the wrong `completed_pieces`.
+
+**Fix**: Add `completedAtRunStart` to the deps array on line 356.
+
+---
+
+### Bug 2: Bender DONE button doesn't refresh data (CRITICAL)
+**Location**: `BenderStationView.tsx` line 104
+
+After pressing DONE, the query is invalidated with:
 ```
-setCompletedAtRunStart(completedPieces);
-```
-`completedPieces` derives from `currentItem?.completed_pieces` (line 89), which may be stale if the realtime subscription hasn't delivered the latest DB value yet. This causes the snapshot to capture 0 (or an old value), making the next run's progress calculation start from the wrong base.
-
-### Fix (single surgical change)
-
-**File: `src/components/shopfloor/CutterStationView.tsx`**
-
-Replace line 130 with a direct DB fetch before snapshotting:
-
-```typescript
-// Line 125-131 becomes:
-const handleLockAndStart = async (stockLength: number, bars: number) => {
-  if (!currentItem) return;
-  try {
-    setIsRunning(true);
-    // Fetch fresh completed_pieces from DB to avoid stale realtime data
-    const { data: freshRow } = await supabase
-      .from("cut_plan_items")
-      .select("completed_pieces")
-      .eq("id", currentItem.id)
-      .single();
-    const freshCompleted = freshRow?.completed_pieces ?? completedPieces;
-    setCompletedAtRunStart(freshCompleted);
-    // ... rest unchanged
+queryClient.invalidateQueries({ queryKey: ["station-data", machine.id] })
 ```
 
-This ensures the snapshot always reflects the true DB state, regardless of whether the realtime subscription has delivered the update yet. The DB fetch adds ~50ms latency (negligible since the operator just clicked a button).
+But `useStationData` uses a THREE-part key: `["station-data", machineId, machineType]` (line 58 of useStationData.ts). The two-part key doesn't match, so the invalidation silently fails and the bender UI doesn't refresh after DONE. The operator sees stale counts until the realtime subscription happens to fire.
 
-### What This Does NOT Change
-- No changes to `useStationData.ts`, `ProductionCard.tsx`, `handleCompleteRun`, `handleRecordStroke`, or any other file
-- No schema changes, no new queries, no UI changes
-- The auto-advance behavior (item disappearing after completion) remains correct
-- The `completedAtRunStart` reset to `null` on line 322 remains correct
+**Fix**: Change to `["station-data", machine.id, "bender"]` on line 104.
 
-### Files Modified
-- `src/components/shopfloor/CutterStationView.tsx` — lines 128-130 only (add DB fetch before snapshot)
+---
 
+### Bug 3: "Pieces Done" display double-counts after realtime update (DISPLAY)
+**Location**: `CutterStationView.tsx` line 464
+
+The display shows:
+```
+{completedPieces + slotTracker.totalCutsDone}
+```
+
+After each stroke, `handleRecordStroke` saves `completedAtRunStart + totalCutsDone` to DB. When realtime delivers the update, `completedPieces` becomes `completedAtRunStart + totalCutsDone`. The display then shows `(completedAtRunStart + totalCutsDone) + totalCutsDone` — double-counting the current run's cuts.
+
+The flicker is: correct value right after stroke, then jumps to double when realtime arrives.
+
+**Fix**: During an active run (when `completedAtRunStart` is not null), use `completedAtRunStart + slotTracker.totalCutsDone` instead of `completedPieces + slotTracker.totalCutsDone`. Fallback to `completedPieces` when no run is active.
+
+---
+
+### Bug 4: Indentation misalignment from last edit (MINOR)
+**Location**: `CutterStationView.tsx` line 128
+
+`setIsRunning(true)` lost its indentation in the previous diff. Cosmetic but should be corrected.
+
+---
+
+### Summary of Changes
+
+| File | Line(s) | Fix |
+|------|---------|-----|
+| `CutterStationView.tsx` | 128 | Fix indentation of `setIsRunning(true)` |
+| `CutterStationView.tsx` | 356 | Add `completedAtRunStart` to `handleCompleteRun` deps |
+| `CutterStationView.tsx` | 464 | Use `completedAtRunStart` for display during active run |
+| `BenderStationView.tsx` | 104 | Fix query key to include `"bender"` for proper invalidation |
+
+All fixes are surgical single-line changes. No schema changes, no new files, no UI redesign.
