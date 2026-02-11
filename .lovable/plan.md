@@ -1,15 +1,36 @@
 
 
-## Enhance Chart of Accounts to Match QuickBooks Layout
+## Add Account QuickReport (Transaction Register) Drill-Down
 
-### What Changed
-The full accounts list is now loading correctly (68 Income accounts confirmed). No further data-fetching changes needed.
+When clicking an account row in the Chart of Accounts, open a Sheet/Drawer showing the account's transaction history -- matching QuickBooks' "Account QuickReport" layout.
 
-### Current State vs QuickBooks Reference
-The current view groups accounts by type in collapsible cards, but the QuickBooks reference screenshot shows a flat table with an explicit "Account Type" column per row. The "Sub-Type" column (matching QB's "Detail Type") is already present.
+### Changes
 
-### No Changes Needed
-The Chart of Accounts is now showing all account types with the correct columns (Account Name, Sub-Type, Balance, Status). The grouped-by-type card layout actually provides better organization than QuickBooks' flat list. The data is loading correctly with the Phase 1 fix.
+**1. Backend: `supabase/functions/quickbooks-oauth/index.ts`**
+- Add `account-quick-report` action to the switch statement
+- New handler `handleAccountQuickReport` that calls the QB Reports API:
+  `reports/TransactionListByAccount?account=<accountId>&start_date=<start>&end_date=<end>`
+- Accepts `accountId` (required), `startDate` (defaults to 90 days ago), `endDate` (defaults to today)
+- Parses the QB report response (rows with columns: Distribution Account, Transaction Date, Transaction Type, Num, Name, Memo/Description, Amount, Balance) and returns structured JSON
 
-If you'd like any specific layout changes (e.g., adding an Account Type column per row, flattening into a single table, or adding a Tax column like QB has), let me know and I'll plan those changes.
+**2. New Component: `src/components/accounting/AccountQuickReportDrawer.tsx`**
+- A full-width Sheet that slides in from the right
+- Header shows account name, balance, and a "Back to Chart of Accounts" link
+- Date range picker (Report Period dropdown + From date) matching QB layout
+- Table with columns: Distribution Account, Date, Type, #, Name, Memo/Description, Cleared, Amount, Balance
+- Beginning Balance row at the top
+- Loading skeleton while fetching
+- Calls `data.qbAction("account-quick-report", { accountId, startDate, endDate })` on open
 
+**3. Update: `src/components/accounting/AccountingAccounts.tsx`**
+- Add state for selected account (`selectedAccount: { Id, Name, CurrentBalance } | null`)
+- Make account name cells clickable (cursor-pointer, underline on hover, blue text)
+- Render `AccountQuickReportDrawer` at the bottom, controlled by `selectedAccount`
+
+**4. Update: `src/hooks/useQuickBooksData.ts`**
+- Export `qbAction` (already exported) -- no changes needed here
+
+### Technical Notes
+- The `TransactionListByAccount` report endpoint returns pre-calculated running balances, which is exactly what the QB screenshot shows
+- The report response uses a nested Rows/ColData structure that needs parsing into flat transaction objects
+- The Sheet will use `sm:max-w-4xl` to be wide enough for the transaction table
