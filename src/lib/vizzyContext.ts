@@ -97,6 +97,15 @@ ${hotLeadsList || "    None"}
 👷 TEAM
   Staff Total: ${team.totalStaff}
 
+🏢 TEAM DIRECTORY
+  • Sattar Esmaeili (sattar@rebar.shop) — CEO
+  • Neel Mahajan (neel@rebar.shop) — CEO / Co-founder
+  • Vicky Anderson (vicky@rebar.shop) — Accountant
+  • Saurabh Seghal (saurabh@rebar.shop) — Sales
+  • Ben Rajabifar (ben@rebar.shop) — Estimator
+  • Kourosh Zand (kourosh@rebar.shop) — Shop Supervisor
+  • Radin Lachini (radin@rebar.shop) — AI Manager
+
 ⏱️ TEAM PRESENCE (TIME CLOCK)
 ${(() => {
   const onNow = teamPresence.filter((t) => !t.clocked_out);
