@@ -71,11 +71,45 @@ export default function VizzyPage() {
   const saveTranscript = useCallback(async (entries: TranscriptEntry[]) => {
     if (!user || entries.length === 0) return;
     try {
+      // Save to vizzy_interactions (existing)
       await supabase.from("vizzy_interactions").insert({
         user_id: user.id,
         transcript: entries as any,
         session_ended_at: new Date().toISOString(),
       });
+
+      // Also save as a chat_session + chat_messages so it appears in Agent Workspace sidebar
+      const textEntries = entries.filter((e) => e.type !== "quotation" && e.text.trim());
+      if (textEntries.length === 0) return;
+
+      const firstUserMsg = textEntries.find((e) => e.role === "user")?.text || "Voice Chat";
+      const title = firstUserMsg.slice(0, 80) + (firstUserMsg.length > 80 ? "..." : "");
+
+      const { data: session, error: sessionError } = await supabase
+        .from("chat_sessions")
+        .insert({
+          user_id: user.id,
+          title: `🎙️ ${title}`,
+          agent_name: "Vizzy",
+          agent_color: "bg-yellow-400",
+        })
+        .select("id")
+        .single();
+
+      if (sessionError || !session) {
+        console.error("Failed to create chat session for voice transcript:", sessionError);
+        return;
+      }
+
+      const messagesToInsert = textEntries.map((entry) => ({
+        session_id: session.id,
+        role: entry.role === "user" ? "user" as const : "agent" as const,
+        content: entry.text,
+        agent_type: "assistant",
+      }));
+
+      const { error: msgError } = await supabase.from("chat_messages").insert(messagesToInsert);
+      if (msgError) console.error("Failed to save voice transcript messages:", msgError);
     } catch (err) {
       console.error("Failed to save Vizzy transcript:", err);
     }
