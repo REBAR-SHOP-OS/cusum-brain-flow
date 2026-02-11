@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { StationHeader } from "./StationHeader";
 import { CutEngine } from "./CutEngine";
@@ -30,6 +31,7 @@ const REMNANT_THRESHOLD_MM = 300;
 
 export function CutterStationView({ machine, items, canWrite, initialIndex = 0 }: CutterStationViewProps) {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [isRunning, setIsRunning] = useState(false);
   const [selectedStockLength, setSelectedStockLength] = useState(12000);
@@ -298,6 +300,9 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0 }
         } as any)
         .eq("id", currentItem.id);
       if (itemErr) throw itemErr;
+
+      // Immediately invalidate to refresh UI without waiting for realtime
+      queryClient.invalidateQueries({ queryKey: ["station-data", machine.id, "cutter"] });
 
       await manageMachine({
         action: "complete-run",
