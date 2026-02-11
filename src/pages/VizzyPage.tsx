@@ -94,11 +94,6 @@ export default function VizzyPage() {
         await conversation.startSession({
           signedUrl: data.signed_url,
           connectionType: "websocket",
-          overrides: {
-            agent: {
-              language: "",
-            },
-          },
         });
 
         if (snap) {
