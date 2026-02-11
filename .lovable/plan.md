@@ -1,31 +1,63 @@
 
 
-## Fix: Vizzy's Empty Business Context (Race Condition)
+## Vizzy Fix Request Queue — Log Issues for Lovable
 
-### Root Cause
-`useVizzyContext` calls `qb.loadAll()` which sets React state internally (`setInvoices(...)`, etc.), then immediately reads `qb.totalReceivable`, `qb.accounts`, etc. But React state updates don't take effect until the next render -- so every value is still at its initial default (0, empty arrays). Vizzy receives a context full of zeros and "None" entries, so she makes things up or gives generic answers.
+### What This Does
+When you're on the shop floor talking to Vizzy, you can tell her about a bug or issue (e.g., "the delivery screen is showing wrong dates"). Vizzy will log it to a database table with details and optionally a photo. Later, when you open this Lovable chat, you can reference those logged issues and I'll fix them.
 
-### The Fix
-Bypass the QuickBooks React hook entirely inside `loadFullContext`. Instead, call the QuickBooks edge function directly from Supabase to get raw financial data, then build the snapshot from those raw results -- no React state dependency.
+### How It Works
 
-### Changes
+1. **New database table** `vizzy_fix_requests` stores each logged issue with:
+   - Description of the problem
+   - Screenshot/photo URL (if one was taken during the session)
+   - Page or feature affected
+   - Status (open / resolved)
+   - Timestamp
 
-**File: `src/hooks/useVizzyContext.ts`**
+2. **New Vizzy client tool** `log_fix_request` — when you tell Vizzy "this screen is broken" or "log a bug about deliveries", she calls this tool. It goes through the same approval dialog so you confirm before it's saved.
 
-Replace the QuickBooks hook dependency with a direct Supabase function call:
+3. **New ERP action handler** in the `vizzy-erp-action` edge function to insert the fix request into the database.
 
-1. Remove the `useQuickBooksData()` import/usage from this hook
-2. Inside `loadFullContext`, call `supabase.functions.invoke("quickbooks-oauth", { body: { action: "dashboard-summary" } })` directly to get invoices, bills, payments, and accounts as raw data
-3. Compute `totalReceivable`, `totalPayable`, `overdueInvoices`, `overdueBills` from those raw arrays right there -- not from React state
-4. Remove the `loadedRef` cache so context is always fresh on each session start
+4. **Fix Request Queue UI** — a small panel on the CEO dashboard showing open fix requests, so you can quickly copy/paste or reference them in this chat.
 
-**File: `src/components/vizzy/VoiceVizzy.tsx`**
+### Technical Details
 
-Remove the pre-load `useEffect` that eagerly calls `loadFullContext()` on mount (since there's no longer a cache to warm, this just wastes a call). The context will be loaded fresh when the session actually starts.
+**Database Migration:**
+```sql
+CREATE TABLE public.vizzy_fix_requests (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  description TEXT NOT NULL,
+  photo_url TEXT,
+  affected_area TEXT,
+  status TEXT NOT NULL DEFAULT 'open',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  resolved_at TIMESTAMPTZ
+);
 
-### Why This Works
-By reading raw API data instead of React state values, we guarantee the snapshot has actual numbers. No more race condition, no more zeros, no more hallucinated data.
+ALTER TABLE public.vizzy_fix_requests ENABLE ROW LEVEL SECURITY;
 
-### Files Modified
-- `src/hooks/useVizzyContext.ts`
-- `src/components/vizzy/VoiceVizzy.tsx`
+CREATE POLICY "Users can manage own fix requests"
+  ON public.vizzy_fix_requests FOR ALL TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+```
+
+**Files to modify:**
+- `supabase/functions/vizzy-erp-action/index.ts` — add `log_fix_request` action that inserts into `vizzy_fix_requests`
+- `src/components/vizzy/VoiceVizzy.tsx` — register `log_fix_request` client tool
+- `src/lib/vizzyContext.ts` — add tool description so Vizzy knows how to use it
+- `src/pages/CEOPortal.tsx` — add a small "Fix Requests" section showing open items
+
+**New file:**
+- `src/components/ceo/FixRequestQueue.tsx` — displays open fix requests with description, photo, and a "copy to clipboard" button for easy pasting into Lovable chat
+
+### User Flow
+1. You're on the shop floor, talking to Vizzy
+2. You say: "Vizzy, log a bug — the delivery tracker is showing yesterday's routes"
+3. Vizzy shows approval dialog: "Log fix request: delivery tracker showing yesterday's routes"
+4. You tap Approve
+5. Saved to database
+6. Later, you open CEO dashboard, see the fix request, and paste it into Lovable chat
+7. I fix it
+
