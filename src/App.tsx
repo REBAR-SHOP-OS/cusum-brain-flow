@@ -53,6 +53,7 @@ import AccountingWorkspace from "./pages/AccountingWorkspace";
 import CustomerPortal from "./pages/CustomerPortal";
 import CEOPortal from "./pages/CEOPortal";
 import Transcribe from "./pages/Transcribe";
+import VizzyPage from "./pages/VizzyPage";
 const queryClient = new QueryClient();
 
 /** Helper to wrap protected routes with layout + page-level error boundary */
@@ -141,6 +142,9 @@ const App = () => (
                     <Route path="/admin/machines" element={<P><AdminMachines /></P>} />
                     <Route path="/admin/cleanup" element={<P><CleanupReport /></P>} />
                     <Route path="/admin/data-audit" element={<P><DataStoresAudit /></P>} />
+
+                    {/* Vizzy – standalone voice page for Siri Shortcut */}
+                    <Route path="/vizzy" element={<ProtectedRoute><VizzyPage /></ProtectedRoute>} />
 
                     {/* Legacy redirects */}
                     <Route path="/inbox-manager" element={<Navigate to="/inbox" replace />} />
