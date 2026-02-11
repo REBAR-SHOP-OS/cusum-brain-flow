@@ -1,37 +1,34 @@
 
 
-## Revert Vizzy to Avatar-Centered Voice UI (No Chat Transcript)
+## Unify Voice Vizzy Into One
 
-### What Changes
+### Problem
+There are two separate Voice Vizzy implementations with duplicated code:
+1. `VoiceVizzy` component -- floating mic button rendered in `AppLayout`, has its own ElevenLabs session, transcript, reconnect logic
+2. `VizzyPage` at `/vizzy` -- full-screen voice page for Siri shortcuts, has its own separate ElevenLabs session, transcript, reconnect logic
 
-Replace the current chat-bubble layout with the original centered avatar design shown in your screenshot: a large brain icon in the center, "Vizzy is speaking..." / "Listening..." status text below it, dark overlay background -- while keeping all the new features (mute, volume, reconnect, timer, quotation drafting).
+Both do the same thing but feel like two different assistants.
 
-### Layout
+### Solution
+Remove the duplicate `VoiceVizzy` component from `AppLayout` and keep only the `VizzyPage` as the single voice experience. The floating mic button will navigate to `/vizzy` instead of spinning up a separate voice session.
 
-- **Full-screen dark overlay** with blurred background
-- **Centered brain avatar** (large circle, pulsing ring when speaking)
-- **Status text** below avatar: "Connecting...", "Vizzy is speaking...", "Listening...", "Reconnecting..."
-- **Close (X) button** top-right corner (red circle, like screenshot)
-- **Bottom control bar** with: Mute mic, Volume slider, Reconnect button, Timer display, Camera button (bottom-left)
-- **No chat transcript** -- remove all the message bubbles and scroll area
-- **Quotation cards** appear as a floating overlay/dialog in the center when Vizzy drafts one, with Approve/Dismiss buttons
+### Changes
 
-### Technical Details
+**1. `src/components/layout/AppLayout.tsx`**
+- Remove the `VoiceVizzy` import and component
+- Add a simple floating mic button (for `sattar@rebar.shop` only) that navigates to `/vizzy`
 
-**File: `src/pages/VizzyPage.tsx`** (full rewrite of the UI portion only, logic stays)
+**2. `src/components/vizzy/VoiceVizzy.tsx`**
+- Delete this file entirely (its logic is already duplicated in `VizzyPage.tsx`)
 
-1. Remove the header bar, chat transcript scroll area, and bottom status bar
-2. Replace with:
-   - Fixed full-screen container with `bg-black/90 backdrop-blur`
-   - Centered `motion.div` for the brain avatar with animated ring (scales/glows when `conversation.isSpeaking`)
-   - Status label below avatar
-   - Red X button positioned top-right
-   - Bottom toolbar row with mic mute, volume, reconnect, timer icons
-   - Camera button bottom-left (for photo analysis)
-3. Quotation card renders as a centered floating card (like a modal overlay) instead of inline chat bubble
-4. All existing logic preserved: transcript tracking (kept in refs for memory/persistence), reconnect, mute, volume, quotation client tool, session save
+**3. `src/pages/VizzyPage.tsx`**
+- Already has all features (mute, volume, camera, reconnect, quotation cards, context loading, transcript persistence)
+- No changes needed -- this becomes the single voice Vizzy
 
-### Files Modified
-
-- `src/pages/VizzyPage.tsx` -- Rewrite the render/return JSX to match the avatar-centered design; keep all hooks and logic intact
+### Result
+- One Voice Vizzy, one codebase, one experience
+- Floating mic button just opens `/vizzy`
+- Siri Shortcut still works via `/vizzy`
+- Text-chat Vizzy at `/agent/assistant` remains as the text interface
+- Both share the same "Vizzy" identity
 
