@@ -1,6 +1,5 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useQuickBooksData } from "@/hooks/useQuickBooksData";
 
 export interface VizzyBusinessSnapshot {
   financials: {
@@ -28,20 +27,23 @@ export interface VizzyBusinessSnapshot {
 }
 
 export function useVizzyContext() {
-  const qb = useQuickBooksData();
   const [loading, setLoading] = useState(false);
   const [snapshot, setSnapshot] = useState<VizzyBusinessSnapshot | null>(null);
-  const loadedRef = useRef(false);
 
   const loadFullContext = useCallback(async (): Promise<VizzyBusinessSnapshot | null> => {
-    if (loadedRef.current && snapshot) return snapshot;
-    loadedRef.current = true;
     setLoading(true);
 
     try {
-      const qbPromise = qb.loadAll().catch(() => {});
-
       const today = new Date().toISOString().split("T")[0];
+
+      // Fetch QuickBooks data directly from edge function (bypasses React state race condition)
+      const qbPromise = supabase.functions.invoke("quickbooks-oauth", {
+        body: { action: "dashboard-summary" },
+      }).then(({ data, error }) => {
+        if (error) { console.warn("QB fetch error:", error); return null; }
+        return data as { invoices: any[]; bills: any[]; payments: any[]; accounts: any[] } | null;
+      }).catch(() => null);
+
       const cutPlansP = supabase.from("cut_plans").select("id, status").in("status", ["queued", "running"]) as any;
       const cutItemsP = supabase.from("cut_plan_items").select("id, phase, completed_pieces, total_pieces")
         .in("phase", ["queued", "cutting", "bending"]).limit(500) as any;
@@ -56,11 +58,9 @@ export function useVizzyContext() {
       const eventsP = supabase.from("events").select("id, event_type, entity_type, description, created_at")
         .order("created_at", { ascending: false }).limit(20) as any;
 
-      const [cutPlansRes, cutItemsRes, machinesRes, leadsRes, customersRes, deliveriesRes, profilesRes, eventsRes] = await Promise.all([
-        cutPlansP, cutItemsP, machinesP, leadsP, customersP, deliveriesP, profilesP, eventsP,
+      const [qbData, cutPlansRes, cutItemsRes, machinesRes, leadsRes, customersRes, deliveriesRes, profilesRes, eventsRes] = await Promise.all([
+        qbPromise, cutPlansP, cutItemsP, machinesP, leadsP, customersP, deliveriesP, profilesP, eventsP,
       ]);
-
-      await qbPromise;
 
       const cutPlans = cutPlansRes.data || [];
       const cutPlanItems = cutItemsRes.data || [];
@@ -71,18 +71,30 @@ export function useVizzyContext() {
       const profiles = profilesRes.data || [];
       const events = eventsRes.data || [];
 
+      // Compute financials directly from raw QB data (no React state dependency)
+      const invoices = qbData?.invoices || [];
+      const bills = qbData?.bills || [];
+      const payments = qbData?.payments || [];
+      const accounts = qbData?.accounts || [];
+
+      const todayDate = new Date().toISOString().split("T")[0];
+      const overdueInvoices = invoices.filter((inv: any) => (inv.Balance || 0) > 0 && inv.DueDate && inv.DueDate < todayDate);
+      const overdueBills = bills.filter((b: any) => (b.Balance || 0) > 0 && b.DueDate && b.DueDate < todayDate);
+      const totalReceivable = invoices.reduce((sum: number, inv: any) => sum + (inv.Balance || 0), 0);
+      const totalPayable = bills.reduce((sum: number, b: any) => sum + (b.Balance || 0), 0);
+
       const completedToday = cutPlanItems.filter(
         (i: any) => (i.completed_pieces ?? 0) >= (i.total_pieces ?? 0) && (i.total_pieces ?? 0) > 0
       ).length;
 
       const snap: VizzyBusinessSnapshot = {
         financials: {
-          totalReceivable: qb.totalReceivable,
-          totalPayable: qb.totalPayable,
-          overdueInvoices: qb.overdueInvoices,
-          overdueBills: qb.overdueBills,
-          accounts: qb.accounts,
-          payments: qb.payments,
+          totalReceivable,
+          totalPayable,
+          overdueInvoices,
+          overdueBills,
+          accounts,
+          payments,
         },
         production: {
           activeCutPlans: cutPlans.length,
@@ -111,7 +123,7 @@ export function useVizzyContext() {
       setLoading(false);
       return null;
     }
-  }, [qb, snapshot]);
+  }, []);
 
   return { loadFullContext, snapshot, loading };
 }
