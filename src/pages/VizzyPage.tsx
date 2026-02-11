@@ -43,6 +43,7 @@ export default function VizzyPage() {
   const [showVolume, setShowVolume] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [activeQuotation, setActiveQuotation] = useState<{ id: string; draft: QuotationDraft } | null>(null);
+  const [silentMode, setSilentMode] = useState(false);
   const startedRef = useRef(false);
   const sessionActiveRef = useRef(false);
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -50,6 +51,7 @@ export default function VizzyPage() {
   const retryCountRef = useRef(0);
   const snapshotRef = useRef<VizzyBusinessSnapshot | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const prevVolumeRef = useRef(80);
   const { loadFullContext } = useVizzyContext();
 
   // Session timer
@@ -186,13 +188,37 @@ export default function VizzyPage() {
     },
     onMessage: (message: any) => {
       if (message.type === "user_transcript") {
+        const userText = message.user_transcription_event?.user_transcript ?? "";
         const entry: TranscriptEntry = {
           role: "user",
-          text: message.user_transcription_event?.user_transcript ?? "",
+          text: userText,
           id: crypto.randomUUID(),
           type: "text",
         };
         setTranscript((prev) => { const next = [...prev, entry]; transcriptRef.current = next; return next; });
+
+        // Silent mode detection
+        const lower = userText.toLowerCase().trim();
+        const SILENCE_TRIGGERS = ["silent", "be quiet", "shut up", "hush", "shhh", "be silent"];
+        const WAKE_TRIGGERS = ["vizzy", "hey vizzy"];
+
+        const shouldSilence = SILENCE_TRIGGERS.some((t) => lower.includes(t));
+        const shouldWake = WAKE_TRIGGERS.some((t) => lower.includes(t));
+
+        if (shouldSilence && !shouldWake) {
+          setSilentMode(true);
+          prevVolumeRef.current = volume;
+          try { conversation.setVolume({ volume: 0 }); } catch {}
+          conversation.sendContextualUpdate(
+            "CEO asked you to be silent. Do NOT speak. Just listen and take mental notes silently. Only respond when the CEO calls your name 'Vizzy'."
+          );
+        } else if (shouldWake) {
+          setSilentMode(false);
+          try { conversation.setVolume({ volume: prevVolumeRef.current / 100 }); } catch {}
+          conversation.sendContextualUpdate(
+            "CEO called your name. You may speak again. Briefly summarize any notes you took during the silent period, then continue normally."
+          );
+        }
       } else if (message.type === "agent_response") {
         const entry: TranscriptEntry = {
           role: "agent",
@@ -304,6 +330,7 @@ export default function VizzyPage() {
     status === "starting" ? "Connecting..." :
     status === "reconnecting" ? "Reconnecting..." :
     status === "error" ? "Connection lost" :
+    silentMode ? "Silent mode — taking notes..." :
     conversation.isSpeaking ? "Vizzy is speaking..." : "Listening...";
 
   return (
@@ -333,7 +360,9 @@ export default function VizzyPage() {
             "w-32 h-32 rounded-full flex items-center justify-center",
             "bg-gradient-to-br from-primary/30 to-primary/10",
             "ring-4 transition-all duration-300",
-            conversation.isSpeaking
+            silentMode
+              ? "ring-amber-500/50 opacity-60"
+              : conversation.isSpeaking
               ? "ring-primary shadow-[0_0_60px_rgba(var(--primary),0.4)]"
               : status === "error"
               ? "ring-destructive/50"
@@ -358,6 +387,11 @@ export default function VizzyPage() {
         <div className="text-center">
           <h1 className="text-xl font-semibold text-white mb-1">Vizzy</h1>
           <p className="text-sm text-white/50">{statusLabel}</p>
+          {silentMode && (
+            <span className="inline-block mt-2 text-[10px] uppercase tracking-widest px-3 py-1 rounded-full bg-amber-500/20 text-amber-400 font-semibold">
+              Silent
+            </span>
+          )}
         </div>
 
         {/* Error retry */}
