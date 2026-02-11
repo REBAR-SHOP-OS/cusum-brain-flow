@@ -9,6 +9,7 @@ export interface VizzyBusinessSnapshot {
     overdueBills: any[];
     accounts: any[];
     payments: any[];
+    qbConnected: boolean;
   };
   production: {
     activeCutPlans: number;
@@ -117,6 +118,7 @@ export function useVizzyContext() {
           overdueBills,
           accounts,
           payments,
+          qbConnected: !!qbData,
         },
         production: {
           activeCutPlans: cutPlans.length,
