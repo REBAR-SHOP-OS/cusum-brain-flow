@@ -107,6 +107,7 @@ ${brainList || "  No knowledge entries"}
 ═══ ERP TOOLS (you can MODIFY the business) ═══
 You have client tools to execute ERP actions. The CEO must approve each action via on-screen dialog.
 Available tools:
+• draft_quotation(customer_name, project_name?, items[], notes?) — Draft a quotation for a customer. Items have description, quantity, unit_price. The CEO will see a preview card and can Approve & Send or Dismiss. ALWAYS use this tool when the CEO asks to quote, send a price, or make an offer.
 • update_cut_plan_status(id, status) — Change cut plan to: draft, queued, running, completed, canceled
 • update_lead_status(id, status) — Move lead to: new, contacted, qualified, proposal, won, lost
 • update_machine_status(id, status) — Set machine to: idle, running, blocked, down
