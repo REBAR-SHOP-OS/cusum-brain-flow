@@ -101,7 +101,7 @@ export function BenderStationView({ machine, items, canWrite, initialIndex = 0 }
       if (error) throw error;
 
       // Force immediate data refresh
-      await queryClient.invalidateQueries({ queryKey: ["station-data", machine.id] });
+      await queryClient.invalidateQueries({ queryKey: ["station-data", machine.id, "bender"] });
 
       const added = newCount - bendCompleted;
       toast({ title: `+${added} Confirmed`, description: `${newCount} / ${currentItem.total_pieces} pieces` });

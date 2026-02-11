@@ -125,7 +125,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0 }
   const handleLockAndStart = async (stockLength: number, bars: number) => {
     if (!currentItem) return;
     try {
-    setIsRunning(true);
+      setIsRunning(true);
       // Fetch fresh completed_pieces from DB to avoid stale realtime data
       const { data: freshRow } = await supabase
         .from("cut_plan_items")
@@ -353,7 +353,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0 }
     } catch (err: any) {
       toast({ title: "Complete failed", description: err.message, variant: "destructive" });
     }
-  }, [currentItem, slotTracker, selectedStockLength, machine, toast, completedPieces, totalPieces, currentIndex, items.length]);
+  }, [currentItem, slotTracker, selectedStockLength, machine, toast, completedPieces, totalPieces, currentIndex, items.length, completedAtRunStart]);
 
   if (!currentItem) {
     return (
@@ -461,7 +461,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0 }
               <CardContent className="p-4 text-center">
                 <Hash className="w-5 h-5 text-secondary-foreground mx-auto mb-2" />
                 <p className="text-3xl font-black font-mono text-foreground">
-                  {completedPieces + slotTracker.totalCutsDone}
+                  {(completedAtRunStart != null ? completedAtRunStart : completedPieces) + slotTracker.totalCutsDone}
                   <span className="text-lg text-muted-foreground">/{totalPieces}</span>
                 </p>
                 <p className="text-[10px] text-muted-foreground tracking-wider uppercase mt-1">Pieces Done</p>
