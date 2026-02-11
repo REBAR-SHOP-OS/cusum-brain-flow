@@ -118,7 +118,6 @@ function VoiceVizzyInner({ userId }: { userId: string }) {
       await conversation.startSession({
         signedUrl: data.signed_url,
         connectionType: "websocket",
-        overrides: { agent: { language: "" } },
       });
 
       // Delay contextual update to avoid "Invalid message received" error
