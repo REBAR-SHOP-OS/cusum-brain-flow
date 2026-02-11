@@ -82,20 +82,14 @@ function AutomationCard({ automation, onToggle, onClick }: AutomationCardProps) 
     <div
       onClick={onClick}
       className={cn(
-        "relative overflow-hidden rounded-2xl p-5 text-white transition-transform hover:scale-[1.02] cursor-pointer",
+        "relative overflow-hidden rounded-2xl p-4 text-white transition-transform hover:scale-[1.02] cursor-pointer",
         colorGradients[automation.color]
       )}
     >
       {/* Content */}
       <div className="relative z-10">
-        <h3 className="text-xl font-bold leading-tight mb-1">
-          {automation.name.split(" ").map((word, i) => (
-            <span key={i} className="block">
-              {word}
-            </span>
-          ))}
-        </h3>
-        <p className="text-sm text-white/70 mb-4">{automation.description}</p>
+        <h3 className="text-lg font-bold leading-tight mb-1">{automation.name}</h3>
+        <p className="text-sm text-white/70 mb-3">{automation.description}</p>
 
         <div className="flex items-center gap-3">
           <Switch
@@ -120,7 +114,7 @@ function AutomationCard({ automation, onToggle, onClick }: AutomationCardProps) 
 
       {/* Decorative Icon */}
       <div className="absolute right-4 bottom-4 opacity-20">
-        <Icon className="w-24 h-24" strokeWidth={1} />
+        <Icon className="w-16 h-16" strokeWidth={1} />
       </div>
 
       {/* Glow effect */}
