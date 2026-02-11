@@ -172,6 +172,7 @@ export default function Home() {
               onSend={handleSend}
               placeholder={mapping ? `Ask ${mapping.agentKey === "assistant" ? "Vizzy" : mapping.agentKey === "shopfloor" ? "Forge" : "Gauge"} anything...` : "Ask anything about your business..."}
               disabled={isStreaming}
+              showFileUpload
             />
           </div>
 
