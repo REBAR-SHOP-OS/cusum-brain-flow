@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth";
 import { useNavigate } from "react-router-dom";
 import { Mic } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { LiveChatWidget } from "./LiveChatWidget";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -49,19 +50,22 @@ export function AppLayout({ children }: AppLayoutProps) {
         {/* Mobile bottom nav */}
         <MobileNavV2 />
 
+        {/* Live Chat Widget */}
+        <LiveChatWidget />
+
         {/* Floating mic → opens /vizzy (sattar only) */}
         {showVizzyButton && (
           <button
             onClick={() => navigate("/vizzy")}
             className={cn(
-              "fixed bottom-20 right-4 z-50 md:bottom-6 md:right-6",
-              "flex items-center justify-center w-14 h-14 rounded-full",
-              "bg-primary text-primary-foreground shadow-lg",
+              "fixed bottom-36 right-4 z-50 md:bottom-[5.5rem] md:right-6",
+              "flex items-center justify-center w-12 h-12 rounded-full",
+              "bg-secondary text-foreground shadow-lg border border-border",
               "hover:scale-105 active:scale-95 transition-transform"
             )}
             aria-label="Talk to Vizzy"
           >
-            <Mic className="w-6 h-6" />
+            <Mic className="w-5 h-5" />
           </button>
         )}
       </div>
