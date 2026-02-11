@@ -31,8 +31,11 @@ export function AccountingAccounts({ data }: Props) {
       (e.CustomerRef?.name || "").toLowerCase().includes(search.toLowerCase())
   );
 
-  // Group accounts by type
-  const grouped = filteredAccounts.reduce((acc, a) => {
+  // Group accounts by type, sort alphabetically within each group
+  const sorted = [...filteredAccounts].sort((a, b) =>
+    a.Name.localeCompare(b.Name, undefined, { sensitivity: "base" })
+  );
+  const grouped = sorted.reduce((acc, a) => {
     const type = a.AccountType || "Other";
     if (!acc[type]) acc[type] = [];
     acc[type].push(a);
@@ -75,6 +78,7 @@ export function AccountingAccounts({ data }: Props) {
                   <TableHeader>
                     <TableRow>
                       <TableHead className="text-base">Account Name</TableHead>
+                      <TableHead className="text-base">Sub-Type</TableHead>
                       <TableHead className="text-base text-right">Balance</TableHead>
                       <TableHead className="text-base">Status</TableHead>
                     </TableRow>
@@ -83,6 +87,7 @@ export function AccountingAccounts({ data }: Props) {
                     {accts.map((a) => (
                       <TableRow key={a.Id} className="text-base">
                         <TableCell className="font-medium">{a.Name}</TableCell>
+                        <TableCell className="text-muted-foreground">{a.AccountSubType || "—"}</TableCell>
                         <TableCell className="text-right font-semibold">{fmt(a.CurrentBalance || 0)}</TableCell>
                         <TableCell>
                           <Badge className={`border-0 text-sm ${a.Active ? "bg-emerald-500/10 text-emerald-500" : "bg-muted text-muted-foreground"}`}>
