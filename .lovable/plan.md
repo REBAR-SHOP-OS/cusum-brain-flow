@@ -1,32 +1,24 @@
 
 
-## Make QuickBooks a Company-Wide Connection
+## Sort Customers Alphabetically
 
 ### Problem
-QuickBooks only allows one admin per connected app. Currently, the system stores a separate QB connection per user (`user_id` in `integration_connections`). When Sattar connects, QuickBooks revokes Vicky's token, breaking her access.
+The Customers table in the Accounting workspace displays 1,946 customers in an unsorted order (e.g., "BOB HILL" appears before "Level Ltd" before "LIBERTY STONE"). They should be sorted A-Z by name.
 
 ### Solution
-Change the QuickBooks integration to use a single **company-level** connection. One admin connects once, and all users in the same company share that token for API calls.
+Add a `.sort()` call on the `enriched` array in `AccountingCustomers.tsx` to sort by `DisplayName` alphabetically (case-insensitive).
 
 ### Technical Details
 
-**1. Edge Function: `quickbooks-oauth/index.ts`**
+**File: `src/components/accounting/AccountingCustomers.tsx`**
 
-- **`getQBConfig()`**: Instead of looking up by `user_id`, first get the user's `company_id` from `profiles`, then find ANY connected QB row for that company. This means all users in the same company share the same QB token.
-- **`handleCallback()`**: On OAuth success, look up the user's `company_id` and store the connection with a `company_id` field in the config. Also delete any other QB connections for the same company (cleanup duplicates).
-- **`handleCheckStatus()`**: Look up by company instead of just user. If a company-mate already connected, return "connected" for everyone.
-- **`handleDisconnect()`**: Disconnect the company-wide token (only admins should do this).
-- **Token refresh**: Works the same, just queries by company instead of individual user.
-- **All data endpoints** (sync-customers, list-invoices, etc.): Already call `getQBConfig()` so they'll automatically use the shared token once that function is updated.
+After the `enriched` array is built (around line 32), add a sort:
 
-**2. Frontend: `useQuickBooksData.ts` / `useIntegrations.ts`**
-- No changes needed — the frontend already calls the edge function with the user's auth token, and the edge function will resolve the company connection server-side.
+```typescript
+enriched.sort((a, b) => a.DisplayName.localeCompare(b.DisplayName, undefined, { sensitivity: 'base' }));
+```
 
-**3. Data Migration**
-- Clean up the duplicate: delete Vicky's stale QB connection row (her token is already revoked by Intuit) and keep only Sattar's active one.
-- Add `company_id` to the existing connection config so future lookups work by company.
+This uses `localeCompare` with `sensitivity: 'base'` so that "bob" and "BOB" sort together correctly regardless of case.
 
-### What Changes for Users
-- Only one person per company needs to connect QuickBooks
-- Everyone in the company automatically gets access to QB data
-- No more "kicking out" the other admin when someone reconnects
+One line change, no new dependencies.
+
