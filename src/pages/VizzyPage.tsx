@@ -256,8 +256,9 @@ export default function VizzyPage() {
 
   // Volume control
   useEffect(() => {
+    if (silentMode) return; // Don't override silent mode mute
     try { conversation.setVolume({ volume: volume / 100 }); } catch {}
-  }, [volume, conversation]);
+  }, [volume, conversation, silentMode]);
 
   useEffect(() => {
     reconnectRef.current = async () => {
