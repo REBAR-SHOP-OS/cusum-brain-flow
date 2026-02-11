@@ -4064,6 +4064,69 @@ export type Database = {
         }
         Relationships: []
       }
+      vizzy_interactions: {
+        Row: {
+          context_snapshot: Json | null
+          created_at: string
+          id: string
+          session_date: string
+          session_ended_at: string | null
+          session_started_at: string
+          transcript: Json
+          user_id: string
+        }
+        Insert: {
+          context_snapshot?: Json | null
+          created_at?: string
+          id?: string
+          session_date?: string
+          session_ended_at?: string | null
+          session_started_at?: string
+          transcript?: Json
+          user_id: string
+        }
+        Update: {
+          context_snapshot?: Json | null
+          created_at?: string
+          id?: string
+          session_date?: string
+          session_ended_at?: string | null
+          session_started_at?: string
+          transcript?: Json
+          user_id?: string
+        }
+        Relationships: []
+      }
+      vizzy_journals: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          interaction_count: number
+          journal_date: string
+          metadata: Json | null
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          interaction_count?: number
+          journal_date?: string
+          metadata?: Json | null
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          interaction_count?: number
+          journal_date?: string
+          metadata?: Json | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       work_orders: {
         Row: {
           actual_end: string | null
