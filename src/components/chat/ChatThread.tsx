@@ -5,9 +5,10 @@ import { ChatMessage, Message } from "./ChatMessage";
 interface ChatThreadProps {
   messages: Message[];
   isLoading?: boolean;
+  onRegenerateImage?: (imageUrl: string, alt: string) => void;
 }
 
-export function ChatThread({ messages, isLoading }: ChatThreadProps) {
+export function ChatThread({ messages, isLoading, onRegenerateImage }: ChatThreadProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -33,7 +34,7 @@ export function ChatThread({ messages, isLoading }: ChatThreadProps) {
   return (
     <div className="flex-1 overflow-y-auto scrollbar-thin p-4 space-y-4">
       {messages.map((message) => (
-        <ChatMessage key={message.id} message={message} />
+        <ChatMessage key={message.id} message={message} onRegenerateImage={onRegenerateImage} />
       ))}
       {isLoading && (
         <div className="flex gap-3 items-start animate-fade-in">
