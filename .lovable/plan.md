@@ -1,16 +1,23 @@
 
 
-## Always-Visible Fix Request Queue
+## Fix Vizzy Showing $0 AR and No Overdue Items
 
-### Change
-Update `src/components/ceo/FixRequestQueue.tsx` to always render on the CEO Portal instead of hiding when empty.
+### Problem
+Vizzy loads financial data by calling the `quickbooks-oauth` edge function directly. That function throws "QuickBooks not connected", so all financials (AR, overdue invoices, overdue bills) default to zero. The CEO Dashboard works correctly because it reads from the `accounting_mirror` table instead.
 
-- **No requests**: Show a subtle, muted panel with the bug icon and a message like "No open fix requests — tell Vizzy to log one from the shop floor"
-- **Has requests**: Show the current active list as it works today (no changes needed)
+### Solution
+Update `src/hooks/useVizzyContext.ts` to fall back to the `accounting_mirror` table when the QuickBooks edge function returns no data. This mirrors how the CEO Dashboard already works.
 
-### Technical Detail
+### Technical Details
 
-**File:** `src/components/ceo/FixRequestQueue.tsx`
+**File:** `src/hooks/useVizzyContext.ts`
 
-Remove the early return (`if (requests.length === 0) return null;`) and replace it with an empty-state message inside the existing card container. The outer card shell (border, icon, title) always renders. When `requests.length === 0`, show a single line of muted text instead of the scrollable list.
+After the QuickBooks edge function call, add a fallback that queries `accounting_mirror`:
 
+1. If `qbData` is null (QB not connected), query `accounting_mirror` for invoices and bills with `balance > 0`
+2. Compute `totalReceivable`, `totalPayable`, `overdueInvoices`, and `overdueBills` from the mirror data
+3. The rest of the context (production, CRM, deliveries, etc.) stays unchanged
+
+The mirror table stores `entity_type` ("Invoice" / "Vendor"), `balance`, and `data` (JSON with DueDate, CustomerRef, VendorRef, etc.), so we can reconstruct the same financial picture Vizzy needs.
+
+**No other files need to change** -- the context string builder in `vizzyContext.ts` already handles whatever data the snapshot provides.
