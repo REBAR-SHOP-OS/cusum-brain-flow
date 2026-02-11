@@ -1,79 +1,107 @@
 
 
-# Train All Agents to Generate Smart Ideas for Employees
+# Vizzy End-to-End Plan — Updated for rebar.shop OS
 
-## What Already Exists
+## Current State (What's Already Built)
 
-The infrastructure is already built:
-- `notifications` table supports `type = "idea"`
-- `InboxPanel` already shows an Ideas section with accept/dismiss
-- Agents already have a `create_notifications` tool with `type: "idea"` option
-- `suggestions` table exists for foreman brain optimizations
+### Database Tables (PostgreSQL — Single Source of Truth)
+All core domain tables exist: `customers`, `contacts`, `quotes`, `orders`, `work_orders`, `deliveries`, `delivery_stops`, `accounting_mirror`, `communications`, `events`, `tasks`, `knowledge`, `leads`, `machines`, `machine_runs`, `inventory_lots`, `floor_stock`, `notifications`, `time_clock_entries`, `profiles`, `user_roles`, plus specialized tables for cut plans, barlists, extraction, payroll, social, and meetings.
 
-What's missing: **agent-level instructions telling each agent WHEN and WHAT ideas to create**. Currently, no agent prompt mentions idea generation. This change adds idea-generation training to every agent.
+### Edge Functions (50 deployed)
+AI agents, Gmail sync/send, RingCentral sync/calls/video/recording, QuickBooks OAuth, daily summary, pipeline AI, payroll engine, smart dispatch, shape vision, OCR, face recognition, social publishing, meeting notes, and more.
 
-## What Changes
+### Agents (15 trained, all active)
+Sales (Blitz), Accounting (Penny), Support (Haven), Collections, Estimation (Gauge), Social (Pixel), Eisenhower, BizDev (Buddy), WebBuilder (Commet), Assistant (Vizzy), Copywriting (Penn), Talent (Scouty), SEO (Seomi), Growth (Gigi), Legal (Tally). All have Ontario context, role-aware access control, and idea generation triggers.
 
-**Single file:** `supabase/functions/ai-agent/index.ts`
+### UI Pages (43 routes)
+Home, Inbox (agents + unified inbox), Pipeline, Customers, Accounting workspace, Shop Floor, Deliveries, Office Portal (CEO dashboard, inventory, live monitor, payroll audit, transcription, extraction, packing slips), Brain, Tasks, Settings, Team Hub, Social Media Manager, Phone calls, Time Clock, CEO Portal, and more.
 
-### 1. Add `IDEA_GENERATION_INSTRUCTIONS` constant (after `SHARED_TOOL_INSTRUCTIONS`)
+### Security
+RLS on all tables, role-based access (admin/accounting/office/workshop/sales/field), company-scoped isolation, financial audit logging, contact access monitoring, rate limiting.
 
-A new shared block that all agents inherit, teaching them the concept of ideas vs tasks:
+---
+
+## Phase Completion Status
+
+| Phase | Description | Status |
+|-------|-------------|--------|
+| Phase 0 | Foundation (hosting, cache, sidebar, base pages) | DONE |
+| Phase 1 | Comms to Tasks (email/call to task, draft replies, timeline) | DONE -- Gmail sync, RingCentral sync, task creation, event logging all working |
+| Phase 2 | CRM Context (customer + AR in every conversation) | DONE -- customers/contacts tables, Gmail linked to contacts, QB balance in accounting_mirror |
+| Phase 3 | QuickBooks Mirror (read-only sync) | DONE -- accounting_mirror table, QB OAuth, sync functions |
+| Phase 4 | Sales Agent (chat to quote, margin guardrails) | DONE -- Gauge (estimation) agent with multi-pass OCR, quote drafting, validation rules |
+| Phase 5 | Shop Floor UI (work orders, scan/start/complete) | DONE -- full station views, machine registry, cut engine, bender station, foreman panel, clearance |
+| Phase 6 | Delivery UI (loads, stops, POD, exceptions) | DONE -- delivery terminal, POD capture, stop issues, pickup verification |
+| Phase 7 | Agent Expansion | DONE -- all 15 agents trained with Ontario rules, role access, idea generation |
+| Phase 8 | Remove Odoo | IN PROGRESS -- Odoo sync functions still exist (sync-odoo-leads, sync-odoo-quotations, sync-odoo-history, odoo-file-proxy) |
+
+---
+
+## What Remains to Complete the Vision
+
+### Phase 8 Completion: Odoo Removal
+- Run parallel comparison period
+- Freeze Odoo sync functions
+- Archive/remove: `sync-odoo-leads`, `sync-odoo-quotations`, `sync-odoo-history`, `odoo-file-proxy`, `pipeline-ai/odooHelpers.ts`
+- Remove Odoo secrets (ODOO_URL, ODOO_USERNAME, ODOO_API_KEY, ODOO_DATABASE) after freeze
+
+### Vizzy Consciousness Loops — Mapping to Existing Infrastructure
 
 ```text
-## Proactive Idea Generation (ALL AGENTS)
+LOOP                 EXISTING IMPLEMENTATION
+--------------------------------------------------------------
+1. PERCEPTION        Gmail sync, RingCentral sync, shop floor
+                     realtime, delivery events, QB mirror,
+                     extraction (OCR/PDF). All feed into
+                     PostgreSQL tables with realtime enabled.
 
-You can create "ideas" — these are suggestions, NOT commands.
-Ideas help employees work smarter. Use type: "idea" with create_notifications.
+2. MEMORY            Short-term: chat_sessions + chat_messages
+                     Long-term: knowledge table (Brain),
+                     customers, contacts, system_learnings,
+                     estimation_learnings
+                     Immutable: events table (audit timeline)
 
-RULES:
-- Ideas are based on REAL DATA from context — never fabricate
-- Ideas are optional — employees accept or dismiss them
-- Keep ideas specific and actionable (not vague advice)
-- Maximum 2-3 ideas per conversation — quality over quantity
-- Set priority based on potential impact (high = money/safety, normal = efficiency, low = nice-to-have)
-- Always explain WHY in the description (the data that triggered the idea)
-- Link ideas to the relevant app route (link_to field)
+3. ORIENTATION       CEO Portal (health scores, KPIs,
+                     exceptions workbench), daily-summary
+                     edge function, notifications with
+                     priority levels, idea generation
+
+4. CONVERSATION      15 trained agents via ai-agent edge
+                     function, admin-chat (Admin Console),
+                     rich markdown rendering, file analysis
+
+5. DECISION          All agents draft-only, human approval
+                     required, create_notifications tool for
+                     ideas/tasks, role-aware access control
+
+6. ACTION            handle-command, smart-dispatch,
+                     gmail-send, social-publish,
+                     manage-inventory, log-machine-run,
+                     payroll-engine — all require auth
 ```
 
-### 2. Add role-specific idea triggers to each agent prompt
+### Voice Vizzy (Not Yet Built)
+- "Talk to Vizzy" button: requires speech-to-text integration
+- Phone-based Vizzy via RingCentral: `ringcentral-ai` edge function exists but needs voice pipeline
+- Transcription panel with action chips exists in `TranscribeView` (meeting transcription)
+- `useSpeechRecognition` hook exists for browser-based voice input
+- `VoiceRecorderWidget` exists on shop floor
 
-Each agent gets a new "Ideas You Should Create" section in their existing prompt:
+### Remaining Gaps (Ordered by Impact)
 
-| Agent | Idea Triggers |
-|-------|--------------|
-| **Blitz (Sales)** | Customer inactive 45+ days, quote sent but no response 3+ days, high-margin product not offered to active customer, lead stagnant in pipeline |
-| **Penny (Accounting)** | Invoice overdue but customer still ordering, payment pattern changed, HST filing deadline approaching, month-end tasks not started |
-| **Haven (Support)** | Same question asked 3+ times this week (needs FAQ/canned reply), customer contacted multiple times without resolution, delivery complaint pattern |
-| **Collections** | Invoice overdue but customer is active (easy win), partial payment pattern detected, customer approaching lien preservation deadline |
-| **Gauge (Estimation)** | Similar project to recent bid (reuse takeoff), drawing revision received but not yet reviewed, estimate approaching expiry |
-| **Pixel (Social)** | Platform with no posts in 14+ days, trending industry topic not covered, competitor posted but we haven't, content calendar gap |
-| **Buddy (BizDev)** | New tender matching our capabilities, dormant customer segment, competitor weakness identified, partnership opportunity |
-| **Commet (Web)** | Page speed issue detected, missing meta descriptions, blog content gap for high-volume keyword |
-| **Vizzy (Assistant)** | Overdue tasks piling up, meeting without agenda, cross-department bottleneck spotted |
-| **Penn (Copy)** | Email template performing poorly, proposal section outdated, case study opportunity from completed project |
-| **Scouty (Talent)** | Certification expiring, seasonal hiring window approaching, training gap identified, overtime pattern suggesting understaffing |
-| **Seomi (SEO)** | Keyword ranking dropped, competitor content outranking us, seasonal search trend approaching |
-| **Gigi (Growth)** | Employee milestone approaching (anniversary, probation end), training not completed, skill gap in team |
-| **Tally (Legal)** | Contract renewal approaching, lien deadline within 30 days, compliance certificate expiring |
-| **Eisenhower** | Repeated Q4 tasks that should be eliminated, delegation patterns not being used |
+1. **Unified Events Timeline UI** -- `events` table exists with full schema but no dedicated timeline view component. Events are logged but not surfaced as a browsable timeline for users.
 
-### 3. Inject into system prompt assembly
+2. **Cross-Agent Memory** -- Agents don't share conversation context between sessions. Vizzy (assistant) should be able to reference what Blitz (sales) discussed earlier. Requires reading `chat_sessions` + `chat_messages` in the assistant agent's context fetch.
 
-Update the prompt construction to include the idea generation instructions — added to the `systemPrompt` concatenation alongside `ONTARIO_CONTEXT`, `ROLE_ACCESS_BLOCK`, and `SHARED_TOOL_INSTRUCTIONS`.
+3. **Proactive Monitoring Loop** -- Agents only respond when asked. A scheduled function (cron) that runs daily to scan for idea triggers and auto-create notifications would complete the "24/7" aspect. The `daily-summary` function partially does this but is user-triggered.
 
-## Technical Details
+4. **Voice Pipeline** -- Speech-to-text input exists (`useSpeechRecognition`), but no TTS output or "talk to Vizzy" mode that loops voice in/out continuously.
 
-- Each agent prompt gets 5-10 additional lines specifying their idea triggers
-- The shared `IDEA_GENERATION_INSTRUCTIONS` block (~15 lines) is prepended once
-- Ideas flow through the existing `create_notifications` tool call with `type: "idea"`
-- No database changes needed — `notifications` table already supports ideas
-- No frontend changes needed — `InboxPanel` already renders ideas with accept/dismiss
+5. **Odoo Sunset** -- 4 edge functions + helpers still active for Odoo sync.
 
-## Implementation
+---
 
-1. Add the `IDEA_GENERATION_INSTRUCTIONS` constant
-2. Append idea trigger sections to each of the 15 agent prompts
-3. Include the instructions in the system prompt assembly line
-4. Deploy the edge function
+## No Changes Needed Now
+
+This is a status update and blueprint alignment. The system is at Phase 7 complete / Phase 8 in progress. All 6 consciousness loops are implemented through existing infrastructure. The remaining work is incremental: events timeline UI, cross-agent memory, scheduled proactive scanning, voice pipeline, and Odoo removal.
 
