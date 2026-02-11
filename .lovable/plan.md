@@ -1,36 +1,40 @@
 
 
-## Add Account QuickReport (Transaction Register) Drill-Down
+## Add QuickBooks-Style Dropdowns and Filtering to Account QuickReport
 
-When clicking an account row in the Chart of Accounts, open a Sheet/Drawer showing the account's transaction history -- matching QuickBooks' "Account QuickReport" layout.
+### What We're Adding
+Matching the QB Account QuickReport UI with proper dropdown controls and filtering, based on the reference screenshots.
 
 ### Changes
 
-**1. Backend: `supabase/functions/quickbooks-oauth/index.ts`**
-- Add `account-quick-report` action to the switch statement
-- New handler `handleAccountQuickReport` that calls the QB Reports API:
-  `reports/TransactionListByAccount?account=<accountId>&start_date=<start>&end_date=<end>`
-- Accepts `accountId` (required), `startDate` (defaults to 90 days ago), `endDate` (defaults to today)
-- Parses the QB report response (rows with columns: Distribution Account, Transaction Date, Transaction Type, Num, Name, Memo/Description, Amount, Balance) and returns structured JSON
+**1. `src/components/accounting/AccountQuickReportDrawer.tsx`**
 
-**2. New Component: `src/components/accounting/AccountQuickReportDrawer.tsx`**
-- A full-width Sheet that slides in from the right
-- Header shows account name, balance, and a "Back to Chart of Accounts" link
-- Date range picker (Report Period dropdown + From date) matching QB layout
-- Table with columns: Distribution Account, Date, Type, #, Name, Memo/Description, Cleared, Amount, Balance
-- Beginning Balance row at the top
-- Loading skeleton while fetching
-- Calls `data.qbAction("account-quick-report", { accountId, startDate, endDate })` on open
+Add the following controls to match the QB layout:
 
-**3. Update: `src/components/accounting/AccountingAccounts.tsx`**
-- Add state for selected account (`selectedAccount: { Id, Name, CurrentBalance } | null`)
-- Make account name cells clickable (cursor-pointer, underline on hover, blue text)
-- Render `AccountQuickReportDrawer` at the bottom, controlled by `selectedAccount`
+- **Report Period dropdown** -- A Select dropdown with preset options:
+  - "Today", "This Week", "This Month", "This Quarter", "This Year", "Since 90 days ago" (default), "Since 365 days ago", "All Dates", "Custom"
+  - Selecting a preset automatically sets the start date; "Custom" keeps the manual date pickers visible
+- **Transaction Type filter dropdown** -- A Select dropdown to filter the displayed transactions client-side:
+  - "All" (default), "Expense", "Payment", "Deposit", "Bill Payment", "Bill Payment (Cheque)", "Sales Receipt", "Refund", "Transfer", "Journal Entry"
+  - Filters `transactions` array by `t.type` before rendering
+- **Additional columns** to match QB screenshot:
+  - "Distribution Account" column (already have "Account" -- just rename the header)
+  - "Full Name" column (map from existing `account` field which contains the full account name)
+  - "Cleared" column (currently not returned by backend -- will show placeholder "---" for now)
+- **Layout adjustment**: Move the date controls into a toolbar row matching QB's "Report period | From" layout with the filter dropdown alongside
 
-**4. Update: `src/hooks/useQuickBooksData.ts`**
-- Export `qbAction` (already exported) -- no changes needed here
+**2. Specific UI layout (header area)**
+
+```
+[Report period: v] [From: date] [To: date]  |  [Filter by type: v]
+```
+
+- Report period Select on the left
+- Date pickers next to it (hidden when not "Custom" and the period is a preset with only a start boundary)
+- Transaction type filter Select on the right
 
 ### Technical Notes
-- The `TransactionListByAccount` report endpoint returns pre-calculated running balances, which is exactly what the QB screenshot shows
-- The report response uses a nested Rows/ColData structure that needs parsing into flat transaction objects
-- The Sheet will use `sm:max-w-4xl` to be wide enough for the transaction table
+- All filtering is client-side on the already-fetched transactions array -- no backend changes needed
+- The Report Period dropdown computes `startDate` and `endDate` from presets using `date-fns` helpers (e.g., `startOfMonth`, `startOfQuarter`, `startOfYear`)
+- The "Cleared" column data is not available from the `TransactionListByAccount` report endpoint without adding the `cleared_status` column parameter -- this can be added to the backend in a follow-up if needed
+- Select dropdowns will use the existing `@/components/ui/select` component with proper `bg-popover` background (no transparency issues)
