@@ -21,6 +21,12 @@ export function LiveChatWidget() {
     if (open) inputRef.current?.focus();
   }, [open]);
 
+  // Cancel stream when closing the panel
+  const handleClose = () => {
+    if (isStreaming) cancelStream();
+    setOpen(false);
+  };
+
   const handleSend = () => {
     if (!input.trim() || isStreaming) return;
     sendMessage(input.trim());
@@ -51,7 +57,7 @@ export function LiveChatWidget() {
                   <Trash2 className="w-3.5 h-3.5" />
                 </Button>
               )}
-              <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setOpen(false)}>
+              <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={handleClose}>
                 <X className="w-4 h-4" />
               </Button>
             </div>
@@ -125,7 +131,7 @@ export function LiveChatWidget() {
 
       {/* Floating button */}
       <button
-        onClick={() => setOpen(!open)}
+        onClick={() => open ? handleClose() : setOpen(true)}
         className={cn(
           "fixed bottom-20 right-4 z-50 md:bottom-6 md:right-6",
           "flex items-center justify-center w-14 h-14 rounded-full",

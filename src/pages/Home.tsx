@@ -113,6 +113,11 @@ export default function Home() {
     chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Cancel stream on unmount
+  useEffect(() => {
+    return () => { cancelStream(); };
+  }, [cancelStream]);
+
   // Build personalized quick actions
   const useCases: UseCase[] = useMemo(() => {
     if (!mapping) return defaultUseCases;
