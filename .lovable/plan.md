@@ -1,20 +1,25 @@
 
 
-## Enhance Multi-Language Support and Humanized English Output
+## Restrict Kourosh to Shop Floor Only (No CRM Access)
 
-### Changes
+### Problem
+`kourosh@rebar.shop` currently has no `user_id` linked in the profiles table and no roles assigned, which means RoleGuard lets them through to everything. They should only have **workshop** access (Shop Floor, Time Clock, Team Hub, etc.) -- no CRM, Accounting, or Pipeline.
 
-**1. `src/components/office/TranscribeView.tsx`**
-- Add Georgian (`ka`, "Georgian") to the `LANGUAGES` array (after Hindi)
+### Steps
 
-**2. `supabase/functions/transcribe-translate/index.ts`**
-- Update `TRANSLATOR_PERSONA` to explicitly list primary supported languages: English, Farsi, Hindi, Georgian, Arabic, Turkish, Urdu
-- Expand code-switching examples to include Hindi+English, Georgian+English, Farsi+Hindi mixes
-- Add a COMPREHENSION section instructing the model to first fully understand meaning/intent/cultural context before translating
-- Update `buildAudioSystemPrompt` to list all primary languages in the mixing examples (not just "Farsi and English")
-- Strengthen humanization: add rules about understanding colloquialisms, slang, and cultural idioms specific to Farsi, Hindi, and Georgian before producing polished English
+**1. Link the profile to the auth account**
+- Update the existing profile record to set `user_id = 'efa543f5-0f1b-4cee-b806-4176d996e9a6'`
 
-### Technical Notes
-- No backend API or schema changes -- only prompt engineering and one UI addition
-- Georgian script is already handled by Gemini; adding it to the picker and prompts improves accuracy
-- The two-pass pipeline ensures Pass 2 refines whatever Pass 1 produces, so better Pass 1 prompts directly improve final output quality
+**2. Assign the `workshop` role**
+- Insert a row into `user_roles` with `user_id = 'efa543f5-...'` and `role = 'workshop'`
+
+### Result
+Once linked and assigned:
+- RoleGuard will restrict Kourosh to: `/home`, `/shop-floor`, `/timeclock`, `/team-hub`, `/settings`, `/inbox`, `/phonecalls`, `/agent`, `/tasks`
+- Attempting to visit `/pipeline`, `/customers`, `/accounting`, or any other restricted route will redirect to `/shop-floor`
+- The sidebar will show locked indicators on restricted modules
+
+### Technical Details
+- Two SQL `UPDATE`/`INSERT` statements executed via the data tools (no schema changes needed)
+- The `user_roles` table and `has_role` function already exist
+- The `workshop` role is already defined in the `app_role` enum
