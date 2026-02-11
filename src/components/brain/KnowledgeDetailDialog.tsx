@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, Loader2, Trash2 } from "lucide-react";
+import { X, Loader2, Trash2, Paperclip, Download, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -131,7 +131,53 @@ export function KnowledgeDetailDialog({ item, onClose, onUpdated }: KnowledgeDet
           ) : (
             <>
               <h2 className="text-xl font-semibold">{item.title}</h2>
-              {item.source_url && (
+
+              {/* File preview section */}
+              {(() => {
+                const meta = item.metadata as Record<string, unknown> | null;
+                const fileName = meta?.file_name as string | undefined;
+                const fileType = (meta?.file_type as string | undefined)?.toLowerCase();
+                const isImage = fileType && ["jpg", "jpeg", "png", "webp", "svg", "gif"].includes(fileType);
+                const isVideo = fileType && ["mp4", "webm", "mov"].includes(fileType);
+
+                if (!fileName || !item.source_url) return null;
+
+                return (
+                  <div className="space-y-2">
+                    {isImage && (
+                      <img
+                        src={item.source_url}
+                        alt={fileName}
+                        className="w-full max-h-64 object-contain rounded-lg border border-border bg-muted/30"
+                      />
+                    )}
+                    {isVideo && (
+                      <video
+                        src={item.source_url}
+                        controls
+                        className="w-full max-h-64 rounded-lg border border-border bg-muted/30"
+                      />
+                    )}
+                    {!isImage && !isVideo && (
+                      <a
+                        href={item.source_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-3 p-3 rounded-xl border border-border hover:border-primary/30 hover:bg-primary/5 transition-colors"
+                      >
+                        <Paperclip className="w-4 h-4 text-primary flex-shrink-0" />
+                        <span className="text-sm font-medium truncate flex-1">{fileName}</span>
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                          {fileType?.toUpperCase()}
+                        </span>
+                        <ExternalLink className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                      </a>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {item.source_url && !((item.metadata as any)?.file_name) && (
                 <a
                   href={item.source_url}
                   target="_blank"
