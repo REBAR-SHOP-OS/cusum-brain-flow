@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useConversation } from "@elevenlabs/react";
-import { Mic, X } from "lucide-react";
+import { Mic, X, WifiOff, RefreshCw } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
@@ -9,6 +9,7 @@ import { useVizzyContext } from "@/hooks/useVizzyContext";
 import { buildVizzyContext } from "@/lib/vizzyContext";
 
 const ALLOWED_EMAIL = "sattar@rebar.shop";
+const MAX_AUTO_RETRIES = 2;
 
 interface TranscriptEntry {
   role: "user" | "agent";
@@ -27,8 +28,13 @@ export function VoiceVizzy() {
 function VoiceVizzyInner({ userId }: { userId: string }) {
   const [isConnecting, setIsConnecting] = useState(false);
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
+  const [connectionLost, setConnectionLost] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
   const transcriptRef = useRef<TranscriptEntry[]>([]);
   const sessionActiveRef = useRef(false);
+  const userRequestedStop = useRef(false);
+  const retryCount = useRef(0);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { loadFullContext } = useVizzyContext();
 
@@ -40,21 +46,50 @@ function VoiceVizzyInner({ userId }: { userId: string }) {
     loadFullContext().catch(() => {});
   }, [loadFullContext]);
 
+  // Cleanup retry timer on unmount
+  useEffect(() => {
+    return () => {
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+    };
+  }, []);
+
   const conversation = useConversation({
     onConnect: () => {
       sessionActiveRef.current = true;
+      setIsRetrying(false);
       console.warn("Vizzy voice connected");
     },
     onDisconnect: () => {
       setIsConnecting(false);
       sessionActiveRef.current = false;
-      const entries = transcriptRef.current;
-      if (entries.length > 0) {
-        supabase.from("vizzy_interactions").insert({
-          user_id: userId,
-          transcript: entries as any,
-          session_ended_at: new Date().toISOString(),
-        }).then(({ error }) => { if (error) console.error(error); });
+
+      // User clicked X — normal flow
+      if (userRequestedStop.current) {
+        userRequestedStop.current = false;
+        const entries = transcriptRef.current;
+        if (entries.length > 0) {
+          supabase.from("vizzy_interactions").insert({
+            user_id: userId,
+            transcript: entries as any,
+            session_ended_at: new Date().toISOString(),
+          }).then(({ error }) => { if (error) console.error(error); });
+        }
+        return;
+      }
+
+      // Unexpected disconnect — auto-retry
+      if (retryCount.current < MAX_AUTO_RETRIES) {
+        retryCount.current += 1;
+        setIsRetrying(true);
+        console.warn(`Vizzy: unexpected disconnect, auto-retry ${retryCount.current}/${MAX_AUTO_RETRIES}`);
+        retryTimerRef.current = setTimeout(() => {
+          startSession();
+        }, 2000);
+      } else {
+        // Retries exhausted — show connection lost UI
+        console.warn("Vizzy: retries exhausted, showing connection lost");
+        setConnectionLost(true);
+        setIsRetrying(false);
       }
     },
     onMessage: (message: any) => {
@@ -72,11 +107,9 @@ function VoiceVizzyInner({ userId }: { userId: string }) {
 
   const isActive = conversation.status === "connected";
 
-  const start = useCallback(async () => {
+  const startSession = useCallback(async () => {
     if (sessionActiveRef.current || isConnecting) return;
     setIsConnecting(true);
-    setTranscript([]);
-    transcriptRef.current = [];
     try {
       await navigator.mediaDevices.getUserMedia({ audio: true });
       const { data, error } = await supabase.functions.invoke("elevenlabs-conversation-token");
@@ -96,10 +129,31 @@ function VoiceVizzyInner({ userId }: { userId: string }) {
       console.error("Failed to start Vizzy voice:", err);
       setIsConnecting(false);
       sessionActiveRef.current = false;
+      // If this was a retry attempt, show connection lost
+      if (retryCount.current > 0) {
+        setConnectionLost(true);
+        setIsRetrying(false);
+      }
     }
   }, [conversation, loadFullContext, isConnecting]);
 
+  const start = useCallback(() => {
+    // Fresh start — reset everything
+    userRequestedStop.current = false;
+    retryCount.current = 0;
+    setConnectionLost(false);
+    setIsRetrying(false);
+    setTranscript([]);
+    transcriptRef.current = [];
+    startSession();
+  }, [startSession]);
+
   const stop = useCallback(async () => {
+    userRequestedStop.current = true;
+    if (retryTimerRef.current) {
+      clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
     try {
       await conversation.endSession();
     } catch (err) {
@@ -109,9 +163,16 @@ function VoiceVizzyInner({ userId }: { userId: string }) {
     }
   }, [conversation]);
 
+  const dismiss = useCallback(() => {
+    setConnectionLost(false);
+    setIsRetrying(false);
+    retryCount.current = 0;
+  }, []);
+
   return (
     <>
-      {!isActive && (
+      {/* Default mic button — hidden during active/retrying/lost states */}
+      {!isActive && !connectionLost && !isRetrying && (
         <button
           onClick={start}
           disabled={isConnecting}
@@ -128,6 +189,60 @@ function VoiceVizzyInner({ userId }: { userId: string }) {
         </button>
       )}
 
+      {/* Connection lost card */}
+      {connectionLost && !isActive && (
+        <div className="fixed bottom-20 right-4 z-50 md:bottom-6 md:right-6 flex flex-col items-end gap-2">
+          <div className="bg-card border border-border rounded-2xl shadow-xl p-4 w-64 space-y-3">
+            <div className="flex items-center gap-2 text-destructive">
+              <WifiOff className="w-5 h-5" />
+              <span className="text-sm font-medium">Connection lost</span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Vizzy disconnected unexpectedly. Tap to try again.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={start}
+                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                Try Again
+              </button>
+              <button
+                onClick={dismiss}
+                className="px-3 py-2 rounded-lg bg-muted text-muted-foreground text-sm hover:bg-muted/80 transition-colors"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Retrying overlay */}
+      <AnimatePresence>
+        {isRetrying && !isActive && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/90 backdrop-blur-sm"
+          >
+            <button
+              onClick={stop}
+              className="absolute top-6 right-6 p-3 rounded-full bg-destructive text-destructive-foreground hover:bg-destructive/80 transition-colors"
+              aria-label="Cancel"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            <RefreshCw className="w-10 h-10 text-primary animate-spin mb-4" />
+            <p className="text-lg font-medium text-white/80">Reconnecting...</p>
+            <p className="text-sm text-white/50 mt-1">Attempt {retryCount.current}/{MAX_AUTO_RETRIES}</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Active session overlay */}
       <AnimatePresence>
         {isActive && (
           <motion.div
