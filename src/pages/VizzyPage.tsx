@@ -52,6 +52,8 @@ export default function VizzyPage() {
   const snapshotRef = useRef<VizzyBusinessSnapshot | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const prevVolumeRef = useRef(80);
+  const silentModeRef = useRef(false);
+  const silentIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const { loadFullContext } = useVizzyContext();
 
   // Session timer
@@ -61,6 +63,7 @@ export default function VizzyPage() {
     }
     return () => {
       if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+      if (silentIntervalRef.current) { clearInterval(silentIntervalRef.current); silentIntervalRef.current = null; }
     };
   }, [status]);
 
@@ -207,13 +210,23 @@ export default function VizzyPage() {
 
         if (shouldSilence && !shouldWake) {
           setSilentMode(true);
+          silentModeRef.current = true;
           prevVolumeRef.current = volume;
           try { conversation.setVolume({ volume: 0 }); } catch {}
           conversation.sendContextualUpdate(
-            "CEO asked you to be silent. Do NOT speak. Just listen and take mental notes silently. Only respond when the CEO calls your name 'Vizzy'."
+            "SYSTEM OVERRIDE: CEO activated silent mode. You MUST NOT speak, respond, or check in. Do NOT ask if they are there. Do NOT say anything at all. Remain completely silent until CEO says your name 'Vizzy'. This is a hard rule — zero exceptions."
           );
+          // Start activity pings to prevent idle "are you there?" prompts
+          if (!silentIntervalRef.current) {
+            silentIntervalRef.current = setInterval(() => {
+              try { conversation.sendUserActivity(); } catch {}
+            }, 15000);
+          }
         } else if (shouldWake) {
           setSilentMode(false);
+          silentModeRef.current = false;
+          // Clear activity pings
+          if (silentIntervalRef.current) { clearInterval(silentIntervalRef.current); silentIntervalRef.current = null; }
           try { conversation.setVolume({ volume: prevVolumeRef.current / 100 }); } catch {}
           conversation.sendContextualUpdate(
             "CEO called your name. You may speak again. Briefly summarize any notes you took during the silent period, then continue normally."
@@ -227,6 +240,12 @@ export default function VizzyPage() {
           type: "text",
         };
         setTranscript((prev) => { const next = [...prev, entry]; transcriptRef.current = next; return next; });
+        // Reinforce silence if agent speaks during silent mode
+        if (silentModeRef.current) {
+          conversation.sendContextualUpdate(
+            "SYSTEM OVERRIDE: You are STILL in silent mode. Do NOT speak. Do NOT check in. Do NOT respond. Remain completely silent until CEO says 'Vizzy'."
+          );
+        }
       }
     },
     onError: (error: any) => {
