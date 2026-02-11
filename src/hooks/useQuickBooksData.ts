@@ -166,19 +166,29 @@ export function useQuickBooksData() {
         return;
       }
 
-      // Phase 1: Single call for dashboard-critical data (invoices, bills, payments, bank accounts)
+      // Phase 1: Dashboard-critical data + full accounts list
       const dashboardData = await qbAction("dashboard-summary");
       setInvoices(dashboardData.invoices || []);
       setBills(dashboardData.bills || []);
       setPayments(dashboardData.payments || []);
-      setAccounts(dashboardData.accounts || []);
+
+      // Fetch full Chart of Accounts immediately (not in background batch)
+      try {
+        const fullAccounts = await qbAction("list-accounts");
+        setAccounts(fullAccounts.accounts || []);
+        console.log("[QB] Full accounts loaded:", (fullAccounts.accounts || []).length);
+      } catch (accErr) {
+        console.warn("[QB] list-accounts failed, falling back to dashboard bank accounts:", accErr);
+        setAccounts(dashboardData.accounts || []);
+      }
+
       setLoading(false); // Dashboard cards render immediately
 
       // Phase 2: Load secondary data in background (no loading spinner)
       const [
         vendorsResult, estimatesResult, companyInfoResult, itemsResult,
         poResult, cmResult, empResult, taResult,
-        syncCustResult, syncInvResult, fullAccountsResult,
+        syncCustResult, syncInvResult,
       ] = await Promise.allSettled([
         qbAction("list-vendors"),
         qbAction("list-estimates"),
@@ -190,7 +200,6 @@ export function useQuickBooksData() {
         qbAction("list-time-activities"),
         qbAction("sync-customers"),
         qbAction("sync-invoices"),
-        qbAction("list-accounts"),
       ]);
 
       if (vendorsResult.status === "fulfilled") setVendors(vendorsResult.value.vendors || []);
@@ -201,7 +210,6 @@ export function useQuickBooksData() {
       if (cmResult.status === "fulfilled") setCreditMemos(cmResult.value.creditMemos || []);
       if (empResult.status === "fulfilled") setEmployees(empResult.value.employees || []);
       if (taResult.status === "fulfilled") setTimeActivities(taResult.value.timeActivities || []);
-      if (fullAccountsResult.status === "fulfilled") setAccounts(fullAccountsResult.value.accounts || []);
 
       // Load synced customers from our DB (paginate past Supabase 1000-row default)
       const allDbCustomers: typeof dbCustomersPage = [];
