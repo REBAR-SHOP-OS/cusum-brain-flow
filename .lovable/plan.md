@@ -1,39 +1,32 @@
 
 
-## افزودن آیکون Brain به ایجنت Pixel برای مدیریت دانش اختصاصی
+## نمایش فایل‌های آپلود شده در Pixel Brain
 
 ### خلاصه
-یک آیکون مغز (Brain) در هدر چت ایجنت Pixel اضافه می‌شود که با کلیک روی آن، دیالوگ AddKnowledgeDialog باز شده و کاربر می‌تواند منابع، دستورعمل‌ها و محتوای آموزشی مخصوص تولید محتوای شبکه‌های اجتماعی را اضافه کند. همچنین امکان مشاهده دانش‌های ذخیره‌شده قبلی وجود خواهد داشت.
+در حال حاضر قابلیت آپلود فایل در AddKnowledgeDialog وجود دارد، اما در لیست دانش‌ها و صفحه جزئیات، فایل‌های آپلود شده نمایش داده نمی‌شوند. این تغییرات باعث می‌شود فایل‌ها به صورت واضح در هر دو بخش قابل مشاهده باشند.
 
 ### تغییرات
 
-**فایل: `src/pages/AgentWorkspace.tsx`**
-- اضافه کردن آیکون Brain در نوار بالای چت (کنار toggle سایدبار)، فقط برای ایجنت `social`
-- با کلیک روی آن، یک دیالوگ Brain باز می‌شود که شامل:
-  - لیست دانش‌های موجود (فیلتر شده با metadata.agent = "social")
-  - دکمه افزودن دانش جدید (با استفاده از همان AddKnowledgeDialog موجود)
-- state جدید: `brainOpen` برای کنترل باز/بسته شدن دیالوگ
-- import کردن `Brain` از lucide-react و `AddKnowledgeDialog` و `KnowledgeDetailDialog`
+**فایل 1: `src/components/social/PixelBrainDialog.tsx`**
+- نمایش نام فایل آپلود شده (از `metadata.file_name`) در زیر عنوان هر آیتم با آیکون گیره کاغذ
+- نمایش نوع فایل (badge کوچک مثل PDF, JPG, MP4) در کنار نام فایل
 
-**فایل جدید: `src/components/social/PixelBrainDialog.tsx`**
-- یک دیالوگ (Sheet یا Dialog) که دانش‌های مرتبط با ایجنت social را نمایش می‌دهد
-- فیلتر خودکار: فقط آیتم‌هایی که `metadata.agent = "social"` دارند نشان داده می‌شوند
-- دکمه "Add Knowledge" برای باز کردن AddKnowledgeDialog با metadata پیش‌فرض `{ agent: "social" }`
-- امکان کلیک روی هر آیتم برای مشاهده جزئیات (KnowledgeDetailDialog)
-- ظاهر ساده و تمیز، مطابق با سبک فعلی اپ
-
-**فایل: `src/components/brain/AddKnowledgeDialog.tsx`**
-- اضافه کردن prop اختیاری `defaultMetadata` برای ارسال metadata پیش‌فرض (مثلا `{ agent: "social" }`)
-- هنگام ذخیره، این metadata با metadata موجود merge می‌شود
+**فایل 2: `src/components/brain/KnowledgeDetailDialog.tsx`**
+- اضافه کردن بخش نمایش فایل در صفحه جزئیات:
+  - برای تصاویر: نمایش پیش‌نمایش تصویر (img tag با source_url)
+  - برای ویدیو: نمایش پلیر ویدیو
+  - برای اسناد (PDF, DOC و غیره): نمایش نام فایل با دکمه دانلود/باز کردن
+- نام فایل و نوع آن از metadata خوانده می‌شود
 
 ### چه چیزی تغییر نمی‌کند
-- صفحه Brain اصلی
-- عملکرد سایر ایجنت‌ها
-- ظاهر کلی اپلیکیشن
-- جدول knowledge در دیتابیس (بدون تغییر schema -- از فیلد metadata موجود استفاده می‌شود)
+- AddKnowledgeDialog (قبلا قابلیت آپلود دارد)
+- ساختار دیتابیس
+- عملکرد سایر بخش‌های اپ
+- سایر ایجنت‌ها
 
 ### جزئیات فنی
-- جدول `knowledge` دارای ستون `metadata` از نوع JSONB است که می‌توان `agent: "social"` را در آن ذخیره کرد
-- فیلتر کردن در سمت کلاینت از روی metadata انجام می‌شود
-- نیازی به migration نیست
+- فایل‌ها در `estimation-files` bucket ذخیره شده و URL آنها در `source_url` قرار دارد
+- اطلاعات فایل (نام و نوع) در `metadata.file_name` و `metadata.file_type` ذخیره شده
+- برای تصاویر از تگ `img` و برای ویدیو از تگ `video` استفاده می‌شود
+- لینک دانلود مستقیم از `source_url` باز می‌شود
 
