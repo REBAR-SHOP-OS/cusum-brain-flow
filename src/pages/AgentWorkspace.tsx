@@ -183,7 +183,7 @@ export default function AgentWorkspace() {
             activeSessionId={activeSessionId}
             onSelectSession={loadSession}
             onNewChat={handleNewChat}
-            sessions={sessions.filter((s) => s.agent_name === config.name)}
+            sessions={sessions}
             loading={sessionsLoading}
             deleteSession={deleteSession}
           />
@@ -205,7 +205,7 @@ export default function AgentWorkspace() {
               activeSessionId={activeSessionId}
               onSelectSession={(id) => { loadSession(id); setMobileHistoryOpen(false); }}
               onNewChat={() => { handleNewChat(); setMobileHistoryOpen(false); }}
-              sessions={sessions.filter((s) => s.agent_name === config.name)}
+              sessions={sessions}
               loading={sessionsLoading}
               deleteSession={deleteSession}
             />
