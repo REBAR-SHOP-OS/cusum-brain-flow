@@ -1,7 +1,8 @@
-import { useState, useRef } from "react";
+import { useState, useRef, lazy, Suspense } from "react";
 import {
   Lock, Tag, CreditCard, Lightbulb, HelpCircle, LogOut,
   Camera, Settings as SettingsIcon, Users, Loader2, GraduationCap,
+  Brain, Plug,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { useTour } from "@/hooks/useTour";
@@ -23,7 +24,10 @@ import { useAvatarUpload } from "@/hooks/useAvatarUpload";
 import { useNavigate } from "react-router-dom";
 import brandLogo from "@/assets/brand-logo.png";
 
-type SettingsTab = "settings";
+const BrainPage = lazy(() => import("@/pages/Brain"));
+const IntegrationsPage = lazy(() => import("@/pages/Integrations"));
+
+type SettingsTab = "settings" | "brain" | "integrations";
 
 export default function Settings() {
   const { user, signOut } = useAuth();
@@ -55,8 +59,10 @@ export default function Settings() {
     await uploadSingle(myProfile.id, file);
   };
 
-  const tabs: { id: SettingsTab; label: string; icon: React.ElementType; onClick?: () => void }[] = [
+  const tabs: { id: SettingsTab; label: string; icon: React.ElementType }[] = [
     { id: "settings", label: "Settings", icon: SettingsIcon },
+    { id: "brain", label: "Brain", icon: Brain },
+    { id: "integrations", label: "Integrations", icon: Plug },
   ];
 
   return (
@@ -83,7 +89,7 @@ export default function Settings() {
           {tabs.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => tab.onClick ? tab.onClick() : setActiveTab(tab.id)}
+              onClick={() => setActiveTab(tab.id)}
               className={cn(
                 "flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left",
                 activeTab === tab.id
@@ -97,7 +103,7 @@ export default function Settings() {
           ))}
           {/* People link → Office Member Area */}
           <button
-            onClick={() => navigate("/office")}
+            onClick={() => navigate("/admin")}
             className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left text-muted-foreground hover:text-foreground hover:bg-secondary/50"
           >
             <Users className="w-4 h-4" />
@@ -106,33 +112,51 @@ export default function Settings() {
         </nav>
       </div>
 
+      {/* Mobile tab bar */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-card border-t border-border flex">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={cn(
+              "flex-1 flex flex-col items-center gap-1 py-2 text-xs transition-colors",
+              activeTab === tab.id ? "text-primary" : "text-muted-foreground"
+            )}
+          >
+            <tab.icon className="w-4 h-4" />
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
       {/* Content */}
       <div className="flex-1 overflow-y-auto scrollbar-thin">
-        <div className="max-w-xl mx-auto py-8 px-6">
-          <div className="space-y-8">
-            {/* Profile Avatar */}
-            <div className="flex flex-col items-center">
-              <div className="relative">
-                <Avatar className="w-24 h-24 border-4 border-primary/20">
-                  <AvatarImage src={myProfile?.avatar_url || ""} />
-                  <AvatarFallback className="text-2xl bg-gradient-to-br from-primary to-accent">
-                    {userEmail.charAt(0).toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
-                <button
-                  onClick={() => avatarFileRef.current?.click()}
-                  disabled={uploading}
-                  className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-secondary border border-border flex items-center justify-center hover:bg-secondary/80 transition-colors"
-                >
-                  {uploading ? <Loader2 className="w-4 h-4 text-muted-foreground animate-spin" /> : <Camera className="w-4 h-4 text-muted-foreground" />}
-                </button>
-                <input ref={avatarFileRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
+        {activeTab === "settings" && (
+          <div className="max-w-xl mx-auto py-8 px-6">
+            <div className="space-y-8">
+              {/* Profile Avatar */}
+              <div className="flex flex-col items-center">
+                <div className="relative">
+                  <Avatar className="w-24 h-24 border-4 border-primary/20">
+                    <AvatarImage src={myProfile?.avatar_url || ""} />
+                    <AvatarFallback className="text-2xl bg-gradient-to-br from-primary to-accent">
+                      {userEmail.charAt(0).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <button
+                    onClick={() => avatarFileRef.current?.click()}
+                    disabled={uploading}
+                    className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-secondary border border-border flex items-center justify-center hover:bg-secondary/80 transition-colors"
+                  >
+                    {uploading ? <Loader2 className="w-4 h-4 text-muted-foreground animate-spin" /> : <Camera className="w-4 h-4 text-muted-foreground" />}
+                  </button>
+                  <input ref={avatarFileRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
+                </div>
+                <h2 className="mt-4 text-xl font-semibold">
+                  {formData.name} {formData.surname}
+                </h2>
+                <p className="text-sm text-muted-foreground">{formData.email}</p>
               </div>
-              <h2 className="mt-4 text-xl font-semibold">
-                {formData.name} {formData.surname}
-              </h2>
-              <p className="text-sm text-muted-foreground">{formData.email}</p>
-            </div>
 
               {/* Personal Details */}
               <section className="space-y-4">
@@ -267,7 +291,20 @@ export default function Settings() {
                 </button>
               </div>
             </div>
-        </div>
+          </div>
+        )}
+
+        {activeTab === "brain" && (
+          <Suspense fallback={<div className="flex items-center justify-center h-64"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>}>
+            <BrainPage />
+          </Suspense>
+        )}
+
+        {activeTab === "integrations" && (
+          <Suspense fallback={<div className="flex items-center justify-center h-64"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>}>
+            <IntegrationsPage />
+          </Suspense>
+        )}
       </div>
     </div>
   );

@@ -68,8 +68,6 @@ export function AppSidebar() {
       items: [
         { name: "Inbox", href: "/inbox", icon: Inbox, badge: unreadCount || undefined, tourId: "nav-inbox" },
         { name: "Tasks", href: "/tasks", icon: CheckSquare, tourId: "nav-tasks" },
-        { name: "Brain", href: "/brain", icon: Brain, tourId: "nav-brain" },
-        { name: "Integrations", href: "/integrations", icon: Plug, tourId: "nav-integrations" },
         { name: "Settings", href: "/settings", icon: Settings, tourId: "nav-settings" },
         { name: "Admin Panel", href: "/admin", icon: Shield, roles: ["admin"], lockReason: "Requires Admin role", tourId: "nav-admin" },
       ],
