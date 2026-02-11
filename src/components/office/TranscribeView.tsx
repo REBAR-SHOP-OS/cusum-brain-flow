@@ -167,7 +167,7 @@ function formatTime(seconds: number) {
 
 export function TranscribeView() {
   const [sourceLang, setSourceLang] = useState("auto");
-  const [targetLang, setTargetLang] = useState("English");
+  const targetLang = "English";
   const [formality, setFormality] = useState("neutral");
   const [contextHint, setContextHint] = useState("");
   const [outputFormat, setOutputFormat] = useState("plain");
@@ -691,15 +691,8 @@ export function TranscribeView() {
                 </Select>
               </div>
               <div className="space-y-1">
-                <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Translate To</label>
-                <Select value={targetLang} onValueChange={setTargetLang}>
-                  <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {TARGET_LANGUAGES.map(l => (
-                      <SelectItem key={l.value} value={l.value} className="text-xs">{l.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Output Language</label>
+                <div className="h-8 flex items-center text-xs text-muted-foreground px-2 border border-border rounded-md bg-muted/30">English (fixed)</div>
               </div>
               <div className="space-y-1">
                 <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Formality</label>
@@ -764,7 +757,7 @@ export function TranscribeView() {
               <div className="space-y-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-                    {targetLang} Translation
+                    English Translation
                   </span>
                   {confidence !== null && <ConfidenceBadge confidence={confidence} />}
                 </div>
