@@ -112,11 +112,14 @@ export function AgentHistorySidebar({
               </div>
             )}
             {agentSessions.map((session) => (
-              <button
+              <div
                 key={session.id}
+                role="button"
+                tabIndex={0}
                 onClick={() => onSelectSession(session.id)}
+                onKeyDown={(e) => { if (e.key === 'Enter') onSelectSession(session.id); }}
                 className={cn(
-                  "w-full text-left px-3 py-2.5 rounded-lg text-sm truncate transition-colors group flex items-center gap-2",
+                  "w-full text-left px-3 py-2.5 rounded-lg text-sm truncate transition-colors group flex items-center gap-2 cursor-pointer",
                   activeSessionId === session.id
                     ? "bg-primary/10 text-primary font-medium"
                     : "text-foreground/80 hover:bg-muted"
@@ -126,13 +129,14 @@ export function AgentHistorySidebar({
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
+                    e.preventDefault();
                     deleteSession(session.id);
                   }}
-                  className="opacity-0 group-hover:opacity-100 p-1 hover:text-destructive transition-all"
+                  className="opacity-0 group-hover:opacity-100 p-1 hover:text-destructive transition-all flex-shrink-0"
                 >
                   <Trash2 className="w-3 h-3" />
                 </button>
-              </button>
+              </div>
             ))}
           </div>
         </ScrollArea>
