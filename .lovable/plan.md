@@ -1,92 +1,84 @@
 
+# Role-Aware Agent Access Control
 
-# Train All Agents with Ontario Rules + Agent Activity Report in Daily Summary
+## What This Does
 
-## Overview
+Every user can talk to every agent, but each agent will know the user's role level and automatically filter what information it shares. A workshop worker can ask Penny a question, but Penny won't reveal financial details like invoice amounts, AR aging, or customer credit limits. Instead, she'll answer at the appropriate level or redirect.
 
-Two changes: (1) inject Ontario regulatory context into all 15 agent system prompts so every agent operates with awareness of Ontario laws and acts as a CEO helper, and (2) add an "Agent Activity Report" section to the daily summary showing what each AI agent and human did that day.
+## How It Works
 
----
+One change to `supabase/functions/ai-agent/index.ts`:
 
-## Change 1: Ontario Context for All Agents
+### 1. Fetch user roles server-side (after line 2176)
 
-**File:** `supabase/functions/ai-agent/index.ts`
+After fetching the user profile, also fetch their roles from `user_roles`:
 
-Add a new constant `ONTARIO_CONTEXT` (after the existing `SHARED_TOOL_INSTRUCTIONS` at line 625) containing:
-
-- **ESA (Employment Standards Act):** 44h/week OT threshold, 1.5x rate, 30min meal break after 5h, 2 weeks vacation after 12 months, 9 statutory holidays
-- **OHSA / WSIB:** Critical injury reporting within 48h, JHSC required for 20+ workers, WHMIS training, WSIB premiums
-- **Construction Lien Act:** 60-day preservation window, 10% holdback on progress payments, Prompt Payment Act 28-day cycle
-- **CRA / HST:** 13% HST on Ontario sales, quarterly remittance, T4 deadlines
-- **CEO Helper Mode directive:** All agents proactively flag compliance risks, create tasks for regulatory deadlines, report exceptions
-
-Then prepend `ONTARIO_CONTEXT` to every agent prompt in the `agentPrompts` record (all 15 agents: sales, accounting, support, collections, estimation, social, bizdev, webbuilder, assistant, copywriting, talent, seo, growth, legal, eisenhower).
-
-This is done by modifying the prompt construction logic (around line 1376 where prompts are used) to concatenate `ONTARIO_CONTEXT` before each agent's specific prompt, similar to how `SHARED_TOOL_INSTRUCTIONS` is already appended.
-
----
-
-## Change 2: Agent Activity Report in Daily Summary
-
-### Backend: `supabase/functions/daily-summary/index.ts`
-
-**Data context addition (around line 873):** Add a new section `--- AGENT ACTIVITY REPORT ---` that groups `command_log` entries by:
-- Agent type (parsed from `parsed_intent` field) -- count interactions per agent
-- User ID (resolved to name via `profileMap`) -- count commands per human
-
-**AI prompt addition (around line 908):** Add `agentActivityReport` to the JSON schema the AI must return:
-
-```text
-"agentActivityReport": {
-  "totalInteractions": "number",
-  "agentBreakdown": [
-    { "agent": "Name", "interactions": 3, "tasksCreated": 2, "highlights": ["..."] }
-  ],
-  "humanActivity": [
-    { "name": "Employee", "agentsUsed": ["penny","blitz"], "totalCommands": 5, "highlights": ["..."] }
-  ]
-}
+```
+const { data: userRoles } = await svcClient
+  .from("user_roles")
+  .select("role")
+  .eq("user_id", user.id);
+const roles = (userRoles || []).map(r => r.role);
 ```
 
-**Stats addition:** Add `agentInteractions` count to the stats object returned.
+### 2. Add a new `ROLE_ACCESS_RULES` constant
 
-### Frontend Types: `src/hooks/useDailyDigest.ts`
-
-Add two new interfaces:
+This block defines what each role level can and cannot see, injected into the system prompt:
 
 ```text
-DigestAgentActivity { agent, interactions, tasksCreated, highlights[] }
-DigestHumanActivity { name, agentsUsed[], totalCommands, highlights[] }
+## Role-Based Information Access (MANDATORY)
+
+Current user roles: [admin, sales, etc.]
+
+ACCESS LEVELS:
+- ADMIN: Full access to everything -- financials, HR, strategy, operations
+- ACCOUNTING: Full financial data, invoices, AR/AP, payroll, tax
+- OFFICE: Orders, customers, deliveries, scheduling, production overview
+- SALES: Pipeline, leads, quotes, customer contacts, estimating
+- WORKSHOP: Machine status, production queue, their own jobs, safety info. 
+  CANNOT SEE: Financial data (invoice amounts, AR, revenue, margins, payroll, credit limits), 
+  HR data (salaries, performance reviews), strategic data (business plans, competitor analysis)
+- FIELD: Delivery routes, their assigned stops, POD. 
+  CANNOT SEE: Same restrictions as workshop
+
+ENFORCEMENT RULES:
+1. If a workshop/field user asks about finances, say: 
+   "That information is managed by the office team. I can help you with [relevant alternatives]."
+2. Never reveal dollar amounts, margins, or revenue to workshop/field users
+3. Workshop users CAN see: their own hours, machine specs, production counts, safety rules
+4. If unsure whether to share, DON'T -- redirect to appropriate department
+5. Admin users bypass all restrictions
 ```
 
-Add to `DigestData`:
-```text
-agentActivityReport?: { totalInteractions, agentBreakdown[], humanActivity[] }
+### 3. Inject into the system prompt (line 2260)
+
+Update the prompt assembly to include role context:
+
+```
+const roleList = roles.join(", ") || "none";
+const isRestricted = !roles.some(r => ["admin","accounting","office","sales"].includes(r));
+
+const ROLE_ACCESS_BLOCK = `\n\n## Current User Access Level\nRoles: ${roleList}\n${isRestricted ? RESTRICTED_RULES : "Full access granted."}`;
+
+const systemPrompt = ONTARIO_CONTEXT + basePrompt + ROLE_ACCESS_BLOCK + SHARED_TOOL_INSTRUCTIONS + `\n\n## Current User\nName: ${userFullName}\nEmail: ${userEmail}`;
 ```
 
-### Frontend UI: `src/components/daily-digest/DigestContent.tsx`
+## What Each Role Sees Per Agent
 
-Add a new "Agent Activity Report" card (after the ERP Activity card, before Emails) that renders:
-- Total AI interactions pill
-- Each agent's name, interaction count, and highlights
-- Each human's name, agents used, and what they accomplished
-- Styled consistently with existing digest cards using the same Card/CardContent pattern
+| Agent | Admin | Office/Sales/Accounting | Workshop/Field |
+|-------|-------|------------------------|----------------|
+| Penny (Accounting) | Everything | Everything | General advice only, no amounts |
+| Blitz (Sales) | Everything | Pipeline + leads | "Talk to the sales team" |
+| Gauge (Estimating) | Everything | Everything | Drawing questions OK, no pricing |
+| Forge (Shop Floor) | Everything | Overview | Full access (their domain) |
+| Atlas (Delivery) | Everything | Overview | Their routes only (their domain) |
+| Vizzy (Assistant) | CEO mode | Department-scoped | Basic task help |
+| All others | Everything | Domain-appropriate | General guidance only |
 
----
+## File Changed
 
-## Files Modified
+| File | Change |
+|------|--------|
+| `supabase/functions/ai-agent/index.ts` | Fetch user roles, add `ROLE_ACCESS_RULES` constant, inject into prompt assembly |
 
-| File | What Changes |
-|------|-------------|
-| `supabase/functions/ai-agent/index.ts` | Add `ONTARIO_CONTEXT`, prepend to all 15 agent prompts |
-| `supabase/functions/daily-summary/index.ts` | Group command_log by agent/user, add agentActivityReport to AI schema |
-| `src/hooks/useDailyDigest.ts` | Add agent/human activity types to DigestData |
-| `src/components/daily-digest/DigestContent.tsx` | Render Agent Activity Report card |
-
-## Implementation Order
-
-1. Add `ONTARIO_CONTEXT` to ai-agent and prepend to all prompts
-2. Update daily-summary data context + AI prompt schema
-3. Update frontend types and DigestContent rendering
-4. Deploy both edge functions
-
+No frontend changes needed. No database changes needed. The `user_roles` table and `has_role` function already exist.
