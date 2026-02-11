@@ -26,6 +26,7 @@ export interface VizzyBusinessSnapshot {
   team: { totalStaff: number };
   recentEvents: any[];
   brainKnowledge: { title: string; category: string; content: string | null }[];
+  agentActivity: { agent_name: string; session_count: number; last_topic: string; user_name: string }[];
 }
 
 export function useVizzyContext() {
@@ -56,14 +57,17 @@ export function useVizzyContext() {
       const customersP = supabase.from("customers").select("id, name, status").eq("status", "active").limit(100) as any;
       const deliveriesP = supabase.from("deliveries").select("id, delivery_number, status, scheduled_date")
         .gte("scheduled_date", today).lte("scheduled_date", today).limit(50) as any;
-      const profilesP = supabase.from("profiles").select("id, full_name").not("full_name", "is", null) as any;
+      const profilesP = supabase.from("profiles").select("id, full_name, user_id").not("full_name", "is", null) as any;
       const eventsP = supabase.from("events").select("id, event_type, entity_type, description, created_at")
         .order("created_at", { ascending: false }).limit(20) as any;
       const knowledgeP = supabase.from("knowledge").select("title, category, content")
         .order("created_at", { ascending: false }).limit(1000) as any;
+      const agentSessionsP = supabase.from("chat_sessions").select("id, title, agent_name, user_id, created_at")
+        .gte("created_at", today + "T00:00:00")
+        .order("created_at", { ascending: false }).limit(200) as any;
 
-      const [qbData, cutPlansRes, cutItemsRes, machinesRes, leadsRes, customersRes, deliveriesRes, profilesRes, eventsRes, knowledgeRes] = await Promise.all([
-        qbPromise, cutPlansP, cutItemsP, machinesP, leadsP, customersP, deliveriesP, profilesP, eventsP, knowledgeP,
+      const [qbData, cutPlansRes, cutItemsRes, machinesRes, leadsRes, customersRes, deliveriesRes, profilesRes, eventsRes, knowledgeRes, agentSessionsRes] = await Promise.all([
+        qbPromise, cutPlansP, cutItemsP, machinesP, leadsP, customersP, deliveriesP, profilesP, eventsP, knowledgeP, agentSessionsP,
       ]);
 
       const cutPlans = cutPlansRes.data || [];
@@ -75,6 +79,26 @@ export function useVizzyContext() {
       const profiles = profilesRes.data || [];
       const events = eventsRes.data || [];
       const knowledge = (knowledgeRes.data || []) as { title: string; category: string; content: string | null }[];
+      const agentSessions = (agentSessionsRes.data || []) as { id: string; title: string; agent_name: string; user_id: string; created_at: string }[];
+
+      // Build agent activity summary: group by agent_name + user
+      const profileMap = new Map<string, string>(profiles.map((p: any) => [p.user_id, p.full_name || "Unknown"]));
+      const activityMap = new Map<string, { agent_name: string; session_count: number; last_topic: string; user_name: string }>();
+      for (const s of agentSessions) {
+        const key = `${s.agent_name}||${s.user_id}`;
+        const existing = activityMap.get(key);
+        if (existing) {
+          existing.session_count++;
+        } else {
+          activityMap.set(key, {
+            agent_name: s.agent_name,
+            session_count: 1,
+            last_topic: s.title,
+            user_name: profileMap.get(s.user_id) || "Unknown",
+          });
+        }
+      }
+      const agentActivity = Array.from(activityMap.values());
 
       // Compute financials — use QB data if available, otherwise fall back to accounting_mirror
       let invoices = qbData?.invoices || [];
@@ -142,6 +166,7 @@ export function useVizzyContext() {
         team: { totalStaff: profiles.length },
         recentEvents: events,
         brainKnowledge: knowledge,
+        agentActivity,
       };
 
       setSnapshot(snap);

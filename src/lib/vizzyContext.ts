@@ -3,7 +3,7 @@ import type { VizzyBusinessSnapshot } from "@/hooks/useVizzyContext";
 export function buildVizzyContext(snap: VizzyBusinessSnapshot): string {
   const fmt = (n: number) =>
     n.toLocaleString("en-US", { style: "currency", currency: "USD" });
-  const { financials: f, production: p, crm, customers: c, deliveries: d, team, recentEvents, brainKnowledge } = snap;
+  const { financials: f, production: p, crm, customers: c, deliveries: d, team, recentEvents, brainKnowledge, agentActivity } = snap;
 
   const bankAccounts = f.accounts
     .filter((a) => a.AccountType === "Bank" && a.Active)
@@ -99,6 +99,11 @@ ${hotLeadsList || "    None"}
 
 📋 RECENT ACTIVITY
 ${eventsList || "  No recent events"}
+
+🤖 AGENT ACTIVITY TODAY
+${agentActivity.length > 0
+  ? agentActivity.map((a) => `  • ${a.agent_name}: ${a.session_count} session${a.session_count > 1 ? "s" : ""} by ${a.user_name} — "${a.last_topic}"`).join("\n")
+  : "  No agent sessions today"}
 
 🧠 ERP BRAIN — KNOWLEDGE BASE (${brainKnowledge.length} entries)
 Use this knowledge to answer questions about company processes, standards, pricing, strategies, and meeting history.
