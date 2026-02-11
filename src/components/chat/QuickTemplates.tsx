@@ -1,6 +1,6 @@
-import { useState } from "react";
 import { LayoutTemplate } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/lib/auth";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   DropdownMenu,
@@ -20,12 +20,20 @@ const templates = [
   { label: "Daily summary", text: "Give me a summary of today's key activities, pending tasks, and any items that need attention." },
 ];
 
+const externalTemplates = [
+  { label: "Days I cannot attend", text: "Days I cannot attend (must be reported at least 2 days in advance)" },
+  { label: "Sick days", text: "Sick days" },
+];
+
 interface QuickTemplatesProps {
   onSelect: (text: string) => void;
   disabled?: boolean;
 }
 
 export function QuickTemplates({ onSelect, disabled }: QuickTemplatesProps) {
+  const { user } = useAuth();
+  const isInternal = user?.email?.endsWith("@rebar.shop") ?? false;
+  const visibleTemplates = isInternal ? templates : externalTemplates;
   return (
     <DropdownMenu>
       <Tooltip>
@@ -49,7 +57,7 @@ export function QuickTemplates({ onSelect, disabled }: QuickTemplatesProps) {
       <DropdownMenuContent align="start" side="top" className="w-[280px]">
         <DropdownMenuLabel className="text-xs text-muted-foreground">Quick Templates</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        {templates.map((t) => (
+        {visibleTemplates.map((t) => (
           <DropdownMenuItem
             key={t.label}
             onClick={() => onSelect(t.text)}
