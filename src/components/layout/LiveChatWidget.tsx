@@ -136,19 +136,6 @@ export function LiveChatWidget() {
         </div>
       )}
 
-      {/* Floating button */}
-      <button
-        onClick={() => open ? handleClose() : setOpen(true)}
-        className={cn(
-          "fixed bottom-20 right-4 z-50 md:bottom-6 md:right-6",
-          "flex items-center justify-center w-14 h-14 rounded-full",
-          "bg-primary text-primary-foreground shadow-lg",
-          "hover:scale-105 active:scale-95 transition-transform"
-        )}
-        aria-label="Live Chat"
-      >
-        {open ? <X className="w-6 h-6" /> : <MessageCircle className="w-6 h-6" />}
-      </button>
     </>
   );
 }
