@@ -47,7 +47,6 @@ const officeTools: { id: OfficeSection; label: string; icon: React.ElementType }
   { id: "optimization", label: "Optimization", icon: Sparkles },
   { id: "tags-export", label: "Tags & Export", icon: Tag },
   { id: "packing-slips", label: "Packing Slips", icon: FileBox },
-  { id: "payroll-audit", label: "Payroll Audit", icon: DollarSign },
 ];
 
 const bottomItems: { id: OfficeSection; label: string; icon: React.ElementType }[] = [

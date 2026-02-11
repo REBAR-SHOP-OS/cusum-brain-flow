@@ -22,6 +22,7 @@ import { AccountingPayroll } from "@/components/accounting/AccountingPayroll";
 import { AccountingDocuments } from "@/components/accounting/AccountingDocuments";
 import { AccountingReport } from "@/components/accounting/AccountingReport";
 import { AccountingAgent } from "@/components/accounting/AccountingAgent";
+import { PayrollAuditView } from "@/components/office/PayrollAuditView";
 import { useIntegrations } from "@/hooks/useIntegrations";
 import { useUserRole } from "@/hooks/useUserRole";
 import accountingHelper from "@/assets/helpers/accounting-helper.png";
@@ -166,6 +167,7 @@ export default function AccountingWorkspace() {
             {activeTab === "accounts" && <AccountingAccounts data={qb} />}
             {activeTab === "audit" && <AccountingAudit data={qb} />}
             {activeTab === "payroll" && <AccountingPayroll data={qb} />}
+            {activeTab === "payroll-audit" && <PayrollAuditView />}
             {activeTab === "documents" && <AccountingDocuments data={qb} />}
             {activeTab === "balance-sheet" && <AccountingReport data={qb} report="balance-sheet" />}
             {activeTab === "profit-loss" && <AccountingReport data={qb} report="profit-loss" />}
