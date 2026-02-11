@@ -1,84 +1,45 @@
 
 
-## Fix: Live Microphone Translation (Record Real Audio Instead of Browser Speech API)
+## Fix: Cutter Queue "Reset to 0" Race Condition
 
-### The Problem
-The Microphone tab uses the browser's built-in `SpeechRecognition` API, which:
-- Only works well for English
-- Produces garbage or nothing for Farsi, Hindi, Georgian, Arabic, Turkish, Urdu, and other languages
-- Cannot do speaker diarization or confidence scoring
+### Root Cause (confirmed)
+Line 130 in `CutterStationView.tsx`:
+```
+setCompletedAtRunStart(completedPieces);
+```
+`completedPieces` derives from `currentItem?.completed_pieces` (line 89), which may be stale if the realtime subscription hasn't delivered the latest DB value yet. This causes the snapshot to capture 0 (or an old value), making the next run's progress calculation start from the wrong base.
 
-The Upload File tab works perfectly because it sends actual audio to the AI-powered backend for transcription.
+### Fix (single surgical change)
 
-### The Fix
-Replace the browser `SpeechRecognition` approach with `MediaRecorder` — capture real audio from the microphone, then send it to the same `transcribe-translate` backend function that file uploads use.
+**File: `src/components/shopfloor/CutterStationView.tsx`**
 
-### Changes to `src/components/office/TranscribeView.tsx`
+Replace line 130 with a direct DB fetch before snapshotting:
 
-**Remove**: All `SpeechRecognition` logic (`recognitionRef`, `accumulatedTextRef`, `interimText`, `onresult` handler, auto-restart on `onend`)
-
-**Add**: `MediaRecorder`-based recording:
-
-```text
-[User clicks "Start Recording"]
-       |
-       v
-  navigator.mediaDevices.getUserMedia({ audio: true })
-       |
-       v
-  MediaRecorder collects audio chunks
-  Timer shows elapsed time
-  Visual pulse animation indicates recording
-       |
-  [User clicks "Stop & Translate"]
-       |
-       v
-  Combine chunks into audio Blob
-  Create FormData with the audio blob
-  Send to transcribe-translate (same as file upload)
-       |
-       v
-  Display results: original transcript, English translation,
-  confidence score, speaker diarization
+```typescript
+// Line 125-131 becomes:
+const handleLockAndStart = async (stockLength: number, bars: number) => {
+  if (!currentItem) return;
+  try {
+    setIsRunning(true);
+    // Fetch fresh completed_pieces from DB to avoid stale realtime data
+    const { data: freshRow } = await supabase
+      .from("cut_plan_items")
+      .select("completed_pieces")
+      .eq("id", currentItem.id)
+      .single();
+    const freshCompleted = freshRow?.completed_pieces ?? completedPieces;
+    setCompletedAtRunStart(freshCompleted);
+    // ... rest unchanged
 ```
 
-**Specific code changes:**
+This ensures the snapshot always reflects the true DB state, regardless of whether the realtime subscription has delivered the update yet. The DB fetch adds ~50ms latency (negligible since the operator just clicked a button).
 
-1. **`startListening` function** — Replace SpeechRecognition with:
-   - `navigator.mediaDevices.getUserMedia({ audio: true })` to get mic stream
-   - Create `MediaRecorder` with webm/opus format
-   - Collect chunks in array via `ondataavailable`
-   - Start recording timer
-
-2. **`stopListening` function** — Replace text accumulation with:
-   - Stop MediaRecorder
-   - Combine chunks into a single audio Blob
-   - Build FormData (same format as file upload)
-   - Call `callTranslateAPI(formData, true)` — same path as file upload
-   - Display results
-
-3. **Remove unused state**: `interimText`, `accumulatedTextRef`, `wordCount` display during recording (replaced by timer-only display)
-
-4. **UI during recording**: Show a simple recording indicator with elapsed time and a pulsing mic icon (no live transcript preview since the AI processes audio after stop)
-
-5. **Recording indicator text**: Change from "Listening..." to "Recording... speak in any language" to make it clear all languages are supported
-
-### What This Fixes
-- Farsi, Hindi, Georgian, Arabic, Turkish, Urdu, and ALL other languages now work from the microphone
-- Speaker diarization works for mic recordings (multiple speakers detected)
-- Confidence scores are generated for mic recordings
-- Same high-quality two-pass Gemini pipeline used for both mic and file upload
-
-### What Changes for the User
-- Instead of seeing live interim text while speaking, they see a recording timer
-- After stopping, there's a brief processing delay (same as file upload) before results appear
-- All languages work perfectly from the microphone
+### What This Does NOT Change
+- No changes to `useStationData.ts`, `ProductionCard.tsx`, `handleCompleteRun`, `handleRecordStroke`, or any other file
+- No schema changes, no new queries, no UI changes
+- The auto-advance behavior (item disappearing after completion) remains correct
+- The `completedAtRunStart` reset to `null` on line 322 remains correct
 
 ### Files Modified
-- `src/components/office/TranscribeView.tsx` — Replace SpeechRecognition with MediaRecorder (~40 lines changed)
-
-### No Other Changes
-- No edge function changes needed (reuses existing `transcribe-translate`)
-- No schema changes
-- No new dependencies
+- `src/components/shopfloor/CutterStationView.tsx` — lines 128-130 only (add DB fetch before snapshot)
 
