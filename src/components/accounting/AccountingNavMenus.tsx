@@ -33,6 +33,7 @@ const menus: Menu[] = [
   {
     label: "Vendors",
     items: [
+      { label: "Vendors", tab: "vendors" },
       { label: "Bills", tab: "bills" },
       { label: "Vendor Payments", tab: "payments" },
     ],
