@@ -87,7 +87,15 @@ export default function VizzyPage() {
         ]);
         const { data, error } = await supabase.functions.invoke("elevenlabs-conversation-token");
         if (error || !data?.token) throw new Error(error?.message ?? "No token received");
-        await conversation.startSession({ conversationToken: data.token, connectionType: "webrtc" });
+        await conversation.startSession({
+          conversationToken: data.token,
+          connectionType: "webrtc",
+          overrides: {
+            agent: {
+              language: "",
+            },
+          },
+        });
 
         // Inject full business context
         if (snap) {
