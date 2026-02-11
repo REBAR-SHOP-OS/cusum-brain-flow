@@ -145,16 +145,39 @@ async function aiSummarize(personData: PersonActivity): Promise<string> {
     ...personData.emailsReceived.map(e => `RECEIVED from ${e.from}: "${e.subject}" — ${e.preview}`),
   ].join("\n");
 
-  const prompt = `You are a concise business analyst. Summarize this person's email activity for today.
-Extract: 1) Key notes (max 5 bullet points) 2) Action items they need to follow up on (max 5)
-Keep it short and actionable. No fluff.
+  const unanswered = personData.emailsReceived.length - personData.emailsSent.length;
+  const responseRate = personData.emailsReceived.length > 0 
+    ? Math.round((personData.emailsSent.length / personData.emailsReceived.length) * 100) 
+    : 100;
+
+  const prompt = `You are a performance coach and business analyst. Analyze this person's FULL activity for today and produce a structured coaching report.
 
 Person: ${personData.name} (${personData.role})
 Tasks: ${personData.tasksOpen} open, ${personData.tasksDone} completed
 Agent Sessions: ${personData.agentSessions}
+Email Response Rate: ${responseRate}% (${personData.emailsSent.length} sent / ${personData.emailsReceived.length} received)
+${unanswered > 0 ? `⚠️ Approximately ${unanswered} emails may be unanswered` : ""}
 
 Emails:
-${emailList || "No email activity today."}`;
+${emailList || "No email activity today."}
+
+PRODUCE THIS EXACT FORMAT:
+
+SCORE: [0-100 based on responsiveness, task completion, engagement]
+
+STRENGTHS (evidence-based, max 4):
+- [specific good behavior with evidence from data above]
+
+AREAS TO IMPROVE (evidence-based, max 4):
+- [specific gap with evidence]
+
+COACHING TIPS (max 3):
+- [actionable suggestion based on the gaps identified]
+
+KEY NOTES (max 4):
+- [important email threads or topics]
+
+RULES: Be supportive but honest. Use data evidence. No fluff. Short sentences.`;
 
   try {
     const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -183,71 +206,122 @@ ${emailList || "No email activity today."}`;
 }
 
 function buildPersonalReportHTML(person: PersonActivity, dateStr: string): string {
+  // Extract score from AI summary
+  const scoreMatch = person.aiSummary.match(/SCORE:\s*(\d+)/i);
+  const score = scoreMatch ? parseInt(scoreMatch[1]) : 0;
+  const scoreColor = score >= 80 ? "#22c55e" : score >= 60 ? "#f59e0b" : "#ef4444";
+  const scoreLabel = score >= 80 ? "Excellent" : score >= 60 ? "Good" : "Needs Attention";
+
+  // Parse sections from AI summary
+  const sections = person.aiSummary.split(/\n(?=STRENGTHS|AREAS TO IMPROVE|COACHING TIPS|KEY NOTES|SCORE)/i);
+  const formatSection = (text: string) => text.replace(/^- /gm, "• ").replace(/\n/g, "<br>");
+
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;background:#f4f4f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
 <div style="max-width:600px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;margin-top:20px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
-  <div style="background:#1a1a2e;padding:24px 32px;color:#fff;">
-    <h1 style="margin:0;font-size:20px;">Daily Activity Report</h1>
-    <p style="margin:4px 0 0;opacity:0.8;font-size:14px;">${person.name} — ${dateStr}</p>
+  <div style="background:#1a1a2e;padding:24px 32px;color:#fff;position:relative;">
+    <h1 style="margin:0;font-size:20px;">🧠 Business Pulse — Performance Report</h1>
+    <p style="margin:4px 0 0;opacity:0.8;font-size:14px;">${person.name} (${person.role}) — ${dateStr}</p>
+    <div style="position:absolute;right:32px;top:50%;transform:translateY(-50%);background:${scoreColor};color:#fff;border-radius:50%;width:56px;height:56px;display:flex;align-items:center;justify-content:center;flex-direction:column;">
+      <span style="font-size:18px;font-weight:bold;line-height:1;">${score}</span>
+      <span style="font-size:8px;opacity:0.9;">${scoreLabel}</span>
+    </div>
   </div>
   <div style="padding:24px 32px;">
-    <h2 style="font-size:16px;color:#1a1a2e;border-bottom:2px solid #e8e8ed;padding-bottom:8px;">📧 Emails</h2>
-    <p style="font-size:14px;color:#555;">Sent: <strong>${person.emailsSent.length}</strong> | Received: <strong>${person.emailsReceived.length}</strong></p>
+    <div style="display:flex;gap:12px;margin-bottom:20px;">
+      <div style="flex:1;background:#f0fdf4;border-radius:8px;padding:12px;text-align:center;">
+        <div style="font-size:20px;font-weight:bold;color:#16a34a;">${person.emailsSent.length}</div>
+        <div style="font-size:11px;color:#666;">Emails Sent</div>
+      </div>
+      <div style="flex:1;background:#eff6ff;border-radius:8px;padding:12px;text-align:center;">
+        <div style="font-size:20px;font-weight:bold;color:#2563eb;">${person.emailsReceived.length}</div>
+        <div style="font-size:11px;color:#666;">Emails Received</div>
+      </div>
+      <div style="flex:1;background:#fefce8;border-radius:8px;padding:12px;text-align:center;">
+        <div style="font-size:20px;font-weight:bold;color:#ca8a04;">${person.tasksOpen}/${person.tasksDone}</div>
+        <div style="font-size:11px;color:#666;">Open/Done Tasks</div>
+      </div>
+      <div style="flex:1;background:#f5f3ff;border-radius:8px;padding:12px;text-align:center;">
+        <div style="font-size:20px;font-weight:bold;color:#7c3aed;">${person.agentSessions}</div>
+        <div style="font-size:11px;color:#666;">AI Sessions</div>
+      </div>
+    </div>
     
-    <h2 style="font-size:16px;color:#1a1a2e;border-bottom:2px solid #e8e8ed;padding-bottom:8px;">📋 Tasks</h2>
-    <p style="font-size:14px;color:#555;">Open: <strong>${person.tasksOpen}</strong> | Completed today: <strong>${person.tasksDone}</strong></p>
-    
-    <h2 style="font-size:16px;color:#1a1a2e;border-bottom:2px solid #e8e8ed;padding-bottom:8px;">🤖 AI Agent Sessions</h2>
-    <p style="font-size:14px;color:#555;">${person.agentSessions} session(s)</p>
-    
-    <h2 style="font-size:16px;color:#1a1a2e;border-bottom:2px solid #e8e8ed;padding-bottom:8px;">🧠 AI Summary & Action Items</h2>
-    <div style="font-size:14px;color:#333;line-height:1.6;white-space:pre-wrap;background:#f8f9fa;padding:16px;border-radius:6px;">${person.aiSummary}</div>
+    <div style="font-size:14px;color:#333;line-height:1.6;white-space:pre-wrap;background:#f8f9fa;padding:16px;border-radius:6px;">${formatSection(person.aiSummary)}</div>
   </div>
   <div style="padding:16px 32px;background:#f8f9fa;text-align:center;font-size:12px;color:#888;">
-    Rebar.shop AI Supervisor — Automated Report
+    Rebar.shop Brain Intelligence — Automated Performance Report
   </div>
 </div></body></html>`;
 }
 
 function buildMasterReportHTML(people: PersonActivity[], dateStr: string): string {
-  const rows = people.map(p => `
-    <tr>
+  // Extract scores and sort for leaderboard
+  const scored = people.map(p => {
+    const scoreMatch = p.aiSummary.match(/SCORE:\s*(\d+)/i);
+    return { ...p, score: scoreMatch ? parseInt(scoreMatch[1]) : 0 };
+  }).sort((a, b) => b.score - a.score);
+
+  const avgScore = scored.length > 0 ? Math.round(scored.reduce((s, p) => s + p.score, 0) / scored.length) : 0;
+  const avgColor = avgScore >= 80 ? "#22c55e" : avgScore >= 60 ? "#f59e0b" : "#ef4444";
+
+  const leaderboardRows = scored.map((p, i) => {
+    const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}.`;
+    const scoreColor = p.score >= 80 ? "#22c55e" : p.score >= 60 ? "#f59e0b" : "#ef4444";
+    return `<tr>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;">${medal}</td>
       <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;"><strong>${p.name}</strong><br><span style="color:#888;font-size:12px;">${p.role}</span></td>
-      <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;text-align:center;">${p.emailsSent.length}</td>
-      <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;text-align:center;">${p.emailsReceived.length}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;text-align:center;color:${scoreColor};font-weight:bold;">${p.score}/100</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;text-align:center;">${p.emailsSent.length}/${p.emailsReceived.length}</td>
       <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;text-align:center;">${p.tasksOpen}/${p.tasksDone}</td>
       <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;text-align:center;">${p.agentSessions}</td>
-    </tr>`).join("");
+    </tr>`;
+  }).join("");
 
-  const summaries = people.map(p => `
-    <div style="margin-bottom:20px;">
-      <h3 style="font-size:15px;color:#1a1a2e;margin:0 0 8px;">${p.name} (${p.role})</h3>
-      <div style="font-size:13px;color:#333;line-height:1.5;white-space:pre-wrap;background:#f8f9fa;padding:12px;border-radius:6px;">${p.aiSummary}</div>
-    </div>`).join("");
+  const needsAttention = scored.filter(p => p.score < 60).map(p => p.name).join(", ") || "None";
+  const starPerformers = scored.filter(p => p.score >= 80).map(p => p.name).join(", ") || "None";
+
+  const summaries = scored.map(p => {
+    const scoreColor = p.score >= 80 ? "#22c55e" : p.score >= 60 ? "#f59e0b" : "#ef4444";
+    return `<div style="margin-bottom:20px;border-left:3px solid ${scoreColor};padding-left:12px;">
+      <h3 style="font-size:15px;color:#1a1a2e;margin:0 0 8px;">${p.name} (${p.role}) — <span style="color:${scoreColor}">${p.score}/100</span></h3>
+      <div style="font-size:13px;color:#333;line-height:1.5;white-space:pre-wrap;background:#f8f9fa;padding:12px;border-radius:6px;">${p.aiSummary.replace(/\n/g, "<br>")}</div>
+    </div>`;
+  }).join("");
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;background:#f4f4f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
 <div style="max-width:700px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;margin-top:20px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
-  <div style="background:#1a1a2e;padding:24px 32px;color:#fff;">
-    <h1 style="margin:0;font-size:20px;">📊 Master Supervisory Report</h1>
-    <p style="margin:4px 0 0;opacity:0.8;font-size:14px;">${dateStr} — All Team Activity</p>
+  <div style="background:#1a1a2e;padding:24px 32px;color:#fff;position:relative;">
+    <h1 style="margin:0;font-size:20px;">🧠 Master Business Pulse</h1>
+    <p style="margin:4px 0 0;opacity:0.8;font-size:14px;">${dateStr} — Team Performance Intelligence</p>
+    <div style="position:absolute;right:32px;top:50%;transform:translateY(-50%);background:${avgColor};color:#fff;border-radius:50%;width:56px;height:56px;display:flex;align-items:center;justify-content:center;flex-direction:column;">
+      <span style="font-size:18px;font-weight:bold;line-height:1;">${avgScore}</span>
+      <span style="font-size:8px;opacity:0.9;">Team Avg</span>
+    </div>
   </div>
   <div style="padding:24px 32px;">
+    <div style="background:#f0f9ff;border-radius:8px;padding:16px;margin-bottom:20px;">
+      <p style="margin:0;font-size:14px;">⭐ <strong>Star Performers:</strong> ${starPerformers}</p>
+      <p style="margin:4px 0 0;font-size:14px;">⚠️ <strong>Needs Attention:</strong> ${needsAttention}</p>
+    </div>
+    <h2 style="font-size:16px;color:#1a1a2e;border-bottom:2px solid #e8e8ed;padding-bottom:8px;">🏆 Team Leaderboard</h2>
     <table style="width:100%;border-collapse:collapse;">
       <thead><tr style="background:#f0f0f5;">
+        <th style="padding:8px 12px;text-align:left;font-size:13px;">#</th>
         <th style="padding:8px 12px;text-align:left;font-size:13px;">Person</th>
-        <th style="padding:8px 12px;text-align:center;font-size:13px;">Sent</th>
-        <th style="padding:8px 12px;text-align:center;font-size:13px;">Received</th>
-        <th style="padding:8px 12px;text-align:center;font-size:13px;">Tasks (Open/Done)</th>
-        <th style="padding:8px 12px;text-align:center;font-size:13px;">AI Sessions</th>
+        <th style="padding:8px 12px;text-align:center;font-size:13px;">Score</th>
+        <th style="padding:8px 12px;text-align:center;font-size:13px;">Sent/Rcvd</th>
+        <th style="padding:8px 12px;text-align:center;font-size:13px;">Open/Done</th>
+        <th style="padding:8px 12px;text-align:center;font-size:13px;">AI</th>
       </tr></thead>
-      <tbody>${rows}</tbody>
+      <tbody>${leaderboardRows}</tbody>
     </table>
-    <h2 style="font-size:16px;color:#1a1a2e;border-bottom:2px solid #e8e8ed;padding-bottom:8px;margin-top:24px;">Per-Person Summaries</h2>
+    <h2 style="font-size:16px;color:#1a1a2e;border-bottom:2px solid #e8e8ed;padding-bottom:8px;margin-top:24px;">📋 Per-Person Coaching Reports</h2>
     ${summaries}
   </div>
   <div style="padding:16px 32px;background:#f8f9fa;text-align:center;font-size:12px;color:#888;">
-    Rebar.shop AI Supervisor — Master Report
+    Rebar.shop Brain Intelligence — Master Supervisory Report
   </div>
 </div></body></html>`;
 }
