@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Paperclip, X, Loader2, Sparkles, Hash, Type, Phone, MessageCircle } from "lucide-react";
+import { Send, Paperclip, X, Loader2, Sparkles, Hash, Type, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -402,18 +402,6 @@ export function ChatInput({
                   <TooltipContent side="top">Voice Chat</TooltipContent>
                 </Tooltip>
 
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      onClick={() => window.dispatchEvent(new Event("toggle-live-chat"))}
-                      className="p-2 text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-muted/50"
-                    >
-                      <MessageCircle className="w-5 h-5" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top">Live Chat</TooltipContent>
-                </Tooltip>
               </>
             )}
 
