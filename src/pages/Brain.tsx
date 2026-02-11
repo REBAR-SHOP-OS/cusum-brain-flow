@@ -359,6 +359,32 @@ export default function Brain() {
               </Button>
             )}
           </div>
+        ) : activeFilter === "all" && !searchQuery ? (
+          <div className="space-y-6">
+            {contentFilters
+              .filter((f) => f.id !== "all" && (counts[f.id] || 0) > 0)
+              .map((section) => {
+                const SectionIcon = section.icon;
+                const sectionItems = filteredItems.filter(
+                  (i) => i.category === section.id
+                );
+                if (sectionItems.length === 0) return null;
+                return (
+                  <div key={section.id}>
+                    <div className="flex items-center gap-2 mb-3">
+                      <SectionIcon className="w-4 h-4 text-primary" />
+                      <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                        {section.label}
+                      </h2>
+                      <span className="text-xs text-muted-foreground">({sectionItems.length})</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                      {sectionItems.map(renderCard)}
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             {filteredItems.map(renderCard)}
