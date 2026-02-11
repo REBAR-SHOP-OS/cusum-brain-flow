@@ -27,6 +27,7 @@ export interface VizzyBusinessSnapshot {
   recentEvents: any[];
   brainKnowledge: { title: string; category: string; content: string | null }[];
   agentActivity: { agent_name: string; session_count: number; last_topic: string; user_name: string }[];
+  teamPresence: { name: string; clocked_in: string; clocked_out: string | null }[];
 }
 
 export function useVizzyContext() {
@@ -65,9 +66,12 @@ export function useVizzyContext() {
       const agentSessionsP = supabase.from("chat_sessions").select("id, title, agent_name, user_id, created_at")
         .gte("created_at", today + "T00:00:00")
         .order("created_at", { ascending: false }).limit(200) as any;
+      const timeClockP = supabase.from("time_clock_entries").select("id, profile_id, clock_in, clock_out")
+        .gte("clock_in", today + "T00:00:00")
+        .order("clock_in", { ascending: false }).limit(200) as any;
 
-      const [qbData, cutPlansRes, cutItemsRes, machinesRes, leadsRes, customersRes, deliveriesRes, profilesRes, eventsRes, knowledgeRes, agentSessionsRes] = await Promise.all([
-        qbPromise, cutPlansP, cutItemsP, machinesP, leadsP, customersP, deliveriesP, profilesP, eventsP, knowledgeP, agentSessionsP,
+      const [qbData, cutPlansRes, cutItemsRes, machinesRes, leadsRes, customersRes, deliveriesRes, profilesRes, eventsRes, knowledgeRes, agentSessionsRes, timeClockRes] = await Promise.all([
+        qbPromise, cutPlansP, cutItemsP, machinesP, leadsP, customersP, deliveriesP, profilesP, eventsP, knowledgeP, agentSessionsP, timeClockP,
       ]);
 
       const cutPlans = cutPlansRes.data || [];
@@ -99,6 +103,15 @@ export function useVizzyContext() {
         }
       }
       const agentActivity = Array.from(activityMap.values());
+
+      // Build team presence from time clock entries
+      const timeClockEntries = (timeClockRes.data || []) as { id: string; profile_id: string; clock_in: string; clock_out: string | null }[];
+      const profileIdMap = new Map<string, string>(profiles.map((p: any) => [p.id, p.full_name || "Unknown"]));
+      const teamPresence = timeClockEntries.map((e) => ({
+        name: profileIdMap.get(e.profile_id) || "Unknown",
+        clocked_in: e.clock_in,
+        clocked_out: e.clock_out,
+      }));
 
       // Compute financials — use QB data if available, otherwise fall back to accounting_mirror
       let invoices = qbData?.invoices || [];
@@ -167,6 +180,7 @@ export function useVizzyContext() {
         recentEvents: events,
         brainKnowledge: knowledge,
         agentActivity,
+        teamPresence,
       };
 
       setSnapshot(snap);

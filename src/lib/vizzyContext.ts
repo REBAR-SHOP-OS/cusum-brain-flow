@@ -3,7 +3,7 @@ import type { VizzyBusinessSnapshot } from "@/hooks/useVizzyContext";
 export function buildVizzyContext(snap: VizzyBusinessSnapshot): string {
   const fmt = (n: number) =>
     n.toLocaleString("en-US", { style: "currency", currency: "USD" });
-  const { financials: f, production: p, crm, customers: c, deliveries: d, team, recentEvents, brainKnowledge, agentActivity } = snap;
+  const { financials: f, production: p, crm, customers: c, deliveries: d, team, recentEvents, brainKnowledge, agentActivity, teamPresence } = snap;
 
   const bankAccounts = f.accounts
     .filter((a) => a.AccountType === "Bank" && a.Active)
@@ -96,6 +96,26 @@ ${hotLeadsList || "    None"}
 
 👷 TEAM
   Staff Total: ${team.totalStaff}
+
+⏱️ TEAM PRESENCE (TIME CLOCK)
+${(() => {
+  const onNow = teamPresence.filter((t) => !t.clocked_out);
+  const doneToday = teamPresence.filter((t) => !!t.clocked_out);
+  const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  const lines: string[] = [];
+  if (onNow.length > 0) {
+    lines.push("  Currently Clocked In:");
+    onNow.forEach((t) => lines.push(`    • ${t.name} — since ${fmtTime(t.clocked_in)}`));
+  }
+  if (doneToday.length > 0) {
+    lines.push("  Clocked Out Today:");
+    doneToday.forEach((t) => {
+      const hrs = ((new Date(t.clocked_out!).getTime() - new Date(t.clocked_in).getTime()) / 3600000).toFixed(1);
+      lines.push(`    • ${t.name} — ${fmtTime(t.clocked_in)} to ${fmtTime(t.clocked_out!)} (${hrs} hrs)`);
+    });
+  }
+  return lines.length > 0 ? lines.join("\n") : "  No time clock entries today";
+})()}
 
 📋 RECENT ACTIVITY
 ${eventsList || "  No recent events"}
