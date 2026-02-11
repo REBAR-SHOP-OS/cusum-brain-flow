@@ -78,6 +78,26 @@ export interface DigestErpActivity {
   summary: string;
 }
 
+export interface DigestAgentActivity {
+  agent: string;
+  interactions: number;
+  tasksCreated: number;
+  highlights: string[];
+}
+
+export interface DigestHumanActivity {
+  name: string;
+  agentsUsed: string[];
+  totalCommands: number;
+  highlights: string[];
+}
+
+export interface DigestAgentActivityReport {
+  totalInteractions: string;
+  agentBreakdown: DigestAgentActivity[];
+  humanActivity: DigestHumanActivity[];
+}
+
 export interface BenCategory {
   title: string;
   icon: string;
@@ -97,6 +117,7 @@ export interface DigestData {
   employeeReport?: DigestEmployeeReport;
   productionReport?: DigestProductionReport;
   erpActivity?: DigestErpActivity;
+  agentActivityReport?: DigestAgentActivityReport;
   calendarEvents: DigestCalendarEvent[];
   tipOfTheDay: DigestTip;
   randomFact: string;
@@ -119,6 +140,7 @@ export interface DigestStats {
   machineRuns?: number;
   erpEvents?: number;
   mailboxReports?: number;
+  agentInteractions?: number;
   // Ben-specific stats
   estimatesBen?: number;
   qcFlags?: number;
