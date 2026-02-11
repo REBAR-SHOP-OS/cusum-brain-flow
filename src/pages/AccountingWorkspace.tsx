@@ -16,6 +16,7 @@ import { AccountingInvoices } from "@/components/accounting/AccountingInvoices";
 import { AccountingBills } from "@/components/accounting/AccountingBills";
 import { AccountingPayments } from "@/components/accounting/AccountingPayments";
 import { AccountingCustomers } from "@/components/accounting/AccountingCustomers";
+import { AccountingVendors } from "@/components/accounting/AccountingVendors";
 import { AccountingAccounts } from "@/components/accounting/AccountingAccounts";
 import { AccountingAudit } from "@/components/accounting/AccountingAudit";
 import { AccountingPayroll } from "@/components/accounting/AccountingPayroll";
@@ -164,6 +165,7 @@ export default function AccountingWorkspace() {
             {activeTab === "bills" && <AccountingBills data={qb} />}
             {activeTab === "payments" && <AccountingPayments data={qb} />}
             {activeTab === "customers" && <AccountingCustomers data={qb} />}
+            {activeTab === "vendors" && <AccountingVendors data={qb} />}
             {activeTab === "accounts" && <AccountingAccounts data={qb} />}
             {activeTab === "audit" && <AccountingAudit data={qb} />}
             {activeTab === "payroll" && <AccountingPayroll data={qb} />}
