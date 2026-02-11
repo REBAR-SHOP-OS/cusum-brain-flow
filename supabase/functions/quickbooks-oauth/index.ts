@@ -274,6 +274,10 @@ serve(async (req) => {
       case "create-payroll-correction":
         return handleCreatePayrollCorrection(supabase, userId, body);
 
+      // ── Reports ────────────────────────────────────────────────
+      case "account-quick-report":
+        return handleAccountQuickReport(supabase, userId, body);
+
       default:
         return jsonRes({ error: `Unknown action: ${action}` }, 400);
     }
@@ -1130,4 +1134,69 @@ async function handleCreatePayrollCorrection(supabase: ReturnType<typeof createC
 
   const data = await qbFetch(config, "journalentry", { method: "POST", body: JSON.stringify(payload) });
   return jsonRes({ success: true, journalEntry: data.JournalEntry, docNumber: data.JournalEntry?.DocNumber });
+}
+
+// ─── Account QuickReport (Transaction Register) ────────────────────
+
+async function handleAccountQuickReport(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  body: Record<string, unknown>,
+) {
+  const config = await getQBConfig(supabase, userId);
+  const accountId = body.accountId as string;
+  if (!accountId) throw new Error("accountId is required");
+
+  const today = new Date();
+  const defaultStart = new Date(today);
+  defaultStart.setDate(defaultStart.getDate() - 90);
+
+  const startDate = (body.startDate as string) || defaultStart.toISOString().slice(0, 10);
+  const endDate = (body.endDate as string) || today.toISOString().slice(0, 10);
+
+  const report = await qbFetch(
+    config,
+    `reports/TransactionListByAccount?account=${accountId}&start_date=${startDate}&end_date=${endDate}&columns=tx_date,txn_type,doc_num,name,memo,account,subt_nat_amount,rbal_nat_amount`,
+  ) as Record<string, unknown>;
+
+  // Parse the QB report response
+  const transactions: { date: string; type: string; num: string; name: string; memo: string; account: string; amount: number; balance: number }[] = [];
+  let beginningBalance = 0;
+
+  const columns = (report.Columns as any)?.Column || [];
+  const colNames = columns.map((c: any) => c.ColTitle as string);
+
+  function parseRows(rows: any[]) {
+    for (const row of rows) {
+      if (row.Header?.ColData) {
+        // Section header (account grouping) — check for beginning balance
+        const headerText = row.Header.ColData[0]?.value || "";
+        if (headerText === "Beginning Balance") {
+          const balCol = row.Header.ColData[colNames.length - 1];
+          beginningBalance = parseFloat(balCol?.value || "0");
+        }
+      }
+      if (row.Rows?.Row) {
+        parseRows(row.Rows.Row);
+      }
+      if (row.ColData) {
+        const vals = row.ColData.map((c: any) => c.value || "");
+        transactions.push({
+          date: vals[colNames.indexOf("Date")] || vals[0] || "",
+          type: vals[colNames.indexOf("Transaction Type")] || vals[1] || "",
+          num: vals[colNames.indexOf("Num")] || vals[2] || "",
+          name: vals[colNames.indexOf("Name")] || vals[3] || "",
+          memo: vals[colNames.indexOf("Memo/Description")] || vals[4] || "",
+          account: vals[colNames.indexOf("Account")] || vals[5] || "",
+          amount: parseFloat(vals[colNames.indexOf("Amount")] || vals[6] || "0"),
+          balance: parseFloat(vals[colNames.indexOf("Balance")] || vals[7] || "0"),
+        });
+      }
+    }
+  }
+
+  const reportRows = (report.Rows as any)?.Row || [];
+  parseRows(reportRows);
+
+  return jsonRes({ transactions, beginningBalance, startDate, endDate });
 }

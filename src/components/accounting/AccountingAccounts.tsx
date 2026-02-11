@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Landmark, Search, FileBarChart } from "lucide-react";
+import { AccountQuickReportDrawer } from "./AccountQuickReportDrawer";
 import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
 
 interface Props {
@@ -17,6 +18,7 @@ const fmt = (n: number) =>
 export function AccountingAccounts({ data }: Props) {
   const { accounts, estimates } = data;
   const [search, setSearch] = useState("");
+  const [selectedAccount, setSelectedAccount] = useState<{ Id: string; Name: string; CurrentBalance: number } | null>(null);
   const [subTab, setSubTab] = useState("accounts");
 
   const filteredAccounts = accounts.filter(
@@ -86,7 +88,12 @@ export function AccountingAccounts({ data }: Props) {
                   <TableBody>
                     {accts.map((a) => (
                       <TableRow key={a.Id} className="text-base">
-                        <TableCell className="font-medium">{a.Name}</TableCell>
+                        <TableCell
+                          className="font-medium text-primary cursor-pointer hover:underline"
+                          onClick={() => setSelectedAccount({ Id: a.Id, Name: a.Name, CurrentBalance: a.CurrentBalance || 0 })}
+                        >
+                          {a.Name}
+                        </TableCell>
                         <TableCell className="text-muted-foreground">{a.AccountSubType || "—"}</TableCell>
                         <TableCell className="text-right font-semibold">{fmt(a.CurrentBalance || 0)}</TableCell>
                         <TableCell>
@@ -143,6 +150,13 @@ export function AccountingAccounts({ data }: Props) {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <AccountQuickReportDrawer
+        open={!!selectedAccount}
+        onClose={() => setSelectedAccount(null)}
+        account={selectedAccount}
+        qbAction={data.qbAction}
+      />
     </div>
   );
 }
