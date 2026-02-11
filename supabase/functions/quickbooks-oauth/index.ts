@@ -75,18 +75,77 @@ async function getUserQBConnection(supabase: ReturnType<typeof createClient>, us
   return null;
 }
 
-async function getQBConfig(supabase: ReturnType<typeof createClient>, userId: string) {
+type QBConfig = { realm_id: string; access_token: string; refresh_token: string; expires_at: number; company_id?: string };
+type QBConfigWithContext = QBConfig & { _refreshContext: { supabase: ReturnType<typeof createClient>; connectionId: string } };
+
+async function getQBConfig(supabase: ReturnType<typeof createClient>, userId: string): Promise<QBConfigWithContext> {
   const connection = await getUserQBConnection(supabase, userId);
   if (!connection) throw new Error("QuickBooks not connected");
-  return connection.config as { realm_id: string; access_token: string; refresh_token: string; expires_at: number; company_id?: string };
+  const config = connection.config as QBConfig;
+  return { ...config, _refreshContext: { supabase, connectionId: connection.id } };
+}
+
+// Shared token refresh to avoid concurrent refreshes
+let _refreshPromise: Promise<string> | null = null;
+
+async function refreshQBToken(
+  supabase: ReturnType<typeof createClient>,
+  connectionId: string,
+  config: { realm_id: string; access_token: string; refresh_token: string; expires_at: number; company_id?: string },
+): Promise<string> {
+  const clientId = Deno.env.get("QUICKBOOKS_CLIENT_ID")!;
+  const clientSecret = Deno.env.get("QUICKBOOKS_CLIENT_SECRET")!;
+
+  const refreshResponse = await fetch(QUICKBOOKS_TOKEN_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "Authorization": `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
+      "Accept": "application/json",
+    },
+    body: new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: config.refresh_token,
+    }),
+  });
+
+  const newTokens = await refreshResponse.json();
+  if (!refreshResponse.ok) {
+    console.error("QB token refresh failed:", JSON.stringify(newTokens));
+    throw new Error("QuickBooks token refresh failed — please reconnect");
+  }
+
+  const newAccessToken = newTokens.access_token;
+  // Persist refreshed tokens
+  await supabase
+    .from("integration_connections")
+    .update({
+      config: {
+        ...config,
+        access_token: newAccessToken,
+        refresh_token: newTokens.refresh_token,
+        expires_at: Date.now() + (newTokens.expires_in * 1000),
+      },
+      last_sync_at: new Date().toISOString(),
+    })
+    .eq("id", connectionId);
+
+  // Update in-memory config so subsequent calls in the same request use the new token
+  config.access_token = newAccessToken;
+  if (newTokens.refresh_token) config.refresh_token = newTokens.refresh_token;
+  config.expires_at = Date.now() + (newTokens.expires_in * 1000);
+
+  return newAccessToken;
 }
 
 async function qbFetch(
-  config: { realm_id: string; access_token: string },
+  config: { realm_id: string; access_token: string; refresh_token?: string; expires_at?: number; company_id?: string; _refreshContext?: { supabase: ReturnType<typeof createClient>; connectionId: string } },
   path: string,
   options?: RequestInit,
   _retries = 0,
+  _refreshContextOverride?: { supabase: ReturnType<typeof createClient>; connectionId: string },
 ): Promise<unknown> {
+  const _refreshContext = _refreshContextOverride || (config as QBConfigWithContext)._refreshContext;
   const MAX_RETRIES = 4;
   const url = `${QUICKBOOKS_API_BASE}/v3/company/${config.realm_id}/${path}`;
   const res = await fetch(url, {
@@ -101,10 +160,35 @@ async function qbFetch(
 
   // Retry on 429 (rate limit) with exponential backoff
   if (res.status === 429 && _retries < MAX_RETRIES) {
-    const delay = Math.min(1000 * Math.pow(2, _retries), 10000); // 1s, 2s, 4s, 8s
+    const delay = Math.min(1000 * Math.pow(2, _retries), 10000);
     console.warn(`QB rate-limited on [${path}], retry ${_retries + 1}/${MAX_RETRIES} in ${delay}ms`);
     await new Promise((r) => setTimeout(r, delay));
-    return qbFetch(config, path, options, _retries + 1);
+    return qbFetch(config, path, options, _retries + 1, _refreshContext);
+  }
+
+  // Auto-refresh on 401 (expired token) — only retry once
+  if (res.status === 401 && _retries === 0 && _refreshContext && config.refresh_token) {
+    console.warn(`QB 401 on [${path}], refreshing token...`);
+    // Consume the error body to avoid resource leak
+    await res.text();
+    try {
+      // Deduplicate concurrent refresh attempts
+      if (!_refreshPromise) {
+        _refreshPromise = refreshQBToken(
+          _refreshContext.supabase,
+          _refreshContext.connectionId,
+          config as { realm_id: string; access_token: string; refresh_token: string; expires_at: number; company_id?: string },
+        );
+      }
+      await _refreshPromise;
+      _refreshPromise = null;
+      // Retry with refreshed token
+      return qbFetch(config, path, options, 1, _refreshContext);
+    } catch (refreshErr) {
+      _refreshPromise = null;
+      console.error("QB token refresh failed during fetch:", refreshErr);
+      throw refreshErr;
+    }
   }
 
   if (!res.ok) {
@@ -115,22 +199,25 @@ async function qbFetch(
   return res.json();
 }
 
-async function qbQuery(config: { realm_id: string; access_token: string }, entity: string, maxResults = 50000, whereClause?: string) {
+async function qbQuery(config: QBConfigWithContext | { realm_id: string; access_token: string }, entity: string, maxResults = 50000, whereClause?: string) {
   const allResults: unknown[] = [];
   let startPosition = 1;
   const pageSize = Math.min(maxResults, 1000);
   const where = whereClause ? ` WHERE ${whereClause}` : "";
+  const refreshCtx = (config as QBConfigWithContext)._refreshContext;
 
   while (true) {
     const data = await qbFetch(
       config,
       `query?query=SELECT * FROM ${entity}${where} STARTPOSITION ${startPosition} MAXRESULTS ${pageSize}`,
+      undefined,
+      0,
+      refreshCtx,
     ) as Record<string, unknown>;
     const response = data.QueryResponse as Record<string, unknown> | undefined;
     const entities = (response?.[entity] as unknown[]) || [];
     allResults.push(...entities);
 
-    // If we got fewer than the page size, we've reached the end
     if (entities.length < pageSize || allResults.length >= maxResults) break;
     startPosition += pageSize;
   }
@@ -502,7 +589,7 @@ async function handleDisconnect(supabase: ReturnType<typeof createClient>, userI
 
 async function handleGetCompanyInfo(supabase: ReturnType<typeof createClient>, userId: string) {
   const config = await getQBConfig(supabase, userId);
-  const data = await qbFetch(config, `companyinfo/${config.realm_id}`);
+  const data = await qbFetch(config, `companyinfo/${config.realm_id}`, undefined, 0, config._refreshContext) as Record<string, unknown>;
   return jsonRes(data.CompanyInfo);
 }
 
