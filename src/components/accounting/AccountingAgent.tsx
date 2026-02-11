@@ -259,7 +259,7 @@ RULES:
   }
 
   return (
-    <div className={cn("flex flex-col border border-border rounded-xl bg-card overflow-hidden transition-all duration-300 h-full")}>
+    <div className={cn("flex flex-col border border-border rounded-xl bg-card overflow-hidden transition-all duration-300 h-full min-h-0")}>
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-gradient-to-r from-primary/10 to-transparent shrink-0">
         <img src={accountingHelper} alt="Penny" className="w-10 h-10 rounded-xl object-cover" />
@@ -280,7 +280,7 @@ RULES:
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-3">
+      <div className="flex-1 overflow-y-auto p-3 space-y-3 min-h-0">
         {/* Checking animation when auto-greeting is loading (no messages yet) */}
         {messages.length === 0 && isTyping && (
           <div className="flex flex-col items-center justify-center h-full gap-5">
