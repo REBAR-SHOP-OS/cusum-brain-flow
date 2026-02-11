@@ -99,7 +99,7 @@ ${hotLeadsList || "    None"}
 
 🏢 TEAM DIRECTORY
   • Sattar Esmaeili (sattar@rebar.shop) — CEO
-  • Neel Mahajan (neel@rebar.shop) — CEO / Co-founder
+  • Neel Mahajan (neel@rebar.shop) — Sales Manager
   • Vicky Anderson (vicky@rebar.shop) — Accountant
   • Saurabh Seghal (saurabh@rebar.shop) — Sales
   • Ben Rajabifar (ben@rebar.shop) — Estimator
