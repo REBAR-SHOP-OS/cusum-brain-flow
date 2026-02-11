@@ -1,71 +1,51 @@
 
 
-## Make the Notification Center Interactive and Functional
+## Add Visible "Thinking" Indicator to Agent Chat
 
-### Problems
-1. Clicking a notification with no `link_to` does nothing visible -- no detail view, no feedback
-2. To-do items have no "mark done" action
-3. No individual dismiss button on notifications
-4. Descriptions are truncated with no way to expand them
-5. No visual feedback when marking as read
+### Problem
+When an agent is processing, the only feedback is a tiny "thinking..." text in the top bar that's easy to miss. There's no inline typing indicator in the chat thread itself -- it looks like nothing is happening.
 
 ### Solution
-
-Make each notification item expandable inline and add action buttons.
-
----
+Add an animated typing/thinking indicator bubble inside the chat thread, appearing right after the user's message while the agent is working. This matches the pattern already used in the Admin Console and Live Chat widget (which show a `Loader2` spinner with "Thinking..." text).
 
 ### Changes
 
-**File: `src/components/panels/InboxPanel.tsx`**
+**File: `src/components/chat/ChatThread.tsx`**
+- Accept a new `isLoading` prop (boolean)
+- When `isLoading` is true, render a thinking indicator at the bottom of the message list (before the scroll anchor)
+- The indicator will be an agent-styled bubble with:
+  - A Bot avatar (matching existing agent messages)
+  - An animated three-dot bouncing indicator inside the bubble
+  - Text: "Thinking..." in muted style
 
-1. **Add expandable detail view**: Clicking a notification without a `link_to` toggles an expanded state showing the full description and metadata. Clicking one with a `link_to` still navigates.
+**File: `src/pages/AgentWorkspace.tsx`**
+- Pass `isLoading` to `ChatThread`:
+  ```
+  <ChatThread messages={messages} isLoading={isLoading} />
+  ```
+- Keep the existing top-bar "thinking..." text as a secondary indicator
 
-2. **Add action buttons per item**:
-   - Notifications: "Dismiss" button (X icon) on each item
-   - To-dos: "Mark Done" checkmark button that calls `markActioned`
-   - Ideas: "Dismiss" button
+**File: `src/components/chat/CalChatInterface.tsx`**
+- No changes needed -- it already has a typing indicator (lines 454-462), though it could be improved later
 
-3. **Track expanded item**: Add `expandedId` state. When a user clicks an item without a link, toggle its expansion to show the full description and action buttons.
-
-4. **Visual read feedback**: When an unread item is clicked, it visually transitions from the highlighted `bg-primary/10` to the muted `bg-secondary/50` state.
-
-5. **Add individual dismiss**: Import and use the existing `dismiss` function from `useNotifications` (already available but unused in the panel).
-
-### Detailed Code Plan
+### Typing Indicator Design
 
 ```
-State additions:
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  // Also destructure `dismiss` from useNotifications (already returned but not used)
-
-Click handler update:
-  - If item has linkTo -> navigate (existing behavior)
-  - If item has no linkTo -> toggle expandedId
-  - Always markRead if unread
-
-Each notification card:
-  - Show full description when expanded (remove truncate/line-clamp)
-  - Show action row when expanded:
-    - Notifications: [Dismiss] button
-    - To-dos: [Mark Done] [Dismiss] buttons
-    - Ideas: [Dismiss] button
-  - Show a subtle chevron or expand indicator
-
-To-do section:
-  - Add a small checkbox/checkmark button inline (always visible, not just on expand)
-  - Clicking it calls markActioned(id) and removes the item
+[Bot icon]  [...   ]
+            Thinking...
 ```
+
+The three dots will use a CSS animation (already available via Tailwind `animate-pulse` or a custom bounce), giving clear visual feedback that the agent is working.
 
 ### What Does NOT Change
-- Database schema (no changes)
-- Backend / edge functions (no changes)
-- useNotifications hook (no changes -- all functions already exist)
-- Realtime subscription (no changes)
-- Notification creation logic (no changes)
+- No database changes
+- No edge function changes
+- No changes to message handling logic
+- Admin Console and Live Chat already have their own indicators
 
 ### Files Modified
 | File | Change |
 |------|--------|
-| `src/components/panels/InboxPanel.tsx` | Add expand state, action buttons, detail view |
+| `src/components/chat/ChatThread.tsx` | Add `isLoading` prop and thinking indicator bubble |
+| `src/pages/AgentWorkspace.tsx` | Pass `isLoading` to `ChatThread` |
 
