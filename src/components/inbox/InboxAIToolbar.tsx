@@ -9,6 +9,7 @@ import {
   Wand2,
   Archive,
   MailX,
+  Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,6 +25,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Badge } from "@/components/ui/badge";
+import { supabase } from "@/integrations/supabase/client";
 
 export type AIAction =
   | "summarize"
@@ -32,11 +35,13 @@ export type AIAction =
   | "prioritize"
   | "label-all"
   | "archive-marketing"
-  | "unsubscribe";
+  | "unsubscribe"
+  | "run-relay";
 
 interface InboxAIToolbarProps {
   emailCount: number;
   onAction: (action: AIAction) => Promise<void>;
+  unprocessedCount?: number;
 }
 
 const AI_BUTTONS: { action: AIAction; label: string; shortLabel: string; icon: typeof FileText; iconColor: string }[] = [
@@ -46,7 +51,7 @@ const AI_BUTTONS: { action: AIAction; label: string; shortLabel: string; icon: t
   { action: "prioritize", label: "Prioritize", shortLabel: "Sort", icon: SortAsc, iconColor: "text-warning" },
 ];
 
-export function InboxAIToolbar({ emailCount, onAction }: InboxAIToolbarProps) {
+export function InboxAIToolbar({ emailCount, onAction, unprocessedCount }: InboxAIToolbarProps) {
   const [activeAction, setActiveAction] = useState<AIAction | null>(null);
   const { toast } = useToast();
 
@@ -70,6 +75,34 @@ export function InboxAIToolbar({ emailCount, onAction }: InboxAIToolbarProps) {
 
   return (
     <div className="flex items-center gap-0.5 overflow-x-auto">
+      {/* Run Relay — primary AI action */}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 gap-1 text-[11px] px-2 shrink-0 relative"
+            disabled={isLoading}
+            onClick={() => handleAction("run-relay", "Relay Pipeline")}
+          >
+            {activeAction === "run-relay" ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Zap className="w-3.5 h-3.5 text-amber-500" />
+            )}
+            Relay
+            {unprocessedCount && unprocessedCount > 0 && (
+              <Badge variant="destructive" className="text-[9px] h-3.5 px-1 ml-0.5 min-w-[16px]">
+                {unprocessedCount}
+              </Badge>
+            )}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="text-xs">Run AI Relay Pipeline on unprocessed emails</TooltipContent>
+      </Tooltip>
+
+      <div className="w-px h-4 bg-border shrink-0" />
+
       {AI_BUTTONS.map(({ action, label, icon: Icon, iconColor }) => (
         <Tooltip key={action}>
           <TooltipTrigger asChild>

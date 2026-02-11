@@ -476,6 +476,13 @@ export type Database = {
       }
       communications: {
         Row: {
+          ai_action_required: boolean | null
+          ai_action_summary: string | null
+          ai_category: string | null
+          ai_draft: string | null
+          ai_priority_data: Json | null
+          ai_processed_at: string | null
+          ai_urgency: string | null
           body_preview: string | null
           company_id: string
           contact_id: string | null
@@ -486,6 +493,8 @@ export type Database = {
           id: string
           metadata: Json | null
           received_at: string | null
+          resolved_at: string | null
+          resolved_summary: string | null
           source: string
           source_id: string
           status: string | null
@@ -495,6 +504,13 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
+          ai_action_required?: boolean | null
+          ai_action_summary?: string | null
+          ai_category?: string | null
+          ai_draft?: string | null
+          ai_priority_data?: Json | null
+          ai_processed_at?: string | null
+          ai_urgency?: string | null
           body_preview?: string | null
           company_id: string
           contact_id?: string | null
@@ -505,6 +521,8 @@ export type Database = {
           id?: string
           metadata?: Json | null
           received_at?: string | null
+          resolved_at?: string | null
+          resolved_summary?: string | null
           source: string
           source_id: string
           status?: string | null
@@ -514,6 +532,13 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
+          ai_action_required?: boolean | null
+          ai_action_summary?: string | null
+          ai_category?: string | null
+          ai_draft?: string | null
+          ai_priority_data?: Json | null
+          ai_processed_at?: string | null
+          ai_urgency?: string | null
           body_preview?: string | null
           company_id?: string
           contact_id?: string | null
@@ -524,6 +549,8 @@ export type Database = {
           id?: string
           metadata?: Json | null
           received_at?: string | null
+          resolved_at?: string | null
+          resolved_summary?: string | null
           source?: string
           source_id?: string
           status?: string | null

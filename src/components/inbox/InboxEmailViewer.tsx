@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import DOMPurify from "dompurify";
-import { Mail, FileText, Image, File, ExternalLink } from "lucide-react";
+import { Mail, FileText, Image, File, ExternalLink, Zap, ChevronDown, ChevronUp, CheckCircle2, AlertTriangle, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -9,6 +9,8 @@ import { EmailReplyComposer } from "./EmailReplyComposer";
 import { AddToTaskButton } from "@/components/shared/AddToTaskButton";
 import { CreateTaskDialog } from "@/components/shared/CreateTaskDialog";
 import { ContentActions } from "@/components/shared/ContentActions";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import type { InboxEmail } from "./InboxEmailList";
 
 interface InboxEmailViewerProps {
@@ -106,6 +108,8 @@ export function InboxEmailViewer({ email, onClose }: InboxEmailViewerProps) {
   const [replyMode, setReplyMode] = useState<ReplyMode>(null);
   const [drafting, setDrafting] = useState(false);
   const [showTaskDialog, setShowTaskDialog] = useState(false);
+  const [showAiDraft, setShowAiDraft] = useState(true);
+  const [resolving, setResolving] = useState(false);
   const { toast } = useToast();
 
   const attachments = useMemo(() => {
@@ -143,6 +147,34 @@ export function InboxEmailViewer({ email, onClose }: InboxEmailViewerProps) {
     }
   };
 
+  const handleResolveThread = async () => {
+    if (!email) return;
+    setResolving(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("relay-pipeline", {
+        body: { action: "close-thread", communicationId: email.id },
+      });
+      if (error) throw error;
+      toast({ title: "Thread resolved", description: data?.summary || "Summary generated." });
+    } catch (err) {
+      toast({
+        title: "Failed to resolve",
+        description: err instanceof Error ? err.message : "Please try again",
+        variant: "destructive",
+      });
+    } finally {
+      setResolving(false);
+    }
+  };
+
+  const handleUseDraft = () => {
+    if (!email?.aiDraft) return;
+    setReplyMode("reply");
+    // The draft will be loaded via the composer
+  };
+
+  const priorityData = email?.aiPriorityData as Record<string, unknown> | null;
+
   if (!email) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-3">
@@ -162,6 +194,67 @@ export function InboxEmailViewer({ email, onClose }: InboxEmailViewerProps) {
         onCreateTask={() => setShowTaskDialog(true)}
         drafting={drafting}
       />
+
+      {/* AI Summary Bar */}
+      {email.aiCategory && (
+        <div className="shrink-0 border-b border-border px-4 py-2 bg-muted/30">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Badge variant="outline" className="text-[10px] gap-1">
+              <Zap className="w-2.5 h-2.5 text-amber-500" />
+              {email.aiCategory}
+            </Badge>
+            {email.aiUrgency && (
+              <Badge variant={email.aiUrgency === "high" ? "destructive" : "secondary"} className="text-[10px]">
+                {email.aiUrgency === "high" && <AlertTriangle className="w-2.5 h-2.5 mr-0.5" />}
+                {email.aiUrgency}
+              </Badge>
+            )}
+            {priorityData?.risk_level && priorityData.risk_level !== "none" && (
+              <Badge variant="outline" className="text-[10px] text-destructive border-destructive/30">
+                Risk: {String(priorityData.risk_level)}
+              </Badge>
+            )}
+            {priorityData?.deadline && (
+              <Badge variant="outline" className="text-[10px] gap-1">
+                <Clock className="w-2.5 h-2.5" />
+                {String(priorityData.deadline)}
+              </Badge>
+            )}
+            {email.resolvedAt && (
+              <Badge variant="outline" className="text-[10px] text-emerald-600 border-emerald-600/30 gap-1">
+                <CheckCircle2 className="w-2.5 h-2.5" />
+                Resolved
+              </Badge>
+            )}
+          </div>
+          {email.aiActionSummary && (
+            <p className="text-[11px] text-muted-foreground mt-1">{email.aiActionSummary}</p>
+          )}
+        </div>
+      )}
+
+      {/* AI Draft Suggestion */}
+      {email.aiDraft && !replyMode && (
+        <div className="shrink-0 border-b border-amber-500/20 bg-amber-500/5 px-4 py-2">
+          <button
+            className="flex items-center gap-2 w-full text-left"
+            onClick={() => setShowAiDraft(!showAiDraft)}
+          >
+            <Zap className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+            <span className="text-xs font-medium text-foreground">Suggested Reply</span>
+            {showAiDraft ? <ChevronUp className="w-3 h-3 ml-auto text-muted-foreground" /> : <ChevronDown className="w-3 h-3 ml-auto text-muted-foreground" />}
+          </button>
+          {showAiDraft && (
+            <div className="mt-2 space-y-2">
+              <p className="text-xs text-muted-foreground whitespace-pre-wrap leading-relaxed">{email.aiDraft}</p>
+              <Button size="sm" variant="outline" className="h-6 text-[11px] gap-1" onClick={handleUseDraft}>
+                <Zap className="w-3 h-3" />
+                Use this draft
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Email Content - scrollable */}
       <div className="flex-1 overflow-y-auto min-h-0">
@@ -249,7 +342,7 @@ export function InboxEmailViewer({ email, onClose }: InboxEmailViewerProps) {
         </div>
       </div>
 
-      {/* Add to Task + Brain (shown when no reply composer) */}
+      {/* Add to Task + Brain + Resolve (shown when no reply composer) */}
       {!replyMode && (
         <div className="shrink-0 border-t border-border px-4 py-3 flex items-center gap-2">
           <ContentActions
@@ -265,8 +358,20 @@ export function InboxEmailViewer({ email, onClose }: InboxEmailViewerProps) {
               source: "email",
               sourceRef: email.sourceId || email.id,
             }}
-            className="w-full"
+            className="flex-1"
           />
+          {!email.resolvedAt && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1 text-xs shrink-0"
+              onClick={handleResolveThread}
+              disabled={resolving}
+            >
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+              {resolving ? "Resolving..." : "Resolve"}
+            </Button>
+          )}
         </div>
       )}
 

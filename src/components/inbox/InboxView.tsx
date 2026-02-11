@@ -35,12 +35,34 @@ import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 
 // ─── Categorization ────────────────────────────────────────────────
+// AI category → label/color mapping
+function aiCategoryToLabel(category: string, urgency: string): { label: string; labelColor: string; priority: number } {
+  switch (category) {
+    case "RFQ": return { label: urgency === "high" ? "Urgent" : "To Respond", labelColor: urgency === "high" ? "bg-red-500" : "bg-red-400", priority: urgency === "high" ? 0 : 1 };
+    case "Active Customer": return { label: "To Respond", labelColor: "bg-red-400", priority: 1 };
+    case "Payment": return { label: "FYI", labelColor: "bg-amber-400", priority: 2 };
+    case "Vendor": return { label: "Awaiting Reply", labelColor: "bg-amber-400", priority: 3 };
+    case "Internal": return { label: "Notification", labelColor: "bg-cyan-400", priority: 4 };
+    case "Marketing": return { label: "Marketing", labelColor: "bg-pink-400", priority: 5 };
+    case "Spam": return { label: "Spam", labelColor: "bg-gray-500", priority: 6 };
+    default: return { label: "To Respond", labelColor: "bg-red-400", priority: 1 };
+  }
+}
+
 function categorizeCommunication(
   from: string,
   subject: string,
   preview: string,
-  type: "email" | "call" | "sms"
+  type: "email" | "call" | "sms",
+  aiCategory?: string | null,
+  aiUrgency?: string | null,
 ): { label: string; labelColor: string; priority: number } {
+  // Use AI classification if available
+  if (aiCategory) {
+    return aiCategoryToLabel(aiCategory, aiUrgency || "medium");
+  }
+
+  // Fallback to keyword-based
   const fromLower = from.toLowerCase();
   const subjectLower = (subject || "").toLowerCase();
   const previewLower = (preview || "").toLowerCase();
@@ -272,7 +294,7 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
   const allEmails: (InboxEmail & { priority: number; commType: "email" | "call" | "sms" })[] = useMemo(() => {
     return communications.map((comm) => {
       const commType: "email" | "call" | "sms" = comm.type;
-      const category = categorizeCommunication(comm.from, comm.subject || "", comm.preview || "", commType);
+      const category = categorizeCommunication(comm.from, comm.subject || "", comm.preview || "", commType, comm.aiCategory, comm.aiUrgency);
       const meta = comm.metadata as Record<string, unknown> | null;
       const fullBody = (meta?.body as string) || comm.preview || "";
       const receivedDate = comm.receivedAt ? new Date(comm.receivedAt) : null;
@@ -302,6 +324,14 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
         sourceId: comm.sourceId,
         priority: category.priority,
         commType,
+        // AI fields
+        aiCategory: comm.aiCategory,
+        aiUrgency: comm.aiUrgency,
+        aiActionRequired: comm.aiActionRequired,
+        aiActionSummary: comm.aiActionSummary,
+        aiDraft: comm.aiDraft,
+        aiPriorityData: comm.aiPriorityData,
+        resolvedAt: comm.resolvedAt,
       };
     });
   }, [communications]);
@@ -464,6 +494,17 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
 
   const handleAIAction = async (action: AIAction) => {
     switch (action) {
+      case "run-relay": {
+        // Call relay-pipeline edge function
+        const { data, error } = await supabase.functions.invoke("relay-pipeline", {
+          body: { action: "process" },
+        });
+        if (error) throw error;
+        toast({ title: "Relay Pipeline", description: `Processed ${data?.processed || 0} emails with AI.` });
+        // Refresh communications
+        await sync();
+        return;
+      }
       case "summarize": {
         const toRespond = allEmails.filter((e) => e.label === "To Respond" || e.label === "Urgent").length;
         const fyi = allEmails.filter((e) => e.label === "FYI" || e.label === "Awaiting Reply").length;
@@ -512,6 +553,11 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
         break;
     }
   };
+
+  // Count unprocessed emails for Relay badge
+  const unprocessedCount = useMemo(() => {
+    return communications.filter(c => !c.aiProcessedAt && c.direction === "inbound").length;
+  }, [communications]);
 
   const gmailConnected = gmailStatus === "connected";
   const rcConnected = rcStatus === "connected";
@@ -564,7 +610,7 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
           <div className="w-px h-4 bg-border shrink-0" />
 
           {/* AI actions inline */}
-          <InboxAIToolbar emailCount={allEmails.length} onAction={handleAIAction} />
+          <InboxAIToolbar emailCount={allEmails.length} onAction={handleAIAction} unprocessedCount={unprocessedCount} />
 
           {/* Spacer */}
           <div className="flex-1" />

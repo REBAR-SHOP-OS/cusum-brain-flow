@@ -92,6 +92,15 @@ export function InboxDetailView({ email, onClose }: InboxDetailViewProps) {
           receivedAt: row.received_at ?? row.created_at,
           threadId: row.thread_id,
           metadata: meta,
+          aiCategory: (row as any).ai_category ?? null,
+          aiUrgency: (row as any).ai_urgency ?? null,
+          aiActionRequired: (row as any).ai_action_required ?? null,
+          aiActionSummary: (row as any).ai_action_summary ?? null,
+          aiDraft: (row as any).ai_draft ?? null,
+          aiProcessedAt: (row as any).ai_processed_at ?? null,
+          aiPriorityData: (row as any).ai_priority_data ?? null,
+          resolvedAt: (row as any).resolved_at ?? null,
+          resolvedSummary: (row as any).resolved_summary ?? null,
         };
       });
 
