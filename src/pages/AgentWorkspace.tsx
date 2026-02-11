@@ -287,6 +287,13 @@ export default function AgentWorkspace() {
               <p className="text-base sm:text-2xl font-semibold text-foreground mt-1">
                 What can I help you with?
               </p>
+              {agentId === "social" && (
+                <div className="mt-4 p-3 rounded-lg bg-muted/50 border border-border inline-block">
+                  <p className="text-sm text-muted-foreground">📅 Today's date:</p>
+                  <p className="text-lg font-bold text-primary">{format(new Date(), "yyyy-MM-dd (EEEE, MMMM d)")}</p>
+                  <p className="text-xs text-muted-foreground mt-1">Send <strong>1</strong> to generate today's content</p>
+                </div>
+              )}
             </div>
 
             <div className="w-full max-w-xl mb-4">
