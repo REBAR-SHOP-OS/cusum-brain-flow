@@ -71,11 +71,33 @@ export function useVizzyContext() {
       const profiles = profilesRes.data || [];
       const events = eventsRes.data || [];
 
-      // Compute financials directly from raw QB data (no React state dependency)
-      const invoices = qbData?.invoices || [];
-      const bills = qbData?.bills || [];
-      const payments = qbData?.payments || [];
-      const accounts = qbData?.accounts || [];
+      // Compute financials — use QB data if available, otherwise fall back to accounting_mirror
+      let invoices = qbData?.invoices || [];
+      let bills = qbData?.bills || [];
+      let payments = qbData?.payments || [];
+      let accounts = qbData?.accounts || [];
+
+      // Fallback: if QB returned nothing, read from accounting_mirror (same source CEO Dashboard uses)
+      if (!qbData) {
+        const [mirrorInvRes, mirrorBillRes] = await Promise.all([
+          supabase.from("accounting_mirror").select("balance, entity_type, data").eq("entity_type", "Invoice").gt("balance", 0),
+          supabase.from("accounting_mirror").select("balance, entity_type, data").eq("entity_type", "Vendor").gt("balance", 0),
+        ]);
+        const mirrorInvoices = (mirrorInvRes.data || []).map((r: any) => ({
+          Balance: r.balance,
+          DueDate: (r.data as any)?.DueDate || null,
+          CustomerRef: (r.data as any)?.CustomerRef || null,
+          ...(r.data as any),
+        }));
+        const mirrorBills = (mirrorBillRes.data || []).map((r: any) => ({
+          Balance: r.balance,
+          DueDate: (r.data as any)?.DueDate || null,
+          VendorRef: (r.data as any)?.VendorRef || null,
+          ...(r.data as any),
+        }));
+        invoices = mirrorInvoices;
+        bills = mirrorBills;
+      }
 
       const todayDate = new Date().toISOString().split("T")[0];
       const overdueInvoices = invoices.filter((inv: any) => (inv.Balance || 0) > 0 && inv.DueDate && inv.DueDate < todayDate);
