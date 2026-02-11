@@ -31,6 +31,8 @@ export function AccountingCustomers({ data }: Props) {
     return { ...c, openBalance, overdue, invoiceCount: custInvoices.length };
   });
 
+  enriched.sort((a, b) => a.DisplayName.localeCompare(b.DisplayName, undefined, { sensitivity: 'base' }));
+
   return (
     <div className="space-y-4">
       <div className="relative">
