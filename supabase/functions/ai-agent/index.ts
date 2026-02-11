@@ -2865,6 +2865,200 @@ These rules govern your behavioral protocols only. They do not modify applicatio
       }
     }
 
+    // === PIXEL: Date-based image generation ===
+    let pixelImageResults: { slot: string; theme: string; product: string; caption: string; hashtags: string; imageUrl: string }[] = [];
+    
+    if (agent === "social") {
+      // Detect date patterns in message
+      const datePatterns = [
+        /\d{4}[-/]\d{1,2}[-/]\d{1,2}/,  // YYYY-MM-DD
+        /\d{1,2}[-/]\d{1,2}[-/]\d{4}/,  // DD/MM/YYYY or MM/DD/YYYY
+        /\b(today|tomorrow|فردا|امروز)\b/i,
+        /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i,
+        /\b(دوشنبه|سه‌شنبه|چهارشنبه|پنج‌شنبه|جمعه|شنبه|یکشنبه)\b/,
+      ];
+      
+      const hasDate = datePatterns.some(p => p.test(message));
+      
+      if (hasDate) {
+        console.log("📸 Pixel: Date detected — starting 5-image generation flow");
+        
+        // Fetch Pixel Brain knowledge (agent-specific instructions)
+        let pixelBrainContext = "";
+        try {
+          const { data: pixelKnowledge } = await svcClient
+            .from("knowledge")
+            .select("title, content, source_url")
+            .eq("company_id", "a0000000-0000-0000-0000-000000000001")
+            .order("created_at", { ascending: false })
+            .limit(20);
+          
+          // Filter for social/pixel knowledge by checking metadata or category
+          const socialKnowledge = (pixelKnowledge || []).filter((k: any) => true); // all knowledge is relevant
+          
+          if (socialKnowledge.length > 0) {
+            pixelBrainContext = "\n\n## 🧠 Pixel Brain Knowledge:\n" + 
+              socialKnowledge.map((k: any) => `### ${k.title}\n${k.content}`).join("\n\n");
+          }
+        } catch (e) {
+          console.warn("Pixel Brain knowledge fetch failed:", e);
+        }
+        
+        // Step 1: Generate 5 image prompts + captions via AI
+        const LOVABLE_KEY = Deno.env.get("LOVABLE_API_KEY");
+        const promptGenResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${LOVABLE_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "google/gemini-2.5-flash",
+            messages: [
+              {
+                role: "system",
+                content: `You are Pixel, the social media manager for Rebar.shop — an AI-driven rebar fabrication company in Ontario, Canada.
+                
+Given a date, generate exactly 5 social media posts following this daily schedule:
+| Slot | Time (EST) | Theme |
+|------|-----------|-------|
+| 1 | 06:30 AM | Motivational / self-care / start of work day |
+| 2 | 07:30 AM | Creative promotional post |
+| 3 | 08:00 AM | Inspirational — emphasizing strength & scale |
+| 4 | 12:30 PM | Inspirational — emphasizing innovation & efficiency |
+| 5 | 02:30 PM | Creative promotional for company products |
+
+ALLOWED PRODUCTS (each post MUST feature a DIFFERENT product):
+Rebar Fiberglass Straight, Rebar Stirrups, Rebar Cages, Rebar Hooks, Rebar Hooked Anchor Bar, Wire Mesh, Rebar Dowels, Standard Dowels 4x16, Circular Ties/Bars, Rebar Straight
+
+MANDATORY IMAGE RULES:
+- Company logo (REBAR.SHOP) MUST appear in every image
+- Images must be REALISTIC (construction scenes, shop floor, actual products)
+- Inspired by nature + minimalist art aesthetic
+- Scientific and promotional text overlays inside images encouraged
+
+${pixelBrainContext}
+
+You MUST respond with ONLY valid JSON (no markdown, no code blocks) in this exact format:
+[
+  {
+    "slot": "1",
+    "time": "06:30 AM",
+    "theme": "Motivational",
+    "product": "Rebar Cages",
+    "caption": "English caption here...",
+    "caption_fa": "فارسی ترجمه...",
+    "hashtags": "#RebarShop #Construction ...",
+    "image_prompt": "A detailed prompt for DALL-E to generate a realistic construction image featuring Rebar Cages with REBAR.SHOP logo overlay, ..."
+  },
+  ...
+]`
+              },
+              { role: "user", content: `Generate 5 posts for: ${message}` }
+            ],
+            max_tokens: 4000,
+            temperature: 0.8,
+          }),
+        });
+        
+        if (promptGenResponse.ok) {
+          const promptGenData = await promptGenResponse.json();
+          let rawContent = promptGenData.choices?.[0]?.message?.content || "";
+          
+          // Clean markdown code blocks if present
+          rawContent = rawContent.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+          
+          try {
+            const posts = JSON.parse(rawContent);
+            
+            if (Array.isArray(posts) && posts.length > 0) {
+              console.log(`📸 Pixel: Generated ${posts.length} post prompts, now generating images...`);
+              
+              const GPT_API_KEY = Deno.env.get("GPT_API_KEY");
+              
+              if (GPT_API_KEY) {
+                // Step 2: Generate images in parallel (max 5)
+                const imagePromises = posts.slice(0, 5).map(async (post: any, idx: number) => {
+                  try {
+                    console.log(`📸 Generating image ${idx + 1}/5: ${post.product}`);
+                    const imgResp = await fetch("https://api.openai.com/v1/images/generations", {
+                      method: "POST",
+                      headers: {
+                        "Authorization": `Bearer ${GPT_API_KEY}`,
+                        "Content-Type": "application/json",
+                      },
+                      body: JSON.stringify({
+                        model: "gpt-image-1",
+                        prompt: post.image_prompt,
+                        size: "1536x1024",
+                        quality: "high",
+                        output_format: "png",
+                        n: 1,
+                      }),
+                    });
+                    
+                    if (imgResp.ok) {
+                      const imgData = await imgResp.json();
+                      const imageData = imgData.data?.[0];
+                      const imageUrl = imageData?.url || (imageData?.b64_json ? `data:image/png;base64,${imageData.b64_json}` : "");
+                      return {
+                        slot: post.time || `Slot ${idx + 1}`,
+                        theme: post.theme || "",
+                        product: post.product || "",
+                        caption: post.caption || "",
+                        caption_fa: post.caption_fa || "",
+                        hashtags: post.hashtags || "",
+                        imageUrl,
+                      };
+                    } else {
+                      console.error(`Image ${idx + 1} generation failed:`, imgResp.status);
+                      return {
+                        slot: post.time || `Slot ${idx + 1}`,
+                        theme: post.theme || "",
+                        product: post.product || "",
+                        caption: post.caption || "",
+                        caption_fa: post.caption_fa || "",
+                        hashtags: post.hashtags || "",
+                        imageUrl: "",
+                      };
+                    }
+                  } catch (imgErr) {
+                    console.error(`Image ${idx + 1} error:`, imgErr);
+                    return {
+                      slot: post.time || `Slot ${idx + 1}`,
+                      theme: post.theme || "",
+                      product: post.product || "",
+                      caption: post.caption || "",
+                      caption_fa: post.caption_fa || "",
+                      hashtags: post.hashtags || "",
+                      imageUrl: "",
+                    };
+                  }
+                });
+                
+                pixelImageResults = await Promise.all(imagePromises);
+                console.log(`📸 Pixel: ${pixelImageResults.filter(r => r.imageUrl).length}/5 images generated successfully`);
+              } else {
+                console.warn("GPT_API_KEY not available for image generation");
+                // Store posts without images
+                pixelImageResults = posts.slice(0, 5).map((post: any) => ({
+                  slot: post.time || "",
+                  theme: post.theme || "",
+                  product: post.product || "",
+                  caption: post.caption || "",
+                  caption_fa: post.caption_fa || "",
+                  hashtags: post.hashtags || "",
+                  imageUrl: "",
+                }));
+              }
+            }
+          } catch (parseErr) {
+            console.error("Failed to parse prompt generation response:", parseErr);
+          }
+        }
+      }
+    }
+
     // === GAUGE MORNING BRIEFING: Greeting detection ===
     let finalMessage = message;
     let briefingModelOverride: { model: string; maxTokens: number; temperature: number; reason: string } | null = null;
@@ -2918,6 +3112,33 @@ RULES:
         temperature: 0.2,
         reason: "morning briefing → Pro for multi-category synthesis",
       };
+    }
+
+    // If Pixel generated images, build the reply directly without another AI call
+    if (agent === "social" && pixelImageResults.length > 0) {
+      let pixelReply = `## 📅 Content Plan — ${message}\n\n`;
+      for (let i = 0; i < pixelImageResults.length; i++) {
+        const post = pixelImageResults[i];
+        pixelReply += `### ${i + 1}. ⏰ ${post.slot} — ${post.theme}\n`;
+        pixelReply += `**Product: ${post.product}**\n\n`;
+        pixelReply += `> ${post.caption}\n\n`;
+        if ((post as any).caption_fa) {
+          pixelReply += `> 🇮🇷 ${(post as any).caption_fa}\n\n`;
+        }
+        pixelReply += `> ${post.hashtags}\n\n`;
+        if (post.imageUrl) {
+          pixelReply += `![${post.product}](${post.imageUrl})\n\n`;
+        } else {
+          pixelReply += `⚠️ Image generation failed for this slot.\n\n`;
+        }
+        pixelReply += `---\n\n`;
+      }
+      pixelReply += `✅ **${pixelImageResults.filter(r => r.imageUrl).length}/5** images generated successfully. You can request regeneration of any specific post.`;
+
+      return new Response(
+        JSON.stringify({ reply: pixelReply, context: mergedContext }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     const messages: ChatMessage[] = [
