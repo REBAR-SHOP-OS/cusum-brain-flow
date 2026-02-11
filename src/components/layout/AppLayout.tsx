@@ -5,6 +5,7 @@ import { MobileNavV2 } from "./MobileNavV2";
 import { AppTour } from "@/components/tour/AppTour";
 import { VoiceVizzy } from "@/components/vizzy/VoiceVizzy";
 import { RoleGuard } from "@/components/auth/RoleGuard";
+import { SmartErrorBoundary } from "@/components/error/SmartErrorBoundary";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -41,7 +42,9 @@ export function AppLayout({ children }: AppLayoutProps) {
         <MobileNavV2 />
 
         {/* Voice Vizzy — Jarvis mode (sattar only) */}
-        <VoiceVizzy />
+        <SmartErrorBoundary level="component" maxAutoRetries={1}>
+          <VoiceVizzy />
+        </SmartErrorBoundary>
       </div>
     </RoleGuard>
   );
