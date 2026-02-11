@@ -1,37 +1,29 @@
 
 
-## Give Vizzy Knowledge of Team Clock-In/Clock-Out Activity
+## Add Team Directory to Vizzy's Context
 
 ### Problem
-Vizzy only knows about agent chat sessions. Vicky Anderson doesn't use AI agents, so Vizzy says "I don't know what she did." But Vicky IS clocked in right now -- Vizzy just can't see time clock data.
+Vizzy doesn't know who's who on the team. When the CEO mentions "Vicky" or "Saurabh," Vizzy can't connect the name to their email, role, or department because there's no team directory in her context.
 
 ### Changes
 
-**1. Update `src/hooks/useVizzyContext.ts`**
-- Add `teamPresence` field to `VizzyBusinessSnapshot`:
-  ```
-  teamPresence: { name: string; clocked_in: string; clocked_out: string | null }[]
-  ```
-- Add a query for today's `time_clock_entries` joined with `profiles` (via `profile_id`) to get who clocked in/out and when
+**File: `src/lib/vizzyContext.ts`**
 
-**2. Update `src/lib/vizzyContext.ts`**
-- Add a "TEAM PRESENCE (TIME CLOCK)" section to the system prompt showing:
-  - Who is currently clocked in (clock_out IS NULL) with their clock-in time
-  - Who clocked out already today with their hours
-- Example:
-  ```
-  👷 TEAM PRESENCE (TIME CLOCK)
-  Currently On:
-    * Vicky Anderson — clocked in at 10:17 AM
-    * Kourosh Zand — clocked in at 8:30 AM
-  Clocked Out Today:
-    * Ben Rajabifar — 7:00 AM to 3:30 PM (8.5 hrs)
-  ```
+Add a hardcoded **TEAM DIRECTORY** section near the top of the system prompt so Vizzy always knows every team member by name, email, and role:
 
-### Result
-When the CEO asks "what did Vicky do today?", Vizzy can at least say "Vicky Anderson clocked in at 10:17 AM and is currently working." If she also used agents, that info appears in the Agent Activity section too.
+```
+🏢 TEAM DIRECTORY
+  • Sattar Esmaeili (sattar@rebar.shop) — CEO
+  • Neel Mahajan (neel@rebar.shop) — CEO / Co-founder
+  • Vicky Anderson (vicky@rebar.shop) — Accountant
+  • Saurabh Seghal (saurabh@rebar.shop) — Sales
+  • Ben Rajabifar (ben@rebar.shop) — Estimator
+  • Kourosh Zand (kourosh@rebar.shop) — Shop Supervisor
+  • Radin Lachini (radin@rebar.shop) — AI Manager
+```
+
+This will be placed right after the "TEAM" section (line ~98) so Vizzy can cross-reference names with time clock data and agent activity. When the CEO asks "what did Vicky do today?", Vizzy will know Vicky = vicky@rebar.shop = Accountant, and can look up her clock-in times and agent sessions accordingly.
 
 ### Technical Notes
-- No schema changes -- uses existing `time_clock_entries` table (joins on `profile_id` to `profiles.id`)
-- Added as one more parallel query in the existing `Promise.all` block
-- Only fetches today's entries to keep it lightweight
+- Single file change, ~10 lines added to the prompt string
+- No schema or hook changes needed
