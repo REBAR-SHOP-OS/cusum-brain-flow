@@ -34,18 +34,18 @@ serve(async (req) => {
     }
 
     const response = await fetch(
-      `https://api.elevenlabs.io/v1/convai/conversation/token?agent_id=${agentId}`,
+      `https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=${agentId}`,
       { headers: { "xi-api-key": apiKey } }
     );
 
     if (!response.ok) {
       const err = await response.text();
-      console.error("ElevenLabs token error:", err);
-      return json({ error: "Failed to get conversation token" }, 502);
+      console.error("ElevenLabs signed-url error:", err);
+      return json({ error: "Failed to get signed URL" }, 502);
     }
 
-    const { token } = await response.json();
-    return json({ token });
+    const { signed_url } = await response.json();
+    return json({ signed_url });
   } catch (e) {
     if (e instanceof Response) return e;
     console.error("Unexpected error:", e);
