@@ -1,5 +1,7 @@
 import { Navigate, useLocation } from "react-router-dom";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useAuth } from "@/lib/auth";
+import { useCustomerPortalData } from "@/hooks/useCustomerPortalData";
 
 /** Routes accessible to workshop-only users (no admin/office/sales roles) */
 const WORKSHOP_ALLOWED = [
@@ -41,9 +43,28 @@ interface RoleGuardProps {
  */
 export function RoleGuard({ children }: RoleGuardProps) {
   const { roles, isLoading, isAdmin } = useUserRole();
+  const { user } = useAuth();
   const location = useLocation();
 
+  const email = user?.email || "";
+  const isInternal = email.endsWith("@rebar.shop");
+
+  // For external users, check if they're a linked customer
+  const { hasAccess: isLinkedCustomer, isLoading: customerLoading } = useCustomerPortalData();
+
   if (isLoading || roles.length === 0) return <>{children}</>;
+
+  // External user routing
+  if (!isInternal && email) {
+    // Still loading customer link — don't flash wrong page
+    if (customerLoading) return <>{children}</>;
+
+    // Linked customer → always go to portal
+    if (isLinkedCustomer) {
+      return <Navigate to="/portal" replace />;
+    }
+    // Not a customer → fall through to workshop/role logic below
+  }
 
   // If user has any elevated role, allow everything
   if (isAdmin) return <>{children}</>;
