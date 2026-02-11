@@ -4064,6 +4064,39 @@ export type Database = {
         }
         Relationships: []
       }
+      vizzy_fix_requests: {
+        Row: {
+          affected_area: string | null
+          created_at: string
+          description: string
+          id: string
+          photo_url: string | null
+          resolved_at: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          affected_area?: string | null
+          created_at?: string
+          description: string
+          id?: string
+          photo_url?: string | null
+          resolved_at?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          affected_area?: string | null
+          created_at?: string
+          description?: string
+          id?: string
+          photo_url?: string | null
+          resolved_at?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       vizzy_interactions: {
         Row: {
           context_snapshot: Json | null
