@@ -2,11 +2,13 @@ import { Link, useLocation } from "react-router-dom";
 import {
   Home, Inbox, CheckSquare, Kanban, Users, Factory, Package, Truck,
   LayoutGrid, Brain, Settings, Shield, Plug, DollarSign, Activity,
-  Terminal, Lock, BarChart3,
+  Terminal, Lock, BarChart3, Clock, MessageSquare, Bot,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useNotifications } from "@/hooks/useNotifications";
+import { useAuth } from "@/lib/auth";
+import { useCustomerPortalData } from "@/hooks/useCustomerPortalData";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
@@ -30,6 +32,53 @@ export function AppSidebar() {
   const location = useLocation();
   const { roles, isAdmin } = useUserRole();
   const { unreadCount } = useNotifications();
+  const { user } = useAuth();
+  const email = user?.email || "";
+  const isInternal = email.endsWith("@rebar.shop");
+  const { hasAccess: isLinkedCustomer } = useCustomerPortalData();
+  const isExternalEmployee = !isInternal && !!email && !isLinkedCustomer;
+
+  // External employees see only these 3 items
+  if (isExternalEmployee) {
+    const externalNav: NavItem[] = [
+      { name: "Time Clock", href: "/timeclock", icon: Clock },
+      { name: "Team Hub", href: "/team-hub", icon: MessageSquare },
+      { name: "HR Agent", href: "/agent/talent", icon: Bot },
+    ];
+    return (
+      <aside data-tour="sidebar" className="group/sidebar w-14 hover:w-48 shrink-0 bg-sidebar border-r border-sidebar-border flex flex-col h-full transition-all duration-200 ease-in-out overflow-hidden">
+        <ScrollArea className="flex-1 py-2">
+          <div className="flex flex-col gap-0.5 px-2 mt-2">
+            {externalNav.map((item) => {
+              const isActive = location.pathname === item.href || location.pathname.startsWith(item.href);
+              return (
+                <Tooltip key={item.name} delayDuration={200}>
+                  <TooltipTrigger asChild>
+                    <Link
+                      to={item.href}
+                      className={cn(
+                        "relative h-10 rounded-lg flex items-center gap-3 px-2 transition-colors whitespace-nowrap",
+                        "hover:bg-sidebar-accent",
+                        isActive ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-sidebar-foreground"
+                      )}
+                    >
+                      <item.icon className="w-[18px] h-[18px] shrink-0" />
+                      <span className="text-sm opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-200 overflow-hidden">
+                        {item.name}
+                      </span>
+                    </Link>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" className="text-xs group-hover/sidebar:hidden">
+                    {item.name}
+                  </TooltipContent>
+                </Tooltip>
+              );
+            })}
+          </div>
+        </ScrollArea>
+      </aside>
+    );
+  }
 
   const navGroups: NavGroup[] = [
     {
