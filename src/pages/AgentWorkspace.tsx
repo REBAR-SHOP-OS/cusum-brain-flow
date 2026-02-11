@@ -268,7 +268,7 @@ export default function AgentWorkspace() {
                 onSend={handleSend}
                 placeholder={config.placeholder}
                 disabled={isLoading}
-                showFileUpload={agentId === "estimating"}
+                showFileUpload={agentId === "estimating" || agentId === "social"}
                 showSmartMode
                 onLiveChatClick={() => navigate("/vizzy")}
               />
@@ -292,7 +292,7 @@ export default function AgentWorkspace() {
               onSend={handleSend}
               placeholder={config.placeholder}
               disabled={isLoading}
-              showFileUpload={agentId === "estimating"}
+              showFileUpload={agentId === "estimating" || agentId === "social"}
               showSmartMode
               onLiveChatClick={() => navigate("/vizzy")}
             />
