@@ -1,61 +1,42 @@
 
-## Cutter and Bender Bug Audit — 4 Issues Found
 
-### Bug 1: `handleCompleteRun` has stale `completedAtRunStart` (CRITICAL)
-**Location**: `CutterStationView.tsx` line 356
+## Fix: Cutter Station Not Updating Live
 
-`completedAtRunStart` is NOT in the `useCallback` dependency array of `handleCompleteRun`. This means when `handleLockAndStart` sets `completedAtRunStart` to the fresh DB value, `handleCompleteRun` still holds the OLD value (null) from the previous render — because none of its listed deps changed at the same time.
+### Root Cause
 
-Line 291 then does: `const baseCompleted = completedAtRunStart ?? completedPieces` — with stale `completedAtRunStart = null`, it falls back to `completedPieces` which may also be stale. This can cause the final DB write to save the wrong `completed_pieces`.
+Two problems prevent the Cutter station from updating in real-time:
 
-**Fix**: Add `completedAtRunStart` to the deps array on line 356.
+**1. `cut_plans` table is missing from the realtime publication**
+The `useStationData` hook subscribes to realtime changes on BOTH `cut_plan_items` and `cut_plans`. But only `cut_plan_items` is in the `supabase_realtime` publication. Changes to `cut_plans` (like status updates) never fire realtime events, so the subscription callback never runs for those changes.
 
----
+**2. CutterStationView never manually invalidates the query after DB writes**
+After `handleCompleteRun` updates the database, the component relies 100% on the realtime roundtrip (DB commit -> Postgres replication -> Supabase Realtime -> WebSocket -> client -> invalidation -> refetch) which can take 1-5 seconds or silently fail. Unlike `BenderStationView` (which we already fixed to call `queryClient.invalidateQueries`), CutterStationView has NO manual invalidation at all. The operator sees stale data until the realtime event eventually arrives -- or never, requiring a page navigation.
 
-### Bug 2: Bender DONE button doesn't refresh data (CRITICAL)
-**Location**: `BenderStationView.tsx` line 104
+### Fix (2 changes)
 
-After pressing DONE, the query is invalidated with:
-```
-queryClient.invalidateQueries({ queryKey: ["station-data", machine.id] })
-```
+**Change 1: Add `cut_plans` to realtime publication (migration)**
 
-But `useStationData` uses a THREE-part key: `["station-data", machineId, machineType]` (line 58 of useStationData.ts). The two-part key doesn't match, so the invalidation silently fails and the bender UI doesn't refresh after DONE. The operator sees stale counts until the realtime subscription happens to fire.
-
-**Fix**: Change to `["station-data", machine.id, "bender"]` on line 104.
-
----
-
-### Bug 3: "Pieces Done" display double-counts after realtime update (DISPLAY)
-**Location**: `CutterStationView.tsx` line 464
-
-The display shows:
-```
-{completedPieces + slotTracker.totalCutsDone}
+```sql
+ALTER PUBLICATION supabase_realtime ADD TABLE public.cut_plans;
 ```
 
-After each stroke, `handleRecordStroke` saves `completedAtRunStart + totalCutsDone` to DB. When realtime delivers the update, `completedPieces` becomes `completedAtRunStart + totalCutsDone`. The display then shows `(completedAtRunStart + totalCutsDone) + totalCutsDone` — double-counting the current run's cuts.
+This ensures plan-level changes (status, machine assignment) also trigger realtime events.
 
-The flicker is: correct value right after stroke, then jumps to double when realtime arrives.
+**Change 2: Add manual query invalidation in CutterStationView**
 
-**Fix**: During an active run (when `completedAtRunStart` is not null), use `completedAtRunStart + slotTracker.totalCutsDone` instead of `completedPieces + slotTracker.totalCutsDone`. Fallback to `completedPieces` when no run is active.
+- Import `useQueryClient` from `@tanstack/react-query`
+- After the DB update in `handleCompleteRun` (line 300), immediately call `queryClient.invalidateQueries({ queryKey: ["station-data", machine.id, "cutter"] })` to force an instant refresh -- don't wait for the realtime roundtrip
+- This mirrors the pattern already used in BenderStationView
 
----
+### Files Modified
 
-### Bug 4: Indentation misalignment from last edit (MINOR)
-**Location**: `CutterStationView.tsx` line 128
+| File | Change |
+|------|--------|
+| Migration SQL | Add `cut_plans` to `supabase_realtime` publication |
+| `src/components/shopfloor/CutterStationView.tsx` | Import `useQueryClient`, call `invalidateQueries` after DB update in `handleCompleteRun` |
 
-`setIsRunning(true)` lost its indentation in the previous diff. Cosmetic but should be corrected.
+### What This Does NOT Change
+- No changes to `useStationData.ts` (the realtime subscription there is correct, it just wasn't receiving events for `cut_plans`)
+- No changes to `BenderStationView.tsx` (already fixed)
+- No UI changes, no schema changes
 
----
-
-### Summary of Changes
-
-| File | Line(s) | Fix |
-|------|---------|-----|
-| `CutterStationView.tsx` | 128 | Fix indentation of `setIsRunning(true)` |
-| `CutterStationView.tsx` | 356 | Add `completedAtRunStart` to `handleCompleteRun` deps |
-| `CutterStationView.tsx` | 464 | Use `completedAtRunStart` for display during active run |
-| `BenderStationView.tsx` | 104 | Fix query key to include `"bender"` for proper invalidation |
-
-All fixes are surgical single-line changes. No schema changes, no new files, no UI redesign.
