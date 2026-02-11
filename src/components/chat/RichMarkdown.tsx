@@ -179,6 +179,29 @@ export function RichMarkdown({ content, className }: RichMarkdownProps) {
               {children}
             </a>
           ),
+
+          // ── Images (base64 + URL) ──
+          img: ({ src, alt }) => (
+            <div className="my-3">
+              <img
+                src={src}
+                alt={alt || "Generated image"}
+                className="rounded-lg max-w-full max-h-[400px] object-contain border border-border/30"
+                loading="lazy"
+              />
+              {src && (
+                <a
+                  href={src}
+                  download={alt || "image.png"}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 mt-1 text-xs text-primary hover:text-primary/80 transition-colors"
+                >
+                  ⬇️ Download
+                </a>
+              )}
+            </div>
+          ),
         }}
       >
         {content}
