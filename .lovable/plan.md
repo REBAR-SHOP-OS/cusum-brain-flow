@@ -1,42 +1,79 @@
 
 
-## Fix: Cutter Station Not Updating Live
+## Fix: Make ALL Cutter Numbers Rock-Solid and Foolproof
 
-### Root Cause
+### The Problem
 
-Two problems prevent the Cutter station from updating in real-time:
+During an active run, `completedPieces` (from `currentItem.completed_pieces`) gets updated by realtime subscription every time a stroke is saved to the DB. This causes ALL derived numbers to flicker and jump because they're mixing "realtime-updated base" with "local slot tracker progress":
 
-**1. `cut_plans` table is missing from the realtime publication**
-The `useStationData` hook subscribes to realtime changes on BOTH `cut_plan_items` and `cut_plans`. But only `cut_plan_items` is in the `supabase_realtime` publication. Changes to `cut_plans` (like status updates) never fire realtime events, so the subscription callback never runs for those changes.
+- **Bars Needed** flickers down as realtime catches up, then re-calculates wrong
+- **This Run** changes mid-run because it depends on Bars Needed
+- **isDone** can flash `true` prematurely when realtime delivers a mid-run update
+- **Pieces Done** already fixed but other cards still use raw `completedPieces`
 
-**2. CutterStationView never manually invalidates the query after DB writes**
-After `handleCompleteRun` updates the database, the component relies 100% on the realtime roundtrip (DB commit -> Postgres replication -> Supabase Realtime -> WebSocket -> client -> invalidation -> refetch) which can take 1-5 seconds or silently fail. Unlike `BenderStationView` (which we already fixed to call `queryClient.invalidateQueries`), CutterStationView has NO manual invalidation at all. The operator sees stale data until the realtime event eventually arrives -- or never, requiring a page navigation.
+### The Fix: One Single Source of Truth
 
-### Fix (2 changes)
+Create ONE variable `effectiveCompleted` that ALL display numbers derive from:
 
-**Change 1: Add `cut_plans` to realtime publication (migration)**
+```
+When run is active (completedAtRunStart is set):
+  effectiveCompleted = completedAtRunStart + slotTracker.totalCutsDone
 
-```sql
-ALTER PUBLICATION supabase_realtime ADD TABLE public.cut_plans;
+When idle (no run):
+  effectiveCompleted = completedPieces (from realtime/DB)
 ```
 
-This ensures plan-level changes (status, machine assignment) also trigger realtime events.
+Then derive EVERYTHING from `effectiveCompleted`:
 
-**Change 2: Add manual query invalidation in CutterStationView**
+| Card | Current Source | Fixed Source |
+|------|---------------|-------------|
+| Bars Needed | `remainingPieces` (uses raw `completedPieces`) | `totalPieces - effectiveCompleted` |
+| This Run | `barsStillNeeded` (uses raw `completedPieces`) | derived from fixed remaining |
+| Pieces Done | already using `completedAtRunStart` | uses `effectiveCompleted` (cleaner) |
+| isDone | `remainingPieces <= 0` (uses raw) | `effectiveRemaining <= 0` |
+| "mark complete" banner | uses `isDone` | automatically fixed |
 
-- Import `useQueryClient` from `@tanstack/react-query`
-- After the DB update in `handleCompleteRun` (line 300), immediately call `queryClient.invalidateQueries({ queryKey: ["station-data", machine.id, "cutter"] })` to force an instant refresh -- don't wait for the realtime roundtrip
-- This mirrors the pattern already used in BenderStationView
+### Changes (single file)
+
+**File: `src/components/shopfloor/CutterStationView.tsx`**
+
+Replace lines 88-95 (the derived values block) with:
+
+```typescript
+const computedPiecesPerBar = runPlan?.piecesPerBar || 
+  (currentItem ? Math.floor(selectedStockLength / currentItem.cut_length_mm) : 1);
+const totalPieces = currentItem?.total_pieces || 0;
+const completedPieces = currentItem?.completed_pieces || 0;
+
+// SINGLE SOURCE OF TRUTH: during a run, use snapshot + local tracker;
+// when idle, use whatever the DB/realtime says
+const effectiveCompleted = completedAtRunStart != null
+  ? completedAtRunStart + slotTracker.totalCutsDone
+  : completedPieces;
+
+const remainingPieces = totalPieces - effectiveCompleted;
+const barsStillNeeded = computedPiecesPerBar > 0 
+  ? Math.ceil(remainingPieces / computedPiecesPerBar) : 0;
+const barsForThisRun = operatorBars ?? runPlan?.barsThisRun ?? barsStillNeeded;
+const isDone = remainingPieces <= 0;
+```
+
+Then simplify the "Pieces Done" display (line 468-470) to just use `effectiveCompleted`:
+
+```tsx
+<p className="text-3xl font-black font-mono text-foreground">
+  {effectiveCompleted}
+  <span className="text-lg text-muted-foreground">/{totalPieces}</span>
+</p>
+```
+
+### What This Guarantees
+
+- During a run: numbers ONLY change when the operator presses CUT (local state update) -- never from delayed realtime events
+- When idle: numbers reflect the latest DB value via realtime as before
+- No flicker, no double-counting, no premature "done" state
+- Zero risk of stale data causing wrong calculations
 
 ### Files Modified
-
-| File | Change |
-|------|--------|
-| Migration SQL | Add `cut_plans` to `supabase_realtime` publication |
-| `src/components/shopfloor/CutterStationView.tsx` | Import `useQueryClient`, call `invalidateQueries` after DB update in `handleCompleteRun` |
-
-### What This Does NOT Change
-- No changes to `useStationData.ts` (the realtime subscription there is correct, it just wasn't receiving events for `cut_plans`)
-- No changes to `BenderStationView.tsx` (already fixed)
-- No UI changes, no schema changes
+- `src/components/shopfloor/CutterStationView.tsx` only -- lines 88-95 (derived values) and lines 468-470 (display simplification)
 
