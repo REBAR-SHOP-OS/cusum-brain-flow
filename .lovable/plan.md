@@ -1,79 +1,40 @@
 
 
-## Fix: Make ALL Cutter Numbers Rock-Solid and Foolproof
+## Auto-Route External Users to the Right Portal
 
-### The Problem
+### What This Does
 
-During an active run, `completedPieces` (from `currentItem.completed_pieces`) gets updated by realtime subscription every time a stroke is saved to the DB. This causes ALL derived numbers to flicker and jump because they're mixing "realtime-updated base" with "local slot tracker progress":
+Any user whose email is NOT `@rebar.shop` gets automatically redirected:
+- **If they're a linked customer** (have a `customer_user_links` record) → sent to `/portal` (Customer Portal)
+- **If they're an external employee** (no customer link, have workshop/field role) → existing RoleGuard already locks them to shop floor routes
 
-- **Bars Needed** flickers down as realtime catches up, then re-calculates wrong
-- **This Run** changes mid-run because it depends on Bars Needed
-- **isDone** can flash `true` prematurely when realtime delivers a mid-run update
-- **Pieces Done** already fixed but other cards still use raw `completedPieces`
+### Where the Check Goes
 
-### The Fix: One Single Source of Truth
-
-Create ONE variable `effectiveCompleted` that ALL display numbers derive from:
+**`src/components/auth/RoleGuard.tsx`** — this is already the routing decision-maker. We add one check at the top, before role logic:
 
 ```
-When run is active (completedAtRunStart is set):
-  effectiveCompleted = completedAtRunStart + slotTracker.totalCutsDone
-
-When idle (no run):
-  effectiveCompleted = completedPieces (from realtime/DB)
+1. Get user email from auth
+2. If email ends with @rebar.shop → skip (internal staff, proceed to role checks)
+3. If external email → query customer_user_links
+   - If customer link exists → Navigate to /portal
+   - If no customer link → fall through to existing workshop/role logic
 ```
 
-Then derive EVERYTHING from `effectiveCompleted`:
+### Why RoleGuard (not ProtectedRoute)
 
-| Card | Current Source | Fixed Source |
-|------|---------------|-------------|
-| Bars Needed | `remainingPieces` (uses raw `completedPieces`) | `totalPieces - effectiveCompleted` |
-| This Run | `barsStillNeeded` (uses raw `completedPieces`) | derived from fixed remaining |
-| Pieces Done | already using `completedAtRunStart` | uses `effectiveCompleted` (cleaner) |
-| isDone | `remainingPieces <= 0` (uses raw) | `effectiveRemaining <= 0` |
-| "mark complete" banner | uses `isDone` | automatically fixed |
+- RoleGuard already imports `useAuth` and handles route decisions
+- ProtectedRoute is intentionally simple (auth yes/no only)
+- CustomerPortal at `/portal` is outside AppLayout/RoleGuard, so no infinite redirect loop
 
-### Changes (single file)
+### Technical Changes
 
-**File: `src/components/shopfloor/CutterStationView.tsx`**
+| File | Change |
+|------|--------|
+| `src/components/auth/RoleGuard.tsx` | Add email domain check + `useCustomerPortalData` hook to detect customer users and redirect to `/portal` |
 
-Replace lines 88-95 (the derived values block) with:
-
-```typescript
-const computedPiecesPerBar = runPlan?.piecesPerBar || 
-  (currentItem ? Math.floor(selectedStockLength / currentItem.cut_length_mm) : 1);
-const totalPieces = currentItem?.total_pieces || 0;
-const completedPieces = currentItem?.completed_pieces || 0;
-
-// SINGLE SOURCE OF TRUTH: during a run, use snapshot + local tracker;
-// when idle, use whatever the DB/realtime says
-const effectiveCompleted = completedAtRunStart != null
-  ? completedAtRunStart + slotTracker.totalCutsDone
-  : completedPieces;
-
-const remainingPieces = totalPieces - effectiveCompleted;
-const barsStillNeeded = computedPiecesPerBar > 0 
-  ? Math.ceil(remainingPieces / computedPiecesPerBar) : 0;
-const barsForThisRun = operatorBars ?? runPlan?.barsThisRun ?? barsStillNeeded;
-const isDone = remainingPieces <= 0;
-```
-
-Then simplify the "Pieces Done" display (line 468-470) to just use `effectiveCompleted`:
-
-```tsx
-<p className="text-3xl font-black font-mono text-foreground">
-  {effectiveCompleted}
-  <span className="text-lg text-muted-foreground">/{totalPieces}</span>
-</p>
-```
-
-### What This Guarantees
-
-- During a run: numbers ONLY change when the operator presses CUT (local state update) -- never from delayed realtime events
-- When idle: numbers reflect the latest DB value via realtime as before
-- No flicker, no double-counting, no premature "done" state
-- Zero risk of stale data causing wrong calculations
-
-### Files Modified
-- `src/components/shopfloor/CutterStationView.tsx` only -- lines 88-95 (derived values) and lines 468-470 (display simplification)
+### Edge Cases Handled
+- Loading states: show children while customer link query loads (avoids flash)
+- `/portal` route is outside `AppLayout` so RoleGuard never runs there — no redirect loop
+- Internal `@rebar.shop` users are completely unaffected
+- External employees without customer links fall through to normal workshop role restrictions
 
