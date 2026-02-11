@@ -39,8 +39,8 @@ export function buildVizzyContext(snap: VizzyBusinessSnapshot): string {
 
   const brainList = brainKnowledge
     .map((k) => {
-      const preview = k.content ? k.content.slice(0, 200).replace(/\n/g, " ") : "(document — no text preview)";
-      return `  • [${k.category}] ${k.title}: ${preview}`;
+      const fullContent = k.content ? k.content.replace(/\n/g, " ") : "(no content)";
+      return `  • [${k.category}] ${k.title}: ${fullContent}`;
     })
     .join("\n");
 
