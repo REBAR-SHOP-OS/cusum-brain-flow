@@ -1,66 +1,40 @@
 
 
-## Add Mandatory Agent Governance Rule to All Agents
+## Fix: Hide Inbox and Other Pages from External Users
 
-### Summary
+### The Problem
 
-Inject a global governance block into every agent's system prompt. This is a **prompt-only change** -- no UI, database, architecture, or backend logic modifications.
+External users (non-`@rebar.shop` emails) can see the Inbox and other restricted pages because of a logic ordering bug in `RoleGuard`.
 
-### What Changes
+**Line 55** checks `roles.length === 0` and returns children (pass-through) immediately. Since external users typically have no roles in the `user_roles` table, this early return fires **before** the external user routing logic on line 58 ever runs.
 
-**Single file: `supabase/functions/ai-agent/index.ts`** (line ~2783)
+### The Fix
 
-Add a `GOVERNANCE_RULES` constant before the `systemPrompt` assembly, then include it in the prompt chain.
+**File: `src/components/auth/RoleGuard.tsx`**
 
-### The Governance Block
+Move the external user check (lines 57-76) **above** the `roles.length === 0` early return (line 55). This ensures external users are always routed correctly regardless of whether they have roles assigned.
 
-```
-## MANDATORY AGENT GOVERNANCE (Strict Enforcement)
-
-### No Cross-Interference Policy
-You are prohibited from interfering, overriding, modifying, accessing, or influencing
-the responsibilities, data, logic, or decision-making of any other agent.
-
-### Central Agent Dependency
-All coordination must route through the Central Agent (Vizzy).
-You must not directly communicate with or execute actions on behalf of other agents.
-
-### Mandatory Reporting Protocol
-After completing any task or operational cycle, you must structure your output
-so it can be reported to the CEO Agent (Vizzy). Include:
-- What action was taken
-- What data was used
-- What outcome was produced
-
-### Scope Limitation
-These rules govern your behavioral protocols only. They do not modify
-application features, UI, architecture, backend logic, database, APIs,
-or security settings.
+**Before (broken order):**
+```text
+1. if roles empty -> pass through (BUG: external users escape here)
+2. if external user -> restrict to Clock/Team/HR (never reached)
+3. role-based checks for internal users
 ```
 
-### Implementation Detail
-
-Insert the constant before line 2783 and append it to the `systemPrompt` concatenation:
-
-```typescript
-const GOVERNANCE_RULES = `\n\n## 🔒 MANDATORY AGENT GOVERNANCE...`;
-
-const systemPrompt = ONTARIO_CONTEXT + basePrompt + brainKnowledgeBlock
-  + ROLE_ACCESS_BLOCK + GOVERNANCE_RULES
-  + SHARED_TOOL_INSTRUCTIONS + IDEA_GENERATION_INSTRUCTIONS
-  + `\n\n## Current User\nName: ${userFullName}\nEmail: ${userEmail}`;
+**After (correct order):**
+```text
+1. if external user -> restrict to Clock/Team/HR (always enforced)
+2. if roles still loading -> pass through
+3. role-based checks for internal users
 ```
 
-### What Is NOT Changed
-- No frontend/UI changes
-- No database changes
-- No other edge functions touched
-- No changes to any agent's domain logic or persona
-- All 15 agents receive the same governance block automatically
+### Technical Details
 
-### Files Modified
+Restructure the guard logic in `RoleGuard.tsx`:
 
-| File | Change |
-|------|--------|
-| `supabase/functions/ai-agent/index.ts` | Add governance constant + inject into systemPrompt (line ~2783) |
+- Move the `isInternal` check and external routing block before the `isLoading || roles.length === 0` check
+- Keep the `isLoading` early return for internal users only (they need roles to determine access)
+- Remove `roles.length === 0` from the early return since it was masking the bug
+
+No other files are changed. No database or backend changes needed.
 
