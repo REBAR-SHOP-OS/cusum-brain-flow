@@ -1,33 +1,15 @@
 
 
-## Fix Chart of Accounts - Ensure Full Account List Loads
+## Enhance Chart of Accounts to Match QuickBooks Layout
 
-### Problem
-The Chart of Accounts still only shows 4 Bank accounts despite the code change. The `list-accounts` call in Phase 2 is likely failing silently (one of 11 concurrent API calls). Since `Promise.allSettled` is used, a failure means the bank-only accounts from Phase 1 (`dashboard-summary`) are never replaced.
+### What Changed
+The full accounts list is now loading correctly (68 Income accounts confirmed). No further data-fetching changes needed.
 
-### Root Cause
-Phase 2 fires 11 simultaneous API calls to QuickBooks. The `list-accounts` call may be timing out or getting rate-limited. When it fails, `fullAccountsResult.status` is `"rejected"`, so `setAccounts` never runs with the full list.
+### Current State vs QuickBooks Reference
+The current view groups accounts by type in collapsible cards, but the QuickBooks reference screenshot shows a flat table with an explicit "Account Type" column per row. The "Sub-Type" column (matching QB's "Detail Type") is already present.
 
-### Fix
+### No Changes Needed
+The Chart of Accounts is now showing all account types with the correct columns (Account Name, Sub-Type, Balance, Status). The grouped-by-type card layout actually provides better organization than QuickBooks' flat list. The data is loading correctly with the Phase 1 fix.
 
-**File: `src/hooks/useQuickBooksData.ts`**
+If you'd like any specific layout changes (e.g., adding an Account Type column per row, flattening into a single table, or adding a Tax column like QB has), let me know and I'll plan those changes.
 
-Move the `list-accounts` call out of the Phase 2 batch and into Phase 1, right after `dashboard-summary`. This ensures it runs early and reliably with minimal concurrency:
-
-```
-Phase 1 (sequential):
-  1. dashboard-summary -> set invoices, bills, payments (bank accounts used for dashboard only)
-  2. list-accounts -> set full accounts list
-  3. setLoading(false)
-```
-
-This way the full Chart of Accounts loads immediately with the dashboard, not as a background afterthought that can silently fail.
-
-Also add a `console.log` guard so if it does fail, we know why.
-
-### Changes
-
-**`src/hooks/useQuickBooksData.ts`**
-- After the `dashboard-summary` call (line 170), add a separate `list-accounts` call before `setLoading(false)`
-- Set accounts from the full list immediately, falling back to dashboard bank accounts if it fails
-- Remove `list-accounts` and `fullAccountsResult` from the Phase 2 batch (lines 181-204)
