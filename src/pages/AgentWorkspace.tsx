@@ -1,7 +1,9 @@
 import { useState, useCallback, useEffect } from "react";
 import { format } from "date-fns";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { ChevronDown, PanelLeftClose, PanelLeft, Brain, ImageIcon } from "lucide-react";
+import { ChevronDown, PanelLeftClose, PanelLeft, Brain, ImageIcon, CalendarIcon } from "lucide-react";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { ChatThread } from "@/components/chat/ChatThread";
 import { ChatInput } from "@/components/chat/ChatInput";
@@ -178,6 +180,11 @@ export default function AgentWorkspace() {
   const [mobileHistoryOpen, setMobileHistoryOpen] = useState(false);
   const [brainOpen, setBrainOpen] = useState(false);
   const [imageGenOpen, setImageGenOpen] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+
+  const handleDateChange = useCallback((date: Date | undefined) => {
+    if (date) setSelectedDate(date);
+  }, []);
 
   return (
     <div className="flex h-full">
@@ -257,6 +264,28 @@ export default function AgentWorkspace() {
           <div className="flex-1" />
           {agentId === "social" && (
             <>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 gap-1.5 text-xs"
+                    title="Change date"
+                  >
+                    <CalendarIcon className="w-4 h-4" />
+                    <span className="hidden sm:inline">{format(selectedDate, "yyyy-MM-dd")}</span>
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="end">
+                  <Calendar
+                    mode="single"
+                    selected={selectedDate}
+                    onSelect={handleDateChange}
+                    initialFocus
+                    className="p-3 pointer-events-auto"
+                  />
+                </PopoverContent>
+              </Popover>
               <Button
                 variant="ghost"
                 size="icon"
@@ -294,9 +323,9 @@ export default function AgentWorkspace() {
               </p>
               {agentId === "social" && (
                 <div className="mt-4 p-3 rounded-lg bg-muted/50 border border-border inline-block">
-                  <p className="text-sm text-muted-foreground">📅 Today's date:</p>
-                  <p className="text-lg font-bold text-primary">{format(new Date(), "yyyy-MM-dd (EEEE, MMMM d)")}</p>
-                  <p className="text-xs text-muted-foreground mt-1">Send <strong>1</strong> to generate today's content</p>
+                  <p className="text-sm text-muted-foreground">📅 Selected date:</p>
+                  <p className="text-lg font-bold text-primary">{format(selectedDate, "yyyy-MM-dd (EEEE, MMMM d)")}</p>
+                  <p className="text-xs text-muted-foreground mt-1">Send <strong>1</strong> to generate content for this date</p>
                 </div>
               )}
             </div>

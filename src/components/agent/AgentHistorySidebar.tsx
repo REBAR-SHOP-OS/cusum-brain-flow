@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { format } from "date-fns";
 import { Plus, Settings, Trash2, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -125,7 +126,10 @@ export function AgentHistorySidebar({
                     : "text-foreground/80 hover:bg-muted"
                 )}
               >
-                <span className="flex-1 truncate">{session.title}</span>
+                <div className="flex-1 min-w-0">
+                  <span className="block truncate">{session.title}</span>
+                  <span className="block text-[10px] text-muted-foreground">{format(new Date(session.updated_at), "yyyy-MM-dd")}</span>
+                </div>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
