@@ -14,8 +14,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import {
   Shield, Plus, Pencil, Trash2, DollarSign, Users, Building2, Loader2,
-  Activity, Lock,
+  Activity, Lock, Monitor, Terminal, UserCog,
 } from "lucide-react";
+import { LiveMonitorView } from "@/components/office/LiveMonitorView";
+import { DiagnosticLogView } from "@/components/office/DiagnosticLogView";
+import { MemberAreaView } from "@/components/office/MemberAreaView";
 import { useProfiles, useSalaries, type Profile, type EmployeeSalary } from "@/hooks/useProfiles";
 import { useUserRole } from "@/hooks/useUserRole";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -143,6 +146,18 @@ export default function AdminPanel() {
           <TabsTrigger value="ceo-dashboard" className="gap-1.5 text-xs">
             <Activity className="w-3.5 h-3.5" />
             CEO Dashboard
+          </TabsTrigger>
+          <TabsTrigger value="live-monitor" className="gap-1.5 text-xs">
+            <Monitor className="w-3.5 h-3.5" />
+            Live Monitor
+          </TabsTrigger>
+          <TabsTrigger value="diagnostic-log" className="gap-1.5 text-xs">
+            <Terminal className="w-3.5 h-3.5" />
+            Diagnostic Log
+          </TabsTrigger>
+          <TabsTrigger value="member-area" className="gap-1.5 text-xs">
+            <UserCog className="w-3.5 h-3.5" />
+            Member Area
           </TabsTrigger>
         </TabsList>
       </div>
@@ -285,6 +300,24 @@ export default function AdminPanel() {
       <TabsContent value="ceo-dashboard" className="flex-1 mt-0 overflow-hidden">
         <ScrollArea className="h-full">
           <CEODashboardView />
+        </ScrollArea>
+      </TabsContent>
+
+      <TabsContent value="live-monitor" className="flex-1 mt-0 overflow-hidden">
+        <ScrollArea className="h-full">
+          <LiveMonitorView />
+        </ScrollArea>
+      </TabsContent>
+
+      <TabsContent value="diagnostic-log" className="flex-1 mt-0 overflow-hidden">
+        <ScrollArea className="h-full">
+          <DiagnosticLogView />
+        </ScrollArea>
+      </TabsContent>
+
+      <TabsContent value="member-area" className="flex-1 mt-0 overflow-hidden">
+        <ScrollArea className="h-full">
+          <MemberAreaView />
         </ScrollArea>
       </TabsContent>
     </Tabs>
