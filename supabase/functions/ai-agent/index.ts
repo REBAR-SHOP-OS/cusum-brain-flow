@@ -3019,7 +3019,37 @@ You MUST respond with ONLY valid JSON (no markdown, no code blocks) in this exac
                     if (imgResp.ok) {
                       const imgData = await imgResp.json();
                       const imageData = imgData.data?.[0];
-                      const imageUrl = imageData?.url || (imageData?.b64_json ? `data:image/png;base64,${imageData.b64_json}` : "");
+                      const rawB64 = imageData?.b64_json || "";
+                      let imageUrl = imageData?.url || "";
+
+                      // Upload base64 to Storage to avoid huge JSON responses
+                      if (rawB64 && !imageUrl) {
+                        try {
+                          const bytes = Uint8Array.from(atob(rawB64), c => c.charCodeAt(0));
+                          const dateStr = new Date().toISOString().split("T")[0];
+                          const filePath = `pixel/${dateStr}/post-${idx + 1}-${crypto.randomUUID().slice(0,6)}.png`;
+
+                          const storageClient = createClient(
+                            Deno.env.get("SUPABASE_URL")!,
+                            Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+                          );
+
+                          const { error: upErr } = await storageClient.storage
+                            .from("social-images")
+                            .upload(filePath, bytes, { contentType: "image/png", upsert: false });
+
+                          if (upErr) {
+                            console.error(`Storage upload error for image ${idx + 1}:`, upErr.message);
+                          } else {
+                            const { data: pubData } = storageClient.storage.from("social-images").getPublicUrl(filePath);
+                            imageUrl = pubData.publicUrl;
+                            console.log(`📸 Image ${idx + 1} uploaded to storage: ${imageUrl}`);
+                          }
+                        } catch (uploadErr) {
+                          console.error(`Upload failed for image ${idx + 1}:`, uploadErr);
+                        }
+                      }
+
                       return {
                         slot: post.time || `Slot ${idx + 1}`,
                         theme: post.theme || "",
