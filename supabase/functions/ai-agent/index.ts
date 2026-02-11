@@ -2714,6 +2714,42 @@ serve(async (req) => {
 
     let basePrompt = agentPrompts[agent] || agentPrompts.sales;
 
+    // --- Load Brain Knowledge (shared playbook + agent-specific strategy) ---
+    const agentNameMap: Record<string, string> = {
+      sales: "Blitz", accounting: "Penny", support: "Haven", collections: "Penny",
+      estimation: "Gauge", social: "Pixel", eisenhower: "Eisenhower", bizdev: "Buddy",
+      webbuilder: "Commet", assistant: "Vizzy", copywriting: "Penn", talent: "Scouty",
+      seo: "Seomi", growth: "Gigi", legal: "Tally",
+    };
+    const agentKnowledgeName = agentNameMap[agent] || "Blitz";
+
+    let brainKnowledgeBlock = "";
+    try {
+      const { data: brainDocs } = await svcClient
+        .from("knowledge")
+        .select("title, content, category")
+        .in("category", ["company-playbook", "agent-strategy", "social-strategy"])
+        .eq("company_id", "a0000000-0000-0000-0000-000000000001")
+        .order("created_at", { ascending: false });
+
+      if (brainDocs && brainDocs.length > 0) {
+        const shared = brainDocs.filter((d: any) => d.category === "company-playbook");
+        const agentSpecific = brainDocs.filter((d: any) =>
+          (d.category === "agent-strategy" && d.title.startsWith(agentKnowledgeName)) ||
+          (d.category === "social-strategy" && agent === "social")
+        );
+
+        if (shared.length > 0) {
+          brainKnowledgeBlock += `\n\n## 🧠 BRAIN: Company Playbook\n${shared[0].content}`;
+        }
+        if (agentSpecific.length > 0) {
+          brainKnowledgeBlock += `\n\n## 🧠 BRAIN: ${agentKnowledgeName} Strategy\n${agentSpecific.map((d: any) => d.content).join("\n\n")}`;
+        }
+      }
+    } catch (brainErr) {
+      console.warn("Brain knowledge load failed (non-fatal):", brainErr);
+    }
+
     // --- Role-Aware Access Control ---
     const RESTRICTED_RULES = `## Role-Based Information Access (MANDATORY)
 
@@ -2744,7 +2780,7 @@ ENFORCEMENT RULES:
     const isRestricted = !roles.some(r => ["admin", "accounting", "office", "sales"].includes(r));
     const ROLE_ACCESS_BLOCK = `\n\n## Current User Access Level\nRoles: ${roleList}\n${isRestricted ? RESTRICTED_RULES : "Full access granted — user has elevated role(s)."}`;
 
-    const systemPrompt = ONTARIO_CONTEXT + basePrompt + ROLE_ACCESS_BLOCK + SHARED_TOOL_INSTRUCTIONS + IDEA_GENERATION_INSTRUCTIONS + `\n\n## Current User\nName: ${userFullName}\nEmail: ${userEmail}`;
+    const systemPrompt = ONTARIO_CONTEXT + basePrompt + brainKnowledgeBlock + ROLE_ACCESS_BLOCK + SHARED_TOOL_INSTRUCTIONS + IDEA_GENERATION_INSTRUCTIONS + `\n\n## Current User\nName: ${userFullName}\nEmail: ${userEmail}`;
     
     let contextStr = "";
     if (Object.keys(mergedContext).length > 0) {
