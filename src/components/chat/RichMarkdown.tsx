@@ -3,12 +3,13 @@ import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
 import {
   CheckCircle2, AlertTriangle, Info, TrendingUp, TrendingDown,
-  Minus, ArrowRight
+  Minus, ArrowRight, RefreshCw
 } from "lucide-react";
 
 interface RichMarkdownProps {
   content: string;
   className?: string;
+  onRegenerateImage?: (imageUrl: string, alt: string) => void;
 }
 
 /** Detects status keywords and returns icon + color */
@@ -25,7 +26,7 @@ function statusBadge(text: string) {
   return null;
 }
 
-export function RichMarkdown({ content, className }: RichMarkdownProps) {
+export function RichMarkdown({ content, className, onRegenerateImage }: RichMarkdownProps) {
   return (
     <div className={cn("text-sm leading-relaxed break-words overflow-hidden", className)}>
       <ReactMarkdown
@@ -181,27 +182,41 @@ export function RichMarkdown({ content, className }: RichMarkdownProps) {
           ),
 
           // ── Images (base64 + URL) ──
-          img: ({ src, alt }) => (
-            <div className="my-3">
-              <img
-                src={src}
-                alt={alt || "Generated image"}
-                className="rounded-lg max-w-full max-h-[400px] object-contain border border-border/30"
-                loading="lazy"
-              />
-              {src && (
-                <a
-                  href={src}
-                  download={alt || "image.png"}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 mt-1 text-xs text-primary hover:text-primary/80 transition-colors"
-                >
-                  ⬇️ Download
-                </a>
-              )}
-            </div>
-          ),
+          img: ({ src, alt }) => {
+            const isSocialImage = src?.includes("social-images");
+            return (
+              <div className="my-3">
+                <img
+                  src={src}
+                  alt={alt || "Generated image"}
+                  className="rounded-lg max-w-full max-h-[400px] object-contain border border-border/30"
+                  loading="lazy"
+                />
+                <div className="flex items-center gap-3 mt-1">
+                  {src && (
+                    <a
+                      href={src}
+                      download={alt || "image.png"}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors"
+                    >
+                      ⬇️ Download
+                    </a>
+                  )}
+                  {isSocialImage && onRegenerateImage && src && (
+                    <button
+                      onClick={() => onRegenerateImage(src, alt || "")}
+                      className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      Regenerate
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          },
         }}
       >
         {content}

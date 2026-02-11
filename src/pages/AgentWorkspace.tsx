@@ -170,6 +170,11 @@ export default function AgentWorkspace() {
     }
   }, [messages, config.agentType, config.name, activeSessionId, createSession, addMessage, mapping]);
 
+  const handleRegenerateImage = useCallback((imageUrl: string, alt: string) => {
+    const productName = alt || "this product";
+    handleSend(`Regenerate post for ${productName}`);
+  }, [handleSend]);
+
   const [mobileHistoryOpen, setMobileHistoryOpen] = useState(false);
   const [brainOpen, setBrainOpen] = useState(false);
   const [imageGenOpen, setImageGenOpen] = useState(false);
@@ -320,7 +325,7 @@ export default function AgentWorkspace() {
           </div>
         ) : (
           <>
-            <ChatThread messages={messages} isLoading={isLoading} />
+            <ChatThread messages={messages} isLoading={isLoading} onRegenerateImage={handleRegenerateImage} />
             <ChatInput
               onSend={handleSend}
               placeholder={config.placeholder}

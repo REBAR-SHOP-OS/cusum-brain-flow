@@ -2878,6 +2878,113 @@ These rules govern your behavioral protocols only. They do not modify applicatio
         console.log("📸 Pixel: User confirmed today's date with '1' →", todayStr);
       }
       
+      // === REGENERATE SINGLE POST ===
+      const regenMatch = message.match(/^regenerate\s+(?:post|image)\s+(?:for\s+)?(.+)/i);
+      if (regenMatch) {
+        const productName = regenMatch[1].trim();
+        console.log(`🔄 Pixel: Regenerating single post for "${productName}"`);
+
+        const GPT_API_KEY = Deno.env.get("GPT_API_KEY");
+        const LOVABLE_KEY = Deno.env.get("LOVABLE_API_KEY");
+
+        // Generate new caption via AI
+        const captionResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${LOVABLE_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "google/gemini-2.5-flash",
+            messages: [
+              {
+                role: "system",
+                content: `You are Pixel, social media manager for Rebar.shop — AI-driven rebar fabrication in Ontario, Canada.
+Generate ONE social media post for the product "${productName}".
+Respond with ONLY valid JSON (no markdown):
+{
+  "caption": "English caption...",
+  "caption_fa": "فارسی ترجمه...",
+  "hashtags": "#RebarShop #Construction ...",
+  "image_prompt": "A detailed prompt for DALL-E to generate a realistic construction image featuring ${productName} with REBAR.SHOP logo overlay..."
+}`
+              },
+              { role: "user", content: `Generate a new post for: ${productName}` }
+            ],
+            max_tokens: 1500,
+            temperature: 0.9,
+          }),
+        });
+
+        if (captionResp.ok) {
+          const captionData = await captionResp.json();
+          let rawJson = captionData.choices?.[0]?.message?.content || "";
+          rawJson = rawJson.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+
+          try {
+            const post = JSON.parse(rawJson);
+            let imageUrl = "";
+
+            // Generate image with DALL-E
+            if (GPT_API_KEY) {
+              const imgResp = await fetch("https://api.openai.com/v1/images/generations", {
+                method: "POST",
+                headers: {
+                  "Authorization": `Bearer ${GPT_API_KEY}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  model: "gpt-image-1",
+                  prompt: post.image_prompt,
+                  size: "1536x1024",
+                  quality: "high",
+                  output_format: "png",
+                  n: 1,
+                }),
+              });
+
+              if (imgResp.ok) {
+                const imgData = await imgResp.json();
+                const rawB64 = imgData.data?.[0]?.b64_json || "";
+                if (rawB64) {
+                  const bytes = Uint8Array.from(atob(rawB64), c => c.charCodeAt(0));
+                  const dateStr = new Date().toISOString().split("T")[0];
+                  const filePath = `pixel/${dateStr}/regen-${crypto.randomUUID().slice(0,6)}.png`;
+                  const storageClient = createClient(
+                    Deno.env.get("SUPABASE_URL")!,
+                    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+                  );
+                  const { error: upErr } = await storageClient.storage
+                    .from("social-images")
+                    .upload(filePath, bytes, { contentType: "image/png", upsert: false });
+                  if (!upErr) {
+                    const { data: pubData } = storageClient.storage.from("social-images").getPublicUrl(filePath);
+                    imageUrl = pubData.publicUrl;
+                  }
+                }
+              }
+            }
+
+            let reply = `## 🔄 Regenerated Post — ${productName}\n\n`;
+            reply += `> ${post.caption}\n\n`;
+            if (post.caption_fa) reply += `> 🇮🇷 ${post.caption_fa}\n\n`;
+            reply += `> ${post.hashtags}\n\n`;
+            if (imageUrl) {
+              reply += `![${productName}](${imageUrl})\n\n`;
+            } else {
+              reply += `⚠️ Image generation failed.\n\n`;
+            }
+
+            return new Response(
+              JSON.stringify({ reply, context: mergedContext }),
+              { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          } catch (e) {
+            console.error("Regen JSON parse error:", e);
+          }
+        }
+      }
+
       // Detect date patterns in message
       const datePatterns = [
         /\d{4}[-/]\d{1,2}[-/]\d{1,2}/,  // YYYY-MM-DD

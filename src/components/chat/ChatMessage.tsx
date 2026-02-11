@@ -18,9 +18,10 @@ export interface Message {
 interface ChatMessageProps {
   message: Message;
   onRegenerate?: () => void;
+  onRegenerateImage?: (imageUrl: string, alt: string) => void;
 }
 
-export function ChatMessage({ message, onRegenerate }: ChatMessageProps) {
+export function ChatMessage({ message, onRegenerate, onRegenerateImage }: ChatMessageProps) {
   const isUser = message.role === "user";
 
   return (
@@ -82,7 +83,7 @@ export function ChatMessage({ message, onRegenerate }: ChatMessageProps) {
               {message.content || (message.files?.length ? "📎 Files attached" : "")}
             </p>
           ) : (
-            <RichMarkdown content={message.content || ""} />
+            <RichMarkdown content={message.content || ""} onRegenerateImage={onRegenerateImage} />
           )}
         </div>
 
