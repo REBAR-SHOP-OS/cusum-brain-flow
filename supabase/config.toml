@@ -137,3 +137,6 @@ verify_jwt = false
 
 [functions.vizzy-erp-action]
 verify_jwt = false
+
+[functions.email-activity-report]
+verify_jwt = false
