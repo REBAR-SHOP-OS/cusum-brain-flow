@@ -128,3 +128,6 @@ verify_jwt = false
 
 [functions.transcribe-translate]
 verify_jwt = false
+
+[functions.elevenlabs-conversation-token]
+verify_jwt = false
