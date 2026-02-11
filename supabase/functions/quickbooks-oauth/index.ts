@@ -32,24 +32,6 @@ async function verifyAuth(req: Request): Promise<string | null> {
   return data.claims.sub as string;
 }
 
-async function getUserQBConnection(supabase: ReturnType<typeof createClient>, userId: string) {
-  const { data: connection } = await supabase
-    .from("integration_connections")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("integration_id", "quickbooks")
-    .maybeSingle();
-
-  if (!connection || connection.status !== "connected") return null;
-  return connection;
-}
-
-async function getQBConfig(supabase: ReturnType<typeof createClient>, userId: string) {
-  const connection = await getUserQBConnection(supabase, userId);
-  if (!connection) throw new Error("QuickBooks not connected");
-  return connection.config as { realm_id: string; access_token: string; refresh_token: string; expires_at: number };
-}
-
 async function getUserCompanyId(supabase: ReturnType<typeof createClient>, userId: string): Promise<string> {
   const { data: profile } = await supabase
     .from("profiles")
@@ -58,6 +40,45 @@ async function getUserCompanyId(supabase: ReturnType<typeof createClient>, userI
     .maybeSingle();
   if (!profile?.company_id) throw new Error("User has no company assigned");
   return profile.company_id;
+}
+
+// Company-wide QB connection: find ANY connected QB row for the user's company
+async function getUserQBConnection(supabase: ReturnType<typeof createClient>, userId: string) {
+  const companyId = await getUserCompanyId(supabase, userId);
+
+  // First try to find a connection that has company_id in its config
+  const { data: connections } = await supabase
+    .from("integration_connections")
+    .select("*")
+    .eq("integration_id", "quickbooks")
+    .eq("status", "connected");
+
+  if (!connections || connections.length === 0) return null;
+
+  // Find connection belonging to any user in the same company
+  for (const conn of connections) {
+    const config = conn.config as Record<string, unknown> | null;
+    // Check if connection has company_id stored in config
+    if (config?.company_id === companyId) return conn;
+  }
+
+  // Fallback: check if the connection owner belongs to the same company
+  for (const conn of connections) {
+    const { data: ownerProfile } = await supabase
+      .from("profiles")
+      .select("company_id")
+      .eq("user_id", conn.user_id)
+      .maybeSingle();
+    if (ownerProfile?.company_id === companyId) return conn;
+  }
+
+  return null;
+}
+
+async function getQBConfig(supabase: ReturnType<typeof createClient>, userId: string) {
+  const connection = await getUserQBConnection(supabase, userId);
+  if (!connection) throw new Error("QuickBooks not connected");
+  return connection.config as { realm_id: string; access_token: string; refresh_token: string; expires_at: number; company_id?: string };
 }
 
 async function qbFetch(
@@ -124,12 +145,15 @@ function jsonRes(data: unknown, status = 200) {
   });
 }
 
-function updateLastSync(supabase: ReturnType<typeof createClient>, userId: string) {
-  return supabase
-    .from("integration_connections")
-    .update({ last_sync_at: new Date().toISOString() })
-    .eq("user_id", userId)
-    .eq("integration_id", "quickbooks");
+async function updateLastSync(supabase: ReturnType<typeof createClient>, userId: string) {
+  // Update the company-wide connection's last_sync_at
+  const connection = await getUserQBConnection(supabase, userId);
+  if (connection) {
+    return supabase
+      .from("integration_connections")
+      .update({ last_sync_at: new Date().toISOString() })
+      .eq("id", connection.id);
+  }
 }
 
 // ─── Main Handler ──────────────────────────────────────────────────
@@ -296,6 +320,9 @@ async function handleCallback(
 
   if (!userId) throw new Error("Missing user context in OAuth callback");
 
+  // Get user's company_id for company-wide storage
+  const companyId = await getUserCompanyId(supabase, userId);
+
   const tokenResponse = await fetch(QUICKBOOKS_TOKEN_URL, {
     method: "POST",
     headers: {
@@ -316,6 +343,26 @@ async function handleCallback(
     throw new Error(tokens.error_description || "Token exchange failed");
   }
 
+  // Delete any existing QB connections for users in the same company (cleanup duplicates)
+  const { data: allQBConnections } = await supabase
+    .from("integration_connections")
+    .select("id, user_id")
+    .eq("integration_id", "quickbooks");
+
+  if (allQBConnections) {
+    for (const conn of allQBConnections) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("company_id")
+        .eq("user_id", conn.user_id)
+        .maybeSingle();
+      if (profile?.company_id === companyId) {
+        await supabase.from("integration_connections").delete().eq("id", conn.id);
+      }
+    }
+  }
+
+  // Store the new company-wide connection under the connecting user
   const { error: dbError } = await supabase
     .from("integration_connections")
     .upsert({
@@ -328,6 +375,7 @@ async function handleCallback(
         refresh_token: tokens.refresh_token,
         expires_at: Date.now() + (tokens.expires_in * 1000),
         refresh_token_expires_at: Date.now() + (tokens.x_refresh_token_expires_in * 1000),
+        company_id: companyId,
       },
       last_sync_at: new Date().toISOString(),
       error_message: null,
@@ -384,6 +432,7 @@ async function handleCheckStatus(
   const config = connection.config as {
     realm_id: string; access_token: string;
     refresh_token: string; expires_at: number;
+    company_id?: string;
   };
 
   if (config.expires_at < Date.now()) {
@@ -415,8 +464,7 @@ async function handleCheckStatus(
             },
             last_sync_at: new Date().toISOString(),
           })
-          .eq("user_id", userId)
-          .eq("integration_id", "quickbooks");
+          .eq("id", connection.id);
       } else {
         throw new Error("Token refresh failed");
       }
@@ -425,8 +473,7 @@ async function handleCheckStatus(
       await supabase
         .from("integration_connections")
         .update({ status: "error", error_message: "Token expired, please reconnect" })
-        .eq("user_id", userId)
-        .eq("integration_id", "quickbooks");
+        .eq("id", connection.id);
 
       return jsonRes({ status: "error", error: "Token expired, please reconnect" });
     }
@@ -438,11 +485,11 @@ async function handleCheckStatus(
 // ─── Disconnect ────────────────────────────────────────────────────
 
 async function handleDisconnect(supabase: ReturnType<typeof createClient>, userId: string) {
-  await supabase
-    .from("integration_connections")
-    .delete()
-    .eq("user_id", userId)
-    .eq("integration_id", "quickbooks");
+  // Delete the company-wide QB connection
+  const connection = await getUserQBConnection(supabase, userId);
+  if (connection) {
+    await supabase.from("integration_connections").delete().eq("id", connection.id);
+  }
 
   return jsonRes({ success: true });
 }
