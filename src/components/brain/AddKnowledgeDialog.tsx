@@ -13,6 +13,7 @@ interface AddKnowledgeDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
+  defaultMetadata?: Record<string, unknown>;
 }
 
 const categoryOptions = [
@@ -29,7 +30,7 @@ const acceptByCategory: Record<string, string> = {
   video: "video/*",
 };
 
-export function AddKnowledgeDialog({ open, onOpenChange, onSuccess }: AddKnowledgeDialogProps) {
+export function AddKnowledgeDialog({ open, onOpenChange, onSuccess, defaultMetadata }: AddKnowledgeDialogProps) {
   const [category, setCategory] = useState("memory");
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
@@ -115,7 +116,10 @@ export function AddKnowledgeDialog({ open, onOpenChange, onSuccess }: AddKnowled
         content: content.trim() || null,
         category,
         source_url: sourceUrl.trim() || null,
-        metadata: uploadedFile ? { file_name: uploadedFile.name, file_type: uploadedFile.name.split(".").pop() } : null,
+        metadata: (defaultMetadata || uploadedFile) ? {
+          ...(defaultMetadata || {}),
+          ...(uploadedFile ? { file_name: uploadedFile.name, file_type: uploadedFile.name.split(".").pop() } : {}),
+        } : null,
         company_id: companyId,
       });
 
