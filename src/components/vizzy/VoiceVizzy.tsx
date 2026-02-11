@@ -27,6 +27,8 @@ export function VoiceVizzy() {
 function VoiceVizzyInner({ userId }: { userId: string }) {
   const [isConnecting, setIsConnecting] = useState(false);
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
+  const transcriptRef = useRef<TranscriptEntry[]>([]);
+  const sessionActiveRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { loadFullContext } = useVizzyContext();
 
@@ -39,28 +41,29 @@ function VoiceVizzyInner({ userId }: { userId: string }) {
   }, [loadFullContext]);
 
   const conversation = useConversation({
-    onConnect: () => console.warn("Vizzy voice connected"),
+    onConnect: () => {
+      sessionActiveRef.current = true;
+      console.warn("Vizzy voice connected");
+    },
     onDisconnect: () => {
       setIsConnecting(false);
-      if (transcript.length > 0) {
+      sessionActiveRef.current = false;
+      const entries = transcriptRef.current;
+      if (entries.length > 0) {
         supabase.from("vizzy_interactions").insert({
           user_id: userId,
-          transcript: transcript as any,
+          transcript: entries as any,
           session_ended_at: new Date().toISOString(),
         }).then(({ error }) => { if (error) console.error(error); });
       }
     },
     onMessage: (message: any) => {
       if (message.type === "user_transcript") {
-        setTranscript((prev) => [
-          ...prev,
-          { role: "user", text: message.user_transcription_event?.user_transcript ?? "", id: crypto.randomUUID() },
-        ]);
+        const entry: TranscriptEntry = { role: "user", text: message.user_transcription_event?.user_transcript ?? "", id: crypto.randomUUID() };
+        setTranscript((prev) => { const next = [...prev, entry]; transcriptRef.current = next; return next; });
       } else if (message.type === "agent_response") {
-        setTranscript((prev) => [
-          ...prev,
-          { role: "agent", text: message.agent_response_event?.agent_response ?? "", id: crypto.randomUUID() },
-        ]);
+        const entry: TranscriptEntry = { role: "agent", text: message.agent_response_event?.agent_response ?? "", id: crypto.randomUUID() };
+        setTranscript((prev) => { const next = [...prev, entry]; transcriptRef.current = next; return next; });
       }
       setTimeout(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" }), 50);
     },
@@ -70,8 +73,10 @@ function VoiceVizzyInner({ userId }: { userId: string }) {
   const isActive = conversation.status === "connected";
 
   const start = useCallback(async () => {
+    if (sessionActiveRef.current || isConnecting) return;
     setIsConnecting(true);
     setTranscript([]);
+    transcriptRef.current = [];
     try {
       await navigator.mediaDevices.getUserMedia({ audio: true });
       const { data, error } = await supabase.functions.invoke("elevenlabs-conversation-token");
@@ -90,11 +95,18 @@ function VoiceVizzyInner({ userId }: { userId: string }) {
     } catch (err) {
       console.error("Failed to start Vizzy voice:", err);
       setIsConnecting(false);
+      sessionActiveRef.current = false;
     }
-  }, [conversation, loadFullContext]);
+  }, [conversation, loadFullContext, isConnecting]);
 
   const stop = useCallback(async () => {
-    await conversation.endSession();
+    try {
+      await conversation.endSession();
+    } catch (err) {
+      console.error("Error ending Vizzy session:", err);
+      sessionActiveRef.current = false;
+      setIsConnecting(false);
+    }
   }, [conversation]);
 
   return (
