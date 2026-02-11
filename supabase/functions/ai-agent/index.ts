@@ -622,6 +622,9 @@ You have the ability to create notifications, to-do items, reminders, and assign
 
 ### Employee Assignment:
 When assigning activities, match the employee name from the availableEmployees list in context. If no specific person is mentioned, leave it for the current user.
+
+## 📊 Team Activity (Today)
+If the context contains a teamActivityReport, use it to answer questions about what team members did today — clock status, emails, tasks, and agent sessions. Reference actual data from the report.
 `;
 
 // Proactive idea generation instructions — injected into ALL agent prompts
@@ -1625,7 +1628,7 @@ async function fetchEstimationLearnings(supabase: ReturnType<typeof createClient
   return learnings;
 }
 
-async function fetchContext(supabase: ReturnType<typeof createClient>, agent: string, userId?: string, userEmail?: string) {
+async function fetchContext(supabase: ReturnType<typeof createClient>, agent: string, userId?: string, userEmail?: string, userRolesList?: string[]) {
   const context: Record<string, unknown> = {};
 
   try {
@@ -2060,6 +2063,135 @@ async function fetchContext(supabase: ReturnType<typeof createClient>, agent: st
     console.error("Error fetching context:", error);
   }
 
+  // ── Team Activity Report (ALL agents) ──────────────────────────
+  try {
+    const TEAM_DIR: Record<string, { name: string; role: string }> = {
+      "sattar@rebar.shop": { name: "Sattar Esmaeili", role: "CEO" },
+      "neel@rebar.shop": { name: "Neel Mahajan", role: "Co-founder" },
+      "vicky@rebar.shop": { name: "Vicky Anderson", role: "Accountant" },
+      "saurabh@rebar.shop": { name: "Saurabh Seghal", role: "Sales" },
+      "ben@rebar.shop": { name: "Ben Rajabifar", role: "Estimator" },
+      "kourosh@rebar.shop": { name: "Kourosh Zand", role: "Shop Supervisor" },
+      "radin@rebar.shop": { name: "Radin Lachini", role: "AI Manager" },
+    };
+
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayISO = todayStart.toISOString();
+
+    const [clockRes, sessionsRes, commsRes, tasksRes] = await Promise.all([
+      supabase.from("time_clock_entries").select("id, profile_id, clock_in, clock_out").gte("clock_in", todayISO).limit(200),
+      supabase.from("chat_sessions").select("id, user_id, agent_name, created_at").gte("created_at", todayISO).limit(200),
+      supabase.from("communications").select("id, direction, from_address, to_address, user_id").gte("created_at", todayISO).limit(200),
+      supabase.from("tasks").select("id, status, assigned_to, created_at").gte("created_at", todayISO).limit(200),
+    ]);
+
+    // Build profiles lookup: profile_id → email
+    const profileIds = new Set<string>();
+    for (const e of clockRes.data || []) if (e.profile_id) profileIds.add(e.profile_id);
+    let profileMap: Record<string, string> = {}; // profile_id → email
+    if (profileIds.size > 0) {
+      const { data: profs } = await supabase
+        .from("profiles")
+        .select("id, email")
+        .in("id", Array.from(profileIds))
+        .limit(50);
+      for (const p of profs || []) if (p.email) profileMap[p.id] = p.email.toLowerCase();
+    }
+
+    // Also map user_id → email for sessions
+    const sessionUserIds = new Set<string>();
+    for (const s of sessionsRes.data || []) if (s.user_id) sessionUserIds.add(s.user_id);
+    let userIdEmailMap: Record<string, string> = {}; // user_id → email
+    if (sessionUserIds.size > 0) {
+      const { data: uProfs } = await supabase
+        .from("profiles")
+        .select("user_id, email")
+        .in("user_id", Array.from(sessionUserIds))
+        .limit(50);
+      for (const p of uProfs || []) if (p.email) userIdEmailMap[p.user_id] = p.email.toLowerCase();
+    }
+
+    // Determine if caller is restricted (workshop/field only)
+    const callerRoles = userRolesList || [];
+    const isCallerRestricted = callerRoles.length > 0 &&
+      !callerRoles.some(r => ["admin", "accounting", "office", "sales"].includes(r));
+
+    // Build per-person activity
+    type PersonActivity = { name: string; role: string; clock: string; emailsSent: number; emailsReceived: number; tasksCreated: number; tasksCompleted: number; agentSessions: number; agents: string[] };
+    const activity: Record<string, PersonActivity> = {};
+    for (const [email, info] of Object.entries(TEAM_DIR)) {
+      activity[email] = { name: info.name, role: info.role, clock: "Not clocked in", emailsSent: 0, emailsReceived: 0, tasksCreated: 0, tasksCompleted: 0, agentSessions: 0, agents: [] };
+    }
+
+    // Clock entries
+    for (const e of clockRes.data || []) {
+      const email = profileMap[e.profile_id];
+      if (email && activity[email]) {
+        if (e.clock_out) {
+          const inT = new Date(e.clock_in).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+          const outT = new Date(e.clock_out).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+          activity[email].clock = `${inT} – ${outT}`;
+        } else {
+          const inT = new Date(e.clock_in).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+          activity[email].clock = `In since ${inT}`;
+        }
+      }
+    }
+
+    // Communications
+    for (const c of commsRes.data || []) {
+      const from = (c.from_address || "").toLowerCase();
+      const to = (c.to_address || "").toLowerCase();
+      for (const email of Object.keys(activity)) {
+        if (from.includes(email.split("@")[0])) activity[email].emailsSent++;
+        if (to.includes(email.split("@")[0])) activity[email].emailsReceived++;
+      }
+    }
+
+    // Chat sessions
+    for (const s of sessionsRes.data || []) {
+      const email = userIdEmailMap[s.user_id];
+      if (email && activity[email]) {
+        activity[email].agentSessions++;
+        if (s.agent_name && !activity[email].agents.includes(s.agent_name)) {
+          activity[email].agents.push(s.agent_name);
+        }
+      }
+    }
+
+    // Tasks
+    for (const t of tasksRes.data || []) {
+      // assigned_to is profile_id; map to email
+      if (t.assigned_to && profileMap[t.assigned_to]) {
+        const email = profileMap[t.assigned_to];
+        if (activity[email]) {
+          if (t.status === "done") activity[email].tasksCompleted++;
+          else activity[email].tasksCreated++;
+        }
+      }
+    }
+
+    // Format report
+    let report = "📊 TEAM ACTIVITY REPORT (Today)\n";
+    for (const [email, a] of Object.entries(activity)) {
+      const isSelf = email === (userEmail || "").toLowerCase();
+      if (isCallerRestricted && !isSelf) {
+        // Restricted users only see clock status for others
+        report += `👤 ${a.name} (${a.role}) — Clock: ${a.clock}\n`;
+      } else {
+        report += `👤 ${a.name} (${a.role})\n`;
+        report += `   Clock: ${a.clock}\n`;
+        report += `   Emails: ${a.emailsSent} sent, ${a.emailsReceived} received\n`;
+        report += `   Tasks: ${a.tasksCreated} open, ${a.tasksCompleted} done\n`;
+        report += `   Agents: ${a.agentSessions} session${a.agentSessions !== 1 ? "s" : ""}${a.agents.length > 0 ? ` (${a.agents.join(", ")})` : ""}\n`;
+      }
+    }
+    context.teamActivityReport = report;
+  } catch (teamErr) {
+    console.warn("Team activity report failed (non-fatal):", teamErr);
+  }
+
   return context;
 }
 
@@ -2308,7 +2440,7 @@ serve(async (req) => {
       });
     }
 
-    const dbContext = await fetchContext(supabase, agent, user.id, userEmail);
+    const dbContext = await fetchContext(supabase, agent, user.id, userEmail, roles);
     const mergedContext = { ...dbContext, ...userContext };
 
     // Get validation rules for OCR validation
