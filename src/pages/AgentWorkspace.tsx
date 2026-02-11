@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { format } from "date-fns";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { ChevronDown, PanelLeftClose, PanelLeft } from "lucide-react";
+import { ChevronDown, PanelLeftClose, PanelLeft, Brain } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ChatThread } from "@/components/chat/ChatThread";
 import { ChatInput } from "@/components/chat/ChatInput";
@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { agentConfigs } from "@/components/agent/agentConfigs";
 import { useAuth } from "@/lib/auth";
 import { getUserAgentMapping } from "@/lib/userAgentMap";
+import { PixelBrainDialog } from "@/components/social/PixelBrainDialog";
 
 export default function AgentWorkspace() {
   const { agentId } = useParams<{ agentId: string }>();
@@ -169,6 +170,7 @@ export default function AgentWorkspace() {
   }, [messages, config.agentType, config.name, activeSessionId, createSession, addMessage, mapping]);
 
   const [mobileHistoryOpen, setMobileHistoryOpen] = useState(false);
+  const [brainOpen, setBrainOpen] = useState(false);
 
   return (
     <div className="flex h-full">
@@ -246,6 +248,17 @@ export default function AgentWorkspace() {
             </div>
           )}
           <div className="flex-1" />
+          {agentId === "social" && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setBrainOpen(true)}
+              title="Pixel Brain – Knowledge & Instructions"
+            >
+              <Brain className="w-4 h-4" />
+            </Button>
+          )}
           {isLoading && (
             <span className="text-xs text-muted-foreground animate-pulse">thinking...</span>
           )}
@@ -299,6 +312,8 @@ export default function AgentWorkspace() {
           </>
         )}
       </div>
+
+      <PixelBrainDialog open={brainOpen} onOpenChange={setBrainOpen} />
     </div>
   );
 }
