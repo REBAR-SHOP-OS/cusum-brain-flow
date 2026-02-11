@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Paperclip, X, Loader2, Sparkles, Hash, Type } from "lucide-react";
+import { Send, Paperclip, X, Loader2, Sparkles, Hash, Type, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -27,6 +27,7 @@ interface ChatInputProps {
   disabled?: boolean;
   showFileUpload?: boolean;
   showSmartMode?: boolean;
+  onLiveChatClick?: () => void;
 }
 
 export function ChatInput({
@@ -35,6 +36,7 @@ export function ChatInput({
   disabled,
   showFileUpload = false,
   showSmartMode = false,
+  onLiveChatClick,
 }: ChatInputProps) {
   const [value, setValue] = useState("");
   const [smartMode, setSmartMode] = useState(false);
@@ -384,6 +386,21 @@ export function ChatInput({
               </TooltipTrigger>
               <TooltipContent side="top">Commands (/)</TooltipContent>
             </Tooltip>
+
+            {onLiveChatClick && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={onLiveChatClick}
+                    className="p-2 text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-muted/50"
+                  >
+                    <MessageCircle className="w-5 h-5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top">Live Chat</TooltipContent>
+              </Tooltip>
+            )}
 
             {/* Spacer */}
             <div className="flex-1" />

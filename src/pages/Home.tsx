@@ -1,14 +1,10 @@
-import { useState, useCallback, useMemo, useRef, useEffect } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { routeToAgent } from "@/lib/agentRouter";
 import { Card } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { AutomationsSection } from "@/components/integrations/AutomationsSection";
-import { RichMarkdown } from "@/components/chat/RichMarkdown";
-import { useAdminChat } from "@/hooks/useAdminChat";
-import { Loader2, Square } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { 
   TrendingUp, 
   FileText, 
@@ -30,7 +26,6 @@ import {
 import logoCoin from "@/assets/logo-coin.png";
 import { useAuth } from "@/lib/auth";
 import { getUserAgentMapping } from "@/lib/userAgentMap";
-import { cn } from "@/lib/utils";
 
 // Helper character images
 import salesHelper from "@/assets/helpers/sales-helper.png";
@@ -102,21 +97,8 @@ const defaultUseCases: UseCase[] = [
 export default function Home() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [inputValue, setInputValue] = useState("");
-  const { messages, isStreaming, sendMessage, clearChat, cancelStream } = useAdminChat();
-  const chatBottomRef = useRef<HTMLDivElement>(null);
 
   const mapping = getUserAgentMapping(user?.email);
-
-  // Auto-scroll chat
-  useEffect(() => {
-    chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  // Cancel stream on unmount
-  useEffect(() => {
-    return () => { cancelStream(); };
-  }, [cancelStream]);
 
   // Build personalized quick actions
   const useCases: UseCase[] = useMemo(() => {
@@ -139,8 +121,9 @@ export default function Home() {
   }, [mapping]);
 
   const handleSend = useCallback((content: string) => {
-    sendMessage(content);
-  }, [sendMessage]);
+    const result = routeToAgent(content);
+    navigate(result.route, { state: { initialMessage: content } });
+  }, [navigate]);
 
   const handleHelperClick = (helper: Helper) => {
     navigate(helper.route);
@@ -148,6 +131,10 @@ export default function Home() {
 
   const handleUseCaseClick = (useCase: UseCase) => {
     navigate(useCase.route, { state: { initialMessage: useCase.prompt } });
+  };
+
+  const handleLiveChatClick = () => {
+    window.dispatchEvent(new Event("open-live-chat"));
   };
 
   // Hero text
@@ -176,55 +163,10 @@ export default function Home() {
             <ChatInput
               onSend={handleSend}
               placeholder={mapping ? `Ask ${mapping.agentKey === "assistant" ? "Vizzy" : mapping.agentKey === "shopfloor" ? "Forge" : "Gauge"} anything...` : "Ask anything about your business..."}
-              disabled={isStreaming}
               showFileUpload
+              onLiveChatClick={handleLiveChatClick}
             />
           </div>
-
-          {/* Inline chat messages */}
-          {messages.length > 0 && (
-            <div className="w-full mt-4 space-y-3">
-              {messages.map((msg) => (
-                <div
-                  key={msg.id}
-                  className={cn(
-                    "rounded-xl px-4 py-3 text-sm max-w-[90%] animate-fade-in",
-                    msg.role === "user"
-                      ? "ml-auto bg-primary text-primary-foreground"
-                      : "mr-auto bg-muted text-foreground"
-                  )}
-                >
-                  {msg.role === "assistant" ? (
-                    <RichMarkdown content={msg.content} className="text-sm [&_p]:text-sm" />
-                  ) : (
-                    <p className="whitespace-pre-wrap">{msg.content}</p>
-                  )}
-                </div>
-              ))}
-
-              {isStreaming && messages[messages.length - 1]?.role !== "assistant" && (
-                <div className="mr-auto bg-muted rounded-xl px-4 py-3 text-sm flex items-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span className="text-muted-foreground">Thinking...</span>
-                </div>
-              )}
-
-              <div className="flex items-center gap-2 justify-center pt-1">
-                {isStreaming && (
-                  <Button variant="outline" size="sm" onClick={cancelStream} className="gap-1.5 text-xs">
-                    <Square className="w-3 h-3" /> Stop
-                  </Button>
-                )}
-                {!isStreaming && messages.length > 0 && (
-                  <Button variant="ghost" size="sm" onClick={clearChat} className="text-xs text-muted-foreground">
-                    Clear chat
-                  </Button>
-                )}
-              </div>
-
-              <div ref={chatBottomRef} />
-            </div>
-          )}
         </div>
 
         {/* Use Cases Section */}
