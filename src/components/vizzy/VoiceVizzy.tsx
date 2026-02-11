@@ -7,6 +7,8 @@ import { cn } from "@/lib/utils";
 import { AnimatePresence, motion } from "framer-motion";
 import { useVizzyContext } from "@/hooks/useVizzyContext";
 import { buildVizzyContext } from "@/lib/vizzyContext";
+import { VizzyPhotoButton } from "./VizzyPhotoButton";
+import { VizzyApprovalDialog, type PendingAction } from "./VizzyApprovalDialog";
 
 const ALLOWED_EMAIL = "sattar@rebar.shop";
 const MAX_AUTO_RETRIES = 2;
@@ -30,15 +32,15 @@ function VoiceVizzyInner({ userId }: { userId: string }) {
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
   const [connectionLost, setConnectionLost] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const transcriptRef = useRef<TranscriptEntry[]>([]);
   const sessionActiveRef = useRef(false);
   const userRequestedStop = useRef(false);
   const retryCount = useRef(0);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const conversationRef = useRef<any>(null);
   const { loadFullContext } = useVizzyContext();
-
-  // Context is loaded fresh when session starts — no pre-load needed
 
   // Cleanup retry timer on unmount
   useEffect(() => {
@@ -47,7 +49,56 @@ function VoiceVizzyInner({ userId }: { userId: string }) {
     };
   }, []);
 
+  // ERP action handler — shows approval dialog and waits for user response
+  const executeErpAction = useCallback(async (action: string, description: string, params: Record<string, any>): Promise<string> => {
+    return new Promise((resolve) => {
+      setPendingAction({
+        id: crypto.randomUUID(),
+        action,
+        description,
+        params,
+        resolve: async (approved) => {
+          setPendingAction(null);
+          if (!approved) {
+            resolve("Action denied by CEO. The request was not executed.");
+            return;
+          }
+          try {
+            const { data, error } = await supabase.functions.invoke("vizzy-erp-action", {
+              body: { action, params },
+            });
+            if (error) throw error;
+            resolve(data?.message || `Action ${action} completed successfully.`);
+          } catch (err: any) {
+            console.error("ERP action failed:", err);
+            resolve(`Action failed: ${err.message}`);
+          }
+        },
+      });
+    });
+  }, []);
+
   const conversation = useConversation({
+    clientTools: {
+      update_cut_plan_status: async (params: { id: string; status: string }) => {
+        return executeErpAction("update_cut_plan_status", `Change cut plan status to "${params.status}"`, params);
+      },
+      update_lead_status: async (params: { id: string; status: string }) => {
+        return executeErpAction("update_lead_status", `Move lead to "${params.status}" stage`, params);
+      },
+      update_machine_status: async (params: { id: string; status: string }) => {
+        return executeErpAction("update_machine_status", `Set machine status to "${params.status}"`, params);
+      },
+      update_delivery_status: async (params: { id: string; status: string }) => {
+        return executeErpAction("update_delivery_status", `Update delivery status to "${params.status}"`, params);
+      },
+      update_cut_plan_item: async (params: { id: string; updates: any }) => {
+        return executeErpAction("update_cut_plan_item", `Update cut plan item`, params);
+      },
+      log_event: async (params: { entity_type: string; event_type: string; description: string }) => {
+        return executeErpAction("create_event", `Log event: ${params.description}`, params);
+      },
+    },
     onConnect: () => {
       sessionActiveRef.current = true;
       setIsRetrying(false);
@@ -57,7 +108,6 @@ function VoiceVizzyInner({ userId }: { userId: string }) {
       setIsConnecting(false);
       sessionActiveRef.current = false;
 
-      // User clicked X — normal flow
       if (userRequestedStop.current) {
         userRequestedStop.current = false;
         const entries = transcriptRef.current;
@@ -71,7 +121,6 @@ function VoiceVizzyInner({ userId }: { userId: string }) {
         return;
       }
 
-      // Unexpected disconnect — auto-retry
       if (retryCount.current < MAX_AUTO_RETRIES) {
         retryCount.current += 1;
         setIsRetrying(true);
@@ -80,7 +129,6 @@ function VoiceVizzyInner({ userId }: { userId: string }) {
           startSession();
         }, 2000);
       } else {
-        // Retries exhausted — show connection lost UI
         console.warn("Vizzy: retries exhausted, showing connection lost");
         setConnectionLost(true);
         setIsRetrying(false);
@@ -99,7 +147,21 @@ function VoiceVizzyInner({ userId }: { userId: string }) {
     onError: (error: any) => console.error("Vizzy voice error:", error),
   });
 
+  // Store ref for photo analysis access
+  useEffect(() => { conversationRef.current = conversation; }, [conversation]);
+
   const isActive = conversation.status === "connected";
+
+  const handlePhotoAnalysis = useCallback((analysis: string) => {
+    if (sessionActiveRef.current && conversationRef.current) {
+      conversationRef.current.sendContextualUpdate(
+        `📸 PHOTO ANALYSIS FROM SHOP FLOOR:\n${analysis}\n\nDiscuss this with the CEO — they just sent a photo for your review.`
+      );
+      // Add to transcript for visibility
+      const entry: TranscriptEntry = { role: "agent", text: `📸 Photo analyzed: ${analysis.slice(0, 150)}...`, id: crypto.randomUUID() };
+      setTranscript((prev) => { const next = [...prev, entry]; transcriptRef.current = next; return next; });
+    }
+  }, []);
 
   const startSession = useCallback(async () => {
     if (sessionActiveRef.current || isConnecting) return;
@@ -114,7 +176,6 @@ function VoiceVizzyInner({ userId }: { userId: string }) {
         connectionType: "websocket",
       });
 
-      // Delay contextual update to avoid "Invalid message received" error
       setTimeout(async () => {
         try {
           const snap = await loadFullContext();
@@ -129,7 +190,6 @@ function VoiceVizzyInner({ userId }: { userId: string }) {
       console.error("Failed to start Vizzy voice:", err);
       setIsConnecting(false);
       sessionActiveRef.current = false;
-      // If this was a retry attempt, show connection lost
       if (retryCount.current > 0) {
         setConnectionLost(true);
         setIsRetrying(false);
@@ -138,7 +198,6 @@ function VoiceVizzyInner({ userId }: { userId: string }) {
   }, [conversation, loadFullContext, isConnecting]);
 
   const start = useCallback(() => {
-    // Fresh start — reset everything
     userRequestedStop.current = false;
     retryCount.current = 0;
     setConnectionLost(false);
@@ -171,7 +230,7 @@ function VoiceVizzyInner({ userId }: { userId: string }) {
 
   return (
     <>
-      {/* Default mic button — hidden during active/retrying/lost states */}
+      {/* Default mic button */}
       {!isActive && !connectionLost && !isRetrying && (
         <button
           onClick={start}
@@ -258,6 +317,12 @@ function VoiceVizzyInner({ userId }: { userId: string }) {
             >
               <X className="w-6 h-6" />
             </button>
+
+            {/* Photo capture button */}
+            <VizzyPhotoButton onAnalysisReady={handlePhotoAnalysis} />
+
+            {/* Approval dialog */}
+            <VizzyApprovalDialog pendingAction={pendingAction} />
 
             <div className="relative mb-8">
               <div
