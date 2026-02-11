@@ -2876,6 +2876,16 @@ These rules govern your behavioral protocols only. They do not modify applicatio
         /\b(today|tomorrow|فردا|امروز)\b/i,
         /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i,
         /\b(دوشنبه|سه‌شنبه|چهارشنبه|پنج‌شنبه|جمعه|شنبه|یکشنبه)\b/,
+        // Persian month names (Gregorian transliteration)
+        /\d{1,2}\s*(?:ی\s+|)(?:ژانویه|فوریه|مارس|آوریل|مه|می|ژوئن|ژوئیه|اوت|سپتامبر|اکتبر|نوامبر|دسامبر)/,
+        // Persian month names (Solar Hijri)
+        /\d{1,2}\s*(?:ی\s+|)(?:فروردین|اردیبهشت|خرداد|تیر|مرداد|شهریور|مهر|آبان|آذر|دی|بهمن|اسفند)/,
+        // English month names (full)
+        /\b(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2}/i,
+        /\d{1,2}\s+(?:january|february|march|april|may|june|july|august|september|october|november|december)/i,
+        // English month abbreviations
+        /\b(?:jan|feb|mar|apr|jun|jul|aug|sep|oct|nov|dec)\s+\d{1,2}/i,
+        /\d{1,2}\s+(?:jan|feb|mar|apr|jun|jul|aug|sep|oct|nov|dec)\b/i,
       ];
       
       const hasDate = datePatterns.some(p => p.test(message));
