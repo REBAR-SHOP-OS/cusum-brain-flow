@@ -178,7 +178,7 @@ export function useQuickBooksData() {
       const [
         vendorsResult, estimatesResult, companyInfoResult, itemsResult,
         poResult, cmResult, empResult, taResult,
-        syncCustResult, syncInvResult,
+        syncCustResult, syncInvResult, fullAccountsResult,
       ] = await Promise.allSettled([
         qbAction("list-vendors"),
         qbAction("list-estimates"),
@@ -190,6 +190,7 @@ export function useQuickBooksData() {
         qbAction("list-time-activities"),
         qbAction("sync-customers"),
         qbAction("sync-invoices"),
+        qbAction("list-accounts"),
       ]);
 
       if (vendorsResult.status === "fulfilled") setVendors(vendorsResult.value.vendors || []);
@@ -200,6 +201,7 @@ export function useQuickBooksData() {
       if (cmResult.status === "fulfilled") setCreditMemos(cmResult.value.creditMemos || []);
       if (empResult.status === "fulfilled") setEmployees(empResult.value.employees || []);
       if (taResult.status === "fulfilled") setTimeActivities(taResult.value.timeActivities || []);
+      if (fullAccountsResult.status === "fulfilled") setAccounts(fullAccountsResult.value.accounts || []);
 
       // Load synced customers from our DB (paginate past Supabase 1000-row default)
       const allDbCustomers: typeof dbCustomersPage = [];
