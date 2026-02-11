@@ -126,10 +126,7 @@ export function AgentHistorySidebar({
                     : "text-foreground/80 hover:bg-muted"
                 )}
               >
-                <div className="flex-1 min-w-0">
-                  <span className="block truncate">{session.title}</span>
-                  <span className="block text-[10px] text-muted-foreground">{format(new Date(session.updated_at), "yyyy-MM-dd")}</span>
-                </div>
+                <span className="flex-1 truncate text-xs">{format(new Date(session.updated_at), "yyyy-MM-dd")}</span>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
