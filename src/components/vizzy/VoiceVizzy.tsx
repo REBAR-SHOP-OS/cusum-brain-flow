@@ -38,13 +38,7 @@ function VoiceVizzyInner({ userId }: { userId: string }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const { loadFullContext } = useVizzyContext();
 
-  // Pre-load context once
-  const loadedRef = useRef(false);
-  useEffect(() => {
-    if (loadedRef.current) return;
-    loadedRef.current = true;
-    loadFullContext().catch(() => {});
-  }, [loadFullContext]);
+  // Context is loaded fresh when session starts — no pre-load needed
 
   // Cleanup retry timer on unmount
   useEffect(() => {
