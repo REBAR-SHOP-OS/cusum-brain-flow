@@ -3,6 +3,7 @@ import { TopBar } from "./TopBar";
 import { IntelligencePanel } from "./IntelligencePanel";
 import { MobileNavV2 } from "./MobileNavV2";
 import { AppTour } from "@/components/tour/AppTour";
+import { VoiceVizzy } from "@/components/vizzy/VoiceVizzy";
 import { RoleGuard } from "@/components/auth/RoleGuard";
 
 interface AppLayoutProps {
@@ -38,6 +39,9 @@ export function AppLayout({ children }: AppLayoutProps) {
 
         {/* Mobile bottom nav */}
         <MobileNavV2 />
+
+        {/* Voice Vizzy — Jarvis mode (sattar only) */}
+        <VoiceVizzy />
       </div>
     </RoleGuard>
   );
