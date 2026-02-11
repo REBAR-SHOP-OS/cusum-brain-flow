@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { useQuickBooksData } from "@/hooks/useQuickBooksData";
+import { useVizzyContext } from "@/hooks/useVizzyContext";
 import { buildVizzyContext } from "@/lib/vizzyContext";
 
 const ALLOWED_EMAIL = "sattar@rebar.shop";
@@ -23,12 +23,17 @@ export default function VizzyPage() {
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
   const [status, setStatus] = useState<"starting" | "connected" | "error">("starting");
   const scrollRef = useRef<HTMLDivElement>(null);
-  const { loadAll, totalReceivable, totalPayable, overdueInvoices, overdueBills, accounts, payments } = useQuickBooksData();
   const startedRef = useRef(false);
+  const sessionIdRef = useRef<string | null>(null);
+  const { loadFullContext } = useVizzyContext();
 
   const conversation = useConversation({
     onConnect: () => setStatus("connected"),
-    onDisconnect: () => navigate("/home"),
+    onDisconnect: () => {
+      // Save transcript on disconnect
+      saveTranscript(transcript);
+      navigate("/home");
+    },
     onMessage: (message: any) => {
       if (message.type === "user_transcript") {
         setTranscript((prev) => [
@@ -49,10 +54,24 @@ export default function VizzyPage() {
     },
   });
 
+  const saveTranscript = useCallback(async (entries: TranscriptEntry[]) => {
+    if (!user || entries.length === 0) return;
+    try {
+      await supabase.from("vizzy_interactions").insert({
+        user_id: user.id,
+        transcript: entries as any,
+        session_ended_at: new Date().toISOString(),
+      });
+    } catch (err) {
+      console.error("Failed to save Vizzy transcript:", err);
+    }
+  }, [user]);
+
   const stop = useCallback(async () => {
+    await saveTranscript(transcript);
     await conversation.endSession();
     navigate("/home");
-  }, [conversation, navigate]);
+  }, [conversation, navigate, transcript, saveTranscript]);
 
   // Auto-start on mount
   useEffect(() => {
@@ -62,24 +81,24 @@ export default function VizzyPage() {
 
     (async () => {
       try {
-        // Load QB data and start voice session in parallel
-        const [, micStream] = await Promise.all([
-          loadAll().catch(() => {}),
+        const [snap] = await Promise.all([
+          loadFullContext(),
           navigator.mediaDevices.getUserMedia({ audio: true }),
         ]);
         const { data, error } = await supabase.functions.invoke("elevenlabs-conversation-token");
         if (error || !data?.token) throw new Error(error?.message ?? "No token received");
         await conversation.startSession({ conversationToken: data.token, connectionType: "webrtc" });
 
-        // Inject live financial context
-        const ctx = buildVizzyContext({ totalReceivable, totalPayable, overdueInvoices, overdueBills, accounts, payments });
-        conversation.sendContextualUpdate(ctx);
+        // Inject full business context
+        if (snap) {
+          conversation.sendContextualUpdate(buildVizzyContext(snap));
+        }
       } catch (err) {
         console.error("Failed to start Vizzy voice:", err);
         setStatus("error");
       }
     })();
-  }, [user, conversation]);
+  }, [user, conversation, loadFullContext]);
 
   // Gate
   if (!user || user.email !== ALLOWED_EMAIL) {
