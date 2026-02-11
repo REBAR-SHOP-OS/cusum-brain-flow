@@ -183,12 +183,11 @@ export function TranscribeView() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
 
-  // Mic - ref-based accumulation
+  // Mic - MediaRecorder-based
   const [isListening, setIsListening] = useState(false);
-  const [interimText, setInterimText] = useState("");
-  const recognitionRef = useRef<any>(null);
-  const accumulatedTextRef = useRef("");
-  const [wordCount, setWordCount] = useState(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
   const [recordingTime, setRecordingTime] = useState(0);
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const stopDisabledRef = useRef(false);
@@ -257,124 +256,93 @@ export function TranscribeView() {
   };
 
   // --- Mic Tab ---
-  const startListening = () => {
-    const SpeechRecognitionAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognitionAPI) {
-      toast.error("Speech recognition not supported in this browser");
-      return;
-    }
-    const recognition = new SpeechRecognitionAPI();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    if (sourceLang !== "auto") {
-      recognition.lang = sourceLang;
-    }
+  const startListening = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+      audioChunksRef.current = [];
 
-    recognition.onstart = () => setIsListening(true);
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : "audio/webm";
+      const recorder = new MediaRecorder(stream, { mimeType });
 
-    recognition.onresult = (event: any) => {
-      let interim = "";
-      let finalText = "";
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          finalText += transcript;
-        } else {
-          interim += transcript;
-        }
-      }
-      setInterimText(interim);
-      if (finalText) {
-        accumulatedTextRef.current += (accumulatedTextRef.current ? " " : "") + finalText.trim();
-        setOriginalText(accumulatedTextRef.current);
-        const wc = accumulatedTextRef.current.split(/\s+/).filter(Boolean).length;
-        setWordCount(wc);
-        setInterimText("");
-      }
-      // Update live word count including interim
-      if (interim) {
-        const totalText = accumulatedTextRef.current + " " + interim;
-        const wc = totalText.split(/\s+/).filter(Boolean).length;
-        setWordCount(wc);
-      }
-    };
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
 
-    recognition.onerror = (event: any) => {
-      if (event.error === "not-allowed") {
-        toast.error("Microphone access denied");
-        setIsListening(false);
-      } else if (event.error === "no-speech") {
-        toast.info("No speech detected, still listening…");
+      recorder.start(1000); // collect chunks every second
+      mediaRecorderRef.current = recorder;
+      setIsListening(true);
+      setOriginalText("");
+      setEnglishText("");
+      setDetectedLang("");
+      setConfidence(null);
+      setSpeakers([]);
+    } catch (err: any) {
+      if (err.name === "NotAllowedError") {
+        toast.error("Microphone access denied. Please allow microphone permissions.");
       } else {
-        toast.error(`Speech error: ${event.error}`);
+        toast.error(`Microphone error: ${err.message}`);
       }
-    };
-
-    recognition.onend = () => {
-      if (recognitionRef.current === recognition) {
-        try {
-          recognition.start();
-        } catch {
-          setIsListening(false);
-        }
-      }
-    };
-
-    // Reset state
-    accumulatedTextRef.current = "";
-    recognitionRef.current = recognition;
-    recognition.start();
-    setIsListening(true);
-    setOriginalText("");
-    setEnglishText("");
-    setDetectedLang("");
-    setConfidence(null);
-    setInterimText("");
-    setWordCount(0);
+    }
   };
 
   const stopListening = async () => {
     if (stopDisabledRef.current) return;
 
-    const ref = recognitionRef.current;
-    recognitionRef.current = null;
-    ref?.stop();
-    setIsListening(false);
-    setInterimText("");
-
-    // Grab full accumulated text from ref (no race conditions)
-    const fullText = accumulatedTextRef.current.trim();
-    if (!fullText) {
-      toast.info("No speech captured");
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || recorder.state === "inactive") {
+      setIsListening(false);
       return;
     }
 
-    setOriginalText(fullText);
-    toast.info("Translating full transcript…");
+    // Wait for recorder to finish
+    const audioBlob = await new Promise<Blob>((resolve) => {
+      recorder.onstop = () => {
+        const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType });
+        resolve(blob);
+      };
+      recorder.stop();
+    });
+
+    // Stop mic stream
+    mediaStreamRef.current?.getTracks().forEach(t => t.stop());
+    mediaStreamRef.current = null;
+    mediaRecorderRef.current = null;
+    setIsListening(false);
+
+    if (audioBlob.size < 1000) {
+      toast.info("No speech captured — recording too short");
+      return;
+    }
+
+    toast.info("Processing recording…");
+
+    const formData = new FormData();
+    formData.append("audio", audioBlob, "recording.webm");
+    formData.append("sourceLang", sourceLang);
+    formData.append("targetLang", targetLang);
+    formData.append("formality", formality);
+    formData.append("context", contextHint);
+    formData.append("outputFormat", outputFormat);
 
     try {
-      const result = await callTranslateAPI({
-        mode: "text",
-        text: fullText,
-        sourceLang,
-        targetLang,
-        formality,
-        context: contextHint,
-        outputFormat,
-      });
+      const result = await callTranslateAPI(formData, true);
+      setOriginalText(result.transcript || result.original || "");
       setEnglishText(result.english || "");
       setDetectedLang(result.detectedLang || "");
       setConfidence(typeof result.confidence === "number" ? result.confidence : null);
       setSpeakers(Array.isArray(result.speakers) ? result.speakers : []);
       addToHistory({
-        original: fullText,
+        original: result.transcript || result.original || "",
         english: result.english || "",
         detectedLang: result.detectedLang || "",
         mode: "mic",
         confidence: result.confidence,
         speakers: result.speakers,
       });
-      toast.success("Translation complete");
+      toast.success("Transcription & translation complete");
     } catch (err: any) {
       toast.error(err.message);
     }
@@ -530,10 +498,15 @@ export function TranscribeView() {
     setDetectedLang("");
     setConfidence(null);
     setSpeakers([]);
-    setInterimText("");
     setPasteText("");
-    setWordCount(0);
-    accumulatedTextRef.current = "";
+    // Stop any active recording
+    if (mediaRecorderRef.current?.state !== "inactive") {
+      mediaRecorderRef.current?.stop();
+    }
+    mediaStreamRef.current?.getTracks().forEach(t => t.stop());
+    mediaRecorderRef.current = null;
+    mediaStreamRef.current = null;
+    setIsListening(false);
   };
 
   return (
@@ -572,11 +545,12 @@ export function TranscribeView() {
                 variant={isListening ? "destructive" : "default"}
                 className="rounded-full h-16 w-16"
                 onClick={isListening ? stopListening : startListening}
+                disabled={isProcessing}
               >
-                {isListening ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
+                {isProcessing ? <Loader2 className="w-6 h-6 animate-spin" /> : isListening ? <Square className="w-5 h-5" /> : <Mic className="w-6 h-6" />}
               </Button>
               <p className="text-sm text-muted-foreground">
-                {isListening ? "Listening… speak now" : "Click to start listening"}
+                {isProcessing ? "Processing recording…" : isListening ? "Recording… speak in any language" : "Click to start recording"}
               </p>
 
               {/* Recording stats */}
@@ -586,25 +560,10 @@ export function TranscribeView() {
                     <Timer className="w-3 h-3" />
                     {formatTime(recordingTime)}
                   </span>
-                  <span className="flex items-center gap-1">
-                    <FileText className="w-3 h-3" />
-                    {wordCount} words
-                  </span>
                   <span className="relative flex h-2 w-2">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive/75"></span>
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-destructive"></span>
                   </span>
-                </div>
-              )}
-
-              {interimText && (
-                <p className="text-sm italic text-muted-foreground/70 animate-pulse">{interimText}</p>
-              )}
-
-              {/* Live accumulated preview */}
-              {isListening && accumulatedTextRef.current && (
-                <div className="w-full bg-muted/30 rounded-md p-2 text-xs text-muted-foreground max-h-24 overflow-y-auto">
-                  {originalText}
                 </div>
               )}
             </CardContent>
