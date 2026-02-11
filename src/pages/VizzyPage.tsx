@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useConversation } from "@elevenlabs/react";
-import { X, ArrowLeft } from "lucide-react";
+import { X, ArrowLeft, Mic, MicOff } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
@@ -23,9 +23,11 @@ export default function VizzyPage() {
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
   const transcriptRef = useRef<TranscriptEntry[]>([]);
   const [status, setStatus] = useState<"starting" | "connected" | "error">("starting");
+  const [muted, setMuted] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const startedRef = useRef(false);
   const sessionActiveRef = useRef(false);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
   const { loadFullContext } = useVizzyContext();
 
   const saveTranscript = useCallback(async (entries: TranscriptEntry[]) => {
@@ -85,10 +87,11 @@ export default function VizzyPage() {
 
     (async () => {
       try {
-        const [snap] = await Promise.all([
+        const [snap, stream] = await Promise.all([
           loadFullContext(),
           navigator.mediaDevices.getUserMedia({ audio: true }),
         ]);
+        mediaStreamRef.current = stream;
         const { data, error } = await supabase.functions.invoke("elevenlabs-conversation-token");
         if (error || !data?.signed_url) throw new Error(error?.message ?? "No signed URL received");
         await conversation.startSession({
@@ -128,13 +131,29 @@ export default function VizzyPage() {
           <ArrowLeft className="w-5 h-5" />
         </button>
         {status === "connected" && (
-          <button
-            onClick={stop}
-            className="p-3 rounded-full bg-destructive text-destructive-foreground hover:bg-destructive/80 transition-colors"
-            aria-label="End conversation"
-          >
-            <X className="w-6 h-6" />
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => {
+                const next = !muted;
+                setMuted(next);
+                mediaStreamRef.current?.getAudioTracks().forEach(t => { t.enabled = !next; });
+              }}
+              className={cn(
+                "p-3 rounded-full transition-colors",
+                muted ? "bg-yellow-500/80 text-black hover:bg-yellow-500" : "bg-white/10 text-white hover:bg-white/20"
+              )}
+              aria-label={muted ? "Unmute microphone" : "Mute microphone"}
+            >
+              {muted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+            </button>
+            <button
+              onClick={stop}
+              className="p-3 rounded-full bg-destructive text-destructive-foreground hover:bg-destructive/80 transition-colors"
+              aria-label="End conversation"
+            >
+              <X className="w-6 h-6" />
+            </button>
+          </div>
         )}
       </div>
 
