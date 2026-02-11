@@ -2633,6 +2633,21 @@ serve(async (req) => {
       .eq("user_id", user.id);
     const roles: string[] = (userRoles || []).map((r: { role: string }) => r.role);
 
+    // --- Comms Engine: draft-only + no_act_global enforcement ---
+    let agentDraftOnly = false;
+    let globalNoAct = false;
+    try {
+      const [pairingRes, configRes] = await Promise.all([
+        svcClient.from("comms_agent_pairing").select("draft_only").eq("user_email", userEmail).maybeSingle(),
+        svcClient.from("comms_config").select("no_act_global").eq("company_id", "a0000000-0000-0000-0000-000000000001").maybeSingle(),
+      ]);
+      agentDraftOnly = pairingRes.data?.draft_only === true;
+      globalNoAct = configRes.data?.no_act_global === true;
+    } catch (e) {
+      console.warn("Comms config lookup failed (non-fatal):", e);
+    }
+    const stripSendCapabilities = agentDraftOnly || globalNoAct;
+
     // Rate limit: 10 requests per 60 seconds per user
     const { data: allowed } = await svcClient.rpc("check_rate_limit", {
       _user_id: user.id,
@@ -2797,7 +2812,12 @@ After completing any task or operational cycle, you must structure your output s
 ### Scope Limitation
 These rules govern your behavioral protocols only. They do not modify application features, UI, architecture, backend logic, database, APIs, or security settings.`;
 
-    const systemPrompt = ONTARIO_CONTEXT + basePrompt + brainKnowledgeBlock + ROLE_ACCESS_BLOCK + GOVERNANCE_RULES + SHARED_TOOL_INSTRUCTIONS + IDEA_GENERATION_INSTRUCTIONS + `\n\n## Current User\nName: ${userFullName}\nEmail: ${userEmail}`;
+    // --- Draft-only governance injection ---
+    const DRAFT_ONLY_BLOCK = stripSendCapabilities
+      ? `\n\n## ⚠️ DRAFT-ONLY MODE ACTIVE\nYou are in TRACKING/DRAFT-ONLY mode. You CANNOT send emails, messages, or perform any external actions.\nYou CAN: draft content, suggest replies, analyze data, create notifications/tasks.\nYou CANNOT: send emails, post to social media, or trigger external actions.\nIf the user asks you to send something, explain that you can prepare a draft for their review, but sending is disabled.`
+      : "";
+
+    const systemPrompt = ONTARIO_CONTEXT + basePrompt + brainKnowledgeBlock + ROLE_ACCESS_BLOCK + GOVERNANCE_RULES + DRAFT_ONLY_BLOCK + SHARED_TOOL_INSTRUCTIONS + IDEA_GENERATION_INSTRUCTIONS + `\n\n## Current User\nName: ${userFullName}\nEmail: ${userEmail}`;
     
     let contextStr = "";
     if (Object.keys(mergedContext).length > 0) {
@@ -2948,7 +2968,7 @@ RULES:
           },
         },
       },
-      ...(agent === "accounting" ? [{
+      ...(!stripSendCapabilities && agent === "accounting" ? [{
         type: "function" as const,
         function: {
           name: "send_email",

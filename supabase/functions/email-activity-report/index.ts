@@ -3,14 +3,14 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { decryptToken } from "../_shared/tokenEncryption.ts";
 import { requireAuth, corsHeaders, json } from "../_shared/auth.ts";
 
-const TEAM_DIR: Record<string, { name: string; role: string }> = {
-  "sattar@rebar.shop": { name: "Sattar Esmaeili", role: "CEO" },
-  "neel@rebar.shop": { name: "Neel Mahajan", role: "Co-founder" },
-  "vicky@rebar.shop": { name: "Vicky Anderson", role: "Accountant" },
-  "saurabh@rebar.shop": { name: "Saurabh Seghal", role: "Sales" },
-  "ben@rebar.shop": { name: "Ben Rajabifar", role: "Estimator" },
-  "kourosh@rebar.shop": { name: "Kourosh Zand", role: "Shop Supervisor" },
-  "radin@rebar.shop": { name: "Radin Lachini", role: "AI Manager" },
+const TEAM_DIR: Record<string, { name: string; role: string; agent?: string }> = {
+  "sattar@rebar.shop": { name: "Sattar Esmaeili", role: "CEO", agent: "Vizzy" },
+  "neel@rebar.shop": { name: "Neel Mahajan", role: "Sales", agent: "Blitz" },
+  "vicky@rebar.shop": { name: "Vicky Anderson", role: "Accountant", agent: "Penny" },
+  "saurabh@rebar.shop": { name: "Saurabh Seghal", role: "Sales", agent: "Blitz" },
+  "ben@rebar.shop": { name: "Ben Rajabifar", role: "Estimator", agent: "Gauge" },
+  "kourosh@rebar.shop": { name: "Kourosh Zand", role: "Shop Supervisor", agent: "Forge" },
+  "radin@rebar.shop": { name: "Radin Lachini", role: "AI Manager", agent: "Relay" },
   "ai@rebar.shop": { name: "AI Supervisor", role: "Shared Mailbox" },
 };
 
@@ -20,6 +20,7 @@ interface PersonActivity {
   name: string;
   role: string;
   email: string;
+  agentShadow?: string;
   emailsSent: { subject: string; to: string; preview: string }[];
   emailsReceived: { subject: string; from: string; preview: string }[];
   tasksOpen: number;
@@ -221,7 +222,7 @@ function buildPersonalReportHTML(person: PersonActivity, dateStr: string): strin
 <div style="max-width:600px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;margin-top:20px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
   <div style="background:#1a1a2e;padding:24px 32px;color:#fff;position:relative;">
     <h1 style="margin:0;font-size:20px;">🧠 Business Pulse — Performance Report</h1>
-    <p style="margin:4px 0 0;opacity:0.8;font-size:14px;">${person.name} (${person.role}) — ${dateStr}</p>
+    <p style="margin:4px 0 0;opacity:0.8;font-size:14px;">${person.name} (${person.role}${(person as any).agentShadow ? ` — AI: ${(person as any).agentShadow}` : ''}) — ${dateStr}</p>
     <div style="position:absolute;right:32px;top:50%;transform:translateY(-50%);background:${scoreColor};color:#fff;border-radius:50%;width:56px;height:56px;display:flex;align-items:center;justify-content:center;flex-direction:column;">
       <span style="font-size:18px;font-weight:bold;line-height:1;">${score}</span>
       <span style="font-size:8px;opacity:0.9;">${scoreLabel}</span>
@@ -255,7 +256,7 @@ function buildPersonalReportHTML(person: PersonActivity, dateStr: string): strin
 </div></body></html>`;
 }
 
-function buildMasterReportHTML(people: PersonActivity[], dateStr: string): string {
+function buildMasterReportHTML(people: PersonActivity[], dateStr: string, alertSummaryHtml?: string): string {
   // Extract scores and sort for leaderboard
   const scored = people.map(p => {
     const scoreMatch = p.aiSummary.match(/SCORE:\s*(\d+)/i);
@@ -270,7 +271,7 @@ function buildMasterReportHTML(people: PersonActivity[], dateStr: string): strin
     const scoreColor = p.score >= 80 ? "#22c55e" : p.score >= 60 ? "#f59e0b" : "#ef4444";
     return `<tr>
       <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;">${medal}</td>
-      <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;"><strong>${p.name}</strong><br><span style="color:#888;font-size:12px;">${p.role}</span></td>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;"><strong>${p.name}</strong><br><span style="color:#888;font-size:12px;">${p.role}${(p as any).agentShadow ? ` (${(p as any).agentShadow})` : ''}</span></td>
       <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;text-align:center;color:${scoreColor};font-weight:bold;">${p.score}/100</td>
       <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;text-align:center;">${p.emailsSent.length}/${p.emailsReceived.length}</td>
       <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;text-align:center;">${p.tasksOpen}/${p.tasksDone}</td>
@@ -284,7 +285,7 @@ function buildMasterReportHTML(people: PersonActivity[], dateStr: string): strin
   const summaries = scored.map(p => {
     const scoreColor = p.score >= 80 ? "#22c55e" : p.score >= 60 ? "#f59e0b" : "#ef4444";
     return `<div style="margin-bottom:20px;border-left:3px solid ${scoreColor};padding-left:12px;">
-      <h3 style="font-size:15px;color:#1a1a2e;margin:0 0 8px;">${p.name} (${p.role}) — <span style="color:${scoreColor}">${p.score}/100</span></h3>
+      <h3 style="font-size:15px;color:#1a1a2e;margin:0 0 8px;">${p.name} (${p.role}${(p as any).agentShadow ? ` — ${(p as any).agentShadow}` : ''}) — <span style="color:${scoreColor}">${p.score}/100</span></h3>
       <div style="font-size:13px;color:#333;line-height:1.5;white-space:pre-wrap;background:#f8f9fa;padding:12px;border-radius:6px;">${p.aiSummary.replace(/\n/g, "<br>")}</div>
     </div>`;
   }).join("");
@@ -304,6 +305,7 @@ function buildMasterReportHTML(people: PersonActivity[], dateStr: string): strin
     <div style="background:#f0f9ff;border-radius:8px;padding:16px;margin-bottom:20px;">
       <p style="margin:0;font-size:14px;">⭐ <strong>Star Performers:</strong> ${starPerformers}</p>
       <p style="margin:4px 0 0;font-size:14px;">⚠️ <strong>Needs Attention:</strong> ${needsAttention}</p>
+      ${alertSummaryHtml ? `<p style="margin:4px 0 0;font-size:14px;">🔔 <strong>Open Alerts:</strong> ${alertSummaryHtml}</p>` : ""}
     </div>
     <h2 style="font-size:16px;color:#1a1a2e;border-bottom:2px solid #e8e8ed;padding-bottom:8px;">🏆 Team Leaderboard</h2>
     <table style="width:100%;border-collapse:collapse;">
@@ -425,6 +427,7 @@ serve(async (req) => {
         name: info.name,
         role: info.role,
         email,
+        agentShadow: info.agent,
         emailsSent: sent.map(c => ({ subject: c.subject || "(no subject)", to: c.to_address || "", preview: (c.body_preview || "").slice(0, 100) })),
         emailsReceived: received.map(c => ({ subject: c.subject || "(no subject)", from: c.from_address || "", preview: (c.body_preview || "").slice(0, 100) })),
         tasksOpen,
@@ -459,15 +462,53 @@ serve(async (req) => {
       }
     }
 
-    // Master report to ai@rebar.shop
+    // Master report to ai@rebar.shop (or comms_config brief_recipients)
     if (people.length > 0) {
-      const masterHtml = buildMasterReportHTML(people, dateStr);
+      // Fetch open alerts for summary
+      let alertSummaryHtml = "";
       try {
-        const ok = await sendEmail(accessToken, SUPERVISOR_EMAIL, `Master Supervisory Report — ${dateStr}`, masterHtml);
-        sendResults.push({ email: SUPERVISOR_EMAIL, success: ok });
+        const { data: openAlerts } = await serviceClient
+          .from("comms_alerts")
+          .select("alert_type, owner_email, created_at")
+          .is("resolved_at", null)
+          .gte("created_at", todayISO)
+          .limit(50);
+        
+        if (openAlerts && openAlerts.length > 0) {
+          const byType: Record<string, number> = {};
+          for (const a of openAlerts) {
+            byType[a.alert_type] = (byType[a.alert_type] || 0) + 1;
+          }
+          alertSummaryHtml = Object.entries(byType)
+            .map(([t, c]) => `${t.replace(/_/g, " ")}: <strong>${c}</strong>`)
+            .join(" | ");
+        }
       } catch (e) {
-        console.error("Master report send failed:", e);
-        sendResults.push({ email: SUPERVISOR_EMAIL, success: false });
+        console.warn("Alert summary fetch failed (non-fatal):", e);
+      }
+
+      // Fetch brief recipients from config
+      let briefRecipients = [SUPERVISOR_EMAIL];
+      try {
+        const { data: commsConf } = await serviceClient
+          .from("comms_config")
+          .select("brief_recipients")
+          .eq("company_id", "a0000000-0000-0000-0000-000000000001")
+          .maybeSingle();
+        if (commsConf?.brief_recipients?.length) briefRecipients = commsConf.brief_recipients;
+      } catch (e) {
+        console.warn("Comms config fetch failed (non-fatal):", e);
+      }
+
+      const masterHtml = buildMasterReportHTML(people, dateStr, alertSummaryHtml);
+      for (const recipient of briefRecipients) {
+        try {
+          const ok = await sendEmail(accessToken, recipient, `Master Supervisory Report — ${dateStr}`, masterHtml);
+          sendResults.push({ email: recipient, success: ok });
+        } catch (e) {
+          console.error(`Master report to ${recipient} failed:`, e);
+          sendResults.push({ email: recipient, success: false });
+        }
       }
     }
 

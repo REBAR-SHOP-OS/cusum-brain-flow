@@ -128,6 +128,7 @@ interface SendEmailRequest {
   threadId?: string;
   replyToMessageId?: string;
   references?: string;
+  sent_by_agent?: boolean;
 }
 
 serve(async (req) => {
@@ -146,22 +147,38 @@ serve(async (req) => {
       );
     }
 
-    const { to, subject, body, threadId, replyToMessageId, references }: SendEmailRequest = await clonedReq.json();
+    const { to, subject, body, threadId, replyToMessageId, references, sent_by_agent }: SendEmailRequest = await clonedReq.json();
 
     if (!to || !subject || !body) {
       throw new Error("Missing required fields: to, subject, body");
     }
 
-    // Use this user's own Gmail token with IP tracking
-    const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
-    const accessToken = await getAccessTokenForUser(userId, clientIp);
-    
-
-    // Fetch user's email signature
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
+
+    // --- Comms Engine: no_act_global + email routing ---
+    if (sent_by_agent) {
+      const { data: commsConfig } = await supabaseAdmin
+        .from("comms_config")
+        .select("no_act_global, external_sender, internal_sender, internal_domain")
+        .eq("company_id", "a0000000-0000-0000-0000-000000000001")
+        .maybeSingle();
+
+      if (commsConfig?.no_act_global) {
+        return new Response(
+          JSON.stringify({ blocked: true, reason: "tracking_only" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
+    // Use this user's own Gmail token with IP tracking
+    const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+    const accessToken = await getAccessTokenForUser(userId, clientIp);
+
+    // Fetch user's email signature
     const { data: sigRow } = await supabaseAdmin
       .from("email_signatures")
       .select("signature_html")
@@ -180,7 +197,23 @@ serve(async (req) => {
     }
 
     const profile = await profileResponse.json();
-    const fromEmail = profile.emailAddress;
+    let fromEmail = profile.emailAddress;
+
+    // --- Agent email routing: use rfq@ for external, ai@ for internal ---
+    if (sent_by_agent) {
+      const { data: commsConfig } = await supabaseAdmin
+        .from("comms_config")
+        .select("external_sender, internal_sender, internal_domain")
+        .eq("company_id", "a0000000-0000-0000-0000-000000000001")
+        .maybeSingle();
+
+      if (commsConfig) {
+        const recipientDomain = to.split("@")[1]?.toLowerCase() || "";
+        fromEmail = recipientDomain === commsConfig.internal_domain
+          ? commsConfig.internal_sender
+          : commsConfig.external_sender;
+      }
+    }
 
     // Wrap body in modern HTML email template
     const styledBody = `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.7;color:#1a1a1a;">${body}</div>`;

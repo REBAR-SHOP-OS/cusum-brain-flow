@@ -140,3 +140,6 @@ verify_jwt = false
 
 [functions.email-activity-report]
 verify_jwt = false
+
+[functions.comms-alerts]
+verify_jwt = false

@@ -349,6 +349,131 @@ export type Database = {
         }
         Relationships: []
       }
+      comms_agent_pairing: {
+        Row: {
+          agent_name: string
+          company_id: string
+          created_at: string
+          draft_only: boolean
+          id: string
+          rc_extension: string | null
+          user_email: string
+        }
+        Insert: {
+          agent_name: string
+          company_id?: string
+          created_at?: string
+          draft_only?: boolean
+          id?: string
+          rc_extension?: string | null
+          user_email: string
+        }
+        Update: {
+          agent_name?: string
+          company_id?: string
+          created_at?: string
+          draft_only?: boolean
+          id?: string
+          rc_extension?: string | null
+          user_email?: string
+        }
+        Relationships: []
+      }
+      comms_alerts: {
+        Row: {
+          alert_type: string
+          ceo_notified_at: string | null
+          communication_id: string | null
+          company_id: string
+          created_at: string
+          id: string
+          metadata: Json | null
+          owner_email: string
+          owner_notified_at: string | null
+          resolved_at: string | null
+        }
+        Insert: {
+          alert_type: string
+          ceo_notified_at?: string | null
+          communication_id?: string | null
+          company_id?: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          owner_email: string
+          owner_notified_at?: string | null
+          resolved_at?: string | null
+        }
+        Update: {
+          alert_type?: string
+          ceo_notified_at?: string | null
+          communication_id?: string | null
+          company_id?: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          owner_email?: string
+          owner_notified_at?: string | null
+          resolved_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comms_alerts_communication_id_fkey"
+            columns: ["communication_id"]
+            isOneToOne: false
+            referencedRelation: "communications"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      comms_config: {
+        Row: {
+          brief_recipients: string[]
+          ceo_email: string
+          company_id: string
+          created_at: string
+          daily_brief_time: string
+          external_sender: string
+          id: string
+          internal_domain: string
+          internal_sender: string
+          missed_call_alert: string
+          no_act_global: boolean
+          response_thresholds_hours: Json
+          updated_at: string
+        }
+        Insert: {
+          brief_recipients?: string[]
+          ceo_email?: string
+          company_id?: string
+          created_at?: string
+          daily_brief_time?: string
+          external_sender?: string
+          id?: string
+          internal_domain?: string
+          internal_sender?: string
+          missed_call_alert?: string
+          no_act_global?: boolean
+          response_thresholds_hours?: Json
+          updated_at?: string
+        }
+        Update: {
+          brief_recipients?: string[]
+          ceo_email?: string
+          company_id?: string
+          created_at?: string
+          daily_brief_time?: string
+          external_sender?: string
+          id?: string
+          internal_domain?: string
+          internal_sender?: string
+          missed_call_alert?: string
+          no_act_global?: boolean
+          response_thresholds_hours?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
       communications: {
         Row: {
           body_preview: string | null
