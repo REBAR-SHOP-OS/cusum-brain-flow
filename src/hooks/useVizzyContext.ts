@@ -60,7 +60,7 @@ export function useVizzyContext() {
       const eventsP = supabase.from("events").select("id, event_type, entity_type, description, created_at")
         .order("created_at", { ascending: false }).limit(20) as any;
       const knowledgeP = supabase.from("knowledge").select("title, category, content")
-        .order("created_at", { ascending: false }).limit(50) as any;
+        .order("created_at", { ascending: false }).limit(1000) as any;
 
       const [qbData, cutPlansRes, cutItemsRes, machinesRes, leadsRes, customersRes, deliveriesRes, profilesRes, eventsRes, knowledgeRes] = await Promise.all([
         qbPromise, cutPlansP, cutItemsP, machinesP, leadsP, customersP, deliveriesP, profilesP, eventsP, knowledgeP,
