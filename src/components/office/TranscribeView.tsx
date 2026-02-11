@@ -20,6 +20,7 @@ const LANGUAGES = [
   { value: "fr", label: "French" },
   { value: "ar", label: "Arabic" },
   { value: "hi", label: "Hindi" },
+  { value: "ka", label: "Georgian" },
   { value: "zh", label: "Chinese" },
   { value: "de", label: "German" },
   { value: "pt", label: "Portuguese" },
