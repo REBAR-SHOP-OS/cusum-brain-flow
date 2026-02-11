@@ -1,38 +1,45 @@
 
 
-## Revert Home Page Chat and Add Live Chat Button to ChatInput
+## Two Changes: Vizzy Silent Mode + Remove Chat Icon
 
-### What changes
+### 1. Remove the MessageCircle (Live Chat) icon from ChatInput toolbar
 
-1. **Home.tsx** - Remove all inline chat functionality (messages display, streaming controls, `useAdminChat` hook, `chatBottomRef`, etc.). Restore the original behavior where the ChatInput routes to the appropriate agent page. Keep everything else (helpers, workspaces, quick actions) untouched.
+The circled chat bubble icon in the toolbar will be removed entirely. The `LiveChatWidget` event trigger and the `MessageCircle` import will be cleaned up from `ChatInput.tsx`.
 
-2. **ChatInput.tsx** - Add a new `MessageCircle` (live chat) icon button to the bottom toolbar, next to the existing icons (paperclip, emoji, voice, etc.). Clicking it will toggle the LiveChatWidget open.
+### 2. Vizzy "Silent Mode" -- voice-activated mute/unmute
 
-3. **ChatInput props** - Add an optional `onLiveChatClick` callback prop. When provided, the live chat button appears in the toolbar.
+When you tell Vizzy to be silent (e.g., "silent", "be quiet", "shut up", "hush"), she will immediately go quiet -- muting her output and only silently recording your words as notes. She stays in this mode until you call her by name (e.g., "Vizzy", "hey Vizzy"), at which point she resumes speaking normally.
 
-4. **Home.tsx wiring** - Pass an `onLiveChatClick` handler from Home that triggers the LiveChatWidget to open. This will use a simple state or a shared callback approach.
+**How it works:**
+
+- A new `silentMode` state is added to `VizzyPage.tsx`
+- The `onMessage` handler watches incoming user transcripts for trigger phrases:
+  - **Silence triggers**: "silent", "be quiet", "shut up", "hush", "shhh"
+  - **Wake triggers**: "vizzy", "hey vizzy"
+- When silent mode activates:
+  - Volume is set to 0 via `conversation.setVolume({ volume: 0 })`
+  - A contextual update is sent: "CEO asked you to be silent. Do NOT speak. Just listen and take mental notes. Only respond when the CEO calls your name 'Vizzy'."
+  - The UI status label shows "Silent mode -- taking notes..."
+- When the user says "Vizzy":
+  - Volume is restored to previous level
+  - A contextual update is sent: "CEO called your name. You may speak again. Briefly summarize any notes from the silent period."
+  - Normal status labels resume
 
 ### Technical Details
 
-**ChatInput.tsx changes:**
-- Add optional prop `onLiveChatClick?: () => void`
-- Import `MessageCircle` from lucide-react
-- Add a new tooltip button in the bottom toolbar (after the Hash/commands button) with the `MessageCircle` icon, visible only when `onLiveChatClick` is provided
-- On click, call `onLiveChatClick()`
+**Files to modify:**
 
-**Home.tsx changes:**
-- Remove: `useAdminChat` import/hook, `chatBottomRef`, `Loader2`/`Square`/`Button` imports (if only used for chat), `RichMarkdown` import, the entire inline messages block, the `cancelStream` cleanup effect, and the `handleSend` callback that calls `sendMessage`
-- Restore: the original `handleSend` that uses `routeToAgent` to navigate to the right agent page with the message
-- Pass `onLiveChatClick` to `ChatInput` which sets the LiveChatWidget open state
+1. **`src/components/chat/ChatInput.tsx`**
+   - Remove the `MessageCircle` import from lucide-react
+   - Remove the entire tooltip button block that dispatches `"toggle-live-chat"`
+   - No other toolbar buttons are affected
 
-**LiveChatWidget.tsx changes:**
-- Export a way to open it externally. Options:
-  - Option A: Expose an `externalOpen` prop or use a lightweight context/ref
-  - Option B (simpler): Add a custom event listener approach - dispatch a `CustomEvent` when the ChatInput button is clicked, and the LiveChatWidget listens for it
+2. **`src/pages/VizzyPage.tsx`**
+   - Add `silentMode` state (`useState(false)`)
+   - Add `prevVolumeRef` ref to remember volume before muting
+   - In the `onMessage` handler for `user_transcript`, after recording the entry, check the transcript text against silence/wake keywords
+   - On silence trigger: set `silentMode(true)`, save current volume, set volume to 0, send contextual update
+   - On wake trigger: set `silentMode(false)`, restore volume, send contextual update
+   - Update the `statusLabel` to show "Silent mode -- taking notes..." when `silentMode` is true
+   - Add a visual indicator (e.g., a small "SILENT" badge or dimmed avatar ring) so you know she's in silent mode
 
-The simplest approach: LiveChatWidget listens for a `window` custom event `"open-live-chat"`, and ChatInput's `onLiveChatClick` dispatches that event. This requires zero prop drilling through the layout.
-
-**Sequence:**
-1. Update `ChatInput.tsx` - add `onLiveChatClick` prop and MessageCircle button
-2. Update `LiveChatWidget.tsx` - add event listener for `"open-live-chat"` custom event
-3. Update `Home.tsx` - remove inline chat, restore agent routing, pass `onLiveChatClick={() => window.dispatchEvent(new Event("open-live-chat"))}` to ChatInput
