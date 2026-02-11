@@ -1,23 +1,29 @@
 
 
-## Fix Vizzy Showing $0 AR and No Overdue Items
+## Vizzy Alerts CEO When QuickBooks Is Disconnected
 
-### Problem
-Vizzy loads financial data by calling the `quickbooks-oauth` edge function directly. That function throws "QuickBooks not connected", so all financials (AR, overdue invoices, overdue bills) default to zero. The CEO Dashboard works correctly because it reads from the `accounting_mirror` table instead.
+### What Changes
+When Vizzy loads business data and detects that QuickBooks is not connected (falling back to the mirror table), she will proactively tell the CEO about it during the conversation.
 
-### Solution
-Update `src/hooks/useVizzyContext.ts` to fall back to the `accounting_mirror` table when the QuickBooks edge function returns no data. This mirrors how the CEO Dashboard already works.
+### How It Works
 
-### Technical Details
+1. **Track QB connection status in the snapshot** -- Add a `qbConnected: boolean` field to the `VizzyBusinessSnapshot` interface in `src/hooks/useVizzyContext.ts`. Set it to `true` when the QB edge function returns data, `false` when it falls back to the mirror table.
 
-**File:** `src/hooks/useVizzyContext.ts`
+2. **Include the warning in Vizzy's context prompt** -- Update `src/lib/vizzyContext.ts` (`buildVizzyContext`) to check `snap.financials.qbConnected`. When `false`, inject a prominent warning block like:
 
-After the QuickBooks edge function call, add a fallback that queries `accounting_mirror`:
+```
+⚠️ QUICKBOOKS DISCONNECTED
+Financial data is loaded from a cached mirror — it may be stale.
+IMPORTANT: Tell the CEO that QuickBooks needs to be reconnected
+via Settings → Integrations. Mention this early in the conversation.
+```
 
-1. If `qbData` is null (QB not connected), query `accounting_mirror` for invoices and bills with `balance > 0`
-2. Compute `totalReceivable`, `totalPayable`, `overdueInvoices`, and `overdueBills` from the mirror data
-3. The rest of the context (production, CRM, deliveries, etc.) stays unchanged
+3. **No change when QB is connected** -- When `qbConnected` is `true`, no warning appears and Vizzy behaves as normal with live data.
 
-The mirror table stores `entity_type` ("Invoice" / "Vendor"), `balance`, and `data` (JSON with DueDate, CustomerRef, VendorRef, etc.), so we can reconstruct the same financial picture Vizzy needs.
+### Files Modified
 
-**No other files need to change** -- the context string builder in `vizzyContext.ts` already handles whatever data the snapshot provides.
+- `src/hooks/useVizzyContext.ts` -- Add `qbConnected` to the snapshot interface and set it based on the QB fetch result.
+- `src/lib/vizzyContext.ts` -- Add a conditional warning section in the context string when `qbConnected` is `false`.
+
+### Result
+Next time Vizzy starts a session and QuickBooks is disconnected, she will proactively say something like: "Hey boss, heads up — QuickBooks isn't connected right now. I'm using cached financial data, so the numbers might be a bit stale. You can reconnect it in Settings under Integrations."
