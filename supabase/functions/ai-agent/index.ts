@@ -2101,13 +2101,13 @@ function selectModel(agent: string, message: string, hasAttachments: boolean, hi
 
   // Accounting — financial precision matters
   if (agent === "accounting" || agent === "collections") {
-    const isComplexFinancial = /report|aging|analysis|reconcil|audit|forecast/i.test(message);
+    const isComplexFinancial = /report|aging|analysis|reconcil|audit|forecast|briefing|priority|attention today|drill into/i.test(message);
     if (isComplexFinancial) {
       return {
         model: "google/gemini-2.5-flash",
-        maxTokens: 3000,
+        maxTokens: 4000,
         temperature: 0.3,
-        reason: "accounting complex analysis → Flash for balanced precision",
+        reason: "accounting complex analysis/briefing → Flash for balanced precision",
       };
     }
     return {
