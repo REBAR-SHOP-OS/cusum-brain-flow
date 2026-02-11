@@ -134,7 +134,7 @@ export default function Home() {
   };
 
   const handleLiveChatClick = () => {
-    window.dispatchEvent(new Event("open-voice-chat"));
+    navigate("/vizzy");
   };
 
   // Hero text

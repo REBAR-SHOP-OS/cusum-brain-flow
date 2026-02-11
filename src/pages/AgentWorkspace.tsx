@@ -270,7 +270,7 @@ export default function AgentWorkspace() {
                 disabled={isLoading}
                 showFileUpload={agentId === "estimating"}
                 showSmartMode
-                onLiveChatClick={() => window.dispatchEvent(new Event("open-voice-chat"))}
+                onLiveChatClick={() => navigate("/vizzy")}
               />
             </div>
 
@@ -294,7 +294,7 @@ export default function AgentWorkspace() {
               disabled={isLoading}
               showFileUpload={agentId === "estimating"}
               showSmartMode
-              onLiveChatClick={() => window.dispatchEvent(new Event("open-voice-chat"))}
+              onLiveChatClick={() => navigate("/vizzy")}
             />
           </>
         )}
