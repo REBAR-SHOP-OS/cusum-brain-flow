@@ -30,15 +30,59 @@ const userAgentMappings: Record<string, UserAgentMapping> = {
       { title: "Today's production queue", prompt: "Show me today's production queue — what's scheduled, what's in progress, and what's blocked.", icon: "ListOrdered", category: "Production" },
     ],
   },
-  "neel@rebar.shop": {
-    agentKey: "assistant",
-    userRole: "ceo",
-    heroText: "How can your **CEO Portal** help you today?",
+  "saurabh@rebar.shop": {
+    agentKey: "sales",
+    userRole: "sales",
+    heroText: "How can **Blitz** help you close deals today?",
     quickActions: [
-      { title: "Business Health Score", prompt: "Give me the full business health score — production, revenue, AR, team attendance, and machine status. Highlight anything that needs my attention.", icon: "Activity", category: "Executive" },
-      { title: "Today's exceptions", prompt: "Show me today's exceptions only — anything overdue, blocked, or flagged across all departments.", icon: "AlertTriangle", category: "Executive" },
       { title: "Pipeline overview", prompt: "Give me a pipeline summary — active leads, expected close dates, and any deals that need attention.", icon: "TrendingUp", category: "Sales" },
-      { title: "Team attendance", prompt: "Show me today's team attendance — who's clocked in, who's absent, and any patterns to watch.", icon: "Users", category: "HR" },
+      { title: "Follow-up queue", prompt: "Show me leads that need follow-up today — overdue responses, pending quotes, and stale conversations.", icon: "Clock", category: "Sales" },
+      { title: "New RFQs", prompt: "Show me any new RFQ emails that came in today that need quoting.", icon: "FileText", category: "Sales" },
+      { title: "Customer check-in", prompt: "Which customers haven't heard from us in over a week? List them with last contact date.", icon: "Users", category: "Sales" },
+    ],
+  },
+  "neel@rebar.shop": {
+    agentKey: "sales",
+    userRole: "sales",
+    heroText: "How can **Blitz** help you close deals today?",
+    quickActions: [
+      { title: "Pipeline overview", prompt: "Give me a pipeline summary — active leads, expected close dates, and any deals that need attention.", icon: "TrendingUp", category: "Sales" },
+      { title: "Follow-up queue", prompt: "Show me leads that need follow-up today — overdue responses, pending quotes, and stale conversations.", icon: "Clock", category: "Sales" },
+      { title: "New RFQs", prompt: "Show me any new RFQ emails that came in today that need quoting.", icon: "FileText", category: "Sales" },
+      { title: "Customer check-in", prompt: "Which customers haven't heard from us in over a week? List them with last contact date.", icon: "Users", category: "Sales" },
+    ],
+  },
+  "radin@rebar.shop": {
+    agentKey: "support",
+    userRole: "ai_manager",
+    heroText: "How can **Relay** assist you today?",
+    quickActions: [
+      { title: "System status", prompt: "Give me a system health overview — any errors, failed syncs, or agent issues in the last 24 hours.", icon: "Activity", category: "Systems" },
+      { title: "AI agent activity", prompt: "Show me a summary of all AI agent sessions today — who used which agent, and what actions were taken.", icon: "Bot", category: "AI" },
+      { title: "Integration health", prompt: "Check the status of all integrations — Gmail, RingCentral, QuickBooks. Flag any that need attention.", icon: "Plug", category: "Systems" },
+      { title: "Team comms overview", prompt: "Show me today's communication summary — emails sent/received, calls made, and any gaps.", icon: "MessageSquare", category: "Comms" },
+    ],
+  },
+  "vicky@rebar.shop": {
+    agentKey: "accounting",
+    userRole: "accountant",
+    heroText: "How can **Penny** help you today?",
+    quickActions: [
+      { title: "AR aging", prompt: "Show me the accounts receivable aging report — who owes what and how overdue.", icon: "DollarSign", category: "AR" },
+      { title: "Bills due", prompt: "What bills are due this week? Show amounts and vendors.", icon: "FileText", category: "AP" },
+      { title: "Payroll check", prompt: "Run a payroll pre-check — flag any missing hours, overtime issues, or ESA compliance concerns.", icon: "Users", category: "Payroll" },
+      { title: "Bank reconciliation", prompt: "Help me reconcile recent bank transactions with QuickBooks entries.", icon: "CreditCard", category: "Banking" },
+    ],
+  },
+  "josh@rebar.shop": {
+    agentKey: "assistant",
+    userRole: "operations",
+    heroText: "How can **Vizzy** help you today?",
+    quickActions: [
+      { title: "Today's deliveries", prompt: "Show me today's delivery schedule — routes, stops, and any issues.", icon: "Truck", category: "Delivery" },
+      { title: "Production status", prompt: "What's the current production queue? Show what's running, queued, and blocked.", icon: "Factory", category: "Production" },
+      { title: "Customer inquiries", prompt: "Show me any customer inquiries or messages that need a response today.", icon: "MessageSquare", category: "Support" },
+      { title: "Office tasks", prompt: "What tasks are assigned to me today? Show priorities and deadlines.", icon: "CheckSquare", category: "Tasks" },
     ],
   },
   "ben@rebar.shop": {
