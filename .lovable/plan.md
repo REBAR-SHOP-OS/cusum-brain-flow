@@ -1,142 +1,96 @@
 
 
-# Phase 1: Central Brain Event Ledger -- DB + Core Engine
+# Phase 2: Webhook Receivers + Phase T Stabilization
 
-## Overview
+## Part A: Stabilize Phase 1 (Phase T Fixes)
 
-Replace the existing `events` table with a new `activity_events` append-only ledger, add a `human_tasks` table with idempotent dedupe, and rewire `generate-suggestions` to consume from the new ledger. All existing code references to `events` will be updated to write to `activity_events`.
+Before adding new capabilities, we need to fix the remaining issues from Phase 1.
 
----
+### A1. Fix generate-suggestions error handling
+The catch block wraps thrown `Response` objects with `String()`, producing `"[object Response]"` 500 errors. Add `if (e instanceof Response) return e;` before the generic catch.
 
-## 1. Database Migration
+### A2. Migrate remaining `.from("events")` references (6 locations)
+These still use the old table name (working via the backward-compat view, but INSERTs should go directly to `activity_events` with `source` and `dedupe_key`):
 
-### 1a. Rename `events` to `activity_events` and add new columns
+| File | Action |
+|---|---|
+| `src/components/cutter/QueueToMachineDialog.tsx` (line 58) | Change to `activity_events`, add `source: "system"`, `dedupe_key: "cut_plan_queued:{plan.id}"` |
+| `supabase/functions/manage-inventory/index.ts` (lines 178, 536) | Change to `activity_events`, add `source: "system"` |
+| `supabase/functions/smart-dispatch/index.ts` (line 395) | Change to `activity_events`, add `source: "system"` |
+| `supabase/functions/manage-machine/index.ts` (line 246) | Change to `activity_events`, add `source: "system"` |
+| `supabase/functions/daily-summary/index.ts` (line 657) | Change SELECT to `activity_events` |
+| `supabase/functions/admin-chat/index.ts` (line 66) | Change SELECT to `activity_events` |
 
-Rename the existing table (preserving 364 rows of data) and add new columns for the ledger spec:
-
-| New Column | Type | Purpose |
-|---|---|---|
-| `source` | text NOT NULL DEFAULT 'system' | Origin: gmail, ringcentral, quickbooks, system, user |
-| `dedupe_key` | text | Stable key for idempotent INSERT ... ON CONFLICT |
-| `inputs_snapshot` | jsonb | Frozen copy of data that triggered this event |
-| `processed_at` | timestamptz | When rule engine last evaluated this event |
-
-Add a **partial unique index** on `dedupe_key` (WHERE `dedupe_key IS NOT NULL`) for idempotent inserts.
-
-Keep existing columns: `id`, `event_type`, `entity_type`, `entity_id`, `actor_type`, `actor_id`, `description`, `metadata`, `created_at`, `company_id`.
-
-Change `entity_id` from `uuid` to `text` (more flexible for external IDs like Gmail message IDs or RC call IDs). Requires creating a new column, migrating data, and swapping.
-
-### 1b. Create `human_tasks` table
-
-```
-human_tasks (
-  id             UUID PK DEFAULT gen_random_uuid(),
-  company_id     UUID NOT NULL,
-  agent_id       UUID REFERENCES agents(id),
-  source_event_id UUID REFERENCES activity_events(id),
-  dedupe_key     TEXT UNIQUE,
-  title          TEXT NOT NULL,
-  description    TEXT,
-  severity       TEXT NOT NULL DEFAULT 'info',
-  category       TEXT,
-  entity_type    TEXT,
-  entity_id      TEXT,
-  inputs_snapshot JSONB,
-  assigned_to    UUID,
-  status         TEXT NOT NULL DEFAULT 'open',
-  resolved_at    TIMESTAMPTZ,
-  snoozed_until  TIMESTAMPTZ,
-  actions        JSONB,
-  reason         TEXT,
-  impact         TEXT,
-  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
-)
-```
-
-Partial unique index on `dedupe_key` WHERE `dedupe_key IS NOT NULL`.
-
-### 1c. RLS Policies
-
-**activity_events** -- same pattern as current `events`:
-- SELECT/INSERT/UPDATE: company-scoped, any staff role
-- DELETE: company-scoped, admin only
-- No changes to the policy logic, just renamed table
-
-**human_tasks**:
-- SELECT: `company_id = get_user_company_id(auth.uid())`
-- UPDATE: same company scope
-- INSERT: admin + office roles
-
-### 1d. Register missing agents
-
-Insert into `agents` table: relay, gauge, atlas, blitz, pixel (currently only vizzy, penny, forge exist).
+### A3. Drop duplicate RLS policies (database migration)
+Remove the 4 old renamed policies on `activity_events` (`Staff read events in company`, etc.) — the new `activity_events_select/insert/update/delete` policies handle everything.
 
 ---
 
-## 2. Update All `events` References to `activity_events`
+## Part B: Webhook Receivers (Phase 2)
 
-15 files currently reference `.from("events")`. Each insert will be updated to:
-- Use `.from("activity_events")`
-- Add `source` field (e.g., `'system'`, `'gmail'`, `'ringcentral'`)
-- Add `dedupe_key` where applicable (e.g., `machine_run:{id}:status_change`)
+### B1. Gmail Push Notifications via Pub/Sub
 
-Files to update:
-- `supabase/functions/log-machine-run/index.ts`
-- `supabase/functions/manage-machine/index.ts`
-- `supabase/functions/manage-extract/index.ts`
-- `supabase/functions/comms-alerts/index.ts`
-- `supabase/functions/vizzy-erp-action/index.ts`
-- `supabase/functions/relay-pipeline/index.ts`
-- `src/hooks/useVizzyContext.ts`
-- `src/lib/foremanLearningService.ts`
-- `src/lib/barlistService.ts`
-- `supabase/functions/diagnostic-logs/index.ts`
+Create a new edge function `gmail-webhook` that receives Gmail push notifications:
 
----
+1. **Setup flow**: A new action `"watch"` in the existing `gmail-sync` function calls `POST /gmail/v1/users/me/watch` with a Cloud Pub/Sub topic to subscribe to mailbox changes
+2. **Receiver**: New `gmail-webhook/index.ts` edge function (public endpoint, no JWT) that:
+   - Receives Pub/Sub push messages (POST with base64-encoded data containing `emailAddress` and `historyId`)
+   - Validates the request (checks expected fields)
+   - Looks up the user by Gmail email in `user_gmail_tokens`
+   - Fetches new messages since last known `historyId` via `history.list` API
+   - Upserts into `communications` table (same as current gmail-sync)
+   - Writes an `activity_events` entry with `source: "gmail"`, `dedupe_key: "gmail:{messageId}"`
+   - Rate-limits to prevent Pub/Sub replay storms
 
-## 3. Rewire `generate-suggestions` to Write `human_tasks`
+**Note**: Gmail Pub/Sub requires a Google Cloud project with Pub/Sub enabled and a push subscription pointing to our edge function URL. This is configured outside Lovable (in Google Cloud Console). The edge function just receives the pushes.
 
-The current `generate-suggestions` edge function writes to `suggestions`. It will be updated to:
+### B2. RingCentral Webhook Receiver
 
-1. **Query `activity_events`** for recent unprocessed events (WHERE `processed_at IS NULL`)
-2. Apply the same deterministic rules (overdue AR, idle machines, bender starving, etc.)
-3. Write results to `human_tasks` with `dedupe_key` using `INSERT ... ON CONFLICT (dedupe_key) DO NOTHING`
-4. Mark processed events with `processed_at = now()`
-5. Continue writing to `suggestions` table as well for backward compatibility during transition
+Create a new edge function `ringcentral-webhook` that receives RC webhook events:
 
----
+1. **Subscription setup**: New action `"subscribe"` in `ringcentral-sync` that calls RC's subscription API to register a webhook URL pointing to our edge function
+2. **Receiver**: New `ringcentral-webhook/index.ts` edge function (public endpoint) that:
+   - Handles RC's `validation-token` handshake (returns the token in `Validation-Token` header)
+   - Receives call log and message events
+   - Upserts into `communications` table
+   - Writes `activity_events` with `source: "ringcentral"`, `dedupe_key: "rc:{event.id}"`
+   - Handles RC 429 `Retry-After` trap (respects the header, logs warning)
 
-## 4. Frontend Hook: `useHumanTasks`
+### B3. Feed activity_events from gmail-sync and ringcentral-sync
 
-Create a new hook mirroring `useAgentSuggestions` but reading from `human_tasks`:
-- Fetch open/new tasks filtered by agent code
-- Act / Snooze / Dismiss mutations
-- Log actions to `agent_action_log`
+Even before webhooks are fully operational, update the existing polling sync functions to write `activity_events` entries when they upsert communications:
 
-The existing `useAgentSuggestions` hook remains unchanged during transition.
+- **gmail-sync**: After each successful communication upsert, insert `activity_events` with `source: "gmail"`, `event_type: "email_received"`, `dedupe_key: "gmail:{messageId}"`
+- **ringcentral-sync**: After each call/SMS upsert, insert `activity_events` with `source: "ringcentral"`, `event_type: "call_logged" | "sms_received"`, `dedupe_key: "rc:{recordId}"`
 
----
-
-## 5. Backward Compatibility
-
-- A database **view** named `events` will be created pointing to `activity_events` so any missed references continue to work
-- The `suggestions` table stays untouched; `human_tasks` runs in parallel
-- Agent UI components can be incrementally switched from suggestions to human_tasks
+This ensures the rule engine in `generate-suggestions` can see external communication events regardless of whether push or poll delivers them.
 
 ---
 
 ## Files to Create
-- `src/hooks/useHumanTasks.ts` -- new hook for human_tasks
+- `supabase/functions/gmail-webhook/index.ts` -- Pub/Sub push receiver
+- `supabase/functions/ringcentral-webhook/index.ts` -- RC webhook receiver
 
 ## Files to Modify
-- 10 files with `.from("events")` references (listed above)
-- `supabase/functions/generate-suggestions/index.ts` -- dual-write to human_tasks
-- 1 database migration (rename table, add columns, create human_tasks, register agents, RLS, view)
+- `supabase/functions/generate-suggestions/index.ts` -- fix error handling (Part A)
+- `src/components/cutter/QueueToMachineDialog.tsx` -- migrate to activity_events
+- `supabase/functions/manage-inventory/index.ts` -- migrate 2 references
+- `supabase/functions/smart-dispatch/index.ts` -- migrate 1 reference
+- `supabase/functions/manage-machine/index.ts` -- migrate 1 reference
+- `supabase/functions/daily-summary/index.ts` -- migrate SELECT
+- `supabase/functions/admin-chat/index.ts` -- migrate SELECT
+- `supabase/functions/gmail-sync/index.ts` -- add activity_events writes after upserts
+- `supabase/functions/ringcentral-sync/index.ts` -- add activity_events writes after upserts
+- 1 database migration (drop duplicate RLS policies)
 
-## No Changes
-- `suggestions` table and `useAgentSuggestions` hook remain as-is
-- Agent chat UI unchanged
-- No new webhook receivers in this phase
+## Edge Functions to Deploy
+- gmail-webhook (new), ringcentral-webhook (new)
+- generate-suggestions, manage-inventory, smart-dispatch, manage-machine, daily-summary, admin-chat, gmail-sync, ringcentral-sync (updated)
+
+## Config Changes
+- Add `gmail-webhook` and `ringcentral-webhook` to `config.toml` with `verify_jwt = false` (public webhook endpoints)
+
+## External Setup Required (by admin, outside Lovable)
+- **Gmail**: Create a Google Cloud Pub/Sub topic + push subscription pointing to the `gmail-webhook` edge function URL
+- **RingCentral**: Call the `subscribe` action to register the webhook URL with RingCentral's subscription API
 
