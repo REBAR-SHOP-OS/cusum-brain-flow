@@ -441,33 +441,36 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
   const handleDeleteEmail = useCallback(async (id: string) => {
     const email = allEmails.find((e) => e.id === id);
     setHiddenIds((prev) => { const next = new Set(prev); next.add(id); return next; });
-    if (selectedEmail?.id === id) setSelectedEmail(null);
+    setSelectedEmail(prev => prev?.id === id ? null : prev);
     try {
       await supabase.from("communications").delete().eq("id", id);
       toast({ title: "Email deleted", description: "Email has been permanently removed." });
       logActivity(id, "email_deleted", `Deleted email from ${email?.sender || "unknown"}: ${email?.subject || "(no subject)"}`, { sender: email?.sender, subject: email?.subject, action: "delete" });
+      // Re-sync to permanently remove from data source
+      await sync();
     } catch {
       toast({ title: "Delete failed", variant: "destructive" });
     }
-  }, [selectedEmail, toast, allEmails, logActivity]);
+  }, [toast, allEmails, logActivity, sync]);
 
   const handleArchiveEmail = useCallback(async (id: string) => {
     const email = allEmails.find((e) => e.id === id);
     setHiddenIds((prev) => { const next = new Set(prev); next.add(id); return next; });
-    if (selectedEmail?.id === id) setSelectedEmail(null);
+    setSelectedEmail(prev => prev?.id === id ? null : prev);
     try {
       await supabase.from("communications").update({ status: "archived" }).eq("id", id);
       toast({ title: "Email archived" });
       logActivity(id, "email_archived", `Archived email from ${email?.sender || "unknown"}: ${email?.subject || "(no subject)"}`, { sender: email?.sender, subject: email?.subject, action: "archive" });
+      await sync();
     } catch {
       toast({ title: "Archive failed", variant: "destructive" });
     }
-  }, [selectedEmail, toast, allEmails, logActivity]);
+  }, [toast, allEmails, logActivity, sync]);
 
   const handleBulkDelete = useCallback(async () => {
     const ids = Array.from(selectedIds);
     setHiddenIds((prev) => { const next = new Set(prev); ids.forEach((id) => next.add(id)); return next; });
-    if (selectedEmail && selectedIds.has(selectedEmail.id)) setSelectedEmail(null);
+    setSelectedEmail(prev => prev && selectedIds.has(prev.id) ? null : prev);
     try {
       await supabase.from("communications").delete().in("id", ids);
       toast({ title: "Bulk delete", description: `${ids.length} email(s) deleted.` });
@@ -475,17 +478,18 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
         const email = allEmails.find((e) => e.id === id);
         logActivity(id, "email_deleted", `Deleted email from ${email?.sender || "unknown"}: ${email?.subject || "(no subject)"}`, { sender: email?.sender, subject: email?.subject, action: "bulk_delete" });
       });
+      await sync();
     } catch {
       toast({ title: "Bulk delete failed", variant: "destructive" });
     }
     setSelectedIds(new Set());
     setSelectionMode(false);
-  }, [selectedIds, selectedEmail, toast, allEmails, logActivity]);
+  }, [selectedIds, toast, allEmails, logActivity, sync]);
 
   const handleBulkArchive = useCallback(async () => {
     const ids = Array.from(selectedIds);
     setHiddenIds((prev) => { const next = new Set(prev); ids.forEach((id) => next.add(id)); return next; });
-    if (selectedEmail && selectedIds.has(selectedEmail.id)) setSelectedEmail(null);
+    setSelectedEmail(prev => prev && selectedIds.has(prev.id) ? null : prev);
     try {
       await supabase.from("communications").update({ status: "archived" }).in("id", ids);
       toast({ title: "Bulk archive", description: `${ids.length} email(s) archived.` });
@@ -493,12 +497,13 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
         const email = allEmails.find((e) => e.id === id);
         logActivity(id, "email_archived", `Archived email from ${email?.sender || "unknown"}: ${email?.subject || "(no subject)"}`, { sender: email?.sender, subject: email?.subject, action: "bulk_archive" });
       });
+      await sync();
     } catch {
       toast({ title: "Bulk archive failed", variant: "destructive" });
     }
     setSelectedIds(new Set());
     setSelectionMode(false);
-  }, [selectedIds, selectedEmail, toast, allEmails, logActivity]);
+  }, [selectedIds, toast, allEmails, logActivity, sync]);
 
   // ─── Keyboard shortcuts (desktop only) ────────────────────────────
   useEffect(() => {
@@ -877,11 +882,22 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
               selectedEmail ? "hidden md:flex md:w-[400px]" : "flex w-full md:w-[400px]"
             )}>
               {/* Email Count + selection bar */}
-              <div className="px-3 py-1.5 text-[11px] text-muted-foreground border-b flex items-center justify-between">
+              <div className="px-3 py-1.5 text-[11px] text-muted-foreground border-b flex items-center gap-2">
+                {/* Always-visible Select checkbox */}
+                <Checkbox
+                  checked={selectionMode && emails.length > 0 && selectedIds.size === emails.length}
+                  onCheckedChange={() => {
+                    if (!selectionMode) {
+                      setSelectionMode(true);
+                      setSelectedIds(new Set(emails.map(e => e.id)));
+                    } else {
+                      selectAll();
+                    }
+                  }}
+                />
                 {selectionMode ? (
-                  <div className="flex items-center gap-2 w-full">
-                    <Checkbox checked={emails.length > 0 && selectedIds.size === emails.length} onCheckedChange={selectAll} />
-                    <span className="text-xs font-medium">
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <span className="text-xs font-medium whitespace-nowrap">
                       {selectedIds.size > 0 ? `${selectedIds.size} selected` : "Select all"}
                     </span>
                     {selectedIds.size > 0 && (
@@ -894,14 +910,17 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
                         </Button>
                       </div>
                     )}
+                    <Button variant="ghost" size="sm" className="h-6 px-1.5 text-[10px] ml-auto" onClick={toggleSelectMode}>
+                      <X className="w-3 h-3" />
+                    </Button>
                   </div>
                 ) : (
-                  <>
+                  <div className="flex items-center justify-between flex-1 min-w-0">
                     <span>{emails.length} email{emails.length !== 1 ? "s" : ""}</span>
                     {sortByPriority && (
                       <Button variant="ghost" size="sm" className="text-[11px] h-5 px-1.5" onClick={() => setSortByPriority(false)}>Clear sort</Button>
                     )}
-                  </>
+                  </div>
                 )}
               </div>
 
