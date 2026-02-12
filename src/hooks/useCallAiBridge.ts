@@ -13,6 +13,7 @@ export interface CallBridgeData {
   contactName: string;
   reason: string;
   phone: string;
+  details?: string;
 }
 
 /**
@@ -72,7 +73,7 @@ export function useCallAiBridge() {
 
         // 4. Capture remote audio
         const source = audioCtx.createMediaStreamSource(remoteStream);
-        const processor = audioCtx.createScriptProcessor(4096, 1, 1);
+        const processor = audioCtx.createScriptProcessor(2048, 1, 1);
         processorRef.current = processor;
 
         // Silent gain so processor fires without audible output (RC SDK handles playback via audioElement)
@@ -174,14 +175,18 @@ export function useCallAiBridge() {
 // ─── phone call overrides ────────────────────────────────────────────────────
 
 function buildPhoneCallOverrides(callData: CallBridgeData) {
-  const { agentName, contactName, reason, phone } = callData;
+  const { agentName, contactName, reason, phone, details } = callData;
+
+  const detailsBlock = details
+    ? `\n\nSPECIFIC DETAILS YOU KNOW:\n${details}\n\nUse these details naturally in conversation. Reference specific invoice numbers and amounts when discussing payment.`
+    : "";
 
   return {
     agent: {
       prompt: {
         prompt: `You are ${agentName}, an AI assistant calling on behalf of Rebar Shop. You have placed an outbound phone call to ${contactName} at ${phone}.
 
-PURPOSE OF THIS CALL: ${reason}
+PURPOSE OF THIS CALL: ${reason}${detailsBlock}
 
 CRITICAL INSTRUCTIONS:
 - You are calling THEM. They did not call you. Introduce yourself immediately.
@@ -190,7 +195,8 @@ CRITICAL INSTRUCTIONS:
 - If they ask who you are, explain you are an AI assistant calling from Rebar Shop.
 - Stay focused on the purpose of the call.
 - If they want to speak to a human, let them know someone from Rebar Shop will follow up.
-- Keep responses brief and conversational — this is a phone call, not an email.`,
+- Keep responses brief and conversational — this is a phone call, not an email.
+- NEVER say you don't have access to invoice details — use the specific details provided above.`,
       },
       first_message: `Hi, this is ${agentName} calling from Rebar Shop. Am I speaking with ${contactName}? I'm reaching out regarding ${reason.length > 100 ? reason.substring(0, 100) + "..." : reason}.`,
       language: "en",
