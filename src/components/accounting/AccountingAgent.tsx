@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { cn } from "@/lib/utils";
-import { Send, Loader2, Minimize2, Maximize2, Shrink, Mail, DollarSign, ListChecks } from "lucide-react";
+import { Send, Loader2, Minimize2, Maximize2, Shrink, Mail, DollarSign, ListChecks, PhoneOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { sendAgentMessage, ChatMessage } from "@/lib/agent";
 import { useToast } from "@/hooks/use-toast";
@@ -8,12 +8,15 @@ import { useAuth } from "@/lib/auth";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import accountingHelper from "@/assets/helpers/accounting-helper.png";
+import { PennyCallCard, parsePennyCalls, type PennyCallData } from "./PennyCallCard";
+import type { WebPhoneState, WebPhoneActions } from "@/hooks/useWebPhone";
 
 interface Message {
   id: string;
   role: "user" | "agent";
   content: string;
   timestamp: Date;
+  calls?: PennyCallData[];
 }
 
 type ViewMode = "default" | "minimized" | "fullscreen";
@@ -34,6 +37,8 @@ interface AccountingAgentProps {
   viewMode?: ViewMode;
   qbSummary?: QBSummary;
   autoGreet?: boolean;
+  webPhoneState?: WebPhoneState;
+  webPhoneActions?: WebPhoneActions;
 }
 
 const checkingPhases = [
@@ -42,7 +47,7 @@ const checkingPhases = [
   { label: "Prioritizing your tasks...", Icon: ListChecks },
 ];
 
-export function AccountingAgent({ onViewModeChange, viewMode: externalMode, qbSummary, autoGreet }: AccountingAgentProps) {
+export function AccountingAgent({ onViewModeChange, viewMode: externalMode, qbSummary, autoGreet, webPhoneState, webPhoneActions }: AccountingAgentProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isTyping, setIsTyping] = useState(false);
@@ -146,11 +151,13 @@ RULES:
             .join("\n");
           replyContent += `\n\n---\n📋 **Created ${response.createdNotifications.length} item(s):**\n${notifSummary}`;
         }
+        const { cleanText, calls } = parsePennyCalls(replyContent);
         setMessages([{
           id: crypto.randomUUID(),
           role: "agent",
-          content: replyContent,
+          content: cleanText,
           timestamp: new Date(),
+          calls: calls.length > 0 ? calls : undefined,
         }]);
       })
       .catch((err) => {
@@ -201,11 +208,13 @@ RULES:
         replyContent += `\n\n---\n📋 **Created ${response.createdNotifications.length} item(s):**\n${notifSummary}`;
       }
 
+      const { cleanText, calls } = parsePennyCalls(replyContent);
       const agentMsg: Message = {
         id: crypto.randomUUID(),
         role: "agent",
-        content: replyContent,
+        content: cleanText,
         timestamp: new Date(),
+        calls: calls.length > 0 ? calls : undefined,
       };
       setMessages((prev) => [...prev, agentMsg]);
     } catch (error) {
@@ -270,6 +279,12 @@ RULES:
           </h3>
         </div>
         <div className="flex items-center gap-0.5">
+          {webPhoneState && (webPhoneState.status === "calling" || webPhoneState.status === "in_call") && (
+            <Button variant="destructive" size="sm" className="h-7 gap-1 mr-1 text-xs" onClick={() => webPhoneActions?.hangup()}>
+              <PhoneOff className="w-3 h-3" />
+              {webPhoneState.status === "calling" ? "Dialing..." : "On Call"}
+            </Button>
+          )}
           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setMode("minimized")} title="Minimize">
             <Minimize2 className="w-3.5 h-3.5" />
           </Button>
@@ -336,24 +351,40 @@ RULES:
         {messages.length > 0 && (
           <>
             {messages.map((msg) => (
-              <div key={msg.id} className={cn("flex gap-2", msg.role === "user" ? "justify-end" : "justify-start")}>
-                {msg.role === "agent" && (
-                  <img src={accountingHelper} alt="Penny" className="w-7 h-7 rounded-lg object-cover shrink-0 mt-1" />
-                )}
-                <div className={cn(
-                  "rounded-xl px-3 py-2 text-sm overflow-x-auto",
-                  msg.role === "user"
-                    ? "max-w-[85%] bg-primary text-primary-foreground"
-                    : mode === "fullscreen" ? "max-w-[90%] bg-muted" : "max-w-[85%] bg-muted"
-                )}>
-                  {msg.role === "agent" ? (
-                    <div className="prose prose-sm dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_table]:w-full [&_table]:text-xs [&_table]:border-collapse [&_th]:bg-muted/60 [&_th]:px-2 [&_th]:py-1.5 [&_th]:text-left [&_th]:font-semibold [&_th]:border [&_th]:border-border [&_td]:px-2 [&_td]:py-1.5 [&_td]:border [&_td]:border-border [&_tr:nth-child(even)]:bg-muted/30">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
-                    </div>
-                  ) : (
-                    msg.content
+              <div key={msg.id} className="space-y-2">
+                <div className={cn("flex gap-2", msg.role === "user" ? "justify-end" : "justify-start")}>
+                  {msg.role === "agent" && (
+                    <img src={accountingHelper} alt="Penny" className="w-7 h-7 rounded-lg object-cover shrink-0 mt-1" />
                   )}
+                  <div className={cn(
+                    "rounded-xl px-3 py-2 text-sm overflow-x-auto",
+                    msg.role === "user"
+                      ? "max-w-[85%] bg-primary text-primary-foreground"
+                      : mode === "fullscreen" ? "max-w-[90%] bg-muted" : "max-w-[85%] bg-muted"
+                  )}>
+                    {msg.role === "agent" ? (
+                      <div className="prose prose-sm dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_table]:w-full [&_table]:text-xs [&_table]:border-collapse [&_th]:bg-muted/60 [&_th]:px-2 [&_th]:py-1.5 [&_th]:text-left [&_th]:font-semibold [&_th]:border [&_th]:border-border [&_td]:px-2 [&_td]:py-1.5 [&_td]:border [&_td]:border-border [&_tr:nth-child(even)]:bg-muted/30">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                      </div>
+                    ) : (
+                      msg.content
+                    )}
+                  </div>
                 </div>
+                {/* Render call cards for this message */}
+                {msg.calls && msg.calls.length > 0 && webPhoneState && webPhoneActions && (
+                  <div className="ml-9 space-y-2">
+                    {msg.calls.map((call, idx) => (
+                      <PennyCallCard
+                        key={`${msg.id}-call-${idx}`}
+                        data={call}
+                        callStatus={webPhoneState.status}
+                        onCall={(phone, name) => webPhoneActions.call(phone, name)}
+                        onHangup={() => webPhoneActions.hangup()}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
 
@@ -432,11 +463,13 @@ RULES:
 
     sendAgentMessage("accounting", text, history, qbContext)
       .then((response) => {
+        const { cleanText, calls } = parsePennyCalls(response.reply);
         const agentMsg: Message = {
           id: crypto.randomUUID(),
           role: "agent",
-          content: response.reply,
+          content: cleanText,
           timestamp: new Date(),
+          calls: calls.length > 0 ? calls : undefined,
         };
         setMessages((prev) => [...prev, agentMsg]);
       })
