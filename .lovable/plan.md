@@ -1,86 +1,50 @@
 
 
-# Give Vizzy Full Access to Emails, Live QuickBooks, and Employee Call Notes
+# Refine Vizzy's Email, QuickBooks, and Call Notes Integration
 
-## What Changes
+## What's Already Done
+The previous implementation already added all three features (email context, call notes, live QuickBooks) to `supabase/functions/ai-agent/index.ts`. This plan applies your recommended refinements for reliability, performance, and maintainability.
 
-### 1. All Inbound @rebar.shop Emails for Vizzy
-Currently Vizzy only sees the 15 most recent communications regardless of direction. We will expand this so Vizzy gets ALL inbound emails to any @rebar.shop address (up to 200), giving her full visibility into every conversation coming into the company.
+## Changes
 
-### 2. Live QuickBooks Data (Not Cached Snapshot)
-Currently only the Accounting agent (Penny) gets live QuickBooks API data. Vizzy only sees the `accounting_mirror` table which may be stale. We will give the `assistant` agent the same live QuickBooks integration that Penny has -- real-time customers, invoices, payments, and company info directly from the QuickBooks API.
+### 1. Add `direction = 'inbound'` Filter to Email Queries
+The current email query only filters by `to_address ilike @rebar.shop` but doesn't filter by direction. This can pull outbound replies and internal forwards. Add `.eq("direction", "inbound")` to both queries.
 
-### 3. Employee Performance via "Notes of your call with Rebar Dot Shop" Emails
-When the CEO asks about employee performance, Vizzy will have access to all "Notes of your call with Rebar Dot Shop" emails. These are RingCentral call summary emails that show which employee spoke with which customer. We will:
-- Fetch these specific emails as a dedicated context block
-- Map them to employees by matching the `from_address` or `to_address` against the team directory
-- Include subject, preview, timestamp, and the employee involved
-- Update Vizzy's system prompt to instruct her to use this data for performance analysis
+**File:** `supabase/functions/ai-agent/index.ts` (lines 2013-2029)
 
-### 4. Updated Vizzy System Prompt
-Add instructions telling Vizzy to:
-- Use the full email inbox to answer questions about customer communications
-- Use live QuickBooks data for financial questions (not cached)
-- Analyze "Notes of your call" emails when asked about employee performance or customer interactions
+- `allInboundEmails` query: add `.eq("direction", "inbound")` before the `.ilike("to_address", ...)` filter
+- `callNotes` query: add `.eq("direction", "inbound")` -- these RingCentral summaries arrive as inbound emails
+- Add error logging with `console.warn` for both queries instead of silently swallowing errors
 
-## Technical Details
+### 2. Add `direction` and `source` columns to Call Notes Query
+The current call notes select is missing `direction` and `source` columns which are useful for mapping employees. Add them.
 
-### File: `supabase/functions/ai-agent/index.ts`
+**File:** `supabase/functions/ai-agent/index.ts` (line 2025)
 
-**A. Expand email context for assistant agent (inside `fetchContext`, within the `if (agent === "assistant")` block around line 1942):**
+- From: `.select("id, subject, from_address, to_address, body_preview, received_at")`
+- To: `.select("id, subject, from_address, to_address, body_preview, received_at, direction, source")`
 
-Add a query for all inbound @rebar.shop emails (up to 200):
-```typescript
-// All inbound emails to rebar.shop
-const { data: allInboundEmails } = await supabase
-  .from("communications")
-  .select("id, subject, from_address, to_address, body_preview, status, source, received_at, direction")
-  .ilike("to_address", "%@rebar.shop%")
-  .order("received_at", { ascending: false })
-  .limit(200);
-context.allInboundEmails = allInboundEmails;
-```
+### 3. Extract QuickBooks Fetch into Shared Helper Function
+Currently the QuickBooks live API code is duplicated between the `accounting` agent block (lines 1778-1898) and the `assistant` agent block (lines 2036-2119). Extract into a reusable `fetchQuickBooksLiveContext()` helper and call it from both agents.
 
-Add a dedicated query for "Notes of your call" emails:
-```typescript
-// Employee call notes for performance tracking
-const { data: callNotes } = await supabase
-  .from("communications")
-  .select("id, subject, from_address, to_address, body_preview, received_at")
-  .ilike("subject", "%Notes of your call with Rebar%")
-  .order("received_at", { ascending: false })
-  .limit(100);
-context.employeeCallNotes = callNotes;
-```
+**File:** `supabase/functions/ai-agent/index.ts`
 
-**B. Add live QuickBooks data for assistant agent (inside the same `if (agent === "assistant")` block):**
+- Create a new `async function fetchQuickBooksLiveContext(supabase, context)` that contains the shared QB logic (connection check, token retrieval, API calls for customers/invoices/payments/company info)
+- Replace the accounting agent's QB block (lines 1778-1898) with a call to the helper
+- Replace the assistant agent's QB block (lines 2036-2119) with a call to the same helper
+- This prevents future drift where one agent gets QB updates but the other doesn't
 
-Copy the same QuickBooks live API integration that exists for the `accounting` agent (lines 1758-1888) into the `assistant` block. This fetches customers, invoices, payments, and company info directly from the QuickBooks API using the stored OAuth tokens.
+### 4. Add Guardrail to Vizzy's System Prompt
+Add the anti-hallucination instruction to the Employee Performance section.
 
-**C. Update Vizzy's system prompt (line 1211-1275):**
+**File:** `supabase/functions/ai-agent/index.ts` (after line 1259)
 
-Add these sections to the assistant prompt:
+- Add: `Important: Only summarize what is explicitly present in emails/call notes. Do not make performance judgments without evidence. If information is missing, say so clearly.`
 
-```
-## 📧 Full Email Access
-You have access to ALL inbound emails to @rebar.shop in your context (allInboundEmails).
-Use this to answer questions about customer communications, response times, and team activity.
-
-## 💼 Live QuickBooks Access
-You have LIVE QuickBooks data (not cached). Use qbCustomers, qbInvoices, qbPayments for real-time financial answers.
-
-## 📞 Employee Performance — Call Notes
-When asked about employee performance or customer interactions, check employeeCallNotes in context.
-These are emails with subject "Notes of your call with Rebar Dot Shop" — each one represents a recorded call between an employee and a customer.
-- Match the to_address or from_address to team members to identify who made the call
-- Count calls per employee to measure activity
-- Review body_preview for call quality and topics discussed
-- Compare call frequency across team members
-```
-
-### Summary of Changes
-- **1 file modified**: `supabase/functions/ai-agent/index.ts`
-  - ~30 lines added to `fetchContext` for expanded email + call notes queries
-  - ~80 lines added to `fetchContext` for live QuickBooks API calls (mirrored from accounting agent)
-  - ~20 lines added to Vizzy's system prompt for new capabilities
+## Summary
+- 1 file modified: `supabase/functions/ai-agent/index.ts`
+- Inbound direction filter added to both email queries (prevents pulling outbound/internal noise)
+- QuickBooks logic deduplicated into shared helper (prevents future drift)
+- Anti-hallucination guardrail added to prompt
+- Better error logging on email queries
 
