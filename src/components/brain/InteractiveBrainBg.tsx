@@ -104,7 +104,9 @@ export function InteractiveBrainBg() {
           mixBlendMode: "screen",
           transform: `translate(calc(-50% + ${offset.x}px), calc(-50% + ${offset.y}px)) rotate(${offset.x * 0.4}deg) scale(${1 + Math.abs(offset.x + offset.y) * 0.003})`,
           transition: "transform 0.2s ease-out",
-          filter: "drop-shadow(0 0 60px hsl(var(--primary) / 0.5)) drop-shadow(0 0 120px hsl(var(--primary) / 0.25))",
+          filter: "brightness(1.2) contrast(1.1) drop-shadow(0 0 60px hsl(var(--primary) / 0.5)) drop-shadow(0 0 120px hsl(var(--primary) / 0.25))",
+          maskImage: "radial-gradient(circle, white 40%, transparent 70%)",
+          WebkitMaskImage: "radial-gradient(circle, white 40%, transparent 70%)",
         }}
       />
 
