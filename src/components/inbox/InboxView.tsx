@@ -137,7 +137,7 @@ interface InboxViewProps {
 export function InboxView({ connectedEmail }: InboxViewProps) {
   const { user } = useAuth();
   const userEmail = connectedEmail || user?.email || "unknown";
-  const { communications, loading, sync } = useCommunications();
+  const { communications, loading, sync, refresh } = useCommunications();
   const [selectedEmail, setSelectedEmail] = useState<InboxEmail | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -447,11 +447,11 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
       toast({ title: "Email deleted", description: "Email has been permanently removed." });
       logActivity(id, "email_deleted", `Deleted email from ${email?.sender || "unknown"}: ${email?.subject || "(no subject)"}`, { sender: email?.sender, subject: email?.subject, action: "delete" });
       // Re-sync to permanently remove from data source
-      await sync();
+      await refresh();
     } catch {
       toast({ title: "Delete failed", variant: "destructive" });
     }
-  }, [toast, allEmails, logActivity, sync]);
+  }, [toast, allEmails, logActivity, refresh]);
 
   const handleArchiveEmail = useCallback(async (id: string) => {
     const email = allEmails.find((e) => e.id === id);
@@ -461,11 +461,11 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
       await supabase.from("communications").update({ status: "archived" }).eq("id", id);
       toast({ title: "Email archived" });
       logActivity(id, "email_archived", `Archived email from ${email?.sender || "unknown"}: ${email?.subject || "(no subject)"}`, { sender: email?.sender, subject: email?.subject, action: "archive" });
-      await sync();
+      await refresh();
     } catch {
       toast({ title: "Archive failed", variant: "destructive" });
     }
-  }, [toast, allEmails, logActivity, sync]);
+  }, [toast, allEmails, logActivity, refresh]);
 
   const handleBulkDelete = useCallback(async () => {
     const ids = Array.from(selectedIds);
@@ -478,13 +478,13 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
         const email = allEmails.find((e) => e.id === id);
         logActivity(id, "email_deleted", `Deleted email from ${email?.sender || "unknown"}: ${email?.subject || "(no subject)"}`, { sender: email?.sender, subject: email?.subject, action: "bulk_delete" });
       });
-      await sync();
+      await refresh();
     } catch {
       toast({ title: "Bulk delete failed", variant: "destructive" });
     }
     setSelectedIds(new Set());
     setSelectionMode(false);
-  }, [selectedIds, toast, allEmails, logActivity, sync]);
+  }, [selectedIds, toast, allEmails, logActivity, refresh]);
 
   const handleBulkArchive = useCallback(async () => {
     const ids = Array.from(selectedIds);
@@ -497,13 +497,13 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
         const email = allEmails.find((e) => e.id === id);
         logActivity(id, "email_archived", `Archived email from ${email?.sender || "unknown"}: ${email?.subject || "(no subject)"}`, { sender: email?.sender, subject: email?.subject, action: "bulk_archive" });
       });
-      await sync();
+      await refresh();
     } catch {
       toast({ title: "Bulk archive failed", variant: "destructive" });
     }
     setSelectedIds(new Set());
     setSelectionMode(false);
-  }, [selectedIds, toast, allEmails, logActivity, sync]);
+  }, [selectedIds, toast, allEmails, logActivity, refresh]);
 
   // ─── Keyboard shortcuts (desktop only) ────────────────────────────
   useEffect(() => {
