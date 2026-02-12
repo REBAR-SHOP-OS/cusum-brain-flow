@@ -58,6 +58,57 @@ export type Database = {
           },
         ]
       }
+      activity_events: {
+        Row: {
+          actor_id: string | null
+          actor_type: string | null
+          company_id: string
+          created_at: string
+          dedupe_key: string | null
+          description: string | null
+          entity_id: string
+          entity_type: string
+          event_type: string
+          id: string
+          inputs_snapshot: Json | null
+          metadata: Json | null
+          processed_at: string | null
+          source: string
+        }
+        Insert: {
+          actor_id?: string | null
+          actor_type?: string | null
+          company_id: string
+          created_at?: string
+          dedupe_key?: string | null
+          description?: string | null
+          entity_id: string
+          entity_type: string
+          event_type: string
+          id?: string
+          inputs_snapshot?: Json | null
+          metadata?: Json | null
+          processed_at?: string | null
+          source?: string
+        }
+        Update: {
+          actor_id?: string | null
+          actor_type?: string | null
+          company_id?: string
+          created_at?: string
+          dedupe_key?: string | null
+          description?: string | null
+          entity_id?: string
+          entity_type?: string
+          event_type?: string
+          id?: string
+          inputs_snapshot?: Json | null
+          metadata?: Json | null
+          processed_at?: string | null
+          source?: string
+        }
+        Relationships: []
+      }
       agent_action_log: {
         Row: {
           action_type: string
@@ -1336,45 +1387,6 @@ export type Database = {
         }
         Relationships: []
       }
-      events: {
-        Row: {
-          actor_id: string | null
-          actor_type: string | null
-          company_id: string
-          created_at: string
-          description: string | null
-          entity_id: string
-          entity_type: string
-          event_type: string
-          id: string
-          metadata: Json | null
-        }
-        Insert: {
-          actor_id?: string | null
-          actor_type?: string | null
-          company_id: string
-          created_at?: string
-          description?: string | null
-          entity_id: string
-          entity_type: string
-          event_type: string
-          id?: string
-          metadata?: Json | null
-        }
-        Update: {
-          actor_id?: string | null
-          actor_type?: string | null
-          company_id?: string
-          created_at?: string
-          description?: string | null
-          entity_id?: string
-          entity_type?: string
-          event_type?: string
-          id?: string
-          metadata?: Json | null
-        }
-        Relationships: []
-      }
       extract_errors: {
         Row: {
           created_at: string
@@ -1781,6 +1793,100 @@ export type Database = {
             columns: ["machine_id"]
             isOneToOne: false
             referencedRelation: "machines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      human_tasks: {
+        Row: {
+          actions: Json | null
+          agent_id: string | null
+          assigned_to: string | null
+          category: string | null
+          company_id: string
+          created_at: string
+          dedupe_key: string | null
+          description: string | null
+          entity_id: string | null
+          entity_type: string | null
+          id: string
+          impact: string | null
+          inputs_snapshot: Json | null
+          reason: string | null
+          resolved_at: string | null
+          severity: string
+          snoozed_until: string | null
+          source_event_id: string | null
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          actions?: Json | null
+          agent_id?: string | null
+          assigned_to?: string | null
+          category?: string | null
+          company_id: string
+          created_at?: string
+          dedupe_key?: string | null
+          description?: string | null
+          entity_id?: string | null
+          entity_type?: string | null
+          id?: string
+          impact?: string | null
+          inputs_snapshot?: Json | null
+          reason?: string | null
+          resolved_at?: string | null
+          severity?: string
+          snoozed_until?: string | null
+          source_event_id?: string | null
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          actions?: Json | null
+          agent_id?: string | null
+          assigned_to?: string | null
+          category?: string | null
+          company_id?: string
+          created_at?: string
+          dedupe_key?: string | null
+          description?: string | null
+          entity_id?: string | null
+          entity_type?: string | null
+          id?: string
+          impact?: string | null
+          inputs_snapshot?: Json | null
+          reason?: string | null
+          resolved_at?: string | null
+          severity?: string
+          snoozed_until?: string | null
+          source_event_id?: string | null
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "human_tasks_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "human_tasks_source_event_id_fkey"
+            columns: ["source_event_id"]
+            isOneToOne: false
+            referencedRelation: "activity_events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "human_tasks_source_event_id_fkey"
+            columns: ["source_event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
             referencedColumns: ["id"]
           },
         ]
@@ -4684,6 +4790,57 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      events: {
+        Row: {
+          actor_id: string | null
+          actor_type: string | null
+          company_id: string | null
+          created_at: string | null
+          dedupe_key: string | null
+          description: string | null
+          entity_id: string | null
+          entity_type: string | null
+          event_type: string | null
+          id: string | null
+          inputs_snapshot: Json | null
+          metadata: Json | null
+          processed_at: string | null
+          source: string | null
+        }
+        Insert: {
+          actor_id?: string | null
+          actor_type?: string | null
+          company_id?: string | null
+          created_at?: string | null
+          dedupe_key?: string | null
+          description?: string | null
+          entity_id?: string | null
+          entity_type?: string | null
+          event_type?: string | null
+          id?: string | null
+          inputs_snapshot?: Json | null
+          metadata?: Json | null
+          processed_at?: string | null
+          source?: string | null
+        }
+        Update: {
+          actor_id?: string | null
+          actor_type?: string | null
+          company_id?: string | null
+          created_at?: string | null
+          dedupe_key?: string | null
+          description?: string | null
+          entity_id?: string | null
+          entity_type?: string | null
+          event_type?: string | null
+          id?: string | null
+          inputs_snapshot?: Json | null
+          metadata?: Json | null
+          processed_at?: string | null
+          source?: string | null
+        }
+        Relationships: []
       }
       profiles_safe: {
         Row: {
