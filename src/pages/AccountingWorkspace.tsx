@@ -28,6 +28,7 @@ import { AccountingOrders } from "@/components/accounting/AccountingOrders";
 import { AgentSuggestionsPanel } from "@/components/agent/AgentSuggestionsPanel";
 import { useIntegrations } from "@/hooks/useIntegrations";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useWebPhone } from "@/hooks/useWebPhone";
 import accountingHelper from "@/assets/helpers/accounting-helper.png";
 
 export default function AccountingWorkspace() {
@@ -37,12 +38,17 @@ export default function AccountingWorkspace() {
   const qb = useQuickBooksData();
   const { startOAuth } = useIntegrations();
   const { isAdmin, hasRole, isLoading: rolesLoading } = useUserRole();
+  const [webPhoneState, webPhoneActions] = useWebPhone();
 
   const hasAccess = isAdmin || hasRole("accounting");
 
   useEffect(() => {
     if (hasAccess) {
       qb.loadAll();
+      // Initialize WebPhone in the background for collections calling
+      if (webPhoneState.status === "idle") {
+        webPhoneActions.initialize();
+      }
     }
   }, [hasAccess]);
 
@@ -194,6 +200,8 @@ export default function AccountingWorkspace() {
                 onViewModeChange={(m) => setAgentMode(m)}
                 qbSummary={qb}
                 autoGreet
+                webPhoneState={webPhoneState}
+                webPhoneActions={webPhoneActions}
               />
             </div>
           </div>
@@ -211,6 +219,8 @@ export default function AccountingWorkspace() {
             onViewModeChange={(m) => setAgentMode(m)}
             qbSummary={qb}
             autoGreet
+            webPhoneState={webPhoneState}
+            webPhoneActions={webPhoneActions}
           />
         </div>
       )}
