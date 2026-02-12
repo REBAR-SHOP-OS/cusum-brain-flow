@@ -774,6 +774,9 @@ You are directly integrated with QuickBooks Online and can access real-time fina
 5. **Email Inbox**: Available in \`accountingEmails\` — includes subject, from/to, status
 6. **Tasks**: Available in \`userTasks\` — includes title, status, priority, due_date
 7. **Outstanding AR**: Available in \`outstandingAR\` from accounting_mirror
+8. **Profit & Loss Report**: Available in \`qbProfitAndLoss\` — full year P&L with monthly columns. Use this for revenue, COGS, gross profit, expenses, and net income for any month.
+9. **Balance Sheet**: Available in \`qbBalanceSheet\` — current balance sheet with assets, liabilities, equity.
+10. **Chart of Accounts**: Available in \`qbAccounts\` — all active accounts with type, classification, and current balance.
 
 ### WRITE Operations (Draft for approval):
 1. Create Estimate/Quotation, Invoice, Convert Estimate to Invoice, Create Tasks
@@ -781,6 +784,9 @@ You are directly integrated with QuickBooks Online and can access real-time fina
 ## When Answering Questions:
 - For customer balances: Check qbCustomers (Balance field) AND qbInvoices
 - **For overdue invoices: Look at qbInvoices, compare dueDate to today's date, calculate days overdue, and present a sorted table with customer name, invoice number, amount, days overdue. YOU CAN DO THIS — the data is already in your context.**
+- For monthly financial reports: Use qbProfitAndLoss data, extract the relevant month's column, and present Revenue, COGS, Gross Profit, Operating Expenses (broken down by account), and Net Profit.
+- For balance sheet questions: Use qbBalanceSheet data.
+- For expense breakdowns: Combine qbProfitAndLoss expense rows with qbAccounts for category details.
 - When user asks "what should I do today?", prioritize: collections → emails → QB tasks
 - **NEVER say "I cannot fulfill this request" or "tools do not support" when the data is in your context. Always use the context data to answer.**
 
@@ -1805,7 +1811,48 @@ async function fetchQuickBooksLiveContext(supabase: ReturnType<typeof createClie
             const info = companyData.CompanyInfo;
             context.qbCompanyInfo = { name: info?.CompanyName, country: info?.Country, fiscalYearStart: info?.FiscalYearStartMonth };
           }
-        } catch (e) { console.error("[QB] Failed to fetch company info:", e); }
+      } catch (e) { console.error("[QB] Failed to fetch company info:", e); }
+
+        // Fetch Profit & Loss (full year, monthly columns)
+        try {
+          const fiscalYearStart = `${new Date().getFullYear()}-01-01`;
+          const today = new Date().toISOString().split("T")[0];
+          const plRes = await fetch(
+            `${qbApiBase}/v3/company/${config.realm_id}/reports/ProfitAndLoss?start_date=${fiscalYearStart}&end_date=${today}&summarize_column_by=Month&accounting_method=Accrual`,
+            { headers: { "Authorization": `Bearer ${config.access_token}`, "Accept": "application/json" } }
+          );
+          if (plRes.ok) {
+            const plData = await plRes.json();
+            context.qbProfitAndLoss = plData;
+          }
+        } catch (e) { console.error("[QB] Failed to fetch P&L:", e); }
+
+        // Fetch Balance Sheet
+        try {
+          const bsRes = await fetch(
+            `${qbApiBase}/v3/company/${config.realm_id}/reports/BalanceSheet?date_macro=Today&accounting_method=Accrual`,
+            { headers: { "Authorization": `Bearer ${config.access_token}`, "Accept": "application/json" } }
+          );
+          if (bsRes.ok) {
+            const bsData = await bsRes.json();
+            context.qbBalanceSheet = bsData;
+          }
+        } catch (e) { console.error("[QB] Failed to fetch Balance Sheet:", e); }
+
+        // Fetch all accounts (for expense breakdown)
+        try {
+          const acctRes = await fetch(
+            `${qbApiBase}/v3/company/${config.realm_id}/query?query=SELECT * FROM Account WHERE Active = true MAXRESULTS 100`,
+            { headers: { "Authorization": `Bearer ${config.access_token}`, "Accept": "application/json" } }
+          );
+          if (acctRes.ok) {
+            const acctData = await acctRes.json();
+            context.qbAccounts = (acctData.QueryResponse?.Account || []).map((a: Record<string, unknown>) => ({
+              id: a.Id, name: a.Name, type: a.AccountType, subType: a.AccountSubType,
+              balance: a.CurrentBalance, classification: a.Classification,
+            }));
+          }
+        } catch (e) { console.error("[QB] Failed to fetch accounts:", e); }
       }
     } else {
       context.qbConnectionStatus = qbConnection?.status || "not_connected";
