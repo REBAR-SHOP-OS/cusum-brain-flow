@@ -78,7 +78,7 @@ export function useAgentSuggestions(agentCode: string) {
         .update({ status: "acted", resolved_at: new Date().toISOString() })
         .eq("id", id);
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["agent-suggestions"] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["agent-suggestions", agentCode] }),
   });
 
   const dismissSuggestion = useMutation({
@@ -88,7 +88,7 @@ export function useAgentSuggestions(agentCode: string) {
         .update({ status: "dismissed", resolved_at: new Date().toISOString() })
         .eq("id", id);
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["agent-suggestions"] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["agent-suggestions", agentCode] }),
   });
 
   const snoozeSuggestion = useMutation({
@@ -99,7 +99,7 @@ export function useAgentSuggestions(agentCode: string) {
         .update({ snoozed_until: snoozedUntil })
         .eq("id", id);
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["agent-suggestions"] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["agent-suggestions", agentCode] }),
   });
 
   return { suggestions, isLoading, actOnSuggestion, dismissSuggestion, snoozeSuggestion };
