@@ -1,62 +1,74 @@
 
 
-# Fix: Caller Can't Hear AI Audio
+# Add Details Field to Phone Calls
 
-## Root Cause
+## What Changes
 
-The most likely issue is **AudioContext suspension**. Modern browsers create `AudioContext` instances in a `suspended` state by default and require explicit `.resume()` calls. The code creates two AudioContexts (`captureCtx` at 16kHz and `outputCtx` at 48kHz) but never calls `.resume()` on either. This means:
+The phone AI currently has no content to discuss because only the call "reason" (a short label) is passed. We need to thread a `details` field through so the chat agent can include substantive information.
 
-- **outputCtx suspended** = AI audio chunks are decoded and scheduled but never actually play through the `MediaStreamAudioDestinationNode`, so the replaced outgoing track produces silence
-- **captureCtx suspended** = remote caller audio is never captured and sent to ElevenLabs, so the AI thinks nobody is speaking (hence "Are you still there?")
+## Changes
 
-## Fix
+### 1. PennyCallCard.tsx -- Add `details` to data interface and parser
 
-**File: `src/hooks/useCallAiBridge.ts`**
+- Add `details?: string` to `PennyCallData`
+- Update `parsePennyCalls` to extract the `details` field from the JSON tag
 
-Add explicit `.resume()` calls on both AudioContexts immediately after creation:
+### 2. AccountingAgent.tsx -- Pass details to startBridge
 
+- Line 417-422: Add `details: callData.details` to the `startBridge` call
+
+### 3. ai-agent edge function -- Instruct chat AI to populate details
+
+- Update the PENNY-CALL tag format documentation (around line 818) to include the optional `details` field
+- Add instruction: "When calling about reports, briefs, invoices, collections, or any topic where you have data in context, include a summary of the relevant information in the `details` field so the phone AI can discuss it intelligently"
+- Example: `[PENNY-CALL]{"phone":"ext:101","contact_name":"Sattar","reason":"Daily brief","details":"12 orders processed yesterday, 3 pending pickup, inventory low on 10M rebar (23 bundles remaining)"}[/PENNY-CALL]`
+
+### 4. Improve no-details fallback behavior
+
+- In `buildPhoneCallOverrides`, update the no-details prompt to be more conversational: instead of repeating "I don't have details," the AI should ask the caller what specific topics they'd like to cover
+
+## Technical Details
+
+**PennyCallCard.tsx parser change:**
 ```typescript
-// After creating captureCtx (line ~87)
-const captureCtx = new AudioContext({ sampleRate: 16000 });
-await captureCtx.resume();  // <-- ADD THIS
-
-// After creating outputCtx (line ~91)  
-const outputCtx = new AudioContext({ sampleRate: 48000 });
-await outputCtx.resume();   // <-- ADD THIS
+// In parsePennyCalls, add details extraction
+calls.push({
+  phone: data.phone,
+  contact_name: data.contact_name,
+  reason: data.reason || "",
+  details: data.details,  // NEW
+  lead_id: data.lead_id,
+  contact_id: data.contact_id,
+});
 ```
 
-Also add a safety `.resume()` inside `playAiAudioChunk` in case the context gets suspended mid-call:
-
+**AccountingAgent.tsx startBridge call:**
 ```typescript
-function playAiAudioChunk(...) {
-  // Resume if suspended
-  if (outputCtx.state === 'suspended') {
-    outputCtx.resume();
-  }
-  // ... rest of function
-}
+startBridge(session, {
+  agentName: "Penny",
+  contactName: callData.contact_name,
+  reason: callData.reason,
+  phone: callData.phone,
+  details: callData.details,  // NEW
+});
 ```
 
-Additionally, add diagnostic logging to `replaceOutgoingTrack` to confirm the track replacement succeeds and the AI track is live:
-
-```typescript
-function replaceOutgoingTrack(pc, aiStream) {
-  // ... existing code ...
-  if (aiTrack) {
-    console.log("AI bridge: replacing track, AI track enabled:", aiTrack.enabled, "readyState:", aiTrack.readyState);
-    audioSender.replaceTrack(aiTrack)
-      .then(() => console.log("AI bridge: track replaced successfully"))
-      .catch(e => console.error("AI bridge: failed to replace track", e));
-  }
-}
+**ai-agent prompt update (line ~818):**
+```
+[PENNY-CALL]{"phone":"ext:101","contact_name":"Person Name","reason":"Brief reason","details":"Optional: key facts and data the phone AI should discuss"}[/PENNY-CALL]
 ```
 
-## Technical Summary
+**No-details fallback improvement (useCallAiBridge.ts ~244):**
+```typescript
+const noDetailsWarning = !details
+  ? `\n\nIMPORTANT: No specific details were provided. Do NOT fabricate any. Instead, ask the caller what they would like to discuss and offer to have someone from Rebar Shop follow up with specifics.`
+  : "";
+```
 
-| Change | File | Purpose |
-|--------|------|---------|
-| `await captureCtx.resume()` | useCallAiBridge.ts | Ensure caller audio capture works |
-| `await outputCtx.resume()` | useCallAiBridge.ts | Ensure AI audio plays to caller |
-| Safety resume in playAiAudioChunk | useCallAiBridge.ts | Guard against mid-call suspension |
-| Diagnostic logging in replaceOutgoingTrack | useCallAiBridge.ts | Confirm track swap succeeds |
+## Files Modified
+
+- `src/components/accounting/PennyCallCard.tsx`
+- `src/components/accounting/AccountingAgent.tsx`
+- `src/hooks/useCallAiBridge.ts`
+- `supabase/functions/ai-agent/index.ts`
 
