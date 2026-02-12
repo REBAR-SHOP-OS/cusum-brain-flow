@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { Phone, PhoneOff, Loader2, Bot, BotOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -33,6 +34,25 @@ export function PennyCallCard({
   const isDialing = callStatus === "calling";
   const aiActive = bridgeState?.active ?? false;
   const aiConnecting = bridgeState?.status === "connecting";
+  const autoTriggeredRef = useRef(false);
+
+  // Auto-activate AI bridge when call connects
+  useEffect(() => {
+    if (
+      callStatus === "in_call" &&
+      !aiActive &&
+      bridgeState?.status === "idle" &&
+      !autoTriggeredRef.current &&
+      onStartAiBridge
+    ) {
+      autoTriggeredRef.current = true;
+      onStartAiBridge();
+    }
+    // Reset flag when call ends
+    if (callStatus !== "in_call" && callStatus !== "calling") {
+      autoTriggeredRef.current = false;
+    }
+  }, [callStatus, aiActive, bridgeState?.status, onStartAiBridge]);
 
   return (
     <Card className="border-primary/30 bg-primary/5">
