@@ -10,6 +10,7 @@ import remarkGfm from "remark-gfm";
 import accountingHelper from "@/assets/helpers/accounting-helper.png";
 import { PennyCallCard, parsePennyCalls, type PennyCallData } from "./PennyCallCard";
 import type { WebPhoneState, WebPhoneActions } from "@/hooks/useWebPhone";
+import { useCallAiBridge } from "@/hooks/useCallAiBridge";
 
 interface Message {
   id: string;
@@ -48,6 +49,7 @@ const checkingPhases = [
 ];
 
 export function AccountingAgent({ onViewModeChange, viewMode: externalMode, qbSummary, autoGreet, webPhoneState, webPhoneActions }: AccountingAgentProps) {
+  const { bridgeState, startBridge, stopBridge } = useCallAiBridge();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isTyping, setIsTyping] = useState(false);
@@ -381,6 +383,14 @@ RULES:
                         callStatus={webPhoneState.status}
                         onCall={(phone, name) => webPhoneActions.call(phone, name)}
                         onHangup={() => webPhoneActions.hangup()}
+                        bridgeState={bridgeState}
+                        onStartAiBridge={() => {
+                          const session = webPhoneActions.getCallSession();
+                          if (session) {
+                            startBridge(session, `You are Penny, calling ${call.contact_name}. Reason: ${call.reason}. Be professional, concise, and helpful.`);
+                          }
+                        }}
+                        onStopAiBridge={stopBridge}
                       />
                     ))}
                   </div>

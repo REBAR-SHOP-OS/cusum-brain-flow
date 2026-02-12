@@ -1,6 +1,7 @@
-import { Phone, PhoneOff, Loader2 } from "lucide-react";
+import { Phone, PhoneOff, Loader2, Bot, BotOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import type { CallAiBridgeState } from "@/hooks/useCallAiBridge";
 
 export interface PennyCallData {
   phone: string;
@@ -13,11 +14,25 @@ interface PennyCallCardProps {
   callStatus: "idle" | "registering" | "ready" | "calling" | "in_call" | "error";
   onCall: (phone: string, contactName: string) => void;
   onHangup: () => void;
+  /** AI voice bridge controls (optional — enables "AI Talk" button) */
+  bridgeState?: CallAiBridgeState;
+  onStartAiBridge?: () => void;
+  onStopAiBridge?: () => void;
 }
 
-export function PennyCallCard({ data, callStatus, onCall, onHangup }: PennyCallCardProps) {
+export function PennyCallCard({
+  data,
+  callStatus,
+  onCall,
+  onHangup,
+  bridgeState,
+  onStartAiBridge,
+  onStopAiBridge,
+}: PennyCallCardProps) {
   const isActive = callStatus === "calling" || callStatus === "in_call";
   const isDialing = callStatus === "calling";
+  const aiActive = bridgeState?.active ?? false;
+  const aiConnecting = bridgeState?.status === "connecting";
 
   return (
     <Card className="border-primary/30 bg-primary/5">
@@ -30,41 +45,81 @@ export function PennyCallCard({ data, callStatus, onCall, onHangup }: PennyCallC
             </p>
             <p className="text-xs text-muted-foreground mt-1">{data.reason}</p>
           </div>
-          {isActive ? (
-            <Button
-              size="sm"
-              variant="destructive"
-              className="gap-1.5 shrink-0"
-              onClick={onHangup}
-            >
-              <PhoneOff className="w-3.5 h-3.5" />
-              {isDialing ? "Cancel" : "Hang up"}
-            </Button>
-          ) : (
-            <Button
-              size="sm"
-              className="gap-1.5 shrink-0"
-              onClick={() => onCall(data.phone, data.contact_name)}
-              disabled={callStatus === "registering"}
-            >
-              {callStatus === "registering" ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Phone className="w-3.5 h-3.5" />
-              )}
-              Call Now
-            </Button>
-          )}
+          <div className="flex items-center gap-1.5 shrink-0">
+            {/* AI Talk toggle — only show when call is in progress */}
+            {isActive && onStartAiBridge && onStopAiBridge && (
+              <Button
+                size="sm"
+                variant={aiActive ? "secondary" : "outline"}
+                className="gap-1.5"
+                onClick={aiActive ? onStopAiBridge : onStartAiBridge}
+                disabled={aiConnecting}
+              >
+                {aiConnecting ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : aiActive ? (
+                  <BotOff className="w-3.5 h-3.5" />
+                ) : (
+                  <Bot className="w-3.5 h-3.5" />
+                )}
+                {aiActive ? "Stop AI" : "AI Talk"}
+              </Button>
+            )}
+
+            {isActive ? (
+              <Button
+                size="sm"
+                variant="destructive"
+                className="gap-1.5"
+                onClick={onHangup}
+              >
+                <PhoneOff className="w-3.5 h-3.5" />
+                {isDialing ? "Cancel" : "Hang up"}
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                className="gap-1.5"
+                onClick={() => onCall(data.phone, data.contact_name)}
+                disabled={callStatus === "registering"}
+              >
+                {callStatus === "registering" ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Phone className="w-3.5 h-3.5" />
+                )}
+                Call Now
+              </Button>
+            )}
+          </div>
         </div>
+
+        {/* Call status indicator */}
         {isActive && (
           <div className="flex items-center gap-2 text-xs">
             <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${aiActive ? "bg-violet-400" : "bg-green-400"}`} />
+              <span className={`relative inline-flex rounded-full h-2 w-2 ${aiActive ? "bg-violet-500" : "bg-green-500"}`} />
             </span>
             <span className="text-muted-foreground">
-              {isDialing ? "Dialing..." : "On call"}
+              {aiActive
+                ? "AI is talking"
+                : isDialing
+                  ? "Dialing..."
+                  : "On call"}
             </span>
+          </div>
+        )}
+
+        {/* Live AI transcript */}
+        {aiActive && bridgeState && bridgeState.transcript.length > 0 && (
+          <div className="mt-2 max-h-32 overflow-y-auto space-y-1 text-xs border-t pt-2">
+            {bridgeState.transcript.map((entry, i) => (
+              <p key={i} className={entry.role === "ai" ? "text-primary" : "text-muted-foreground"}>
+                <span className="font-medium">{entry.role === "ai" ? "AI" : "Caller"}:</span>{" "}
+                {entry.text}
+              </p>
+            ))}
           </div>
         )}
       </CardContent>
