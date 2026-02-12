@@ -259,32 +259,19 @@ mcpServer.tool("get_dashboard_stats", {
 // ── HTTP Transport ──────────────────────────────────────────
 
 const transport = new StreamableHttpTransport();
+const httpHandler = transport.bind(mcpServer);
 const app = new Hono();
 
-// Auth middleware
+// CORS middleware
 app.use("*", async (c, next) => {
   if (c.req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
-
-  // Validate API key
-  if (mcpApiKey) {
-    const authHeader = c.req.header("Authorization") || "";
-    const apiKeyHeader = c.req.header("x-api-key") || "";
-    const token = authHeader.replace("Bearer ", "");
-    if (token !== mcpApiKey && apiKeyHeader !== mcpApiKey) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-  }
-
   await next();
 });
 
 app.all("/*", async (c) => {
-  const response = await transport.handleRequest(c.req.raw, mcpServer);
+  const response = await httpHandler(c.req.raw);
   // Add CORS headers to response
   const headers = new Headers(response.headers);
   Object.entries(corsHeaders).forEach(([k, v]) => headers.set(k, v));
