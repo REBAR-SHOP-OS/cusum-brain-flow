@@ -57,7 +57,7 @@ export default function Landing() {
             <h1 className="text-4xl md:text-6xl font-extrabold text-foreground mb-6 leading-tight tracking-tight">
               AI-Powered Rebar Fabrication<br className="hidden md:block" /> & Shop Management
             </h1>
-            <p className="text-lg md:text-xl text-muted-foreground mb-10 max-w-2xl mx-auto">
+            <p className="text-lg md:text-xl text-foreground/80 mb-10 max-w-2xl mx-auto">
               From takeoff to delivery — streamline estimating, production, sales, and accounting
               with AI agents built for reinforcing steel contractors.
             </p>
