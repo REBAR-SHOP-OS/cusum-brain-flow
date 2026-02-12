@@ -20,8 +20,8 @@ export interface CallBridgeData {
  * Bridges a live RingCentral WebRTC call with an ElevenLabs Conversational AI agent.
  *
  * Flow:
- *   Remote caller audio  →  capture via AudioContext  →  PCM16 base64  →  ElevenLabs WS
- *   ElevenLabs AI audio  ←  decode PCM16  ←  inject into call via replaceTrack
+ *   Remote caller audio  →  capture via AudioContext (16kHz)  →  PCM16 base64  →  ElevenLabs WS
+ *   ElevenLabs AI audio  ←  decode PCM16  ←  upsample to 48kHz  ←  inject into call via replaceTrack
  */
 export function useCallAiBridge() {
   const [state, setState] = useState<CallAiBridgeState>({
@@ -31,7 +31,8 @@ export function useCallAiBridge() {
   });
 
   const wsRef = useRef<WebSocket | null>(null);
-  const audioCtxRef = useRef<AudioContext | null>(null);
+  const captureCtxRef = useRef<AudioContext | null>(null);
+  const outputCtxRef = useRef<AudioContext | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const aiDestRef = useRef<MediaStreamAudioDestinationNode | null>(null);
   const originalTrackRef = useRef<MediaStreamTrack | null>(null);
@@ -47,7 +48,7 @@ export function useCallAiBridge() {
       try {
         setState((s) => ({ ...s, status: "connecting", transcript: [] }));
 
-        // 1. Get signed URL from edge function (phone_call mode for outbound calls)
+        // 1. Get signed URL from edge function
         const { data, error } = await supabase.functions.invoke(
           "elevenlabs-conversation-token",
           { body: { mode: callData ? "phone_call" : "voice_chat" } }
@@ -58,7 +59,7 @@ export function useCallAiBridge() {
 
         const pc = callSession.rtcPeerConnection;
 
-        // 2. Get REMOTE audio from peer connection receivers (not mediaStream which is local mic)
+        // 2. Get REMOTE audio from peer connection receivers
         const audioReceiver = pc.getReceivers().find(
           (r) => r.track?.kind === "audio"
         );
@@ -67,30 +68,33 @@ export function useCallAiBridge() {
         }
         const remoteStream = new MediaStream([audioReceiver.track]);
 
-        // 3. Create AudioContext at 16 kHz to match ElevenLabs expected input
-        const audioCtx = new AudioContext({ sampleRate: 16000 });
-        audioCtxRef.current = audioCtx;
+        // 3. Create 16kHz AudioContext for CAPTURING caller audio → ElevenLabs
+        const captureCtx = new AudioContext({ sampleRate: 16000 });
+        captureCtxRef.current = captureCtx;
 
-        // 4. Capture remote audio
-        const source = audioCtx.createMediaStreamSource(remoteStream);
-        const processor = audioCtx.createScriptProcessor(2048, 1, 1);
+        // 4. Create 48kHz AudioContext for AI OUTPUT → WebRTC (standard rate)
+        const outputCtx = new AudioContext({ sampleRate: 48000 });
+        outputCtxRef.current = outputCtx;
+
+        // 5. Capture remote audio at 16kHz for ElevenLabs
+        const source = captureCtx.createMediaStreamSource(remoteStream);
+        const processor = captureCtx.createScriptProcessor(2048, 1, 1);
         processorRef.current = processor;
 
-        // Silent gain so processor fires without audible output (RC SDK handles playback via audioElement)
-        const silentGain = audioCtx.createGain();
+        const silentGain = captureCtx.createGain();
         silentGain.gain.value = 0;
         source.connect(processor);
         processor.connect(silentGain);
-        silentGain.connect(audioCtx.destination);
+        silentGain.connect(captureCtx.destination);
 
-        // 5. AI audio output destination → will replace call's outgoing track
-        const aiDest = audioCtx.createMediaStreamDestination();
+        // 6. AI audio output destination at 48kHz → will replace call's outgoing track
+        const aiDest = outputCtx.createMediaStreamDestination();
         aiDestRef.current = aiDest;
 
-        // 6. Build conversation overrides for phone call mode
+        // 7. Build conversation overrides for phone call mode
         const overrides = callData ? buildPhoneCallOverrides(callData) : undefined;
 
-        // 7. Connect to ElevenLabs WebSocket
+        // 8. Connect to ElevenLabs WebSocket
         const ws = new WebSocket(data.signed_url);
         wsRef.current = ws;
 
@@ -110,7 +114,6 @@ export function useCallAiBridge() {
 
           // Wait briefly for override to register, then start audio
           setTimeout(() => {
-            // Start sending remote audio to ElevenLabs
             processor.onaudioprocess = (e) => {
               if (ws.readyState !== WebSocket.OPEN) return;
               const samples = e.inputBuffer.getChannelData(0);
@@ -119,7 +122,7 @@ export function useCallAiBridge() {
               ws.send(JSON.stringify({ user_audio_chunk: b64 }));
             };
 
-            // Replace the call's outgoing audio (local mic) with AI voice
+            // Replace the call's outgoing audio with AI voice (48kHz stream)
             replaceOutgoingTrack(pc, aiDest.stream);
 
             setState((s) => ({ ...s, active: true, status: "active" }));
@@ -130,7 +133,7 @@ export function useCallAiBridge() {
         ws.onmessage = (event) => {
           try {
             const msg = JSON.parse(event.data);
-            handleWsMessage(msg, audioCtx, aiDest, ws, setState);
+            handleWsMessage(msg, outputCtx, aiDest, ws, setState);
           } catch (e) {
             console.warn("AI bridge: bad WS message", e);
           }
@@ -144,7 +147,7 @@ export function useCallAiBridge() {
         ws.onclose = () => {
           console.log("AI bridge WS closed");
           restoreOriginalTrack(pc);
-          cleanup(audioCtxRef, processorRef, wsRef);
+          cleanup(captureCtxRef, outputCtxRef, processorRef, wsRef);
           setState({ active: false, status: "idle", transcript: [] });
         };
       } catch (err) {
@@ -162,13 +165,13 @@ export function useCallAiBridge() {
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.close();
     }
-    cleanup(audioCtxRef, processorRef, wsRef);
+    cleanup(captureCtxRef, outputCtxRef, processorRef, wsRef);
     setState({ active: false, status: "idle", transcript: [] });
   }, []);
 
   useEffect(() => {
     return () => {
-      cleanup(audioCtxRef, processorRef, wsRef);
+      cleanup(captureCtxRef, outputCtxRef, processorRef, wsRef);
     };
   }, []);
 
@@ -249,25 +252,37 @@ function pcm16Base64ToFloat32(base64: string): Float32Array {
 
 function playAiAudioChunk(
   base64Audio: string,
-  audioCtx: AudioContext,
+  outputCtx: AudioContext,
   dest: MediaStreamAudioDestinationNode
 ) {
   const float32 = pcm16Base64ToFloat32(base64Audio);
   if (float32.length === 0) return;
 
-  const audioBuffer = audioCtx.createBuffer(1, float32.length, 16000);
-  audioBuffer.getChannelData(0).set(float32);
+  // Upsample from 16kHz to output sample rate (48kHz) via linear interpolation
+  const outputSampleRate = outputCtx.sampleRate;
+  const resampledLength = Math.round(float32.length * (outputSampleRate / 16000));
+  const audioBuffer = outputCtx.createBuffer(1, resampledLength, outputSampleRate);
+  const channelData = audioBuffer.getChannelData(0);
+  const ratio = float32.length / resampledLength;
+
+  for (let i = 0; i < resampledLength; i++) {
+    const srcIdx = i * ratio;
+    const lower = Math.floor(srcIdx);
+    const upper = Math.min(lower + 1, float32.length - 1);
+    const frac = srcIdx - lower;
+    channelData[i] = float32[lower] * (1 - frac) + float32[upper] * frac;
+  }
 
   // Play to remote caller via replaced track
-  const bufferSource = audioCtx.createBufferSource();
+  const bufferSource = outputCtx.createBufferSource();
   bufferSource.buffer = audioBuffer;
   bufferSource.connect(dest);
   bufferSource.start();
 
   // Also play locally so the user can monitor the AI voice
-  const localSource = audioCtx.createBufferSource();
+  const localSource = outputCtx.createBufferSource();
   localSource.buffer = audioBuffer;
-  localSource.connect(audioCtx.destination);
+  localSource.connect(outputCtx.destination);
   localSource.start();
 }
 
@@ -299,7 +314,7 @@ function restoreOriginalTrack(pc: RTCPeerConnection) {
 
 function handleWsMessage(
   msg: any,
-  audioCtx: AudioContext,
+  outputCtx: AudioContext,
   aiDest: MediaStreamAudioDestinationNode,
   ws: WebSocket,
   setState: React.Dispatch<React.SetStateAction<CallAiBridgeState>>
@@ -308,7 +323,7 @@ function handleWsMessage(
     case "audio":
       const audioB64 = msg.audio_event?.audio_base_64;
       if (audioB64) {
-        playAiAudioChunk(audioB64, audioCtx, aiDest);
+        playAiAudioChunk(audioB64, outputCtx, aiDest);
       }
       break;
 
@@ -351,14 +366,17 @@ function handleWsMessage(
 }
 
 function cleanup(
-  audioCtxRef: React.MutableRefObject<AudioContext | null>,
+  captureCtxRef: React.MutableRefObject<AudioContext | null>,
+  outputCtxRef: React.MutableRefObject<AudioContext | null>,
   processorRef: React.MutableRefObject<ScriptProcessorNode | null>,
   wsRef: React.MutableRefObject<WebSocket | null>
 ) {
   processorRef.current?.disconnect();
   processorRef.current = null;
-  audioCtxRef.current?.close().catch(() => {});
-  audioCtxRef.current = null;
+  captureCtxRef.current?.close().catch(() => {});
+  captureCtxRef.current = null;
+  outputCtxRef.current?.close().catch(() => {});
+  outputCtxRef.current = null;
   const ws = wsRef.current;
   if (ws && ws.readyState <= WebSocket.OPEN) {
     ws.close();
