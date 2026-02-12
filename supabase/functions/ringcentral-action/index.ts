@@ -19,12 +19,10 @@ async function getAccessToken(supabaseAdmin: ReturnType<typeof createClient>, us
 
   if (!tokenRow?.refresh_token) return null;
 
-  // Check if token is still valid
   if (tokenRow.token_expires_at && new Date(tokenRow.token_expires_at) > new Date()) {
     return tokenRow.access_token;
   }
 
-  // Refresh token
   const clientId = Deno.env.get("RINGCENTRAL_CLIENT_ID")!;
   const clientSecret = Deno.env.get("RINGCENTRAL_CLIENT_SECRET")!;
 
@@ -42,7 +40,6 @@ async function getAccessToken(supabaseAdmin: ReturnType<typeof createClient>, us
 
   if (!resp.ok) {
     console.error("RC token refresh failed:", await resp.text());
-    // Clear stale tokens
     await supabaseAdmin.from("user_ringcentral_tokens").delete().eq("user_id", userId);
     return null;
   }
@@ -55,6 +52,36 @@ async function getAccessToken(supabaseAdmin: ReturnType<typeof createClient>, us
   }).eq("user_id", userId);
 
   return tokens.access_token;
+}
+
+/** Fetch the user's phone numbers from RingCentral extension */
+async function getUserPhoneNumbers(accessToken: string): Promise<{ callerId: string; smsSender: string }> {
+  let callerId = "";
+  let smsSender = "";
+  try {
+    const resp = await fetch(
+      `${RC_SERVER}/restapi/v1.0/account/~/extension/~/phone-number`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    if (resp.ok) {
+      const data = await resp.json();
+      const records = data.records || [];
+      const directNum = records.find(
+        (r: any) => r.usageType === "DirectNumber" && r.features?.includes("CallerId")
+      );
+      callerId = directNum?.phoneNumber || records[0]?.phoneNumber || "";
+      const smsNum = records.find(
+        (r: any) => r.features?.includes("SmsSender")
+      );
+      smsSender = smsNum?.phoneNumber || callerId;
+      console.log("RC phone numbers found:", { callerId, smsSender, totalRecords: records.length });
+    } else {
+      console.warn("Failed to fetch RC phone numbers:", resp.status);
+    }
+  } catch (e) {
+    console.error("Error fetching RC phone numbers:", e);
+  }
+  return { callerId, smsSender };
 }
 
 serve(async (req) => {
@@ -91,7 +118,6 @@ serve(async (req) => {
     const userId = claimsData.claims.sub as string;
     const supabaseAdmin = createClient(supabaseUrl, serviceKey);
 
-    // Verify super admin
     const { data: profile } = await supabaseAdmin
       .from("profiles")
       .select("email")
@@ -109,14 +135,17 @@ serve(async (req) => {
 
     const accessToken = await getAccessToken(supabaseAdmin, userId);
     if (!accessToken) {
-      return new Response(JSON.stringify({ error: "RingCentral not connected. Please reconnect your account." }), {
+      return new Response(JSON.stringify({ error: "RingCentral not connected. Please reconnect your account in Settings." }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
+    // Fetch user's actual phone numbers for from field
+    const { callerId, smsSender } = await getUserPhoneNumbers(accessToken);
+
     if (type === "ringcentral_call") {
-      // RingOut call
+      console.log("RingOut request:", { from: callerId, to: phone, userId, contact_name });
       const resp = await fetch(`${RC_SERVER}/restapi/v1.0/account/~/extension/~/ring-out`, {
         method: "POST",
         headers: {
@@ -124,7 +153,7 @@ serve(async (req) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          from: { phoneNumber: "" }, // Uses default caller ID
+          from: { phoneNumber: callerId },
           to: { phoneNumber: phone },
           playPrompt: true,
         }),
@@ -144,6 +173,7 @@ serve(async (req) => {
       });
 
     } else if (type === "ringcentral_sms") {
+      console.log("SMS request:", { from: smsSender, to: phone, userId, contact_name, messageLength: message?.length });
       const resp = await fetch(`${RC_SERVER}/restapi/v1.0/account/~/extension/~/sms`, {
         method: "POST",
         headers: {
@@ -151,7 +181,7 @@ serve(async (req) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          from: { phoneNumber: "" }, // Uses default SMS number
+          from: { phoneNumber: smsSender },
           to: [{ phoneNumber: phone }],
           text: message,
         }),
