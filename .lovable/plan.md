@@ -1,61 +1,60 @@
 
 
-# Fix: Smart Alert Filtering for Comms Engine
+# Wire Delete/Archive Actions + Show Activity Events
 
 ## Problem
-The `comms-alerts` function is flooding inboxes because it has zero intelligence about what deserves an alert:
+1. Delete and archive actions in the EmailActionBar work but don't log any activity events -- so there's no audit trail
+2. The "All Activity" tab in the customer context panel doesn't include activity_events from the database (like alert processing, deletions, archives)
+3. The EmailActionBar's delete/archive don't notify the parent InboxView, so the email stays visible until page refresh
 
-1. **Spam/marketing emails trigger alerts** -- newsletters, promotions, system notifications (QuickBooks, Synology, flight deals, OpenAI, etc.)
-2. **Internal emails trigger alerts** -- `@rebar.shop` team messages, task updates, daily reports
-3. **Triple-firing** -- each email triggers alerts at 2h, 4h, AND 24h thresholds independently, sending 3 separate alert emails for the same message
-4. **Alerts sent TO ai@rebar.shop** -- the bot is alerting itself about its own daily reports
+## Changes
 
----
+### 1. EmailActionBar: Wire delete/archive to parent + log activity_events
 
-## Solution
+**File: `src/components/inbox/EmailActionBar.tsx`**
 
-Update `supabase/functions/comms-alerts/index.ts` with three layers of filtering:
+- Add `onDelete` and `onArchive` callback props so the parent (InboxView) controls hiding/refreshing
+- After the DB operation, insert an `activity_events` row:
+  - entity_type: "communication"
+  - entity_id: the email ID
+  - event_type: "email_deleted" or "email_archived"
+  - description: includes subject/sender info
+  - source: "user"
+  - company_id: "a0000000-0000-0000-0000-000000000001"
 
-### Layer 1: Skip List (instant, no AI needed)
-Add the same `SKIP_SENDERS` list already used in `process-rfq-emails` to immediately discard alerts for known marketing/system senders:
-- `noreply@`, `no-reply@`, `mailer-daemon@`
-- `@accounts.google.com`, `@stripe.com`, `@linkedin.com`, `@facebookmail.com`
-- `@newsletter.`, `@marketing.`, `@notify.`
-- `@synologynotification.com`, `@ringcentral.com`, etc.
+### 2. InboxView: Pass delete/archive handlers to EmailActionBar
 
-### Layer 2: Internal Email Filter
-Skip any email where `from_address` contains `@rebar.shop` (the configured `internal_domain`). Internal team communications should never trigger unanswered-email alerts.
+**File: `src/components/inbox/InboxView.tsx`**
 
-### Layer 3: Escalation-Only Thresholds (no triple-fire)
-Change behavior so only the **highest breached threshold** fires an alert, not all three:
-- If an email is 25h old, only the 24h alert fires (not 2h + 4h + 24h)
-- This reduces alert volume by ~66%
+- Pass `handleDeleteEmail` and `handleArchiveEmail` as props to EmailActionBar (via InboxEmailViewer/InboxDetailView)
+- These already do the DB delete/archive + hide from UI -- just need to also log activity_events
+- Add activity_events inserts inside `handleDeleteEmail`, `handleArchiveEmail`, `handleBulkDelete`, and `handleBulkArchive`
 
-### Layer 4: Subject-Based Spam Detection
-Add keyword patterns to catch remaining junk that slips past the sender filter:
-- Subjects containing promotional language: "% off", "deals", "cheap", "unsubscribe"
-- System subjects: "[CMS]", "[Task Update]", "Daily Report"
+### 3. Customer Context: Include activity_events in the All Activity tab
 
----
+**File: `src/components/inbox/InboxCustomerContext.tsx`**
 
-## Technical Changes
+- Add a parallel query to `activity_events` filtered by entity_type "communication" or matching the sender email in metadata
+- Map activity_events into the unified `ActivityItem[]` timeline with a new type (or reuse existing types)
+- This surfaces actions like "email deleted", "email archived", "alerts processed" in the activity feed
 
-**File: `supabase/functions/comms-alerts/index.ts`**
+## Technical Details
 
-1. Add `SKIP_SENDERS` array (copy from `process-rfq-emails`)
-2. Add `SKIP_SUBJECTS` patterns array
-3. Add `shouldSkipAlert(comm, internalDomain)` function that checks:
-   - Sender against skip list
-   - Sender domain against internal domain
-   - Subject against spam keywords
-   - `to_address` is not a bot/system address (e.g., `ai@rebar.shop`)
-4. Modify threshold logic: for each email, only fire the **single highest breached** threshold
-5. Apply `shouldSkipAlert()` filter before creating any alert
+### Activity event format for inbox actions:
+```typescript
+await supabase.from("activity_events").insert({
+  company_id: "a0000000-0000-0000-0000-000000000001",
+  entity_type: "communication",
+  entity_id: emailId,
+  event_type: "email_deleted", // or "email_archived"
+  description: `Deleted email from ${sender}: ${subject}`,
+  source: "user",
+  metadata: { sender, subject, action: "delete" }
+});
+```
 
----
-
-## Expected Impact
-- Eliminates alerts for newsletters, promotions, system notifications
-- Eliminates alerts for internal team emails
-- Reduces duplicate alerts from 3-per-email to 1-per-email
-- Only genuinely unanswered external business emails will trigger alerts
+### Files to modify:
+1. `src/components/inbox/EmailActionBar.tsx` -- add onDelete/onArchive props, log activity
+2. `src/components/inbox/InboxView.tsx` -- add activity logging to all delete/archive handlers, pass callbacks down
+3. `src/components/inbox/InboxCustomerContext.tsx` -- query activity_events and merge into timeline
+4. `src/components/inbox/InboxDetailView.tsx` -- pass delete/archive props through to EmailActionBar (if not already)
