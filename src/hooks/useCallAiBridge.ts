@@ -181,6 +181,8 @@ function buildPhoneCallOverrides(callData: CallBridgeData) {
     ? `\n\nSPECIFIC DETAILS YOU KNOW:\n${details}\n\nUse these details naturally in conversation. Reference specific invoice numbers and amounts when discussing payment.`
     : "";
 
+  const firstMsg = `Hi, this is ${agentName} calling from Rebar Shop. Am I speaking with ${contactName}? I'm reaching out regarding ${reason.length > 100 ? reason.substring(0, 100) + "..." : reason}.`;
+
   return {
     agent: {
       prompt: {
@@ -189,16 +191,18 @@ function buildPhoneCallOverrides(callData: CallBridgeData) {
 PURPOSE OF THIS CALL: ${reason}${detailsBlock}
 
 CRITICAL INSTRUCTIONS:
-- You are calling THEM. They did not call you. Introduce yourself immediately.
-- Start by saying who you are and why you're calling.
+- You are calling THEM. They did not call you.
+- Your FIRST message must be EXACTLY: "${firstMsg}"
+- Do NOT repeat your introduction after they respond. Move directly to the purpose.
 - Be professional, friendly, and concise.
 - If they ask who you are, explain you are an AI assistant calling from Rebar Shop.
 - Stay focused on the purpose of the call.
 - If they want to speak to a human, let them know someone from Rebar Shop will follow up.
 - Keep responses brief and conversational — this is a phone call, not an email.
-- NEVER say you don't have access to invoice details — use the specific details provided above.`,
+- NEVER say you don't have access to invoice details — use the specific details provided above.
+- Do NOT re-introduce yourself or restate the reason after your first message.`,
       },
-      first_message: `Hi, this is ${agentName} calling from Rebar Shop. Am I speaking with ${contactName}? I'm reaching out regarding ${reason.length > 100 ? reason.substring(0, 100) + "..." : reason}.`,
+      first_message: firstMsg,
       language: "en",
     },
   };
