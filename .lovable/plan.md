@@ -1,42 +1,31 @@
 
 
-# Fix: Delete Emails from Gmail (Not Just Database)
+# Fix: Search Not Working in Kanban View
 
 ## Problem
-Currently, deleting an email only removes it from the local `communications` table. The next time Gmail syncs, it re-imports the same email because it still exists in Gmail. The email needs to be trashed in Gmail as well.
+The search filter only applies to the **list view**. When in **kanban view** (which appears to be your current view), the kanban board receives `allEmails` directly, completely ignoring the search state. So typing in the search box has no effect on what's displayed.
 
 ## Solution
-Create a new edge function `gmail-delete` that calls the Gmail API to trash a message, then update the frontend delete handler to call it before removing from the database.
+Replace `allEmails` with the filtered `emails` array in the kanban view rendering, so the search filter applies in both views.
 
 ## Technical Changes
 
-### 1. New Edge Function: `supabase/functions/gmail-delete/index.ts`
-- Authenticates the user (same pattern as `gmail-sync`)
-- Gets the user's Gmail access token via `getAccessTokenForUser` (reuse from `gmail-sync` or shared helper)
-- Accepts `{ messageId: string }` in the request body (the Gmail `source_id`)
-- Calls `POST https://gmail.googleapis.com/gmail/v1/users/me/messages/{messageId}/trash` to move it to Gmail's trash
-- Returns success/failure
+### File: `src/components/inbox/InboxView.tsx`
 
-### 2. Update `src/components/inbox/InboxView.tsx`
-- In `handleDeleteEmail`: before deleting from the `communications` table, check if the email has a `sourceId` (Gmail message ID). If so, call the `gmail-delete` edge function to trash it in Gmail first.
-- Same for `handleBulkDelete`: loop through selected emails and call `gmail-delete` for each one that has a `sourceId`.
-- If the Gmail delete call fails (e.g., user not connected), still proceed with local database deletion but show a warning that it may reappear on next sync.
+1. **Kanban board data (line ~884)**: Change the emails passed to `InboxKanbanBoard` from:
+   ```
+   allEmails.filter(e => !hiddenIds.has(e.id) && !snoozedUntil.has(e.id) && ...)
+   ```
+   to:
+   ```
+   emails.filter(e => kanbanTypeFilter === "all" || e.commType === kanbanTypeFilter)
+   ```
+   Since `emails` already filters out hidden/snoozed items AND applies the search query.
 
-### 3. Flow After Fix
+2. **Kanban type filter tab counts (lines ~859-862)**: Update the count calculations to use `emails` instead of `allEmails` so the tab counts reflect search results:
+   - `"all"` count: `emails.length`
+   - `"email"` count: `emails.filter(e => e.commType === "email").length`
+   - `"call"` count: `emails.filter(e => e.commType === "call").length`
+   - `"sms"` count: `emails.filter(e => e.commType === "sms").length`
 
-```text
-User clicks Delete
-    |
-    v
-Has sourceId? --Yes--> Call gmail-delete edge function (trash in Gmail)
-    |                        |
-    No                   Success/Fail
-    |                        |
-    v                        v
-Delete from communications table
-    |
-    v
-Call refresh() to update UI
-```
-
-This ensures deleted emails are removed from both Gmail and the database, so they won't reappear on the next sync.
+This ensures the search box works consistently regardless of which view mode (list or kanban) is active.
