@@ -55,7 +55,7 @@ export function QueueToMachineDialog({
       if (runsError) throw runsError;
 
       // Write event
-      const { error: eventError } = await supabase.from("events").insert({
+      const { error: eventError } = await supabase.from("activity_events").insert({
         entity_type: "cut_plan",
         entity_id: plan.id,
         event_type: "cut_plan_queued",
@@ -63,6 +63,8 @@ export function QueueToMachineDialog({
         actor_type: "user",
         description: `Cut plan "${plan.name}" queued to ${selectedMachine?.name || "machine"} with ${items.length} items`,
         company_id: companyId!,
+        source: "system",
+        dedupe_key: `cut_plan_queued:${plan.id}:${machineId}`,
         metadata: {
           machine_id: machineId,
           machine_name: selectedMachine?.name,

@@ -398,6 +398,7 @@ serve(async (req) => {
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (e) {
+    if (e instanceof Response) return e;
     console.error("generate-suggestions error:", e);
     return new Response(JSON.stringify({ error: String(e) }), {
       status: 500,

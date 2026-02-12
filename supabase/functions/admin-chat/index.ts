@@ -63,7 +63,7 @@ serve(async (req) => {
     ] = await Promise.all([
       supabase.from("work_orders").select("*", { count: "exact", head: true }).in("status", ["pending", "in_progress"]),
       supabase.from("machines").select("id, name, status, type, current_operator_id").limit(20),
-      supabase.from("events").select("event_type, entity_type, description, created_at").order("created_at", { ascending: false }).limit(10),
+      supabase.from("activity_events").select("event_type, entity_type, description, created_at").order("created_at", { ascending: false }).limit(10),
       supabase.from("suggestions").select("title, suggestion_type, priority, status").eq("status", "pending").order("priority", { ascending: false }).limit(5),
       supabase.from("customers").select("*", { count: "exact", head: true }),
       supabase.from("inventory_lots").select("bar_code, qty_on_hand, location").gt("qty_on_hand", 0).limit(15),

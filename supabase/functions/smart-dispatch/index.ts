@@ -392,7 +392,7 @@ serve(async (req) => {
     }
 
     if (events.length > 0) {
-      const { error: evtErr } = await svc.from("events").insert(events);
+      const { error: evtErr } = await svc.from("activity_events").insert(events.map((e: any) => ({ ...e, source: "system", company_id: companyId })));
       if (evtErr) console.error("Failed to log events:", evtErr);
     }
 
