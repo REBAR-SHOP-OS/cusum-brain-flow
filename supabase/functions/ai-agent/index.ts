@@ -1735,7 +1735,7 @@ async function fetchQuickBooksLiveContext(supabase: ReturnType<typeof createClie
   try {
     const { data: qbConnection } = await supabase
       .from("integration_connections")
-      .select("status, config, last_sync_at, error_message")
+      .select("id, status, config, last_sync_at, error_message")
       .eq("integration_id", "quickbooks")
       .single();
 
@@ -1746,6 +1746,9 @@ async function fetchQuickBooksLiveContext(supabase: ReturnType<typeof createClie
       const config = qbConnection.config as {
         realm_id?: string;
         access_token?: string;
+        refresh_token?: string;
+        expires_at?: number;
+        company_id?: string;
       };
 
       if (config?.access_token && config?.realm_id) {
@@ -1753,13 +1756,73 @@ async function fetchQuickBooksLiveContext(supabase: ReturnType<typeof createClie
           ? "https://quickbooks.api.intuit.com"
           : "https://sandbox-quickbooks.api.intuit.com";
 
+        // Auto-refresh expired token
+        let accessToken = config.access_token;
+        if (config.expires_at && config.expires_at < Date.now() && config.refresh_token) {
+          try {
+            const clientId = Deno.env.get("QUICKBOOKS_CLIENT_ID")!;
+            const clientSecret = Deno.env.get("QUICKBOOKS_CLIENT_SECRET")!;
+            const refreshRes = await fetch("https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Authorization": `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
+                "Accept": "application/json",
+              },
+              body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: config.refresh_token }),
+            });
+            if (refreshRes.ok) {
+              const newTokens = await refreshRes.json();
+              accessToken = newTokens.access_token;
+              await supabase.from("integration_connections").update({
+                config: { ...config, access_token: accessToken, refresh_token: newTokens.refresh_token || config.refresh_token, expires_at: Date.now() + (newTokens.expires_in * 1000) },
+                last_sync_at: new Date().toISOString(),
+              }).eq("id", qbConnection.id);
+              console.log("[QB] Token auto-refreshed for ai-agent context");
+            } else {
+              console.error("[QB] Token refresh failed in ai-agent:", await refreshRes.text());
+            }
+          } catch (refreshErr) {
+            console.error("[QB] Token refresh error:", refreshErr);
+          }
+        }
+
+        // Helper to make QB API calls with 401 retry
+        const qbFetch = async (url: string): Promise<Response | null> => {
+          let res = await fetch(url, { headers: { "Authorization": `Bearer ${accessToken}`, "Accept": "application/json" } });
+          if (res.status === 401 && config.refresh_token) {
+            // Token expired mid-request, try refresh
+            try {
+              const clientId = Deno.env.get("QUICKBOOKS_CLIENT_ID")!;
+              const clientSecret = Deno.env.get("QUICKBOOKS_CLIENT_SECRET")!;
+              const refreshRes = await fetch("https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/x-www-form-urlencoded",
+                  "Authorization": `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
+                  "Accept": "application/json",
+                },
+                body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: config.refresh_token }),
+              });
+              if (refreshRes.ok) {
+                const newTokens = await refreshRes.json();
+                accessToken = newTokens.access_token;
+                await supabase.from("integration_connections").update({
+                  config: { ...config, access_token: accessToken, refresh_token: newTokens.refresh_token || config.refresh_token, expires_at: Date.now() + (newTokens.expires_in * 1000) },
+                  last_sync_at: new Date().toISOString(),
+                }).eq("id", qbConnection.id);
+                console.log("[QB] Token refreshed on 401 retry");
+                res = await fetch(url, { headers: { "Authorization": `Bearer ${accessToken}`, "Accept": "application/json" } });
+              }
+            } catch (_) { /* refresh failed */ }
+          }
+          return res.ok ? res : null;
+        };
+
         // Fetch customers
         try {
-          const customersRes = await fetch(
-            `${qbApiBase}/v3/company/${config.realm_id}/query?query=SELECT * FROM Customer MAXRESULTS 50`,
-            { headers: { "Authorization": `Bearer ${config.access_token}`, "Accept": "application/json" } }
-          );
-          if (customersRes.ok) {
+          const customersRes = await qbFetch(`${qbApiBase}/v3/company/${config.realm_id}/query?query=SELECT * FROM Customer MAXRESULTS 50`);
+          if (customersRes) {
             const customersData = await customersRes.json();
             context.qbCustomers = (customersData.QueryResponse?.Customer || []).map((c: Record<string, unknown>) => ({
               id: c.Id, name: c.DisplayName, company: c.CompanyName, balance: c.Balance,
@@ -1770,11 +1833,8 @@ async function fetchQuickBooksLiveContext(supabase: ReturnType<typeof createClie
 
         // Fetch open invoices
         try {
-          const invoicesRes = await fetch(
-            `${qbApiBase}/v3/company/${config.realm_id}/query?query=SELECT * FROM Invoice WHERE Balance > '0' MAXRESULTS 30`,
-            { headers: { "Authorization": `Bearer ${config.access_token}`, "Accept": "application/json" } }
-          );
-          if (invoicesRes.ok) {
+          const invoicesRes = await qbFetch(`${qbApiBase}/v3/company/${config.realm_id}/query?query=SELECT * FROM Invoice WHERE Balance > '0' MAXRESULTS 30`);
+          if (invoicesRes) {
             const invoicesData = await invoicesRes.json();
             context.qbInvoices = (invoicesData.QueryResponse?.Invoice || []).map((inv: Record<string, unknown>) => ({
               id: inv.Id, docNumber: inv.DocNumber,
@@ -1787,11 +1847,8 @@ async function fetchQuickBooksLiveContext(supabase: ReturnType<typeof createClie
 
         // Fetch recent payments
         try {
-          const paymentsRes = await fetch(
-            `${qbApiBase}/v3/company/${config.realm_id}/query?query=SELECT * FROM Payment ORDERBY TxnDate DESC MAXRESULTS 20`,
-            { headers: { "Authorization": `Bearer ${config.access_token}`, "Accept": "application/json" } }
-          );
-          if (paymentsRes.ok) {
+          const paymentsRes = await qbFetch(`${qbApiBase}/v3/company/${config.realm_id}/query?query=SELECT * FROM Payment ORDERBY TxnDate DESC MAXRESULTS 20`);
+          if (paymentsRes) {
             const paymentsData = await paymentsRes.json();
             context.qbPayments = (paymentsData.QueryResponse?.Payment || []).map((pmt: Record<string, unknown>) => ({
               id: pmt.Id, customerName: (pmt.CustomerRef as Record<string, unknown>)?.name,
@@ -1802,26 +1859,20 @@ async function fetchQuickBooksLiveContext(supabase: ReturnType<typeof createClie
 
         // Fetch company info
         try {
-          const companyRes = await fetch(
-            `${qbApiBase}/v3/company/${config.realm_id}/companyinfo/${config.realm_id}`,
-            { headers: { "Authorization": `Bearer ${config.access_token}`, "Accept": "application/json" } }
-          );
-          if (companyRes.ok) {
+          const companyRes = await qbFetch(`${qbApiBase}/v3/company/${config.realm_id}/companyinfo/${config.realm_id}`);
+          if (companyRes) {
             const companyData = await companyRes.json();
             const info = companyData.CompanyInfo;
             context.qbCompanyInfo = { name: info?.CompanyName, country: info?.Country, fiscalYearStart: info?.FiscalYearStartMonth };
           }
-      } catch (e) { console.error("[QB] Failed to fetch company info:", e); }
+        } catch (e) { console.error("[QB] Failed to fetch company info:", e); }
 
         // Fetch Profit & Loss (full year, monthly columns)
         try {
           const fiscalYearStart = `${new Date().getFullYear()}-01-01`;
           const today = new Date().toISOString().split("T")[0];
-          const plRes = await fetch(
-            `${qbApiBase}/v3/company/${config.realm_id}/reports/ProfitAndLoss?start_date=${fiscalYearStart}&end_date=${today}&summarize_column_by=Month&accounting_method=Accrual`,
-            { headers: { "Authorization": `Bearer ${config.access_token}`, "Accept": "application/json" } }
-          );
-          if (plRes.ok) {
+          const plRes = await qbFetch(`${qbApiBase}/v3/company/${config.realm_id}/reports/ProfitAndLoss?start_date=${fiscalYearStart}&end_date=${today}&summarize_column_by=Month&accounting_method=Accrual`);
+          if (plRes) {
             const plData = await plRes.json();
             context.qbProfitAndLoss = plData;
           }
@@ -1829,11 +1880,8 @@ async function fetchQuickBooksLiveContext(supabase: ReturnType<typeof createClie
 
         // Fetch Balance Sheet
         try {
-          const bsRes = await fetch(
-            `${qbApiBase}/v3/company/${config.realm_id}/reports/BalanceSheet?date_macro=Today&accounting_method=Accrual`,
-            { headers: { "Authorization": `Bearer ${config.access_token}`, "Accept": "application/json" } }
-          );
-          if (bsRes.ok) {
+          const bsRes = await qbFetch(`${qbApiBase}/v3/company/${config.realm_id}/reports/BalanceSheet?date_macro=Today&accounting_method=Accrual`);
+          if (bsRes) {
             const bsData = await bsRes.json();
             context.qbBalanceSheet = bsData;
           }
@@ -1841,11 +1889,8 @@ async function fetchQuickBooksLiveContext(supabase: ReturnType<typeof createClie
 
         // Fetch all accounts (for expense breakdown)
         try {
-          const acctRes = await fetch(
-            `${qbApiBase}/v3/company/${config.realm_id}/query?query=SELECT * FROM Account WHERE Active = true MAXRESULTS 100`,
-            { headers: { "Authorization": `Bearer ${config.access_token}`, "Accept": "application/json" } }
-          );
-          if (acctRes.ok) {
+          const acctRes = await qbFetch(`${qbApiBase}/v3/company/${config.realm_id}/query?query=SELECT * FROM Account WHERE Active = true MAXRESULTS 100`);
+          if (acctRes) {
             const acctData = await acctRes.json();
             context.qbAccounts = (acctData.QueryResponse?.Account || []).map((a: Record<string, unknown>) => ({
               id: a.Id, name: a.Name, type: a.AccountType, subType: a.AccountSubType,
@@ -1903,7 +1948,7 @@ async function fetchContext(supabase: ReturnType<typeof createClient>, agent: st
       const { data: arData } = await supabase
         .from("accounting_mirror")
         .select("id, entity_type, balance, customer_id, last_synced_at, data")
-        .eq("entity_type", "invoice")
+        .eq("entity_type", "Invoice")
         .gt("balance", 0)
         .limit(15);
       context.outstandingAR = arData;
