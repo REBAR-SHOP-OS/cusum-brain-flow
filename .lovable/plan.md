@@ -1,80 +1,54 @@
 
 
-# Fix: AI Starts Before Answer + Echo/Overlap Issues
+# Fix: AI Goes Silent After Greeting
 
-## Problems Identified
+## Root Cause
 
-### 1. AI starts talking before the caller answers
-The RingCentral WebPhone SDK has a **known limitation**: for outbound calls, the "answered" event fires immediately when the SIP INVITE is sent, NOT when the remote party picks up. This means the AI bridge activates while the phone is still ringing, causing the AI to "speak into the void" and hear ringback tone as caller audio.
+After the AI delivers its greeting, the microphone capture is suppressed for too long and the caller's response is never heard by the AI. Here is what happens:
 
-### 2. Echo feedback loop causing overlap
-When the AI speaks, its audio is sent to the remote party via the replaced WebRTC track. The telephony network echoes some of that audio back. The 1000ms echo tail guard is not long enough for telephony echo, causing the AI's own speech to be captured and sent back to ElevenLabs as "caller speech." This creates a feedback loop where the AI thinks the caller said something, interrupts itself, and then repeats.
+1. The AI greeting plays as many small audio chunks (each one resets the 2500ms echo tail timer)
+2. After the last chunk finishes, the mic stays muted for another 2500ms
+3. The caller responds during this muted window -- their speech is discarded
+4. ElevenLabs never receives caller audio, so the AI has nothing to respond to
+5. The conversation dies
 
 ## Solution
 
-### Fix 1: Delay AI bridge start with a "ring guard" timer
-Since the SDK cannot detect when the remote party actually answers, we add a configurable delay (e.g., 8 seconds) before starting the AI bridge. This gives the phone time to ring and be answered before the AI starts speaking.
+Two changes to `src/hooks/useCallAiBridge.ts`:
 
-**File: `src/components/accounting/PennyCallCard.tsx`**
-- Add a delay timer in the auto-trigger `useEffect`
-- When `callStatus` becomes `"in_call"`, start a timeout (e.g., 8 seconds) before calling `onStartAiBridge`
-- Clear the timeout if the call ends before the timer fires
-- Show a "Waiting for answer..." indicator during the delay
+### 1. Reduce the echo tail guard from 2500ms to 800ms
 
-### Fix 2: Increase echo tail guard
-**File: `src/hooks/useCallAiBridge.ts`**
-- Increase the echo tail guard from 1000ms to 2500ms in `playAiAudioChunk`
-- Telephony networks have longer echo tails than local audio, especially over PSTN
+The 2500ms guard was too aggressive. Telephony echo typically fades within 300-500ms. An 800ms guard is sufficient to catch echo while letting the caller's response through quickly.
 
-### Fix 3: Add audio energy gate to capture
-**File: `src/hooks/useCallAiBridge.ts`**
-- Add a simple energy threshold check in the `onaudioprocess` callback
-- Only send audio chunks to ElevenLabs if the audio energy exceeds a minimum threshold
-- This filters out low-level echo/noise that gets past the mute guard
-- Threshold should be tunable (e.g., RMS > 0.01)
+### 2. Lower the energy gate threshold from 0.01 to 0.005
+
+Phone audio from a remote caller can be quieter than local microphone input, especially on mobile networks. The 0.01 threshold may be filtering out legitimate speech. Lowering to 0.005 catches more real speech while still filtering dead silence.
 
 ## Technical Details
 
-### PennyCallCard.tsx -- Ring guard delay
+**File: `src/hooks/useCallAiBridge.ts`**
 
+Change 1 -- Echo tail guard (line ~364):
 ```text
-// Current behavior:
-callStatus === "in_call" --> immediately starts AI bridge
+// Before:
+setTimeout(() => { ... ttsPlayingRef.current = false; }, 2500);
 
-// New behavior:
-callStatus === "in_call" --> starts 8-second timer --> then starts AI bridge
-callStatus changes away from "in_call" --> clears timer
+// After:
+setTimeout(() => { ... ttsPlayingRef.current = false; }, 800);
 ```
 
-The delay value of 8 seconds accounts for typical ring time (phones ring 4-6 times before someone answers). This can be adjusted based on real-world usage.
-
-### useCallAiBridge.ts -- Echo tail guard increase
-
+Change 2 -- Energy gate threshold (line ~135):
 ```text
-// Current: 1000ms echo tail
-setTimeout(() => { ttsPlayingRef.current = false; }, 1000);
+// Before:
+if (rms < 0.01) return;
 
-// New: 2500ms echo tail for telephony
-setTimeout(() => { ttsPlayingRef.current = false; }, 2500);
+// After:
+if (rms < 0.005) return;
 ```
-
-### useCallAiBridge.ts -- Audio energy gate
-
-```text
-// In onaudioprocess callback, before sending to ElevenLabs:
-// Calculate RMS energy of the audio buffer
-// If RMS < 0.01, skip sending (it's likely echo or silence)
-```
-
-## Files Modified
-
-- `src/components/accounting/PennyCallCard.tsx` -- Ring guard delay before AI activation
-- `src/hooks/useCallAiBridge.ts` -- Echo tail guard increase + audio energy gate
 
 ## Expected Outcome
 
-- AI waits ~8 seconds after dialing before starting to speak, giving the caller time to answer
-- Echo from telephony network is filtered out by longer tail guard and energy gate
-- AI no longer hears its own speech echoed back as "caller audio"
-- The "Caller: ..." empty entries in the transcript should disappear
+- After the AI greeting finishes, the mic unmutes within ~800ms instead of ~2500ms
+- The caller's response ("Yes, it's me") is captured and sent to ElevenLabs
+- The conversation continues naturally after the greeting
 
