@@ -1,51 +1,55 @@
 
 
-# Fix Double Voice: Mute RC Audio Element + Echo Tail Guard
+# Fix Double Agent: Remove Local Playback + Add Bridge Guard
 
-## Root Cause
+## Analysis
 
-The user hears the AI voice **twice** because:
+After reviewing the full audio pipeline, there are **two remaining causes** of the double voice:
 
-1. **Local playback** (line 303): AI audio plays directly to the user via `outputCtx.destination`
-2. **RC audio element**: The remote caller's phone echoes back the AI voice through their mic. This echo returns on the RingCentral receiver track and plays through the RC SDK's built-in `<audio>` element -- creating a delayed second copy
+### Cause 1: Local playback creates a second audio path (lines 314-318)
+Even with the RC audio element muted, the code **explicitly plays AI audio locally** via `outputCtx.destination` so the operator can "monitor" the AI. But this local playback can leak back into the system -- the browser's audio output can be picked up by hardware echo, and it creates a perceptual "double" for the user sitting at the desk hearing it from speakers.
 
-Additionally, the `ttsPlayingRef` unmutes the mic capture immediately when playback ends, but the echo from the remote phone arrives 200-500ms later, potentially getting sent back to ElevenLabs.
+### Cause 2: No guard against double `startBridge` calls
+If `startBridge` is called while already connecting/active (race condition in React effects), two ElevenLabs WebSocket connections open simultaneously -- literally two AI agents.
+
+### Cause 3: Echo tail guard may be too short
+500ms may not be enough for telephony networks with higher latency. The AI's own voice echoed back from the caller's phone can arrive 500-1000ms later.
 
 ## Changes to `src/hooks/useCallAiBridge.ts`
 
-### 1. Add `audioElementRef` to store and mute the RC audio element
+### 1. Remove local playback entirely (lines 314-318)
+Delete the `localSource` that plays AI audio to the user's speakers. The user can monitor the call via the live transcript in the UI. This eliminates the second audio path completely.
 
-Add a new ref. When the bridge starts, set `callSession.audioElement.volume = 0` so the user only hears the AI through the local playback path. Restore volume on stop/close.
-
-### 2. Echo tail guard -- delay unmuting after TTS ends
-
-Change the `onEnded` callback in `playAiAudioChunk` (lines 285-290) to wait 500ms before setting `ttsPlayingRef.current = false`. This prevents the capture processor from picking up delayed echo from the remote phone.
-
-```text
-const onEnded = (src: AudioBufferSourceNode) => {
-  activeSourcesRef.current.delete(src);
-  if (activeSourcesRef.current.size === 0) {
-    setTimeout(() => {
-      if (activeSourcesRef.current.size === 0) {
-        ttsPlayingRef.current = false;
-      }
-    }, 500);
-  }
-};
+```
+// REMOVE these lines:
+const localSource = outputCtx.createBufferSource();
+localSource.buffer = audioBuffer;
+localSource.connect(outputCtx.destination);
+localSource.start();
 ```
 
-### 3. Handle `interruption` event from ElevenLabs
+### 2. Add bridge guard to prevent double WS connections
+At the top of `startBridge`, check if already active/connecting and bail out:
 
-Add a case for the `interruption` WebSocket message type to immediately stop all TTS playback, improving barge-in responsiveness.
+```
+if (state.status !== "idle") {
+  console.warn("AI bridge: already active, ignoring duplicate start");
+  return;
+}
+```
 
-### 4. Restore audio element on cleanup
+Since `state` is React state (stale in closure), use a ref instead for reliable checking.
 
-In `ws.onclose`, `stopBridge`, and `cleanup`, restore `audioElementRef.current.volume = 1`.
+### 3. Increase echo tail guard from 500ms to 1000ms
+Telephony echo can take up to 1 second. Increase the timeout in `onEnded`.
 
-## Summary of All Changes
+### 4. Add debug logging for audioElement muting
+Log whether `callSession.audioElement` was found and muted, so we can verify it's working.
 
-- Add `audioElementRef` ref
-- Mute `audioElement.volume = 0` on bridge start
-- Add 500ms echo tail guard in `onEnded`
-- Add `interruption` case in `handleWsMessage`
-- Restore `audioElement.volume = 1` on bridge stop/close
+## Summary
+
+- Remove local AI audio playback (user monitors via transcript instead)
+- Add `bridgeActiveRef` guard to prevent two simultaneous WS connections
+- Increase echo tail guard to 1000ms
+- Add console logging for audioElement muting verification
+
