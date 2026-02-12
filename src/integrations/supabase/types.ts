@@ -616,6 +616,7 @@ export type Database = {
           direction: string | null
           from_address: string | null
           id: string
+          lead_id: string | null
           metadata: Json | null
           received_at: string | null
           resolved_at: string | null
@@ -644,6 +645,7 @@ export type Database = {
           direction?: string | null
           from_address?: string | null
           id?: string
+          lead_id?: string | null
           metadata?: Json | null
           received_at?: string | null
           resolved_at?: string | null
@@ -672,6 +674,7 @@ export type Database = {
           direction?: string | null
           from_address?: string | null
           id?: string
+          lead_id?: string | null
           metadata?: Json | null
           received_at?: string | null
           resolved_at?: string | null
@@ -704,6 +707,13 @@ export type Database = {
             columns: ["customer_id"]
             isOneToOne: false
             referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communications_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
             referencedColumns: ["id"]
           },
         ]

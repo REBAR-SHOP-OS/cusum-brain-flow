@@ -148,7 +148,7 @@ export function LeadDetailDrawer({
             </TabsList>
 
             <TabsContent value="email" className="space-y-4 mt-0">
-              <LeadEmailThread metadata={lead.metadata} notes={lead.notes} source={lead.source} />
+              <LeadEmailThread metadata={lead.metadata} notes={lead.notes} source={lead.source} leadId={lead.id} customerId={lead.customer_id} leadTitle={lead.title} />
             </TabsContent>
 
             <TabsContent value="timeline" className="mt-0">
