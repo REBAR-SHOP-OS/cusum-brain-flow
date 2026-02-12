@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -188,8 +189,22 @@ serve(async (req) => {
       );
     }
 
-    const body = await req.json();
-    const { action, provider, prompt, jobId, duration, model } = body;
+    const videoSchema = z.object({
+      action: z.enum(["generate", "poll", "download"]),
+      provider: z.enum(["veo", "sora"]).optional(),
+      prompt: z.string().max(5000).optional(),
+      jobId: z.string().max(500).optional(),
+      duration: z.number().min(1).max(30).optional(),
+      model: z.string().max(50).optional(),
+    });
+    const parsed = videoSchema.safeParse(await req.json());
+    if (!parsed.success) {
+      return new Response(
+        JSON.stringify({ error: "Validation failed", details: parsed.error.flatten().fieldErrors }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    const { action, provider, prompt, jobId, duration, model } = parsed.data;
 
     // Determine which API key to use
     const isVeo = provider === "veo";

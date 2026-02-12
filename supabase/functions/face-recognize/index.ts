@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireAuth, corsHeaders } from "../_shared/auth.ts";
+import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -18,14 +19,18 @@ serve(async (req) => {
       throw res;
     }
 
-    const { capturedImageBase64, companyId } = await req.json();
-
-    if (!capturedImageBase64) {
-      return new Response(JSON.stringify({ error: "No image provided" }), {
+    const faceSchema = z.object({
+      capturedImageBase64: z.string().min(100).max(10_000_000, "Image too large (max ~7.5MB)"),
+      companyId: z.string().uuid().optional(),
+    });
+    const parsed = faceSchema.safeParse(await req.json());
+    if (!parsed.success) {
+      return new Response(JSON.stringify({ error: "Validation failed", details: parsed.error.flatten().fieldErrors }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    const { capturedImageBase64, companyId } = parsed.data;
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");

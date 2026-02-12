@@ -31,6 +31,10 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
         .eq("customer_id", customer.id)
         .order("is_primary", { ascending: false });
       if (error) throw error;
+      // Log contact access for audit trail
+      if (data && data.length > 0) {
+        supabase.rpc("log_contact_bulk_access", { _count: data.length, _action: "customer_detail_read" }).then(() => {}, () => {});
+      }
       return data as Contact[];
     },
   });

@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -39,15 +40,20 @@ serve(async (req) => {
       );
     }
 
-    const body = await req.json();
-    const { platform, message, image_url, post_id } = body;
-
-    if (!platform || !message) {
+    const publishSchema = z.object({
+      platform: z.enum(["facebook", "instagram"]),
+      message: z.string().min(1).max(63206),
+      image_url: z.string().url().max(2000).optional(),
+      post_id: z.string().uuid().optional(),
+    });
+    const parsed = publishSchema.safeParse(await req.json());
+    if (!parsed.success) {
       return new Response(
-        JSON.stringify({ error: "Missing platform or message" }),
+        JSON.stringify({ error: "Validation failed", details: parsed.error.flatten().fieldErrors }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+    const { platform, message, image_url, post_id } = parsed.data;
 
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,

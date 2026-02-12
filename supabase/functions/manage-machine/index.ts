@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -58,12 +59,16 @@ serve(async (req) => {
     }
 
     // ── Parse body ───────────────────────────────────────────────────
-    const body = await req.json();
-    const { action, machineId } = body;
-
-    if (!action || !machineId) {
-      return json({ error: "Missing required: action, machineId" }, 400);
+    const topSchema = z.object({
+      action: z.string().min(1).max(50),
+      machineId: z.string().uuid("machineId must be a valid UUID"),
+    }).passthrough();
+    const parsed = topSchema.safeParse(await req.json());
+    if (!parsed.success) {
+      return json({ error: "Validation failed", details: parsed.error.flatten().fieldErrors }, 400);
     }
+    const body = parsed.data;
+    const { action, machineId } = body;
 
     // Fetch current machine state (via user client → RLS enforced)
     const { data: machine, error: machineError } = await supabaseUser

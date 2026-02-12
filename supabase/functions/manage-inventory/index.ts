@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -65,7 +66,14 @@ serve(async (req) => {
     }
     const companyId = profile.company_id;
 
-    const body = await req.json();
+    const topSchema = z.object({
+      action: z.string().min(1).max(50),
+    }).passthrough();
+    const parsed = topSchema.safeParse(await req.json());
+    if (!parsed.success) {
+      return json({ error: "Validation failed", details: parsed.error.flatten().fieldErrors }, 400);
+    }
+    const body = parsed.data;
     const { action } = body;
     const now = new Date().toISOString();
     const events: Record<string, unknown>[] = [];

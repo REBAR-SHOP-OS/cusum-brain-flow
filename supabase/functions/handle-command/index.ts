@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireAuth, corsHeaders } from "../_shared/auth.ts";
+import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
 
 interface CommandRequest {
   input: string;
@@ -28,7 +29,17 @@ serve(async (req) => {
       throw res;
     }
 
-    const { input } = (await req.json()) as CommandRequest;
+    const commandSchema = z.object({
+      input: z.string().min(1, "Command cannot be empty").max(1000, "Command too long (max 1000 chars)"),
+    });
+    const parsed = commandSchema.safeParse(await req.json());
+    if (!parsed.success) {
+      return new Response(
+        JSON.stringify({ error: "Validation failed", details: parsed.error.flatten().fieldErrors }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    const { input } = parsed.data as CommandRequest;
     const { intent, params } = parseIntent(input);
 
     let result = "executed";
