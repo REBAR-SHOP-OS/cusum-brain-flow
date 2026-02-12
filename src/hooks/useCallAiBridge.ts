@@ -125,6 +125,15 @@ export function useCallAiBridge() {
             if (ws.readyState !== WebSocket.OPEN) return;
             if (ttsPlayingRef.current) return;
             const samples = e.inputBuffer.getChannelData(0);
+
+            // Audio energy gate: skip silence/echo below threshold
+            let sumSq = 0;
+            for (let i = 0; i < samples.length; i++) {
+              sumSq += samples[i] * samples[i];
+            }
+            const rms = Math.sqrt(sumSq / samples.length);
+            if (rms < 0.01) return; // too quiet — likely echo or silence
+
             const pcm16 = float32ToPcm16(samples);
             const b64 = arrayBufferToBase64(pcm16.buffer as ArrayBuffer);
             ws.send(JSON.stringify({ user_audio_chunk: b64 }));
@@ -351,12 +360,12 @@ function playAiAudioChunk(
   const onEnded = (src: AudioBufferSourceNode) => {
     activeSourcesRef.current.delete(src);
     if (activeSourcesRef.current.size === 0) {
-      // Echo tail guard: wait 1000ms for remote telephony echo to pass before unmuting capture
+      // Echo tail guard: wait 2500ms for remote telephony echo to pass before unmuting capture
       setTimeout(() => {
         if (activeSourcesRef.current.size === 0) {
           ttsPlayingRef.current = false;
         }
-      }, 1000);
+      }, 2500);
     }
   };
 
