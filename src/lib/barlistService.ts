@@ -154,7 +154,7 @@ export async function logBarlistEvent(
 ) {
   const { getCompanyId } = await import("@/hooks/useCompanyId");
   const companyId = await getCompanyId();
-  await supabase.from("events").insert({
+  await supabase.from("activity_events").insert({
     entity_type: "barlist",
     entity_id: barlistId,
     event_type: eventType,
@@ -163,5 +163,7 @@ export async function logBarlistEvent(
     description: description || eventType,
     company_id: companyId!,
     metadata: metadata || {},
+    source: "system",
+    dedupe_key: `barlist:${barlistId}:${eventType}`,
   } as any);
 }

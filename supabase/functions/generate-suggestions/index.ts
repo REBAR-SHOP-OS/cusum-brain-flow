@@ -22,15 +22,13 @@ serve(async (req) => {
     // Load agent IDs
     const { data: agents } = await supabase.from("agents").select("id, code");
     if (!agents || agents.length === 0) {
-      return new Response(JSON.stringify({ error: "No agents found" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return json({ error: "No agents found" }, 500);
     }
 
     const agentMap = Object.fromEntries(agents.map((a: any) => [a.code, a.id]));
     const now = new Date();
     const suggestions: any[] = [];
+    const humanTasks: any[] = [];
 
     // Helper: check if suggestion already exists (dedup)
     const existingSuggestions = new Set<string>();
@@ -46,8 +44,53 @@ serve(async (req) => {
       });
     }
 
+    // Also check existing human_tasks dedupe keys
+    const existingTaskKeys = new Set<string>();
+    const { data: existingTasks } = await supabase
+      .from("human_tasks")
+      .select("dedupe_key")
+      .in("status", ["open", "snoozed"])
+      .not("dedupe_key", "is", null);
+
+    if (existingTasks) {
+      existingTasks.forEach((t: any) => {
+        if (t.dedupe_key) existingTaskKeys.add(t.dedupe_key);
+      });
+    }
+
     const isDuplicate = (entityType: string, entityId: string, category: string) =>
       existingSuggestions.has(`${entityType}:${entityId}:${category}`);
+
+    const isTaskDupe = (key: string) => existingTaskKeys.has(key);
+
+    // Helper to push both suggestion + human_task
+    function pushDual(suggestionRow: any, taskDedupeKey: string, agentId: string, sourceEventId?: string) {
+      suggestions.push(suggestionRow);
+
+      if (!isTaskDupe(taskDedupeKey)) {
+        humanTasks.push({
+          company_id: suggestionRow.company_id,
+          agent_id: agentId,
+          source_event_id: sourceEventId || null,
+          dedupe_key: taskDedupeKey,
+          title: suggestionRow.title,
+          description: suggestionRow.description,
+          severity: suggestionRow.severity,
+          category: suggestionRow.category,
+          entity_type: suggestionRow.entity_type,
+          entity_id: suggestionRow.entity_id,
+          inputs_snapshot: {
+            generated_at: now.toISOString(),
+            reason: suggestionRow.reason,
+            impact: suggestionRow.impact,
+          },
+          status: "open",
+          actions: suggestionRow.actions,
+          reason: suggestionRow.reason,
+          impact: suggestionRow.impact,
+        });
+      }
+    }
 
     // ========== VIZZY (CEO) ==========
     if (agentMap.vizzy) {
@@ -67,11 +110,10 @@ serve(async (req) => {
 
           const daysPast = Math.floor((now.getTime() - dueDate.getTime()) / 86400000);
           const severity = daysPast > 90 ? "critical" : daysPast > 30 ? "warning" : "info";
-          const key = `invoice:${inv.id}:overdue_ar`;
           if (isDuplicate("invoice", inv.id, "overdue_ar")) continue;
 
           const customerName = invData?.CustomerRef?.name ?? "Unknown";
-          suggestions.push({
+          const row = {
             company_id: inv.company_id,
             agent_id: agentMap.vizzy,
             suggestion_type: "action",
@@ -87,7 +129,8 @@ serve(async (req) => {
             actions: [
               { label: "View AR", action: "navigate", path: "/accounting?tab=invoices" },
             ],
-          });
+          };
+          pushDual(row, `vizzy:overdue_ar:${inv.id}`, agentMap.vizzy);
         }
       }
 
@@ -102,7 +145,7 @@ serve(async (req) => {
         for (const order of zeroOrders) {
           if (isDuplicate("order", order.id, "zero_total")) continue;
           if (!order.company_id) continue;
-          suggestions.push({
+          const row = {
             company_id: order.company_id,
             agent_id: agentMap.vizzy,
             suggestion_type: "action",
@@ -118,7 +161,8 @@ serve(async (req) => {
             actions: [
               { label: "View Order", action: "navigate", path: `/orders` },
             ],
-          });
+          };
+          pushDual(row, `vizzy:zero_total:${order.id}`, agentMap.vizzy);
         }
       }
     }
@@ -137,7 +181,7 @@ serve(async (req) => {
       if (missingQb) {
         for (const cust of missingQb) {
           if (isDuplicate("customer", cust.id, "missing_qb")) continue;
-          suggestions.push({
+          const row = {
             company_id: (cust as any).company_id,
             agent_id: agentMap.penny,
             suggestion_type: "action",
@@ -152,7 +196,8 @@ serve(async (req) => {
             actions: [
               { label: "View Customer", action: "navigate", path: "/customers" },
             ],
-          });
+          };
+          pushDual(row, `penny:missing_qb:${cust.id}`, agentMap.penny);
         }
       }
 
@@ -171,14 +216,14 @@ serve(async (req) => {
           if (!inv.company_id) continue;
 
           const daysPast = Math.floor((now.getTime() - dueDate.getTime()) / 86400000);
-          if (daysPast < 30) continue; // Penny only surfaces 30+ day aging
+          if (daysPast < 30) continue;
 
           const severity = daysPast >= 90 ? "critical" : daysPast >= 60 ? "warning" : "info";
           if (isDuplicate("invoice", inv.id, "penny_overdue_ar")) continue;
 
           const customerName = invData?.CustomerRef?.name ?? "Unknown";
           const tier = daysPast >= 90 ? "90+" : daysPast >= 60 ? "60-89" : "30-59";
-          suggestions.push({
+          const row = {
             company_id: inv.company_id,
             agent_id: agentMap.penny,
             suggestion_type: "action",
@@ -194,7 +239,8 @@ serve(async (req) => {
             actions: [
               { label: "View Invoice", action: "navigate", path: "/accounting?tab=invoices" },
             ],
-          });
+          };
+          pushDual(row, `penny:overdue_ar:${inv.id}:${tier}`, agentMap.penny);
         }
       }
     }
@@ -223,7 +269,7 @@ serve(async (req) => {
           if (machine.status === "idle" && (queuedByMachine.get(machine.id) ?? 0) > 0) {
             if (isDuplicate("machine", machine.id, "idle_with_backlog")) continue;
             const queueCount = queuedByMachine.get(machine.id)!;
-            suggestions.push({
+            const row = {
               company_id: machine.company_id,
               agent_id: agentMap.forge,
               suggestion_type: "action",
@@ -239,11 +285,12 @@ serve(async (req) => {
               actions: [
                 { label: "View Machine", action: "navigate", path: "/shop-floor" },
               ],
-            });
+            };
+            pushDual(row, `forge:idle_backlog:${machine.id}`, agentMap.forge);
           }
         }
 
-        // Bender starving: cutters have 5+ queued but benders have 0
+        // Bender starving
         const cutterMachines = machines.filter((m: any) => m.type === "cutter");
         const benderMachines = machines.filter((m: any) => m.type === "bender");
         const cutterQueued = cutterMachines.reduce((sum: number, m: any) => sum + (queuedByMachine.get(m.id) ?? 0), 0);
@@ -252,7 +299,7 @@ serve(async (req) => {
         if (cutterQueued > 5 && benderQueued === 0 && benderMachines.length > 0) {
           const firstBender = benderMachines[0] as any;
           if (!isDuplicate("machine", firstBender.id, "bender_starving")) {
-            suggestions.push({
+            const row = {
               company_id: firstBender.company_id,
               agent_id: agentMap.forge,
               suggestion_type: "action",
@@ -268,13 +315,13 @@ serve(async (req) => {
               actions: [
                 { label: "View Shop Floor", action: "navigate", path: "/shop-floor" },
               ],
-            });
+            };
+            pushDual(row, `forge:bender_starving:${firstBender.id}`, agentMap.forge);
           }
         }
       }
 
-      // At-risk jobs: cut plans near due date with low completion
-      const threeDaysFromNow = new Date(now.getTime() + 3 * 86400000).toISOString();
+      // At-risk jobs: cut plans with low completion
       const { data: atRiskPlans } = await supabase
         .from("cut_plans")
         .select("id, name, company_id, status, project_name, created_at")
@@ -283,7 +330,6 @@ serve(async (req) => {
       if (atRiskPlans) {
         for (const plan of atRiskPlans) {
           if (!plan.company_id) continue;
-          // Check items for completion rate
           const { data: items } = await supabase
             .from("cut_plan_items")
             .select("total_pieces, completed_pieces")
@@ -295,10 +341,9 @@ serve(async (req) => {
           if (totalPieces === 0) continue;
           const completionPct = (completedPieces / totalPieces) * 100;
 
-          // Flag plans that are in_progress but below 50% completion
           if (plan.status === "in_progress" && completionPct < 50) {
             if (isDuplicate("cut_plan", plan.id, "at_risk_job")) continue;
-            suggestions.push({
+            const row = {
               company_id: plan.company_id,
               agent_id: agentMap.forge,
               suggestion_type: "action",
@@ -314,26 +359,42 @@ serve(async (req) => {
               actions: [
                 { label: "View Shop Floor", action: "navigate", path: "/shop-floor" },
               ],
-            });
+            };
+            pushDual(row, `forge:at_risk:${plan.id}`, agentMap.forge);
           }
         }
       }
     }
 
-    // Batch insert all suggestions
+    // Batch insert suggestions (backward compat)
     if (suggestions.length > 0) {
       const { error: insertError } = await supabase.from("suggestions").insert(suggestions);
       if (insertError) {
         console.error("Failed to insert suggestions:", insertError);
-        return new Response(JSON.stringify({ error: insertError.message }), {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+      }
+    }
+
+    // Batch insert human_tasks with ON CONFLICT dedupe
+    let tasksInserted = 0;
+    if (humanTasks.length > 0) {
+      // Use upsert with ignoreDuplicates to handle dedupe_key conflicts
+      const { data: insertedTasks, error: taskError } = await supabase
+        .from("human_tasks")
+        .upsert(humanTasks, { onConflict: "dedupe_key", ignoreDuplicates: true })
+        .select("id");
+
+      if (taskError) {
+        console.error("Failed to insert human_tasks:", taskError);
+      } else {
+        tasksInserted = insertedTasks?.length ?? 0;
       }
     }
 
     return new Response(
-      JSON.stringify({ generated: suggestions.length }),
+      JSON.stringify({
+        generated: suggestions.length,
+        human_tasks_created: tasksInserted,
+      }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (e) {

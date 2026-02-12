@@ -393,13 +393,15 @@ async function approveExtract(sb: any, sessionId: string, userId: string) {
 
     // Log project event
     if (projectId) {
-      await sb.from("events").insert({
+      await sb.from("activity_events").insert({
         entity_type: "project",
         entity_id: projectId,
         event_type: "project_created",
         actor_id: userId,
         actor_type: "user",
         description: `Project "${projectName}" created from extract session`,
+        source: "system",
+        dedupe_key: `project:${projectId}:created`,
       });
     }
   }
@@ -425,7 +427,7 @@ async function approveExtract(sb: any, sessionId: string, userId: string) {
 
     // Log barlist_created event
     if (barlistId) {
-      await sb.from("events").insert({
+      await sb.from("activity_events").insert({
         entity_type: "barlist",
         entity_id: barlistId,
         event_type: "barlist_created",
@@ -433,6 +435,8 @@ async function approveExtract(sb: any, sessionId: string, userId: string) {
         actor_type: "user",
         description: `Barlist created from AI extraction: ${session.name}`,
         metadata: { session_id: sessionId, item_count: rows.length },
+        source: "system",
+        dedupe_key: `barlist:${barlistId}:created`,
       });
     }
   } else if (barlistId) {
@@ -458,7 +462,7 @@ async function approveExtract(sb: any, sessionId: string, userId: string) {
     await sb.from("barlist_items").insert(barlistItems);
 
     // Log barlist_approved event
-    await sb.from("events").insert({
+    await sb.from("activity_events").insert({
       entity_type: "barlist",
       entity_id: barlistId,
       event_type: "barlist_approved",
@@ -466,6 +470,8 @@ async function approveExtract(sb: any, sessionId: string, userId: string) {
       actor_type: "user",
       description: `Barlist approved with ${rows.length} items`,
       metadata: { session_id: sessionId, item_count: rows.length },
+      source: "system",
+      dedupe_key: `barlist:${barlistId}:approved`,
     });
   }
 
@@ -620,7 +626,7 @@ async function approveExtract(sb: any, sessionId: string, userId: string) {
   // ── Log barlist_sent_to_production event ───────────────────
   if (barlistId) {
     await sb.from("barlists").update({ status: "in_production" }).eq("id", barlistId);
-    await sb.from("events").insert({
+    await sb.from("activity_events").insert({
       entity_type: "barlist",
       entity_id: barlistId,
       event_type: "barlist_sent_to_production",
@@ -632,6 +638,8 @@ async function approveExtract(sb: any, sessionId: string, userId: string) {
         cut_plan_id: cutPlan?.id,
         work_order_number: woNumber,
       },
+      source: "system",
+      dedupe_key: `barlist:${barlistId}:sent_to_production`,
     });
   }
 
@@ -647,7 +655,7 @@ async function approveExtract(sb: any, sessionId: string, userId: string) {
     .eq("session_id", sessionId);
 
   // Log session event
-  await sb.from("events").insert({
+  await sb.from("activity_events").insert({
     entity_type: "extract_session",
     entity_id: sessionId,
     event_type: "approved",
@@ -662,6 +670,8 @@ async function approveExtract(sb: any, sessionId: string, userId: string) {
       project_id: projectId,
       item_count: rows.length,
     },
+    source: "system",
+    dedupe_key: `extract_session:${sessionId}:approved`,
   });
 
   return jsonResponse({
@@ -700,7 +710,7 @@ async function rejectExtract(sb: any, sessionId: string, userId: string, reason?
     .eq("session_id", sessionId);
 
   // Log event
-  await sb.from("events").insert({
+  await sb.from("activity_events").insert({
     entity_type: "extract_session",
     entity_id: sessionId,
     event_type: "rejected",
@@ -708,6 +718,8 @@ async function rejectExtract(sb: any, sessionId: string, userId: string, reason?
     actor_type: "user",
     description: `Rejected session "${session.name}"${reason ? `: ${reason}` : ""}`,
     metadata: { reason: reason || null, previous_status: session.status },
+    source: "system",
+    dedupe_key: `extract_session:${sessionId}:rejected`,
   });
 
   return jsonResponse({ success: true, status: "rejected" });

@@ -59,7 +59,7 @@ serve(async (req) => {
     switch (logType) {
       case "events": {
         let query = supabase
-          .from("events")
+          .from("activity_events")
           .select("*")
           .order("created_at", { ascending: false })
           .limit(safeLimit);

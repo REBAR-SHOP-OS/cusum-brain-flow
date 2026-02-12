@@ -302,13 +302,14 @@ serve(async (req) => {
 
     // Log event
     if (alerts.length > 0) {
-      await svc.from("events").insert({
+      await svc.from("activity_events").insert({
         company_id: "a0000000-0000-0000-0000-000000000001",
         entity_type: "comms_alert",
         entity_id: "system",
         event_type: "alerts_processed",
         description: `Processed ${alerts.length} alerts: ${results.filter(r => r.sent).length} sent`,
         metadata: { alerts_count: alerts.length, results },
+        source: "system",
       });
     }
 

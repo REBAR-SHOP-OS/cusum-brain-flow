@@ -59,7 +59,7 @@ export function useVizzyContext() {
       const deliveriesP = supabase.from("deliveries").select("id, delivery_number, status, scheduled_date")
         .gte("scheduled_date", today).lte("scheduled_date", today).limit(50) as any;
       const profilesP = supabase.from("profiles").select("id, full_name, user_id").not("full_name", "is", null) as any;
-      const eventsP = supabase.from("events").select("id, event_type, entity_type, description, created_at")
+      const eventsP = supabase.from("activity_events").select("id, event_type, entity_type, description, created_at")
         .order("created_at", { ascending: false }).limit(20) as any;
       const knowledgeP = supabase.from("knowledge").select("title, category, content")
         .order("created_at", { ascending: false }).limit(1000) as any;
