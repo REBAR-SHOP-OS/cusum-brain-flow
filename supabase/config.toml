@@ -146,3 +146,6 @@ verify_jwt = false
 
 [functions.relay-pipeline]
 verify_jwt = false
+
+[functions.mcp-server]
+verify_jwt = false
