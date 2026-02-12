@@ -1,38 +1,32 @@
 
-# Phase 2: COMPLETED ✅
 
-## What was done
+# Add Odoo Integration Card to Integrations Page
 
-### Part A: Phase T Stabilization ✅
-- **A1**: Fixed `generate-suggestions` error handling — added `if (e instanceof Response) return e;`
-- **A2**: Migrated all 6 remaining `.from("events")` references to `activity_events` with `source` and `dedupe_key`
-  - `QueueToMachineDialog.tsx` → `activity_events` + `source: "system"` + `dedupe_key`
-  - `manage-inventory/index.ts` (2 locations) → `activity_events` + `source: "system"`
-  - `smart-dispatch/index.ts` → `activity_events` + `source: "system"`
-  - `manage-machine/index.ts` (line 246) → `activity_events` + `source: "system"`
-  - `daily-summary/index.ts` → SELECT from `activity_events`
-  - `admin-chat/index.ts` → SELECT from `activity_events`
-- **A3**: Dropped 4 duplicate RLS policies on `activity_events`
+## What will change
 
-### Part B: Webhook Receivers ✅
-- **B1**: Created `gmail-webhook` edge function — receives Google Pub/Sub push notifications, fetches new messages via `history.list`, upserts into `communications`, writes `activity_events` with `source: "gmail"` and deduplication
-- **B2**: Created `ringcentral-webhook` edge function — handles RC validation handshake, processes call log and SMS events, upserts `communications`, writes `activity_events` with `source: "ringcentral"`
-- **B3**: Updated `gmail-sync` to write `activity_events` after each successful communication upsert (`dedupe_key: "gmail:{messageId}"`)
-- **B3**: Updated `ringcentral-sync` to write `activity_events` after each call/SMS upsert (`dedupe_key: "rc:{recordId}"`)
+An **Odoo** card will appear on the Integrations page alongside the existing integrations (Gmail, Slack, Stripe, etc.), allowing users to connect their Odoo instance by entering their credentials.
 
-### Config Changes ✅
-- Added `gmail-webhook` and `ringcentral-webhook` to `config.toml` with `verify_jwt = false`
+## Implementation
 
-### Edge Functions Deployed ✅
-All 10 functions deployed: generate-suggestions, manage-inventory, smart-dispatch, manage-machine, daily-summary, admin-chat, gmail-sync, ringcentral-sync, gmail-webhook, ringcentral-webhook
+### 1. Add Odoo icon to IntegrationIcons.tsx
+Add a new `"odoo"` case to the icon switch statement -- the official Odoo purple gear/cog logo as an inline SVG.
 
-## External Setup Required (by admin, outside Lovable)
-- **Gmail**: Create a Google Cloud Pub/Sub topic + push subscription pointing to `https://uavzziigfnqpfdkczbdo.supabase.co/functions/v1/gmail-webhook`
-- **RingCentral**: Register webhook subscription pointing to `https://uavzziigfnqpfdkczbdo.supabase.co/functions/v1/ringcentral-webhook`
+### 2. Add Odoo entry to integrationsList.ts
+Insert an Odoo integration object into the `defaultIntegrations` array with:
+- **id**: `"odoo"`
+- **name**: `"Odoo"`
+- **description**: `"Sync leads, quotations, and ERP data from Odoo."`
+- **icon**: `"odoo"`
+- **docsUrl**: `"https://www.odoo.com/documentation/17.0/developer/reference/external_api.html"`
+- **fields**:
+  - `ODOO_URL` (text) -- Odoo instance URL
+  - `ODOO_DATABASE` (text) -- Database name
+  - `ODOO_USERNAME` (text) -- Login username
+  - `ODOO_API_KEY` (password) -- API key from Odoo settings
 
----
+These match the secrets already used by existing edge functions (`sync-odoo-leads`, `sync-odoo-quotations`).
 
-# Phase 3: Next Steps (not started)
-- Agent rule engine expansion (Relay agent processing activity_events → human_tasks)
-- Dashboard for human_tasks management
-- Webhook subscription management UI
+### Files to modify
+- `src/components/integrations/IntegrationIcons.tsx` -- add Odoo SVG icon
+- `src/components/integrations/integrationsList.ts` -- add Odoo entry
+
