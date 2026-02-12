@@ -38,6 +38,7 @@ import AdminPanel from "./pages/AdminPanel";
 import AdminMachines from "./pages/AdminMachines";
 import AdminDbAudit from "./pages/AdminDbAudit";
 import CleanupReport from "./pages/CleanupReport";
+import ConnectionsAudit from "./pages/ConnectionsAudit";
 import DataStoresAudit from "./pages/DataStoresAudit";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import DataDeletion from "./pages/DataDeletion";
@@ -141,6 +142,7 @@ const App = () => (
                     <Route path="/admin/db-audit" element={<P><AdminDbAudit /></P>} />
                     <Route path="/admin/machines" element={<P><AdminMachines /></P>} />
                     <Route path="/admin/cleanup" element={<P><CleanupReport /></P>} />
+                    <Route path="/admin/connections-audit" element={<P><ConnectionsAudit /></P>} />
                     <Route path="/admin/data-audit" element={<P><DataStoresAudit /></P>} />
 
                     {/* Vizzy – standalone voice page for Siri Shortcut */}
