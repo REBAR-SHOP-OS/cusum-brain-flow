@@ -192,7 +192,7 @@ export function InboxDetailView({ email, onClose, onDelete, onArchive }: InboxDe
       <EmailSummaryBanner email={email} />
 
       {/* Split content */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex min-h-0 overflow-hidden">
         {/* Left: Thread timeline */}
         <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
           <ScrollArea className="flex-1 min-h-0">
