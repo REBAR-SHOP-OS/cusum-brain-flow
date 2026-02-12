@@ -1,115 +1,72 @@
 
 
-# Fix Agents v2: All Bugs, Security Gaps, and Hardening
+# Finish Wiring Penny + Forge: UI Mounting and Suggestion Engine Completion
 
-This plan addresses every issue the user identified plus additional problems found during audit.
-
----
-
-## Confirmed Bugs
-
-### 1. Suggestions RLS: No Company Scoping on SELECT
-**The `suggestions` SELECT policy is `qual: true`** -- any authenticated user can read ALL suggestions across ALL companies. This is a **data leak**.
-
-**Fix:** Replace with `company_id = get_user_company_id(auth.uid())::text` (note: `company_id` is TEXT, `get_user_company_id` returns UUID, so cast needed).
-
-### 2. Suggestions RLS: UPDATE Policy Wrong
-Current UPDATE policy: `shown_to = auth.uid() OR shown_to IS NULL`. This allows any user to update ANY suggestion where `shown_to` is null (which is all agent-generated ones). Users could dismiss/snooze suggestions across companies.
-
-**Fix:** Add `company_id = get_user_company_id(auth.uid())::text` to the UPDATE qual.
-
-### 3. Query Key Missing `agentCode` (Cache Collision)
-In `useAgentSuggestions.ts` line 28: `queryKey: ["agent-suggestions", agentCode]` -- this is correct in the current code. However, the `onSuccess` invalidation on lines 81, 91, 102 uses `queryKey: ["agent-suggestions"]` without `agentCode`, which means mutations invalidate ALL agent suggestion queries (Vizzy + Penny + Forge). This causes unnecessary refetches but isn't a data bug. Minor fix for efficiency.
-
-### 4. `generate-suggestions` Edge Function: No Auth, No Admin Check
-The function uses `SUPABASE_SERVICE_ROLE_KEY` and has no authentication check. Anyone who knows the URL can trigger suggestion generation. It's also missing from `config.toml` (no `verify_jwt = false` entry).
-
-**Fix:** Add to `config.toml`, add auth check requiring admin role, OR at minimum rate-limit.
-
-### 5. `generate-suggestions`: No Dedup Index
-Dedup relies on an in-memory Set checked against currently open suggestions. If two concurrent calls happen, both insert duplicates. There's no unique constraint on `(entity_type, entity_id, category, status)`.
-
-**Fix:** Add a partial unique index on `suggestions(entity_type, entity_id, category)` where `status IN ('open','new')`.
-
-### 6. `generate-suggestions`: `actions` Stored as JSON String, Not JSONB
-The edge function does `JSON.stringify([...])` for the `actions` field, but the column is JSONB. This means it's stored as a JSON string inside JSONB (double-encoded). The client then reads it and tries to cast directly, which may fail or produce a string instead of an array.
-
-**Fix:** Remove `JSON.stringify()` wrapper -- pass the array directly and let Supabase handle JSONB serialization.
-
-### 7. `AgentSuggestionCard`: `borderLeftColor` CSS Hack Broken
-Line 38: `config.color.replace("text-", "var(--")` produces strings like `var(--destructive` (missing closing paren) and won't work as CSS. The border-left color is silently broken.
-
-**Fix:** Use a proper color map instead of string manipulation.
+No new tables, no schema changes, no architecture changes. This extends the existing system.
 
 ---
 
-## Security Fixes
+## What's Already Done
 
-### 8. Voice Token: Company Scope Missing
-`elevenlabs-conversation-token` checks `voice_enabled` and admin role but doesn't verify company scope. In a multi-tenant setup, a user from company B with `voice_enabled=true` gets the same agent signed URL as company A's CEO.
+- `generate-suggestions` edge function already has Penny (missing QB ID) and Forge (idle machines with backlog) rules
+- `AgentSuggestionsPanel` and `AgentSuggestionCard` components exist and work
+- Vizzy cards are mounted on the CEO Portal
 
-**Fix:** This is acceptable for now since there's a single ElevenLabs agent, but document it.
+## What's Missing
 
-### 9. `agent_action_log` INSERT: No Server-Side Validation
-The client inserts `action_type`, `entity_type`, `entity_id` with no validation. A malicious user could insert arbitrary audit records. The RLS ensures `user_id = auth.uid()` and correct `company_id`, so they can only log actions as themselves, which is acceptable for audit purposes.
+### 1. Penny: Additional AR Aging Rules in Edge Function
 
-**Status:** Low risk, no change needed.
+The current Penny logic only covers "customers missing QB ID". The overdue AR logic exists but is assigned to **Vizzy**. Need to add Penny-specific AR aging suggestions with 30/60/90 day severity tiers that surface in the Accounting workspace.
+
+**Changes to `supabase/functions/generate-suggestions/index.ts`:**
+- Inside the `if (agentMap.penny)` block, add a query to `accounting_mirror` for overdue invoices, generating suggestions with:
+  - 30-59 days: severity `info`
+  - 60-89 days: severity `warning`
+  - 90+ days: severity `critical`
+  - Category: `penny_overdue_ar` (distinct from Vizzy's `overdue_ar`)
+  - Actions: `[{ label: "View Invoice", action: "navigate", path: "/accounting?tab=invoices" }]`
+
+### 2. Forge: Additional Rules in Edge Function
+
+Current Forge logic covers idle machines. Add:
+- **Jobs near due date with low completion**: Query `cut_plan_items` where `due_date` is within 3 days and completion < 50%. Category: `at_risk_job`. Severity: `warning` or `critical`.
+- **Bender starving**: Compare cutter queue length vs bender queue length. If cutters have > 5 queued and benders have 0, generate a suggestion. Category: `bender_starving`.
+
+### 3. Mount Penny Panel in Accounting Workspace
+
+**File: `src/pages/AccountingWorkspace.tsx`**
+
+Add `<AgentSuggestionsPanel agentCode="penny" agentName="Penny" />` at the top of the main content area, just above the tab content. It renders only when suggestions exist (already handles empty state internally).
+
+Insert after line 163 (inside the scrollable content div), before the tab content:
+
+```tsx
+<AgentSuggestionsPanel agentCode="penny" agentName="Penny" />
+```
+
+### 4. Mount Forge Panel in Shop Floor Views
+
+**File: `src/pages/ShopFloor.tsx`**
+
+Add `<AgentSuggestionsPanel agentCode="forge" agentName="Forge" />` below the `MyJobsCard` component and above the hub cards grid.
+
+**File: `src/pages/LiveMonitor.tsx`**
+
+Add `<AgentSuggestionsPanel agentCode="forge" agentName="Forge" />` at the top of the page content, before the machine cards/filters.
 
 ---
 
-## Implementation Steps
-
-### Step 1: Database Migration
-- Drop and recreate `suggestions` SELECT policy with company scoping
-- Fix `suggestions` UPDATE policy with company scoping  
-- Add partial unique index for dedup: `CREATE UNIQUE INDEX ON suggestions(entity_type, entity_id, category) WHERE status IN ('open','new') AND entity_type IS NOT NULL`
-- Add `generate-suggestions` to `config.toml`
-
-### Step 2: Fix `generate-suggestions` Edge Function
-- Add auth guard (require admin role)
-- Remove `JSON.stringify()` from `actions` field (pass raw arrays)
-
-### Step 3: Fix `useAgentSuggestions.ts`
-- Fix invalidation keys to include `agentCode`
-
-### Step 4: Fix `AgentSuggestionCard.tsx`
-- Replace broken CSS color hack with a proper color mapping
-
----
-
-## Technical Details
+## Technical Summary
 
 ### Files to Modify
-- `supabase/functions/generate-suggestions/index.ts` -- auth guard + fix JSON.stringify
-- `src/hooks/useAgentSuggestions.ts` -- fix invalidation query keys
-- `src/components/agent/AgentSuggestionCard.tsx` -- fix border color
-- `supabase/config.toml` -- add generate-suggestions entry (auto-managed, just noting)
+- `supabase/functions/generate-suggestions/index.ts` -- add Penny AR aging + Forge at-risk jobs + bender starving rules
+- `src/pages/AccountingWorkspace.tsx` -- import and mount `AgentSuggestionsPanel` for Penny
+- `src/pages/ShopFloor.tsx` -- import and mount `AgentSuggestionsPanel` for Forge
+- `src/pages/LiveMonitor.tsx` -- import and mount `AgentSuggestionsPanel` for Forge
 
-### Database Migration SQL (Summary)
-```text
--- Fix SELECT policy: company-scoped
-DROP POLICY "Authenticated users can read suggestions" ON suggestions;
-CREATE POLICY "Users read own company suggestions" ON suggestions
-  FOR SELECT TO authenticated
-  USING (company_id = get_user_company_id(auth.uid())::text);
+### No Files to Create
+### No Schema Changes
+### No Breaking Changes to Vizzy
 
--- Fix UPDATE policy: company-scoped  
-DROP POLICY "Authenticated users can update own shown suggestions" ON suggestions;
-CREATE POLICY "Users update own company suggestions" ON suggestions
-  FOR UPDATE TO authenticated
-  USING (company_id = get_user_company_id(auth.uid())::text);
+All new suggestion categories use distinct category strings to avoid dedup index conflicts with Vizzy's existing suggestions.
 
--- Dedup index
-CREATE UNIQUE INDEX IF NOT EXISTS idx_suggestions_dedup
-  ON suggestions(entity_type, entity_id, category)
-  WHERE status IN ('open','new') AND entity_type IS NOT NULL;
-```
-
-### Color Fix Map
-Replace string manipulation with:
-```text
-critical -> border-red-500
-warning  -> border-amber-500  
-info     -> border-blue-500
-```
-Using Tailwind classes directly via className instead of inline style.
