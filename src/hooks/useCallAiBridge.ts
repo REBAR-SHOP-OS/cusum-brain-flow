@@ -258,10 +258,17 @@ function playAiAudioChunk(
   const audioBuffer = audioCtx.createBuffer(1, float32.length, 16000);
   audioBuffer.getChannelData(0).set(float32);
 
+  // Play to remote caller via replaced track
   const bufferSource = audioCtx.createBufferSource();
   bufferSource.buffer = audioBuffer;
   bufferSource.connect(dest);
   bufferSource.start();
+
+  // Also play locally so the user can monitor the AI voice
+  const localSource = audioCtx.createBufferSource();
+  localSource.buffer = audioBuffer;
+  localSource.connect(audioCtx.destination);
+  localSource.start();
 }
 
 function replaceOutgoingTrack(
