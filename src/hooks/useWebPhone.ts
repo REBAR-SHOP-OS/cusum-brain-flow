@@ -81,11 +81,21 @@ export function useWebPhone(): [WebPhoneState, WebPhoneActions] {
     try {
       setState((s) => ({ ...s, status: "calling" }));
 
-      // Clean phone number - remove non-digits except leading +
-      const cleaned = phoneNumber.replace(/[^\d+]/g, "");
-      const callee = cleaned.startsWith("+") ? cleaned.slice(1) : cleaned;
+      // Detect internal extension dialing (ext:101 format or short 3-digit numbers)
+      const isExtension = phoneNumber.startsWith("ext:");
+      const extensionNumber = isExtension ? phoneNumber.slice(4) : null;
 
-      const callSession = await wp.call(callee, state.callerId.replace("+", ""));
+      let callSession;
+      if (isExtension && extensionNumber) {
+        // Dial internal extension directly
+        console.log("Dialing internal extension:", extensionNumber);
+        callSession = await wp.call(extensionNumber);
+      } else {
+        // Clean phone number - remove non-digits except leading +
+        const cleaned = phoneNumber.replace(/[^\d+]/g, "");
+        const callee = cleaned.startsWith("+") ? cleaned.slice(1) : cleaned;
+        callSession = await wp.call(callee, state.callerId.replace("+", ""));
+      }
       callSessionRef.current = callSession;
 
       // Listen for call events
