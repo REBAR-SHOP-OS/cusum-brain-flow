@@ -154,7 +154,7 @@ export default function AgentWorkspace() {
 
       // Parse vizzy-action blocks for RingCentral actions (assistant only)
       if (agentId === "assistant" && isSuperAdmin) {
-        const actionMatch = replyContent.match(/```vizzy-action\n([\s\S]*?)\n```/);
+        const actionMatch = replyContent.match(/\[VIZZY-ACTION\]([\s\S]*?)\[\/VIZZY-ACTION\]/);
         if (actionMatch) {
           try {
             const actionData = JSON.parse(actionMatch[1]);
@@ -188,7 +188,7 @@ export default function AgentWorkspace() {
             console.warn("Failed to parse vizzy-action:", e);
           }
           // Remove the action block from displayed content
-          replyContent = replyContent.replace(/```vizzy-action\n[\s\S]*?\n```/, "").trim();
+          replyContent = replyContent.replace(/\[VIZZY-ACTION\][\s\S]*?\[\/VIZZY-ACTION\]/, "").trim();
         }
       }
 

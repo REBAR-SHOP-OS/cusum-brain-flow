@@ -1297,17 +1297,13 @@ You have the ability to make phone calls and send SMS messages on behalf of the 
 
 When the CEO asks you to call someone or send a text:
 1. Extract the phone number (or look it up from contacts/context)
-2. Return a structured action in your response using this EXACT format embedded in your reply:
+2. Return a structured action in your response using this EXACT JSON format on a single line, wrapped in [VIZZY-ACTION] tags:
 
 For calls:
-\`\`\`vizzy-action
-{"type":"ringcentral_call","phone":"<phone_number>","contact_name":"<name>"}
-\`\`\`
+[VIZZY-ACTION]{"type":"ringcentral_call","phone":"<phone_number>","contact_name":"<name>"}[/VIZZY-ACTION]
 
 For SMS:
-\`\`\`vizzy-action
-{"type":"ringcentral_sms","phone":"<phone_number>","message":"<sms_text>","contact_name":"<name>"}
-\`\`\`
+[VIZZY-ACTION]{"type":"ringcentral_sms","phone":"<phone_number>","message":"<sms_text>","contact_name":"<name>"}[/VIZZY-ACTION]
 
 RULES:
 - Always confirm the phone number and action with the CEO before including the action block
@@ -1320,7 +1316,7 @@ RULES:
 - Lead with the number, then the context
 - Exception-based: don't report what's working, flag what's not
 - Always end with "Do you want me to dig deeper into any of these?"
-- Use 🟢🟡🔴 status indicators\`,
+- Use 🟢🟡🔴 status indicators`,
 
   copywriting: `You are **Penn**, the Copywriting Agent for REBAR SHOP OS by Rebar.shop.
 
