@@ -1,51 +1,57 @@
 
-# Auto-Activate AI Voice When Call Connects
 
-## Goal
-When any agent (Penny, Vizzy, Forge) initiates a call, the AI should **automatically take over the conversation** as soon as the call connects -- no manual "AI Talk" button click needed.
+# Fix AI Voice Bridge: Proper Phone Call Behavior
 
-## Current Problem
-Right now the flow is: Agent suggests call -> User clicks "Call Now" -> Call connects to user's computer -> User has to manually click "AI Talk" -> Then AI starts speaking. The user wants the AI to start speaking immediately.
+## Problems Identified
 
-## Implementation
+1. **Wrong AI identity**: The ElevenLabs agent is configured as "Vizzy" for voice chat with you (Sattar). When bridged to a phone call, it greets the called party with "Hey Sattar, Vizzy here" -- completely wrong for an outbound call to a customer.
 
-### 1. Add a `callWithAi` method to `useWebPhone`
-Create a new method in the WebPhone hook that combines dialing + auto-bridging. When called, it will:
-- Dial the number as usual
-- Listen for the call "established"/"accepted" event on the session
-- Automatically trigger the AI bridge (`startBridge`) as soon as the remote party picks up
+2. **Context arrives too late**: The call context (reason, contact name) is sent as a `contextual_update` after the agent already starts its default greeting. The agent ignores it and follows its pre-configured behavior.
 
-### 2. Update `PennyCallCard` to auto-bridge on call
-- Change the "Call Now" button behavior: when the call card has AI bridge props, clicking "Call Now" will automatically activate the AI bridge once the call is connected
-- Remove the manual "AI Talk" button (or keep it as a fallback toggle)
-- Use a `useEffect` that watches `callStatus` -- when it transitions to `in_call`, automatically start the bridge
+3. **Same agent for everything**: One ElevenLabs agent (`ELEVENLABS_AGENT_ID`) is shared between Vizzy voice chat and phone call bridging. These need different behaviors.
 
-### 3. Make it work for all agents
-- The `useCallAiBridge` hook is already generic
-- Each agent component (Penny, Vizzy, Forge) just needs to pass the appropriate context string when calling
+## Solution
 
-## Technical Details
+### 1. Create a dedicated "Phone Caller" ElevenLabs agent (or override at connection time)
 
-### File changes:
+Update the edge function `elevenlabs-conversation-token` to accept an optional `mode` parameter. When `mode === "phone_call"`, use a separate agent ID (`ELEVENLABS_PHONE_AGENT_ID`) or the same agent with **conversation overrides** sent at WebSocket connection time.
 
-**`src/components/accounting/AccountingAgent.tsx`**
-- Add an effect: when `webPhoneState.status` changes to `"in_call"`, automatically call `startBridge()` with the pending call's context
-- Store the pending call data (contact name, reason) so the bridge knows what context to send
+### 2. Override prompt and first message per call
 
-**`src/components/accounting/PennyCallCard.tsx`**
-- Add a `useEffect` that watches `callStatus` -- when it becomes `"in_call"` and bridge is not yet active, automatically trigger `onStartAiBridge`
-- Keep the "Stop AI" / "AI Talk" button as a manual override toggle
-- Change default label from "AI Talk" to indicate AI will auto-activate
+When the WebSocket connects, send a `conversation_initiation_client_data` event (ElevenLabs protocol) that overrides:
+- **System prompt**: "You are an AI assistant calling on behalf of Rebar Shop. You are calling [contact_name] to [reason]. Be professional, introduce yourself, and handle the conversation."
+- **First message**: "Hi, this is an automated call from Rebar Shop. I'm calling regarding [reason]. Is this [contact_name]?"
 
-**`src/hooks/useWebPhone.ts`**
-- Add an `"established"` or `"accepted"` event listener on the call session to ensure we detect when the remote party actually picks up (not just when dialing starts)
-- This ensures the AI bridge only activates after the call is truly connected
+This way each call gets a unique, contextual introduction.
 
-### Flow after changes:
-1. User tells Penny "call Sattar and ask him to come to office"
-2. Penny outputs the call card with reason
-3. User clicks "Call Now"
-4. WebPhone dials the number
-5. When the remote party picks up (status -> `in_call`), the AI bridge **automatically activates**
-6. Penny's AI voice starts talking to the person
-7. User can click "Stop AI" to take over manually if needed
+### 3. Pass agent name and call context from the calling component
+
+The `startBridge` function will accept additional parameters: `agentName` (Penny/Vizzy/Forge) and `callData` (contact_name, reason, phone). These are used to construct the override prompt.
+
+## File Changes
+
+### `supabase/functions/elevenlabs-conversation-token/index.ts`
+- Accept an optional `mode` parameter from the request body
+- When `mode === "phone_call"`, use `ELEVENLABS_PHONE_AGENT_ID` if set, otherwise fall back to the same agent
+- Return the signed URL as before
+
+### `src/hooks/useCallAiBridge.ts`
+- Update `startBridge` to accept structured call data (agent name, contact name, reason)
+- After WebSocket opens, send `conversation_initiation_client_data` with prompt and first message overrides BEFORE any audio processing starts
+- Remove the `contextual_update` approach (too late, agent ignores it)
+- The override prompt will instruct the AI: "You are [AgentName] from Rebar Shop. You called [contact_name] at [phone]. Reason: [reason]. Start by introducing yourself and stating the purpose of your call."
+
+### `src/components/accounting/AccountingAgent.tsx`
+- Update the `onStartAiBridge` callback to pass the agent name ("Penny") and full call data to `startBridge`
+
+### `src/components/accounting/PennyCallCard.tsx`
+- Update `onStartAiBridge` prop type to pass call data through
+
+## Expected Result After Fix
+
+1. User tells Penny "call this customer about invoices"
+2. Penny shows the call card, user clicks "Call Now"
+3. Call connects, AI bridge auto-activates
+4. The called person hears: **"Hi, this is Penny calling from Rebar Shop. I'm reaching out regarding your outstanding invoices..."**
+5. The AI has a proper conversation about the specific invoices, not a generic Vizzy greeting
+
