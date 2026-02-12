@@ -83,10 +83,12 @@ export function useCallAiBridge() {
 
         // 3. Create 16kHz AudioContext for CAPTURING caller audio → ElevenLabs
         const captureCtx = new AudioContext({ sampleRate: 16000 });
+        await captureCtx.resume();
         captureCtxRef.current = captureCtx;
 
         // 4. Create 48kHz AudioContext for AI OUTPUT → WebRTC (standard rate)
         const outputCtx = new AudioContext({ sampleRate: 48000 });
+        await outputCtx.resume();
         outputCtxRef.current = outputCtx;
 
         // 5. Capture remote audio at 16kHz for ElevenLabs
@@ -317,6 +319,11 @@ function playAiAudioChunk(
   const float32 = pcm16Base64ToFloat32(base64Audio);
   if (float32.length === 0) return;
 
+  // Safety: resume outputCtx if browser suspended it mid-call
+  if (outputCtx.state === 'suspended') {
+    outputCtx.resume();
+  }
+
   // Mark TTS as playing to mute mic input
   ttsPlayingRef.current = true;
 
@@ -373,9 +380,10 @@ function replaceOutgoingTrack(
 
   const aiTrack = aiStream.getAudioTracks()[0];
   if (aiTrack) {
-    audioSender.replaceTrack(aiTrack).catch((e) => {
-      console.error("AI bridge: failed to replace track", e);
-    });
+    console.log("AI bridge: replacing track, AI track enabled:", aiTrack.enabled, "readyState:", aiTrack.readyState);
+    audioSender.replaceTrack(aiTrack)
+      .then(() => console.log("AI bridge: track replaced successfully"))
+      .catch((e) => console.error("AI bridge: failed to replace track", e));
   }
 }
 
