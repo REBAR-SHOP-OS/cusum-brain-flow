@@ -155,6 +155,48 @@ serve(async (req) => {
           });
         }
       }
+
+      // Penny-specific AR aging (30/60/90 day tiers)
+      const { data: pennyOverdue } = await supabase
+        .from("accounting_mirror")
+        .select("id, company_id, quickbooks_id, data, balance, customer_id")
+        .eq("entity_type", "Invoice")
+        .gt("balance", 0);
+
+      if (pennyOverdue) {
+        for (const inv of pennyOverdue) {
+          const invData = inv.data as any;
+          const dueDate = invData?.DueDate ? new Date(invData.DueDate) : null;
+          if (!dueDate || dueDate >= now) continue;
+          if (!inv.company_id) continue;
+
+          const daysPast = Math.floor((now.getTime() - dueDate.getTime()) / 86400000);
+          if (daysPast < 30) continue; // Penny only surfaces 30+ day aging
+
+          const severity = daysPast >= 90 ? "critical" : daysPast >= 60 ? "warning" : "info";
+          if (isDuplicate("invoice", inv.id, "penny_overdue_ar")) continue;
+
+          const customerName = invData?.CustomerRef?.name ?? "Unknown";
+          const tier = daysPast >= 90 ? "90+" : daysPast >= 60 ? "60-89" : "30-59";
+          suggestions.push({
+            company_id: inv.company_id,
+            agent_id: agentMap.penny,
+            suggestion_type: "action",
+            category: "penny_overdue_ar",
+            title: `${customerName} — $${inv.balance?.toFixed(0)} overdue (${tier}d)`,
+            description: `Invoice ${invData?.DocNumber ?? inv.quickbooks_id} is ${daysPast} days past due. ${tier}-day aging tier.`,
+            severity,
+            reason: `This invoice was due ${dueDate.toLocaleDateString()} and remains unpaid. Aging tier: ${tier} days.`,
+            impact: `$${inv.balance?.toFixed(2)} at risk`,
+            entity_type: "invoice",
+            entity_id: inv.id,
+            status: "open",
+            actions: [
+              { label: "View Invoice", action: "navigate", path: "/accounting?tab=invoices" },
+            ],
+          });
+        }
+      }
     }
 
     // ========== FORGE (Shop Floor) ==========
@@ -194,9 +236,84 @@ serve(async (req) => {
               entity_type: "machine",
               entity_id: machine.id,
               status: "open",
-            actions: [
-              { label: "View Machine", action: "navigate", path: "/shop-floor" },
-            ],
+              actions: [
+                { label: "View Machine", action: "navigate", path: "/shop-floor" },
+              ],
+            });
+          }
+        }
+
+        // Bender starving: cutters have 5+ queued but benders have 0
+        const cutterMachines = machines.filter((m: any) => m.type === "cutter");
+        const benderMachines = machines.filter((m: any) => m.type === "bender");
+        const cutterQueued = cutterMachines.reduce((sum: number, m: any) => sum + (queuedByMachine.get(m.id) ?? 0), 0);
+        const benderQueued = benderMachines.reduce((sum: number, m: any) => sum + (queuedByMachine.get(m.id) ?? 0), 0);
+
+        if (cutterQueued > 5 && benderQueued === 0 && benderMachines.length > 0) {
+          const firstBender = benderMachines[0] as any;
+          if (!isDuplicate("machine", firstBender.id, "bender_starving")) {
+            suggestions.push({
+              company_id: firstBender.company_id,
+              agent_id: agentMap.forge,
+              suggestion_type: "action",
+              category: "bender_starving",
+              title: `Benders starving — ${cutterQueued} cuts queued, 0 bends`,
+              description: `Cutters have ${cutterQueued} queued plans but benders have nothing. Downstream bottleneck forming.`,
+              severity: "warning",
+              reason: "Cut output is piling up with no bending work scheduled. This creates a production imbalance.",
+              impact: `${cutterQueued} cut plans with no downstream bending`,
+              entity_type: "machine",
+              entity_id: firstBender.id,
+              status: "open",
+              actions: [
+                { label: "View Shop Floor", action: "navigate", path: "/shop-floor" },
+              ],
+            });
+          }
+        }
+      }
+
+      // At-risk jobs: cut plans near due date with low completion
+      const threeDaysFromNow = new Date(now.getTime() + 3 * 86400000).toISOString();
+      const { data: atRiskPlans } = await supabase
+        .from("cut_plans")
+        .select("id, name, company_id, status, project_name, created_at")
+        .in("status", ["queued", "in_progress"]);
+
+      if (atRiskPlans) {
+        for (const plan of atRiskPlans) {
+          if (!plan.company_id) continue;
+          // Check items for completion rate
+          const { data: items } = await supabase
+            .from("cut_plan_items")
+            .select("total_pieces, completed_pieces")
+            .eq("cut_plan_id", plan.id);
+
+          if (!items || items.length === 0) continue;
+          const totalPieces = items.reduce((s: number, i: any) => s + (i.total_pieces ?? 0), 0);
+          const completedPieces = items.reduce((s: number, i: any) => s + (i.completed_pieces ?? 0), 0);
+          if (totalPieces === 0) continue;
+          const completionPct = (completedPieces / totalPieces) * 100;
+
+          // Flag plans that are in_progress but below 50% completion
+          if (plan.status === "in_progress" && completionPct < 50) {
+            if (isDuplicate("cut_plan", plan.id, "at_risk_job")) continue;
+            suggestions.push({
+              company_id: plan.company_id,
+              agent_id: agentMap.forge,
+              suggestion_type: "action",
+              category: "at_risk_job",
+              title: `${plan.name} at risk — ${completionPct.toFixed(0)}% done`,
+              description: `Cut plan "${plan.name}" is in progress but only ${completionPct.toFixed(0)}% complete.`,
+              severity: completionPct < 25 ? "critical" : "warning",
+              reason: "This job is actively running but completion is significantly behind. May miss delivery targets.",
+              impact: `${totalPieces - completedPieces} pieces remaining`,
+              entity_type: "cut_plan",
+              entity_id: plan.id,
+              status: "open",
+              actions: [
+                { label: "View Shop Floor", action: "navigate", path: "/shop-floor" },
+              ],
             });
           }
         }
