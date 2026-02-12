@@ -25,7 +25,9 @@ export function PennyCallCard({ data, callStatus, onCall, onHangup }: PennyCallC
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <p className="font-semibold text-sm">{data.contact_name}</p>
-            <p className="text-xs text-muted-foreground">{data.phone}</p>
+            <p className="text-xs text-muted-foreground">
+              {data.phone.startsWith("ext:") ? `Ext. ${data.phone.slice(4)}` : data.phone}
+            </p>
             <p className="text-xs text-muted-foreground mt-1">{data.reason}</p>
           </div>
           {isActive ? (
