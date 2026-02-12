@@ -2,13 +2,12 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { toast } from "@/hooks/use-toast";
-import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { DollarSign, Settings, TrendingUp, Truck, AlertTriangle, Clock, User, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { mockExceptions } from "./mockData";
-import type { ExceptionItem } from "./types";
+import type { CEOException } from "@/hooks/useCEODashboard";
+
+interface ExceptionDisplay extends CEOException {}
 
 const categoryIcons = { cash: DollarSign, ops: Settings, sales: TrendingUp, delivery: Truck };
 const severityStyle = {
@@ -17,11 +16,15 @@ const severityStyle = {
   info: "border-border bg-muted/20",
 };
 
-export function ExceptionsWorkbench() {
-  const [tab, setTab] = useState("all");
-  const [selected, setSelected] = useState<ExceptionItem | null>(null);
+interface Props {
+  exceptions?: ExceptionDisplay[];
+}
 
-  const filtered = tab === "all" ? mockExceptions : mockExceptions.filter((e) => e.category === tab);
+export function ExceptionsWorkbench({ exceptions = [] }: Props) {
+  const [tab, setTab] = useState("all");
+  const [selected, setSelected] = useState<ExceptionDisplay | null>(null);
+
+  const filtered = tab === "all" ? exceptions : exceptions.filter((e) => e.category === tab);
 
   return (
     <motion.div
@@ -36,7 +39,7 @@ export function ExceptionsWorkbench() {
             <AlertTriangle className="w-4 h-4 text-amber-500" />
             Exceptions Workbench
           </h2>
-          <Badge variant="secondary" className="text-xs">{mockExceptions.length} open</Badge>
+          <Badge variant="secondary" className="text-xs">{exceptions.length} open</Badge>
         </div>
 
         <Tabs value={tab} onValueChange={setTab}>
@@ -113,30 +116,14 @@ export function ExceptionsWorkbench() {
                     <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Owner</p>
                     <p className="text-lg font-bold">{selected.owner}</p>
                   </div>
-                  {selected.customer && (
-                    <div className="rounded-lg border border-border/50 bg-muted/20 p-3">
-                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Customer</p>
-                      <p className="text-sm font-medium">{selected.customer}</p>
-                    </div>
-                  )}
-                  {selected.value && (
-                    <div className="rounded-lg border border-border/50 bg-muted/20 p-3">
-                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Value</p>
-                      <p className="text-lg font-bold">${selected.value.toLocaleString()}</p>
-                    </div>
-                  )}
-                </div>
-                <div className="flex gap-2 pt-2">
-                  {selected.actions.map((a) => (
-                    <Button key={a.label} variant={a.type === "primary" ? "default" : "outline"} size="sm" className="text-xs"
-                      onClick={() => {
-                        toast({ title: `${a.label}`, description: `Action "${a.label}" triggered for this exception.` });
-                        setSelected(null);
-                      }}
-                    >
-                      {a.label}
-                    </Button>
-                  ))}
+                  <div className="rounded-lg border border-border/50 bg-muted/20 p-3">
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Category</p>
+                    <p className="text-sm font-medium capitalize">{selected.category}</p>
+                  </div>
+                  <div className="rounded-lg border border-border/50 bg-muted/20 p-3">
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Severity</p>
+                    <p className="text-sm font-medium capitalize">{selected.severity}</p>
+                  </div>
                 </div>
               </div>
             </>

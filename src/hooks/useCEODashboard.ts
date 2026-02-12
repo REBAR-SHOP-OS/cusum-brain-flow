@@ -6,6 +6,16 @@ export interface CEOAlert {
   message: string;
 }
 
+export interface CEOException {
+  id: string;
+  category: "cash" | "ops" | "sales" | "delivery";
+  severity: "critical" | "warning" | "info";
+  title: string;
+  detail: string;
+  owner: string;
+  age: string;
+}
+
 export interface CEOMetrics {
   // Production
   activeProjects: number;
@@ -20,6 +30,11 @@ export interface CEOMetrics {
   activeRuns: number;
   tonnageToday: number;
   scrapRate: number;
+
+  // Phase counters
+  queuedItems: number;
+  inProgressItems: number;
+  completedToday: number;
 
   // Financial
   outstandingAR: number;
@@ -55,6 +70,9 @@ export interface CEOMetrics {
 
   // Alerts
   alerts: CEOAlert[];
+
+  // Exceptions (real data)
+  exceptions: CEOException[];
 
   // Pipeline stages
   pipelineByStage: Record<string, { count: number; value: number }>;
@@ -112,6 +130,7 @@ async function fetchCEOMetrics(): Promise<CEOMetrics> {
     clockRes, inventoryRes, commsRes, socialRes,
     accountingRes, runsRes, cutPlansRes, pickupsRes,
     recentOrdersRes, pipelineRes, dailyRunsRes,
+    phaseItemsRes,
   ] = await Promise.all([
     supabase.from("projects").select("id", { count: "exact", head: true }).eq("status", "active"),
     supabase.from("orders").select("id", { count: "exact", head: true }).in("status", ["active", "pending"]),
@@ -132,6 +151,7 @@ async function fetchCEOMetrics(): Promise<CEOMetrics> {
     supabase.from("orders").select("id, order_number, status, total_amount, customer_id, order_date, customers(name)").order("created_at", { ascending: false }).limit(5),
     supabase.from("leads").select("stage, expected_value"),
     supabase.from("machine_runs").select("started_at, status").gte("started_at", weekAgo),
+    supabase.from("cut_plan_items").select("phase"),
   ]);
 
   // Production metrics
@@ -224,9 +244,85 @@ async function fetchCEOMetrics(): Promise<CEOMetrics> {
   if (overdueInvoices > 5) {
     alerts.push({ type: "warning", message: `${overdueInvoices} unpaid invoices totaling ${formatCurrencySimple(outstandingAR)}` });
   }
-  const pendingDeliveries = deliveriesRes.count || 0;
+   const pendingDeliveries = deliveriesRes.count || 0;
   if (pendingDeliveries > 3) {
     alerts.push({ type: "warning", message: `${pendingDeliveries} deliveries pending dispatch` });
+  }
+
+  // Phase counters
+  const phaseItems = phaseItemsRes.data || [];
+  const queuedItems = phaseItems.filter((i) => i.phase === "queued").length;
+  const inProgressItems = phaseItems.filter((i: any) => i.phase === "cutting" || i.phase === "bending").length;
+  const completedToday = phaseItems.filter((i: any) => i.phase === "complete").length; // approximate — all complete items (no updated_at on cut_plan_items)
+
+  // Real exceptions
+  const exceptions: CEOException[] = [];
+  // Overdue invoices
+  for (const inv of unpaidInvoices.slice(0, 5)) {
+    const data = inv.data as Record<string, unknown> | null;
+    const docNumber = (data?.DocNumber as string) || "Unknown";
+    exceptions.push({
+      id: `inv-${docNumber}`,
+      category: "cash",
+      severity: (inv.balance || 0) > 10000 ? "critical" : "warning",
+      title: `Invoice #${docNumber} — $${(inv.balance || 0).toLocaleString()} unpaid`,
+      detail: `Outstanding balance on this invoice needs collection follow-up.`,
+      owner: "Collections",
+      age: "open",
+    });
+  }
+  // Idle machines (3+ hours would need timestamp, simplified: show idle machines)
+  const idleMachines = machines.filter((m) => m.status === "idle");
+  if (idleMachines.length > 0) {
+    for (const mac of idleMachines.slice(0, 3)) {
+      exceptions.push({
+        id: `idle-${mac.id}`,
+        category: "ops",
+        severity: "warning",
+        title: `${mac.name} idle — no active run`,
+        detail: `Machine is available but unproductive. Consider assigning a cut plan.`,
+        owner: "Foreman",
+        age: "now",
+      });
+    }
+  }
+  // Down machines (reuse machinesDown from alerts)
+  if (machinesDown.length > 0) {
+    for (const mac of machinesDown) {
+      exceptions.push({
+        id: `down-${mac.id}`,
+        category: "ops",
+        severity: "critical",
+        title: `${mac.name} DOWN`,
+        detail: `Machine is offline. Requires maintenance attention.`,
+        owner: "Maintenance",
+        age: "active",
+      });
+    }
+  }
+  // Queued backlog
+  if (queuedItems > 5) {
+    exceptions.push({
+      id: `backlog-queued`,
+      category: "ops",
+      severity: "info",
+      title: `${queuedItems} items queued — backlog building`,
+      detail: `Production queue has ${queuedItems} items waiting. Review capacity allocation.`,
+      owner: "Production",
+      age: "today",
+    });
+  }
+  // Pending deliveries
+  if (pendingDeliveries > 0) {
+    exceptions.push({
+      id: `del-pending`,
+      category: "delivery",
+      severity: pendingDeliveries > 3 ? "warning" : "info",
+      title: `${pendingDeliveries} deliveries pending dispatch`,
+      detail: `Deliveries awaiting driver assignment or dispatch.`,
+      owner: "Dispatch",
+      age: "today",
+    });
   }
 
   const machineStatuses = machines.map((m) => ({ id: m.id, name: m.name, type: m.type, status: m.status }));
@@ -253,6 +349,9 @@ async function fetchCEOMetrics(): Promise<CEOMetrics> {
     activeRuns: runs.filter((r) => r.status === "running").length,
     tonnageToday,
     scrapRate,
+    queuedItems,
+    inProgressItems,
+    completedToday,
     outstandingAR,
     unpaidInvoices: unpaidInvoices.length,
     overdueInvoices,
@@ -272,6 +371,7 @@ async function fetchCEOMetrics(): Promise<CEOMetrics> {
     scheduledPosts,
     healthScore,
     alerts,
+    exceptions,
     pipelineByStage,
     recentOrders,
     machineStatuses,

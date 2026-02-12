@@ -219,7 +219,7 @@ mcpServer.tool("list_time_entries", {
   handler: async ({ limit }: Record<string, unknown>) => {
     const db = getDb();
     const { data, error } = await db
-      .from("time_entries")
+      .from("time_clock_entries")
       .select("id, profile_id, clock_in, clock_out, status, created_at")
       .order("clock_in", { ascending: false })
       .limit(Math.min(Number(limit) || 50, 50));
