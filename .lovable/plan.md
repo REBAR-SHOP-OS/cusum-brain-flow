@@ -1,55 +1,59 @@
 
 
-# Fix Double Agent: Remove Local Playback + Add Bridge Guard
+# Fix Double Greeting in AI Voice Bridge
 
-## Analysis
+## Root Cause
 
-After reviewing the full audio pipeline, there are **two remaining causes** of the double voice:
+The "double agent" greeting happens because of a **race condition** between the ElevenLabs agent's dashboard-configured first message and the override sent from code:
 
-### Cause 1: Local playback creates a second audio path (lines 314-318)
-Even with the RC audio element muted, the code **explicitly plays AI audio locally** via `outputCtx.destination` so the operator can "monitor" the AI. But this local playback can leak back into the system -- the browser's audio output can be picked up by hardware echo, and it creates a perceptual "double" for the user sitting at the desk hearing it from speakers.
+1. WebSocket connects -> ElevenLabs server immediately starts speaking the agent's **dashboard-configured** first message
+2. Code sends `conversation_initiation_client_data` with a **different** first message override
+3. Both greetings fire, creating two overlapping AI voices
 
-### Cause 2: No guard against double `startBridge` calls
-If `startBridge` is called while already connecting/active (race condition in React effects), two ElevenLabs WebSocket connections open simultaneously -- literally two AI agents.
+## Two-Part Fix
 
-### Cause 3: Echo tail guard may be too short
-500ms may not be enough for telephony networks with higher latency. The AI's own voice echoed back from the caller's phone can arrive 500-1000ms later.
+### Part 1: Dashboard Change (you need to do this manually)
 
-## Changes to `src/hooks/useCallAiBridge.ts`
+Go to the ElevenLabs dashboard for the **phone agent** (`ELEVENLABS_PHONE_AGENT_ID`):
+- Set "First message" to **empty/blank**
+- Ensure "Allow client overrides" is **enabled**
 
-### 1. Remove local playback entirely (lines 314-318)
-Delete the `localSource` that plays AI audio to the user's speakers. The user can monitor the call via the live transcript in the UI. This eliminates the second audio path completely.
+This ensures the agent waits for the client override instead of speaking immediately.
+
+### Part 2: Code Change - Wait for Server Confirmation Before Streaming
+
+Instead of the arbitrary 300ms delay, wait for the `conversation_initiation_metadata` event from ElevenLabs (which confirms overrides were received) before starting audio capture. This eliminates the race.
+
+**File: `src/hooks/useCallAiBridge.ts`**
+
+- Replace the `setTimeout(() => { ... }, 300)` block with a flag-based approach
+- In `ws.onopen`: send overrides, but do NOT start audio yet
+- In `handleWsMessage` for `conversation_initiation_metadata`: trigger audio start (attach `onaudioprocess`, replace track, mute RC element)
+- Store the setup function in a ref so `handleWsMessage` can call it when ready
 
 ```
-// REMOVE these lines:
-const localSource = outputCtx.createBufferSource();
-localSource.buffer = audioBuffer;
-localSource.connect(outputCtx.destination);
-localSource.start();
+// In ws.onopen:
+ws.send(overrides);  // send immediately
+// Do NOT start audio here -- wait for server confirmation
+
+// In handleWsMessage, case "conversation_initiation_metadata":
+// NOW start audio capture + replace track + mute RC element
+startAudioCapture();
 ```
 
-### 2. Add bridge guard to prevent double WS connections
-At the top of `startBridge`, check if already active/connecting and bail out:
+This guarantees the override is registered before any audio flows in either direction.
 
-```
-if (state.status !== "idle") {
-  console.warn("AI bridge: already active, ignoring duplicate start");
-  return;
-}
-```
+## Technical Details
 
-Since `state` is React state (stale in closure), use a ref instead for reliable checking.
+- Add a `startAudioRef` callback ref that holds the function to begin audio capture
+- `ws.onopen` sets up this callback but doesn't invoke it
+- `handleWsMessage` invokes it on `conversation_initiation_metadata`
+- Add a 3-second safety timeout in case the metadata event never arrives
+- Pass `callSession` references through to `handleWsMessage` via closure or ref
 
-### 3. Increase echo tail guard from 500ms to 1000ms
-Telephony echo can take up to 1 second. Increase the timeout in `onEnded`.
+## Expected Result
 
-### 4. Add debug logging for audioElement muting
-Log whether `callSession.audioElement` was found and muted, so we can verify it's working.
-
-## Summary
-
-- Remove local AI audio playback (user monitors via transcript instead)
-- Add `bridgeActiveRef` guard to prevent two simultaneous WS connections
-- Increase echo tail guard to 1000ms
-- Add console logging for audioElement muting verification
+- Only ONE AI greeting (the override) is heard by the caller
+- No audio is sent to ElevenLabs until the server confirms it received the override
+- Eliminates the race condition entirely
 
