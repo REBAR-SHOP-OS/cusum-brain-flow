@@ -422,27 +422,47 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
     }
   }, [emails, selectedIds.size]);
 
+  const logActivity = useCallback(async (entityId: string, eventType: string, description: string, metadata: Record<string, unknown>) => {
+    try {
+      await supabase.from("activity_events").insert({
+        company_id: "a0000000-0000-0000-0000-000000000001",
+        entity_type: "communication",
+        entity_id: entityId,
+        event_type: eventType,
+        description,
+        source: "user",
+        metadata: metadata as any,
+      });
+    } catch (err) {
+      console.error("Failed to log activity:", err);
+    }
+  }, []);
+
   const handleDeleteEmail = useCallback(async (id: string) => {
+    const email = allEmails.find((e) => e.id === id);
     setHiddenIds((prev) => { const next = new Set(prev); next.add(id); return next; });
     if (selectedEmail?.id === id) setSelectedEmail(null);
     try {
       await supabase.from("communications").delete().eq("id", id);
       toast({ title: "Email deleted", description: "Email has been permanently removed." });
+      logActivity(id, "email_deleted", `Deleted email from ${email?.sender || "unknown"}: ${email?.subject || "(no subject)"}`, { sender: email?.sender, subject: email?.subject, action: "delete" });
     } catch {
       toast({ title: "Delete failed", variant: "destructive" });
     }
-  }, [selectedEmail, toast]);
+  }, [selectedEmail, toast, allEmails, logActivity]);
 
   const handleArchiveEmail = useCallback(async (id: string) => {
+    const email = allEmails.find((e) => e.id === id);
     setHiddenIds((prev) => { const next = new Set(prev); next.add(id); return next; });
     if (selectedEmail?.id === id) setSelectedEmail(null);
     try {
       await supabase.from("communications").update({ status: "archived" }).eq("id", id);
       toast({ title: "Email archived" });
+      logActivity(id, "email_archived", `Archived email from ${email?.sender || "unknown"}: ${email?.subject || "(no subject)"}`, { sender: email?.sender, subject: email?.subject, action: "archive" });
     } catch {
       toast({ title: "Archive failed", variant: "destructive" });
     }
-  }, [selectedEmail, toast]);
+  }, [selectedEmail, toast, allEmails, logActivity]);
 
   const handleBulkDelete = useCallback(async () => {
     const ids = Array.from(selectedIds);
@@ -451,12 +471,16 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
     try {
       await supabase.from("communications").delete().in("id", ids);
       toast({ title: "Bulk delete", description: `${ids.length} email(s) deleted.` });
+      ids.forEach((id) => {
+        const email = allEmails.find((e) => e.id === id);
+        logActivity(id, "email_deleted", `Deleted email from ${email?.sender || "unknown"}: ${email?.subject || "(no subject)"}`, { sender: email?.sender, subject: email?.subject, action: "bulk_delete" });
+      });
     } catch {
       toast({ title: "Bulk delete failed", variant: "destructive" });
     }
     setSelectedIds(new Set());
     setSelectionMode(false);
-  }, [selectedIds, selectedEmail, toast]);
+  }, [selectedIds, selectedEmail, toast, allEmails, logActivity]);
 
   const handleBulkArchive = useCallback(async () => {
     const ids = Array.from(selectedIds);
@@ -465,12 +489,16 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
     try {
       await supabase.from("communications").update({ status: "archived" }).in("id", ids);
       toast({ title: "Bulk archive", description: `${ids.length} email(s) archived.` });
+      ids.forEach((id) => {
+        const email = allEmails.find((e) => e.id === id);
+        logActivity(id, "email_archived", `Archived email from ${email?.sender || "unknown"}: ${email?.subject || "(no subject)"}`, { sender: email?.sender, subject: email?.subject, action: "bulk_archive" });
+      });
     } catch {
       toast({ title: "Bulk archive failed", variant: "destructive" });
     }
     setSelectedIds(new Set());
     setSelectionMode(false);
-  }, [selectedIds, selectedEmail, toast]);
+  }, [selectedIds, selectedEmail, toast, allEmails, logActivity]);
 
   // ─── Keyboard shortcuts (desktop only) ────────────────────────────
   useEffect(() => {
@@ -801,7 +829,7 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
 
         {viewMode === "kanban" ? (
           selectedEmail ? (
-            <InboxDetailView email={selectedEmail} onClose={() => setSelectedEmail(null)} />
+            <InboxDetailView email={selectedEmail} onClose={() => setSelectedEmail(null)} onDelete={handleDeleteEmail} onArchive={handleArchiveEmail} />
           ) : (
             <div className="flex-1 flex flex-col overflow-hidden">
               {/* Type filter tabs for Kanban */}
@@ -894,7 +922,7 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
             {/* Email Viewer */}
             <div className={cn("flex-1 min-h-0", selectedEmail ? "flex" : "hidden md:flex")}>
               {selectedEmail ? (
-                <InboxDetailView email={selectedEmail} onClose={() => setSelectedEmail(null)} />
+                <InboxDetailView email={selectedEmail} onClose={() => setSelectedEmail(null)} onDelete={handleDeleteEmail} onArchive={handleArchiveEmail} />
               ) : (
                 <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-3 w-full">
                   <Mail className="w-10 h-10 opacity-30" />

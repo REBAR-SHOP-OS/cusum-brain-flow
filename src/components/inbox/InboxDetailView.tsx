@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { ArrowLeft, Reply, ReplyAll, Forward, Sparkles } from "lucide-react";
+import { ArrowLeft, Reply, ReplyAll, Forward, Sparkles, Archive, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -20,6 +20,8 @@ import type { ReplyMode } from "./EmailActionBar";
 interface InboxDetailViewProps {
   email: InboxEmail;
   onClose: () => void;
+  onDelete?: (id: string) => void;
+  onArchive?: (id: string) => void;
 }
 
 function extractEmail(fromAddress: string): string {
@@ -28,7 +30,7 @@ function extractEmail(fromAddress: string): string {
   return fromAddress;
 }
 
-export function InboxDetailView({ email, onClose }: InboxDetailViewProps) {
+export function InboxDetailView({ email, onClose, onDelete, onArchive }: InboxDetailViewProps) {
   const [replyMode, setReplyMode] = useState<ReplyMode>(null);
   const [threadComms, setThreadComms] = useState<Communication[]>([]);
   const [loadingThread, setLoadingThread] = useState(true);
@@ -173,6 +175,16 @@ export function InboxDetailView({ email, onClose }: InboxDetailViewProps) {
           <Button variant="outline" size="sm" className="h-7 gap-1 text-xs" onClick={handleSmartReply}>
             <Sparkles className="w-3.5 h-3.5" /> Smart Reply
           </Button>
+          {onArchive && (
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onArchive(email.id)}>
+              <Archive className="w-3.5 h-3.5" />
+            </Button>
+          )}
+          {onDelete && (
+            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => onDelete(email.id)}>
+              <Trash2 className="w-3.5 h-3.5" />
+            </Button>
+          )}
         </div>
       </div>
 

@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   User, Building2, Phone, Mail, Briefcase, Clock,
   Calendar, DollarSign, FileText, Star, MessageSquare,
-  PhoneIncoming, PhoneOutgoing, MailOpen
+  PhoneIncoming, PhoneOutgoing, MailOpen, Archive
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -40,7 +40,7 @@ interface LeadInfo {
 
 interface ActivityItem {
   id: string;
-  type: "email" | "call" | "sms" | "order" | "quote" | "lead" | "meeting" | "invoice";
+  type: "email" | "call" | "sms" | "order" | "quote" | "lead" | "meeting" | "invoice" | "action";
   title: string;
   subtitle: string | null;
   date: string;
@@ -139,7 +139,7 @@ export function InboxCustomerContext({ senderEmail, senderName }: InboxCustomerC
       }
 
       // 2. Load all data in parallel
-      const [leadsRes, commsRes, ordersRes, quotesRes, qbInvoicesRes] = await Promise.allSettled([
+      const [leadsRes, commsRes, ordersRes, quotesRes, qbInvoicesRes, activityEventsRes] = await Promise.allSettled([
         // Leads — use proper FK relationships, not non-existent columns
         custId
           ? supabase
@@ -196,6 +196,13 @@ export function InboxCustomerContext({ senderEmail, senderName }: InboxCustomerC
               .order("created_at", { ascending: false })
               .limit(20)
           : Promise.resolve({ data: [], error: null }),
+        // Activity events (delete/archive/alerts)
+        supabase
+          .from("activity_events")
+          .select("id, event_type, description, created_at, metadata, source")
+          .eq("entity_type", "communication")
+          .order("created_at", { ascending: false })
+          .limit(50),
       ]);
 
       // Process leads
@@ -280,6 +287,26 @@ export function InboxCustomerContext({ senderEmail, senderName }: InboxCustomerC
             amount: totalAmt ?? null,
             status: inv.balance > 0 ? "unpaid" : "paid",
           });
+        });
+      }
+
+      // Activity events → activities
+      if (activityEventsRes.status === "fulfilled") {
+        const events = (activityEventsRes.value as any).data ?? [];
+        events.forEach((evt: any) => {
+          const meta = evt.metadata as Record<string, unknown> | null;
+          const evtSender = (meta?.sender as string) || "";
+          // Only include events related to this sender
+          if (evtSender && senderEmail && evtSender.toLowerCase().includes(senderName.toLowerCase().split(" ")[0])) {
+            allActivities.push({
+              id: evt.id,
+              type: "action",
+              title: evt.description || evt.event_type,
+              subtitle: `by ${evt.source || "system"}`,
+              date: evt.created_at || "",
+              status: evt.event_type,
+            });
+          }
         });
       }
 
@@ -525,6 +552,7 @@ function ActivityRow({ activity }: { activity: ActivityItem }) {
     lead: <Star className="w-3.5 h-3.5 text-pink-400" />,
     meeting: <Calendar className="w-3.5 h-3.5 text-cyan-400" />,
     invoice: <DollarSign className="w-3.5 h-3.5 text-orange-400" />,
+    action: <Archive className="w-3.5 h-3.5 text-gray-400" />,
   };
 
   const typeBadgeMap: Record<ActivityItem["type"], { label: string; className: string }> = {
@@ -536,6 +564,7 @@ function ActivityRow({ activity }: { activity: ActivityItem }) {
     lead: { label: "Lead", className: "bg-pink-500/15 text-pink-400" },
     meeting: { label: "Meeting", className: "bg-cyan-500/15 text-cyan-400" },
     invoice: { label: "Invoice", className: "bg-orange-500/15 text-orange-400" },
+    action: { label: "Action", className: "bg-gray-500/15 text-gray-400" },
   };
 
   const badge = typeBadgeMap[activity.type];
