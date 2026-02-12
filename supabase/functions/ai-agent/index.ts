@@ -1947,7 +1947,7 @@ async function fetchContext(supabase: ReturnType<typeof createClient>, agent: st
       }
 
       // Fetch live QuickBooks data via shared helper
-      await fetchQuickBooksLiveContext(supabase, context);
+      await fetchQuickBooksLiveContext(svcClient, context);
     }
 
     if (agent === "support") {
@@ -2084,7 +2084,7 @@ async function fetchContext(supabase: ReturnType<typeof createClient>, agent: st
       }
 
       // Fetch live QuickBooks data via shared helper
-      await fetchQuickBooksLiveContext(supabase, context);
+      await fetchQuickBooksLiveContext(svcClient, context);
     }
 
     if (agent === "estimation") {
