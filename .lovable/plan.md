@@ -1,59 +1,39 @@
 
 
-# Fix Double Greeting in AI Voice Bridge
+# Eliminate Double Greeting: Dashboard Config Required
 
-## Root Cause
+## The Problem
 
-The "double agent" greeting happens because of a **race condition** between the ElevenLabs agent's dashboard-configured first message and the override sent from code:
+The code fix is working correctly -- the logs confirm overrides are sent and acknowledged before audio streaming begins. The remaining double greeting comes from the **ElevenLabs dashboard configuration**.
 
-1. WebSocket connects -> ElevenLabs server immediately starts speaking the agent's **dashboard-configured** first message
-2. Code sends `conversation_initiation_client_data` with a **different** first message override
-3. Both greetings fire, creating two overlapping AI voices
+When the WebSocket connects, ElevenLabs immediately fires the agent's dashboard-configured "First message" -- this happens server-side before our override can replace it. So the caller hears:
+1. The dashboard's default greeting (fired instantly by the server)
+2. Our code-based override greeting (sent moments later)
 
-## Two-Part Fix
+## The Fix (Manual -- No Code Changes Needed)
 
-### Part 1: Dashboard Change (you need to do this manually)
+You need to make this change in your **ElevenLabs dashboard**:
 
-Go to the ElevenLabs dashboard for the **phone agent** (`ELEVENLABS_PHONE_AGENT_ID`):
-- Set "First message" to **empty/blank**
-- Ensure "Allow client overrides" is **enabled**
+1. Go to https://elevenlabs.io and sign in
+2. Navigate to the **Conversational AI** section
+3. Find the agent associated with your **phone agent** (the one using `ELEVENLABS_PHONE_AGENT_ID`)
+4. Set the **"First message"** field to **completely empty/blank** (delete all text)
+5. Make sure **"Allow client overrides"** is toggled **ON**
+6. Save the agent
 
-This ensures the agent waits for the client override instead of speaking immediately.
+This ensures the agent stays silent on connect and only speaks the greeting sent by our code.
 
-### Part 2: Code Change - Wait for Server Confirmation Before Streaming
+## Why No Code Change Is Needed
 
-Instead of the arbitrary 300ms delay, wait for the `conversation_initiation_metadata` event from ElevenLabs (which confirms overrides were received) before starting audio capture. This eliminates the race.
+The code is already doing everything correctly:
+- Sends overrides immediately on WebSocket open
+- Waits for `conversation_initiation_metadata` before starting audio capture
+- Has a 3-second safety timeout as fallback
+- Guards against duplicate connections via `bridgeActiveRef`
 
-**File: `src/hooks/useCallAiBridge.ts`**
+The double voice is purely a server-side config issue at this point.
 
-- Replace the `setTimeout(() => { ... }, 300)` block with a flag-based approach
-- In `ws.onopen`: send overrides, but do NOT start audio yet
-- In `handleWsMessage` for `conversation_initiation_metadata`: trigger audio start (attach `onaudioprocess`, replace track, mute RC element)
-- Store the setup function in a ref so `handleWsMessage` can call it when ready
+## After Dashboard Change
 
-```
-// In ws.onopen:
-ws.send(overrides);  // send immediately
-// Do NOT start audio here -- wait for server confirmation
-
-// In handleWsMessage, case "conversation_initiation_metadata":
-// NOW start audio capture + replace track + mute RC element
-startAudioCapture();
-```
-
-This guarantees the override is registered before any audio flows in either direction.
-
-## Technical Details
-
-- Add a `startAudioRef` callback ref that holds the function to begin audio capture
-- `ws.onopen` sets up this callback but doesn't invoke it
-- `handleWsMessage` invokes it on `conversation_initiation_metadata`
-- Add a 3-second safety timeout in case the metadata event never arrives
-- Pass `callSession` references through to `handleWsMessage` via closure or ref
-
-## Expected Result
-
-- Only ONE AI greeting (the override) is heard by the caller
-- No audio is sent to ElevenLabs until the server confirms it received the override
-- Eliminates the race condition entirely
+Once you clear the First Message in the dashboard, test again. You should hear only ONE greeting from Penny with the correct context for the call.
 
