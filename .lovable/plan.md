@@ -1,57 +1,58 @@
 
 
-# Fix AI Voice Bridge: Proper Phone Call Behavior
+# Fix Double AI Voice + Delay + Missing Invoice Details
 
-## Problems Identified
+## Problems
 
-1. **Wrong AI identity**: The ElevenLabs agent is configured as "Vizzy" for voice chat with you (Sattar). When bridged to a phone call, it greets the called party with "Hey Sattar, Vizzy here" -- completely wrong for an outbound call to a customer.
+1. **Double AI greeting**: The ElevenLabs agent (configured as Vizzy in the dashboard) fires its default "Hey Sattar, Vizzy here" greeting immediately. Then the override prompt kicks in and Penny also greets. The caller hears TWO different AI voices/personalities.
 
-2. **Context arrives too late**: The call context (reason, contact name) is sent as a `contextual_update` after the agent already starts its default greeting. The agent ignores it and follows its pre-configured behavior.
+2. **Response delay**: The audio processor uses a 4096-sample buffer at 16kHz, which means ~256ms of latency per chunk before audio even reaches ElevenLabs. Combined with WebSocket round-trip, this creates noticeable lag.
 
-3. **Same agent for everything**: One ElevenLabs agent (`ELEVENLABS_AGENT_ID`) is shared between Vizzy voice chat and phone call bridging. These need different behaviors.
+3. **AI doesn't know invoice details**: The prompt says "Request payment for outstanding invoices" but never includes the actual invoice numbers, amounts, or customer names. The AI has to say "I don't have access to specific invoice details."
 
 ## Solution
 
-### 1. Create a dedicated "Phone Caller" ElevenLabs agent (or override at connection time)
+### 1. Eliminate double AI by using a dedicated phone agent
 
-Update the edge function `elevenlabs-conversation-token` to accept an optional `mode` parameter. When `mode === "phone_call"`, use a separate agent ID (`ELEVENLABS_PHONE_AGENT_ID`) or the same agent with **conversation overrides** sent at WebSocket connection time.
+Since there's no `ELEVENLABS_PHONE_AGENT_ID` secret set, the system falls back to the default Vizzy agent -- which has its own first_message configured in the ElevenLabs dashboard. The override arrives on the same WebSocket but the default greeting may already be queued.
 
-### 2. Override prompt and first message per call
+**Fix**: Create a new secret `ELEVENLABS_PHONE_AGENT_ID` pointing to an ElevenLabs agent configured with:
+- No default first_message (empty/blank)
+- Minimal default prompt (will be overridden per call)
+- Overrides enabled in the agent settings
 
-When the WebSocket connects, send a `conversation_initiation_client_data` event (ElevenLabs protocol) that overrides:
-- **System prompt**: "You are an AI assistant calling on behalf of Rebar Shop. You are calling [contact_name] to [reason]. Be professional, introduce yourself, and handle the conversation."
-- **First message**: "Hi, this is an automated call from Rebar Shop. I'm calling regarding [reason]. Is this [contact_name]?"
+Alternatively, if creating a second agent isn't feasible right now, we can work around this by ensuring the `conversation_initiation_client_data` message is sent synchronously before any other processing. However, the most reliable fix is a dedicated phone agent with overrides enabled and no default greeting.
 
-This way each call gets a unique, contextual introduction.
+### 2. Reduce audio latency
 
-### 3. Pass agent name and call context from the calling component
+- Decrease the `ScriptProcessor` buffer from 4096 to 2048 samples (halves chunk latency from ~256ms to ~128ms)
+- This is the simplest change to reduce perceived delay
 
-The `startBridge` function will accept additional parameters: `agentName` (Penny/Vizzy/Forge) and `callData` (contact_name, reason, phone). These are used to construct the override prompt.
+### 3. Include invoice details in the AI prompt
+
+Update `buildPhoneCallOverrides` to accept an optional `details` field in `CallBridgeData`. The accounting agent already has invoice data in its context -- we just need to pass it through the call chain so the AI knows exactly which invoices to discuss.
+
+Update the `PennyCallCard` reason field and `CallBridgeData` to carry structured invoice info into the prompt.
 
 ## File Changes
 
-### `supabase/functions/elevenlabs-conversation-token/index.ts`
-- Accept an optional `mode` parameter from the request body
-- When `mode === "phone_call"`, use `ELEVENLABS_PHONE_AGENT_ID` if set, otherwise fall back to the same agent
-- Return the signed URL as before
-
 ### `src/hooks/useCallAiBridge.ts`
-- Update `startBridge` to accept structured call data (agent name, contact name, reason)
-- After WebSocket opens, send `conversation_initiation_client_data` with prompt and first message overrides BEFORE any audio processing starts
-- Remove the `contextual_update` approach (too late, agent ignores it)
-- The override prompt will instruct the AI: "You are [AgentName] from Rebar Shop. You called [contact_name] at [phone]. Reason: [reason]. Start by introducing yourself and stating the purpose of your call."
-
-### `src/components/accounting/AccountingAgent.tsx`
-- Update the `onStartAiBridge` callback to pass the agent name ("Penny") and full call data to `startBridge`
+- Reduce ScriptProcessor buffer size from 4096 to 2048
+- Update `CallBridgeData` interface to include optional `details` string
+- Update `buildPhoneCallOverrides` to include invoice details in the prompt so the AI can reference specific amounts and invoice numbers
 
 ### `src/components/accounting/PennyCallCard.tsx`
-- Update `onStartAiBridge` prop type to pass call data through
+- No changes needed -- the reason field already carries the invoice context from the AI agent response
 
-## Expected Result After Fix
+### Secret: `ELEVENLABS_PHONE_AGENT_ID`
+- You will need to create a new ElevenLabs Conversational AI agent specifically for outbound phone calls:
+  - Set first_message to empty/blank
+  - Enable conversation overrides in the agent settings
+  - Use a professional voice (e.g., "Sarah" or "Laura")
+  - Keep the default prompt minimal -- it will be overridden per call
+- Then add the new agent's ID as a secret
 
-1. User tells Penny "call this customer about invoices"
-2. Penny shows the call card, user clicks "Call Now"
-3. Call connects, AI bridge auto-activates
-4. The called person hears: **"Hi, this is Penny calling from Rebar Shop. I'm reaching out regarding your outstanding invoices..."**
-5. The AI has a proper conversation about the specific invoices, not a generic Vizzy greeting
-
+## Expected Result
+1. Only ONE AI voice speaks (Penny, with proper introduction)
+2. Faster response time (~128ms chunks instead of ~256ms)
+3. AI knows exact invoice details: "I'm calling about Invoice 2155 for $1.00 and Invoice 2079 for $4,570.85..."
