@@ -58,6 +58,80 @@ export type Database = {
           },
         ]
       }
+      agent_action_log: {
+        Row: {
+          action_type: string
+          agent_id: string | null
+          company_id: string
+          created_at: string
+          entity_id: string | null
+          entity_type: string | null
+          id: string
+          payload: Json | null
+          result: Json | null
+          user_id: string
+        }
+        Insert: {
+          action_type: string
+          agent_id?: string | null
+          company_id: string
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string | null
+          id?: string
+          payload?: Json | null
+          result?: Json | null
+          user_id: string
+        }
+        Update: {
+          action_type?: string
+          agent_id?: string | null
+          company_id?: string
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string | null
+          id?: string
+          payload?: Json | null
+          result?: Json | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_action_log_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agents: {
+        Row: {
+          code: string
+          created_at: string
+          default_role: string
+          enabled: boolean
+          id: string
+          name: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          default_role: string
+          enabled?: boolean
+          id?: string
+          name: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          default_role?: string
+          enabled?: boolean
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
       barlist_items: {
         Row: {
           bar_code: string | null
@@ -3240,9 +3314,11 @@ export type Database = {
           is_active: boolean | null
           phone: string | null
           preferred_language: string
+          preferred_voice_id: string | null
           title: string | null
           updated_at: string
           user_id: string | null
+          voice_enabled: boolean
         }
         Insert: {
           avatar_url?: string | null
@@ -3257,9 +3333,11 @@ export type Database = {
           is_active?: boolean | null
           phone?: string | null
           preferred_language?: string
+          preferred_voice_id?: string | null
           title?: string | null
           updated_at?: string
           user_id?: string | null
+          voice_enabled?: boolean
         }
         Update: {
           avatar_url?: string | null
@@ -3274,9 +3352,11 @@ export type Database = {
           is_active?: boolean | null
           phone?: string | null
           preferred_language?: string
+          preferred_voice_id?: string | null
           title?: string | null
           updated_at?: string
           user_id?: string | null
+          voice_enabled?: boolean
         }
         Relationships: []
       }
@@ -3717,54 +3797,86 @@ export type Database = {
       }
       suggestions: {
         Row: {
+          actions: Json | null
+          agent_id: string | null
           category: string
           company_id: string
           context: Json | null
           created_at: string
           description: string | null
+          entity_id: string | null
+          entity_type: string | null
           id: string
+          impact: string | null
           priority: number | null
+          reason: string | null
           resolved_at: string | null
+          severity: string
           shown_at: string | null
           shown_to: string | null
+          snoozed_until: string | null
           status: string
           suggestion_type: string
           title: string
           updated_at: string
         }
         Insert: {
+          actions?: Json | null
+          agent_id?: string | null
           category: string
           company_id?: string
           context?: Json | null
           created_at?: string
           description?: string | null
+          entity_id?: string | null
+          entity_type?: string | null
           id?: string
+          impact?: string | null
           priority?: number | null
+          reason?: string | null
           resolved_at?: string | null
+          severity?: string
           shown_at?: string | null
           shown_to?: string | null
+          snoozed_until?: string | null
           status?: string
           suggestion_type: string
           title: string
           updated_at?: string
         }
         Update: {
+          actions?: Json | null
+          agent_id?: string | null
           category?: string
           company_id?: string
           context?: Json | null
           created_at?: string
           description?: string | null
+          entity_id?: string | null
+          entity_type?: string | null
           id?: string
+          impact?: string | null
           priority?: number | null
+          reason?: string | null
           resolved_at?: string | null
+          severity?: string
           shown_at?: string | null
           shown_to?: string | null
+          snoozed_until?: string | null
           status?: string
           suggestion_type?: string
           title?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "suggestions_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       system_learnings: {
         Row: {
@@ -4118,6 +4230,41 @@ export type Database = {
             columns: ["profile_id"]
             isOneToOne: false
             referencedRelation: "profiles_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_agents: {
+        Row: {
+          agent_id: string
+          assigned_at: string
+          company_id: string
+          id: string
+          mode: string
+          user_id: string
+        }
+        Insert: {
+          agent_id: string
+          assigned_at?: string
+          company_id: string
+          id?: string
+          mode?: string
+          user_id: string
+        }
+        Update: {
+          agent_id?: string
+          assigned_at?: string
+          company_id?: string
+          id?: string
+          mode?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_agents_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
             referencedColumns: ["id"]
           },
         ]
