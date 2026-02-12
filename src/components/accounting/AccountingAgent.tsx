@@ -11,6 +11,7 @@ import accountingHelper from "@/assets/helpers/accounting-helper.png";
 import { PennyCallCard, parsePennyCalls, type PennyCallData } from "./PennyCallCard";
 import type { WebPhoneState, WebPhoneActions } from "@/hooks/useWebPhone";
 import { useCallAiBridge } from "@/hooks/useCallAiBridge";
+import { useCallTask, type CallTaskOutcome } from "@/hooks/useCallTask";
 
 interface Message {
   id: string;
@@ -50,6 +51,9 @@ const checkingPhases = [
 
 export function AccountingAgent({ onViewModeChange, viewMode: externalMode, qbSummary, autoGreet, webPhoneState, webPhoneActions }: AccountingAgentProps) {
   const { bridgeState, startBridge, stopBridge } = useCallAiBridge();
+  const { activeTask, createCallTask, startCall, onCallConnected, completeCall, failCall, cancelCall, clearTask } = useCallTask();
+  const [showOutcome, setShowOutcome] = useState(false);
+  const prevCallStatusRef = useRef<string | undefined>();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isTyping, setIsTyping] = useState(false);
@@ -381,10 +385,33 @@ RULES:
                         key={`${msg.id}-call-${idx}`}
                         data={call}
                         callStatus={webPhoneState.status}
-                        onCall={(phone, name) => webPhoneActions.call(phone, name)}
-                        onHangup={() => webPhoneActions.hangup()}
+                        onCall={async (phone, name) => {
+                          // Create call task first, then dial
+                          const taskId = await createCallTask({
+                            phone,
+                            contact_name: name,
+                            reason: call.reason,
+                            lead_id: call.lead_id,
+                            contact_id: call.contact_id,
+                          });
+                          if (taskId) {
+                            await startCall(taskId);
+                            webPhoneActions.call(phone, name);
+                          }
+                        }}
+                        onHangup={() => {
+                          webPhoneActions.hangup();
+                          // Show outcome buttons after hangup
+                          if (activeTask) {
+                            setShowOutcome(true);
+                          }
+                        }}
                         bridgeState={bridgeState}
                         onStartAiBridge={(callData) => {
+                          // Update task to in_call when AI bridge starts
+                          if (activeTask) {
+                            onCallConnected(activeTask.id);
+                          }
                           const session = webPhoneActions.getCallSession();
                           if (session) {
                             startBridge(session, {
@@ -396,6 +423,15 @@ RULES:
                           }
                         }}
                         onStopAiBridge={stopBridge}
+                        taskStatus={activeTask?.status}
+                        attemptCount={activeTask?.attempt_count}
+                        showOutcome={showOutcome && activeTask?.status !== "done"}
+                        onOutcome={async (outcome: CallTaskOutcome) => {
+                          if (activeTask) {
+                            await completeCall(activeTask.id, outcome, bridgeState.transcript);
+                            setShowOutcome(false);
+                          }
+                        }}
                       />
                     ))}
                   </div>

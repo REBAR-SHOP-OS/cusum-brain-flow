@@ -34,32 +34,63 @@ serve(async (req) => {
 
     console.log(`RC webhook: event=${event}, subscriptionId=${subscriptionId}`);
 
-    // Handle different event types
-    // Telephony session notifications
     if (event.includes("/telephony/sessions") || event.includes("/call-log")) {
       await handleCallEvent(supabase, body);
-    }
-    // Message store notifications
-    else if (event.includes("/message-store")) {
+    } else if (event.includes("/message-store")) {
       await handleMessageEvent(supabase, body);
-    }
-    else {
+    } else {
       console.log("Unhandled RC event type:", event);
     }
 
     return new Response("OK", { status: 200 });
   } catch (error) {
     console.error("ringcentral-webhook error:", error);
-    // Return 200 to prevent RC retries on app errors
     return new Response("OK", { status: 200 });
   }
 });
+
+// ─── Link call event to call_tasks for idempotency ─────────────────────────
+
+async function linkCallToTask(supabase: any, phone: string, sessionId: string) {
+  // Normalize phone for matching (strip +1 prefix, etc.)
+  const normalizedPhone = phone.replace(/^\+1/, "").replace(/\D/g, "");
+  
+  // Find matching call_task by phone + active status
+  const { data: task } = await supabase
+    .from("call_tasks")
+    .select("id, status, rc_session_id")
+    .or(`phone.eq.${phone},phone.eq.${normalizedPhone},phone.eq.+1${normalizedPhone}`)
+    .in("status", ["dialing", "in_call"])
+    .maybeSingle();
+
+  if (!task) return;
+
+  // If already has this session ID, skip (idempotency)
+  if (task.rc_session_id === sessionId) {
+    console.log(`call_task ${task.id} already linked to session ${sessionId}`);
+    return;
+  }
+
+  // Store rc_session_id and update status
+  const update: Record<string, any> = { rc_session_id: sessionId };
+  if (task.status === "dialing") {
+    update.status = "in_call";
+  }
+
+  await supabase
+    .from("call_tasks")
+    .update(update)
+    .eq("id", task.id);
+
+  console.log(`Linked call_task ${task.id} to RC session ${sessionId}`);
+}
+
+// ─── Call event handler ─────────────────────────────────────────────────────
 
 async function handleCallEvent(supabase: any, body: any) {
   const callBody = body.body;
   if (!callBody) return;
 
-  // Handle both call-log and telephony session formats
   const calls = callBody.changes || [callBody];
 
   for (const call of calls) {
@@ -75,8 +106,20 @@ async function handleCallEvent(supabase: any, body: any) {
 
     if (existing) continue;
 
-    // Try to determine which user this belongs to
-    // RC webhooks are account-level, so we need to match extension
+    // Try to link to call_tasks
+    const fromNumber = call.from?.phoneNumber || call.from?.name || "Unknown";
+    const toNumber = call.to?.phoneNumber || call.to?.name || "Unknown";
+    const sessionId = call.sessionId || String(callId);
+
+    // Link outbound calls to call_tasks
+    const direction = (call.direction || "").toLowerCase();
+    if (direction === "outbound" && toNumber !== "Unknown") {
+      await linkCallToTask(supabase, toNumber, sessionId);
+    } else if (direction === "inbound" && fromNumber !== "Unknown") {
+      await linkCallToTask(supabase, fromNumber, sessionId);
+    }
+
+    // Determine user
     const extensionId = call.extension?.id || callBody.extensionId;
     let userId: string | null = null;
     let companyId: string | null = null;
@@ -99,7 +142,6 @@ async function handleCallEvent(supabase: any, body: any) {
       }
     }
 
-    // Fallback: use first company if we can't match
     if (!companyId) {
       const { data: firstProfile } = await supabase
         .from("profiles")
@@ -115,13 +157,9 @@ async function handleCallEvent(supabase: any, body: any) {
       continue;
     }
 
-    const fromNumber = call.from?.phoneNumber || call.from?.name || "Unknown";
-    const toNumber = call.to?.phoneNumber || call.to?.name || "Unknown";
-    const direction = (call.direction || "").toLowerCase();
     const result = call.result || call.telephonyStatus || "Unknown";
     const duration = call.duration || 0;
 
-    // Upsert communication
     const { error: upsertErr } = await supabase
       .from("communications")
       .upsert({
@@ -157,7 +195,6 @@ async function handleCallEvent(supabase: any, body: any) {
       continue;
     }
 
-    // Write activity event
     await supabase.from("activity_events").upsert({
       entity_type: "communication",
       entity_id: String(callId),
@@ -173,6 +210,8 @@ async function handleCallEvent(supabase: any, body: any) {
   }
 }
 
+// ─── Message event handler ──────────────────────────────────────────────────
+
 async function handleMessageEvent(supabase: any, body: any) {
   const msgBody = body.body;
   if (!msgBody) return;
@@ -183,7 +222,6 @@ async function handleMessageEvent(supabase: any, body: any) {
     const msgId = msg.id || `rc-msg-${Date.now()}`;
     const dedupeKey = `rc:sms:${msgId}`;
 
-    // Check dedupe
     const { data: existing } = await supabase
       .from("activity_events")
       .select("id")
@@ -192,7 +230,6 @@ async function handleMessageEvent(supabase: any, body: any) {
 
     if (existing) continue;
 
-    // Determine user
     const extensionId = msg.extension?.id || msgBody.extensionId;
     let userId: string | null = null;
     let companyId: string | null = null;

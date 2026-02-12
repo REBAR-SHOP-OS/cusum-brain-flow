@@ -36,6 +36,8 @@ export function useCallAiBridge() {
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const aiDestRef = useRef<MediaStreamAudioDestinationNode | null>(null);
   const originalTrackRef = useRef<MediaStreamTrack | null>(null);
+  const ttsPlayingRef = useRef(false);
+  const activeSourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
 
   const startBridge = useCallback(
     async (
@@ -116,6 +118,8 @@ export function useCallAiBridge() {
           setTimeout(() => {
             processor.onaudioprocess = (e) => {
               if (ws.readyState !== WebSocket.OPEN) return;
+              // Mute mic while TTS is playing to prevent echo
+              if (ttsPlayingRef.current) return;
               const samples = e.inputBuffer.getChannelData(0);
               const pcm16 = float32ToPcm16(samples);
               const b64 = arrayBufferToBase64(pcm16.buffer as ArrayBuffer);
@@ -133,7 +137,7 @@ export function useCallAiBridge() {
         ws.onmessage = (event) => {
           try {
             const msg = JSON.parse(event.data);
-            handleWsMessage(msg, outputCtx, aiDest, ws, setState);
+            handleWsMessage(msg, outputCtx, aiDest, ws, setState, ttsPlayingRef, activeSourcesRef);
           } catch (e) {
             console.warn("AI bridge: bad WS message", e);
           }
@@ -253,10 +257,15 @@ function pcm16Base64ToFloat32(base64: string): Float32Array {
 function playAiAudioChunk(
   base64Audio: string,
   outputCtx: AudioContext,
-  dest: MediaStreamAudioDestinationNode
+  dest: MediaStreamAudioDestinationNode,
+  ttsPlayingRef: React.MutableRefObject<boolean>,
+  activeSourcesRef: React.MutableRefObject<Set<AudioBufferSourceNode>>
 ) {
   const float32 = pcm16Base64ToFloat32(base64Audio);
   if (float32.length === 0) return;
+
+  // Mark TTS as playing to mute mic input
+  ttsPlayingRef.current = true;
 
   // Upsample from 16kHz to output sample rate (48kHz) via linear interpolation
   const outputSampleRate = outputCtx.sampleRate;
@@ -273,10 +282,19 @@ function playAiAudioChunk(
     channelData[i] = float32[lower] * (1 - frac) + float32[upper] * frac;
   }
 
+  const onEnded = (src: AudioBufferSourceNode) => {
+    activeSourcesRef.current.delete(src);
+    if (activeSourcesRef.current.size === 0) {
+      ttsPlayingRef.current = false;
+    }
+  };
+
   // Play to remote caller via replaced track
   const bufferSource = outputCtx.createBufferSource();
   bufferSource.buffer = audioBuffer;
   bufferSource.connect(dest);
+  bufferSource.onended = () => onEnded(bufferSource);
+  activeSourcesRef.current.add(bufferSource);
   bufferSource.start();
 
   // Also play locally so the user can monitor the AI voice
@@ -312,18 +330,31 @@ function restoreOriginalTrack(pc: RTCPeerConnection) {
   // user takes over naturally. No explicit restore needed for now.
 }
 
+function stopAllTtsPlayback(
+  activeSourcesRef: React.MutableRefObject<Set<AudioBufferSourceNode>>,
+  ttsPlayingRef: React.MutableRefObject<boolean>
+) {
+  for (const src of activeSourcesRef.current) {
+    try { src.stop(); } catch {}
+  }
+  activeSourcesRef.current.clear();
+  ttsPlayingRef.current = false;
+}
+
 function handleWsMessage(
   msg: any,
   outputCtx: AudioContext,
   aiDest: MediaStreamAudioDestinationNode,
   ws: WebSocket,
-  setState: React.Dispatch<React.SetStateAction<CallAiBridgeState>>
+  setState: React.Dispatch<React.SetStateAction<CallAiBridgeState>>,
+  ttsPlayingRef: React.MutableRefObject<boolean>,
+  activeSourcesRef: React.MutableRefObject<Set<AudioBufferSourceNode>>
 ) {
   switch (msg.type) {
     case "audio":
       const audioB64 = msg.audio_event?.audio_base_64;
       if (audioB64) {
-        playAiAudioChunk(audioB64, outputCtx, aiDest);
+        playAiAudioChunk(audioB64, outputCtx, aiDest, ttsPlayingRef, activeSourcesRef);
       }
       break;
 
@@ -340,6 +371,8 @@ function handleWsMessage(
     case "user_transcript":
       const callerText = msg.user_transcription_event?.user_transcript;
       if (callerText) {
+        // Barge-in: stop TTS playback when caller speaks
+        stopAllTtsPlayback(activeSourcesRef, ttsPlayingRef);
         setState((s) => ({
           ...s,
           transcript: [...s.transcript, { role: "caller", text: callerText }],

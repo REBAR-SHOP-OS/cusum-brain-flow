@@ -326,6 +326,107 @@ export type Database = {
           },
         ]
       }
+      call_tasks: {
+        Row: {
+          agent_id: string | null
+          ai_transcript: Json | null
+          attempt_count: number
+          company_id: string
+          contact_id: string | null
+          contact_name: string
+          created_at: string
+          details: string | null
+          id: string
+          last_attempt_at: string | null
+          lead_id: string | null
+          max_attempts: number
+          next_attempt_at: string | null
+          notes: string | null
+          outcome: string | null
+          phone: string
+          rc_session_id: string | null
+          reason: string
+          status: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          agent_id?: string | null
+          ai_transcript?: Json | null
+          attempt_count?: number
+          company_id: string
+          contact_id?: string | null
+          contact_name: string
+          created_at?: string
+          details?: string | null
+          id?: string
+          last_attempt_at?: string | null
+          lead_id?: string | null
+          max_attempts?: number
+          next_attempt_at?: string | null
+          notes?: string | null
+          outcome?: string | null
+          phone: string
+          rc_session_id?: string | null
+          reason: string
+          status?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          agent_id?: string | null
+          ai_transcript?: Json | null
+          attempt_count?: number
+          company_id?: string
+          contact_id?: string | null
+          contact_name?: string
+          created_at?: string
+          details?: string | null
+          id?: string
+          last_attempt_at?: string | null
+          lead_id?: string | null
+          max_attempts?: number
+          next_attempt_at?: string | null
+          notes?: string | null
+          outcome?: string | null
+          phone?: string
+          rc_session_id?: string | null
+          reason?: string
+          status?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "call_tasks_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "call_tasks_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "call_tasks_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "call_tasks_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chat_messages: {
         Row: {
           agent_type: string | null
