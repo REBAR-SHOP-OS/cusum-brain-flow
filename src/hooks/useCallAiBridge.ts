@@ -242,7 +242,7 @@ function buildPhoneCallOverrides(callData: CallBridgeData) {
     : "";
 
   const noDetailsWarning = !details
-    ? `\n\nIMPORTANT: No specific details were provided for this call. You ONLY know the general reason above. Do NOT invent, guess, or fabricate any details such as report content, invoice numbers, amounts, dates, or any other specifics. If asked for details you do not have, say: "I don't have the full details on hand, but someone from Rebar Shop will follow up with the complete information."`
+    ? `\n\nIMPORTANT: No specific details were provided for this call. You ONLY know the general reason above. Do NOT invent, guess, or fabricate any details such as report content, invoice numbers, amounts, dates, or any other specifics. Instead of repeating "I don't have details," be conversational: ask the caller what specific topics they'd like to cover, and offer to have someone from Rebar Shop follow up with complete information.`
     : "";
 
   const firstMsg = `Hi, this is ${agentName} calling from Rebar Shop. Am I speaking with ${displayName}? I'm reaching out regarding ${reason.length > 100 ? reason.substring(0, 100) + "..." : reason}.`;

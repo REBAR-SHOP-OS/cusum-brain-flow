@@ -9,6 +9,7 @@ export interface PennyCallData {
   phone: string;
   contact_name: string;
   reason: string;
+  details?: string;
   lead_id?: string;
   contact_id?: string;
 }
@@ -204,6 +205,7 @@ export function parsePennyCalls(text: string): { cleanText: string; calls: Penny
             phone: data.phone,
             contact_name: data.contact_name,
             reason: data.reason || "",
+            details: data.details,
             lead_id: data.lead_id,
             contact_id: data.contact_id,
           });

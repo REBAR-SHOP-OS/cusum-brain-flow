@@ -414,11 +414,12 @@ RULES:
                           }
                           const session = webPhoneActions.getCallSession();
                           if (session) {
-                            startBridge(session, {
+                          startBridge(session, {
                               agentName: "Penny",
                               contactName: callData.contact_name,
                               reason: callData.reason,
                               phone: callData.phone,
+                              details: callData.details,
                             });
                           }
                         }}
