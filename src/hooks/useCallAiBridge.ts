@@ -159,13 +159,13 @@ export function useCallAiBridge() {
             console.log("AI bridge: sent phone call overrides", overrides);
           }
 
-          // Safety timeout: if metadata never arrives, start after 3s
+          // Safety timeout: if metadata never arrives, start after 1.5s
           safetyTimeoutRef.current = setTimeout(() => {
             console.warn("AI bridge: metadata timeout, starting audio anyway");
             if (startAudioRef.current) {
               startAudioRef.current();
             }
-          }, 3000);
+          }, 1500);
         };
 
         ws.onmessage = (event) => {
@@ -231,18 +231,26 @@ export function useCallAiBridge() {
 function buildPhoneCallOverrides(callData: CallBridgeData) {
   const { agentName, contactName, reason, phone, details } = callData;
 
+  // Detect if contactName is actually a phone number
+  const isPhoneNumber = /^[\d+\-\s()]+$/.test(contactName.trim());
+  const displayName = isPhoneNumber ? "the person I'm trying to reach" : contactName;
+
   const detailsBlock = details
     ? `\n\nSPECIFIC DETAILS YOU KNOW:\n${details}\n\nUse these details naturally in conversation. Reference specific invoice numbers and amounts when discussing payment.`
     : "";
 
-  const firstMsg = `Hi, this is ${agentName} calling from Rebar Shop. Am I speaking with ${contactName}? I'm reaching out regarding ${reason.length > 100 ? reason.substring(0, 100) + "..." : reason}.`;
+  const noDetailsWarning = !details
+    ? `\n\nIMPORTANT: No specific details were provided for this call. You ONLY know the general reason above. Do NOT invent, guess, or fabricate any details such as report content, invoice numbers, amounts, dates, or any other specifics. If asked for details you do not have, say: "I don't have the full details on hand, but someone from Rebar Shop will follow up with the complete information."`
+    : "";
+
+  const firstMsg = `Hi, this is ${agentName} calling from Rebar Shop. Am I speaking with ${displayName}? I'm reaching out regarding ${reason.length > 100 ? reason.substring(0, 100) + "..." : reason}.`;
 
   return {
     agent: {
       prompt: {
-        prompt: `You are ${agentName}, an AI assistant calling on behalf of Rebar Shop. You have placed an outbound phone call to ${contactName} at ${phone}.
+        prompt: `You are ${agentName}, an AI assistant calling on behalf of Rebar Shop. You have placed an outbound phone call to ${displayName} at ${phone}.
 
-PURPOSE OF THIS CALL: ${reason}${detailsBlock}
+PURPOSE OF THIS CALL: ${reason}${detailsBlock}${noDetailsWarning}
 
 CRITICAL INSTRUCTIONS:
 - You are calling THEM. They did not call you.
@@ -253,7 +261,8 @@ CRITICAL INSTRUCTIONS:
 - Stay focused on the purpose of the call.
 - If they want to speak to a human, let them know someone from Rebar Shop will follow up.
 - Keep responses brief and conversational — this is a phone call, not an email.
-- NEVER say you don't have access to invoice details — use the specific details provided above.
+- You ONLY know what is explicitly provided in the SPECIFIC DETAILS section above. Do NOT invent, guess, or fabricate ANY information whatsoever.
+- If asked for information you do not have, say: "I don't have the full details on hand, but someone from Rebar Shop will follow up with the complete information."
 - Do NOT re-introduce yourself or restate the reason after your first message.`,
       },
       first_message: firstMsg,
