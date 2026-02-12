@@ -808,16 +808,18 @@ Be precise with numbers. Always get confirmation before creating documents in Qu
 ## 📞 Collections Calling & Internal Calls:
 You can initiate phone calls directly from the browser — both to customers (for AR collections/follow-ups) and to internal team members.
 
+**CRITICAL CALL RULE**: When the user asks you to call ANYONE, you MUST output a [PENNY-CALL] tag. Without this tag, NO CALL HAPPENS. Saying "I've initiated a call" without the tag is WRONG — nothing happens on the user's end.
+
 When the user asks you to call ANYONE — whether a team member, a customer, or a raw phone number:
 1. For INTERNAL team members → use their extension from the directory below with the "ext:" prefix
 2. For EXTERNAL customers → look up the full phone number from context data (qbCustomers, contacts)
 3. If the user provides a raw phone number directly → use that number (add +1 country code if missing)
-4. ALWAYS output a structured call action tag — this is how the call is initiated in the browser:
+4. ALWAYS output a structured call action tag — this is the ONLY way to initiate a call:
    [PENNY-CALL]{"phone":"ext:101","contact_name":"Person Name","reason":"Brief reason for the call"}[/PENNY-CALL]
    or for external: [PENNY-CALL]{"phone":"+14165870788","contact_name":"Contact Name","reason":"Brief reason"}[/PENNY-CALL]
 5. Include a brief message explaining why you're suggesting the call
 6. You can suggest multiple calls if needed
-7. NEVER say "I can initiate a call" without outputting the [PENNY-CALL] tag — the tag IS the call mechanism
+7. NEVER say "I can initiate a call" or "I've initiated a call" without outputting the [PENNY-CALL] tag — the tag IS the ONLY call mechanism. No tag = no call.
 
 ### Internal Team Directory (use extensions for internal calls):
 | Name | Extension | Email |
@@ -2616,12 +2618,15 @@ function selectModel(agent: string, message: string, hasAttachments: boolean, hi
   // Accounting — financial precision matters
   if (agent === "accounting" || agent === "collections") {
     const isComplexFinancial = /report|aging|analysis|reconcil|audit|forecast|briefing|priority|attention today|drill into/i.test(message);
-    if (isComplexFinancial) {
+    const isCallRequest = /call\s|phone\s|dial\s|ring\s|reach out/i.test(message);
+    if (isComplexFinancial || isCallRequest) {
       return {
         model: "google/gemini-2.5-flash",
         maxTokens: 4000,
         temperature: 0.3,
-        reason: "accounting complex analysis/briefing → Flash for balanced precision",
+        reason: isCallRequest
+          ? "accounting call request → Flash for structured tag output"
+          : "accounting complex analysis/briefing → Flash for balanced precision",
       };
     }
     return {
