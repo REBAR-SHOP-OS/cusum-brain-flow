@@ -20,31 +20,40 @@ interface EmailActionBarProps {
   onCreateTask?: () => void;
   drafting: boolean;
   emailId?: string;
+  emailSubject?: string;
+  emailSender?: string;
   isStarred?: boolean;
   onToggleStar?: () => void;
   onSnooze?: (until: Date) => void;
   onMarkReadUnread?: () => void;
   isUnread?: boolean;
+  onDelete?: (id: string) => void;
+  onArchive?: (id: string) => void;
 }
 
 export function EmailActionBar({
   activeMode, onModeChange, onSmartReply, onCreateTask, drafting,
-  emailId, isStarred, onToggleStar, onSnooze, onMarkReadUnread, isUnread,
+  emailId, emailSubject, emailSender, isStarred, onToggleStar, onSnooze, onMarkReadUnread, isUnread,
+  onDelete, onArchive,
 }: EmailActionBarProps) {
   const { toast } = useToast();
 
   const handleArchive = async () => {
-    if (emailId) {
+    if (emailId && onArchive) {
+      onArchive(emailId);
+    } else if (emailId) {
       await supabase.from("communications").update({ status: "archived" }).eq("id", emailId);
+      toast({ title: "Archived", description: "Email moved to archive." });
     }
-    toast({ title: "Archived", description: "Email moved to archive." });
   };
 
   const handleDelete = async () => {
-    if (emailId) {
+    if (emailId && onDelete) {
+      onDelete(emailId);
+    } else if (emailId) {
       await supabase.from("communications").delete().eq("id", emailId);
+      toast({ title: "Deleted", description: "Email permanently deleted." });
     }
-    toast({ title: "Deleted", description: "Email permanently deleted." });
   };
 
   const handleMarkReadUnread = async () => {
