@@ -40,6 +40,8 @@ export function useCallAiBridge() {
   const activeSourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
   const bridgeActiveRef = useRef(false);
+  const startAudioRef = useRef<(() => void) | null>(null);
+  const safetyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const startBridge = useCallback(
     async (
@@ -109,10 +111,44 @@ export function useCallAiBridge() {
         const ws = new WebSocket(data.signed_url);
         wsRef.current = ws;
 
+        // Define the audio start function — called ONLY after server confirms overrides
+        const beginAudioCapture = () => {
+          startAudioRef.current = null;
+          if (safetyTimeoutRef.current) {
+            clearTimeout(safetyTimeoutRef.current);
+            safetyTimeoutRef.current = null;
+          }
+
+          processor.onaudioprocess = (e) => {
+            if (ws.readyState !== WebSocket.OPEN) return;
+            if (ttsPlayingRef.current) return;
+            const samples = e.inputBuffer.getChannelData(0);
+            const pcm16 = float32ToPcm16(samples);
+            const b64 = arrayBufferToBase64(pcm16.buffer as ArrayBuffer);
+            ws.send(JSON.stringify({ user_audio_chunk: b64 }));
+          };
+
+          replaceOutgoingTrack(pc, aiDest.stream);
+
+          if (callSession.audioElement) {
+            callSession.audioElement.volume = 0;
+            audioElementRef.current = callSession.audioElement;
+            console.log("AI bridge: muted RC audio element");
+          } else {
+            console.warn("AI bridge: no audioElement found on callSession");
+          }
+
+          setState((s) => ({ ...s, active: true, status: "active" }));
+          toast.success("AI is now talking on the call");
+        };
+
+        // Store in ref so handleWsMessage can trigger it
+        startAudioRef.current = beginAudioCapture;
+
         ws.onopen = () => {
           console.log("AI call bridge: WS connected");
 
-          // Send conversation_initiation_client_data with overrides BEFORE audio
+          // Send overrides immediately but do NOT start audio yet
           if (overrides) {
             ws.send(
               JSON.stringify({
@@ -123,39 +159,19 @@ export function useCallAiBridge() {
             console.log("AI bridge: sent phone call overrides", overrides);
           }
 
-          // Wait briefly for override to register, then start audio
-          setTimeout(() => {
-            processor.onaudioprocess = (e) => {
-              if (ws.readyState !== WebSocket.OPEN) return;
-              // Mute mic while TTS is playing to prevent echo
-              if (ttsPlayingRef.current) return;
-              const samples = e.inputBuffer.getChannelData(0);
-              const pcm16 = float32ToPcm16(samples);
-              const b64 = arrayBufferToBase64(pcm16.buffer as ArrayBuffer);
-              ws.send(JSON.stringify({ user_audio_chunk: b64 }));
-            };
-
-            // Replace the call's outgoing audio with AI voice (48kHz stream)
-            replaceOutgoingTrack(pc, aiDest.stream);
-
-            // Mute RC audio element to prevent hearing AI voice twice
-            if (callSession.audioElement) {
-              callSession.audioElement.volume = 0;
-              audioElementRef.current = callSession.audioElement;
-              console.log("AI bridge: muted RC audio element");
-            } else {
-              console.warn("AI bridge: no audioElement found on callSession");
+          // Safety timeout: if metadata never arrives, start after 3s
+          safetyTimeoutRef.current = setTimeout(() => {
+            console.warn("AI bridge: metadata timeout, starting audio anyway");
+            if (startAudioRef.current) {
+              startAudioRef.current();
             }
-
-            setState((s) => ({ ...s, active: true, status: "active" }));
-            toast.success("AI is now talking on the call");
-          }, 300);
+          }, 3000);
         };
 
         ws.onmessage = (event) => {
           try {
             const msg = JSON.parse(event.data);
-            handleWsMessage(msg, outputCtx, aiDest, ws, setState, ttsPlayingRef, activeSourcesRef);
+            handleWsMessage(msg, outputCtx, aiDest, ws, setState, ttsPlayingRef, activeSourcesRef, startAudioRef);
           } catch (e) {
             console.warn("AI bridge: bad WS message", e);
           }
@@ -187,6 +203,11 @@ export function useCallAiBridge() {
 
   const stopBridge = useCallback(() => {
     bridgeActiveRef.current = false;
+    startAudioRef.current = null;
+    if (safetyTimeoutRef.current) {
+      clearTimeout(safetyTimeoutRef.current);
+      safetyTimeoutRef.current = null;
+    }
     const ws = wsRef.current;
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.close();
@@ -381,7 +402,8 @@ function handleWsMessage(
   ws: WebSocket,
   setState: React.Dispatch<React.SetStateAction<CallAiBridgeState>>,
   ttsPlayingRef: React.MutableRefObject<boolean>,
-  activeSourcesRef: React.MutableRefObject<Set<AudioBufferSourceNode>>
+  activeSourcesRef: React.MutableRefObject<Set<AudioBufferSourceNode>>,
+  startAudioRef: React.MutableRefObject<(() => void) | null>
 ) {
   switch (msg.type) {
     case "audio":
@@ -427,7 +449,11 @@ function handleWsMessage(
       break;
 
     case "conversation_initiation_metadata":
-      console.log("AI bridge: conversation started", msg);
+      console.log("AI bridge: conversation started, overrides confirmed", msg);
+      // Server confirmed overrides — NOW start audio capture
+      if (startAudioRef?.current) {
+        startAudioRef.current();
+      }
       break;
 
     default:
