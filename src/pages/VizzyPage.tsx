@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useConversation } from "@elevenlabs/react";
-import { X, Mic, MicOff, Volume2, WifiOff, Camera } from "lucide-react";
+import { X, Mic, MicOff, Volume2, WifiOff, Camera, Phone, PhoneOff } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
@@ -9,6 +9,7 @@ import { useNavigate } from "react-router-dom";
 import { useVizzyContext } from "@/hooks/useVizzyContext";
 import { buildVizzyContext } from "@/lib/vizzyContext";
 import type { VizzyBusinessSnapshot } from "@/hooks/useVizzyContext";
+import { useWebPhone } from "@/hooks/useWebPhone";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import { FileText, Check, XCircle } from "lucide-react";
@@ -38,6 +39,7 @@ const SUPER_ADMIN_EMAIL = "sattar@rebar.shop";
 export default function VizzyPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [webPhoneState, webPhoneActions] = useWebPhone();
 
   // Super admin guard
   useEffect(() => {
@@ -67,6 +69,7 @@ export default function VizzyPage() {
   const silentIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const { loadFullContext } = useVizzyContext();
   const [preferredLang, setPreferredLang] = useState("en");
+  const webPhoneInitRef = useRef(false);
 
   // Session timer
   useEffect(() => {
@@ -183,14 +186,17 @@ export default function VizzyPage() {
       },
       make_call: async (params: { phone: string; contact_name?: string }) => {
         try {
-          const { data, error } = await supabase.functions.invoke(
-            "ringcentral-action",
-            { body: { type: "ringcentral_call", phone: params.phone, contact_name: params.contact_name } }
-          );
-          if (error) throw error;
-          if (data?.error) throw new Error(data.error);
-          toast.success(`Calling ${params.contact_name || params.phone}...`);
-          return "Call initiated successfully";
+          // Use WebRTC browser calling
+          const wp = webPhoneInitRef.current;
+          if (!wp) {
+            // Try initializing on-the-fly
+            const ok = await webPhoneActions.initialize();
+            if (!ok) throw new Error("WebPhone not available. Check RingCentral connection.");
+            webPhoneInitRef.current = true;
+          }
+          const success = await webPhoneActions.call(params.phone, params.contact_name);
+          if (!success) throw new Error("Call failed to connect");
+          return "Call initiated via browser WebRTC — audio is live in this browser session";
         } catch (err) {
           const msg = err instanceof Error ? err.message : "Unknown error";
           toast.error(`Call failed: ${msg}`);
@@ -349,6 +355,7 @@ export default function VizzyPage() {
 
   const stop = useCallback(async () => {
     intentionalStopRef.current = true;
+    webPhoneActions.dispose();
     try {
       await saveTranscript(transcriptRef.current);
       await conversation.endSession();
@@ -356,7 +363,7 @@ export default function VizzyPage() {
       console.error("Error ending Vizzy session:", err);
     }
     navigate("/home");
-  }, [conversation, navigate, saveTranscript]);
+  }, [conversation, navigate, saveTranscript, webPhoneActions]);
 
   const manualReconnect = useCallback(() => {
     retryCountRef.current = 0;
@@ -378,6 +385,14 @@ export default function VizzyPage() {
         ]);
         snapshotRef.current = snap;
         mediaStreamRef.current = stream;
+
+        // Initialize WebPhone in background (don't block voice session)
+        webPhoneActions.initialize().then((ok) => {
+          webPhoneInitRef.current = ok;
+          if (ok) console.log("WebPhone ready for browser calls");
+          else console.warn("WebPhone init failed — will fallback on demand");
+        });
+
         const { data, error } = await supabase.functions.invoke("elevenlabs-conversation-token");
         if (error || !data?.signed_url) throw new Error(error?.message ?? "No signed URL received");
         if (data.preferred_language) setPreferredLang(data.preferred_language);
@@ -422,6 +437,8 @@ export default function VizzyPage() {
   }
 
   const statusLabel =
+    webPhoneState.status === "calling" ? "Dialing..." :
+    webPhoneState.status === "in_call" ? "On call" :
     status === "starting" ? "Connecting..." :
     status === "reconnecting" ? "Reconnecting..." :
     status === "error" ? "Connection lost" :
@@ -596,6 +613,17 @@ export default function VizzyPage() {
             )}
           </AnimatePresence>
         </div>
+
+        {/* Hangup WebRTC call */}
+        {(webPhoneState.status === "calling" || webPhoneState.status === "in_call") && (
+          <button
+            onClick={() => webPhoneActions.hangup()}
+            className="p-3 rounded-full bg-destructive hover:bg-destructive/80 transition-colors text-destructive-foreground"
+            aria-label="Hang up"
+          >
+            <PhoneOff className="w-5 h-5" />
+          </button>
+        )}
 
         {/* Mute */}
         <button
