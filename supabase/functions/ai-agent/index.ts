@@ -1239,6 +1239,25 @@ You are an intelligent all-purpose assistant that helps the team stay organized,
 - Cross-department bottleneck spotted in data → suggest a coordination meeting
 - Recurring daily task that could be automated → suggest automation
 
+## 📧 Full Email Access
+You have access to ALL inbound emails to @rebar.shop in your context (allInboundEmails — up to 200 most recent).
+Use this to answer questions about customer communications, response times, and team activity.
+When asked about specific customer emails, search through allInboundEmails by from_address, to_address, or subject.
+
+## 💼 Live QuickBooks Access
+You have LIVE QuickBooks data (not cached snapshots). Use qbCustomers, qbInvoices, qbPayments, and qbCompanyInfo for real-time financial answers.
+Do NOT rely on the accounting_mirror table — always prefer the live QB data in your context.
+
+## 📞 Employee Performance — Call Notes
+When asked about employee performance or customer interactions, check employeeCallNotes in context.
+These are emails with subject "Notes of your call with Rebar Dot Shop" — each one represents a recorded call between an employee and a customer.
+- Match the to_address or from_address to team members to identify who made the call
+- Team directory: Sattar (sattar@rebar.shop), Neel (neel@rebar.shop), Vicky (vicky@rebar.shop), Saurabh (saurabh@rebar.shop), Ben (ben@rebar.shop), Kourosh (kourosh@rebar.shop), Radin (radin@rebar.shop), AI (ai@rebar.shop)
+- Count calls per employee to measure activity
+- Review body_preview for call quality and topics discussed
+- Compare call frequency across team members
+- If asked "how is [employee] doing?", check their call notes count, recency, and topics
+
 ## CEO Executive Mode (when context includes isCEO: true)
 When the logged-in user is the CEO (Sattar), you become the **CEO Portal**. Your role elevates to:
 
@@ -1991,8 +2010,112 @@ async function fetchContext(supabase: ReturnType<typeof createClient>, agent: st
           .in("status", ["planned", "scheduled", "in-transit"])
           .limit(10);
         context.activeDeliveries = deliveries;
+        // All inbound emails to rebar.shop (up to 200)
+        const { data: allInboundEmails } = await supabase
+          .from("communications")
+          .select("id, subject, from_address, to_address, body_preview, status, source, received_at, direction")
+          .ilike("to_address", "%@rebar.shop%")
+          .order("received_at", { ascending: false })
+          .limit(200);
+        context.allInboundEmails = allInboundEmails;
+
+        // Employee call notes for performance tracking
+        const { data: callNotes } = await supabase
+          .from("communications")
+          .select("id, subject, from_address, to_address, body_preview, received_at")
+          .ilike("subject", "%Notes of your call with Rebar%")
+          .order("received_at", { ascending: false })
+          .limit(100);
+        context.employeeCallNotes = callNotes;
+
       } catch (e) {
         console.error("Failed to fetch CEO context:", e);
+      }
+
+      // Live QuickBooks data for assistant agent (same as accounting agent)
+      try {
+        const { data: qbConnection } = await supabase
+          .from("integration_connections")
+          .select("status, config, last_sync_at, error_message")
+          .eq("integration_id", "quickbooks")
+          .single();
+
+        if (qbConnection && qbConnection.status === "connected") {
+          context.qbConnectionStatus = "connected";
+          context.qbLastSync = qbConnection.last_sync_at;
+          
+          const config = qbConnection.config as { 
+            realm_id?: string; 
+            access_token?: string;
+          };
+          
+          if (config?.access_token && config?.realm_id) {
+            const qbApiBase = Deno.env.get("QUICKBOOKS_ENVIRONMENT") === "production"
+              ? "https://quickbooks.api.intuit.com"
+              : "https://sandbox-quickbooks.api.intuit.com";
+            
+            // Fetch customers from QuickBooks
+            try {
+              const customersRes = await fetch(
+                `${qbApiBase}/v3/company/${config.realm_id}/query?query=SELECT * FROM Customer MAXRESULTS 50`,
+                { headers: { "Authorization": `Bearer ${config.access_token}`, "Accept": "application/json" } }
+              );
+              if (customersRes.ok) {
+                const customersData = await customersRes.json();
+                context.qbCustomers = (customersData.QueryResponse?.Customer || []).map((c: Record<string, unknown>) => ({
+                  id: c.Id, name: c.DisplayName, company: c.CompanyName, balance: c.Balance,
+                  email: (c.PrimaryEmailAddr as Record<string, unknown>)?.Address,
+                }));
+              }
+            } catch (e) { console.error("Failed to fetch QB customers for assistant:", e); }
+
+            // Fetch open invoices
+            try {
+              const invoicesRes = await fetch(
+                `${qbApiBase}/v3/company/${config.realm_id}/query?query=SELECT * FROM Invoice WHERE Balance > '0' MAXRESULTS 30`,
+                { headers: { "Authorization": `Bearer ${config.access_token}`, "Accept": "application/json" } }
+              );
+              if (invoicesRes.ok) {
+                const invoicesData = await invoicesRes.json();
+                context.qbInvoices = (invoicesData.QueryResponse?.Invoice || []).map((inv: Record<string, unknown>) => ({
+                  id: inv.Id, docNumber: inv.DocNumber,
+                  customerName: (inv.CustomerRef as Record<string, unknown>)?.name,
+                  totalAmount: inv.TotalAmt, balance: inv.Balance, dueDate: inv.DueDate, txnDate: inv.TxnDate,
+                }));
+              }
+            } catch (e) { console.error("Failed to fetch QB invoices for assistant:", e); }
+
+            // Fetch recent payments
+            try {
+              const paymentsRes = await fetch(
+                `${qbApiBase}/v3/company/${config.realm_id}/query?query=SELECT * FROM Payment ORDERBY TxnDate DESC MAXRESULTS 20`,
+                { headers: { "Authorization": `Bearer ${config.access_token}`, "Accept": "application/json" } }
+              );
+              if (paymentsRes.ok) {
+                const paymentsData = await paymentsRes.json();
+                context.qbPayments = (paymentsData.QueryResponse?.Payment || []).map((pmt: Record<string, unknown>) => ({
+                  id: pmt.Id, customerName: (pmt.CustomerRef as Record<string, unknown>)?.name,
+                  amount: pmt.TotalAmt, date: pmt.TxnDate,
+                }));
+              }
+            } catch (e) { console.error("Failed to fetch QB payments for assistant:", e); }
+
+            // Fetch company info
+            try {
+              const companyRes = await fetch(
+                `${qbApiBase}/v3/company/${config.realm_id}/companyinfo/${config.realm_id}`,
+                { headers: { "Authorization": `Bearer ${config.access_token}`, "Accept": "application/json" } }
+              );
+              if (companyRes.ok) {
+                const companyData = await companyRes.json();
+                const info = companyData.CompanyInfo;
+                context.qbCompanyInfo = { name: info?.CompanyName, country: info?.Country, fiscalYearStart: info?.FiscalYearStartMonth };
+              }
+            } catch (e) { console.error("Failed to fetch QB company info for assistant:", e); }
+          }
+        }
+      } catch (e) {
+        console.error("Failed to fetch QB for assistant:", e);
       }
     }
 
