@@ -175,6 +175,7 @@ export default function AgentWorkspace() {
                       body: actionData,
                     });
                     if (error) throw error;
+                    if (data?.error) throw new Error(data.error);
                     toast.success(actionData.type === "ringcentral_call" ? "Call initiated!" : "SMS sent!");
                   } catch (err) {
                     toast.error(`Failed: ${err instanceof Error ? err.message : "Unknown error"}`);
