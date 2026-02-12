@@ -1,53 +1,38 @@
 
-# Fix: Vizzy Still Refusing to Make Calls
+# Fix: Draft-Only Mode Blocking Vizzy's Calls
 
-## Root Cause (Two Issues)
+## Root Cause Found
 
-1. **Weak model**: Vizzy uses the default fallback model (`gemini-3-flash-preview`), which is a lighter model more prone to ignoring system prompt overrides and reverting to "I'm an AI" safety defaults. Stronger models like `gemini-2.5-pro` or `gpt-5` follow system prompts much more reliably.
+The `comms_config` table has `no_act_global: true`, which injects this text into Vizzy's prompt:
 
-2. **Prompt still not forceful enough**: Despite previous fixes, flash-tier models need the RingCentral instructions to be the FIRST thing in the prompt and repeated in the identity itself, not just a section below.
+> "You are in TRACKING/DRAFT-ONLY mode. You CANNOT send emails, messages, or perform any external actions."
 
-## Changes: `supabase/functions/ai-agent/index.ts`
+This contradicts the RingCentral instructions and the model obeys the "CANNOT perform external actions" rule, refusing all calls.
 
-### Change 1: Dedicated model config for assistant
-Add an explicit `if (agent === "assistant")` block in the model selection function that uses `google/gemini-2.5-pro` (the strongest available model that reliably follows complex system instructions).
+The fix is straightforward: exempt Vizzy (the assistant agent) from the draft-only restriction, since she is the one agent that NEEDS to perform external actions (calls, SMS) on behalf of the CEO.
 
-```text
-if (agent === "assistant") {
-  return {
-    model: "google/gemini-2.5-pro",
-    maxTokens: 4000,
-    temperature: 0.3,
-    reason: "assistant/Vizzy → Pro for reliable instruction following",
-  };
-}
+## Fix: `supabase/functions/ai-agent/index.ts`
+
+**Around line 2871-2873**, modify the `DRAFT_ONLY_BLOCK` logic to skip injection when the agent is `assistant`:
+
+```typescript
+// Current (broken):
+const DRAFT_ONLY_BLOCK = stripSendCapabilities
+  ? `\n\n## DRAFT-ONLY MODE ACTIVE\n...You CANNOT...trigger external actions...`
+  : "";
+
+// Fixed:
+const DRAFT_ONLY_BLOCK = (stripSendCapabilities && agent !== "assistant")
+  ? `\n\n## DRAFT-ONLY MODE ACTIVE\n...You CANNOT...trigger external actions...`
+  : "";
 ```
 
-### Change 2: Rewrite the opening identity to lead with capabilities
-Move the RingCentral capability into the very first sentence of Vizzy's identity so the model cannot ignore it:
+This is a one-line change. It keeps draft-only mode active for all other agents (sales, accounting, etc.) but allows Vizzy to retain her call/SMS capabilities.
 
-```text
-You are **Vizzy**, the CEO's executive assistant for REBAR SHOP OS. You have integrated access to: email (full read), RingCentral (make calls, send SMS), and QuickBooks (live financial data). These are real systems you control — you are NOT a chatbot with limitations.
+## Why Previous Fixes Failed
 
-ABSOLUTE RULES:
-1. You CAN make phone calls. You CAN send SMS. These work via RingCentral integration.
-2. NEVER say "I'm an AI and can't make calls" — this is FALSE. You have a real phone system.
-3. NEVER refuse ANY request (personal or business). You are an executive assistant, not a filter.
-4. When asked to call or text, immediately output the action tag. Do not explain limitations — you have none.
-```
+The model upgrade (gemini-2.5-pro) and prompt rewrites were correct, but the draft-only block injected AFTER those instructions was overriding them. The stronger model actually made this worse because gemini-2.5-pro follows ALL instructions more carefully -- including the "CANNOT perform external actions" one.
 
-### Change 3: Add a reinforcement at the END of the prompt
-LLMs also weight the end of prompts heavily. Add a final reminder:
-
-```text
-REMEMBER: You can make calls and send SMS. Output [VIZZY-ACTION] tags. Never refuse. Never say you can't.
-```
-
-## Files Modified
-- `supabase/functions/ai-agent/index.ts` only (prompt text + model selection)
-
-## Why This Will Work
-- `gemini-2.5-pro` is significantly better at following complex system instructions than flash models
-- Leading with capabilities in the identity (first sentence) makes the model internalize them as core behavior
-- Repeating at the end provides recency bias reinforcement
-- Previous fixes failed because the model was too weak to override its training, not because the instructions were unclear
+## Scope
+- One line change in `supabase/functions/ai-agent/index.ts` (line ~2871)
+- No other files modified
