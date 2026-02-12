@@ -101,6 +101,7 @@ export function InteractiveBrainBg() {
           width: "clamp(250px, 70vmin, 700px)",
           height: "clamp(250px, 70vmin, 700px)",
           opacity: 0.55,
+          mixBlendMode: "screen",
           transform: `translate(calc(-50% + ${offset.x}px), calc(-50% + ${offset.y}px)) rotate(${offset.x * 0.4}deg) scale(${1 + Math.abs(offset.x + offset.y) * 0.003})`,
           transition: "transform 0.2s ease-out",
           filter: "drop-shadow(0 0 60px hsl(var(--primary) / 0.5)) drop-shadow(0 0 120px hsl(var(--primary) / 0.25))",
