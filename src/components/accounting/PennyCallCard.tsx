@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Phone, PhoneOff, Loader2, Bot, BotOff, CheckCircle, XCircle, Voicemail, PhoneMissed } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -48,8 +48,10 @@ export function PennyCallCard({
   const aiActive = bridgeState?.active ?? false;
   const aiConnecting = bridgeState?.status === "connecting";
   const autoTriggeredRef = useRef(false);
+  const ringGuardTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [waitingForAnswer, setWaitingForAnswer] = useState(false);
 
-  // Auto-activate AI bridge when call connects
+  // Auto-activate AI bridge with ring guard delay (wait for caller to answer)
   useEffect(() => {
     if (
       callStatus === "in_call" &&
@@ -59,12 +61,32 @@ export function PennyCallCard({
       onStartAiBridge
     ) {
       autoTriggeredRef.current = true;
-      onStartAiBridge(data);
+      setWaitingForAnswer(true);
+      // Delay 8 seconds to allow phone to ring and be answered
+      ringGuardTimerRef.current = setTimeout(() => {
+        ringGuardTimerRef.current = null;
+        setWaitingForAnswer(false);
+        onStartAiBridge(data);
+      }, 8000);
     }
     if (callStatus !== "in_call" && callStatus !== "calling") {
       autoTriggeredRef.current = false;
+      setWaitingForAnswer(false);
+      if (ringGuardTimerRef.current) {
+        clearTimeout(ringGuardTimerRef.current);
+        ringGuardTimerRef.current = null;
+      }
     }
   }, [callStatus, aiActive, bridgeState?.status, onStartAiBridge]);
+
+  // Cleanup ring guard timer on unmount
+  useEffect(() => {
+    return () => {
+      if (ringGuardTimerRef.current) {
+        clearTimeout(ringGuardTimerRef.current);
+      }
+    };
+  }, []);
 
   const outcomeButtons: { outcome: CallTaskOutcome; label: string; icon: React.ReactNode }[] = [
     { outcome: "answered", label: "Answered", icon: <CheckCircle className="w-3.5 h-3.5" /> },
@@ -148,9 +170,11 @@ export function PennyCallCard({
             <span className="text-muted-foreground">
               {aiActive
                 ? "AI is talking"
-                : isDialing
-                  ? "Dialing..."
-                  : "On call"}
+                : waitingForAnswer
+                  ? "Waiting for answer..."
+                  : isDialing
+                    ? "Dialing..."
+                    : "On call"}
             </span>
           </div>
         )}
