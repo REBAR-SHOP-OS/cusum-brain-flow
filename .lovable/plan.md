@@ -1,16 +1,28 @@
 
 
-# Fix Low-Contrast Font Colors on Inbox Kanban Cards
+# Fix Email Body Colors for Dark Mode
 
 ## Problem
-In dark mode, the text on Kanban email cards (subject, preview, footer, timestamps) is too dim and hard to read. The `text-muted-foreground` CSS variable is set to `hsl(215 20% 55%)` in dark mode, which lacks sufficient contrast against dark card backgrounds.
+The email body cards in the inbox are rendered with forced `bg-white text-zinc-900` / `text-zinc-800`, creating a jarring bright white block against the dark mode UI. Icons, links, and text within these cards clash with the rest of the interface.
 
 ## Solution
-Bump the dark-mode `--muted-foreground` lightness from 55% to 65% in `src/index.css`. This improves readability across the entire app in dark mode without changing light mode.
+Switch the email body containers from hardcoded white/light styles to dark-mode-compatible theme colors across both viewer components.
 
-## File Change
+## File Changes
 
-**`src/index.css`** (dark theme section):
-- Change `--muted-foreground: 215 20% 55%` to `--muted-foreground: 215 20% 65%`
+### 1. `src/components/inbox/InboxEmailThread.tsx` (line ~315)
+Replace the email body container classes:
+- `bg-white text-zinc-900` → `bg-card text-card-foreground`
+- `[&_a]:text-blue-600` → `[&_a]:text-primary [&_a]:underline`
 
-This single change fixes contrast for all `text-muted-foreground` usage across the inbox cards (preview text, timestamps, footer email addresses) and every other component using this token in dark mode.
+### 2. `src/components/inbox/InboxEmailViewer.tsx` (line ~299)
+Replace the email body container classes:
+- `bg-white text-zinc-800` → `bg-card text-card-foreground`
+- All hardcoded `zinc-*` color references → theme-aware equivalents:
+  - `[&_a]:text-cyan-600` → `[&_a]:text-primary`
+  - `[&_blockquote]:text-zinc-500` → `[&_blockquote]:text-muted-foreground`
+  - `[&_hr]:border-zinc-200` → `[&_hr]:border-border`
+  - `[&_pre]:bg-zinc-100` / `[&_code]:bg-zinc-100` → `[&_pre]:bg-muted [&_code]:bg-muted`
+
+This ensures the email body blends with the dark theme while remaining readable in light mode too.
+
