@@ -1,50 +1,31 @@
 
 
-# Refine Vizzy's Email, QuickBooks, and Call Notes Integration
+# Fix Email View Overlapping Reply Composer
 
-## What's Already Done
-The previous implementation already added all three features (email context, call notes, live QuickBooks) to `supabase/functions/ai-agent/index.ts`. This plan applies your recommended refinements for reliability, performance, and maintainability.
+## Problem
+When opening the reply composer in the inbox detail view, the email thread content extends behind/underneath the composer, making the reply area partially hidden. The email body should scroll independently above the pinned reply section.
+
+## Root Cause
+In `InboxView.tsx` (line 958), the wrapper div for the email detail view is missing `overflow-hidden`, which means the `h-full` on `InboxDetailView` doesn't properly constrain to the available space. This causes the scroll area to overflow past its intended boundary, pushing content behind the reply composer.
 
 ## Changes
 
-### 1. Add `direction = 'inbound'` Filter to Email Queries
-The current email query only filters by `to_address ilike @rebar.shop` but doesn't filter by direction. This can pull outbound replies and internal forwards. Add `.eq("direction", "inbound")` to both queries.
+### File: `src/components/inbox/InboxView.tsx` (line 958)
+Add `overflow-hidden` to the email viewer wrapper so the detail view is properly height-constrained:
 
-**File:** `supabase/functions/ai-agent/index.ts` (lines 2013-2029)
+- **Before:** `"flex-1 min-h-0"`
+- **After:** `"flex-1 min-h-0 overflow-hidden"`
 
-- `allInboundEmails` query: add `.eq("direction", "inbound")` before the `.ilike("to_address", ...)` filter
-- `callNotes` query: add `.eq("direction", "inbound")` -- these RingCentral summaries arrive as inbound emails
-- Add error logging with `console.warn` for both queries instead of silently swallowing errors
+### File: `src/components/inbox/InboxDetailView.tsx` (line 197)
+The left column already has `overflow-hidden`, but the ScrollArea needs a hard height cap. Change the ScrollArea wrapper to ensure it doesn't push the composer off-screen:
 
-### 2. Add `direction` and `source` columns to Call Notes Query
-The current call notes select is missing `direction` and `source` columns which are useful for mapping employees. Add them.
+- Add `overflow-hidden` to the root container (line 153) if not already present
+- Ensure the left column (line 197) uses `overflow-y-hidden` so only the ScrollArea scrolls
 
-**File:** `supabase/functions/ai-agent/index.ts` (line 2025)
-
-- From: `.select("id, subject, from_address, to_address, body_preview, received_at")`
-- To: `.select("id, subject, from_address, to_address, body_preview, received_at, direction, source")`
-
-### 3. Extract QuickBooks Fetch into Shared Helper Function
-Currently the QuickBooks live API code is duplicated between the `accounting` agent block (lines 1778-1898) and the `assistant` agent block (lines 2036-2119). Extract into a reusable `fetchQuickBooksLiveContext()` helper and call it from both agents.
-
-**File:** `supabase/functions/ai-agent/index.ts`
-
-- Create a new `async function fetchQuickBooksLiveContext(supabase, context)` that contains the shared QB logic (connection check, token retrieval, API calls for customers/invoices/payments/company info)
-- Replace the accounting agent's QB block (lines 1778-1898) with a call to the helper
-- Replace the assistant agent's QB block (lines 2036-2119) with a call to the same helper
-- This prevents future drift where one agent gets QB updates but the other doesn't
-
-### 4. Add Guardrail to Vizzy's System Prompt
-Add the anti-hallucination instruction to the Employee Performance section.
-
-**File:** `supabase/functions/ai-agent/index.ts` (after line 1259)
-
-- Add: `Important: Only summarize what is explicitly present in emails/call notes. Do not make performance judgments without evidence. If information is missing, say so clearly.`
+### File: `src/components/inbox/InboxView.tsx` (line 853, kanban selected view)
+The kanban path also renders `InboxDetailView` without overflow constraints. Apply the same `overflow-hidden` fix there.
 
 ## Summary
-- 1 file modified: `supabase/functions/ai-agent/index.ts`
-- Inbound direction filter added to both email queries (prevents pulling outbound/internal noise)
-- QuickBooks logic deduplicated into shared helper (prevents future drift)
-- Anti-hallucination guardrail added to prompt
-- Better error logging on email queries
-
+- 2 files modified: `InboxView.tsx`, `InboxDetailView.tsx`
+- Adds proper overflow containment so the reply composer stays pinned at the bottom
+- Email thread content scrolls independently above it
