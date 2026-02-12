@@ -1,43 +1,22 @@
 
 
-# Make Brain Visible on Landing Page Hero
+# Remove Dark Square Background from Brain Image
 
 ## Problem
-The landing page hero section (lines 53-57 in `Landing.tsx`) renders the brain as a static `<img>` at `opacity-[0.08]` (8%) with a heavy gradient overlay on top, making it nearly invisible. The dynamic `InteractiveBrainBg` component is only used on the `/brain` page.
+The `brain-hero.png` image has a dark rectangular background baked into the PNG file. This creates a visible dark square behind the brain on the landing page hero, which looks bad.
 
 ## Solution
-Replace the static brain image in the hero with the fully interactive `InteractiveBrainBg` component that was just rewritten with neuro-electric effects.
+Apply `mix-blend-mode: screen` to the brain `<img>` element. This CSS blend mode makes dark pixels transparent and keeps bright pixels visible -- effectively removing the dark square while preserving the glowing brain circuits.
 
-## Changes to `src/pages/Landing.tsx`
+## Changes to `src/components/brain/InteractiveBrainBg.tsx`
 
-### 1. Import `InteractiveBrainBg`
-Add import for the interactive component. Remove the unused `brainHero` import.
+On the brain `<img>` element (line 98), add `mix-blend-mode: screen` to the inline style object. This single CSS property will:
+- Make the dark background of the PNG invisible (black becomes transparent with screen blending)
+- Keep the bright cyan/teal brain circuit lines fully visible
+- Blend naturally with the glow effects behind it
 
-### 2. Replace Static Brain Background
-Replace the current hero background (lines 54-57):
-```tsx
-// CURRENT -- static, 8% opacity, invisible
-<img src={brainHero} alt="" className="w-full h-full object-cover opacity-[0.08]" />
-<div className="absolute inset-0 bg-gradient-to-b from-background/60 via-background/30 to-background" />
-```
-
-With the interactive component plus a lighter gradient so the brain shows through:
-```tsx
-<InteractiveBrainBg />
-<div className="absolute inset-0 bg-gradient-to-b from-background/40 via-transparent to-background/80" />
-```
-
-The gradient is lighter at the top (`/40` instead of `/60`) and transparent in the middle so the brain, glows, particles, and neural pathways are clearly visible. The bottom stays dark (`/80`) to ensure text contrast for the stats row.
-
-### 3. Ensure z-index stacking
-Add `relative z-10` to the hero content `<div>` so text stays above the interactive background.
-
----
+No other changes needed -- just one CSS property addition.
 
 ## Files Modified
-- `src/pages/Landing.tsx` -- swap static brain for InteractiveBrainBg, lighten gradient overlay
+- `src/components/brain/InteractiveBrainBg.tsx` -- add `mixBlendMode: "screen"` to brain image style
 
-## No Other Changes
-- `InteractiveBrainBg.tsx` stays as-is (already rewritten with responsive neuro-electric effects)
-- No new dependencies
-- No schema changes
