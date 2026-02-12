@@ -13,7 +13,6 @@ import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import { FileText, Check, XCircle } from "lucide-react";
 
-const ALLOWED_EMAIL = "sattar@rebar.shop";
 const MAX_RETRIES = 2;
 
 interface TranscriptEntry {
@@ -55,6 +54,7 @@ export default function VizzyPage() {
   const silentModeRef = useRef(false);
   const silentIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const { loadFullContext } = useVizzyContext();
+  const [preferredLang, setPreferredLang] = useState("en");
 
   // Session timer
   useEffect(() => {
@@ -298,7 +298,7 @@ export default function VizzyPage() {
   // Auto-start on mount
   useEffect(() => {
     if (startedRef.current) return;
-    if (!user || user.email !== ALLOWED_EMAIL) return;
+    if (!user) return;
     startedRef.current = true;
 
     (async () => {
@@ -311,8 +311,14 @@ export default function VizzyPage() {
         mediaStreamRef.current = stream;
         const { data, error } = await supabase.functions.invoke("elevenlabs-conversation-token");
         if (error || !data?.signed_url) throw new Error(error?.message ?? "No signed URL received");
+        if (data.preferred_language) setPreferredLang(data.preferred_language);
         await conversation.startSession({ signedUrl: data.signed_url, connectionType: "websocket" });
-        if (snap) conversation.sendContextualUpdate(buildVizzyContext(snap));
+        if (snap) {
+          const langCtx = data.preferred_language && data.preferred_language !== "en"
+            ? `\nUser's preferred language: ${data.preferred_language}. Default to speaking in this language unless they switch.`
+            : "";
+          conversation.sendContextualUpdate(buildVizzyContext(snap) + langCtx);
+        }
       } catch (err) {
         console.error("Failed to start Vizzy voice:", err);
         setStatus("error");
@@ -338,10 +344,10 @@ export default function VizzyPage() {
     }
   }, [conversation]);
 
-  if (!user || user.email !== ALLOWED_EMAIL) {
+  if (!user) {
     return (
       <div className="flex h-screen items-center justify-center bg-background text-foreground">
-        <p>Access restricted.</p>
+        <p>Please log in to use Vizzy voice.</p>
       </div>
     );
   }
@@ -406,6 +412,11 @@ export default function VizzyPage() {
 
         <div className="text-center">
           <h1 className="text-xl font-semibold text-white mb-1">Vizzy</h1>
+          {preferredLang !== "en" && (
+            <span className="inline-block mb-1 text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-full bg-primary/20 text-primary font-semibold">
+              {preferredLang.toUpperCase()}
+            </span>
+          )}
           <p className="text-sm text-white/50">{statusLabel}</p>
           {silentMode && (
             <span className="inline-block mt-2 text-[10px] uppercase tracking-widest px-3 py-1 rounded-full bg-amber-500/20 text-amber-400 font-semibold">
