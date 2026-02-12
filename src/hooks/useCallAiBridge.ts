@@ -108,20 +108,23 @@ export function useCallAiBridge() {
             console.log("AI bridge: sent phone call overrides", overrides);
           }
 
-          // Start sending remote audio to ElevenLabs
-          processor.onaudioprocess = (e) => {
-            if (ws.readyState !== WebSocket.OPEN) return;
-            const samples = e.inputBuffer.getChannelData(0);
-            const pcm16 = float32ToPcm16(samples);
-            const b64 = arrayBufferToBase64(pcm16.buffer as ArrayBuffer);
-            ws.send(JSON.stringify({ user_audio_chunk: b64 }));
-          };
+          // Wait briefly for override to register, then start audio
+          setTimeout(() => {
+            // Start sending remote audio to ElevenLabs
+            processor.onaudioprocess = (e) => {
+              if (ws.readyState !== WebSocket.OPEN) return;
+              const samples = e.inputBuffer.getChannelData(0);
+              const pcm16 = float32ToPcm16(samples);
+              const b64 = arrayBufferToBase64(pcm16.buffer as ArrayBuffer);
+              ws.send(JSON.stringify({ user_audio_chunk: b64 }));
+            };
 
-          // Replace the call's outgoing audio (local mic) with AI voice
-          replaceOutgoingTrack(pc, aiDest.stream);
+            // Replace the call's outgoing audio (local mic) with AI voice
+            replaceOutgoingTrack(pc, aiDest.stream);
 
-          setState((s) => ({ ...s, active: true, status: "active" }));
-          toast.success("AI is now talking on the call");
+            setState((s) => ({ ...s, active: true, status: "active" }));
+            toast.success("AI is now talking on the call");
+          }, 300);
         };
 
         ws.onmessage = (event) => {
