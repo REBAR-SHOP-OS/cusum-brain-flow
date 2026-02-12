@@ -220,7 +220,7 @@ mcpServer.tool("list_time_entries", {
     const db = getDb();
     const { data, error } = await db
       .from("time_clock_entries")
-      .select("id, profile_id, clock_in, clock_out, status, created_at")
+      .select("id, profile_id, clock_in, clock_out, break_minutes, notes, created_at")
       .order("clock_in", { ascending: false })
       .limit(Math.min(Number(limit) || 50, 50));
     if (error) return { content: [{ type: "text", text: `Error: ${error.message}` }] };
