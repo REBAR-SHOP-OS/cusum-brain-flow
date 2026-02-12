@@ -1258,6 +1258,8 @@ These are emails with subject "Notes of your call with Rebar Dot Shop" — each 
 - Compare call frequency across team members
 - If asked "how is [employee] doing?", check their call notes count, recency, and topics
 
+Important: Only summarize what is explicitly present in emails/call notes. Do not make performance judgments without evidence. If information is missing, say so clearly.
+
 ## CEO Executive Mode (when context includes isCEO: true)
 When the logged-in user is the CEO (Sattar), you become the **CEO Portal**. Your role elevates to:
 
@@ -1693,7 +1695,101 @@ async function fetchEstimationLearnings(supabase: ReturnType<typeof createClient
   return learnings;
 }
 
+// Shared helper: fetch live QuickBooks data (used by both accounting and assistant agents)
+async function fetchQuickBooksLiveContext(supabase: ReturnType<typeof createClient>, context: Record<string, unknown>) {
+  try {
+    const { data: qbConnection } = await supabase
+      .from("integration_connections")
+      .select("status, config, last_sync_at, error_message")
+      .eq("integration_id", "quickbooks")
+      .single();
+
+    if (qbConnection && qbConnection.status === "connected") {
+      context.qbConnectionStatus = "connected";
+      context.qbLastSync = qbConnection.last_sync_at;
+
+      const config = qbConnection.config as {
+        realm_id?: string;
+        access_token?: string;
+      };
+
+      if (config?.access_token && config?.realm_id) {
+        const qbApiBase = Deno.env.get("QUICKBOOKS_ENVIRONMENT") === "production"
+          ? "https://quickbooks.api.intuit.com"
+          : "https://sandbox-quickbooks.api.intuit.com";
+
+        // Fetch customers
+        try {
+          const customersRes = await fetch(
+            `${qbApiBase}/v3/company/${config.realm_id}/query?query=SELECT * FROM Customer MAXRESULTS 50`,
+            { headers: { "Authorization": `Bearer ${config.access_token}`, "Accept": "application/json" } }
+          );
+          if (customersRes.ok) {
+            const customersData = await customersRes.json();
+            context.qbCustomers = (customersData.QueryResponse?.Customer || []).map((c: Record<string, unknown>) => ({
+              id: c.Id, name: c.DisplayName, company: c.CompanyName, balance: c.Balance,
+              email: (c.PrimaryEmailAddr as Record<string, unknown>)?.Address,
+            }));
+          }
+        } catch (e) { console.error("[QB] Failed to fetch customers:", e); }
+
+        // Fetch open invoices
+        try {
+          const invoicesRes = await fetch(
+            `${qbApiBase}/v3/company/${config.realm_id}/query?query=SELECT * FROM Invoice WHERE Balance > '0' MAXRESULTS 30`,
+            { headers: { "Authorization": `Bearer ${config.access_token}`, "Accept": "application/json" } }
+          );
+          if (invoicesRes.ok) {
+            const invoicesData = await invoicesRes.json();
+            context.qbInvoices = (invoicesData.QueryResponse?.Invoice || []).map((inv: Record<string, unknown>) => ({
+              id: inv.Id, docNumber: inv.DocNumber,
+              customerName: (inv.CustomerRef as Record<string, unknown>)?.name,
+              customerId: (inv.CustomerRef as Record<string, unknown>)?.value,
+              totalAmount: inv.TotalAmt, balance: inv.Balance, dueDate: inv.DueDate, txnDate: inv.TxnDate,
+            }));
+          }
+        } catch (e) { console.error("[QB] Failed to fetch invoices:", e); }
+
+        // Fetch recent payments
+        try {
+          const paymentsRes = await fetch(
+            `${qbApiBase}/v3/company/${config.realm_id}/query?query=SELECT * FROM Payment ORDERBY TxnDate DESC MAXRESULTS 20`,
+            { headers: { "Authorization": `Bearer ${config.access_token}`, "Accept": "application/json" } }
+          );
+          if (paymentsRes.ok) {
+            const paymentsData = await paymentsRes.json();
+            context.qbPayments = (paymentsData.QueryResponse?.Payment || []).map((pmt: Record<string, unknown>) => ({
+              id: pmt.Id, customerName: (pmt.CustomerRef as Record<string, unknown>)?.name,
+              amount: pmt.TotalAmt, date: pmt.TxnDate,
+            }));
+          }
+        } catch (e) { console.error("[QB] Failed to fetch payments:", e); }
+
+        // Fetch company info
+        try {
+          const companyRes = await fetch(
+            `${qbApiBase}/v3/company/${config.realm_id}/companyinfo/${config.realm_id}`,
+            { headers: { "Authorization": `Bearer ${config.access_token}`, "Accept": "application/json" } }
+          );
+          if (companyRes.ok) {
+            const companyData = await companyRes.json();
+            const info = companyData.CompanyInfo;
+            context.qbCompanyInfo = { name: info?.CompanyName, country: info?.Country, fiscalYearStart: info?.FiscalYearStartMonth };
+          }
+        } catch (e) { console.error("[QB] Failed to fetch company info:", e); }
+      }
+    } else {
+      context.qbConnectionStatus = qbConnection?.status || "not_connected";
+      context.qbError = qbConnection?.error_message;
+    }
+  } catch (e) {
+    console.error("[QB] Failed to check connection:", e);
+    context.qbConnectionStatus = "error";
+  }
+}
+
 async function fetchContext(supabase: ReturnType<typeof createClient>, agent: string, userId?: string, userEmail?: string, userRolesList?: string[]) {
+
   const context: Record<string, unknown> = {};
 
   try {
@@ -1774,137 +1870,8 @@ async function fetchContext(supabase: ReturnType<typeof createClient>, agent: st
         console.error("Failed to fetch tasks:", e);
       }
 
-      // Fetch QuickBooks connection status and data for accounting agent
-      try {
-        const { data: qbConnection } = await supabase
-          .from("integration_connections")
-          .select("status, config, last_sync_at, error_message")
-          .eq("integration_id", "quickbooks")
-          .single();
-
-        if (qbConnection && qbConnection.status === "connected") {
-          context.qbConnectionStatus = "connected";
-          context.qbLastSync = qbConnection.last_sync_at;
-          
-          const config = qbConnection.config as { 
-            realm_id?: string; 
-            access_token?: string;
-          };
-          
-          if (config?.access_token && config?.realm_id) {
-            const qbApiBase = Deno.env.get("QUICKBOOKS_ENVIRONMENT") === "production"
-              ? "https://quickbooks.api.intuit.com"
-              : "https://sandbox-quickbooks.api.intuit.com";
-            
-            // Fetch customers from QuickBooks
-            try {
-              const customersRes = await fetch(
-                `${qbApiBase}/v3/company/${config.realm_id}/query?query=SELECT * FROM Customer MAXRESULTS 50`,
-                {
-                  headers: {
-                    "Authorization": `Bearer ${config.access_token}`,
-                    "Accept": "application/json",
-                  },
-                }
-              );
-              if (customersRes.ok) {
-                const customersData = await customersRes.json();
-                context.qbCustomers = (customersData.QueryResponse?.Customer || []).map((c: Record<string, unknown>) => ({
-                  id: c.Id,
-                  name: c.DisplayName,
-                  company: c.CompanyName,
-                  balance: c.Balance,
-                  email: (c.PrimaryEmailAddr as Record<string, unknown>)?.Address,
-                }));
-              }
-            } catch (e) {
-              console.error("Failed to fetch QB customers:", e);
-            }
-
-            // Fetch open invoices from QuickBooks
-            try {
-              const invoicesRes = await fetch(
-                `${qbApiBase}/v3/company/${config.realm_id}/query?query=SELECT * FROM Invoice WHERE Balance > '0' MAXRESULTS 30`,
-                {
-                  headers: {
-                    "Authorization": `Bearer ${config.access_token}`,
-                    "Accept": "application/json",
-                  },
-                }
-              );
-              if (invoicesRes.ok) {
-                const invoicesData = await invoicesRes.json();
-                context.qbInvoices = (invoicesData.QueryResponse?.Invoice || []).map((inv: Record<string, unknown>) => ({
-                  id: inv.Id,
-                  docNumber: inv.DocNumber,
-                  customerName: (inv.CustomerRef as Record<string, unknown>)?.name,
-                  customerId: (inv.CustomerRef as Record<string, unknown>)?.value,
-                  totalAmount: inv.TotalAmt,
-                  balance: inv.Balance,
-                  dueDate: inv.DueDate,
-                  txnDate: inv.TxnDate,
-                }));
-              }
-            } catch (e) {
-              console.error("Failed to fetch QB invoices:", e);
-            }
-
-            // Fetch recent payments
-            try {
-              const paymentsRes = await fetch(
-                `${qbApiBase}/v3/company/${config.realm_id}/query?query=SELECT * FROM Payment ORDERBY TxnDate DESC MAXRESULTS 20`,
-                {
-                  headers: {
-                    "Authorization": `Bearer ${config.access_token}`,
-                    "Accept": "application/json",
-                  },
-                }
-              );
-              if (paymentsRes.ok) {
-                const paymentsData = await paymentsRes.json();
-                context.qbPayments = (paymentsData.QueryResponse?.Payment || []).map((pmt: Record<string, unknown>) => ({
-                  id: pmt.Id,
-                  customerName: (pmt.CustomerRef as Record<string, unknown>)?.name,
-                  amount: pmt.TotalAmt,
-                  date: pmt.TxnDate,
-                }));
-              }
-            } catch (e) {
-              console.error("Failed to fetch QB payments:", e);
-            }
-
-            // Fetch company info
-            try {
-              const companyRes = await fetch(
-                `${qbApiBase}/v3/company/${config.realm_id}/companyinfo/${config.realm_id}`,
-                {
-                  headers: {
-                    "Authorization": `Bearer ${config.access_token}`,
-                    "Accept": "application/json",
-                  },
-                }
-              );
-              if (companyRes.ok) {
-                const companyData = await companyRes.json();
-                const info = companyData.CompanyInfo;
-                context.qbCompanyInfo = {
-                  name: info?.CompanyName,
-                  country: info?.Country,
-                  fiscalYearStart: info?.FiscalYearStartMonth,
-                };
-              }
-            } catch (e) {
-              console.error("Failed to fetch QB company info:", e);
-            }
-          }
-        } else {
-          context.qbConnectionStatus = qbConnection?.status || "not_connected";
-          context.qbError = qbConnection?.error_message;
-        }
-      } catch (e) {
-        console.error("Failed to check QB connection:", e);
-        context.qbConnectionStatus = "error";
-      }
+      // Fetch live QuickBooks data via shared helper
+      await fetchQuickBooksLiveContext(supabase, context);
     }
 
     if (agent === "support") {
@@ -2011,112 +1978,37 @@ async function fetchContext(supabase: ReturnType<typeof createClient>, agent: st
           .limit(10);
         context.activeDeliveries = deliveries;
         // All inbound emails to rebar.shop (up to 200)
-        const { data: allInboundEmails } = await supabase
+        const { data: allInboundEmails, error: allInboundEmailsError } = await supabase
           .from("communications")
           .select("id, subject, from_address, to_address, body_preview, status, source, received_at, direction")
+          .eq("direction", "inbound")
           .ilike("to_address", "%@rebar.shop%")
           .order("received_at", { ascending: false })
           .limit(200);
-        context.allInboundEmails = allInboundEmails;
+        if (allInboundEmailsError) {
+          console.warn("[fetchContext] allInboundEmails error", allInboundEmailsError);
+        }
+        context.allInboundEmails = allInboundEmails ?? [];
 
-        // Employee call notes for performance tracking
-        const { data: callNotes } = await supabase
+        // Employee call notes for performance tracking (RingCentral summaries)
+        const { data: callNotes, error: callNotesError } = await supabase
           .from("communications")
-          .select("id, subject, from_address, to_address, body_preview, received_at")
+          .select("id, subject, from_address, to_address, body_preview, received_at, direction, source")
+          .eq("direction", "inbound")
           .ilike("subject", "%Notes of your call with Rebar%")
           .order("received_at", { ascending: false })
           .limit(100);
-        context.employeeCallNotes = callNotes;
+        if (callNotesError) {
+          console.warn("[fetchContext] employeeCallNotes error", callNotesError);
+        }
+        context.employeeCallNotes = callNotes ?? [];
 
       } catch (e) {
         console.error("Failed to fetch CEO context:", e);
       }
 
-      // Live QuickBooks data for assistant agent (same as accounting agent)
-      try {
-        const { data: qbConnection } = await supabase
-          .from("integration_connections")
-          .select("status, config, last_sync_at, error_message")
-          .eq("integration_id", "quickbooks")
-          .single();
-
-        if (qbConnection && qbConnection.status === "connected") {
-          context.qbConnectionStatus = "connected";
-          context.qbLastSync = qbConnection.last_sync_at;
-          
-          const config = qbConnection.config as { 
-            realm_id?: string; 
-            access_token?: string;
-          };
-          
-          if (config?.access_token && config?.realm_id) {
-            const qbApiBase = Deno.env.get("QUICKBOOKS_ENVIRONMENT") === "production"
-              ? "https://quickbooks.api.intuit.com"
-              : "https://sandbox-quickbooks.api.intuit.com";
-            
-            // Fetch customers from QuickBooks
-            try {
-              const customersRes = await fetch(
-                `${qbApiBase}/v3/company/${config.realm_id}/query?query=SELECT * FROM Customer MAXRESULTS 50`,
-                { headers: { "Authorization": `Bearer ${config.access_token}`, "Accept": "application/json" } }
-              );
-              if (customersRes.ok) {
-                const customersData = await customersRes.json();
-                context.qbCustomers = (customersData.QueryResponse?.Customer || []).map((c: Record<string, unknown>) => ({
-                  id: c.Id, name: c.DisplayName, company: c.CompanyName, balance: c.Balance,
-                  email: (c.PrimaryEmailAddr as Record<string, unknown>)?.Address,
-                }));
-              }
-            } catch (e) { console.error("Failed to fetch QB customers for assistant:", e); }
-
-            // Fetch open invoices
-            try {
-              const invoicesRes = await fetch(
-                `${qbApiBase}/v3/company/${config.realm_id}/query?query=SELECT * FROM Invoice WHERE Balance > '0' MAXRESULTS 30`,
-                { headers: { "Authorization": `Bearer ${config.access_token}`, "Accept": "application/json" } }
-              );
-              if (invoicesRes.ok) {
-                const invoicesData = await invoicesRes.json();
-                context.qbInvoices = (invoicesData.QueryResponse?.Invoice || []).map((inv: Record<string, unknown>) => ({
-                  id: inv.Id, docNumber: inv.DocNumber,
-                  customerName: (inv.CustomerRef as Record<string, unknown>)?.name,
-                  totalAmount: inv.TotalAmt, balance: inv.Balance, dueDate: inv.DueDate, txnDate: inv.TxnDate,
-                }));
-              }
-            } catch (e) { console.error("Failed to fetch QB invoices for assistant:", e); }
-
-            // Fetch recent payments
-            try {
-              const paymentsRes = await fetch(
-                `${qbApiBase}/v3/company/${config.realm_id}/query?query=SELECT * FROM Payment ORDERBY TxnDate DESC MAXRESULTS 20`,
-                { headers: { "Authorization": `Bearer ${config.access_token}`, "Accept": "application/json" } }
-              );
-              if (paymentsRes.ok) {
-                const paymentsData = await paymentsRes.json();
-                context.qbPayments = (paymentsData.QueryResponse?.Payment || []).map((pmt: Record<string, unknown>) => ({
-                  id: pmt.Id, customerName: (pmt.CustomerRef as Record<string, unknown>)?.name,
-                  amount: pmt.TotalAmt, date: pmt.TxnDate,
-                }));
-              }
-            } catch (e) { console.error("Failed to fetch QB payments for assistant:", e); }
-
-            // Fetch company info
-            try {
-              const companyRes = await fetch(
-                `${qbApiBase}/v3/company/${config.realm_id}/companyinfo/${config.realm_id}`,
-                { headers: { "Authorization": `Bearer ${config.access_token}`, "Accept": "application/json" } }
-              );
-              if (companyRes.ok) {
-                const companyData = await companyRes.json();
-                const info = companyData.CompanyInfo;
-                context.qbCompanyInfo = { name: info?.CompanyName, country: info?.Country, fiscalYearStart: info?.FiscalYearStartMonth };
-              }
-            } catch (e) { console.error("Failed to fetch QB company info for assistant:", e); }
-          }
-        }
-      } catch (e) {
-        console.error("Failed to fetch QB for assistant:", e);
-      }
+      // Fetch live QuickBooks data via shared helper
+      await fetchQuickBooksLiveContext(supabase, context);
     }
 
     if (agent === "estimation") {
