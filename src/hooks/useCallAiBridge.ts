@@ -32,7 +32,7 @@ export function useCallAiBridge() {
     async (
       callSession: {
         rtcPeerConnection: RTCPeerConnection;
-        mediaStream?: MediaStream;
+        audioElement?: HTMLAudioElement;
       },
       context?: string
     ) => {
@@ -47,30 +47,38 @@ export function useCallAiBridge() {
           throw new Error(data?.error || "Failed to get AI voice token");
         }
 
-        const remoteStream = callSession.mediaStream;
-        if (!remoteStream) throw new Error("No remote media stream on call");
+        const pc = callSession.rtcPeerConnection;
 
-        // 2. Create AudioContext at 16 kHz to match ElevenLabs expected input
+        // 2. Get REMOTE audio from peer connection receivers (not mediaStream which is local mic)
+        const audioReceiver = pc.getReceivers().find(
+          (r) => r.track?.kind === "audio"
+        );
+        if (!audioReceiver?.track) {
+          throw new Error("No remote audio track found on peer connection");
+        }
+        const remoteStream = new MediaStream([audioReceiver.track]);
+
+        // 3. Create AudioContext at 16 kHz to match ElevenLabs expected input
         const audioCtx = new AudioContext({ sampleRate: 16000 });
         audioCtxRef.current = audioCtx;
 
-        // 3. Capture remote audio
+        // 4. Capture remote audio
         const source = audioCtx.createMediaStreamSource(remoteStream);
         const processor = audioCtx.createScriptProcessor(4096, 1, 1);
         processorRef.current = processor;
 
-        // Silent gain so processor fires without audible output (RC SDK handles playback)
+        // Silent gain so processor fires without audible output (RC SDK handles playback via audioElement)
         const silentGain = audioCtx.createGain();
         silentGain.gain.value = 0;
         source.connect(processor);
         processor.connect(silentGain);
         silentGain.connect(audioCtx.destination);
 
-        // 4. AI audio output destination → will replace call's outgoing track
+        // 5. AI audio output destination → will replace call's outgoing track
         const aiDest = audioCtx.createMediaStreamDestination();
         aiDestRef.current = aiDest;
 
-        // 5. Connect to ElevenLabs WebSocket
+        // 6. Connect to ElevenLabs WebSocket
         const ws = new WebSocket(data.signed_url);
         wsRef.current = ws;
 
@@ -96,8 +104,8 @@ export function useCallAiBridge() {
             ws.send(JSON.stringify({ user_audio_chunk: b64 }));
           };
 
-          // Replace the call's outgoing audio with AI voice
-          replaceOutgoingTrack(callSession.rtcPeerConnection, aiDest.stream);
+          // Replace the call's outgoing audio (local mic) with AI voice
+          replaceOutgoingTrack(pc, aiDest.stream);
 
           setState((s) => ({ ...s, active: true, status: "active" }));
           toast.success("AI is now talking on the call");
@@ -119,8 +127,7 @@ export function useCallAiBridge() {
 
         ws.onclose = () => {
           console.log("AI bridge WS closed");
-          // Restore original mic track if still in call
-          restoreOriginalTrack(callSession.rtcPeerConnection);
+          restoreOriginalTrack(pc);
           cleanup(audioCtxRef, processorRef, wsRef);
           setState({ active: false, status: "idle", transcript: [] });
         };
