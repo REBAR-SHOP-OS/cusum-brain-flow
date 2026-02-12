@@ -17,7 +17,7 @@ interface PennyCallCardProps {
   onHangup: () => void;
   /** AI voice bridge controls (optional — enables "AI Talk" button) */
   bridgeState?: CallAiBridgeState;
-  onStartAiBridge?: () => void;
+  onStartAiBridge?: (callData: PennyCallData) => void;
   onStopAiBridge?: () => void;
 }
 
@@ -46,7 +46,7 @@ export function PennyCallCard({
       onStartAiBridge
     ) {
       autoTriggeredRef.current = true;
-      onStartAiBridge();
+      onStartAiBridge(data);
     }
     // Reset flag when call ends
     if (callStatus !== "in_call" && callStatus !== "calling") {
@@ -72,7 +72,7 @@ export function PennyCallCard({
                 size="sm"
                 variant={aiActive ? "secondary" : "outline"}
                 className="gap-1.5"
-                onClick={aiActive ? onStopAiBridge : onStartAiBridge}
+                onClick={aiActive ? onStopAiBridge : () => onStartAiBridge(data)}
                 disabled={aiConnecting}
               >
                 {aiConnecting ? (
