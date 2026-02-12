@@ -1,57 +1,53 @@
 
 
-## Fix MCP Server "Unauthorized" Error
+## Fix MCP Server Schema Drift
 
 ### Problem
-ChatGPT's "No Auth" mode sends requests without any API key headers, but the MCP server currently requires a valid `MCP_API_KEY`. This causes every request to be rejected with `401 Unauthorized`.
+The MCP server queries reference columns that don't exist in the database, causing 3+ tools to crash when called by ChatGPT.
 
-### Solution
-Update the auth middleware in `supabase/functions/mcp-server/index.ts` to **skip API key validation when no `MCP_API_KEY` secret is configured**. This way:
+### Schema Drift Map
 
-- If `MCP_API_KEY` is set as a secret, the server enforces it (for securing the endpoint later).
-- If `MCP_API_KEY` is **not set** (current state), the server allows requests through -- matching ChatGPT's "No Auth" mode.
+| Tool | Code references | Actual DB column | Action |
+|---|---|---|---|
+| `list_social_posts` | `scheduled_at` | `scheduled_date` | Rename in select |
+| `list_orders` | `total_weight_kg` | `total_amount` | Rename in select |
+| `list_machines` | `location` | (doesn't exist) | Remove from select, add `model` |
+| `list_leads` | `contact_name` | (doesn't exist, has `contact_id`) | Replace with `title, contact_id` |
+| `list_leads` | `company_name` | (doesn't exist) | Remove |
+| `list_leads` | `email` | (doesn't exist) | Remove |
+| `list_leads` | `phone` | (doesn't exist) | Remove |
+| `list_leads` | `lead_score` | (doesn't exist, has `probability`) | Replace with `probability` |
+| `list_leads` | `expected_revenue` | `expected_value` | Rename in select |
+
+### Strategy
+**Option B: Fix the code to match the real DB.** The database is the source of truth. No migrations needed.
 
 ### Changes
 
 **File: `supabase/functions/mcp-server/index.ts`**
 
-Update the auth middleware (around line 175-190) to only enforce the API key check when the environment variable exists:
+1. **`list_social_posts`** (line 43): Change select from `scheduled_at` to `scheduled_date`
 
-```typescript
-// Current (always checks):
-if (mcpApiKey) {
-  // validates key...
-}
+2. **`list_leads`** (lines 70-71): Change select from
+   `"id, contact_name, company_name, email, phone, stage, lead_score, expected_revenue, source, created_at"`
+   to
+   `"id, title, contact_id, stage, probability, expected_value, source, priority, created_at"`
 
-// This logic is already correct! But MCP_API_KEY secret IS set.
-```
+3. **`list_machines`** (line 148): Change select from
+   `"id, name, type, status, location, company_id, created_at"`
+   to
+   `"id, name, model, type, status, company_id, created_at"`
 
-Actually, the `MCP_API_KEY` secret **is already configured** in your project (it was added previously). That means the check fires and rejects ChatGPT's keyless requests.
+4. **`list_orders`** (line 173): Change select from
+   `"id, order_number, customer_id, status, total_weight_kg, notes, created_at"`
+   to
+   `"id, order_number, customer_id, status, total_amount, notes, created_at"`
 
-**Two options:**
-
-**Option A (Recommended):** Remove the `MCP_API_KEY` secret so the server allows unauthenticated access, matching "No Auth" in ChatGPT. The endpoint is still somewhat protected by obscurity (long URL).
-
-**Option B:** Remove the API key check entirely from the middleware code, making the endpoint always open.
-
-We'll go with **Option B** -- remove the API key validation block from the middleware so ChatGPT can connect freely. If you want to re-add security later, you can switch ChatGPT to a different auth mode.
-
-### Specific code change
-
-In `supabase/functions/mcp-server/index.ts`, simplify the middleware to only handle CORS preflight, removing the API key validation entirely:
-
-```typescript
-app.use("*", async (c, next) => {
-  if (c.req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-  await next();
-});
-```
+### After fix
+- Redeploy the `mcp-server` edge function
+- Test all endpoints to confirm they return data without errors
 
 ### No other changes
-- No new files
-- No config changes
+- No migrations
 - No frontend changes
-- Redeploy the edge function automatically
-
+- No config changes
