@@ -28,6 +28,7 @@ export interface VizzyBusinessSnapshot {
   brainKnowledge: { title: string; category: string; content: string | null }[];
   agentActivity: { agent_name: string; session_count: number; last_topic: string; user_name: string }[];
   teamPresence: { name: string; clocked_in: string; clocked_out: string | null }[];
+  inboundEmails: { subject: string; from_address: string; to_address: string; body_preview: string; received_at: string }[];
 }
 
 export function useVizzyContext() {
@@ -69,9 +70,13 @@ export function useVizzyContext() {
       const timeClockP = supabase.from("time_clock_entries").select("id, profile_id, clock_in, clock_out")
         .gte("clock_in", today + "T00:00:00")
         .order("clock_in", { ascending: false }).limit(200) as any;
+      const emailsP = supabase.from("communications").select("subject, from_address, to_address, body_preview, received_at")
+        .eq("direction", "inbound")
+        .ilike("to_address", "%@rebar.shop%")
+        .order("received_at", { ascending: false }).limit(50) as any;
 
-      const [qbData, cutPlansRes, cutItemsRes, machinesRes, leadsRes, customersRes, deliveriesRes, profilesRes, eventsRes, knowledgeRes, agentSessionsRes, timeClockRes] = await Promise.all([
-        qbPromise, cutPlansP, cutItemsP, machinesP, leadsP, customersP, deliveriesP, profilesP, eventsP, knowledgeP, agentSessionsP, timeClockP,
+      const [qbData, cutPlansRes, cutItemsRes, machinesRes, leadsRes, customersRes, deliveriesRes, profilesRes, eventsRes, knowledgeRes, agentSessionsRes, timeClockRes, emailsRes] = await Promise.all([
+        qbPromise, cutPlansP, cutItemsP, machinesP, leadsP, customersP, deliveriesP, profilesP, eventsP, knowledgeP, agentSessionsP, timeClockP, emailsP,
       ]);
 
       const cutPlans = cutPlansRes.data || [];
@@ -181,6 +186,7 @@ export function useVizzyContext() {
         brainKnowledge: knowledge,
         agentActivity,
         teamPresence,
+        inboundEmails: (emailsRes.data || []) as { subject: string; from_address: string; to_address: string; body_preview: string; received_at: string }[],
       };
 
       setSnapshot(snap);
