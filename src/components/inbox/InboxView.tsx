@@ -443,10 +443,19 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
     setHiddenIds((prev) => { const next = new Set(prev); next.add(id); return next; });
     setSelectedEmail(prev => prev?.id === id ? null : prev);
     try {
+      // Trash in Gmail first so it doesn't reappear on next sync
+      if (email?.sourceId) {
+        const { error: gmailErr } = await supabase.functions.invoke("gmail-delete", {
+          body: { messageId: email.sourceId },
+        });
+        if (gmailErr) {
+          console.warn("Gmail trash failed, deleting locally only:", gmailErr);
+          toast({ title: "Warning", description: "Could not remove from Gmail — it may reappear on next sync.", variant: "destructive" });
+        }
+      }
       await supabase.from("communications").delete().eq("id", id);
       toast({ title: "Email deleted", description: "Email has been permanently removed." });
       logActivity(id, "email_deleted", `Deleted email from ${email?.sender || "unknown"}: ${email?.subject || "(no subject)"}`, { sender: email?.sender, subject: email?.subject, action: "delete" });
-      // Re-sync to permanently remove from data source
       await refresh();
     } catch {
       toast({ title: "Delete failed", variant: "destructive" });
@@ -472,6 +481,13 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
     setHiddenIds((prev) => { const next = new Set(prev); ids.forEach((id) => next.add(id)); return next; });
     setSelectedEmail(prev => prev && selectedIds.has(prev.id) ? null : prev);
     try {
+      // Trash each in Gmail first
+      const gmailDeletes = ids
+        .map((id) => allEmails.find((e) => e.id === id))
+        .filter((e) => e?.sourceId)
+        .map((e) => supabase.functions.invoke("gmail-delete", { body: { messageId: e!.sourceId } }));
+      await Promise.allSettled(gmailDeletes);
+
       await supabase.from("communications").delete().in("id", ids);
       toast({ title: "Bulk delete", description: `${ids.length} email(s) deleted.` });
       ids.forEach((id) => {

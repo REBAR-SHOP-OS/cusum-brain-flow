@@ -158,3 +158,6 @@ verify_jwt = false
 
 [functions.ringcentral-webhook]
 verify_jwt = false
+
+[functions.gmail-delete]
+verify_jwt = false
