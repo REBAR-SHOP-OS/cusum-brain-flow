@@ -169,7 +169,7 @@ serve(async (req) => {
       scrapQty: machineRun.scrap_qty,
     };
 
-    await supabaseService.from("events").insert({
+    await supabaseService.from("activity_events").insert({
       entity_type: "machine_run",
       entity_id: machineRun.id,
       event_type: "machine_run_updated",
@@ -177,6 +177,9 @@ serve(async (req) => {
       actor_type: "user",
       description: `Machine run ${machineRunId ? "updated" : "created"}: ${process} → ${status}`,
       metadata: eventPayload,
+      source: "system",
+      dedupe_key: `machine_run:${machineRun.id}:${status}:${machineRun.started_at || ""}`,
+      inputs_snapshot: eventPayload,
     });
 
     return new Response(

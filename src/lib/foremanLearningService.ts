@@ -36,7 +36,7 @@ export async function recordLearning(entry: LearningEntry): Promise<void> {
 
     // Write event for audit trail
     const companyId = await getCompanyId();
-    await supabase.from("events").insert({
+    await supabase.from("activity_events").insert({
       entity_type: "foreman_brain",
       entity_id: entry.machineId || "system",
       event_type: `foreman_${entry.learningType}`,
@@ -48,7 +48,8 @@ export async function recordLearning(entry: LearningEntry): Promise<void> {
         bar_code: entry.barCode,
         ...entry.context,
       },
-    });
+      source: "system",
+    } as any);
   } catch {
     // Learning writes are best-effort — never block the operator
     console.error("[ForemanBrain] Failed to record learning");
@@ -66,14 +67,15 @@ export async function recordSuggestionInteraction(
 ): Promise<void> {
   try {
     const companyId = await getCompanyId();
-    await supabase.from("events").insert({
+    await supabase.from("activity_events").insert({
       entity_type: "foreman_suggestion",
       entity_id: suggestionId,
       event_type: `suggestion_${action}`,
       description: `[${module}] Suggestion ${action}`,
       company_id: companyId!,
       metadata: { module, action, ...context },
-    });
+      source: "system",
+    } as any);
   } catch {
     // Best-effort
   }

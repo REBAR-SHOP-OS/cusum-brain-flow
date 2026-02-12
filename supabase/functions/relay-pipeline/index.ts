@@ -334,7 +334,7 @@ serve(async (req) => {
       }).eq("id", communicationId);
 
       // Log event
-      await svc.from("events").insert({
+      await svc.from("activity_events").insert({
         company_id: "a0000000-0000-0000-0000-000000000001",
         entity_type: "communication",
         entity_id: communicationId,
@@ -342,6 +342,8 @@ serve(async (req) => {
         description: resolvedSummary,
         actor_id: userId,
         actor_type: "user",
+        source: "system",
+        dedupe_key: `thread_resolved:${communicationId}`,
       });
 
       return new Response(JSON.stringify({ success: true, summary: resolvedSummary }), {

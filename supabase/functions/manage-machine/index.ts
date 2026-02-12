@@ -204,8 +204,8 @@ serve(async (req) => {
             // Write events before returning error
             if (events.length > 0) {
               const { error: evtErr } = await supabaseService
-                .from("events")
-                .insert(events);
+                .from("activity_events")
+                .insert(events.map((e: any) => ({ ...e, source: "system" })));
               if (evtErr) console.error("Failed to log events:", evtErr);
             }
 
@@ -378,7 +378,7 @@ serve(async (req) => {
               metadata: { machineId, barCode, process: queuedRun.process },
             });
             if (events.length > 0) {
-              await supabaseService.from("events").insert(events);
+              await supabaseService.from("activity_events").insert(events.map((e: any) => ({ ...e, source: "system" })));
             }
             return json({ error: `Capability violation: ${machine.name} cannot ${queuedRun.process} ${barCode}` }, 403);
           }
@@ -395,7 +395,7 @@ serve(async (req) => {
               metadata: { machineId, barCode, requestedQty, maxBars: capability.max_bars },
             });
             if (events.length > 0) {
-              await supabaseService.from("events").insert(events);
+              await supabaseService.from("activity_events").insert(events.map((e: any) => ({ ...e, source: "system" })));
             }
             return json({ error: `Capacity exceeded: max ${capability.max_bars} bars for ${barCode}` }, 403);
           }
@@ -538,8 +538,8 @@ serve(async (req) => {
     // ── Write events ─────────────────────────────────────────────────
     if (events.length > 0) {
       const { error: evtErr } = await supabaseService
-        .from("events")
-        .insert(events);
+        .from("activity_events")
+        .insert(events.map((e: any) => ({ ...e, source: "system" })));
       if (evtErr) console.error("Failed to log events:", evtErr);
     }
 
