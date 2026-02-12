@@ -33,12 +33,18 @@ export function EmailActionBar({
 }: EmailActionBarProps) {
   const { toast } = useToast();
 
-  const handleArchive = () => {
+  const handleArchive = async () => {
+    if (emailId) {
+      await supabase.from("communications").update({ status: "archived" }).eq("id", emailId);
+    }
     toast({ title: "Archived", description: "Email moved to archive." });
   };
 
-  const handleDelete = () => {
-    toast({ title: "Deleted", description: "Email moved to trash." });
+  const handleDelete = async () => {
+    if (emailId) {
+      await supabase.from("communications").delete().eq("id", emailId);
+    }
+    toast({ title: "Deleted", description: "Email permanently deleted." });
   };
 
   const handleMarkReadUnread = async () => {
