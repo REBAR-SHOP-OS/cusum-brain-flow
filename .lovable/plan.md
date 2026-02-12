@@ -1,47 +1,64 @@
 
 
-# Fix: Voice Vizzy Action Tags Not Triggering Approval Button
+# Fix Penny Returning All-Zero Financial Reports
 
-## Problem
-When Vizzy speaks via voice (ElevenLabs), she correctly outputs `[VIZZY-ACTION]` tags in her responses. However, the voice chat page (`VizzyPage.tsx`) never parses these tags from the transcript. The action-tag parsing and approval dialog only exist in the text chat page (`AgentWorkspace.tsx`). This is why no approval button ever appears during voice conversations.
+## Root Cause
 
-## Solution
-Add `[VIZZY-ACTION]` tag parsing to the voice chat's `agent_response` handler, and render the `VizzyApprovalDialog` component on the voice page.
+The edge function logs reveal a clear error repeating every time Penny is used:
 
-## Technical Changes
-
-### File 1: `src/pages/VizzyPage.tsx`
-
-**A. Import the approval dialog and related types** (top of file)
-
-Add imports for `VizzyApprovalDialog`, `PendingAction`, and `supabase` client (if not already imported), plus `toast` from sonner.
-
-**B. Add state for pending actions**
-
-```typescript
-const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+```
+ReferenceError: svcClient is not defined
+    at fetchContext (ai-agent/index.ts:1885)
 ```
 
-**C. Parse action tags in the `agent_response` handler** (around line 245-258)
+The `fetchContext` function calls `fetchQuickBooksLiveContext(svcClient, context)` on line 1995, but `svcClient` is **not in scope** inside `fetchContext`. It's defined later in the main request handler (line 2763). This means:
 
-When the agent responds, check the text for `[VIZZY-ACTION]...[/VIZZY-ACTION]`. If found:
-1. Parse the JSON inside the tags
-2. Create a `PendingAction` with an `approve/deny` callback
-3. Set it in state so the approval dialog appears
-4. Strip the action tag from the displayed transcript text
+- Every call to Penny crashes the context-fetching step
+- Penny gets **zero financial data** (no invoices, no P&L, no customers)
+- She responds with all-$0.00 reports because she has nothing to work with
+- The same bug exists on line 2132 (for the assistant/Vizzy agent)
 
-The approve callback will call `supabase.functions.invoke("ringcentral-action", { body: actionData })` -- same logic as the text chat version in `AgentWorkspace.tsx`.
+## Fix
 
-**D. Render the `VizzyApprovalDialog`** in the component's JSX
+Add `svcClient` as a parameter to `fetchContext` so it can pass it to `fetchQuickBooksLiveContext`.
 
-Add `<VizzyApprovalDialog pendingAction={pendingAction} />` to the voice page layout, positioned so it's visible over the voice UI.
+### Technical Changes
 
-### No other files need changes
+**File: `supabase/functions/ai-agent/index.ts`**
 
-The edge function (`ringcentral-action`) and the approval dialog component (`VizzyApprovalDialog`) already work correctly. We just need to wire them into the voice page.
+1. **Update function signature** (line 1912): Add a `svcClient` parameter
+
+```typescript
+async function fetchContext(
+  supabase: ReturnType<typeof createClient>,
+  agent: string,
+  userId?: string,
+  userEmail?: string,
+  userRolesList?: string[],
+  svcClient?: ReturnType<typeof createClient>
+)
+```
+
+2. **Guard the two call sites** (lines 1995 and 2132): Only call `fetchQuickBooksLiveContext` if `svcClient` is provided
+
+```typescript
+if (svcClient) {
+  await fetchQuickBooksLiveContext(svcClient, context);
+}
+```
+
+3. **Update the caller** (line 2812): Pass `svcClient` as the new argument
+
+```typescript
+const dbContext = await fetchContext(supabase, agent, user.id, userEmail, roles, svcClient);
+```
+
+4. **Redeploy** the `ai-agent` edge function
+
+## Expected Result
+
+After this fix, Penny will receive live QuickBooks data (invoices, payments, P&L, balance sheet, accounts) and will be able to populate the Monthly Financial Snapshot with real numbers instead of all zeros.
 
 ## Scope
-- 1 file modified: `src/pages/VizzyPage.tsx`
-- No backend changes
-- No new components needed
-
+- 1 file modified: `supabase/functions/ai-agent/index.ts` (3 small edits)
+- Redeploy `ai-agent` edge function
