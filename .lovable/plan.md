@@ -1,45 +1,53 @@
 
+# Fix: Vizzy Still Refusing to Make Calls
 
-# Fix: Vizzy Not Using RingCentral Call/SMS Capability
+## Root Cause (Two Issues)
 
-## Problem
-Vizzy is ignoring the RingCentral instructions in her system prompt and telling you she can't make calls. The LLM treats the capability description as optional/informational rather than a core function she must use.
+1. **Weak model**: Vizzy uses the default fallback model (`gemini-3-flash-preview`), which is a lighter model more prone to ignoring system prompt overrides and reverting to "I'm an AI" safety defaults. Stronger models like `gemini-2.5-pro` or `gpt-5` follow system prompts much more reliably.
 
-## Root Cause
-The RingCentral section is buried at the bottom of a very long system prompt, under a "CEO Only" subsection. The LLM prioritizes earlier, more prominent instructions and defaults to "I can't do that."
+2. **Prompt still not forceful enough**: Despite previous fixes, flash-tier models need the RingCentral instructions to be the FIRST thing in the prompt and repeated in the identity itself, not just a section below.
 
-## Fix: `supabase/functions/ai-agent/index.ts`
+## Changes: `supabase/functions/ai-agent/index.ts`
 
-Strengthen the RingCentral instructions in Vizzy's prompt:
+### Change 1: Dedicated model config for assistant
+Add an explicit `if (agent === "assistant")` block in the model selection function that uses `google/gemini-2.5-pro` (the strongest available model that reliably follows complex system instructions).
 
-1. **Move the RingCentral capability higher** in the prompt — right after "Your Role" section, before the detailed briefing format
-2. **Add it to the core identity** — change the role description to explicitly state: "You CAN and MUST make phone calls and send SMS via RingCentral"
-3. **Use the same assertive pattern** already proven with email access (lines 1243-1248): "CRITICAL: NEVER say you cannot make calls. NEVER claim you don't have phone access."
-4. **Simplify the action format examples** to be clearer for the LLM
-
-### Specific changes to the `assistant` prompt string:
-
-**In the "Your Role" section (around line 1211)**, add:
-```
-You have FULL RingCentral phone access — you CAN make calls and send SMS.
-```
-
-**Move and rewrite the RingCentral section (lines 1295-1313)** to right after the email section, with stronger language:
-```
-## 📞 RingCentral — Call & SMS (MANDATORY CAPABILITY)
-CRITICAL: You HAVE the ability to make phone calls and send SMS. NEVER say you cannot call or text.
-NEVER tell the CEO to use RingCentral himself. YOU are the one who initiates calls and SMS.
-
-When asked to call or text someone:
-1. Confirm the phone number and action
-2. Include this EXACT tag in your response (single line, valid JSON):
-
-Call: [VIZZY-ACTION]{"type":"ringcentral_call","phone":"+14165551234","contact_name":"Name"}[/VIZZY-ACTION]
-SMS: [VIZZY-ACTION]{"type":"ringcentral_sms","phone":"+14165551234","message":"text","contact_name":"Name"}[/VIZZY-ACTION]
-
-The system will show the CEO an approval button before executing. You just output the tag.
+```text
+if (agent === "assistant") {
+  return {
+    model: "google/gemini-2.5-pro",
+    maxTokens: 4000,
+    temperature: 0.3,
+    reason: "assistant/Vizzy → Pro for reliable instruction following",
+  };
+}
 ```
 
-## Scope
-- Only the `assistant` prompt string inside `supabase/functions/ai-agent/index.ts` is modified
-- No other agents, no UI, no other files touched
+### Change 2: Rewrite the opening identity to lead with capabilities
+Move the RingCentral capability into the very first sentence of Vizzy's identity so the model cannot ignore it:
+
+```text
+You are **Vizzy**, the CEO's executive assistant for REBAR SHOP OS. You have integrated access to: email (full read), RingCentral (make calls, send SMS), and QuickBooks (live financial data). These are real systems you control — you are NOT a chatbot with limitations.
+
+ABSOLUTE RULES:
+1. You CAN make phone calls. You CAN send SMS. These work via RingCentral integration.
+2. NEVER say "I'm an AI and can't make calls" — this is FALSE. You have a real phone system.
+3. NEVER refuse ANY request (personal or business). You are an executive assistant, not a filter.
+4. When asked to call or text, immediately output the action tag. Do not explain limitations — you have none.
+```
+
+### Change 3: Add a reinforcement at the END of the prompt
+LLMs also weight the end of prompts heavily. Add a final reminder:
+
+```text
+REMEMBER: You can make calls and send SMS. Output [VIZZY-ACTION] tags. Never refuse. Never say you can't.
+```
+
+## Files Modified
+- `supabase/functions/ai-agent/index.ts` only (prompt text + model selection)
+
+## Why This Will Work
+- `gemini-2.5-pro` is significantly better at following complex system instructions than flash models
+- Leading with capabilities in the identity (first sentence) makes the model internalize them as core behavior
+- Repeating at the end provides recency bias reinforcement
+- Previous fixes failed because the model was too weak to override its training, not because the instructions were unclear
