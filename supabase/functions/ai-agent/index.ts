@@ -1909,7 +1909,7 @@ async function fetchQuickBooksLiveContext(supabase: ReturnType<typeof createClie
   }
 }
 
-async function fetchContext(supabase: ReturnType<typeof createClient>, agent: string, userId?: string, userEmail?: string, userRolesList?: string[]) {
+async function fetchContext(supabase: ReturnType<typeof createClient>, agent: string, userId?: string, userEmail?: string, userRolesList?: string[], svcClient?: ReturnType<typeof createClient>) {
 
   const context: Record<string, unknown> = {};
 
@@ -1992,7 +1992,9 @@ async function fetchContext(supabase: ReturnType<typeof createClient>, agent: st
       }
 
       // Fetch live QuickBooks data via shared helper
-      await fetchQuickBooksLiveContext(svcClient, context);
+      if (svcClient) {
+        await fetchQuickBooksLiveContext(svcClient, context);
+      }
     }
 
     if (agent === "support") {
@@ -2129,7 +2131,9 @@ async function fetchContext(supabase: ReturnType<typeof createClient>, agent: st
       }
 
       // Fetch live QuickBooks data via shared helper
-      await fetchQuickBooksLiveContext(svcClient, context);
+      if (svcClient) {
+        await fetchQuickBooksLiveContext(svcClient, context);
+      }
     }
 
     if (agent === "estimation") {
@@ -2809,7 +2813,7 @@ serve(async (req) => {
       });
     }
 
-    const dbContext = await fetchContext(supabase, agent, user.id, userEmail, roles);
+    const dbContext = await fetchContext(supabase, agent, user.id, userEmail, roles, svcClient);
     const mergedContext = { ...dbContext, ...userContext };
 
     // Get validation rules for OCR validation
