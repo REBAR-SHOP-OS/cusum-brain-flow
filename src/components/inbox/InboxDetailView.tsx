@@ -150,7 +150,7 @@ export function InboxDetailView({ email, onClose, onDelete, onArchive }: InboxDe
   };
 
   return (
-    <div className="flex flex-col h-full bg-background">
+    <div className="flex flex-col h-full bg-background overflow-hidden">
       {/* Header */}
       <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border shrink-0">
         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onClose}>

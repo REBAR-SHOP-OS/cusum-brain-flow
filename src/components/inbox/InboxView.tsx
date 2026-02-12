@@ -850,7 +850,9 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
 
         {viewMode === "kanban" ? (
           selectedEmail ? (
-            <InboxDetailView email={selectedEmail} onClose={() => setSelectedEmail(null)} onDelete={handleDeleteEmail} onArchive={handleArchiveEmail} />
+            <div className="flex-1 min-h-0 overflow-hidden">
+              <InboxDetailView email={selectedEmail} onClose={() => setSelectedEmail(null)} onDelete={handleDeleteEmail} onArchive={handleArchiveEmail} />
+            </div>
           ) : (
             <div className="flex-1 flex flex-col overflow-hidden">
               {/* Type filter tabs for Kanban */}
@@ -955,7 +957,7 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
             </div>
 
             {/* Email Viewer */}
-            <div className={cn("flex-1 min-h-0", selectedEmail ? "flex" : "hidden md:flex")}>
+            <div className={cn("flex-1 min-h-0 overflow-hidden", selectedEmail ? "flex" : "hidden md:flex")}>
               {selectedEmail ? (
                 <InboxDetailView email={selectedEmail} onClose={() => setSelectedEmail(null)} onDelete={handleDeleteEmail} onArchive={handleArchiveEmail} />
               ) : (
