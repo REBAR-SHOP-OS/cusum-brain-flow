@@ -4541,11 +4541,11 @@ export type Database = {
       profiles_safe: {
         Row: {
           avatar_url: string | null
-          company_id: string | null
           created_at: string | null
           department: string | null
           duties: string[] | null
           email: string | null
+          employee_type: string | null
           full_name: string | null
           id: string | null
           is_active: boolean | null
@@ -4557,15 +4557,15 @@ export type Database = {
         }
         Insert: {
           avatar_url?: string | null
-          company_id?: string | null
           created_at?: string | null
           department?: string | null
           duties?: string[] | null
-          email?: never
+          email?: string | null
+          employee_type?: string | null
           full_name?: string | null
           id?: string | null
           is_active?: boolean | null
-          phone?: never
+          phone?: string | null
           preferred_language?: string | null
           title?: string | null
           updated_at?: string | null
@@ -4573,15 +4573,15 @@ export type Database = {
         }
         Update: {
           avatar_url?: string | null
-          company_id?: string | null
           created_at?: string | null
           department?: string | null
           duties?: string[] | null
-          email?: never
+          email?: string | null
+          employee_type?: string | null
           full_name?: string | null
           id?: string | null
           is_active?: boolean | null
-          phone?: never
+          phone?: string | null
           preferred_language?: string | null
           title?: string | null
           updated_at?: string | null
