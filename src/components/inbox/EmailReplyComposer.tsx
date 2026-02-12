@@ -213,7 +213,7 @@ export function EmailReplyComposer({ email, mode, onClose }: EmailReplyComposerP
   };
 
   return (
-    <div className="border-t bg-muted/10 shrink-0 max-h-[40vh] overflow-y-auto">
+    <div className="border-t bg-muted/10 shrink-0 max-h-[40vh] flex flex-col">
       {/* Composer Header */}
       <div className="flex items-center justify-between px-4 pt-2 pb-1">
         <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
@@ -243,7 +243,7 @@ export function EmailReplyComposer({ email, mode, onClose }: EmailReplyComposerP
       </div>
 
       {/* Text Area */}
-      <div className="px-4 py-1">
+      <div className="px-4 py-1 overflow-y-auto flex-1 min-h-0">
         <Textarea
           value={replyText}
           onChange={(e) => setReplyText(e.target.value)}
