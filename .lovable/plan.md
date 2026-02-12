@@ -1,90 +1,62 @@
 
 
-# Fine-Tune AI Phone Call Quality
+# Fix: Caller Can't Hear AI Audio
 
-## Problems Identified
+## Root Cause
 
-1. **AI greets with phone number instead of name** -- The AI said "Am I speaking with 4165870788?" because the `contact_name` field in the PENNY-CALL tag was set to the raw phone number. The greeting template uses `contactName` directly.
+The most likely issue is **AudioContext suspension**. Modern browsers create `AudioContext` instances in a `suspended` state by default and require explicit `.resume()` calls. The code creates two AudioContexts (`captureCtx` at 16kHz and `outputCtx` at 48kHz) but never calls `.resume()` on either. This means:
 
-2. **AI fabricates content (gibberish)** -- When called to "report daily brief," the AI invented fake report details because the prompt says "use the specific details provided" but no actual details were passed. The AI hallucinated instead of admitting it only has a summary reason.
+- **outputCtx suspended** = AI audio chunks are decoded and scheduled but never actually play through the `MediaStreamAudioDestinationNode`, so the replaced outgoing track produces silence
+- **captureCtx suspended** = remote caller audio is never captured and sent to ElevenLabs, so the AI thinks nobody is speaking (hence "Are you still there?")
 
-3. **Delay before AI speaks** -- The 3-second safety timeout may be kicking in instead of the metadata event, adding unnecessary lag.
-
----
-
-## Fixes
-
-### Fix 1: Handle missing contact name gracefully
-
-**File: `src/hooks/useCallAiBridge.ts`** -- `buildPhoneCallOverrides()`
-
-If `contactName` looks like a phone number (starts with `+` or is all digits), replace it with a generic greeting like "the person I'm trying to reach" in the first message, and note in the prompt that the contact's name is unknown.
-
-```
-Before: "Am I speaking with 4165870788?"
-After:  "Am I speaking with the person I'm trying to reach?"
-```
-
-### Fix 2: Prevent AI from fabricating information
-
-**File: `src/hooks/useCallAiBridge.ts`** -- `buildPhoneCallOverrides()` prompt
-
-Add a strict instruction to the prompt:
-- "You ONLY know what is provided in the SPECIFIC DETAILS section. If no details are provided, do NOT invent or fabricate any information."
-- "If asked for specifics you do not have, say: 'I don't have the full details on hand, but someone from Rebar Shop will follow up with the complete information.'"
-
-This prevents the AI from hallucinating invoice numbers, report content, etc.
-
-### Fix 3: Reduce safety timeout from 3s to 1.5s
+## Fix
 
 **File: `src/hooks/useCallAiBridge.ts`**
 
-Reduce the fallback timeout from 3000ms to 1500ms. The metadata event typically arrives within a few hundred milliseconds -- 1.5s is still safe but cuts delay in half if the event is missed.
-
-### Fix 4: Improve the PENNY-CALL prompt in ai-agent
-
-**File: `supabase/functions/ai-agent/index.ts`**
-
-Update the PENNY-CALL instructions to ensure:
-- `contact_name` must always be the person's actual name, never a phone number
-- If the user only provides a phone number with no name, use "the contact" or ask the user for the name first
-
----
-
-## Technical Details
-
-### buildPhoneCallOverrides changes (useCallAiBridge.ts)
+Add explicit `.resume()` calls on both AudioContexts immediately after creation:
 
 ```typescript
-// Detect if contactName is actually a phone number
-const isPhoneNumber = /^[\d+\-\s()]+$/.test(contactName.trim());
-const displayName = isPhoneNumber ? "the person I'm trying to reach" : contactName;
+// After creating captureCtx (line ~87)
+const captureCtx = new AudioContext({ sampleRate: 16000 });
+await captureCtx.resume();  // <-- ADD THIS
 
-const firstMsg = `Hi, this is ${agentName} calling from Rebar Shop. Am I speaking with ${displayName}? I'm reaching out regarding ${reason}...`;
-
-// In prompt, add:
-// - "IMPORTANT: You ONLY know what is explicitly provided below. Do NOT invent, guess, or fabricate any details."
-// - "If asked for information you don't have, say someone from Rebar Shop will follow up with full details."
+// After creating outputCtx (line ~91)  
+const outputCtx = new AudioContext({ sampleRate: 48000 });
+await outputCtx.resume();   // <-- ADD THIS
 ```
 
-### Safety timeout reduction
+Also add a safety `.resume()` inside `playAiAudioChunk` in case the context gets suspended mid-call:
 
 ```typescript
-// Change from 3000 to 1500
-safetyTimeoutRef.current = setTimeout(() => {
-  if (startAudioRef.current) startAudioRef.current();
-}, 1500);
+function playAiAudioChunk(...) {
+  // Resume if suspended
+  if (outputCtx.state === 'suspended') {
+    outputCtx.resume();
+  }
+  // ... rest of function
+}
 ```
 
-### ai-agent prompt update
+Additionally, add diagnostic logging to `replaceOutgoingTrack` to confirm the track replacement succeeds and the AI track is live:
 
-Add to PENNY-CALL instructions:
-- "contact_name MUST be the person's real name, NEVER a phone number"
-- "If the user only gives a phone number without a name, set contact_name to 'the contact' and proceed"
+```typescript
+function replaceOutgoingTrack(pc, aiStream) {
+  // ... existing code ...
+  if (aiTrack) {
+    console.log("AI bridge: replacing track, AI track enabled:", aiTrack.enabled, "readyState:", aiTrack.readyState);
+    audioSender.replaceTrack(aiTrack)
+      .then(() => console.log("AI bridge: track replaced successfully"))
+      .catch(e => console.error("AI bridge: failed to replace track", e));
+  }
+}
+```
 
-## Expected Results
+## Technical Summary
 
-- AI greets with a proper name or generic phrase, never a raw phone number
-- AI stays honest about what it knows -- no more fabricated reports
-- Reduced delay before the AI starts speaking
+| Change | File | Purpose |
+|--------|------|---------|
+| `await captureCtx.resume()` | useCallAiBridge.ts | Ensure caller audio capture works |
+| `await outputCtx.resume()` | useCallAiBridge.ts | Ensure AI audio plays to caller |
+| Safety resume in playAiAudioChunk | useCallAiBridge.ts | Guard against mid-call suspension |
+| Diagnostic logging in replaceOutgoingTrack | useCallAiBridge.ts | Confirm track swap succeeds |
 
