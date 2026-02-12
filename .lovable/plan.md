@@ -1,72 +1,72 @@
 
 
-# Finish Wiring Penny + Forge: UI Mounting and Suggestion Engine Completion
+# Make Brain Neuro-Electric, Dynamic, Visible -- Responsive for All Devices
 
-No new tables, no schema changes, no architecture changes. This extends the existing system.
-
----
-
-## What's Already Done
-
-- `generate-suggestions` edge function already has Penny (missing QB ID) and Forge (idle machines with backlog) rules
-- `AgentSuggestionsPanel` and `AgentSuggestionCard` components exist and work
-- Vizzy cards are mounted on the CEO Portal
-
-## What's Missing
-
-### 1. Penny: Additional AR Aging Rules in Edge Function
-
-The current Penny logic only covers "customers missing QB ID". The overdue AR logic exists but is assigned to **Vizzy**. Need to add Penny-specific AR aging suggestions with 30/60/90 day severity tiers that surface in the Accounting workspace.
-
-**Changes to `supabase/functions/generate-suggestions/index.ts`:**
-- Inside the `if (agentMap.penny)` block, add a query to `accounting_mirror` for overdue invoices, generating suggestions with:
-  - 30-59 days: severity `info`
-  - 60-89 days: severity `warning`
-  - 90+ days: severity `critical`
-  - Category: `penny_overdue_ar` (distinct from Vizzy's `overdue_ar`)
-  - Actions: `[{ label: "View Invoice", action: "navigate", path: "/accounting?tab=invoices" }]`
-
-### 2. Forge: Additional Rules in Edge Function
-
-Current Forge logic covers idle machines. Add:
-- **Jobs near due date with low completion**: Query `cut_plan_items` where `due_date` is within 3 days and completion < 50%. Category: `at_risk_job`. Severity: `warning` or `critical`.
-- **Bender starving**: Compare cutter queue length vs bender queue length. If cutters have > 5 queued and benders have 0, generate a suggestion. Category: `bender_starving`.
-
-### 3. Mount Penny Panel in Accounting Workspace
-
-**File: `src/pages/AccountingWorkspace.tsx`**
-
-Add `<AgentSuggestionsPanel agentCode="penny" agentName="Penny" />` at the top of the main content area, just above the tab content. It renders only when suggestions exist (already handles empty state internally).
-
-Insert after line 163 (inside the scrollable content div), before the tab content:
-
-```tsx
-<AgentSuggestionsPanel agentCode="penny" agentName="Penny" />
-```
-
-### 4. Mount Forge Panel in Shop Floor Views
-
-**File: `src/pages/ShopFloor.tsx`**
-
-Add `<AgentSuggestionsPanel agentCode="forge" agentName="Forge" />` below the `MyJobsCard` component and above the hub cards grid.
-
-**File: `src/pages/LiveMonitor.tsx`**
-
-Add `<AgentSuggestionsPanel agentCode="forge" agentName="Forge" />` at the top of the page content, before the machine cards/filters.
+Full rewrite of `InteractiveBrainBg.tsx` to create a dramatic neuro-electric effect that scales properly across mobile, tablet, and desktop.
 
 ---
 
-## Technical Summary
+## Problems with Current Implementation
 
-### Files to Modify
-- `supabase/functions/generate-suggestions/index.ts` -- add Penny AR aging + Forge at-risk jobs + bender starving rules
-- `src/pages/AccountingWorkspace.tsx` -- import and mount `AgentSuggestionsPanel` for Penny
-- `src/pages/ShopFloor.tsx` -- import and mount `AgentSuggestionsPanel` for Forge
-- `src/pages/LiveMonitor.tsx` -- import and mount `AgentSuggestionsPanel` for Forge
+- Brain image uses `w-[95vh] h-[95vh]` -- overflows on mobile and short viewports
+- Particle orbit radius is fixed at 260-420px -- flies off-screen on small devices
+- Glow layers use `120vw`/`85vw` -- causes horizontal overflow on mobile
+- Neural lines use fixed percentage positions that don't adapt
+- Mouse interaction (`onMouseMove`) does nothing on touch devices
+- Overall opacity too low (30%) to be visible, especially on small bright screens
 
-### No Files to Create
-### No Schema Changes
-### No Breaking Changes to Vizzy
+## Changes to `src/components/brain/InteractiveBrainBg.tsx`
 
-All new suggestion categories use distinct category strings to avoid dedup index conflicts with Vizzy's existing suggestions.
+### 1. Responsive Brain Image
+- Replace `w-[95vh] h-[95vh] max-w-[1100px]` with responsive sizing:
+  - Mobile: `w-[80vw] h-[80vw]` (viewport-width based so it fits)
+  - Tablet: `w-[60vw] h-[60vw]`
+  - Desktop: `w-[50vh] h-[50vh] max-w-[700px]`
+- Use CSS `clamp()` for smooth scaling: `width: clamp(250px, 70vmin, 700px)`
+- Increase opacity from `0.3` to `0.55`
+- Add cyan tint overlay via `filter: drop-shadow + hue-rotate`
+
+### 2. Responsive Glow Layers
+- Outer glow: Change from `120vw` to `min(120vw, 120vh)` using `vmin` units
+- Inner glow: Same approach, boost opacity to `0.3-0.5` range
+- Use `vmin` throughout so glows never exceed the smaller viewport dimension
+
+### 3. Responsive Particles
+- Increase count from 10 to 20
+- Make orbit radius responsive: `clamp(80, 15vmin, 300)` instead of fixed 260-420px
+- Bigger sizes (4-10px) with electric cyan glow `box-shadow: 0 0 12px`
+- Add spark keyframe for random bright flashes
+
+### 4. Touch Support
+- Add `onTouchMove` handler that maps touch position to offset (same as mouse)
+- Add `onTouchEnd` to reset offset (same as mouseLeave)
+- Keeps interactivity working on phones and tablets
+
+### 5. Electric Neural Network (SVG)
+- Increase from 5 to 12 neural lines
+- Use `viewBox="0 0 100 100"` with percentage-based coordinates so they scale
+- Boost opacity from `0.06` to `0.18`
+- Add animated pulse dots traveling along paths
+- Add 3 jagged arc paths with flicker animation
+
+### 6. Scanning Ring Effect
+- A thin circle that expands from center and fades out every 4 seconds
+- Uses `vmin` sizing so it scales with viewport
+
+### 7. New Keyframes
+- `electric-spark`: 0.15s bright flash
+- `arc-flicker`: rapid opacity oscillation for lightning arcs
+- `scan-ring`: expanding circle fade
+- `pulse-dot`: dot traveling along stroke path
+- Updated `brain-pulse`: higher opacity range (0.3 to 0.5)
+
+---
+
+## Files Modified
+- `src/components/brain/InteractiveBrainBg.tsx` -- full rewrite of effects layer
+
+## No Other Changes
+- `Brain.tsx` stays the same (just mounts the component)
+- No new dependencies
+- No schema changes
 
