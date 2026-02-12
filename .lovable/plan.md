@@ -1,74 +1,55 @@
 
 
-# Add Details Field to Phone Calls
+# Fine-Tune Phone AI Prompt for Better Call Handling
 
-## What Changes
+## Problems Identified
 
-The phone AI currently has no content to discuss because only the call "reason" (a short label) is passed. We need to thread a `details` field through so the chat agent can include substantive information.
+1. **Fabrication**: The AI said "everything is proceeding as planned" despite having zero details. The current no-details guard is not aggressive enough.
+2. **Term confusion**: When the caller said "daily brief," the AI heard/interpreted it as "daily grief" and couldn't recover. The prompt needs to instruct the AI to handle STT misinterpretations gracefully.
+3. **Rephrasing the reason**: The AI changed "Daily brief" to "general daily report," confusing the caller. It should always use the exact reason wording provided.
 
 ## Changes
 
-### 1. PennyCallCard.tsx -- Add `details` to data interface and parser
+**File: `src/hooks/useCallAiBridge.ts`** -- `buildPhoneCallOverrides` function
 
-- Add `details?: string` to `PennyCallData`
-- Update `parsePennyCalls` to extract the `details` field from the JSON tag
+### 1. Strengthen the no-details fabrication guard
 
-### 2. AccountingAgent.tsx -- Pass details to startBridge
+Replace the current `noDetailsWarning` with a much more explicit instruction that:
+- Explicitly forbids generating fake summaries like "everything is on track"
+- Tells the AI to immediately say it doesn't have the report content and ask what topics they want covered
+- Removes any ambiguity that could lead to fabrication
 
-- Line 417-422: Add `details: callData.details` to the `startBridge` call
+### 2. Add STT error recovery instructions
 
-### 3. ai-agent edge function -- Instruct chat AI to populate details
+Add a new instruction block telling the AI:
+- Phone audio can cause mishearing (e.g., "brief" heard as "grief")
+- If the caller says something that sounds close to the call reason, assume they mean the call reason
+- Never say "I don't have information about X" when X is clearly a mishearing of the call topic
 
-- Update the PENNY-CALL tag format documentation (around line 818) to include the optional `details` field
-- Add instruction: "When calling about reports, briefs, invoices, collections, or any topic where you have data in context, include a summary of the relevant information in the `details` field so the phone AI can discuss it intelligently"
-- Example: `[PENNY-CALL]{"phone":"ext:101","contact_name":"Sattar","reason":"Daily brief","details":"12 orders processed yesterday, 3 pending pickup, inventory low on 10M rebar (23 bundles remaining)"}[/PENNY-CALL]`
+### 3. Lock the reason terminology
 
-### 4. Improve no-details fallback behavior
+Add instruction: "Always refer to the topic using the EXACT wording from PURPOSE OF THIS CALL. Do not rephrase 'daily brief' as 'daily report' or any other variation."
 
-- In `buildPhoneCallOverrides`, update the no-details prompt to be more conversational: instead of repeating "I don't have details," the AI should ask the caller what specific topics they'd like to cover
+### Updated prompt section (technical detail)
 
-## Technical Details
-
-**PennyCallCard.tsx parser change:**
-```typescript
-// In parsePennyCalls, add details extraction
-calls.push({
-  phone: data.phone,
-  contact_name: data.contact_name,
-  reason: data.reason || "",
-  details: data.details,  // NEW
-  lead_id: data.lead_id,
-  contact_id: data.contact_id,
-});
-```
-
-**AccountingAgent.tsx startBridge call:**
-```typescript
-startBridge(session, {
-  agentName: "Penny",
-  contactName: callData.contact_name,
-  reason: callData.reason,
-  phone: callData.phone,
-  details: callData.details,  // NEW
-});
-```
-
-**ai-agent prompt update (line ~818):**
-```
-[PENNY-CALL]{"phone":"ext:101","contact_name":"Person Name","reason":"Brief reason","details":"Optional: key facts and data the phone AI should discuss"}[/PENNY-CALL]
-```
-
-**No-details fallback improvement (useCallAiBridge.ts ~244):**
 ```typescript
 const noDetailsWarning = !details
-  ? `\n\nIMPORTANT: No specific details were provided. Do NOT fabricate any. Instead, ask the caller what they would like to discuss and offer to have someone from Rebar Shop follow up with specifics.`
+  ? `\n\nCRITICAL — NO DETAILS PROVIDED:
+You were NOT given any report content, numbers, or specifics for this call. You ONLY know the reason: "${reason}".
+- Do NOT fabricate, summarize, or imply any information. Saying things like "everything is proceeding as planned" is FABRICATION and strictly forbidden.
+- Instead, explain that you're calling to connect about "${reason}" and ask the caller what specific topics or questions they have.
+- Offer to have someone from Rebar Shop follow up with the full details.`
   : "";
+
+// Add to CRITICAL INSTRUCTIONS:
+// - ALWAYS use the EXACT topic wording from PURPOSE OF THIS CALL. Do not rephrase "daily brief" as "daily report" or any other variation.
+// - Phone audio quality can cause words to be misheard (e.g., "brief" may sound like "grief"). If the caller says something that sounds similar to the call topic, assume they are referring to it. NEVER say "I don't have information about [misheard word]."
 ```
 
-## Files Modified
+## Expected Outcome
 
-- `src/components/accounting/PennyCallCard.tsx`
-- `src/components/accounting/AccountingAgent.tsx`
-- `src/hooks/useCallAiBridge.ts`
-- `supabase/functions/ai-agent/index.ts`
+- AI will NOT fabricate "everything is on track" when it has no details
+- AI will use "daily brief" consistently, not rephrase to "daily report"
+- If caller says "daily grief," AI will understand they mean "daily brief" and respond accordingly
+- AI will ask what topics the caller wants to discuss instead of repeating it has no information
 
