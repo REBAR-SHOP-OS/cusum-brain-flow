@@ -3,13 +3,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { FileText, Package, Calculator, ClipboardList, Eye, Loader2, RefreshCw } from "lucide-react";
+import { FileText, Package, Calculator, ClipboardList, Eye, Loader2, RefreshCw, ArrowRight } from "lucide-react";
 import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
 import { InvoiceTemplate } from "./documents/InvoiceTemplate";
 import { PackingSlipTemplate } from "./documents/PackingSlipTemplate";
 import { QuotationTemplate } from "./documents/QuotationTemplate";
 import { EstimationTemplate } from "./documents/EstimationTemplate";
 import { useOdooQuotations } from "@/hooks/useOdooQuotations";
+import { ConvertQuoteDialog } from "@/components/orders/ConvertQuoteDialog";
 
 interface Props {
   data: ReturnType<typeof useQuickBooksData>;
@@ -32,6 +33,7 @@ export function AccountingDocuments({ data }: Props) {
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [previewType, setPreviewType] = useState<DocType | null>(null);
   const { quotations, isLoading: quotationsLoading, isSyncing, syncQuotations } = useOdooQuotations();
+  const [convertQuote, setConvertQuote] = useState<{ id: string; quote_number: string; total_amount: number | null; customer_name: string } | null>(null);
 
   const openPreview = (type: DocType, id: string) => {
     setPreviewType(type);
@@ -198,27 +200,51 @@ export function AccountingDocuments({ data }: Props) {
             </Card>
           ))}
 
-          {activeDoc === "quotation" && quotations.length > 0 && quotations.map((q) => (
-            <Card key={q.id} className="hover:ring-2 hover:ring-primary/20 transition-all">
-              <CardContent className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="p-2 rounded-lg bg-primary/10">
-                    <ClipboardList className="w-5 h-5 text-primary" />
+          {activeDoc === "quotation" && quotations.length > 0 && quotations.map((q) => {
+            const odooCustomer = (q.metadata as Record<string, unknown>)?.odoo_customer as string || "Unknown";
+            const isSale = q.odoo_status === "Sales Order";
+            return (
+              <Card key={q.id} className="hover:ring-2 hover:ring-primary/20 transition-all">
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="p-2 rounded-lg bg-primary/10">
+                      <ClipboardList className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                      <p className="font-semibold">{q.quote_number} — {odooCustomer}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {new Date(q.created_at).toLocaleDateString()} · {fmt(Number(q.total_amount) || 0)}
+                        {q.salesperson && <span className="ml-2 text-muted-foreground">· {q.salesperson}</span>}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-semibold">{q.quote_number} — {(q.metadata as Record<string, unknown>)?.odoo_customer as string || "Unknown"}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {new Date(q.created_at).toLocaleDateString()} · {fmt(Number(q.total_amount) || 0)}
-                      {q.salesperson && <span className="ml-2 text-muted-foreground">· {q.salesperson}</span>}
-                    </p>
+                  <div className="flex items-center gap-2">
+                    {isSale && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1.5 text-xs"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setConvertQuote({
+                            id: q.id,
+                            quote_number: q.quote_number,
+                            total_amount: q.total_amount,
+                            customer_name: odooCustomer,
+                          });
+                        }}
+                      >
+                        <ArrowRight className="w-3.5 h-3.5" /> Convert to Order
+                      </Button>
+                    )}
+                    <Badge variant="outline" className={`text-xs ${STATUS_BADGE_COLORS[q.odoo_status || ""] || ""}`}>
+                      {q.odoo_status || q.status}
+                    </Badge>
                   </div>
-                </div>
-                <Badge variant="outline" className={`text-xs ${STATUS_BADGE_COLORS[q.odoo_status || ""] || ""}`}>
-                  {q.odoo_status || q.status}
-                </Badge>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            );
+          })}
 
           {activeDoc === "quotation" && quotations.length === 0 && data.estimates.map((est) => (
             <Card key={`quotation-${est.Id}`} className="hover:ring-2 hover:ring-primary/20 transition-all">
@@ -296,6 +322,15 @@ export function AccountingDocuments({ data }: Props) {
         const est = data.estimates.find(e => e.Id === previewId);
         return est ? <EstimationTemplate data={getEstimationData(est)} onClose={closePreview} /> : null;
       })()}
+
+      {/* Convert Quote Dialog */}
+      {convertQuote && (
+        <ConvertQuoteDialog
+          open={!!convertQuote}
+          onOpenChange={(open) => !open && setConvertQuote(null)}
+          quote={convertQuote}
+        />
+      )}
     </div>
   );
 }

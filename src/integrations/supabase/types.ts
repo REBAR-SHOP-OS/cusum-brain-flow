@@ -2677,6 +2677,59 @@ export type Database = {
           },
         ]
       }
+      order_items: {
+        Row: {
+          bar_size: string | null
+          created_at: string
+          description: string
+          id: string
+          length_mm: number | null
+          notes: string | null
+          order_id: string
+          quantity: number
+          shape: string | null
+          total_price: number | null
+          unit_price: number
+          updated_at: string
+        }
+        Insert: {
+          bar_size?: string | null
+          created_at?: string
+          description?: string
+          id?: string
+          length_mm?: number | null
+          notes?: string | null
+          order_id: string
+          quantity?: number
+          shape?: string | null
+          total_price?: number | null
+          unit_price?: number
+          updated_at?: string
+        }
+        Update: {
+          bar_size?: string | null
+          created_at?: string
+          description?: string
+          id?: string
+          length_mm?: number | null
+          notes?: string | null
+          order_id?: string
+          quantity?: number
+          shape?: string | null
+          total_price?: number | null
+          unit_price?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_items_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       orders: {
         Row: {
           company_id: string | null
