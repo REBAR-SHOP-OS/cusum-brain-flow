@@ -253,8 +253,8 @@ serve(async (req) => {
     }
 
     const companyId = profile.company_id;
-    const body = await req.json().catch(() => ({}));
-    const force = body.force === true;
+    const syncBody = await req.json().catch(() => ({}));
+    const force = syncBody.force === true;
 
     // 1. Auth with Odoo
     const session = await odooAuthenticate();
