@@ -1,37 +1,29 @@
 
 
-# Fix Delete Not Removing Email + Add Prominent Select/Select All
+# Fix: Deleted Emails Keep Reappearing
 
-## Problem 1: Deleted email stays visible
-The current delete flow uses `hiddenIds` to temporarily hide emails, but:
-- Clicking any filter chip resets `hiddenIds` to empty, making deleted emails reappear until the next data refetch
-- The detail view may not close reliably due to stale closure references
+## Root Cause
+When you delete an email, the code:
+1. Removes it from the `communications` table in the database
+2. Calls `sync()` to refresh data
 
-**Fix**: After successfully deleting from the database, also remove the item from `allEmails` by refetching communications data. Additionally, ensure `setSelectedEmail(null)` fires reliably by removing the stale `selectedEmail` dependency from `handleDeleteEmail`.
+The problem is that `sync()` calls the Gmail and RingCentral sync edge functions, which **re-import the deleted email from Gmail back into the database**. So the email is deleted then immediately re-created.
 
-## Problem 2: No prominent Select / Select All
-The selection mode toggle exists as a tiny icon in the toolbar. The user wants visible Select and Select All buttons.
-
-**Fix**: Add a visible "Select" checkbox/button in the email list header area that is always visible (not just in selection mode), and a "Select All" checkbox that appears when selection mode is active.
-
----
+## Solution
+Replace `sync()` with `refresh()` in all delete and archive handlers. The `refresh()` function only reloads data from the database without triggering external syncs.
 
 ## Technical Changes
 
-### 1. `src/components/inbox/InboxView.tsx`
+### File: `src/components/inbox/InboxView.tsx`
 
-**Fix delete persistence:**
-- In `handleDeleteEmail`: after the successful `supabase.from("communications").delete()` call, trigger a re-sync (`sync()`) so the item is permanently removed from the `communications` data source, not just hidden via `hiddenIds`
-- Use functional `setSelectedEmail` to avoid stale closure: replace `if (selectedEmail?.id === id) setSelectedEmail(null)` with `setSelectedEmail(prev => prev?.id === id ? null : prev)`
-- Apply the same fix to `handleArchiveEmail`, `handleBulkDelete`, and `handleBulkArchive`
+In these 4 functions, replace `await sync()` with `await refresh()`:
 
-**Add prominent Select/Select All in list view:**
-- In the email count bar (line ~880), replace the current minimal layout with:
-  - A checkbox that toggles selection mode (always visible)
-  - When selection mode is active: "Select All" checkbox + count + Delete/Archive bulk actions
-  - This replaces the tiny toolbar icon approach with inline controls in the list header
+1. **`handleDeleteEmail`** (~line 450): `await sync()` -> `await refresh()`
+2. **`handleArchiveEmail`** (~line 464): `await sync()` -> `await refresh()`
+3. **`handleBulkDelete`** (~line 481): `await sync()` -> `await refresh()`
+4. **`handleBulkArchive`** (~line 499): `await sync()` -> `await refresh()`
 
-### 2. `src/components/inbox/InboxEmailList.tsx`
-- Add a "Select All" checkbox row at the top of the email list when in selection mode (optional, since InboxView already has it in the header bar)
+Also update the `useCallback` dependency arrays to include `refresh` instead of `sync`.
 
-These changes ensure deleted emails are gone for good (not just hidden) and provide clear, accessible selection controls.
+This ensures deleted emails stay deleted, since we only reload what's in the database rather than re-importing from Gmail.
+
