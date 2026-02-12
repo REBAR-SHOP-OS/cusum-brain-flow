@@ -194,8 +194,8 @@ export function InboxDetailView({ email, onClose, onDelete, onArchive }: InboxDe
       {/* Split content */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left: Thread timeline */}
-        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-          <ScrollArea className="flex-1">
+        <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
+          <ScrollArea className="flex-1 min-h-0">
             {loadingThread ? (
               <div className="flex items-center justify-center py-12">
                 <div className="animate-pulse text-sm text-muted-foreground">Loading thread...</div>

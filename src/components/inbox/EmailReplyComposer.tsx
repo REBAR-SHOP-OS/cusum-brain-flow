@@ -213,7 +213,7 @@ export function EmailReplyComposer({ email, mode, onClose }: EmailReplyComposerP
   };
 
   return (
-    <div className="border-t bg-muted/10 shrink-0 max-h-[45vh] overflow-y-auto">
+    <div className="border-t bg-muted/10 shrink-0 max-h-[40vh] overflow-y-auto">
       {/* Composer Header */}
       <div className="flex items-center justify-between px-4 pt-2 pb-1">
         <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
