@@ -384,6 +384,33 @@ export function CEODashboardView() {
         </motion.div>
       </div>
 
+      {/* ─── Phase Counters ─── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { label: "Queued", value: m.queuedItems, color: "border-amber-500/30 bg-amber-500/5", dot: "bg-amber-500" },
+          { label: "In Progress", value: m.inProgressItems, color: "border-blue-500/30 bg-blue-500/5", dot: "bg-blue-500" },
+          { label: "Completed", value: m.completedToday, color: "border-green-500/30 bg-green-500/5", dot: "bg-green-500" },
+          { label: "Machines Running", value: `${m.machinesRunning}/${m.totalMachines}`, color: "border-primary/30 bg-primary/5", dot: "bg-primary" },
+        ].map((item, i) => (
+          <motion.div
+            key={item.label}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.48 + i * 0.04 }}
+          >
+            <Card className={cn("rounded-xl border", item.color)}>
+              <CardContent className="p-3 flex items-center gap-3">
+                <div className={cn("w-3 h-3 rounded-full shrink-0", item.dot)} />
+                <div>
+                  <p className="text-xl font-black tabular-nums leading-tight">{item.value}</p>
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{item.label}</p>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        ))}
+      </div>
+
       {/* ─── Operations Strip ─── */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         {[
@@ -417,7 +444,7 @@ export function CEODashboardView() {
       </div>
 
       {/* ─── Exceptions Workbench ─── */}
-      <ExceptionsWorkbench />
+      <ExceptionsWorkbench exceptions={m.exceptions} />
 
       {/* ─── Recent Orders ─── */}
       {m.recentOrders.length > 0 && (
