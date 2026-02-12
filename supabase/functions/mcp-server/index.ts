@@ -40,7 +40,7 @@ mcpServer.tool("list_social_posts", {
     const db = getDb();
     let q = db
       .from("social_posts")
-      .select("id, content, platform, status, scheduled_at, created_at")
+      .select("id, content, platform, status, scheduled_date, created_at")
       .order("created_at", { ascending: false })
       .limit(Math.min(Number(limit) || 50, 50));
     if (status) q = q.eq("status", status);
@@ -68,7 +68,7 @@ mcpServer.tool("list_leads", {
     let q = db
       .from("leads")
       .select(
-        "id, contact_name, company_name, email, phone, stage, lead_score, expected_revenue, source, created_at"
+        "id, title, contact_id, stage, probability, expected_value, source, priority, created_at"
       )
       .order("created_at", { ascending: false })
       .limit(Math.min(Number(limit) || 50, 50));
@@ -145,7 +145,7 @@ mcpServer.tool("list_machines", {
     const db = getDb();
     let q = db
       .from("machines")
-      .select("id, name, type, status, location, company_id, created_at")
+      .select("id, name, model, type, status, company_id, created_at")
       .order("name")
       .limit(Math.min(Number(limit) || 50, 50));
     if (status) q = q.eq("status", status);
@@ -170,7 +170,7 @@ mcpServer.tool("list_orders", {
     const db = getDb();
     let q = db
       .from("orders")
-      .select("id, order_number, customer_id, status, total_weight_kg, notes, created_at")
+      .select("id, order_number, customer_id, status, total_amount, notes, created_at")
       .order("created_at", { ascending: false })
       .limit(Math.min(Number(limit) || 50, 50));
     if (status) q = q.eq("status", status);
