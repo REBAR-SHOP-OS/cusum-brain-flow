@@ -1,40 +1,51 @@
 
+# Auto-Activate AI Voice When Call Connects
 
-# Use RingCentral Extensions for Internal Team Calls
+## Goal
+When any agent (Penny, Vizzy, Forge) initiates a call, the AI should **automatically take over the conversation** as soon as the call connects -- no manual "AI Talk" button click needed.
 
-## What Changes
-Right now, internal team calls use full phone numbers. In RingCentral, internal calls should use **extension numbers** instead -- this is faster, free (no PSTN charges), and the standard way to reach coworkers within the same RingCentral account.
+## Current Problem
+Right now the flow is: Agent suggests call -> User clicks "Call Now" -> Call connects to user's computer -> User has to manually click "AI Talk" -> Then AI starts speaking. The user wants the AI to start speaking immediately.
 
-## From the Screenshot -- Extension Directory
-| Name | Extension | Phone |
-|------|-----------|-------|
-| Sattar Esmaeili | 101 | (416) 860-3608 |
-| Vicky Anderson | 201 | (416) 860-3638 |
-| Josh Anderson | 202 | (647) 259-8252 |
-| Ben Rajabi Far | 203 | (647) 775-0698 |
-| Saurabh Saurabh | 206 | (416) 640-0773 |
-| Swapnil Mahajan | 209 | (647) 260-9403 |
-| Radin Lachini | 222 | (647) 259-6837 |
+## Implementation
 
-## Implementation Steps
+### 1. Add a `callWithAi` method to `useWebPhone`
+Create a new method in the WebPhone hook that combines dialing + auto-bridging. When called, it will:
+- Dial the number as usual
+- Listen for the call "established"/"accepted" event on the session
+- Automatically trigger the AI bridge (`startBridge`) as soon as the remote party picks up
 
-### 1. Update `useWebPhone.ts` -- Handle Extension Dialing
-Modify the `call` function to detect short extension numbers (3-digit) and dial them differently. For RingCentral WebRTC, extensions are dialed as-is without stripping the `+` prefix or adding country codes.
+### 2. Update `PennyCallCard` to auto-bridge on call
+- Change the "Call Now" button behavior: when the call card has AI bridge props, clicking "Call Now" will automatically activate the AI bridge once the call is connected
+- Remove the manual "AI Talk" button (or keep it as a fallback toggle)
+- Use a `useEffect` that watches `callStatus` -- when it transitions to `in_call`, automatically start the bridge
 
-### 2. Update Team Directory in `ai-agent/index.ts`
-Replace phone numbers with extensions for internal team members. Update the prompt to instruct Penny and Vizzy to use the extension number (e.g., `"phone":"ext:101"`) for internal calls and full phone numbers for external/customer calls.
-
-### 3. Update `PennyCallCard.tsx` -- Show Extension Info
-Display "Ext. 101" instead of a phone number when the call target is an internal extension.
+### 3. Make it work for all agents
+- The `useCallAiBridge` hook is already generic
+- Each agent component (Penny, Vizzy, Forge) just needs to pass the appropriate context string when calling
 
 ## Technical Details
 
-**Files to modify:**
-- `src/hooks/useWebPhone.ts` -- detect `ext:` prefix in phone number and dial as extension
-- `supabase/functions/ai-agent/index.ts` -- update team directory with extensions, update prompt rules
-- `src/components/accounting/PennyCallCard.tsx` -- display extension nicely in the UI
+### File changes:
 
-**Call format convention:**
-- External: `+14168606118` (full number with country code)
-- Internal: `ext:101` (extension prefix for detection in code)
+**`src/components/accounting/AccountingAgent.tsx`**
+- Add an effect: when `webPhoneState.status` changes to `"in_call"`, automatically call `startBridge()` with the pending call's context
+- Store the pending call data (contact name, reason) so the bridge knows what context to send
 
+**`src/components/accounting/PennyCallCard.tsx`**
+- Add a `useEffect` that watches `callStatus` -- when it becomes `"in_call"` and bridge is not yet active, automatically trigger `onStartAiBridge`
+- Keep the "Stop AI" / "AI Talk" button as a manual override toggle
+- Change default label from "AI Talk" to indicate AI will auto-activate
+
+**`src/hooks/useWebPhone.ts`**
+- Add an `"established"` or `"accepted"` event listener on the call session to ensure we detect when the remote party actually picks up (not just when dialing starts)
+- This ensures the AI bridge only activates after the call is truly connected
+
+### Flow after changes:
+1. User tells Penny "call Sattar and ask him to come to office"
+2. Penny outputs the call card with reason
+3. User clicks "Call Now"
+4. WebPhone dials the number
+5. When the remote party picks up (status -> `in_call`), the AI bridge **automatically activates**
+6. Penny's AI voice starts talking to the person
+7. User can click "Stop AI" to take over manually if needed
