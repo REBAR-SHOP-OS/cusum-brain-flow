@@ -132,7 +132,7 @@ export function useCallAiBridge() {
               sumSq += samples[i] * samples[i];
             }
             const rms = Math.sqrt(sumSq / samples.length);
-            if (rms < 0.01) return; // too quiet — likely echo or silence
+            if (rms < 0.005) return; // too quiet — likely echo or silence
 
             const pcm16 = float32ToPcm16(samples);
             const b64 = arrayBufferToBase64(pcm16.buffer as ArrayBuffer);
@@ -365,7 +365,7 @@ function playAiAudioChunk(
         if (activeSourcesRef.current.size === 0) {
           ttsPlayingRef.current = false;
         }
-      }, 2500);
+      }, 800);
     }
   };
 
