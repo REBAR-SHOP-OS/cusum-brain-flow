@@ -39,6 +39,7 @@ export function useCallAiBridge() {
   const ttsPlayingRef = useRef(false);
   const activeSourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
+  const bridgeActiveRef = useRef(false);
 
   const startBridge = useCallback(
     async (
@@ -48,6 +49,13 @@ export function useCallAiBridge() {
       },
       callData?: CallBridgeData
     ) => {
+      // Guard against duplicate startBridge calls
+      if (bridgeActiveRef.current) {
+        console.warn("AI bridge: already active, ignoring duplicate start");
+        return;
+      }
+      bridgeActiveRef.current = true;
+
       try {
         setState((s) => ({ ...s, status: "connecting", transcript: [] }));
 
@@ -134,6 +142,9 @@ export function useCallAiBridge() {
             if (callSession.audioElement) {
               callSession.audioElement.volume = 0;
               audioElementRef.current = callSession.audioElement;
+              console.log("AI bridge: muted RC audio element");
+            } else {
+              console.warn("AI bridge: no audioElement found on callSession");
             }
 
             setState((s) => ({ ...s, active: true, status: "active" }));
@@ -157,6 +168,7 @@ export function useCallAiBridge() {
 
         ws.onclose = () => {
           console.log("AI bridge WS closed");
+          bridgeActiveRef.current = false;
           restoreOriginalTrack(pc);
           restoreAudioElement(audioElementRef);
           cleanup(captureCtxRef, outputCtxRef, processorRef, wsRef);
@@ -165,6 +177,7 @@ export function useCallAiBridge() {
       } catch (err) {
         const msg = err instanceof Error ? err.message : "AI bridge failed";
         console.error("AI bridge error:", err);
+        bridgeActiveRef.current = false;
         setState((s) => ({ ...s, status: "error" }));
         toast.error(msg);
       }
@@ -173,6 +186,7 @@ export function useCallAiBridge() {
   );
 
   const stopBridge = useCallback(() => {
+    bridgeActiveRef.current = false;
     const ws = wsRef.current;
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.close();
@@ -294,12 +308,12 @@ function playAiAudioChunk(
   const onEnded = (src: AudioBufferSourceNode) => {
     activeSourcesRef.current.delete(src);
     if (activeSourcesRef.current.size === 0) {
-      // Echo tail guard: wait 500ms for remote echo to pass before unmuting capture
+      // Echo tail guard: wait 1000ms for remote telephony echo to pass before unmuting capture
       setTimeout(() => {
         if (activeSourcesRef.current.size === 0) {
           ttsPlayingRef.current = false;
         }
-      }, 500);
+      }, 1000);
     }
   };
 
@@ -311,11 +325,7 @@ function playAiAudioChunk(
   activeSourcesRef.current.add(bufferSource);
   bufferSource.start();
 
-  // Also play locally so the user can monitor the AI voice
-  const localSource = outputCtx.createBufferSource();
-  localSource.buffer = audioBuffer;
-  localSource.connect(outputCtx.destination);
-  localSource.start();
+  // Local playback removed — user monitors AI via live transcript UI
 }
 
 function replaceOutgoingTrack(
