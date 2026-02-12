@@ -1,49 +1,82 @@
 
 
-# Fix Double AI Voice and Delay
+# Fix: Remote Caller Can't Hear AI Voice
 
-## Root Cause (Confirmed)
+## Root Cause
 
-Your ElevenLabs phone agent has overrides enabled (confirmed from screenshot) -- but it still has a **default "First message" configured in the Agent tab**. ElevenLabs fires that message instantly on connect, before the override payload arrives. That's why you hear two greetings.
+The `AudioContext` is created at **16kHz** sample rate (to match ElevenLabs input format). The AI output destination (`aiDest`) is created on the same 16kHz context. When `replaceOutgoingTrack` swaps the WebRTC sender's audio track with this 16kHz stream, the remote caller receives audio at an unexpected sample rate. WebRTC standard audio is 48kHz, and many browsers/codecs don't properly handle a 16kHz replaced track.
 
-## Required Manual Step (ElevenLabs Dashboard)
+## Solution
 
-1. Open the phone agent (the one whose ID is in `ELEVENLABS_PHONE_AGENT_ID`)
-2. Go to the **Agent** tab
-3. **Delete the "First message" field** -- leave it completely blank/empty
-4. Set the default system prompt to something minimal like: `Follow the override instructions provided at conversation start.`
-5. Save
+Create a **separate AudioContext at 48kHz** (default browser rate) for the AI audio output, and upsample the 16kHz PCM data from ElevenLabs to 48kHz when creating audio buffers for playback.
 
-This is the single most important fix. Without it, no code change can prevent the double greeting.
+## Changes to `src/hooks/useCallAiBridge.ts`
 
-## Code Change
+### 1. Add a second AudioContext ref for output
 
-### `src/hooks/useCallAiBridge.ts`
+Add a new ref `outputCtxRef` for a 48kHz AudioContext used exclusively for the AI output destination and local monitoring.
 
-Add a short delay (~300ms) after sending the override before starting the audio processor. This gives ElevenLabs time to register the override prompt and first_message before any audio triggers a response:
+### 2. Create output context and destination at 48kHz
 
+```text
+// Keep 16kHz context for capturing/sending caller audio to ElevenLabs
+const audioCtx = new AudioContext({ sampleRate: 16000 });
+
+// Create 48kHz context for AI audio output (WebRTC compatible)
+const outputCtx = new AudioContext({ sampleRate: 48000 });
+const aiDest = outputCtx.createMediaStreamDestination();
 ```
-ws.onopen = () => {
-  // Send override FIRST
-  if (overrides) {
-    ws.send(JSON.stringify({
-      type: "conversation_initiation_client_data",
-      conversation_config_override: overrides,
-    }));
+
+### 3. Update `playAiAudioChunk` to upsample
+
+When creating audio buffers for the AI voice, create them at 48kHz on the output context. The browser's `AudioBufferSourceNode` will automatically resample the 16kHz data to 48kHz when the buffer is created at the correct rate:
+
+```text
+function playAiAudioChunk(base64Audio, outputCtx, dest) {
+  const float32 = pcm16Base64ToFloat32(base64Audio);
+  if (float32.length === 0) return;
+
+  // Create buffer at 48kHz - browser resamples from 16kHz source data
+  const outputSampleRate = outputCtx.sampleRate; // 48000
+  const resampledLength = Math.round(float32.length * (outputSampleRate / 16000));
+  const audioBuffer = outputCtx.createBuffer(1, resampledLength, outputSampleRate);
+  
+  // Simple linear interpolation upsampling
+  const channelData = audioBuffer.getChannelData(0);
+  const ratio = float32.length / resampledLength;
+  for (let i = 0; i < resampledLength; i++) {
+    const srcIdx = i * ratio;
+    const lower = Math.floor(srcIdx);
+    const upper = Math.min(lower + 1, float32.length - 1);
+    const frac = srcIdx - lower;
+    channelData[i] = float32[lower] * (1 - frac) + float32[upper] * frac;
   }
 
-  // Wait briefly for override to register, then start audio
-  setTimeout(() => {
-    processor.onaudioprocess = (e) => { ... };
-    replaceOutgoingTrack(pc, aiDest.stream);
-    setState(...);
-  }, 300);
-};
+  // Send to remote caller
+  const bufferSource = outputCtx.createBufferSource();
+  bufferSource.buffer = audioBuffer;
+  bufferSource.connect(dest);
+  bufferSource.start();
+
+  // Local monitoring
+  const localSource = outputCtx.createBufferSource();
+  localSource.buffer = audioBuffer;
+  localSource.connect(outputCtx.destination);
+  localSource.start();
+}
 ```
 
-This ensures the AI doesn't start hearing caller audio and responding with default behavior before the Penny persona is loaded.
+### 4. Update cleanup
+
+Close both AudioContexts on cleanup.
+
+### 5. Update `handleWsMessage` call
+
+Pass `outputCtx` instead of `audioCtx` to `playAiAudioChunk`.
 
 ## Expected Result
 
-- Only ONE AI voice speaks (Penny with proper greeting)
-- Reduced delay from buffer optimization (already applied) plus override timing fix
+- Remote caller hears the AI voice clearly (48kHz audio over WebRTC)
+- Local user also hears the AI voice for monitoring
+- ElevenLabs still receives 16kHz caller audio (unchanged)
+
