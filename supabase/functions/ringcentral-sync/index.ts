@@ -287,7 +287,7 @@ serve(async (req) => {
       accessToken = await getAccessTokenForUser(userId, supabaseAdmin);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unknown error";
-      if (msg === "not_connected") {
+      if (msg === "not_connected" || msg.includes("unauthorized_client") || msg.includes("JWT token exchange failed") || msg.includes("Unauthorized for this grant type")) {
         return new Response(
           JSON.stringify({
             error: "not_connected",
