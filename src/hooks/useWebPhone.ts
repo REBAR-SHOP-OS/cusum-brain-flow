@@ -14,6 +14,7 @@ export interface WebPhoneActions {
   call: (phoneNumber: string, contactName?: string) => Promise<boolean>;
   hangup: () => void;
   dispose: () => void;
+  getCallSession: () => any | null;
 }
 
 export function useWebPhone(): [WebPhoneState, WebPhoneActions] {
@@ -156,5 +157,7 @@ export function useWebPhone(): [WebPhoneState, WebPhoneActions] {
     };
   }, []);
 
-  return [state, { initialize, call, hangup, dispose }];
+  const getCallSession = useCallback(() => callSessionRef.current, []);
+
+  return [state, { initialize, call, hangup, dispose, getCallSession }];
 }
