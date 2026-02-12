@@ -2868,7 +2868,7 @@ After completing any task or operational cycle, you must structure your output s
 These rules govern your behavioral protocols only. They do not modify application features, UI, architecture, backend logic, database, APIs, or security settings.`;
 
     // --- Draft-only governance injection ---
-    const DRAFT_ONLY_BLOCK = stripSendCapabilities
+    const DRAFT_ONLY_BLOCK = (stripSendCapabilities && agent !== "assistant")
       ? `\n\n## ⚠️ DRAFT-ONLY MODE ACTIVE\nYou are in TRACKING/DRAFT-ONLY mode. You CANNOT send emails, messages, or perform any external actions.\nYou CAN: draft content, suggest replies, analyze data, create notifications/tasks.\nYou CANNOT: send emails, post to social media, or trigger external actions.\nIf the user asks you to send something, explain that you can prepare a draft for their review, but sending is disabled.`
       : "";
 
