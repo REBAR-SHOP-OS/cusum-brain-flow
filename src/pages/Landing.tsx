@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowRight, Mail, BarChart3, Truck, Factory, Brain, Calculator, Users, Shield, CheckCircle2 } from "lucide-react";
 import { AnimatedCounter } from "@/components/ceo/AnimatedCounter";
 import logoCoin from "@/assets/logo-coin.png";
-import brainHero from "@/assets/brain-hero.png";
+import { InteractiveBrainBg } from "@/components/brain/InteractiveBrainBg";
 
 const STATS = [
   { value: 10000, suffix: "+", label: "Tons Processed", prefix: "" },
@@ -51,11 +51,9 @@ export default function Landing() {
       <main>
         {/* Hero */}
         <section className="relative py-24 md:py-32 px-6 overflow-hidden" aria-label="Hero">
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <img src={brainHero} alt="" className="w-full h-full object-cover opacity-[0.08]" loading="lazy" aria-hidden="true" />
-            <div className="absolute inset-0 bg-gradient-to-b from-background/60 via-background/30 to-background" />
-          </div>
-          <div className="relative max-w-5xl mx-auto text-center">
+          <InteractiveBrainBg />
+          <div className="absolute inset-0 bg-gradient-to-b from-background/40 via-transparent to-background/80 pointer-events-none" />
+          <div className="relative z-10 max-w-5xl mx-auto text-center">
             <h1 className="text-4xl md:text-6xl font-extrabold text-foreground mb-6 leading-tight tracking-tight">
               AI-Powered Rebar Fabrication<br className="hidden md:block" /> & Shop Management
             </h1>
