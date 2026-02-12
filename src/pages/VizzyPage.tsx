@@ -31,9 +31,18 @@ interface QuotationDraft {
   status: "draft" | "approved" | "dismissed";
 }
 
+const SUPER_ADMIN_EMAIL = "sattar@rebar.shop";
+
 export default function VizzyPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+
+  // Super admin guard
+  useEffect(() => {
+    if (user && user.email !== SUPER_ADMIN_EMAIL) {
+      navigate("/home", { replace: true });
+    }
+  }, [user, navigate]);
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
   const transcriptRef = useRef<TranscriptEntry[]>([]);
   const [status, setStatus] = useState<"starting" | "connected" | "error" | "reconnecting">("starting");

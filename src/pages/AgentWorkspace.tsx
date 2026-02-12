@@ -19,6 +19,10 @@ import { useAuth } from "@/lib/auth";
 import { getUserAgentMapping } from "@/lib/userAgentMap";
 import { PixelBrainDialog } from "@/components/social/PixelBrainDialog";
 import { ImageGeneratorDialog } from "@/components/social/ImageGeneratorDialog";
+import { useSuperAdmin } from "@/hooks/useSuperAdmin";
+import { VizzyApprovalDialog, PendingAction } from "@/components/vizzy/VizzyApprovalDialog";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 export default function AgentWorkspace() {
   const { agentId } = useParams<{ agentId: string }>();
@@ -26,12 +30,21 @@ export default function AgentWorkspace() {
   const location = useLocation();
   const { user } = useAuth();
   const config = agentConfigs[agentId || ""] || agentConfigs.sales;
+  const { isSuperAdmin } = useSuperAdmin();
+
+  // Block non-super-admins from accessing Vizzy
+  useEffect(() => {
+    if (agentId === "assistant" && !isSuperAdmin) {
+      navigate("/home", { replace: true });
+    }
+  }, [agentId, isSuperAdmin, navigate]);
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [autoBriefingSent, setAutoBriefingSent] = useState(false);
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
 
   const { sessions, loading: sessionsLoading, fetchSessions, createSession, addMessage, getSessionMessages, deleteSession } = useChatSessions();
   const hasConversation = messages.length > 0;
@@ -138,6 +151,47 @@ export default function AgentWorkspace() {
 
       // Build reply with created notification badges
       let replyContent = response.reply;
+
+      // Parse vizzy-action blocks for RingCentral actions (assistant only)
+      if (agentId === "assistant" && isSuperAdmin) {
+        const actionMatch = replyContent.match(/```vizzy-action\n([\s\S]*?)\n```/);
+        if (actionMatch) {
+          try {
+            const actionData = JSON.parse(actionMatch[1]);
+            const desc = actionData.type === "ringcentral_call"
+              ? `Call ${actionData.contact_name || actionData.phone}`
+              : `Send SMS to ${actionData.contact_name || actionData.phone}: "${actionData.message?.slice(0, 80)}..."`;
+            
+            setPendingAction({
+              id: crypto.randomUUID(),
+              action: actionData.type,
+              description: desc,
+              params: actionData,
+              resolve: async (approved: boolean) => {
+                setPendingAction(null);
+                if (approved) {
+                  try {
+                    const { data, error } = await supabase.functions.invoke("ringcentral-action", {
+                      body: actionData,
+                    });
+                    if (error) throw error;
+                    toast.success(actionData.type === "ringcentral_call" ? "Call initiated!" : "SMS sent!");
+                  } catch (err) {
+                    toast.error(`Failed: ${err instanceof Error ? err.message : "Unknown error"}`);
+                  }
+                } else {
+                  toast.info("Action cancelled");
+                }
+              },
+            });
+          } catch (e) {
+            console.warn("Failed to parse vizzy-action:", e);
+          }
+          // Remove the action block from displayed content
+          replyContent = replyContent.replace(/```vizzy-action\n[\s\S]*?\n```/, "").trim();
+        }
+      }
+
       if (response.createdNotifications && response.createdNotifications.length > 0) {
         const notifSummary = response.createdNotifications
           .map((n) => `${n.type === "todo" ? "✅" : n.type === "idea" ? "💡" : "🔔"} **${n.title}**${n.assigned_to_name ? ` → ${n.assigned_to_name}` : ""}`)
@@ -337,7 +391,7 @@ export default function AgentWorkspace() {
                 disabled={isLoading}
                 showFileUpload={agentId === "estimating" || agentId === "social"}
                 showSmartMode
-                onLiveChatClick={() => navigate("/vizzy")}
+                onLiveChatClick={isSuperAdmin ? () => navigate("/vizzy") : undefined}
               />
             </div>
 
@@ -361,7 +415,7 @@ export default function AgentWorkspace() {
               disabled={isLoading}
               showFileUpload={agentId === "estimating" || agentId === "social"}
               showSmartMode
-              onLiveChatClick={() => navigate("/vizzy")}
+              onLiveChatClick={isSuperAdmin ? () => navigate("/vizzy") : undefined}
             />
           </>
         )}
@@ -369,6 +423,9 @@ export default function AgentWorkspace() {
 
       <PixelBrainDialog open={brainOpen} onOpenChange={setBrainOpen} />
       <ImageGeneratorDialog open={imageGenOpen} onOpenChange={setImageGenOpen} />
+      {agentId === "assistant" && isSuperAdmin && (
+        <VizzyApprovalDialog pendingAction={pendingAction} />
+      )}
     </div>
   );
 }
