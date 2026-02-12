@@ -1,55 +1,80 @@
 
 
-# Fine-Tune Phone AI Prompt for Better Call Handling
+# Fix: AI Starts Before Answer + Echo/Overlap Issues
 
 ## Problems Identified
 
-1. **Fabrication**: The AI said "everything is proceeding as planned" despite having zero details. The current no-details guard is not aggressive enough.
-2. **Term confusion**: When the caller said "daily brief," the AI heard/interpreted it as "daily grief" and couldn't recover. The prompt needs to instruct the AI to handle STT misinterpretations gracefully.
-3. **Rephrasing the reason**: The AI changed "Daily brief" to "general daily report," confusing the caller. It should always use the exact reason wording provided.
+### 1. AI starts talking before the caller answers
+The RingCentral WebPhone SDK has a **known limitation**: for outbound calls, the "answered" event fires immediately when the SIP INVITE is sent, NOT when the remote party picks up. This means the AI bridge activates while the phone is still ringing, causing the AI to "speak into the void" and hear ringback tone as caller audio.
 
-## Changes
+### 2. Echo feedback loop causing overlap
+When the AI speaks, its audio is sent to the remote party via the replaced WebRTC track. The telephony network echoes some of that audio back. The 1000ms echo tail guard is not long enough for telephony echo, causing the AI's own speech to be captured and sent back to ElevenLabs as "caller speech." This creates a feedback loop where the AI thinks the caller said something, interrupts itself, and then repeats.
 
-**File: `src/hooks/useCallAiBridge.ts`** -- `buildPhoneCallOverrides` function
+## Solution
 
-### 1. Strengthen the no-details fabrication guard
+### Fix 1: Delay AI bridge start with a "ring guard" timer
+Since the SDK cannot detect when the remote party actually answers, we add a configurable delay (e.g., 8 seconds) before starting the AI bridge. This gives the phone time to ring and be answered before the AI starts speaking.
 
-Replace the current `noDetailsWarning` with a much more explicit instruction that:
-- Explicitly forbids generating fake summaries like "everything is on track"
-- Tells the AI to immediately say it doesn't have the report content and ask what topics they want covered
-- Removes any ambiguity that could lead to fabrication
+**File: `src/components/accounting/PennyCallCard.tsx`**
+- Add a delay timer in the auto-trigger `useEffect`
+- When `callStatus` becomes `"in_call"`, start a timeout (e.g., 8 seconds) before calling `onStartAiBridge`
+- Clear the timeout if the call ends before the timer fires
+- Show a "Waiting for answer..." indicator during the delay
 
-### 2. Add STT error recovery instructions
+### Fix 2: Increase echo tail guard
+**File: `src/hooks/useCallAiBridge.ts`**
+- Increase the echo tail guard from 1000ms to 2500ms in `playAiAudioChunk`
+- Telephony networks have longer echo tails than local audio, especially over PSTN
 
-Add a new instruction block telling the AI:
-- Phone audio can cause mishearing (e.g., "brief" heard as "grief")
-- If the caller says something that sounds close to the call reason, assume they mean the call reason
-- Never say "I don't have information about X" when X is clearly a mishearing of the call topic
+### Fix 3: Add audio energy gate to capture
+**File: `src/hooks/useCallAiBridge.ts`**
+- Add a simple energy threshold check in the `onaudioprocess` callback
+- Only send audio chunks to ElevenLabs if the audio energy exceeds a minimum threshold
+- This filters out low-level echo/noise that gets past the mute guard
+- Threshold should be tunable (e.g., RMS > 0.01)
 
-### 3. Lock the reason terminology
+## Technical Details
 
-Add instruction: "Always refer to the topic using the EXACT wording from PURPOSE OF THIS CALL. Do not rephrase 'daily brief' as 'daily report' or any other variation."
+### PennyCallCard.tsx -- Ring guard delay
 
-### Updated prompt section (technical detail)
+```text
+// Current behavior:
+callStatus === "in_call" --> immediately starts AI bridge
 
-```typescript
-const noDetailsWarning = !details
-  ? `\n\nCRITICAL — NO DETAILS PROVIDED:
-You were NOT given any report content, numbers, or specifics for this call. You ONLY know the reason: "${reason}".
-- Do NOT fabricate, summarize, or imply any information. Saying things like "everything is proceeding as planned" is FABRICATION and strictly forbidden.
-- Instead, explain that you're calling to connect about "${reason}" and ask the caller what specific topics or questions they have.
-- Offer to have someone from Rebar Shop follow up with the full details.`
-  : "";
-
-// Add to CRITICAL INSTRUCTIONS:
-// - ALWAYS use the EXACT topic wording from PURPOSE OF THIS CALL. Do not rephrase "daily brief" as "daily report" or any other variation.
-// - Phone audio quality can cause words to be misheard (e.g., "brief" may sound like "grief"). If the caller says something that sounds similar to the call topic, assume they are referring to it. NEVER say "I don't have information about [misheard word]."
+// New behavior:
+callStatus === "in_call" --> starts 8-second timer --> then starts AI bridge
+callStatus changes away from "in_call" --> clears timer
 ```
+
+The delay value of 8 seconds accounts for typical ring time (phones ring 4-6 times before someone answers). This can be adjusted based on real-world usage.
+
+### useCallAiBridge.ts -- Echo tail guard increase
+
+```text
+// Current: 1000ms echo tail
+setTimeout(() => { ttsPlayingRef.current = false; }, 1000);
+
+// New: 2500ms echo tail for telephony
+setTimeout(() => { ttsPlayingRef.current = false; }, 2500);
+```
+
+### useCallAiBridge.ts -- Audio energy gate
+
+```text
+// In onaudioprocess callback, before sending to ElevenLabs:
+// Calculate RMS energy of the audio buffer
+// If RMS < 0.01, skip sending (it's likely echo or silence)
+```
+
+## Files Modified
+
+- `src/components/accounting/PennyCallCard.tsx` -- Ring guard delay before AI activation
+- `src/hooks/useCallAiBridge.ts` -- Echo tail guard increase + audio energy gate
 
 ## Expected Outcome
 
-- AI will NOT fabricate "everything is on track" when it has no details
-- AI will use "daily brief" consistently, not rephrase to "daily report"
-- If caller says "daily grief," AI will understand they mean "daily brief" and respond accordingly
-- AI will ask what topics the caller wants to discuss instead of repeating it has no information
+- AI waits ~8 seconds after dialing before starting to speak, giving the caller time to answer
+- Echo from telephony network is filtered out by longer tail guard and energy gate
+- AI no longer hears its own speech echoed back as "caller audio"
+- The "Caller: ..." empty entries in the transcript should disappear
 
