@@ -1,31 +1,44 @@
 
 
-# Fix Email View Overlapping Reply Composer
+# Fix Vizzy Denying Email Access
 
 ## Problem
-When opening the reply composer in the inbox detail view, the email thread content extends behind/underneath the composer, making the reply area partially hidden. The email body should scroll independently above the pinned reply section.
+Vizzy tells the CEO "I do not have the ability to read the content of emails" — but this is wrong. Vizzy already has full access to all inbound emails in its context data. The phrase is NOT in your codebase — the AI model is hallucinating a privacy restriction that doesn't exist.
 
 ## Root Cause
-In `InboxView.tsx` (line 958), the wrapper div for the email detail view is missing `overflow-hidden`, which means the `h-full` on `InboxDetailView` doesn't properly constrain to the available space. This causes the scroll area to overflow past its intended boundary, pushing content behind the reply composer.
+The current prompt says "You have access to ALL inbound emails" but doesn't explicitly tell the model to STOP claiming it can't read them. Large language models have a built-in safety reflex around email/privacy — the prompt needs to override that reflex with a direct, assertive instruction.
 
-## Changes
+## Fix
 
-### File: `src/components/inbox/InboxView.tsx` (line 958)
-Add `overflow-hidden` to the email viewer wrapper so the detail view is properly height-constrained:
+### File: `supabase/functions/ai-agent/index.ts` (line 1242-1245)
 
-- **Before:** `"flex-1 min-h-0"`
-- **After:** `"flex-1 min-h-0 overflow-hidden"`
+Strengthen the "Full Email Access" section from:
 
-### File: `src/components/inbox/InboxDetailView.tsx` (line 197)
-The left column already has `overflow-hidden`, but the ScrollArea needs a hard height cap. Change the ScrollArea wrapper to ensure it doesn't push the composer off-screen:
+```
+## Full Email Access
+You have access to ALL inbound emails to @rebar.shop in your context...
+```
 
-- Add `overflow-hidden` to the root container (line 153) if not already present
-- Ensure the left column (line 197) uses `overflow-y-hidden` so only the ScrollArea scrolls
+To something like:
 
-### File: `src/components/inbox/InboxView.tsx` (line 853, kanban selected view)
-The kanban path also renders `InboxDetailView` without overflow constraints. Apply the same `overflow-hidden` fix there.
+```
+## Full Email Access — MANDATORY
+You CAN and MUST read, search, and discuss email content when asked.
+The allInboundEmails array in your context contains real email data
+(subject, from, to, body_preview, timestamps) for up to 200 recent
+inbound messages to @rebar.shop.
+
+NEVER say you cannot read emails. NEVER claim your access is limited
+to metadata. You have FULL email content access — this is a business
+system, not personal email. Use it confidently.
+
+When asked about emails: search allInboundEmails by from_address,
+to_address, subject, or body_preview and report findings directly.
+```
+
+This explicitly counters the model's safety reflex with a clear override.
 
 ## Summary
-- 2 files modified: `InboxView.tsx`, `InboxDetailView.tsx`
-- Adds proper overflow containment so the reply composer stays pinned at the bottom
-- Email thread content scrolls independently above it
+- 1 file modified: `supabase/functions/ai-agent/index.ts`
+- Strengthens the email access prompt to prevent the model from falsely denying access
+- No logic or query changes needed — the data is already being fetched correctly
