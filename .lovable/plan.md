@@ -1,54 +1,105 @@
 
 
-# Fix: AI Goes Silent After Greeting
+# Fix: AI Goes Silent After Greeting (Root Cause Investigation + Fix)
 
-## Root Cause
+## The Real Problem
 
-After the AI delivers its greeting, the microphone capture is suppressed for too long and the caller's response is never heard by the AI. Here is what happens:
+We've tuned the echo tail guard and energy gate twice now, and the AI still dies after the greeting. The parameter tweaks aren't the root cause. The issue is likely one of two deeper problems that we need to diagnose and fix simultaneously:
 
-1. The AI greeting plays as many small audio chunks (each one resets the 2500ms echo tail timer)
-2. After the last chunk finishes, the mic stays muted for another 2500ms
-3. The caller responds during this muted window -- their speech is discarded
-4. ElevenLabs never receives caller audio, so the AI has nothing to respond to
-5. The conversation dies
+### Likely Cause 1: `ttsPlayingRef` never resets properly
 
-## Solution
+The greeting arrives as many rapid audio chunks. Each chunk sets `ttsPlayingRef = true` and creates a `BufferSource`. Because chunks overlap (next starts before previous ends), the `onEnded` callback fires for early chunks while later ones are still in `activeSourcesRef`. The 800ms timer only starts when the set is empty. But if timers from earlier chunks fire while the set was temporarily empty between chunk arrivals, and then a late chunk arrives after the timer already ran, the ref might get stuck in an inconsistent state.
 
-Two changes to `src/hooks/useCallAiBridge.ts`:
+### Likely Cause 2: Silent capture -- no audio actually reaching the processor
 
-### 1. Reduce the echo tail guard from 2500ms to 800ms
+The 16kHz `captureCtx` captures from a `MediaStream` that wraps the receiver track. If the `ScriptProcessorNode` (deprecated API) fails silently or the resampling from 48kHz to 16kHz produces near-zero samples, the energy gate filters everything out. We have no visibility into this currently.
 
-The 2500ms guard was too aggressive. Telephony echo typically fades within 300-500ms. An 800ms guard is sufficient to catch echo while letting the caller's response through quickly.
-
-### 2. Lower the energy gate threshold from 0.01 to 0.005
-
-Phone audio from a remote caller can be quieter than local microphone input, especially on mobile networks. The 0.01 threshold may be filtering out legitimate speech. Lowering to 0.005 catches more real speech while still filtering dead silence.
-
-## Technical Details
+## Solution: Add Diagnostic Logging + Make Capture More Robust
 
 **File: `src/hooks/useCallAiBridge.ts`**
 
-Change 1 -- Echo tail guard (line ~364):
-```text
-// Before:
-setTimeout(() => { ... ttsPlayingRef.current = false; }, 2500);
+### 1. Add state-change logging for `ttsPlayingRef`
 
-// After:
-setTimeout(() => { ... ttsPlayingRef.current = false; }, 800);
+Wrap every mutation of `ttsPlayingRef.current` in a console.log so we can see exactly when mic capture is muted/unmuted and why. This is critical for diagnosing the next test call.
+
+### 2. Add periodic audio level logging in `onaudioprocess`
+
+Every ~2 seconds, log the current RMS level and whether `ttsPlayingRef` is blocking. This tells us:
+- Is audio actually flowing from the remote track?
+- Is the energy gate filtering it?
+- Is `ttsPlayingRef` stuck on true?
+
+### 3. Remove the energy gate temporarily
+
+Set threshold to 0 (pass all audio). The echo tail guard alone should handle echo suppression. If the conversation works without the energy gate, we know the gate was too aggressive. We can re-add it later with a calibrated value.
+
+### 4. Force `ttsPlayingRef = false` after a safety timeout
+
+Add a global safety mechanism: if `ttsPlayingRef` has been true for more than 15 seconds continuously (no audio chunk should take that long), force it to false. This prevents permanent mic muting from edge cases.
+
+## Technical Details
+
+### Change 1 -- Diagnostic logging in `onaudioprocess` (lines 124-139)
+
+```text
+// Add a frame counter and periodic logging
+let frameCount = 0;
+processor.onaudioprocess = (e) => {
+  frameCount++;
+  const samples = e.inputBuffer.getChannelData(0);
+  let sumSq = 0;
+  for (let i = 0; i < samples.length; i++) sumSq += samples[i] * samples[i];
+  const rms = Math.sqrt(sumSq / samples.length);
+  
+  // Log every ~2s (16000Hz / 2048 buffer = ~7.8 frames/sec, so every 16 frames)
+  if (frameCount % 16 === 0) {
+    console.log(`AI bridge audio: rms=${rms.toFixed(4)}, ttsPlaying=${ttsPlayingRef.current}, wsOpen=${ws.readyState === WebSocket.OPEN}`);
+  }
+  
+  if (ws.readyState !== WebSocket.OPEN) return;
+  if (ttsPlayingRef.current) return;
+  // Remove energy gate for now -- let all audio through
+  // if (rms < 0.005) return;
+  
+  const pcm16 = float32ToPcm16(samples);
+  const b64 = arrayBufferToBase64(pcm16.buffer);
+  ws.send(JSON.stringify({ user_audio_chunk: b64 }));
+};
 ```
 
-Change 2 -- Energy gate threshold (line ~135):
-```text
-// Before:
-if (rms < 0.01) return;
+### Change 2 -- Log ttsPlaying state changes in `playAiAudioChunk` (line 343)
 
-// After:
-if (rms < 0.005) return;
+```text
+// Before setting true:
+console.log("AI bridge: ttsPlaying -> true (chunk received)");
+ttsPlayingRef.current = true;
+
+// In onEnded, before setting false:
+console.log("AI bridge: ttsPlaying -> false (all chunks ended + 800ms)");
+ttsPlayingRef.current = false;
 ```
+
+### Change 3 -- Safety timeout for stuck ttsPlaying in `beginAudioCapture`
+
+```text
+// After setting up onaudioprocess, add a repeating safety check:
+const ttsWatchdog = setInterval(() => {
+  if (ttsPlayingRef.current && activeSourcesRef.current.size === 0) {
+    console.warn("AI bridge: ttsPlaying stuck on true with no active sources, forcing false");
+    ttsPlayingRef.current = false;
+  }
+}, 3000);
+// Store interval ref for cleanup
+```
+
+## Files Modified
+
+- `src/hooks/useCallAiBridge.ts` -- diagnostic logging, remove energy gate, add ttsPlaying watchdog
 
 ## Expected Outcome
 
-- After the AI greeting finishes, the mic unmutes within ~800ms instead of ~2500ms
-- The caller's response ("Yes, it's me") is captured and sent to ElevenLabs
-- The conversation continues naturally after the greeting
+- Console logs will show exactly what's happening during the next test call
+- If `ttsPlayingRef` was stuck, the watchdog will unstick it within 3 seconds
+- If the energy gate was filtering caller audio, removing it will let audio through
+- The logs will definitively tell us whether audio is flowing, being blocked, or absent
 
