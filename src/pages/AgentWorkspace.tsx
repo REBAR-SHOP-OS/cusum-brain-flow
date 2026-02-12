@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { format } from "date-fns";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { ChevronDown, PanelLeftClose, PanelLeft, Brain, ImageIcon, CalendarIcon } from "lucide-react";
+import { ChevronDown, PanelLeftClose, PanelLeft, Brain, ImageIcon, CalendarIcon, PhoneOff } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,7 @@ import { PixelBrainDialog } from "@/components/social/PixelBrainDialog";
 import { ImageGeneratorDialog } from "@/components/social/ImageGeneratorDialog";
 import { useSuperAdmin } from "@/hooks/useSuperAdmin";
 import { VizzyApprovalDialog, PendingAction } from "@/components/vizzy/VizzyApprovalDialog";
+import { useWebPhone } from "@/hooks/useWebPhone";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -31,6 +32,17 @@ export default function AgentWorkspace() {
   const { user } = useAuth();
   const config = agentConfigs[agentId || ""] || agentConfigs.sales;
   const { isSuperAdmin } = useSuperAdmin();
+  const [webPhoneState, webPhoneActions] = useWebPhone();
+
+  // Initialize WebPhone for Vizzy (super admin only)
+  useEffect(() => {
+    if (agentId === "assistant" && isSuperAdmin && webPhoneState.status === "idle") {
+      webPhoneActions.initialize();
+    }
+    return () => {
+      if (agentId === "assistant") webPhoneActions.dispose();
+    };
+  }, [agentId, isSuperAdmin]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Block non-super-admins from accessing Vizzy
   useEffect(() => {
@@ -167,16 +179,23 @@ export default function AgentWorkspace() {
               action: actionData.type,
               description: desc,
               params: actionData,
-              resolve: async (approved: boolean) => {
+                resolve: async (approved: boolean) => {
                 setPendingAction(null);
                 if (approved) {
                   try {
-                    const { data, error } = await supabase.functions.invoke("ringcentral-action", {
-                      body: actionData,
-                    });
-                    if (error) throw error;
-                    if (data?.error) throw new Error(data.error);
-                    toast.success(actionData.type === "ringcentral_call" ? "Call initiated!" : "SMS sent!");
+                    if (actionData.type === "ringcentral_call") {
+                      // Use WebRTC browser calling
+                      const success = await webPhoneActions.call(actionData.phone, actionData.contact_name);
+                      if (!success) throw new Error("WebPhone call failed");
+                    } else {
+                      // SMS still goes through edge function
+                      const { data, error } = await supabase.functions.invoke("ringcentral-action", {
+                        body: actionData,
+                      });
+                      if (error) throw error;
+                      if (data?.error) throw new Error(data.error);
+                      toast.success("SMS sent!");
+                    }
                   } catch (err) {
                     toast.error(`Failed: ${err instanceof Error ? err.message : "Unknown error"}`);
                   }
@@ -317,6 +336,16 @@ export default function AgentWorkspace() {
             </div>
           )}
           <div className="flex-1" />
+          {agentId === "assistant" && isSuperAdmin && (webPhoneState.status === "calling" || webPhoneState.status === "in_call") && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-destructive animate-pulse">
+                {webPhoneState.status === "calling" ? "Dialing..." : "On Call"}
+              </span>
+              <Button variant="destructive" size="sm" className="h-7 gap-1" onClick={webPhoneActions.hangup}>
+                <PhoneOff className="w-3 h-3" /> Hang up
+              </Button>
+            </div>
+          )}
           {agentId === "social" && (
             <>
               <Popover>
