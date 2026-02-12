@@ -147,6 +147,7 @@ export default function VizzyPage() {
   }, []);
 
   const conversation = useConversation({
+    micMuted: muted,
     clientTools: {
       draft_quotation: (params: {
         customer_name: string;
@@ -530,11 +531,7 @@ export default function VizzyPage() {
 
         {/* Mute */}
         <button
-          onClick={() => {
-            const next = !muted;
-            setMuted(next);
-            mediaStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = !next; });
-          }}
+          onClick={() => setMuted((prev) => !prev)}
           className={cn(
             "p-3 rounded-full transition-colors",
             muted ? "bg-destructive text-destructive-foreground" : "bg-white/10 hover:bg-white/20 text-white"
