@@ -243,8 +243,8 @@ serve(async (req) => {
 
             if (events.length > 0) {
               const { error: evtErr } = await supabaseService
-                .from("events")
-                .insert(events);
+                .from("activity_events")
+                .insert(events.map((e: any) => ({ ...e, source: "system" })));
               if (evtErr) console.error("Failed to log events:", evtErr);
             }
 

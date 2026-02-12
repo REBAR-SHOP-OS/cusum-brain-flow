@@ -175,7 +175,7 @@ serve(async (req) => {
         }).eq("id", purchaseOrderId);
 
         if (events.length > 0) {
-          await svc.from("events").insert(events);
+          await svc.from("activity_events").insert(events.map((e: any) => ({ ...e, source: "system", company_id: companyId })));
         }
 
         return json({ success: true, action, totalReceived, poStatus: newStatus });
@@ -533,7 +533,7 @@ serve(async (req) => {
 
     // Write events
     if (events.length > 0) {
-      const { error: evtErr } = await svc.from("events").insert(events);
+      const { error: evtErr } = await svc.from("activity_events").insert(events.map((e: any) => ({ ...e, source: "system", company_id: companyId })));
       if (evtErr) console.error("Failed to log inventory events:", evtErr);
     }
 

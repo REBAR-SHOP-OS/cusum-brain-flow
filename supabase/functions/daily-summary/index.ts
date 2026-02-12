@@ -654,7 +654,7 @@ Rules:
         .limit(50),
       // ERP system events (user activity log)
       supabase
-        .from("events")
+        .from("activity_events")
         .select("event_type, entity_type, actor_id, description, created_at")
         .gte("created_at", dayStart)
         .lte("created_at", dayEnd)
