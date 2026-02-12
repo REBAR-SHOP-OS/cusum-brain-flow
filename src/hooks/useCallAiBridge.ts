@@ -38,6 +38,7 @@ export function useCallAiBridge() {
   const originalTrackRef = useRef<MediaStreamTrack | null>(null);
   const ttsPlayingRef = useRef(false);
   const activeSourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
+  const audioElementRef = useRef<HTMLAudioElement | null>(null);
 
   const startBridge = useCallback(
     async (
@@ -129,6 +130,12 @@ export function useCallAiBridge() {
             // Replace the call's outgoing audio with AI voice (48kHz stream)
             replaceOutgoingTrack(pc, aiDest.stream);
 
+            // Mute RC audio element to prevent hearing AI voice twice
+            if (callSession.audioElement) {
+              callSession.audioElement.volume = 0;
+              audioElementRef.current = callSession.audioElement;
+            }
+
             setState((s) => ({ ...s, active: true, status: "active" }));
             toast.success("AI is now talking on the call");
           }, 300);
@@ -151,6 +158,7 @@ export function useCallAiBridge() {
         ws.onclose = () => {
           console.log("AI bridge WS closed");
           restoreOriginalTrack(pc);
+          restoreAudioElement(audioElementRef);
           cleanup(captureCtxRef, outputCtxRef, processorRef, wsRef);
           setState({ active: false, status: "idle", transcript: [] });
         };
@@ -169,6 +177,7 @@ export function useCallAiBridge() {
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.close();
     }
+    restoreAudioElement(audioElementRef);
     cleanup(captureCtxRef, outputCtxRef, processorRef, wsRef);
     setState({ active: false, status: "idle", transcript: [] });
   }, []);
@@ -285,7 +294,12 @@ function playAiAudioChunk(
   const onEnded = (src: AudioBufferSourceNode) => {
     activeSourcesRef.current.delete(src);
     if (activeSourcesRef.current.size === 0) {
-      ttsPlayingRef.current = false;
+      // Echo tail guard: wait 500ms for remote echo to pass before unmuting capture
+      setTimeout(() => {
+        if (activeSourcesRef.current.size === 0) {
+          ttsPlayingRef.current = false;
+        }
+      }, 500);
     }
   };
 
@@ -328,6 +342,15 @@ function replaceOutgoingTrack(
 function restoreOriginalTrack(pc: RTCPeerConnection) {
   // The RC SDK manages its own tracks - when bridge closes, call will end or
   // user takes over naturally. No explicit restore needed for now.
+}
+
+function restoreAudioElement(
+  audioElementRef: React.MutableRefObject<HTMLAudioElement | null>
+) {
+  if (audioElementRef.current) {
+    audioElementRef.current.volume = 1;
+    audioElementRef.current = null;
+  }
 }
 
 function stopAllTtsPlayback(
@@ -378,6 +401,10 @@ function handleWsMessage(
           transcript: [...s.transcript, { role: "caller", text: callerText }],
         }));
       }
+      break;
+
+    case "interruption":
+      stopAllTtsPlayback(activeSourcesRef, ttsPlayingRef);
       break;
 
     case "ping":
