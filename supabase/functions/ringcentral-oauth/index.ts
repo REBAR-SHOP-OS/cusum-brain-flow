@@ -223,10 +223,10 @@ serve(async (req) => {
 
       if (!tokenRes.ok) {
         const errText = await tokenRes.text();
-        console.error("JWT token exchange failed:", errText);
+        console.warn("JWT token exchange not available:", errText);
         return new Response(
-          JSON.stringify({ error: "JWT authentication failed" }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({ error: "JWT authentication not supported for this app. Use OAuth instead.", fallback: "oauth" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
