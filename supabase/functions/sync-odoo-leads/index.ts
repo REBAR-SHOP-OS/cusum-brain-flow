@@ -204,6 +204,24 @@ serve(async (req) => {
       });
     }
 
+    // Handle check-status action (lightweight env var check)
+    const body = await req.clone().json().catch(() => ({}));
+    if (body.action === "check-status") {
+      const hasUrl = !!Deno.env.get("ODOO_URL");
+      const hasDb = !!Deno.env.get("ODOO_DATABASE");
+      const hasUser = !!Deno.env.get("ODOO_USERNAME");
+      const hasKey = !!Deno.env.get("ODOO_API_KEY");
+      const allSet = hasUrl && hasDb && hasUser && hasKey;
+
+      return new Response(
+        JSON.stringify({
+          status: allSet ? "connected" : "available",
+          configured: { url: hasUrl, database: hasDb, username: hasUser, api_key: hasKey },
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,

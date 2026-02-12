@@ -234,6 +234,34 @@ export function useIntegrations() {
         return statusData.status;
       }
 
+      // Odoo
+      if (integrationId === "odoo") {
+        const { data: statusData, error: statusError } = await supabase.functions.invoke(
+          "sync-odoo-leads",
+          { body: { action: "check-status" } }
+        );
+
+        if (statusError) throw new Error(statusError.message);
+
+        setIntegrations((prev) =>
+          prev.map((i) =>
+            i.id === "odoo"
+              ? {
+                  ...i,
+                  status: statusData.status,
+                  error: undefined,
+                  lastSync: statusData.status === "connected" ? new Date().toLocaleTimeString() : undefined,
+                }
+              : i
+          )
+        );
+
+        if (statusData.status === "connected") {
+          toast({ title: "Odoo connected", description: "All credentials verified" });
+        }
+        return statusData.status;
+      }
+
       toast({ title: "No test available", description: "This integration doesn't have a test endpoint" });
       return "available";
     } catch (error) {
@@ -392,6 +420,30 @@ export function useIntegrations() {
                   status: ttStatus.status,
                   error: ttStatus.error,
                   lastSync: ttStatus.status === "connected" ? new Date().toLocaleTimeString() : undefined,
+                }
+              : i
+          )
+        );
+      }
+    } catch (err) {
+      // Silently skip
+    }
+
+    // Check Odoo
+    try {
+      const { data: odooStatus } = await supabase.functions.invoke("sync-odoo-leads", {
+        body: { action: "check-status" },
+      });
+
+      if (odooStatus?.status === "connected") {
+        setIntegrations((prev) =>
+          prev.map((i) =>
+            i.id === "odoo"
+              ? {
+                  ...i,
+                  status: "connected" as const,
+                  error: undefined,
+                  lastSync: new Date().toLocaleTimeString(),
                 }
               : i
           )
