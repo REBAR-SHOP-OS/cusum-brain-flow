@@ -115,29 +115,44 @@ export function useCallAiBridge() {
 
         // Define the audio start function — called ONLY after server confirms overrides
         const beginAudioCapture = () => {
-          startAudioRef.current = null;
+        startAudioRef.current = null;
           if (safetyTimeoutRef.current) {
             clearTimeout(safetyTimeoutRef.current);
             safetyTimeoutRef.current = null;
           }
 
+          let frameCount = 0;
           processor.onaudioprocess = (e) => {
-            if (ws.readyState !== WebSocket.OPEN) return;
-            if (ttsPlayingRef.current) return;
+            frameCount++;
             const samples = e.inputBuffer.getChannelData(0);
 
-            // Audio energy gate: skip silence/echo below threshold
             let sumSq = 0;
             for (let i = 0; i < samples.length; i++) {
               sumSq += samples[i] * samples[i];
             }
             const rms = Math.sqrt(sumSq / samples.length);
-            if (rms < 0.005) return; // too quiet — likely echo or silence
+
+            // Diagnostic: log every ~2s
+            if (frameCount % 16 === 0) {
+              console.log(`AI bridge audio: rms=${rms.toFixed(4)}, ttsPlaying=${ttsPlayingRef.current}, wsOpen=${ws.readyState === WebSocket.OPEN}, activeSources=${activeSourcesRef.current.size}`);
+            }
+
+            if (ws.readyState !== WebSocket.OPEN) return;
+            if (ttsPlayingRef.current) return;
+            // Energy gate removed for diagnosis — let all audio through
 
             const pcm16 = float32ToPcm16(samples);
             const b64 = arrayBufferToBase64(pcm16.buffer as ArrayBuffer);
             ws.send(JSON.stringify({ user_audio_chunk: b64 }));
           };
+
+          // Safety watchdog: unstick ttsPlaying if no active sources for 3s
+          const ttsWatchdog = setInterval(() => {
+            if (ttsPlayingRef.current && activeSourcesRef.current.size === 0) {
+              console.warn("AI bridge: ttsPlaying stuck on true with no active sources, forcing false");
+              ttsPlayingRef.current = false;
+            }
+          }, 3000);
 
           replaceOutgoingTrack(pc, aiDest.stream);
 
@@ -340,6 +355,7 @@ function playAiAudioChunk(
   }
 
   // Mark TTS as playing to mute mic input
+  console.log("AI bridge: ttsPlaying -> true (chunk received)");
   ttsPlayingRef.current = true;
 
   // Upsample from 16kHz to output sample rate (48kHz) via linear interpolation
@@ -363,6 +379,7 @@ function playAiAudioChunk(
       // Echo tail guard: wait 2500ms for remote telephony echo to pass before unmuting capture
       setTimeout(() => {
         if (activeSourcesRef.current.size === 0) {
+          console.log("AI bridge: ttsPlaying -> false (all chunks ended + 800ms)");
           ttsPlayingRef.current = false;
         }
       }, 800);
