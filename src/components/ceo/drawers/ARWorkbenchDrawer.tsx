@@ -2,15 +2,25 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Badge } from "@/components/ui/badge";
 import { DollarSign } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
-import { mockARAgingBuckets } from "../mockData";
 import { motion } from "framer-motion";
+import type { ARAgingBucket } from "@/hooks/useCEODashboard";
 
-interface Props { open: boolean; onClose: () => void; outstandingAR: number; unpaidInvoices: number; }
+interface Props {
+  open: boolean;
+  onClose: () => void;
+  outstandingAR: number;
+  unpaidInvoices: number;
+  arAgingBuckets: ARAgingBucket[];
+}
 
 const barColors = ["hsl(var(--success))", "hsl(var(--primary))", "hsl(var(--warning))", "hsl(210,80%,55%)", "hsl(var(--destructive))"];
 
-export function ARWorkbenchDrawer({ open, onClose, outstandingAR, unpaidInvoices }: Props) {
+export function ARWorkbenchDrawer({ open, onClose, outstandingAR, unpaidInvoices, arAgingBuckets }: Props) {
   const formatCurrency = (v: number) => v >= 1000 ? `$${(v / 1000).toFixed(0)}K` : `$${v}`;
+
+  // Top overdue from aging data
+  const totalOverdue = arAgingBuckets.slice(1).reduce((s, b) => s + b.amount, 0);
+  const overdueCount = arAgingBuckets.slice(1).reduce((s, b) => s + b.count, 0);
 
   return (
     <Sheet open={open} onOpenChange={onClose}>
@@ -35,39 +45,41 @@ export function ARWorkbenchDrawer({ open, onClose, outstandingAR, unpaidInvoices
             </motion.div>
           </div>
 
+          {overdueCount > 0 && (
+            <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
+              ⚠ {overdueCount} invoices overdue totaling {formatCurrency(totalOverdue)}
+            </div>
+          )}
+
           {/* Aging Chart */}
           <div className="space-y-2">
             <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Aging Buckets</h3>
             <div className="h-[180px]">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={mockARAgingBuckets} margin={{ top: 5, right: 5, left: -10, bottom: 0 }}>
+                <BarChart data={arAgingBuckets} margin={{ top: 5, right: 5, left: -10, bottom: 0 }}>
                   <XAxis dataKey="bucket" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v / 1000}K`} />
                   <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 11 }} formatter={(v: number) => [`$${v.toLocaleString()}`, "Amount"]} />
                   <Bar dataKey="amount" radius={[6, 6, 0, 0]} barSize={32}>
-                    {mockARAgingBuckets.map((_, i) => <Cell key={i} fill={barColors[i]} />)}
+                    {arAgingBuckets.map((_, i) => <Cell key={i} fill={barColors[i] || barColors[4]} />)}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
           </div>
 
-          {/* Top Overdue */}
+          {/* Bucket Details */}
           <div className="space-y-2">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Top Overdue Invoices</h3>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Bucket Details</h3>
             <div className="space-y-2">
-              {[
-                { inv: "#4821", customer: "Acme Builders", amount: 12400, days: 45 },
-                { inv: "#4790", customer: "Delta Rebar", amount: 6100, days: 22 },
-                { inv: "#4812", customer: "Summit Steel", amount: 4800, days: 18 },
-              ].map((inv) => (
-                <div key={inv.inv} className="flex items-center justify-between p-3 rounded-lg border border-border/50 bg-muted/10">
+              {arAgingBuckets.filter(b => b.count > 0).map((b, i) => (
+                <div key={b.bucket} className="flex items-center justify-between p-3 rounded-lg border border-border/50 bg-muted/10">
                   <div>
-                    <p className="text-sm font-medium">{inv.inv} — {inv.customer}</p>
-                    <p className="text-xs text-muted-foreground">{inv.days} days overdue</p>
+                    <p className="text-sm font-medium">{b.bucket} days</p>
+                    <p className="text-xs text-muted-foreground">{b.count} invoice{b.count !== 1 ? "s" : ""}</p>
                   </div>
-                  <Badge variant="outline" className="text-destructive border-destructive/40 text-xs">
-                    ${inv.amount.toLocaleString()}
+                  <Badge variant="outline" className={`text-xs ${i >= 3 ? "text-destructive border-destructive/40" : i >= 2 ? "text-amber-500 border-amber-500/40" : "border-primary/40 text-primary"}`}>
+                    ${b.amount.toLocaleString()}
                   </Badge>
                 </div>
               ))}

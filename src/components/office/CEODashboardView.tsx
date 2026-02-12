@@ -497,9 +497,9 @@ export function CEODashboardView() {
       <MeetingIntelligence />
 
       {/* ─── Drilldown Drawers ─── */}
-      <ARWorkbenchDrawer open={openDrawer === "ar"} onClose={() => setOpenDrawer(null)} outstandingAR={m.outstandingAR} unpaidInvoices={m.unpaidInvoices} />
-      <JobRiskDrawer open={openDrawer === "risk"} onClose={() => setOpenDrawer(null)} />
-      <CapacityDrawer open={openDrawer === "capacity"} onClose={() => setOpenDrawer(null)} />
+      <ARWorkbenchDrawer open={openDrawer === "ar"} onClose={() => setOpenDrawer(null)} outstandingAR={m.outstandingAR} unpaidInvoices={m.unpaidInvoices} arAgingBuckets={m.arAgingBuckets} />
+      <JobRiskDrawer open={openDrawer === "risk"} onClose={() => setOpenDrawer(null)} atRiskJobs={m.atRiskJobs} />
+      <CapacityDrawer open={openDrawer === "capacity"} onClose={() => setOpenDrawer(null)} capacityForecast={m.capacityForecast} />
     </div>
   );
 }
