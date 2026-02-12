@@ -1,13 +1,16 @@
 import { useEffect, useRef } from "react";
-import { Phone, PhoneOff, Loader2, Bot, BotOff } from "lucide-react";
+import { Phone, PhoneOff, Loader2, Bot, BotOff, CheckCircle, XCircle, Voicemail, PhoneMissed } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import type { CallAiBridgeState } from "@/hooks/useCallAiBridge";
+import type { CallTaskOutcome } from "@/hooks/useCallTask";
 
 export interface PennyCallData {
   phone: string;
   contact_name: string;
   reason: string;
+  lead_id?: string;
+  contact_id?: string;
 }
 
 interface PennyCallCardProps {
@@ -15,10 +18,15 @@ interface PennyCallCardProps {
   callStatus: "idle" | "registering" | "ready" | "calling" | "in_call" | "error";
   onCall: (phone: string, contactName: string) => void;
   onHangup: () => void;
-  /** AI voice bridge controls (optional — enables "AI Talk" button) */
+  /** AI voice bridge controls */
   bridgeState?: CallAiBridgeState;
   onStartAiBridge?: (callData: PennyCallData) => void;
   onStopAiBridge?: () => void;
+  /** Call task lifecycle */
+  taskStatus?: string;
+  attemptCount?: number;
+  onOutcome?: (outcome: CallTaskOutcome) => void;
+  showOutcome?: boolean;
 }
 
 export function PennyCallCard({
@@ -29,6 +37,10 @@ export function PennyCallCard({
   bridgeState,
   onStartAiBridge,
   onStopAiBridge,
+  taskStatus,
+  attemptCount,
+  onOutcome,
+  showOutcome,
 }: PennyCallCardProps) {
   const isActive = callStatus === "calling" || callStatus === "in_call";
   const isDialing = callStatus === "calling";
@@ -48,11 +60,17 @@ export function PennyCallCard({
       autoTriggeredRef.current = true;
       onStartAiBridge(data);
     }
-    // Reset flag when call ends
     if (callStatus !== "in_call" && callStatus !== "calling") {
       autoTriggeredRef.current = false;
     }
   }, [callStatus, aiActive, bridgeState?.status, onStartAiBridge]);
+
+  const outcomeButtons: { outcome: CallTaskOutcome; label: string; icon: React.ReactNode }[] = [
+    { outcome: "answered", label: "Answered", icon: <CheckCircle className="w-3.5 h-3.5" /> },
+    { outcome: "no_answer", label: "No Answer", icon: <PhoneMissed className="w-3.5 h-3.5" /> },
+    { outcome: "voicemail", label: "Voicemail", icon: <Voicemail className="w-3.5 h-3.5" /> },
+    { outcome: "wrong_number", label: "Wrong #", icon: <XCircle className="w-3.5 h-3.5" /> },
+  ];
 
   return (
     <Card className="border-primary/30 bg-primary/5">
@@ -64,9 +82,14 @@ export function PennyCallCard({
               {data.phone.startsWith("ext:") ? `Ext. ${data.phone.slice(4)}` : data.phone}
             </p>
             <p className="text-xs text-muted-foreground mt-1">{data.reason}</p>
+            {attemptCount != null && attemptCount > 0 && (
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Attempt #{attemptCount}
+              </p>
+            )}
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
-            {/* AI Talk toggle — only show when call is in progress */}
+            {/* AI Talk toggle */}
             {isActive && onStartAiBridge && onStopAiBridge && (
               <Button
                 size="sm"
@@ -101,7 +124,7 @@ export function PennyCallCard({
                 size="sm"
                 className="gap-1.5"
                 onClick={() => onCall(data.phone, data.contact_name)}
-                disabled={callStatus === "registering"}
+                disabled={callStatus === "registering" || showOutcome}
               >
                 {callStatus === "registering" ? (
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -142,6 +165,27 @@ export function PennyCallCard({
             ))}
           </div>
         )}
+
+        {/* Outcome buttons — shown after call ends */}
+        {showOutcome && onOutcome && (
+          <div className="border-t pt-2 mt-2">
+            <p className="text-xs text-muted-foreground mb-1.5">How did the call go?</p>
+            <div className="flex flex-wrap gap-1.5">
+              {outcomeButtons.map((btn) => (
+                <Button
+                  key={btn.outcome}
+                  size="sm"
+                  variant="outline"
+                  className="gap-1 text-xs h-7"
+                  onClick={() => onOutcome(btn.outcome)}
+                >
+                  {btn.icon}
+                  {btn.label}
+                </Button>
+              ))}
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -160,6 +204,8 @@ export function parsePennyCalls(text: string): { cleanText: string; calls: Penny
             phone: data.phone,
             contact_name: data.contact_name,
             reason: data.reason || "",
+            lead_id: data.lead_id,
+            contact_id: data.contact_id,
           });
         }
       } catch (e) {
