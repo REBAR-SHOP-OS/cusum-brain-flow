@@ -1,187 +1,129 @@
 
 
-# ERP Audit Report — Rebar.Shop (2026-02-12)
+# Security Hardening Sprint — 5 Priorities
 
-## Executive Summary
-
-The Rebar ERP (CUSUM) runs on Lovable Cloud with a full backend stack. This audit fills the evidence gaps from your initial assessment across all 8 control areas.
+This plan implements the 5 security fixes identified in the audit, ordered by criticality.
 
 ---
 
-## 1. INVENTORY (AU-2 / Asset Management)
+## Priority 1: Lock Down `profiles.company_id` (Critical)
 
-| Item | Evidence |
-|------|----------|
-| Total public tables | **87** |
-| RLS enabled | **All tables** (0 tables with RLS disabled) |
-| Largest table | `lead_activities` — 43,954 rows, 38 MB |
-| Total DB size (top 20) | ~82 MB across top 20 tables |
-| Edge functions deployed | **57** functions |
-| Storage buckets | **8** (4 public, 4 private) |
-| Active integrations | **10** connections (Facebook, Instagram x2, Gmail x2, Google Calendar, Drive, YouTube, Analytics) |
+**Current state:**
+- `protect_profile_company_id` trigger EXISTS and blocks non-admin updates -- GOOD
+- `protect_profile_user_id` trigger EXISTS and blocks non-admin updates -- GOOD
+- The "Users can update own profile" policy has NO column restriction -- users can attempt to SET company_id, but the trigger catches it
 
-### Top Tables by Size
-| Table | Rows | Size |
-|-------|------|------|
-| lead_activities | 43,954 | 38 MB |
-| chat_messages | 139 | 18 MB |
-| accounting_mirror | 1,916 | 7 MB |
-| lead_files | 16,588 | 6 MB |
-| leads | 2,712 | 3.5 MB |
-| communications | 758 | 3.2 MB |
-| quotes | 2,586 | 2 MB |
-| customers | 2,733 | 936 kB |
-| contacts | 2,679 | 792 kB |
+**Assessment: Already protected.** The trigger-based guard is solid. However, we should add a belt-and-suspenders RLS `WITH CHECK` to the user self-update policy.
+
+**Changes:**
+- Migration: Replace the "Users can update own profile" UPDATE policy with one that adds `WITH CHECK (company_id = OLD.company_id)` or restrict updatable columns via a view
+- Since Postgres RLS doesn't support column-level restrictions natively, the trigger approach is the correct one. We will add an explicit WITH CHECK to the update policy to double-lock it.
 
 ---
 
-## 2. RBAC / ACCESS CONTROL (AC-6)
+## Priority 2: Remove Employee Self-Access to `employee_salaries` (High)
 
-| Role | Count | Users |
-|------|-------|-------|
-| admin | 4 | Radin, Sattar, Vicky, (1 unmatched) |
-| accounting | 1 | Vicky Anderson |
-| sales | 1 | Behnam Rajabifar |
-| office | 1 | (implied) |
-| workshop | 3 | Kourosh Zand, AI Assistant, (1 unmatched) |
+**Current state:**
+- Admin-only SELECT/INSERT/UPDATE/DELETE policies exist -- GOOD
+- BUT there is also a "Users can view own salary" policy that lets employees read their own row via `profile_id IN (SELECT id FROM profiles WHERE user_id = auth.uid())` -- THIS IS THE RISK
 
-| Check | Status |
-|-------|--------|
-| Roles in separate table (`user_roles`) | YES |
-| `has_role()` security definer function | YES |
-| `has_any_role()` multi-role check | YES |
-| Profile company_id protection trigger | YES |
-| Profile user_id protection trigger | YES |
-| Super-admin hardcoded check | `sattar@rebar.shop` in edge functions |
-| PIN-protected admin access | YES (7671) |
-| Kourosh blocked from office roles | Enforced in code |
-| Total profiles | 12 (9 linked to auth, 3 orphaned) |
-
-### Findings
-- **3 orphaned profiles** (no `user_id` link) — should be investigated
-- Super-admin check is hardcoded email, not role-based — acceptable for single-owner but noted
+**Changes:**
+1. **Migration:** Drop the "Users can view own salary" RLS policy
+2. **Migration:** Add `audit_salary_access` trigger to `employee_salaries` for SELECT auditing (the function exists but no trigger is attached)
+3. No code changes needed -- `useSalaries()` already handles permission errors gracefully (returns `[]`)
 
 ---
 
-## 3. AUDIT LOGS (AU-2)
+## Priority 3: Make Public Storage Buckets Private + Signed URLs (High)
 
-| Log Store | Records | Status |
-|-----------|---------|--------|
-| `events` | 364 | Active (Feb 7-11) |
-| `command_log` | 0 | Schema exists, no entries |
-| `contact_access_log` | 0 | Schema exists, triggers wired |
-| `financial_access_log` | 0 | Schema exists, triggers wired |
-| `payroll_audit_log` | 0 | Schema exists, used in code |
+**Current state:**
+- `shape-schematics` = PUBLIC (used for AI vision schematic uploads)
+- `social-media-assets` = PUBLIC (used for generated social content)
+- `social-images` = PUBLIC (used for AI-generated images)
+- `avatars` = PUBLIC (profile photos)
 
-### Findings
-- **CONCERN**: `contact_access_log`, `financial_access_log`, and `payroll_audit_log` have 0 rows despite triggers being defined. Either the triggers are not firing or no relevant operations have occurred yet.
-- `events` table is the primary activity log (364 entries over 5 days)
-- `command_log` is empty — the command/NLP pipeline may not be in production use yet
+**Assessment:**
+- `avatars` can stay public (low risk, standard pattern)
+- `shape-schematics` should go PRIVATE (proprietary fabrication data)
+- `social-media-assets` and `social-images` must stay public because they are used as direct URLs in social media posts (Facebook, LinkedIn, TikTok publish flows require publicly accessible image URLs)
 
----
-
-## 4. INTEGRATION HEALTH (SI-2)
-
-| Integration | Status | Last Sync |
-|-------------|--------|-----------|
-| QuickBooks (QB -> ERP) | Connected | Feb 11, 19:35 UTC |
-| Gmail (saurabh) | Connected | Feb 9 |
-| Gmail (kourosh) | Connected | Feb 9 |
-| Facebook x2 | Connected | Feb 8-9 |
-| Instagram x2 | Connected | Feb 8-9 |
-| Google Calendar | Connected | Feb 9 |
-| Google Drive | Connected | Feb 9 |
-| YouTube | Connected | Feb 9 |
-| Google Analytics | Connected | Feb 9 |
-| RingCentral | Edge function active (boot/shutdown cycles every 60s) |
-| Odoo (legacy) | Secrets configured, sync functions deployed |
-
-### Findings
-- RingCentral edge function is boot-cycling every ~60s (scheduled sync or health-check pattern — normal)
-- Auth logs show repeated `bad_jwt` / `missing sub claim` errors from `cusum-brain-flow.lovable.app` every minute — this is the published app polling `/user` with an expired or anonymous token. **Not a security breach** but indicates a session-refresh issue on the live site.
+**Changes:**
+1. **Migration:** Set `shape-schematics` bucket to `public = false`
+2. **Code:** Update `AiVisionUploadDialog.tsx` and `useShapeSchematics` to use signed URLs instead of `getPublicUrl()`
+3. **Code:** Create a `getSignedSchematicUrl()` utility similar to existing `getSignedFileUrl()`
 
 ---
 
-## 5. SECURITY / INTEGRITY (SI-7)
+## Priority 4: Add Input Validation to Critical Edge Functions (Medium)
 
-| Control | Status |
-|---------|--------|
-| RLS on all public tables | YES (0 exceptions) |
-| Gmail tokens AES-256 encrypted | YES (TOKEN_ENCRYPTION_KEY secret set) |
-| RC tokens deny-all for clients | YES (server-side only) |
-| PII masking via `profiles_safe` / `contacts_safe` views | YES |
-| Bulk access alerting (>50 contacts) | YES (`log_contact_bulk_access` function) |
-| Rate limiting | YES (`check_rate_limit` + `rate_limit_entries` table) |
-| Storage signed URLs | Private buckets configured (estimation-files, clearance-photos, face-enrollments, meeting-recordings) |
-| Service role key server-side only | YES (edge functions only) |
+**Current state:** 0 out of 40 edge functions that parse `req.json()` use Zod or any schema validation. All trust raw input.
 
-### Findings
-- Security posture is strong for the application tier
-- No CVE scan has been performed on dependencies (57 npm packages + Deno imports)
+**Approach:** Add Zod validation to the 10 most security-sensitive functions first (those that write to DB or call external APIs with user-supplied data):
 
----
+| Function | Risk | Validation Needed |
+|----------|------|-------------------|
+| `convert-quote-to-order` | Financial | UUID for quoteId |
+| `log-machine-run` | Production data | Full schema (machineRunId, process, status, quantities) |
+| `manage-machine` | Equipment control | action enum + machineId UUID |
+| `manage-inventory` | Asset management | action enum + item fields |
+| `smart-dispatch` | Logistics | action enum + route fields |
+| `gmail-send` | Email sending | to/subject/body validation |
+| `social-publish` | External API | platform enum + content fields |
+| `face-recognize` | Biometric | base64 format + companyId UUID |
+| `handle-command` | NLP/AI | input string length cap |
+| `generate-video` | Expensive API | action enum + prompt length cap |
 
-## 6. PERFORMANCE
-
-| Metric | Value |
-|--------|-------|
-| Largest table | 43,954 rows (lead_activities) — well within limits |
-| DB checkpoint frequency | ~5 min intervals (healthy) |
-| Checkpoint duration | 1-6 seconds (normal) |
-| WAL recycling | Active, 2-3 files per cycle |
-| No `pg_stat_statements` evidence | Cannot verify slow queries from available tools |
+**Changes per function:**
+- Import Zod from esm.sh
+- Define schema for request body
+- Parse with `.safeParse()` before any logic
+- Return 400 with validation errors on failure
 
 ---
 
-## 7. BACKUP / DR (CP-9)
+## Priority 5: Narrow Contacts RLS + Verify Audit Logging (Medium)
 
-| Item | Status |
-|------|--------|
-| Lovable Cloud automated backups | Platform-managed (not user-accessible) |
-| RPO/RTO defined | NOT SET |
-| Restore test performed | NO EVIDENCE |
-| Manual export capability | `get_table_stats` RPC + `diagnostic-logs` edge function available |
+**Current state:**
+- Sales/accounting can read contacts if they have ANY communication or lead assignment -- broad
+- `audit_contact_changes` trigger is attached for INSERT/UPDATE/DELETE -- fires on writes
+- `contact_access_log` has 0 rows -- likely because no writes have occurred via the client, or SELECT reads are not logged (triggers can't fire on SELECT)
 
-### Findings
-- **GAP**: No documented RPO/RTO targets
-- **GAP**: No restore test evidence
-- Backups are managed by the platform infrastructure — user cannot independently verify
+**Assessment:**
+- The existing RLS is actually reasonable for a small team (5-12 people) -- it scopes to company_id AND requires a relational link
+- The `contact_access_log` being empty is expected: Postgres triggers cannot fire on SELECT. The `log_contact_access()` function must be called explicitly from application code
+- The real gap is that no code calls `log_contact_access()` on reads
 
----
-
-## 8. VULNERABILITY / CVE
-
-| Item | Status |
-|------|--------|
-| Dependency CVE scan | NOT PERFORMED |
-| npm packages | 57 direct dependencies |
-| Deno edge function imports | ~57 functions with external imports |
-| Known auth issue | `bad_jwt` polling on published site (session handling, not a vulnerability) |
+**Changes:**
+1. **Code:** Add `supabase.rpc('log_contact_bulk_access', { _count, _action: 'list_read' })` call in the contacts list hook when fetching contacts
+2. **Code:** Add `supabase.rpc('log_contact_access', { _action: 'detail_read', _contact_id })` call when viewing a single contact
+3. **Migration:** No RLS changes needed -- current policy is adequate for team size. Document the decision.
 
 ---
 
-## Priority Action Items
+## Technical Implementation Sequence
 
-| # | Issue | Severity | Owner | ETA |
-|---|-------|----------|-------|-----|
-| 1 | Investigate 3 orphaned profiles | Medium | Admin | 1 day |
-| 2 | Fix `bad_jwt` polling on published site | Medium | Dev | 1-2 days |
-| 3 | Verify audit triggers are firing (contact/financial/payroll logs all empty) | High | Dev | 1 day |
-| 4 | Define RPO/RTO targets | Critical | IT/Mgmt | 1-3 days |
-| 5 | Run npm audit + Deno dependency scan | Medium | Dev | 1 day |
-| 6 | Document backup/restore procedure | Critical | IT | 2-7 days |
-| 7 | Populate `command_log` or remove dead code | Low | Dev | 3 days |
+```text
+Step 1: Migration (all DB changes in one migration)
+  +-- Drop "Users can view own salary" policy
+  +-- Add WITH CHECK to profiles update policy
+  +-- Set shape-schematics bucket to private
+
+Step 2: Edge Functions (parallel, 10 functions)
+  +-- Add Zod validation to each function
+  +-- Deploy all at once
+
+Step 3: Frontend Code Changes
+  +-- Update shape-schematics to use signed URLs
+  +-- Add contact access logging RPC calls
+  +-- Update useSalaries() error message for employees
+```
 
 ---
 
-## Instance Record (filled)
+## What This Does NOT Change
 
-| Field | Value |
-|-------|-------|
-| Instance | CUSUM Rebar ERP |
-| Env | Production (Lovable Cloud) |
-| Host | `cusum-brain-flow.lovable.app` |
-| Ver | React 18 + Vite + Supabase |
-| Mods | 57 edge functions, 87 tables, 8 storage buckets |
-| Owner | sattar@rebar.shop (super-admin) |
+- `social-media-assets` and `social-images` remain public (required for external platform publishing)
+- `avatars` remain public (standard pattern, low-risk)
+- Contacts RLS stays as-is (adequate for current team size)
+- No new tables created (existing `contact_access_log`, `financial_access_log` are sufficient)
 
