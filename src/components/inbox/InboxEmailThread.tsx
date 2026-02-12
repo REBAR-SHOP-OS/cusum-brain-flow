@@ -312,7 +312,7 @@ export function InboxEmailThread({ communications, currentEmailId, highlightedId
                         {/* Email / SMS Body */}
                         <div className="mt-2 rounded-lg border border-border overflow-hidden">
                           <div
-                            className="p-3 bg-white text-zinc-900 text-sm [&_a]:text-blue-600 [&_a]:underline [&_img]:max-w-full [&_img]:h-auto [&_table]:border-collapse [&_td]:p-1"
+                            className="p-3 bg-card text-card-foreground text-sm [&_a]:text-primary [&_a]:underline [&_img]:max-w-full [&_img]:h-auto [&_table]:border-collapse [&_td]:p-1"
                             style={{ lineHeight: "1.5" }}
                             dangerouslySetInnerHTML={{
                               __html: DOMPurify.sanitize(
