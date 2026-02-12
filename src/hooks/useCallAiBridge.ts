@@ -8,6 +8,13 @@ export interface CallAiBridgeState {
   transcript: Array<{ role: "ai" | "caller"; text: string }>;
 }
 
+export interface CallBridgeData {
+  agentName: string;
+  contactName: string;
+  reason: string;
+  phone: string;
+}
+
 /**
  * Bridges a live RingCentral WebRTC call with an ElevenLabs Conversational AI agent.
  *
@@ -34,14 +41,15 @@ export function useCallAiBridge() {
         rtcPeerConnection: RTCPeerConnection;
         audioElement?: HTMLAudioElement;
       },
-      context?: string
+      callData?: CallBridgeData
     ) => {
       try {
         setState((s) => ({ ...s, status: "connecting", transcript: [] }));
 
-        // 1. Get signed URL from edge function
+        // 1. Get signed URL from edge function (phone_call mode for outbound calls)
         const { data, error } = await supabase.functions.invoke(
-          "elevenlabs-conversation-token"
+          "elevenlabs-conversation-token",
+          { body: { mode: callData ? "phone_call" : "voice_chat" } }
         );
         if (error || !data?.signed_url) {
           throw new Error(data?.error || "Failed to get AI voice token");
@@ -78,21 +86,25 @@ export function useCallAiBridge() {
         const aiDest = audioCtx.createMediaStreamDestination();
         aiDestRef.current = aiDest;
 
-        // 6. Connect to ElevenLabs WebSocket
+        // 6. Build conversation overrides for phone call mode
+        const overrides = callData ? buildPhoneCallOverrides(callData) : undefined;
+
+        // 7. Connect to ElevenLabs WebSocket
         const ws = new WebSocket(data.signed_url);
         wsRef.current = ws;
 
         ws.onopen = () => {
           console.log("AI call bridge: WS connected");
 
-          // Send context about why this call was made
-          if (context) {
+          // Send conversation_initiation_client_data with overrides BEFORE audio
+          if (overrides) {
             ws.send(
               JSON.stringify({
-                type: "contextual_update",
-                text: context,
+                type: "conversation_initiation_client_data",
+                conversation_config_override: overrides,
               })
             );
+            console.log("AI bridge: sent phone call overrides", overrides);
           }
 
           // Start sending remote audio to ElevenLabs
@@ -157,6 +169,33 @@ export function useCallAiBridge() {
   }, []);
 
   return { bridgeState: state, startBridge, stopBridge };
+}
+
+// ─── phone call overrides ────────────────────────────────────────────────────
+
+function buildPhoneCallOverrides(callData: CallBridgeData) {
+  const { agentName, contactName, reason, phone } = callData;
+
+  return {
+    agent: {
+      prompt: {
+        prompt: `You are ${agentName}, an AI assistant calling on behalf of Rebar Shop. You have placed an outbound phone call to ${contactName} at ${phone}.
+
+PURPOSE OF THIS CALL: ${reason}
+
+CRITICAL INSTRUCTIONS:
+- You are calling THEM. They did not call you. Introduce yourself immediately.
+- Start by saying who you are and why you're calling.
+- Be professional, friendly, and concise.
+- If they ask who you are, explain you are an AI assistant calling from Rebar Shop.
+- Stay focused on the purpose of the call.
+- If they want to speak to a human, let them know someone from Rebar Shop will follow up.
+- Keep responses brief and conversational — this is a phone call, not an email.`,
+      },
+      first_message: `Hi, this is ${agentName} calling from Rebar Shop. Am I speaking with ${contactName}? I'm reaching out regarding ${reason.length > 100 ? reason.substring(0, 100) + "..." : reason}.`,
+      language: "en",
+    },
+  };
 }
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -225,7 +264,6 @@ function replaceOutgoingTrack(
     return;
   }
 
-  // Save original track so we can restore it later
   const aiTrack = aiStream.getAudioTracks()[0];
   if (aiTrack) {
     audioSender.replaceTrack(aiTrack).catch((e) => {

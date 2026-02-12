@@ -9,6 +9,13 @@ serve(async (req) => {
   try {
     const { userId, serviceClient } = await requireAuth(req);
 
+    // Parse optional mode from request body
+    let mode = "voice_chat";
+    try {
+      const body = await req.json();
+      if (body?.mode) mode = body.mode;
+    } catch { /* no body or invalid JSON – default mode */ }
+
     // Check: user must be admin OR have voice_enabled in profile
     const { data: profile, error: profileError } = await serviceClient
       .from("profiles")
@@ -36,7 +43,14 @@ serve(async (req) => {
     }
 
     const apiKey = Deno.env.get("ELEVENLABS_API_KEY");
-    const agentId = Deno.env.get("ELEVENLABS_AGENT_ID");
+    
+    // Use a dedicated phone agent ID for outbound calls, fall back to default
+    const phoneAgentId = Deno.env.get("ELEVENLABS_PHONE_AGENT_ID");
+    const defaultAgentId = Deno.env.get("ELEVENLABS_AGENT_ID");
+    
+    const agentId = mode === "phone_call" && phoneAgentId
+      ? phoneAgentId
+      : defaultAgentId;
 
     if (!apiKey || !agentId) {
       return json({ error: "ElevenLabs not configured" }, 500);
@@ -56,6 +70,7 @@ serve(async (req) => {
     const { signed_url } = await response.json();
     return json({
       signed_url,
+      mode,
       preferred_language: profile.preferred_language ?? "en",
       preferred_voice_id: profile.preferred_voice_id ?? null,
     });

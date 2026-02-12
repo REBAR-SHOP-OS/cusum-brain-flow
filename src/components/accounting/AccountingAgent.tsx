@@ -384,10 +384,15 @@ RULES:
                         onCall={(phone, name) => webPhoneActions.call(phone, name)}
                         onHangup={() => webPhoneActions.hangup()}
                         bridgeState={bridgeState}
-                        onStartAiBridge={() => {
+                        onStartAiBridge={(callData) => {
                           const session = webPhoneActions.getCallSession();
                           if (session) {
-                            startBridge(session, `You are Penny, calling ${call.contact_name}. Reason: ${call.reason}. Be professional, concise, and helpful.`);
+                            startBridge(session, {
+                              agentName: "Penny",
+                              contactName: callData.contact_name,
+                              reason: callData.reason,
+                              phone: callData.phone,
+                            });
                           }
                         }}
                         onStopAiBridge={stopBridge}
