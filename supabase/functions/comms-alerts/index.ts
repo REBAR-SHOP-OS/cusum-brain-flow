@@ -18,7 +18,96 @@ interface CommsConfig {
   no_act_global: boolean;
 }
 
-// Get Gmail access token for ai@rebar.shop (internal sender)
+// ── Layer 1: Skip-sender patterns (no-reply, marketing, system senders) ──
+const SKIP_SENDERS: string[] = [
+  "noreply@", "no-reply@", "mailer-daemon@", "postmaster@",
+  "@accounts.google.com", "@google.com",
+  "@stripe.com", "@linkedin.com", "@facebookmail.com",
+  "@instagram.com", "@twitter.com", "@x.com",
+  "@newsletter.", "@marketing.", "@notify.", "@notifications.",
+  "@synologynotification.com", "@ringcentral.com",
+  "@amazonses.com", "@amazon.com", "@amazon.ca",
+  "@quickbooks.intuit.com", "@intuit.com",
+  "@github.com", "@gitlab.com",
+  "@openai.com", "@anthropic.com",
+  "@zoom.us", "@calendly.com",
+  "@slack.com", "@atlassian.com",
+  "@hubspot.com", "@mailchimp.com", "@sendgrid.net",
+  "@canva.com", "@figma.com", "@notion.so",
+  "@godaddy.com", "@namecheap.com",
+  "updates@", "info@", "support@", "billing@", "team@",
+  "notification@", "notifications@", "alert@", "alerts@",
+  "digest@", "news@", "promo@", "promotions@",
+  "donotreply@", "do-not-reply@", "bounce@",
+];
+
+// ── Layer 4: Subject-based spam / system detection ──
+const SKIP_SUBJECT_PATTERNS: RegExp[] = [
+  /% off/i, /\bdeal(s)?\b/i, /\bcheap\b/i, /\bdiscount\b/i,
+  /unsubscribe/i, /\bopt.out\b/i,
+  /\[CMS\]/i, /\[Task Update\]/i, /Daily Report/i, /Daily Brief/i,
+  /\bnewsletter\b/i, /\bwebinar\b/i,
+  /pick up where you left off/i,
+  /unread messages?$/i,
+  /Your messages\. Your Gmail/i,
+  /\bflight\b.*\bdeal/i,
+  /\bSynology\b/i,
+];
+
+// Bot / system recipient addresses that should never receive alerts about themselves
+const BOT_RECIPIENTS = ["ai@rebar.shop"];
+
+/**
+ * Determines whether an alert should be skipped for a given communication.
+ * Returns a reason string if skipped, or null if the alert should proceed.
+ */
+function shouldSkipAlert(
+  comm: { from_address?: string; to_address?: string; subject?: string },
+  internalDomain: string,
+): string | null {
+  const from = (comm.from_address || "").toLowerCase();
+  const to = (comm.to_address || "").toLowerCase();
+  const subject = comm.subject || "";
+
+  // Layer 1: Known spam / system senders
+  for (const pattern of SKIP_SENDERS) {
+    if (from.includes(pattern)) return `skip_sender:${pattern}`;
+  }
+
+  // Layer 2: Internal emails (same domain)
+  if (internalDomain && from.includes(`@${internalDomain.replace(/^@/, "").toLowerCase()}`)) {
+    return "internal_sender";
+  }
+
+  // Bot recipients — don't alert about emails TO the bot
+  for (const bot of BOT_RECIPIENTS) {
+    if (to.includes(bot)) return `bot_recipient:${bot}`;
+  }
+
+  // Layer 4: Subject-based spam detection
+  for (const rx of SKIP_SUBJECT_PATTERNS) {
+    if (rx.test(subject)) return `skip_subject:${rx.source}`;
+  }
+
+  return null;
+}
+
+// ── Layer 3 helper: pick only the highest breached threshold ──
+function highestBreachedThreshold(
+  receivedAt: string,
+  thresholds: number[],
+  now: Date,
+): number | null {
+  const age = (now.getTime() - new Date(receivedAt).getTime()) / 3_600_000; // hours
+  const sorted = [...thresholds].sort((a, b) => b - a); // descending
+  for (const t of sorted) {
+    if (age >= t) return t;
+  }
+  return null;
+}
+
+// ── Gmail helpers (unchanged) ──
+
 async function getInternalSenderToken(svc: ReturnType<typeof createClient>): Promise<string> {
   const { data: profile } = await svc
     .from("profiles")
@@ -165,54 +254,68 @@ serve(async (req) => {
 
     const now = new Date();
     const alerts: { type: string; commId: string; owner: string; agent: string; comm: any }[] = [];
+    let skippedCount = 0;
 
-    // --- Response-time alerts ---
-    for (const hours of config.response_thresholds_hours) {
-      const threshold = new Date(now.getTime() - hours * 3600 * 1000);
-      const alertType = `response_time_${hours}h`;
+    // --- Response-time alerts (with Layer 1-4 filtering + Layer 3 escalation) ---
 
-      // Inbound emails older than threshold with no outbound reply in same thread
-      const { data: unanswered } = await svc
-        .from("communications")
-        .select("id, from_address, to_address, subject, body_preview, received_at, thread_id")
-        .eq("direction", "inbound")
-        .eq("source", "gmail")
-        .lt("received_at", threshold.toISOString())
-        .gte("received_at", new Date(now.getTime() - 48 * 3600 * 1000).toISOString()) // only last 48h
-        .limit(50);
+    // Gather ALL unanswered inbound emails from last 48h
+    const oldestWindow = new Date(now.getTime() - 48 * 3600 * 1000);
+    const { data: unanswered } = await svc
+      .from("communications")
+      .select("id, from_address, to_address, subject, body_preview, received_at, thread_id")
+      .eq("direction", "inbound")
+      .eq("source", "gmail")
+      .gte("received_at", oldestWindow.toISOString())
+      .limit(200);
 
-      for (const comm of unanswered || []) {
-        // Check if a reply exists
-        if (comm.thread_id) {
-          const { count } = await svc
-            .from("communications")
-            .select("id", { count: "exact", head: true })
-            .eq("thread_id", comm.thread_id)
-            .eq("direction", "outbound")
-            .gt("received_at", comm.received_at);
-          if (count && count > 0) continue; // replied
-        }
-
-        // Check if alert already exists
-        const { count: alertExists } = await svc
-          .from("comms_alerts")
-          .select("id", { count: "exact", head: true })
-          .eq("communication_id", comm.id)
-          .eq("alert_type", alertType);
-        if (alertExists && alertExists > 0) continue;
-
-        // Find owner from to_address
-        const ownerEmail = comm.to_address?.toLowerCase() || "";
-        const pairing = pairingMap.get(ownerEmail);
-
-        alerts.push({
-          type: alertType,
-          commId: comm.id,
-          owner: ownerEmail,
-          agent: (pairing as any)?.agent_name || "Vizzy",
-          comm,
-        });
+    for (const comm of unanswered || []) {
+      // ── Layers 1/2/4: Should we skip this comm entirely? ──
+      const skipReason = shouldSkipAlert(comm, config.internal_domain);
+      if (skipReason) {
+        skippedCount++;
+        continue;
       }
+
+      // ── Layer 3: Only fire the HIGHEST breached threshold ──
+      const highestThreshold = highestBreachedThreshold(
+        comm.received_at,
+        config.response_thresholds_hours,
+        now,
+      );
+      if (!highestThreshold) continue; // not old enough for any threshold
+
+      const alertType = `response_time_${highestThreshold}h`;
+
+      // Check if a reply exists in the thread
+      if (comm.thread_id) {
+        const { count } = await svc
+          .from("communications")
+          .select("id", { count: "exact", head: true })
+          .eq("thread_id", comm.thread_id)
+          .eq("direction", "outbound")
+          .gt("received_at", comm.received_at);
+        if (count && count > 0) continue; // replied
+      }
+
+      // Check if THIS specific alert already exists (dedup)
+      const { count: alertExists } = await svc
+        .from("comms_alerts")
+        .select("id", { count: "exact", head: true })
+        .eq("communication_id", comm.id)
+        .eq("alert_type", alertType);
+      if (alertExists && alertExists > 0) continue;
+
+      // Find owner from to_address
+      const ownerEmail = comm.to_address?.toLowerCase() || "";
+      const pairing = pairingMap.get(ownerEmail);
+
+      alerts.push({
+        type: alertType,
+        commId: comm.id,
+        owner: ownerEmail,
+        agent: (pairing as any)?.agent_name || "Vizzy",
+        comm,
+      });
     }
 
     // --- Missed call alerts ---
@@ -301,20 +404,20 @@ serve(async (req) => {
     }
 
     // Log event
-    if (alerts.length > 0) {
+    if (alerts.length > 0 || skippedCount > 0) {
       await svc.from("activity_events").insert({
         company_id: "a0000000-0000-0000-0000-000000000001",
         entity_type: "comms_alert",
         entity_id: "system",
         event_type: "alerts_processed",
-        description: `Processed ${alerts.length} alerts: ${results.filter(r => r.sent).length} sent`,
-        metadata: { alerts_count: alerts.length, results },
+        description: `Processed ${alerts.length} alerts (${skippedCount} skipped by smart filter): ${results.filter(r => r.sent).length} sent`,
+        metadata: { alerts_count: alerts.length, skipped_count: skippedCount, results },
         source: "system",
       });
     }
 
     return new Response(
-      JSON.stringify({ success: true, alertsProcessed: alerts.length, results }),
+      JSON.stringify({ success: true, alertsProcessed: alerts.length, skipped: skippedCount, results }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
