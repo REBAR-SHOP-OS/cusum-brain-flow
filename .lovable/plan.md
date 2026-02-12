@@ -1,57 +1,69 @@
 
 
-# Add Gemini & ChatGPT Image Generator Icons to Pixel Toolbar
+# Restrict Vizzy to Super Admin + Add RingCentral Access
 
 ## What Changes
-Replace the single image generator icon in the Pixel agent toolbar with **two separate icons** — one for **Gemini** and one for **ChatGPT** — so the user can choose which LLM generates their image.
 
-## Visual Result
-The toolbar will show two new icons side by side (only in the Pixel agent):
-- **Gemini icon** — opens the image generator dialog pre-set to Gemini
-- **ChatGPT icon** — opens the image generator dialog pre-set to ChatGPT/DALL-E
+1. **Vizzy visible only to you (sattar@rebar.shop)** — other users won't see Vizzy in the agent grid, can't access `/vizzy`, and won't see the voice chat icon
+2. **Remove voice chat icon from all agent chat rooms** for everyone except you
+3. **Give Vizzy RingCentral access** to make calls and send SMS on your behalf
 
-## Files to Modify (Pixel-only, no other parts of the app)
+## Scope Guarantee
+- No changes to PIXEL or any other agent's logic/UI
+- Only Vizzy-related visibility and RingCentral integration
 
-### 1. `src/pages/AgentWorkspace.tsx`
-- Replace the single `ImageIcon` button (lines 289-297) with **two buttons**:
-  - A Gemini button (using a `Sparkles` or custom SVG icon) that opens ImageGeneratorDialog with `provider="gemini"`
-  - A ChatGPT button (keeping the existing `ImageIcon` or using a distinct icon) that opens with `provider="chatgpt"`
-- Add a new state `imageGenProvider` to track which provider was selected
-- Pass the provider to `ImageGeneratorDialog`
+---
 
-### 2. `src/components/social/ImageGeneratorDialog.tsx`
-- Accept new prop `provider?: "gemini" | "chatgpt"`
-- When `provider="gemini"`: show only Gemini models (using Lovable AI gateway with `google/gemini-2.5-flash-image` and `google/gemini-3-pro-image-preview`)
-- When `provider="chatgpt"`: show existing models (GPT Image 1, DALL-E 3) — no changes to current behavior
-- Update `handleGenerate` to route Gemini requests to a new edge function
+## File Changes
 
-### 3. `supabase/functions/generate-image-gemini/index.ts` (NEW file)
-- New edge function that calls Lovable AI gateway (`https://ai.gateway.lovable.dev/v1/chat/completions`) with `google/gemini-2.5-flash-image` or `google/gemini-3-pro-image-preview`
-- Uses `LOVABLE_API_KEY` (already auto-provisioned, no user input needed)
-- Returns the generated image as a base64 data URI
-- Includes auth verification and CORS headers matching the existing pattern
+### 1. `src/pages/Home.tsx`
+- Filter the `helpers` array: hide the "assistant" (Vizzy) card unless user is super admin
+- Only pass `onLiveChatClick` to `ChatInput` if user is super admin
 
-### 4. `supabase/config.toml`
-- Will be auto-updated when the new edge function is deployed (no manual edit needed)
+### 2. `src/pages/AgentWorkspace.tsx`
+- Only pass `onLiveChatClick` to `ChatInput` if user is super admin
+- If `agentId === "assistant"` and user is NOT super admin, redirect away
+
+### 3. `src/pages/VizzyPage.tsx`
+- Add super admin guard: if not `sattar@rebar.shop`, redirect to `/home`
+
+### 4. `supabase/functions/ai-agent/index.ts`
+- Add RingCentral tools to Vizzy's system prompt so she knows she can make calls/send SMS
+- When Vizzy decides to call or SMS, return a structured action the frontend can execute
+
+### 5. `supabase/functions/ringcentral-action/index.ts` (NEW)
+- New edge function that Vizzy can trigger to:
+  - **Make a call** via RingCentral API (using the super admin's stored OAuth token)
+  - **Send an SMS** via RingCentral API
+- Uses existing `user_ringcentral_tokens` table for auth
+- Requires human confirmation before executing (safety rule)
+
+---
 
 ## Technical Details
 
-**Gemini image generation flow:**
+### Vizzy Visibility Guard
 ```text
-User clicks Gemini icon
-  -> ImageGeneratorDialog opens (provider=gemini)
-  -> User enters prompt, clicks Generate
-  -> Calls generate-image-gemini edge function
-  -> Edge function calls Lovable AI gateway with google/gemini-2.5-flash-image
-  -> Returns base64 image -> displayed in dialog
+useSuperAdmin() hook (already exists) returns { isSuperAdmin }
+- Home.tsx: filter helpers list, conditionally show voice icon
+- AgentWorkspace.tsx: conditionally show voice icon, block /agent/assistant
+- VizzyPage.tsx: redirect non-super-admin users
 ```
 
-**ChatGPT flow remains unchanged** — uses existing `generate-image` edge function with OpenAI API.
+### RingCentral Integration Flow
+```text
+CEO asks Vizzy: "Call John at 416-555-1234"
+  -> Vizzy returns structured action: { type: "ringcentral_call", phone: "4165551234" }
+  -> Frontend shows confirmation dialog: "Vizzy wants to call 416-555-1234. Approve?"
+  -> On approval, calls ringcentral-action edge function
+  -> Edge function uses CEO's RC OAuth token to initiate the call/SMS
+```
 
-**Icon design:** Two small, recognizable icons side by side. Gemini will use a diamond/sparkle-style icon, ChatGPT will use the existing image icon or a chat-bubble style icon. Both will have tooltips ("Generate with Gemini" / "Generate with ChatGPT").
+### RingCentral API Endpoints Used
+- **Make call**: `POST /restapi/v1.0/account/~/telephony/sessions` (RingOut)
+- **Send SMS**: `POST /restapi/v1.0/account/~/extension/~/sms`
 
-## Scope Guarantee
-- Only Pixel agent toolbar and its ImageGeneratorDialog are modified
-- No other agents, pages, or app functionality are touched
-- The existing ChatGPT generation path is completely preserved
-
+### Safety
+- All RingCentral actions require explicit user confirmation (click to approve)
+- Only super admin's RC token is used
+- No other agents gain any new capabilities
