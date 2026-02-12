@@ -856,10 +856,10 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
               {/* Type filter tabs for Kanban */}
               <div className="flex items-center gap-1 px-4 py-1.5 border-b border-border shrink-0">
                 {([
-                  { value: "all" as const, label: "All", icon: null, count: allEmails.filter(e => !hiddenIds.has(e.id)).length },
-                  { value: "email" as const, label: "Email", icon: <Mail className="w-3.5 h-3.5" />, count: allEmails.filter(e => !hiddenIds.has(e.id) && e.commType === "email").length },
-                  { value: "call" as const, label: "Calls", icon: <Phone className="w-3.5 h-3.5" />, count: allEmails.filter(e => !hiddenIds.has(e.id) && e.commType === "call").length },
-                  { value: "sms" as const, label: "SMS", icon: <MessageSquare className="w-3.5 h-3.5" />, count: allEmails.filter(e => !hiddenIds.has(e.id) && e.commType === "sms").length },
+                  { value: "all" as const, label: "All", icon: null, count: emails.length },
+                  { value: "email" as const, label: "Email", icon: <Mail className="w-3.5 h-3.5" />, count: emails.filter(e => e.commType === "email").length },
+                  { value: "call" as const, label: "Calls", icon: <Phone className="w-3.5 h-3.5" />, count: emails.filter(e => e.commType === "call").length },
+                  { value: "sms" as const, label: "SMS", icon: <MessageSquare className="w-3.5 h-3.5" />, count: emails.filter(e => e.commType === "sms").length },
                 ]).map((tab) => (
                   <button
                     key={tab.value}
@@ -881,7 +881,7 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
               </div>
               <div className="flex-1 flex overflow-hidden">
                 <InboxKanbanBoard
-                  emails={allEmails.filter((e) => !hiddenIds.has(e.id) && !snoozedUntil.has(e.id) && (kanbanTypeFilter === "all" || e.commType === kanbanTypeFilter))}
+                  emails={emails.filter((e) => kanbanTypeFilter === "all" || e.commType === kanbanTypeFilter)}
                   onSelect={setSelectedEmail}
                   selectedId={selectedEmail?.id ?? null}
                   starredIds={starredIds}
