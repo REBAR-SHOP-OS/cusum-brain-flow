@@ -1,14 +1,13 @@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { AlertTriangle, Calendar, User } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
-import { mockAtRiskJobs } from "../mockData";
 import { cn } from "@/lib/utils";
+import type { AtRiskJob } from "@/hooks/useCEODashboard";
 
-interface Props { open: boolean; onClose: () => void; }
+interface Props { open: boolean; onClose: () => void; atRiskJobs: AtRiskJob[]; }
 
-export function JobRiskDrawer({ open, onClose }: Props) {
+export function JobRiskDrawer({ open, onClose, atRiskJobs }: Props) {
   return (
     <Sheet open={open} onOpenChange={onClose}>
       <SheetContent className="w-[480px] sm:max-w-[480px] bg-card/95 backdrop-blur-xl border-border/50 overflow-y-auto">
@@ -20,7 +19,12 @@ export function JobRiskDrawer({ open, onClose }: Props) {
         </SheetHeader>
 
         <div className="space-y-3">
-          {mockAtRiskJobs.map((job) => (
+          {atRiskJobs.length === 0 && (
+            <div className="text-center py-8 text-sm text-muted-foreground">
+              ✅ No jobs at risk — all clear
+            </div>
+          )}
+          {atRiskJobs.map((job) => (
             <div key={job.id} className="rounded-xl border border-border/50 bg-muted/10 p-4 space-y-3">
               <div className="flex items-start justify-between">
                 <div>
@@ -47,7 +51,6 @@ export function JobRiskDrawer({ open, onClose }: Props) {
                   <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> Due: {job.dueDate}</span>
                   <span>{job.daysLeft}d left</span>
                 </div>
-                <Button size="sm" variant="outline" className="text-xs h-7">Create Task</Button>
               </div>
 
               <p className="text-xs text-amber-500/80 bg-amber-500/5 rounded-md px-2 py-1 border border-amber-500/20">
