@@ -222,4 +222,18 @@ export const defaultIntegrations: Integration[] = [
       { key: "YOUTUBE_REFRESH_TOKEN", label: "Refresh Token", type: "textarea", placeholder: "1//xxx", helpText: "From OAuth Playground" },
     ],
   },
+  {
+    id: "odoo",
+    name: "Odoo",
+    description: "Sync leads, quotations, and ERP data from Odoo.",
+    status: "available",
+    icon: "odoo",
+    docsUrl: "https://www.odoo.com/documentation/17.0/developer/reference/external_api.html",
+    fields: [
+      { key: "ODOO_URL", label: "Odoo URL", type: "text", placeholder: "https://mycompany.odoo.com", helpText: "Your Odoo instance URL" },
+      { key: "ODOO_DATABASE", label: "Database", type: "text", placeholder: "mycompany", helpText: "Odoo database name" },
+      { key: "ODOO_USERNAME", label: "Username", type: "text", placeholder: "admin@mycompany.com", helpText: "Your Odoo login email" },
+      { key: "ODOO_API_KEY", label: "API Key", type: "password", placeholder: "xxx", helpText: "From Odoo → Settings → Users → API Keys" },
+    ],
+  },
 ];
