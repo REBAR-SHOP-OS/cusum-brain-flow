@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -49,9 +50,17 @@ serve(async (req) => {
     if (!profile?.company_id) throw new Error("No company assigned");
     const companyId = profile.company_id;
 
-    const body = await req.json();
-    const { quoteId } = body;
-    if (!quoteId) throw new Error("quoteId is required");
+    const bodySchema = z.object({
+      quoteId: z.string().uuid("quoteId must be a valid UUID"),
+    });
+    const parsed = bodySchema.safeParse(await req.json());
+    if (!parsed.success) {
+      return new Response(
+        JSON.stringify({ error: "Validation failed", details: parsed.error.flatten().fieldErrors }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    const { quoteId } = parsed.data;
 
     // Fetch the quote
     const { data: quote, error: qErr } = await supabase

@@ -95,23 +95,27 @@ export function AiVisionUploadDialog({ open, onOpenChange, onUploadsComplete }: 
 
         if (uploadErr) throw uploadErr;
 
-        const publicUrl = `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/shape-schematics/${storagePath}`;
+        // Generate signed URL for AI analysis (bucket is private)
+        const { data: signedData } = await supabase.storage
+          .from("shape-schematics")
+          .createSignedUrl(storagePath, 3600);
+        const imageUrl = signedData?.signedUrl || "";
 
         // AI analysis
         let analysis: any = null;
         try {
           const { data, error } = await supabase.functions.invoke("shape-vision", {
-            body: { imageUrl: publicUrl, action: "analyze" },
+            body: { imageUrl, action: "analyze" },
           });
           if (!error && data) analysis = data;
         } catch {
           // AI analysis is optional, continue without it
         }
 
-        // Save to DB
+        // Save to DB — store the storage path (not full URL) so signed URLs can be generated later
         await supabase.from("custom_shape_schematics").insert({
           shape_code: code,
-          image_url: publicUrl,
+          image_url: storagePath,
           ai_analysis: analysis ? JSON.stringify(analysis) : null,
           uploaded_by: "system",
         });

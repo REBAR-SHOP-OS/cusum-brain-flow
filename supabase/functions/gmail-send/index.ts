@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { encryptToken, decryptToken } from "../_shared/tokenEncryption.ts";
+import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -147,11 +148,23 @@ serve(async (req) => {
       );
     }
 
-    const { to, subject, body, threadId, replyToMessageId, references, sent_by_agent }: SendEmailRequest = await clonedReq.json();
-
-    if (!to || !subject || !body) {
-      throw new Error("Missing required fields: to, subject, body");
+    const sendSchema = z.object({
+      to: z.string().email("Invalid recipient email").max(320),
+      subject: z.string().min(1, "Subject required").max(998),
+      body: z.string().min(1, "Body required").max(500000),
+      threadId: z.string().max(100).optional(),
+      replyToMessageId: z.string().max(500).optional(),
+      references: z.string().max(2000).optional(),
+      sent_by_agent: z.boolean().optional(),
+    });
+    const parsed = sendSchema.safeParse(await clonedReq.json());
+    if (!parsed.success) {
+      return new Response(
+        JSON.stringify({ error: "Validation failed", details: parsed.error.flatten().fieldErrors }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
+    const { to, subject, body, threadId, replyToMessageId, references, sent_by_agent }: SendEmailRequest = parsed.data;
 
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,

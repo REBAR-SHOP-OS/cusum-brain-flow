@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -63,7 +64,30 @@ serve(async (req) => {
     }
 
     // ── Parse body ───────────────────────────────────────────────────
-    const body = await req.json();
+    const bodySchema = z.object({
+      machineRunId: z.string().uuid().optional(),
+      companyId: z.string().uuid(),
+      machineId: z.string().uuid(),
+      workOrderId: z.string().uuid().optional().nullable(),
+      operatorProfileId: z.string().uuid().optional().nullable(),
+      supervisorProfileId: z.string().uuid().optional().nullable(),
+      process: z.enum(["cut", "bend", "load", "pickup", "delivery", "clearance", "other"]),
+      status: z.enum(["queued", "running", "paused", "blocked", "completed", "rejected", "canceled"]),
+      startedAt: z.string().optional().nullable(),
+      endedAt: z.string().optional().nullable(),
+      inputQty: z.number().nonnegative().optional().nullable(),
+      outputQty: z.number().nonnegative().optional().nullable(),
+      scrapQty: z.number().nonnegative().optional().nullable(),
+      notes: z.string().max(2000).optional().nullable(),
+      createdBy: z.string().uuid().optional().nullable(),
+    });
+    const parsed = bodySchema.safeParse(await req.json());
+    if (!parsed.success) {
+      return new Response(
+        JSON.stringify({ error: "Validation failed", details: parsed.error.flatten().fieldErrors }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
     const {
       machineRunId,
       companyId,
@@ -80,31 +104,7 @@ serve(async (req) => {
       scrapQty,
       notes,
       createdBy,
-    } = body;
-
-    // Validate required fields
-    if (!companyId || !machineId || !process || !status) {
-      return new Response(
-        JSON.stringify({ error: "Missing required fields: companyId, machineId, process, status" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const validProcesses = ["cut", "bend", "load", "pickup", "delivery", "clearance", "other"];
-    const validStatuses = ["queued", "running", "paused", "blocked", "completed", "rejected", "canceled"];
-
-    if (!validProcesses.includes(process)) {
-      return new Response(
-        JSON.stringify({ error: `Invalid process: ${process}` }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-    if (!validStatuses.includes(status)) {
-      return new Response(
-        JSON.stringify({ error: `Invalid status: ${status}` }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    } = parsed.data;
 
     // ── Build row payload ────────────────────────────────────────────
     const row: Record<string, unknown> = {
