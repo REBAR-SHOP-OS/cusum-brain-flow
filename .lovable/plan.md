@@ -1,53 +1,76 @@
 
 
-## Fix MCP Server Schema Drift
+## Polish Sprint v1 — Trust and Speed
 
-### Problem
-The MCP server queries reference columns that don't exist in the database, causing 3+ tools to crash when called by ChatGPT.
+### Current State (verified from DB)
 
-### Schema Drift Map
+- **Orders**: 15 pending -- endpoint working, data real
+- **Machines**: 5 idle + 1 running -- endpoint working, data real
+- **Deliveries**: 0 rows -- table exists, clean state (no deliveries in progress)
+- **Production (cut_plan_items)**: 73 complete, 9 in clearance, 7 queued -- real workflow data
+- **CEO Dashboard**: Already pulls all KPIs from real DB (health score, machine status, production progress, AR, pipeline, team clock-ins)
 
-| Tool | Code references | Actual DB column | Action |
-|---|---|---|---|
-| `list_social_posts` | `scheduled_at` | `scheduled_date` | Rename in select |
-| `list_orders` | `total_weight_kg` | `total_amount` | Rename in select |
-| `list_machines` | `location` | (doesn't exist) | Remove from select, add `model` |
-| `list_leads` | `contact_name` | (doesn't exist, has `contact_id`) | Replace with `title, contact_id` |
-| `list_leads` | `company_name` | (doesn't exist) | Remove |
-| `list_leads` | `email` | (doesn't exist) | Remove |
-| `list_leads` | `phone` | (doesn't exist) | Remove |
-| `list_leads` | `lead_score` | (doesn't exist, has `probability`) | Replace with `probability` |
-| `list_leads` | `expected_revenue` | `expected_value` | Rename in select |
+### What Needs Polish
 
-### Strategy
-**Option B: Fix the code to match the real DB.** The database is the source of truth. No migrations needed.
+The CEO dashboard is solid but has two gaps, and the MCP server has one remaining schema issue.
 
-### Changes
+---
+
+### 1. MCP Server: Fix `list_deliveries` schema drift
+
+The `list_deliveries` tool likely has column mismatches (same pattern as the others we fixed). Need to verify and align the SELECT with the real `deliveries` table columns: `id, delivery_number, status, scheduled_date, driver_name, vehicle, notes, created_at, company_id`.
+
+### 2. CEO Dashboard: Replace mock exceptions with real data
+
+The exceptions workbench (`ExceptionsWorkbench`) currently renders hardcoded mock data from `mockData.ts`. This breaks trust -- a CEO sees fake "Invoice #4821 overdue 45 days" every time. Replace with real queries:
+
+- **Overdue invoices**: Query `accounting_mirror` where `entity_type = 'Invoice'` and `balance > 0`
+- **Idle machines**: Query `machines` where `status = 'idle'` (already fetched)
+- **Queued production**: Surface `cut_plan_items` where `phase = 'queued'` count
+- **Pending deliveries**: Already counted in metrics
+
+### 3. CEO Dashboard: Add queued/in-progress/completed-today counters
+
+The dashboard shows total pieces but not the operator-friendly breakdown you described:
+- Queued count (items with `phase = 'queued'`)
+- In-progress count (`phase = 'cutting'` or `phase = 'bending'`)
+- Completed today (items completed in last 24h -- requires `updated_at` filter)
+- Machines running vs idle (already shown but can be more prominent)
+
+### 4. Status standardization audit
+
+Verify all status enums are consistent across the codebase:
+- `cut_plan_items.phase`: queued, cutting, cut_done, bending, clearance, complete
+- `machines.status`: idle, running, blocked, down
+- `orders.status`: pending (others?)
+- `machine_runs.status`: queued, running, paused, blocked, completed, rejected, canceled
+
+No mixed naming detected so far -- this is already clean.
+
+---
+
+### Technical Changes
 
 **File: `supabase/functions/mcp-server/index.ts`**
+- Verify and fix `list_deliveries` SELECT to match real columns
+- Verify `list_time_entries` and `get_dashboard_stats` for any remaining drift
 
-1. **`list_social_posts`** (line 43): Change select from `scheduled_at` to `scheduled_date`
+**File: `src/components/ceo/ExceptionsWorkbench.tsx`**
+- Accept real exception data as props instead of importing `mockExceptions`
+- Create a `useExceptions` hook or extend `useCEODashboard` to generate exception items from real DB queries
 
-2. **`list_leads`** (lines 70-71): Change select from
-   `"id, contact_name, company_name, email, phone, stage, lead_score, expected_revenue, source, created_at"`
-   to
-   `"id, title, contact_id, stage, probability, expected_value, source, priority, created_at"`
+**File: `src/hooks/useCEODashboard.ts`**
+- Add queries for: queued cut_plan_items count, items completed today
+- Generate real exception items from: overdue invoices, idle machines, queued backlog
+- Return these as part of `CEOMetrics`
 
-3. **`list_machines`** (line 148): Change select from
-   `"id, name, type, status, location, company_id, created_at"`
-   to
-   `"id, name, model, type, status, company_id, created_at"`
+**File: `src/components/office/CEODashboardView.tsx`**
+- Pass real exceptions to `ExceptionsWorkbench`
+- Add prominent queued/in-progress/completed-today summary row
 
-4. **`list_orders`** (line 173): Change select from
-   `"id, order_number, customer_id, status, total_weight_kg, notes, created_at"`
-   to
-   `"id, order_number, customer_id, status, total_amount, notes, created_at"`
+**File: `src/components/ceo/mockData.ts`**
+- Keep as fallback/demo data but stop importing it in production views
 
-### After fix
-- Redeploy the `mcp-server` edge function
-- Test all endpoints to confirm they return data without errors
+### No new tables or migrations needed
+All data already exists in the database.
 
-### No other changes
-- No migrations
-- No frontend changes
-- No config changes
