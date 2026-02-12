@@ -14,9 +14,9 @@ interface AgentSuggestionCardProps {
 }
 
 const severityConfig = {
-  critical: { icon: AlertTriangle, color: "text-destructive", bg: "bg-destructive/10", badge: "destructive" as const },
-  warning: { icon: AlertTriangle, color: "text-amber-500", bg: "bg-amber-500/10", badge: "secondary" as const },
-  info: { icon: Info, color: "text-blue-500", bg: "bg-blue-500/10", badge: "outline" as const },
+  critical: { icon: AlertTriangle, color: "text-destructive", bg: "bg-destructive/10", badge: "destructive" as const, border: "border-l-red-500" },
+  warning: { icon: AlertTriangle, color: "text-amber-500", bg: "bg-amber-500/10", badge: "secondary" as const, border: "border-l-amber-500" },
+  info: { icon: Info, color: "text-blue-500", bg: "bg-blue-500/10", badge: "outline" as const, border: "border-l-blue-500" },
 };
 
 export function AgentSuggestionCard({ suggestion, agentName, onAct, onSnooze, onDismiss }: AgentSuggestionCardProps) {
@@ -35,7 +35,7 @@ export function AgentSuggestionCard({ suggestion, agentName, onAct, onSnooze, on
   };
 
   return (
-    <Card className="border-l-4 transition-all hover:shadow-md" style={{ borderLeftColor: config.color.replace("text-", "var(--") }}>
+    <Card className={`border-l-4 transition-all hover:shadow-md ${config.border}`}>
       <CardContent className="p-4 space-y-2">
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2">

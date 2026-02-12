@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders } from "../_shared/auth.ts";
+import { corsHeaders, requireAuth, json } from "../_shared/auth.ts";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -8,10 +8,16 @@ serve(async (req) => {
   }
 
   try {
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
+    // Auth guard: only admins can trigger suggestion generation
+    const { userId, serviceClient: supabase } = await requireAuth(req);
+
+    const { data: isAdmin } = await supabase.rpc("has_role", {
+      _user_id: userId,
+      _role: "admin",
+    });
+    if (!isAdmin) {
+      return json({ error: "Admin role required" }, 403);
+    }
 
     // Load agent IDs
     const { data: agents } = await supabase.from("agents").select("id, code");
@@ -78,9 +84,9 @@ serve(async (req) => {
             entity_type: "invoice",
             entity_id: inv.id,
             status: "open",
-            actions: JSON.stringify([
+            actions: [
               { label: "View AR", action: "navigate", path: "/accounting?tab=invoices" },
-            ]),
+            ],
           });
         }
       }
@@ -109,9 +115,9 @@ serve(async (req) => {
             entity_type: "order",
             entity_id: order.id,
             status: "open",
-            actions: JSON.stringify([
+            actions: [
               { label: "View Order", action: "navigate", path: `/orders` },
-            ]),
+            ],
           });
         }
       }
@@ -143,9 +149,9 @@ serve(async (req) => {
             entity_type: "customer",
             entity_id: cust.id,
             status: "open",
-            actions: JSON.stringify([
+            actions: [
               { label: "View Customer", action: "navigate", path: "/customers" },
-            ]),
+            ],
           });
         }
       }
@@ -188,9 +194,9 @@ serve(async (req) => {
               entity_type: "machine",
               entity_id: machine.id,
               status: "open",
-              actions: JSON.stringify([
-                { label: "View Machine", action: "navigate", path: "/shop-floor" },
-              ]),
+            actions: [
+              { label: "View Machine", action: "navigate", path: "/shop-floor" },
+            ],
             });
           }
         }
