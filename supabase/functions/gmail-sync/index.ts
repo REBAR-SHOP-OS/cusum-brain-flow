@@ -414,6 +414,23 @@ serve(async (req) => {
 
       if (upsertError) {
         console.error("Failed to upsert communication:", upsertError);
+      } else {
+        // Write activity_event for the ledger
+        const { error: evtErr } = await supabaseAdmin
+          .from("activity_events")
+          .upsert({
+            entity_type: "communication",
+            entity_id: msg.id,
+            event_type: "email_received",
+            actor_id: userId,
+            actor_type: "system",
+            description: `Email from ${msg.from}: ${msg.subject?.slice(0, 80) || "(no subject)"}`,
+            company_id: companyId,
+            source: "gmail",
+            dedupe_key: `gmail:${msg.id}`,
+            metadata: { from: msg.from, to: msg.to, subject: msg.subject, threadId: msg.threadId },
+          }, { onConflict: "dedupe_key", ignoreDuplicates: true });
+        if (evtErr) console.error("Failed to write activity event:", evtErr);
       }
     }
 

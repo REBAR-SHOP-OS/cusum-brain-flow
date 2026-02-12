@@ -360,7 +360,22 @@ serve(async (req) => {
             ignoreDuplicates: false,
           });
 
-        if (!error) callsUpserted++;
+        if (!error) {
+          callsUpserted++;
+          // Write activity event
+          await supabaseAdmin.from("activity_events").upsert({
+            entity_type: "communication",
+            entity_id: call.id,
+            event_type: "call_logged",
+            actor_id: userId,
+            actor_type: "system",
+            description: `${call.direction} call ${call.from?.phoneNumber || "?"} → ${call.to?.phoneNumber || "?"}: ${call.result}`,
+            company_id: companyId,
+            source: "ringcentral",
+            dedupe_key: `rc:${call.id}`,
+            metadata: { direction: call.direction, result: call.result, duration: call.duration },
+          }, { onConflict: "dedupe_key", ignoreDuplicates: true });
+        }
       }
     }
 
@@ -394,7 +409,22 @@ serve(async (req) => {
             ignoreDuplicates: false,
           });
 
-        if (!error) smsUpserted++;
+        if (!error) {
+          smsUpserted++;
+          // Write activity event
+          await supabaseAdmin.from("activity_events").upsert({
+            entity_type: "communication",
+            entity_id: String(msg.id),
+            event_type: "sms_received",
+            actor_id: userId,
+            actor_type: "system",
+            description: `SMS ${msg.direction} ${msg.from?.phoneNumber || "?"} → ${toAddress}`,
+            company_id: companyId,
+            source: "ringcentral",
+            dedupe_key: `rc:${msg.id}`,
+            metadata: { direction: msg.direction, type: "sms" },
+          }, { onConflict: "dedupe_key", ignoreDuplicates: true });
+        }
       }
     }
 
