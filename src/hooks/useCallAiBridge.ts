@@ -242,7 +242,11 @@ function buildPhoneCallOverrides(callData: CallBridgeData) {
     : "";
 
   const noDetailsWarning = !details
-    ? `\n\nIMPORTANT: No specific details were provided for this call. You ONLY know the general reason above. Do NOT invent, guess, or fabricate any details such as report content, invoice numbers, amounts, dates, or any other specifics. Instead of repeating "I don't have details," be conversational: ask the caller what specific topics they'd like to cover, and offer to have someone from Rebar Shop follow up with complete information.`
+    ? `\n\nCRITICAL — NO DETAILS PROVIDED:
+You were NOT given any report content, numbers, or specifics for this call. You ONLY know the reason: "${reason}".
+- Do NOT fabricate, summarize, or imply any information. Saying things like "everything is proceeding as planned" or "there are no issues" is FABRICATION and strictly forbidden.
+- Instead, explain that you're calling to connect about "${reason}" and ask the caller what specific topics or questions they have.
+- Offer to have someone from Rebar Shop follow up with the full details.`
     : "";
 
   const firstMsg = `Hi, this is ${agentName} calling from Rebar Shop. Am I speaking with ${displayName}? I'm reaching out regarding ${reason.length > 100 ? reason.substring(0, 100) + "..." : reason}.`;
@@ -265,7 +269,9 @@ CRITICAL INSTRUCTIONS:
 - Keep responses brief and conversational — this is a phone call, not an email.
 - You ONLY know what is explicitly provided in the SPECIFIC DETAILS section above. Do NOT invent, guess, or fabricate ANY information whatsoever.
 - If asked for information you do not have, say: "I don't have the full details on hand, but someone from Rebar Shop will follow up with the complete information."
-- Do NOT re-introduce yourself or restate the reason after your first message.`,
+- Do NOT re-introduce yourself or restate the reason after your first message.
+- ALWAYS use the EXACT topic wording from PURPOSE OF THIS CALL. Do not rephrase "${reason}" as anything else. For example, do not change "daily brief" to "daily report" or "general report."
+- PHONE AUDIO MISHEARING: Phone audio quality can cause words to be misheard by the speech recognition system (e.g., "brief" may sound like "grief," "report" may sound like "deport"). If the caller says something that sounds similar to the call topic "${reason}", assume they are referring to it and respond accordingly. NEVER say "I don't have information about [misheard word]."`,
       },
       first_message: firstMsg,
       language: "en",
