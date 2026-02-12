@@ -181,6 +181,38 @@ export default function VizzyPage() {
         addQuotationCard(draft);
         return "Quotation draft displayed to CEO for review. Wait for their approval before sending.";
       },
+      make_call: async (params: { phone: string; contact_name?: string }) => {
+        try {
+          const { data, error } = await supabase.functions.invoke(
+            "ringcentral-action",
+            { body: { type: "ringcentral_call", phone: params.phone, contact_name: params.contact_name } }
+          );
+          if (error) throw error;
+          if (data?.error) throw new Error(data.error);
+          toast.success(`Calling ${params.contact_name || params.phone}...`);
+          return "Call initiated successfully";
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "Unknown error";
+          toast.error(`Call failed: ${msg}`);
+          return `Call failed: ${msg}`;
+        }
+      },
+      send_sms: async (params: { phone: string; message: string; contact_name?: string }) => {
+        try {
+          const { data, error } = await supabase.functions.invoke(
+            "ringcentral-action",
+            { body: { type: "ringcentral_sms", phone: params.phone, message: params.message, contact_name: params.contact_name } }
+          );
+          if (error) throw error;
+          if (data?.error) throw new Error(data.error);
+          toast.success(`SMS sent to ${params.contact_name || params.phone}`);
+          return "SMS sent successfully";
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "Unknown error";
+          toast.error(`SMS failed: ${msg}`);
+          return `SMS failed: ${msg}`;
+        }
+      },
     },
     onConnect: () => {
       sessionActiveRef.current = true;
