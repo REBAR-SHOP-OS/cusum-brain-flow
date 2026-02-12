@@ -262,13 +262,19 @@ serve(async (req) => {
     const oldestWindow = new Date(now.getTime() - 48 * 3600 * 1000);
     const { data: unanswered } = await svc
       .from("communications")
-      .select("id, from_address, to_address, subject, body_preview, received_at, thread_id")
+      .select("id, from_address, to_address, subject, body_preview, received_at, thread_id, resolved_at, status")
       .eq("direction", "inbound")
       .eq("source", "gmail")
       .gte("received_at", oldestWindow.toISOString())
       .limit(200);
 
     for (const comm of unanswered || []) {
+      // Skip already-resolved or archived communications
+      if (comm.resolved_at || comm.status === "archived") {
+        skippedCount++;
+        continue;
+      }
+
       // ── Layers 1/2/4: Should we skip this comm entirely? ──
       const skipReason = shouldSkipAlert(comm, config.internal_domain);
       if (skipReason) {
@@ -286,7 +292,8 @@ serve(async (req) => {
 
       const alertType = `response_time_${highestThreshold}h`;
 
-      // Check if a reply exists in the thread
+      // Check if a reply exists — by thread_id OR by matching from→to outbound
+      let hasReply = false;
       if (comm.thread_id) {
         const { count } = await svc
           .from("communications")
@@ -294,8 +301,20 @@ serve(async (req) => {
           .eq("thread_id", comm.thread_id)
           .eq("direction", "outbound")
           .gt("received_at", comm.received_at);
-        if (count && count > 0) continue; // replied
+        if (count && count > 0) hasReply = true;
       }
+      // Fallback: check if there's ANY outbound to this sender after received_at
+      if (!hasReply && comm.from_address) {
+        const senderEmail = comm.from_address.toLowerCase();
+        const { count: directReply } = await svc
+          .from("communications")
+          .select("id", { count: "exact", head: true })
+          .eq("direction", "outbound")
+          .ilike("to_address", `%${senderEmail}%`)
+          .gt("received_at", comm.received_at);
+        if (directReply && directReply > 0) hasReply = true;
+      }
+      if (hasReply) continue;
 
       // Check if THIS specific alert already exists (dedup)
       const { count: alertExists } = await svc

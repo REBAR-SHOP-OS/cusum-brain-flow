@@ -422,30 +422,52 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
     }
   }, [emails, selectedIds.size]);
 
-  const handleDeleteEmail = useCallback((id: string) => {
+  const handleDeleteEmail = useCallback(async (id: string) => {
     setHiddenIds((prev) => { const next = new Set(prev); next.add(id); return next; });
     if (selectedEmail?.id === id) setSelectedEmail(null);
-    toast({ title: "Email deleted", description: "Email has been removed from your inbox." });
+    try {
+      await supabase.from("communications").delete().eq("id", id);
+      toast({ title: "Email deleted", description: "Email has been permanently removed." });
+    } catch {
+      toast({ title: "Delete failed", variant: "destructive" });
+    }
   }, [selectedEmail, toast]);
 
-  const handleArchiveEmail = useCallback((id: string) => {
+  const handleArchiveEmail = useCallback(async (id: string) => {
     setHiddenIds((prev) => { const next = new Set(prev); next.add(id); return next; });
     if (selectedEmail?.id === id) setSelectedEmail(null);
-    toast({ title: "Email archived", description: "Email has been archived." });
+    try {
+      await supabase.from("communications").update({ status: "archived" }).eq("id", id);
+      toast({ title: "Email archived" });
+    } catch {
+      toast({ title: "Archive failed", variant: "destructive" });
+    }
   }, [selectedEmail, toast]);
 
-  const handleBulkDelete = useCallback(() => {
-    setHiddenIds((prev) => { const next = new Set(prev); selectedIds.forEach((id) => next.add(id)); return next; });
+  const handleBulkDelete = useCallback(async () => {
+    const ids = Array.from(selectedIds);
+    setHiddenIds((prev) => { const next = new Set(prev); ids.forEach((id) => next.add(id)); return next; });
     if (selectedEmail && selectedIds.has(selectedEmail.id)) setSelectedEmail(null);
-    toast({ title: "Bulk delete", description: `${selectedIds.size} email(s) deleted.` });
+    try {
+      await supabase.from("communications").delete().in("id", ids);
+      toast({ title: "Bulk delete", description: `${ids.length} email(s) deleted.` });
+    } catch {
+      toast({ title: "Bulk delete failed", variant: "destructive" });
+    }
     setSelectedIds(new Set());
     setSelectionMode(false);
   }, [selectedIds, selectedEmail, toast]);
 
-  const handleBulkArchive = useCallback(() => {
-    setHiddenIds((prev) => { const next = new Set(prev); selectedIds.forEach((id) => next.add(id)); return next; });
+  const handleBulkArchive = useCallback(async () => {
+    const ids = Array.from(selectedIds);
+    setHiddenIds((prev) => { const next = new Set(prev); ids.forEach((id) => next.add(id)); return next; });
     if (selectedEmail && selectedIds.has(selectedEmail.id)) setSelectedEmail(null);
-    toast({ title: "Bulk archive", description: `${selectedIds.size} email(s) archived.` });
+    try {
+      await supabase.from("communications").update({ status: "archived" }).in("id", ids);
+      toast({ title: "Bulk archive", description: `${ids.length} email(s) archived.` });
+    } catch {
+      toast({ title: "Bulk archive failed", variant: "destructive" });
+    }
     setSelectedIds(new Set());
     setSelectionMode(false);
   }, [selectedIds, selectedEmail, toast]);
