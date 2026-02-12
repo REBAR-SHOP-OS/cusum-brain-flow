@@ -1,69 +1,45 @@
 
 
-# Restrict Vizzy to Super Admin + Add RingCentral Access
+# Fix: Vizzy Not Using RingCentral Call/SMS Capability
 
-## What Changes
+## Problem
+Vizzy is ignoring the RingCentral instructions in her system prompt and telling you she can't make calls. The LLM treats the capability description as optional/informational rather than a core function she must use.
 
-1. **Vizzy visible only to you (sattar@rebar.shop)** — other users won't see Vizzy in the agent grid, can't access `/vizzy`, and won't see the voice chat icon
-2. **Remove voice chat icon from all agent chat rooms** for everyone except you
-3. **Give Vizzy RingCentral access** to make calls and send SMS on your behalf
+## Root Cause
+The RingCentral section is buried at the bottom of a very long system prompt, under a "CEO Only" subsection. The LLM prioritizes earlier, more prominent instructions and defaults to "I can't do that."
 
-## Scope Guarantee
-- No changes to PIXEL or any other agent's logic/UI
-- Only Vizzy-related visibility and RingCentral integration
+## Fix: `supabase/functions/ai-agent/index.ts`
 
----
+Strengthen the RingCentral instructions in Vizzy's prompt:
 
-## File Changes
+1. **Move the RingCentral capability higher** in the prompt — right after "Your Role" section, before the detailed briefing format
+2. **Add it to the core identity** — change the role description to explicitly state: "You CAN and MUST make phone calls and send SMS via RingCentral"
+3. **Use the same assertive pattern** already proven with email access (lines 1243-1248): "CRITICAL: NEVER say you cannot make calls. NEVER claim you don't have phone access."
+4. **Simplify the action format examples** to be clearer for the LLM
 
-### 1. `src/pages/Home.tsx`
-- Filter the `helpers` array: hide the "assistant" (Vizzy) card unless user is super admin
-- Only pass `onLiveChatClick` to `ChatInput` if user is super admin
+### Specific changes to the `assistant` prompt string:
 
-### 2. `src/pages/AgentWorkspace.tsx`
-- Only pass `onLiveChatClick` to `ChatInput` if user is super admin
-- If `agentId === "assistant"` and user is NOT super admin, redirect away
-
-### 3. `src/pages/VizzyPage.tsx`
-- Add super admin guard: if not `sattar@rebar.shop`, redirect to `/home`
-
-### 4. `supabase/functions/ai-agent/index.ts`
-- Add RingCentral tools to Vizzy's system prompt so she knows she can make calls/send SMS
-- When Vizzy decides to call or SMS, return a structured action the frontend can execute
-
-### 5. `supabase/functions/ringcentral-action/index.ts` (NEW)
-- New edge function that Vizzy can trigger to:
-  - **Make a call** via RingCentral API (using the super admin's stored OAuth token)
-  - **Send an SMS** via RingCentral API
-- Uses existing `user_ringcentral_tokens` table for auth
-- Requires human confirmation before executing (safety rule)
-
----
-
-## Technical Details
-
-### Vizzy Visibility Guard
-```text
-useSuperAdmin() hook (already exists) returns { isSuperAdmin }
-- Home.tsx: filter helpers list, conditionally show voice icon
-- AgentWorkspace.tsx: conditionally show voice icon, block /agent/assistant
-- VizzyPage.tsx: redirect non-super-admin users
+**In the "Your Role" section (around line 1211)**, add:
+```
+You have FULL RingCentral phone access — you CAN make calls and send SMS.
 ```
 
-### RingCentral Integration Flow
-```text
-CEO asks Vizzy: "Call John at 416-555-1234"
-  -> Vizzy returns structured action: { type: "ringcentral_call", phone: "4165551234" }
-  -> Frontend shows confirmation dialog: "Vizzy wants to call 416-555-1234. Approve?"
-  -> On approval, calls ringcentral-action edge function
-  -> Edge function uses CEO's RC OAuth token to initiate the call/SMS
+**Move and rewrite the RingCentral section (lines 1295-1313)** to right after the email section, with stronger language:
+```
+## 📞 RingCentral — Call & SMS (MANDATORY CAPABILITY)
+CRITICAL: You HAVE the ability to make phone calls and send SMS. NEVER say you cannot call or text.
+NEVER tell the CEO to use RingCentral himself. YOU are the one who initiates calls and SMS.
+
+When asked to call or text someone:
+1. Confirm the phone number and action
+2. Include this EXACT tag in your response (single line, valid JSON):
+
+Call: [VIZZY-ACTION]{"type":"ringcentral_call","phone":"+14165551234","contact_name":"Name"}[/VIZZY-ACTION]
+SMS: [VIZZY-ACTION]{"type":"ringcentral_sms","phone":"+14165551234","message":"text","contact_name":"Name"}[/VIZZY-ACTION]
+
+The system will show the CEO an approval button before executing. You just output the tag.
 ```
 
-### RingCentral API Endpoints Used
-- **Make call**: `POST /restapi/v1.0/account/~/telephony/sessions` (RingOut)
-- **Send SMS**: `POST /restapi/v1.0/account/~/extension/~/sms`
-
-### Safety
-- All RingCentral actions require explicit user confirmation (click to approve)
-- Only super admin's RC token is used
-- No other agents gain any new capabilities
+## Scope
+- Only the `assistant` prompt string inside `supabase/functions/ai-agent/index.ts` is modified
+- No other agents, no UI, no other files touched
