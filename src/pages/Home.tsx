@@ -26,6 +26,7 @@ import {
 import logoCoin from "@/assets/logo-coin.png";
 import { useAuth } from "@/lib/auth";
 import { getUserAgentMapping } from "@/lib/userAgentMap";
+import { useSuperAdmin } from "@/hooks/useSuperAdmin";
 
 // Helper character images
 import salesHelper from "@/assets/helpers/sales-helper.png";
@@ -99,6 +100,7 @@ export default function Home() {
   const { user } = useAuth();
 
   const mapping = getUserAgentMapping(user?.email);
+  const { isSuperAdmin } = useSuperAdmin();
 
   // Build personalized quick actions
   const useCases: UseCase[] = useMemo(() => {
@@ -114,11 +116,13 @@ export default function Home() {
 
   // Reorder helpers: primary agent first
   const orderedHelpers = useMemo(() => {
-    if (!mapping) return helpers;
-    const primary = helpers.find((h) => h.id === mapping.agentKey);
-    if (!primary) return helpers;
-    return [primary, ...helpers.filter((h) => h.id !== mapping.agentKey)];
-  }, [mapping]);
+    // Hide Vizzy (assistant) for non-super-admins
+    const filtered = isSuperAdmin ? helpers : helpers.filter((h) => h.id !== "assistant");
+    if (!mapping) return filtered;
+    const primary = filtered.find((h) => h.id === mapping.agentKey);
+    if (!primary) return filtered;
+    return [primary, ...filtered.filter((h) => h.id !== mapping.agentKey)];
+  }, [mapping, isSuperAdmin]);
 
   const handleSend = useCallback((content: string) => {
     const result = routeToAgent(content);
@@ -164,7 +168,7 @@ export default function Home() {
               onSend={handleSend}
               placeholder={mapping ? `Ask ${mapping.agentKey === "assistant" ? "Vizzy" : mapping.agentKey === "shopfloor" ? "Forge" : "Gauge"} anything...` : "Ask anything about your business..."}
               showFileUpload
-              onLiveChatClick={handleLiveChatClick}
+              onLiveChatClick={isSuperAdmin ? handleLiveChatClick : undefined}
             />
           </div>
         </div>
