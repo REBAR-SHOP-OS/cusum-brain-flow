@@ -25,8 +25,7 @@ const mcpServer = new McpServer({
 
 // ── Tool: list_social_posts ─────────────────────────────────
 
-mcpServer.tool({
-  name: "list_social_posts",
+mcpServer.tool("list_social_posts", {
   description:
     "List social media posts. Optional filters: status (draft, scheduled, published), platform (instagram, facebook, linkedin, tiktok, youtube). Returns up to 50 posts.",
   inputSchema: {
@@ -54,8 +53,7 @@ mcpServer.tool({
 
 // ── Tool: list_leads ────────────────────────────────────────
 
-mcpServer.tool({
-  name: "list_leads",
+mcpServer.tool("list_leads", {
   description:
     "List pipeline leads. Optional filter: stage (new, contacted, qualified, proposal, won, lost). Returns up to 50 leads.",
   inputSchema: {
@@ -83,8 +81,7 @@ mcpServer.tool({
 
 // ── Tool: list_customers ────────────────────────────────────
 
-mcpServer.tool({
-  name: "list_customers",
+mcpServer.tool("list_customers", {
   description: "List customers. Returns up to 50 customers.",
   inputSchema: {
     type: "object",
@@ -106,8 +103,7 @@ mcpServer.tool({
 
 // ── Tool: list_production_tasks ─────────────────────────────
 
-mcpServer.tool({
-  name: "list_production_tasks",
+mcpServer.tool("list_production_tasks", {
   description:
     "List cut plan items (production tasks). Optional filter: phase (queued, cutting, cut_done, bending, clearance, complete). Returns up to 50 items.",
   inputSchema: {
@@ -135,8 +131,7 @@ mcpServer.tool({
 
 // ── Tool: list_machines ─────────────────────────────────────
 
-mcpServer.tool({
-  name: "list_machines",
+mcpServer.tool("list_machines", {
   description:
     "List machines and their status. Optional filter: status (idle, running, blocked, down). Returns up to 50 machines.",
   inputSchema: {
@@ -162,8 +157,7 @@ mcpServer.tool({
 
 // ── Tool: list_orders ───────────────────────────────────────
 
-mcpServer.tool({
-  name: "list_orders",
+mcpServer.tool("list_orders", {
   description: "List orders. Optional filter: status. Returns up to 50 orders.",
   inputSchema: {
     type: "object",
@@ -188,8 +182,7 @@ mcpServer.tool({
 
 // ── Tool: list_deliveries ───────────────────────────────────
 
-mcpServer.tool({
-  name: "list_deliveries",
+mcpServer.tool("list_deliveries", {
   description:
     "List deliveries. Optional filter: status (scheduled, in_transit, delivered, canceled). Returns up to 50 deliveries.",
   inputSchema: {
@@ -215,8 +208,7 @@ mcpServer.tool({
 
 // ── Tool: list_time_entries ─────────────────────────────────
 
-mcpServer.tool({
-  name: "list_time_entries",
+mcpServer.tool("list_time_entries", {
   description: "List time clock entries. Returns up to 50 recent entries.",
   inputSchema: {
     type: "object",
@@ -238,8 +230,7 @@ mcpServer.tool({
 
 // ── Tool: get_dashboard_stats ───────────────────────────────
 
-mcpServer.tool({
-  name: "get_dashboard_stats",
+mcpServer.tool("get_dashboard_stats", {
   description:
     "Get summary counts across all major sections: customers, leads, machines, cut plans, deliveries, orders.",
   inputSchema: { type: "object", properties: {} },
