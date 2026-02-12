@@ -12,6 +12,8 @@ import type { VizzyBusinessSnapshot } from "@/hooks/useVizzyContext";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import { FileText, Check, XCircle } from "lucide-react";
+import { VizzyApprovalDialog, PendingAction } from "@/components/vizzy/VizzyApprovalDialog";
+import { toast } from "sonner";
 
 const MAX_RETRIES = 2;
 
@@ -51,6 +53,7 @@ export default function VizzyPage() {
   const [showVolume, setShowVolume] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [activeQuotation, setActiveQuotation] = useState<{ id: string; draft: QuotationDraft } | null>(null);
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [silentMode, setSilentMode] = useState(false);
   const startedRef = useRef(false);
   const sessionActiveRef = useRef(false);
@@ -243,9 +246,47 @@ export default function VizzyPage() {
           );
         }
       } else if (message.type === "agent_response") {
+        let agentText = message.agent_response_event?.agent_response ?? "";
+
+        // Parse [VIZZY-ACTION] tags for RingCentral actions
+        const actionMatch = agentText.match(/\[VIZZY-ACTION\]([\s\S]*?)\[\/VIZZY-ACTION\]/);
+        if (actionMatch) {
+          try {
+            const actionData = JSON.parse(actionMatch[1]);
+            const desc = actionData.type === "ringcentral_call"
+              ? `Call ${actionData.contact_name || actionData.phone}`
+              : `Send SMS to ${actionData.contact_name || actionData.phone}: "${actionData.message?.slice(0, 80)}..."`;
+
+            setPendingAction({
+              id: crypto.randomUUID(),
+              action: actionData.type,
+              description: desc,
+              params: actionData,
+              resolve: async (approved: boolean) => {
+                setPendingAction(null);
+                if (approved) {
+                  try {
+                    const { data, error } = await supabase.functions.invoke("ringcentral-action", { body: actionData });
+                    if (error) throw error;
+                    if (data?.error) throw new Error(data.error);
+                    toast.success(actionData.type === "ringcentral_call" ? "Call initiated!" : "SMS sent!");
+                  } catch (err) {
+                    toast.error(`Failed: ${err instanceof Error ? err.message : "Unknown error"}`);
+                  }
+                } else {
+                  toast.info("Action cancelled");
+                }
+              },
+            });
+          } catch (e) {
+            console.warn("Failed to parse vizzy-action:", e);
+          }
+          agentText = agentText.replace(/\[VIZZY-ACTION\][\s\S]*?\[\/VIZZY-ACTION\]/, "").trim();
+        }
+
         const entry: TranscriptEntry = {
           role: "agent",
-          text: message.agent_response_event?.agent_response ?? "",
+          text: agentText,
           id: crypto.randomUUID(),
           type: "text",
         };
@@ -561,6 +602,9 @@ export default function VizzyPage() {
           </button>
         )}
       </div>
+
+      {/* RingCentral action approval dialog */}
+      <VizzyApprovalDialog pendingAction={pendingAction} />
     </div>
   );
 }
