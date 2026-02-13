@@ -1,174 +1,161 @@
 
+# Shop Drawing QC, Revision Control, and Escalation System
 
-# QuickBooks Full Clone -- ERP Database Schema + Sync Engine
-
-## Current State
-
-Your system already has:
-- `accounting_mirror` table (1,822 invoices, 80 vendors synced with `raw_json`-style `data` JSONB column)
-- `customers` table (1,946 QB-linked customers)
-- `quickbooks-oauth` edge function with full QB API access, paginated queries, token refresh, rate-limit handling
-- Sync actions for customers, invoices, and vendors already working
-
-What's **missing**: raw JSON preservation, accounts/items/transactions as first-class tables, general ledger normalization, sync logs, deletion/void tracking, nightly reconciliation, and the verification layer.
+This plan implements your full end-to-end quality control workflow, revision billing enforcement, SLA escalation, and boss dashboards -- all layered on top of the existing schema with minimal structural changes (flags + triggers only, no table redesigns).
 
 ---
 
-## Phase 1: Core QB Mirror Tables (SQL Migration)
+## Phase 1: Database Schema Additions (Migration)
 
-Create dedicated, immutable mirror tables that store `raw_json` alongside parsed fields. These replace the generic `accounting_mirror` approach.
+### A) Orders table -- new safety lock columns
+- `shop_drawing_status` TEXT DEFAULT 'draft' (draft, qc_internal, sent_to_customer, customer_revision, approved)
+- `customer_revision_count` INT DEFAULT 0
+- `billable_revision_required` BOOLEAN DEFAULT FALSE
+- `qc_internal_approved_at` TIMESTAMPTZ NULL
+- `customer_approved_at` TIMESTAMPTZ NULL
+- `production_locked` BOOLEAN DEFAULT TRUE
+- `pending_change_order` BOOLEAN DEFAULT FALSE
+- `qc_final_approved` BOOLEAN DEFAULT FALSE
+- `qc_evidence_uploaded` BOOLEAN DEFAULT FALSE
 
-### Tables to Create
+### B) Leads table -- SLA tracking columns
+- `sla_deadline` TIMESTAMPTZ NULL (auto-set by trigger on stage change)
+- `sla_breached` BOOLEAN DEFAULT FALSE
+- `escalated_to` TEXT NULL
 
-| Table | Key Columns |
-|-------|------------|
-| `qb_company_info` | `id, company_id, qb_realm_id, raw_json, last_synced_at` |
-| `qb_accounts` | `id, company_id, qb_realm_id, qb_id, sync_token, account_type, account_sub_type, name, current_balance, is_active, is_deleted, raw_json, last_synced_at` |
-| `qb_customers` | `id, company_id, qb_realm_id, qb_id, sync_token, display_name, company_name, balance, is_active, is_deleted, raw_json, last_synced_at` |
-| `qb_vendors` | `id, company_id, qb_realm_id, qb_id, sync_token, display_name, company_name, balance, is_active, is_deleted, raw_json, last_synced_at` |
-| `qb_items` | `id, company_id, qb_realm_id, qb_id, sync_token, name, type, unit_price, is_active, is_deleted, raw_json, last_synced_at` |
-| `qb_transactions` | `id, company_id, qb_realm_id, qb_id, entity_type, sync_token, txn_date, doc_number, total_amt, balance, customer_id (nullable), vendor_id (nullable), is_voided, is_deleted, raw_json, last_synced_at` |
+### C) New table: `sla_escalation_log`
+Audit trail of every SLA breach and escalation event.
+- `id`, `entity_type` (lead/order), `entity_id`, `stage`, `sla_hours`, `breached_at`, `escalated_to`, `resolved_at`, `company_id`
 
-All tables:
-- `UNIQUE(company_id, qb_id)` for upsert safety (except `qb_transactions` which uses `UNIQUE(company_id, qb_id, entity_type)`)
-- RLS: admin/accounting roles can SELECT; service role can INSERT/UPDATE
-- Never hard-delete rows; use `is_deleted` flag
+### D) Validation triggers
 
-### Existing Data Migration
-- Copy 1,822 invoices and 80 vendors from `accounting_mirror` into `qb_transactions`
-- Copy 1,946 customers from `customers` table into `qb_customers`
-- Keep old tables intact as fallback (no destructive changes)
+1. **`trg_block_production_without_approval`** on `cut_plan_items` BEFORE UPDATE: If `phase` is moving to 'cutting', join to parent order and block if `shop_drawing_status != 'approved'` OR `pending_change_order = TRUE` OR `qc_internal_approved_at IS NULL`.
 
----
+2. **`trg_auto_billable_revision`** on `orders` BEFORE UPDATE: If `customer_revision_count` changes to >= 1 AND `billable_revision_required` is FALSE, auto-set `billable_revision_required = TRUE` and `pending_change_order = TRUE`.
 
-## Phase 2: General Ledger Normalization
+3. **`trg_block_delivery_without_qc`** on `deliveries` BEFORE UPDATE: If status is moving to 'loading' or 'in_transit', join to related order and block if `qc_evidence_uploaded = FALSE` OR `qc_final_approved = FALSE`.
 
-### Tables
-
-| Table | Key Columns |
-|-------|------------|
-| `gl_transactions` | `id, company_id, source ('quickbooks'), qb_transaction_id (FK), entity_type, txn_date, currency, memo, created_at` |
-| `gl_lines` | `id, gl_transaction_id (FK), account_id (FK to qb_accounts), debit, credit, customer_id, vendor_id, class_id, location_id, description` |
-
-### Derivation Rule
-When a `qb_transactions` row is inserted/updated, parse its `raw_json.Line` array and create corresponding `gl_lines` entries:
-- Invoice lines: debit Accounts Receivable, credit Income
-- Bill lines: debit Expense, credit Accounts Payable
-- Payment lines: debit Bank, credit Accounts Receivable
-- Journal Entry lines: use the explicit debit/credit from QB
-
-P&L, Balance Sheet, and Trial Balance are computed **only** from `gl_lines`.
+4. **`trg_set_sla_deadline`** on `leads` BEFORE UPDATE: When `stage` changes, auto-compute `sla_deadline` based on the SLA matrix (e.g., new -> 24h, estimation -> 48h, shop_drawing -> 72h, customer approval -> 5 days).
 
 ---
 
-## Phase 3: Sync Engine (Edge Function)
+## Phase 2: SLA Escalation Engine (Edge Function)
 
-### New Edge Function: `qb-sync-engine`
+New edge function: `check-sla-breaches`
 
-Handles three modes:
-
-**A) Historical Backfill** (`action: "backfill"`)
-- Sequential order: CompanyInfo -> Accounts -> Items -> Customers -> Vendors -> Transactions (Invoice, Bill, Payment, CreditMemo, JournalEntry, Estimate, PurchaseOrder, Deposit, Transfer, VendorCredit, SalesReceipt)
-- Paginate every endpoint (already have `qbQuery` with pagination)
-- Store raw_json in mirror tables
-- Normalize into GL
-
-**B) Incremental Sync** (`action: "incremental"`)
-- Query by `MetaData.LastUpdatedTime > last_synced_at`
-- SyncToken comparison: skip if unchanged, update if changed
-- Detect deletions via QB `ChangeDataCapture` endpoint
-- Mark `is_deleted = true` (never hard delete)
-
-**C) Nightly Reconciliation** (cron, `action: "reconcile"`)
-- Fetch QB Trial Balance report
-- Compare to ERP Trial Balance (SUM of gl_lines)
-- Alert if difference > $0.01
-- Repair missed updates
-
-### Sync Safety Rules (enforced in code)
-- SyncToken: skip if unchanged, update if changed, never overwrite newer
-- Deletions/Voids: mark `is_deleted` or `is_voided`, preserve original GL lines
-- Rate limits: existing exponential backoff (already implemented)
+- Runs on cron (every 15 minutes)
+- Queries `leads` WHERE `sla_deadline < NOW()` AND `sla_breached = FALSE`
+- Queries `orders` WHERE `production_locked = TRUE` AND age > 12h, or `qc_evidence_uploaded = FALSE` AND age > 4h
+- For each breach: sets `sla_breached = TRUE`, logs to `sla_escalation_log`, creates a `human_task` for the appropriate escalation target
+- Escalation targets follow the matrix:
+  - Intake/Customer Approval/Revisions > 1 -> Sales Mgr
+  - Estimation QC/Shop Drawing/Production Blocked/QC Evidence/Delivery -> Ops Mgr
 
 ---
 
-## Phase 4: Sync Logs + Verification
+## Phase 3: generate-suggestions Engine Updates
 
-### Table: `qb_sync_logs`
+Expand the existing `generate-suggestions` edge function with new rules:
 
-| Column | Type |
-|--------|------|
-| `id` | UUID |
-| `company_id` | UUID |
-| `entity_type` | TEXT |
-| `action` | TEXT (backfill/incremental/reconcile) |
-| `qb_ids_processed` | TEXT[] |
-| `synced_count` | INT |
-| `error_count` | INT |
-| `errors` | TEXT[] |
-| `duration_ms` | INT |
-| `trial_balance_diff` | NUMERIC (nullable) |
-| `created_at` | TIMESTAMPTZ |
+### Vizzy (CEO) -- new rules
+- Jobs blocked by revision / change order
+- QC failure rate (orders with `qc_final_approved = FALSE` past deadline)
+- Revenue waiting on QC/Delivery (orders with `qc_evidence_uploaded = FALSE`)
+- Repeat revision offenders (customers with > 2 revisions across orders)
 
-### Nightly Trial Balance Check
-- Pull QB Trial Balance report via API
-- Calculate ERP Trial Balance from `gl_lines`
-- Log difference in `qb_sync_logs`
-- If diff > $0.01, create `human_task` with severity `warning`
+### Penny (Accounting) -- new rule
+- Paid revision opportunities (orders with `billable_revision_required = TRUE` and no change order invoiced)
+
+### Forge (Shop Floor) -- new rule
+- Production blocked reasons (orders with `production_locked = TRUE` -- detail why: missing shop drawing, pending CO, missing QC)
 
 ---
 
-## Phase 5: Security and Access
+## Phase 4: Boss Dashboard Views
 
-- All new tables scoped by `company_id` with RLS
-- Finance/Admin roles: full SELECT on all QB mirror + GL tables
-- Agents (Penny, Vizzy): read ERP GL tables only, never QB API directly
-- Existing token encryption (`tokenEncryption.ts`) continues to apply
-- `financial_access_log` audit trigger extended to new tables
+### A) CEO Portal additions (CEODashboardView)
+New KPI cards and sections:
+- **Blocked Jobs** count (orders with `production_locked = TRUE`)
+- **QC Backlog** (orders awaiting `qc_final_approved`)
+- **Revenue Held** (sum of `total_amount` where `qc_evidence_uploaded = FALSE`)
+- **Revision Offenders** mini-table (customers ranked by total revision count)
+- **SLA Breach Summary** card with counts by category
 
----
+### B) New SLA Tracker component
+`src/components/ceo/SLATrackerCard.tsx`
+- Compact table showing active SLA timers per stage
+- Color-coded: green (on track), amber (< 2h remaining), red (breached)
+- Click-through to the lead/order
 
-## Phase 6: Update Frontend Hook
-
-Modify `useQuickBooksData` to optionally read from local mirror tables (ERP-native mode) instead of live QB API calls:
-- Dashboard loads from `qb_transactions` + `gl_lines` (instant, no QB latency)
-- Reports computed from `gl_lines` (P&L, Balance Sheet work for any historical date)
-- Fallback to live QB API if mirror is empty or stale
-
----
-
-## Phase 7: Cron Jobs
-
-| Job | Schedule | Purpose |
-|-----|----------|---------|
-| `qb-incremental-sync` | Every 15 minutes | Catch recent changes |
-| `qb-nightly-reconcile` | Daily at 2 AM | Full verification + repair |
-
-Both use vault-stored service role key (same pattern as `archive-odoo-files-batch`).
+### C) Pipeline stage enhancements
+Add visual indicators on pipeline board:
+- Shop drawing status badge on lead cards when in `shop_drawing` or `shop_drawing_approval` stage
+- SLA countdown timer badge
+- Revision count badge
 
 ---
 
-## Files Changed
+## Phase 5: Order Detail Workflow UI
 
-| File | Change |
-|------|--------|
-| Database migration | 6 QB mirror tables, 2 GL tables, `qb_sync_logs`, RLS policies, indexes |
-| `supabase/functions/qb-sync-engine/index.ts` | **New** -- backfill, incremental sync, reconciliation |
-| `supabase/functions/quickbooks-oauth/index.ts` | Add `"full-sync"` and `"reconcile"` action routes that delegate to sync engine |
-| `src/hooks/useQuickBooksData.ts` | Add ERP-native read mode from mirror tables |
-| `src/components/accounting/AccountingDashboard.tsx` | Show sync status indicator |
-| `supabase/config.toml` | Register `qb-sync-engine` function |
+### Order detail panel additions
+- **Shop Drawing Status** stepper (draft -> QC Internal -> Sent to Customer -> Customer Revision -> Approved)
+- **Revision Counter** with visual warning at 1+ (shows "Billable" badge)
+- **QC Checklist** section:
+  - QC Internal Approval (checkbox, stamps timestamp)
+  - Customer Approval (checkbox, stamps timestamp)
+  - QC Evidence Uploaded (checkbox)
+  - QC Final Approved (checkbox)
+- **Production Lock** indicator (red lock icon when locked, green unlock when all gates pass)
+- **Change Order** banner when `pending_change_order = TRUE`
 
 ---
 
-## Execution Order
+## Phase 6: Quote Terms Auto-Include
 
-1. SQL migration: create all tables + RLS + indexes
-2. Data migration: copy existing `accounting_mirror` and `customers` data into new tables
-3. Build `qb-sync-engine` edge function
-4. Run historical backfill
-5. Wire up incremental cron
-6. Wire up nightly reconciliation cron
-7. Update frontend to read from ERP tables
-8. Verify Trial Balance matches QB
+Update `AccountingDocuments.tsx` default terms to include:
+```
+"One (1) shop drawing revision included. Additional revisions billable via Change Order."
+"Revisions impacting quantities, bar sizes, coatings, or scope are re-priced regardless of count."
+```
 
+---
+
+## Technical Details
+
+### Files to Create
+1. `supabase/migrations/XXXXX_shop_drawing_qc_system.sql` -- all schema changes, triggers
+2. `supabase/functions/check-sla-breaches/index.ts` -- SLA cron engine
+3. `src/components/ceo/SLATrackerCard.tsx` -- SLA dashboard widget
+4. `src/components/orders/ShopDrawingStepper.tsx` -- visual stepper component
+5. `src/components/orders/QCChecklist.tsx` -- QC gate checklist
+6. `src/components/orders/ProductionLockBanner.tsx` -- lock status banner
+
+### Files to Modify
+7. `supabase/functions/generate-suggestions/index.ts` -- add new Vizzy/Penny/Forge rules
+8. `src/hooks/useCEODashboard.ts` -- add blocked jobs, QC backlog, SLA breach metrics
+9. `src/components/office/CEODashboardView.tsx` -- render new KPI cards and SLA tracker
+10. `src/pages/CEOPortal.tsx` -- add SLA tracker card
+11. `src/components/accounting/AccountingDocuments.tsx` -- update default quote terms
+12. `src/pages/Pipeline.tsx` -- add SLA/revision badges to pipeline cards
+13. `supabase/config.toml` -- register new edge function
+
+### SLA Matrix (encoded in trigger + edge function)
+
+```text
+Stage                    SLA      Escalation Target
+-----------------------------------------------------
+Intake (new)             24h      Sales Mgr
+Estimation               48h      Sales Mgr
+QC on Estimate           24h      Ops Mgr
+Shop Drawing Draft       72h      Ops Mgr
+QC on Shop Drawing       24h      Ops Mgr
+Customer Approval        5 days   Sales Mgr
+Production Blocked       12h      Ops Mgr
+QC Evidence Pending      4h       Ops Mgr
+Delivery Pending         24h      Ops Mgr
+Revisions > 1            Immediate Sales + Ops
+```
+
+### Cron Setup
+- `check-sla-breaches` runs every 15 minutes via `pg_cron`
+- Uses same `x-cron-secret` pattern as existing `qb-incremental-sync`
