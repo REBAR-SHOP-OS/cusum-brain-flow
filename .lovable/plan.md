@@ -1,149 +1,156 @@
 
 
-# Time Clock Enhancement — Leave Requests, Sick Days, Vacation Calculator
+# Transcribe Upgrade — ElevenLabs STT + LLM Intelligence + Apple Watch Mode
 
 ## Current State
 
-The Time Clock system has:
-- Clock in/out with face recognition and kiosk mode
-- Real-time team status board
-- Payroll audit with Ontario ESA compliance
-- `time_clock_entries` table (clock_in, clock_out, break_minutes, notes)
-- `employee_salaries` table (salary_amount, salary_type)
-
-**Missing entirely:**
-- No leave/time-off request system
-- No sick day tracking
-- No vacation entitlement calculation
-- No approval workflow for time off
-- No balance tracking (days used vs. available)
-
----
+The Transcribe system currently:
+- Records audio via browser MediaRecorder, then sends the entire blob to a `transcribe-translate` edge function
+- Uses Gemini 2.5 Pro for both transcription AND translation (two passes)
+- No real-time streaming — user must wait until recording finishes to see anything
+- Output is limited to translation only (no summaries, action items, or meeting notes)
+- No mobile/wearable optimization
+- ElevenLabs API key and SDK are already configured in the project (used for Vizzy voice agent)
 
 ## What We Will Build
 
-### 1. Database Tables
+### 1. ElevenLabs Scribe v2 Realtime — Live Streaming Transcription
 
-**`leave_balances`** — Each employee's annual entitlements
-- profile_id, year, vacation_days_entitled, vacation_days_used, sick_days_entitled, sick_days_used, personal_days_entitled, personal_days_used, company_id
-- Auto-populated based on Ontario ESA rules (2 weeks minimum vacation after 1 year, 3 weeks after 5 years)
+Replace the "record then send" flow with ElevenLabs `scribe_v2_realtime` via the `useScribe` hook from `@elevenlabs/react` (already installed). Words appear on screen as the user speaks — zero wait time.
 
-**`leave_requests`** — Individual time-off requests
-- profile_id, leave_type (vacation / sick / personal / bereavement / unpaid), start_date, end_date, total_days, reason, status (pending / approved / denied / cancelled), reviewed_by, reviewed_at, company_id
+- New edge function `elevenlabs-scribe-token` to generate single-use tokens
+- Frontend uses `useScribe` hook with VAD commit strategy
+- Live partial transcripts render in real-time with a typing animation
+- Committed transcripts stack below with timestamps
 
-### 2. Ontario ESA Vacation Calculator
+### 2. ElevenLabs Scribe v2 Batch — File Upload Transcription
 
-Automatically calculates entitlements based on:
-- **Vacation**: 2 weeks (10 days) after 1 year of employment, 3 weeks (15 days) after 5+ years
-- **Sick days**: 3 unpaid sick days per year (ESA minimum)
-- **Personal emergency leave**: 2 days per year
-- Vacation pay: 4% of gross earnings (under 5 years) or 6% (5+ years)
-- Integrates with `employee_salaries` to show vacation pay amounts
+Replace Gemini audio transcription for file uploads with ElevenLabs batch STT (`scribe_v2`). This gives:
+- Native speaker diarization (much more accurate than prompt-based)
+- Word-level timestamps
+- Audio event tagging (laughter, applause, music)
+- 99+ language support
 
-### 3. New UI Tabs on Time Clock Page
+New edge function `elevenlabs-transcribe` handles file uploads.
 
-Add a **tabbed interface** below the clock-in card:
+### 3. LLM Post-Processing Options (Gemini 3 Flash)
 
-**Tab: Team Status** (existing team grid, moved into tab)
+After transcription (from either realtime or batch), offer AI-powered post-processing via a toolbar:
 
-**Tab: My Leave**
-- Balance cards: Vacation (X/Y days), Sick (X/Y days), Personal (X/Y days)
-- Calendar view showing booked days
-- "Request Time Off" button opening a dialog form
-- List of my past/pending requests with status badges
+| Option | Description |
+|--------|-------------|
+| Translate | Translate to any of 48 supported languages (existing capability, upgraded) |
+| Summarize | Generate a concise summary of the transcript |
+| Action Items | Extract tasks with assignees and priorities |
+| Meeting Notes | Structured notes: key points, decisions, follow-ups |
+| Clean Up | Remove filler words, fix grammar, polish prose |
+| Custom Prompt | Free-text instruction for custom processing |
 
-**Tab: Team Calendar** (admin/manager view)
-- Calendar grid showing who is off on which days
-- Pending requests requiring approval with approve/deny buttons
-- Summary stats: how many people off today, upcoming leaves
+Each option calls the existing `transcribe-translate` edge function with a new `postProcess` mode, using Gemini 3 Flash for speed.
 
-### 4. Request Workflow
+### 4. Apple Watch Companion Mode
 
-- Employee submits request (leave type, dates, reason)
-- Request appears as "Pending" with yellow badge
-- Admin sees pending requests in Team Calendar tab
-- Admin approves or denies with optional note
-- On approval: balance is automatically decremented
-- On denial: employee gets notification via toast
-- Realtime updates via Supabase channel subscription
+Since we cannot build a native watchOS app, we will build a **PWA-optimized compact UI** designed for small screens (Apple Watch Ultra browser / iPhone companion):
 
-### 5. Payroll Integration
+- A dedicated `/transcribe/watch` route with a minimal, large-button interface
+- Single giant mic button (entire screen is tappable)
+- Real-time transcript displayed in large, high-contrast text
+- Auto-saves transcriptions to the database for later review on desktop
+- Haptic feedback via `navigator.vibrate()` on start/stop
+- Works offline via existing PWA service worker (records locally, syncs when online)
 
-- When payroll engine runs, it checks `leave_requests` for the week
-- Sick/personal days flagged as exceptions in payroll snapshots
-- Vacation days calculate vacation pay based on salary
+### 5. Enhanced Main UI
+
+Redesign the Transcribe page with:
+- **Live waveform visualizer** during recording (using `getInputByteFrequencyData`)
+- **Real-time transcript** appearing word-by-word as user speaks
+- **Post-processing toolbar** below the transcript with one-click actions
+- **Multi-language output** — translate to ANY language (not just English)
+- **Session persistence** — save transcriptions to database for later access
+- **Export options** — TXT, SRT (subtitles), JSON, PDF
 
 ---
 
 ## Technical Details
 
-### New Database Migration
+### New Edge Functions
 
-```text
-leave_balances:
-  id (uuid, PK, default gen_random_uuid())
-  profile_id (uuid, FK to profiles, NOT NULL)
-  year (integer, NOT NULL, default extract(year from now()))
-  vacation_days_entitled (numeric, default 10)
-  vacation_days_used (numeric, default 0)
-  sick_days_entitled (numeric, default 3)
-  sick_days_used (numeric, default 0)
-  personal_days_entitled (numeric, default 2)
-  personal_days_used (numeric, default 0)
-  company_id (uuid, NOT NULL)
-  created_at (timestamptz, default now())
-  updated_at (timestamptz, default now())
-  UNIQUE(profile_id, year)
+| Function | Purpose |
+|----------|---------|
+| `elevenlabs-scribe-token` | Generate single-use tokens for realtime STT |
+| `elevenlabs-transcribe` | Batch transcription of uploaded audio files |
 
-leave_requests:
-  id (uuid, PK, default gen_random_uuid())
-  profile_id (uuid, FK to profiles, NOT NULL)
-  leave_type (text, NOT NULL) -- vacation, sick, personal, bereavement, unpaid
-  start_date (date, NOT NULL)
-  end_date (date, NOT NULL)
-  total_days (numeric, NOT NULL, default 1)
-  reason (text)
-  status (text, NOT NULL, default 'pending') -- pending, approved, denied, cancelled
-  reviewed_by (uuid, FK to profiles, nullable)
-  reviewed_at (timestamptz, nullable)
-  review_note (text, nullable)
-  company_id (uuid, NOT NULL)
-  created_at (timestamptz, default now())
-  updated_at (timestamptz, default now())
-```
+### Modified Edge Functions
 
-- RLS policies: employees see own data + admins see all company data
-- Validation trigger: ensure leave_type and status are valid values
-- Trigger: on leave_request status change to 'approved', auto-update leave_balances
-- Enable realtime on both tables
+| Function | Changes |
+|----------|---------|
+| `transcribe-translate` | Add `postProcess` modes: summarize, action-items, meeting-notes, cleanup, custom. Upgrade model to gemini-3-flash-preview. Keep existing translate mode. |
 
 ### New Files
 
 | File | Purpose |
 |------|---------|
-| `src/hooks/useLeaveManagement.ts` | Hook for fetching balances, requests, CRUD operations |
-| `src/components/timeclock/LeaveBalanceCards.tsx` | Visual balance cards (vacation/sick/personal with progress rings) |
-| `src/components/timeclock/LeaveRequestDialog.tsx` | Form dialog to submit a new leave request |
-| `src/components/timeclock/MyLeaveTab.tsx` | "My Leave" tab content |
-| `src/components/timeclock/TeamCalendarTab.tsx` | Admin team calendar with approval workflow |
+| `supabase/functions/elevenlabs-scribe-token/index.ts` | Token endpoint for realtime STT |
+| `supabase/functions/elevenlabs-transcribe/index.ts` | Batch file transcription via ElevenLabs |
+| `src/hooks/useRealtimeTranscribe.ts` | Wrapper around `useScribe` with token fetching and state management |
+| `src/components/transcribe/LiveTranscript.tsx` | Real-time word-by-word transcript display |
+| `src/components/transcribe/PostProcessToolbar.tsx` | AI action buttons (Summarize, Action Items, etc.) |
+| `src/components/transcribe/AudioWaveform.tsx` | Visual waveform during recording |
+| `src/components/transcribe/WatchMode.tsx` | Compact Apple Watch / small-screen UI |
+| `src/pages/TranscribeWatch.tsx` | Route for `/transcribe/watch` |
 
 ### Modified Files
 
 | File | Changes |
 |------|---------|
-| `src/pages/TimeClock.tsx` | Add Tabs component wrapping Team Status + My Leave + Team Calendar |
-| `src/hooks/useTimeClock.ts` | No changes needed (clock entries remain separate) |
+| `src/components/office/TranscribeView.tsx` | Major rewrite: integrate realtime STT, post-processing toolbar, multi-language output, new export options |
+| `supabase/functions/transcribe-translate/index.ts` | Add post-processing modes, upgrade to gemini-3-flash-preview |
+| `src/App.tsx` | Add `/transcribe/watch` route |
+| `supabase/config.toml` | Register new edge functions |
 
-### Vacation Pay Calculation Logic
+### Database (Optional — Session Persistence)
+
+New `transcription_sessions` table to save transcriptions for later review:
+- id, profile_id, title, raw_transcript, processed_output, process_type, source_language, target_language, duration_seconds, speaker_count, company_id, created_at
+- RLS: users see own sessions, admins see all
+
+### ElevenLabs Scribe Token Edge Function
 
 ```text
-if employment_years < 5:
-  vacation_pay = annual_salary * 0.04
-  entitled_days = 10
-else:
-  vacation_pay = annual_salary * 0.06
-  entitled_days = 15
+1. Verify auth
+2. Fetch single-use token from https://api.elevenlabs.io/v1/single-use-token/realtime_scribe
+3. Return { token } to client
 ```
 
-This runs client-side using data from `employee_salaries` and `profiles.created_at`.
+### Post-Processing Logic (Edge Function)
+
+```text
+switch (postProcess):
+  "translate"      -> existing two-pass translation flow
+  "summarize"      -> system prompt: "Summarize this transcript concisely..."
+  "action-items"   -> system prompt: "Extract actionable tasks with assignees..."
+  "meeting-notes"  -> system prompt: "Structure as: Key Points, Decisions, Action Items, Follow-ups..."
+  "cleanup"        -> system prompt: "Clean up filler words, fix grammar, polish..."
+  "custom"         -> user provides their own instruction
+```
+
+### Apple Watch Mode Design
+
+```text
++------------------+
+|                  |
+|    [LARGE MIC]   |   <- entire top half tappable
+|                  |
+|------------------|
+|  Live text here  |   <- high contrast, large font
+|  scrolling up    |
+|                  |
+|  [Save] [Clear]  |   <- bottom action bar
++------------------+
+```
+
+- Dark background, white text, minimum 18px font
+- No sidebar, no header, no navigation chrome
+- Auto-saves on stop
+- Vibration feedback on start/stop
 
