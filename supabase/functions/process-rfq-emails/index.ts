@@ -24,6 +24,8 @@ const SKIP_INTERNAL_BOTS = ["odoobot"];
 
 const INTERNAL_DOMAIN = "@rebar.shop";
 
+// Default RFQ lead assignee when no historical customer assignment exists
+const DEFAULT_RFQ_ASSIGNEE = "Neel Mahajan";
 
 interface LeadExtraction {
   is_lead: boolean;
@@ -488,9 +490,13 @@ serve(async (req) => {
 
       try {
         // === KEYWORD FAST-TRACK ===
-        // If subject contains clear lead keywords, force is_lead = true regardless of AI decision
+        // If subject/body contains clear lead keywords, force is_lead = true regardless of AI decision
+        // Single-word patterns
         const LEAD_KEYWORDS = /\b(quote|quotation|pricing|price|bid|tender|rfq|estimation|estimate|proposal|budget|cost|shop drawing|rebar.*order)\b/i;
-        const hasLeadKeyword = LEAD_KEYWORDS.test(subject) || LEAD_KEYWORDS.test(body.substring(0, 500));
+        // Multi-word phrase patterns (from Gmail filter best practice)
+        const LEAD_PHRASES = /(request for (a )?(quote|quotation|pricing|price|estimate|proposal|bid))/i;
+        const textToCheck = `${subject} ${body.substring(0, 1000)}`;
+        const hasLeadKeyword = LEAD_KEYWORDS.test(textToCheck) || LEAD_PHRASES.test(textToCheck);
 
         const analysis = await analyzeEmailWithAI(subject, from, body);
 
@@ -580,13 +586,14 @@ serve(async (req) => {
         const leadTitle = `${leadNumber}, ${displayCompany}: ${projectTitle}`;
 
         // === AUTO-ASSIGNMENT ===
-        // Check if this customer has a historical assigned person
-        const assignedTo = customerId ? customerAssignments.get(customerId) : null;
+        // Check if this customer has a historical assigned person, fallback to default
+        const historicalAssignee = customerId ? customerAssignments.get(customerId) : null;
+        const assignedTo = historicalAssignee || DEFAULT_RFQ_ASSIGNEE;
         const toAddress = email.to_address || "";
 
         // Build structured notes
         const noteParts: string[] = [];
-        if (assignedTo) noteParts.push(`Assigned: ${assignedTo}`);
+        noteParts.push(`Assigned: ${assignedTo}`);
         if (analysis.city) noteParts.push(`City: ${analysis.city}`);
         noteParts.push(`From: ${from}`);
         noteParts.push(`To: ${toAddress}`);
@@ -695,7 +702,7 @@ serve(async (req) => {
               analysis.description,
               analysis.city ? `📍 Location: ${analysis.city}` : "",
               customerAction === "created" ? `🆕 New customer created automatically.` : `✅ Matched to existing customer.`,
-              assignedTo ? `👤 Auto-assigned to ${assignedTo} (handles this customer).` : "",
+              assignedTo ? `👤 ${historicalAssignee ? 'Auto-assigned' : 'Default assigned'} to ${assignedTo}${historicalAssignee ? ' (handles this customer)' : ''}.` : "",
               emailAttachments.length > 0 ? `📎 ${emailAttachments.length} attachment(s): ${emailAttachments.map(a => a.filename).join(", ")}` : "",
               fileLinks.length > 0 ? `🔗 ${fileLinks.length} download link(s) found` : "",
             ].filter(Boolean).join("\n"),
