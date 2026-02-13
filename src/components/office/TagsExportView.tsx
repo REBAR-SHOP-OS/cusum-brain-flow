@@ -278,7 +278,7 @@ export function TagsExportView() {
       ) : (
         /* Cards view — physical tag layout */
         <ScrollArea className="flex-1">
-          <div className="p-6 grid grid-cols-1 gap-6 max-w-[6.5in] mx-auto">
+          <div className="p-6 grid grid-cols-1 gap-6 max-w-[4.5in] mx-auto">
             {rowsLoading ? (
               <div className="col-span-full text-center text-muted-foreground text-sm p-8">Loading...</div>
             ) : sortedRows.length === 0 ? (

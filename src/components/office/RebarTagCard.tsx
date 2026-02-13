@@ -24,119 +24,110 @@ export function RebarTagCard({
 }: RebarTagCardProps) {
   return (
     <div
-      className="rebar-tag border-2 border-foreground/80 bg-white text-black overflow-hidden font-mono flex flex-col print:break-inside-avoid print:page-break-inside-avoid print:break-after-page"
-      style={{ width: "6in", height: "4in", boxSizing: "border-box" }}
+      className="rebar-tag border-2 border-black bg-white text-black overflow-hidden font-mono flex flex-col print:break-inside-avoid print:page-break-inside-avoid print:break-after-page"
+      style={{ width: "4in", height: "6in", boxSizing: "border-box" }}
     >
       {/* === TIMESTAMP === */}
-      <div className="px-2 py-0.5 text-[8px] font-bold border-b border-foreground/40 flex justify-between shrink-0">
+      <div className="px-2 py-0.5 text-[9px] font-bold border-b border-black flex justify-between shrink-0">
         <span>{new Date().toLocaleDateString()} {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-        <span>REBAR SHOP OS – AI Rebar Fabrication</span>
+        <span>REBAR SHOP OS</span>
       </div>
 
-      {/* === TOP HEADER ROW === */}
-      <div className="grid grid-cols-5 border-b-2 border-foreground/80 shrink-0">
-        <div className="border-r-2 border-foreground/80 px-2 py-2 text-center">
+      {/* === TOP HEADER: Mark / Size / Grade === */}
+      <div className="grid grid-cols-3 border-b-2 border-black shrink-0">
+        <div className="border-r-2 border-black px-2 py-2 text-center">
           <div className="text-[9px] font-bold tracking-widest uppercase">Mark</div>
-          <div className="text-lg font-black leading-tight">{mark || "—"}</div>
+          <div className="text-2xl font-black leading-tight">{mark || "—"}</div>
         </div>
-        <div className="border-r-2 border-foreground/80 px-2 py-2 text-center">
+        <div className="border-r-2 border-black px-2 py-2 text-center">
           <div className="text-[9px] font-bold tracking-widest uppercase">Size</div>
-          <div className="text-lg font-black leading-tight">{size || "—"}</div>
-        </div>
-        <div className="border-r-2 border-foreground/80 px-2 py-2 text-center">
-          <div className="text-[9px] font-bold tracking-widest uppercase">Grade</div>
-          <div className="text-lg font-black leading-tight">{grade || "—"}</div>
-        </div>
-        <div className="border-r-2 border-foreground/80 px-2 py-2 text-center">
-          <div className="text-[9px] font-bold tracking-widest uppercase">Qty</div>
-          <div className="text-lg font-black leading-tight">{qty ?? "—"}</div>
+          <div className="text-2xl font-black leading-tight">{size || "—"}</div>
         </div>
         <div className="px-2 py-2 text-center">
+          <div className="text-[9px] font-bold tracking-widest uppercase">Grade</div>
+          <div className="text-2xl font-black leading-tight">{grade || "—"}</div>
+        </div>
+      </div>
+
+      {/* === SECOND ROW: Qty / Length / Weight === */}
+      <div className="grid grid-cols-3 border-b-2 border-black shrink-0">
+        <div className="border-r-2 border-black px-2 py-2 text-center">
+          <div className="text-[9px] font-bold tracking-widest uppercase">Qty</div>
+          <div className="text-2xl font-black leading-tight">{qty ?? "—"}</div>
+        </div>
+        <div className="border-r-2 border-black px-2 py-2 text-center">
           <div className="text-[9px] font-bold tracking-widest uppercase">Length</div>
-          <div className="text-lg font-black leading-tight">{length ?? "—"}</div>
+          <div className="text-2xl font-black leading-tight">{length ?? "—"}</div>
+        </div>
+        <div className="px-2 py-2 text-center">
+          <div className="text-[9px] font-bold tracking-widest uppercase">Weight</div>
+          <div className="text-lg font-black leading-tight">{weight || "—"}</div>
         </div>
       </div>
 
-      {/* === MAIN BODY — fills remaining space === */}
-      <div className="grid grid-cols-[110px_1fr_1.2fr] flex-1 min-h-0 border-b-2 border-foreground/80">
-        {/* LEFT: summary fields */}
-        <div className="border-r-2 border-foreground/80 px-2 py-2 text-[11px] space-y-0.5 flex flex-col justify-center">
-          <div className="flex justify-between"><span className="font-bold">Qty:</span><span className="font-black">{qty ?? ""}</span></div>
-          <div className="flex justify-between"><span className="font-bold">Size:</span><span className="font-black">{size}</span></div>
-          <div className="flex justify-between"><span className="font-bold">Grd:</span><span className="font-black">{grade}</span></div>
-          <div className="flex justify-between"><span className="font-bold">Length:</span><span className="font-black">{length ?? ""}</span></div>
-          <div className="border-t border-foreground/30 my-0.5" />
-          <div className="flex justify-between"><span className="font-bold">Mark:</span><span className="font-black">{mark}</span></div>
-          <div className="flex justify-between"><span className="font-bold">Bndl:</span><span className="font-black"></span></div>
-          <div className="flex justify-between"><span className="font-bold">KG:</span><span className="font-black">{weight}</span></div>
-          <div className="flex justify-between"><span className="font-bold">Item:</span><span className="font-black">{item}</span></div>
-        </div>
-
-        {/* CENTER: shape code circle + dimensions A-R */}
-        <div className="border-r-2 border-foreground/80 px-2 py-2 flex flex-col">
-          {/* Shape code badge */}
-          <div className="flex justify-center mb-1.5">
-            <div className="w-8 h-8 rounded-full border-2 border-black flex items-center justify-center">
-              <span className="text-[11px] font-black leading-none">{shapeType || "S"}</span>
-            </div>
+      {/* === DIMENSIONS + SHAPE CODE === */}
+      <div className="grid grid-cols-[1fr_1.4fr] border-b-2 border-black shrink-0">
+        {/* Shape code circle */}
+        <div className="border-r-2 border-black px-2 py-2 flex flex-col items-center justify-center">
+          <div className="w-10 h-10 rounded-full border-2 border-black flex items-center justify-center mb-1">
+            <span className="text-sm font-black leading-none">{shapeType || "S"}</span>
           </div>
-          <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] flex-1">
-            {DIM_LEFT.map((d, i) => (
-              <div key={d} className="flex items-center gap-1" style={{ gridColumn: 1, gridRow: i + 1 }}>
-                <span className="font-bold w-3">{d}:</span>
-                <span className="font-black">{dims[d] || ""}</span>
-              </div>
-            ))}
-            {DIM_RIGHT.map((d, i) => (
-              <div key={d} className="flex items-center gap-1" style={{ gridColumn: 2, gridRow: i + 1 }}>
-                <span className="font-bold w-3">{d}:</span>
-                <span className="font-black">{dims[d] || ""}</span>
-              </div>
-            ))}
-          </div>
+          <span className="text-[9px] font-bold uppercase">Shape</span>
         </div>
-
-        {/* RIGHT: ASA shape image from database */}
-        <div className="px-2 py-2 flex flex-col items-center justify-center bg-white">
-          {shapeImageUrl ? (
-            <img
-              src={shapeImageUrl}
-              alt={`Shape ${shapeType}`}
-              className="max-w-full max-h-full object-contain"
-              crossOrigin="anonymous"
-            />
-          ) : shapeType ? (
-            <div className="flex flex-col items-center justify-center gap-1 text-black/40">
-              <div className="w-20 h-12 border-b-2 border-black/30" />
-              <span className="text-lg font-black">{shapeType}</span>
+        {/* Dimensions A–R */}
+        <div className="px-2 py-1.5 grid grid-cols-2 gap-x-3 gap-y-0">
+          {DIM_LEFT.map((d) => (
+            <div key={d} className="flex items-center gap-1 text-xs" style={{ gridColumn: 1 }}>
+              <span className="font-bold w-3">{d}:</span>
+              <span className="font-black">{dims[d] || ""}</span>
             </div>
-          ) : (
-            <span className="text-[10px] text-black/30 italic">No shape</span>
-          )}
+          ))}
+          {DIM_RIGHT.map((d) => (
+            <div key={d} className="flex items-center gap-1 text-xs" style={{ gridColumn: 2 }}>
+              <span className="font-bold w-3">{d}:</span>
+              <span className="font-black">{dims[d] || ""}</span>
+            </div>
+          ))}
         </div>
       </div>
 
-      {/* === BOTTOM INFO ROW === */}
-      <div className="grid grid-cols-[1.3fr_0.8fr_0.7fr] border-b-2 border-foreground/80 text-[10px] shrink-0">
-        <div className="border-r-2 border-foreground/80 px-2 py-1.5 space-y-px">
+      {/* === SHAPE IMAGE (full width, flex-1 to fill remaining space) === */}
+      <div className="flex-1 min-h-0 border-b-2 border-black flex items-center justify-center bg-white px-2 py-2">
+        {shapeImageUrl ? (
+          <img
+            src={shapeImageUrl}
+            alt={`Shape ${shapeType}`}
+            className="max-w-full max-h-full object-contain"
+            style={{ imageRendering: "pixelated" }}
+          />
+        ) : shapeType ? (
+          <div className="flex flex-col items-center justify-center gap-1 text-black/40">
+            <div className="w-24 h-14 border-b-2 border-black/30" />
+            <span className="text-xl font-black">{shapeType}</span>
+          </div>
+        ) : (
+          <span className="text-xs text-black/30 italic">No shape</span>
+        )}
+      </div>
+
+      {/* === INFO ROW: Ref / Dwg / Item === */}
+      <div className="grid grid-cols-2 border-b border-black text-xs shrink-0">
+        <div className="border-r border-black px-2 py-1.5 space-y-px">
           <div className="flex gap-1">
             <span className="font-bold">Ref:</span>
             <span className="font-black uppercase truncate">{reference || customer || "—"}</span>
           </div>
           {address && <div className="text-[9px] truncate">{address}</div>}
+        </div>
+        <div className="px-2 py-1.5 space-y-px">
           <div className="flex gap-1">
             <span className="font-bold">Dwg:</span>
             <span className="font-black">{dwg || "—"}</span>
           </div>
-        </div>
-        <div className="border-r-2 border-foreground/80 px-2 py-1.5 space-y-px">
-          <div className="flex justify-between"><span className="font-bold">Bndl:</span><span></span></div>
-          <div className="flex justify-between"><span className="font-bold">KG:</span><span className="font-black">{weight}</span></div>
-          <div className="flex justify-between"><span className="font-bold">Item:</span><span className="font-black">{item}</span></div>
-        </div>
-        <div className="px-2 py-1.5 space-y-px">
-          <div className="flex gap-1"><span className="font-bold">Job:</span></div>
-          <div className="flex gap-1"><span className="font-bold">Dwg:</span><span className="font-black">{dwg || "—"}</span></div>
+          <div className="flex gap-1">
+            <span className="font-bold">Item:</span>
+            <span className="font-black">{item}</span>
+          </div>
         </div>
       </div>
 
@@ -144,15 +135,6 @@ export function RebarTagCard({
       <div className="px-2 py-1.5 flex items-center justify-between shrink-0">
         <span className="text-sm font-black tracking-wider">R.S</span>
         <span className="text-[9px] font-bold tracking-widest uppercase">REBAR.SHOP</span>
-        <div className="flex gap-[1px]">
-          {Array.from({ length: 24 }).map((_, i) => (
-            <div
-              key={i}
-              className="bg-black"
-              style={{ width: i % 3 === 0 ? 2 : 1, height: 18 }}
-            />
-          ))}
-        </div>
       </div>
     </div>
   );
