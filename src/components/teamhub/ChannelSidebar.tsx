@@ -47,10 +47,9 @@ function getAvatarColor(name: string) {
 
 export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, profiles, onCreateChannel, onClickMember, onClose }: ChannelSidebarProps) {
   const [channelsOpen, setChannelsOpen] = useState(true);
+  const [dmsOpen, setDmsOpen] = useState(true);
   const [membersOpen, setMembersOpen] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [hovered, setHovered] = useState(false);
-  const isCollapsed = !onClose && !hovered; // only auto-hide on desktop (no onClose prop)
 
   const groupChannels = channels.filter((c) => c.channel_type === "group");
   const dmChannels = channels.filter((c) => c.channel_type === "dm");
@@ -74,10 +73,8 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
     <div
       className={cn(
         "flex flex-col h-full border-r border-border bg-card/30 backdrop-blur-sm shrink-0 transition-all duration-300 ease-in-out overflow-hidden",
-        onClose ? "w-full" : isCollapsed ? "w-14" : "w-64 lg:w-72"
+        onClose ? "w-full" : "w-64 lg:w-72"
       )}
-      onMouseEnter={() => !onClose && setHovered(true)}
-      onMouseLeave={() => !onClose && setHovered(false)}
     >
       {/* Workspace Header */}
       <div className="p-3 md:p-4 border-b border-border">
@@ -86,15 +83,13 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
             <div className="w-8 h-8 md:w-9 md:h-9 rounded-xl bg-primary/15 border border-primary/20 flex items-center justify-center shrink-0">
               <MessageSquare className="w-4 h-4 text-primary" />
             </div>
-            {!isCollapsed && (
-              <div>
-                <h2 className="text-sm font-bold text-foreground tracking-tight whitespace-nowrap">Team Hub</h2>
-                <div className="flex items-center gap-1.5">
-                  <Globe className="w-3 h-3 text-primary" />
-                  <span className="text-[10px] text-primary font-medium whitespace-nowrap">Auto-translated</span>
-                </div>
+            <div>
+              <h2 className="text-sm font-bold text-foreground tracking-tight whitespace-nowrap">Team Hub</h2>
+              <div className="flex items-center gap-1.5">
+                <Globe className="w-3 h-3 text-primary" />
+                <span className="text-[10px] text-primary font-medium whitespace-nowrap">Auto-translated</span>
               </div>
-            )}
+            </div>
           </div>
           {onClose && (
             <Button variant="ghost" size="icon" className="h-8 w-8 md:hidden" onClick={onClose}>
@@ -105,8 +100,7 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
       </div>
 
       {/* Search */}
-      {!isCollapsed && (
-        <div className="px-3 py-2">
+      <div className="px-3 py-2">
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
             <Input
@@ -117,68 +111,9 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
             />
           </div>
         </div>
-      )}
 
       {/* Scrollable Content */}
       <div className="flex-1 overflow-auto py-1 px-2">
-        {isCollapsed ? (
-          /* Collapsed icon rail */
-          <div className="flex flex-col items-center gap-1 pt-1">
-            {groupChannels.map((ch) => (
-              <button
-                key={ch.id}
-                onClick={() => handleSelect(ch.id)}
-                title={`#${ch.name}`}
-                className={cn(
-                  "w-10 h-10 rounded-lg flex items-center justify-center transition-all",
-                  selectedId === ch.id
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                )}
-              >
-                <Hash className="w-4 h-4" />
-              </button>
-            ))}
-            {dmChannels.length > 0 && (
-              <>
-                <div className="w-6 border-t border-border my-1" />
-                {dmChannels.map((ch) => (
-                  <button
-                    key={ch.id}
-                    onClick={() => handleSelect(ch.id)}
-                    title={ch.name}
-                    className={cn(
-                      "w-10 h-10 rounded-lg flex items-center justify-center transition-all",
-                      selectedId === ch.id
-                        ? "bg-primary/10 text-primary"
-                        : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                    )}
-                  >
-                    <Users className="w-4 h-4" />
-                  </button>
-                ))}
-              </>
-            )}
-            <div className="w-6 border-t border-border my-1" />
-            {filteredMembers.slice(0, 6).map((p) => (
-              <button
-                key={p.id}
-                onClick={() => handleClickMember(p.id, p.full_name)}
-                title={p.full_name}
-                className="w-10 h-10 rounded-lg flex items-center justify-center hover:bg-muted/50 transition-colors"
-              >
-                <Avatar className="w-6 h-6">
-                  <AvatarImage src={p.avatar_url || ""} />
-                  <AvatarFallback className={cn("text-[9px] font-bold text-white", getAvatarColor(p.full_name))}>
-                    {getInitials(p.full_name)}
-                  </AvatarFallback>
-                </Avatar>
-              </button>
-            ))}
-          </div>
-        ) : (
-          /* Expanded full content */
-          <>
             {/* Channels Section */}
             <div className="flex items-center justify-between pr-1">
               <button
@@ -226,15 +161,16 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
             {dmChannels.length > 0 && (
               <>
                 <button
-                  onClick={() => {}}
+                  onClick={() => setDmsOpen(!dmsOpen)}
                   className="w-full flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-bold tracking-wider uppercase text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  <ChevronDown className="w-3 h-3" />
+                  {dmsOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
                   Direct Messages
                   <Badge variant="secondary" className="ml-auto text-[9px] px-1 py-0 h-4">
                     {dmChannels.length}
                   </Badge>
                 </button>
+                {dmsOpen && (
                 <div className="space-y-0.5 mb-3">
                   {dmChannels.map((ch) => (
                     <button
@@ -252,6 +188,7 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
                     </button>
                   ))}
                 </div>
+                )}
               </>
             )}
 
@@ -294,8 +231,6 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
                 ))}
               </div>
             )}
-          </>
-        )}
       </div>
     </div>
   );
