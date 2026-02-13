@@ -1,44 +1,36 @@
 
 
-# دسترسی کاربر sourabh@rebar.shop به عنوان Sales
+# اصلاح دسترسی saurabh@rebar.shop به Pipeline
 
-## وضعیت فعلی
-کاربر `sourabh@rebar.shop` هنوز در سیستم ثبت‌نام نکرده. بعد از ثبت‌نام، باید نقش `sales` به او اختصاص داده شود.
+## مشکل
+کاربر `saurabh@rebar.shop` نقش‌های `workshop` و `office` را دارد ولی نقش `sales` را ندارد. سیاست‌های امنیتی جدول `leads` فقط به نقش‌های `admin`، `sales` و `accounting` اجازه دسترسی می‌دهند.
 
-## مراحل
-
-### 1. ثبت‌نام کاربر
-ابتدا `sourabh@rebar.shop` باید وارد اپلیکیشن شود و ثبت‌نام کند. بعد از ثبت‌نام، پروفایل او به‌صورت خودکار ساخته می‌شود.
-
-### 2. اختصاص نقش sales
-بعد از ثبت‌نام، با یک دستور SQL نقش `sales` به او اختصاص داده می‌شود:
+## راه‌حل
+یک دستور SQL برای اضافه کردن نقش `sales` به کاربر:
 
 ```text
 INSERT INTO user_roles (user_id, role)
-SELECT id, 'sales' FROM auth.users WHERE email = 'sourabh@rebar.shop';
+VALUES ('1a618127-a569-4134-b4cc-42da73a70399', 'sales')
+ON CONFLICT (user_id, role) DO NOTHING;
 ```
 
-### 3. دسترسی‌های نقش sales (از قبل تنظیم شده)
-با نقش `sales`، کاربر به این صفحات دسترسی دارد:
-- `/pipeline` (اصلی - CRM)
-- `/customers`
-- `/office`
-- `/inbox`
-- `/phonecalls`
-- `/settings`
-- `/home`
-- `/brain`
-- `/timeclock`
-- `/integrations`
-- `/agent`
-- `/daily-summarizer`
+همچنین اگر نقش `workshop` لازم نیست، می‌توان آن را حذف کرد (اختیاری):
 
-بقیه صفحات مثل accounting، shop floor و غیره برای او مسدود هستند.
+```text
+DELETE FROM user_roles 
+WHERE user_id = '1a618127-a569-4134-b4cc-42da73a70399' 
+AND role = 'workshop';
+```
 
-### 4. به‌روزرسانی department پروفایل
-Department پروفایل هم به `office` تنظیم می‌شود تا در لیست تیم درست نمایش داده شود.
+و department پروفایل به `office` تنظیم شود:
 
-### خلاصه تغییرات
-- تغییر کد لازم نیست - دسترسی‌های sales از قبل در `RoleGuard` تنظیم شده
-- فقط بعد از ثبت‌نام کاربر، نقش در دیتابیس اضافه می‌شود
+```text
+UPDATE profiles SET department = 'office' 
+WHERE user_id = '1a618127-a569-4134-b4cc-42da73a70399';
+```
+
+## نتیجه
+- با اضافه شدن نقش `sales`، RLS جدول `leads` اجازه خواندن/نوشتن داده‌ها را می‌دهد
+- Pipeline و Customers برای کاربر قابل مشاهده خواهد بود
+- تغییر کد لازم نیست -- فقط تنظیم دیتابیس
 
