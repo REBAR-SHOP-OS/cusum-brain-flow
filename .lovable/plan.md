@@ -1,42 +1,98 @@
 
 
-# Fix: Back Arrow Should Return to Production Card Pool
+# Audit and Improve "Remaining" Display -- Make It Big and Foolproof
 
-## Problem
+## Current Issues Found
 
-The back arrow in the Cutter Station view navigates to `/shopfloor/station` (the machine selector page). The user wants it to go back to the **production card pool** -- the list of cards for the current machine.
+1. **"47 REMAINING" badge is tiny** -- it's a small `text-xs` outline badge in the header, easy to miss
+2. **Hidden on mobile** -- uses `hidden sm:flex`, so operators on tablets in portrait mode can't see it at all
+3. **No color urgency** -- same muted outline regardless of whether 47 or 2 items remain
+4. **Only counts incomplete items** -- `items.filter(i => i.completed_pieces < i.total_pieces).length` which is correct, but it's not shown prominently enough for operators to track progress
 
-The CutterStationView is rendered conditionally inside `StationView` when `selectedItemId` is set. Clearing `selectedItemId` returns to the pool without a route change.
+## Plan
 
-## Changes
+### 1. Make "Remaining" Always Visible in Header (StationHeader.tsx)
 
-### 1. Add `onBack` prop to CutterStationView
+- Remove `hidden sm:flex` so it shows on all screen sizes
+- Increase badge size and make it visually dominant with color coding:
+  - Green pulse when remaining is less than or equal to 3 (almost done)
+  - Amber/warning when less than or equal to 10
+  - Default primary otherwise
+- Use a larger font size (`text-sm font-bold`) instead of `text-xs`
 
-Add an optional `onBack?: () => void` callback prop. Pass it through to `StationHeader` via the existing `backTo` mechanism or a new click handler.
+### 2. Add a Prominent Remaining Banner Below Header (CutterStationView.tsx)
 
-### 2. Pass `onBack` from StationView
+Add a full-width progress strip between the header and the content area showing:
+- Large remaining count with progress bar
+- "X of Y marks complete" text
+- Color transitions as work progresses (green zone near completion)
 
-In `StationView.tsx`, pass `onBack={() => setSelectedItemId(null)}` to `CutterStationView` (and `BenderStationView` for consistency).
+### 3. Show Remaining in Operator Stats Cards (CutterStationView.tsx)
 
-### 3. Wire up StationHeader
-
-Add an `onBack` prop to `StationHeader`. When provided, the back arrow calls `onBack()` instead of `navigate(backTo)`.
+Replace or augment the existing stats grid to include a dedicated "Remaining Marks" card that's visually distinct (larger, colored border) so the operator always sees it at a glance.
 
 ## Technical Details
 
 ### File: `src/components/shopfloor/StationHeader.tsx`
-- Add `onBack?: () => void` to props interface
-- Change back button: `onClick={() => onBack ? onBack() : navigate(backTo)}`
+
+**Line 91** -- Remove `hidden sm:flex` from the remaining badge, increase size, add dynamic color:
+
+```tsx
+{remainingCount !== undefined && (
+  <Badge 
+    className={cn(
+      "font-mono text-sm font-bold px-3 py-1.5",
+      remainingCount <= 3 
+        ? "bg-green-500/20 text-green-400 border-green-500/40 animate-pulse" 
+        : remainingCount <= 10 
+          ? "bg-amber-500/20 text-amber-400 border-amber-500/40"
+          : "border-primary/40 text-primary"
+    )}
+    variant="outline"
+  >
+    {remainingCount} REMAINING
+  </Badge>
+)}
+```
 
 ### File: `src/components/shopfloor/CutterStationView.tsx`
-- Add `onBack?: () => void` to `CutterStationViewProps`
-- Pass `onBack={onBack}` to both `StationHeader` usages (lines 373 and 388)
+
+**After the StationHeader (line ~400)** -- Add a progress strip:
+
+```tsx
+{/* Remaining progress strip */}
+<div className={cn(
+  "flex items-center justify-between px-6 py-2 border-b border-border",
+  remaining <= 3 ? "bg-green-500/10" : remaining <= 10 ? "bg-amber-500/10" : "bg-muted/30"
+)}>
+  <div className="flex items-center gap-3">
+    <span className={cn(
+      "text-2xl font-black font-mono",
+      remaining <= 3 ? "text-green-500" : remaining <= 10 ? "text-amber-500" : "text-foreground"
+    )}>
+      {remaining}
+    </span>
+    <span className="text-xs text-muted-foreground uppercase tracking-wider">
+      marks remaining of {items.length}
+    </span>
+  </div>
+  <div className="w-32 h-2 bg-muted rounded-full overflow-hidden">
+    <div 
+      className={cn(
+        "h-full rounded-full transition-all",
+        remaining <= 3 ? "bg-green-500" : remaining <= 10 ? "bg-amber-500" : "bg-primary"
+      )}
+      style={{ width: `${((items.length - remaining) / items.length) * 100}%` }}
+    />
+  </div>
+</div>
+```
 
 ### File: `src/components/shopfloor/BenderStationView.tsx`
-- Same pattern: add `onBack` prop and pass to `StationHeader`
 
-### File: `src/pages/StationView.tsx`
-- Pass `onBack={() => setSelectedItemId(null)}` to both `CutterStationView` and `BenderStationView`
+Apply the same progress strip pattern for consistency on the bender station.
 
-Four files, small changes each.
-
+### Files Modified
+- `src/components/shopfloor/StationHeader.tsx` -- bigger, always-visible, color-coded remaining badge
+- `src/components/shopfloor/CutterStationView.tsx` -- progress strip below header
+- `src/components/shopfloor/BenderStationView.tsx` -- same progress strip for consistency
