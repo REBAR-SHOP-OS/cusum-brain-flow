@@ -11,7 +11,7 @@ serve(async (req) => {
     });
 
     const { region } = await req.json();
-    const targetRegion = region || "Canada/USA";
+    const targetRegion = region || "Ontario, Canada";
 
     // Get user's company_id
     const { data: profile } = await serviceClient
@@ -49,7 +49,7 @@ serve(async (req) => {
 
     const systemPrompt = `You are an expert B2B lead researcher for rebar.shop — a Canadian rebar fabrication company based in Ontario.
 
-Your job is to generate 50 highly targeted, realistic lead prospects for rebar fabrication services.
+Your job is to generate 50 highly targeted, realistic lead prospects for rebar fabrication services in Ontario, Canada.
 
 Target industries:
 - General contractors (commercial, industrial, infrastructure)
@@ -59,7 +59,7 @@ Target industries:
 - Infrastructure project managers (bridges, highways, transit)
 - Concrete construction companies
 
-Geographic focus: ${targetRegion}
+Geographic focus: Ontario, Canada — specifically cities like Toronto, Ottawa, Hamilton, London, Kitchener-Waterloo, Mississauga, Brampton, Markham, Vaughan, Burlington, Oshawa, Barrie, Kingston, Windsor, Sudbury, Thunder Bay, and surrounding areas.
 
 For each prospect, provide realistic but AI-generated data:
 - Company name (realistic sounding, industry-appropriate)

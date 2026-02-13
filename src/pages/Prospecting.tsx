@@ -16,7 +16,7 @@ import {
 } from "@/components/prospecting/ProspectingFilters";
 
 export default function Prospecting() {
-  const [region, setRegion] = useState("Canada/USA");
+  const region = "Ontario, Canada";
   const [introProspect, setIntroProspect] = useState<any | null>(null);
   const [emailMode, setEmailMode] = useState<"intro" | "followup">("intro");
   const [searchInput, setSearchInput] = useState("");
@@ -286,13 +286,6 @@ export default function Prospecting() {
               className="pl-8 w-44 lg:w-56 h-8 text-sm"
             />
           </div>
-
-          <Input
-            value={region}
-            onChange={(e) => setRegion(e.target.value)}
-            placeholder="Region (e.g. Ontario, Canada)"
-            className="w-40 lg:w-52 h-8 text-sm"
-          />
 
           <Button
             onClick={() => digMutation.mutate()}
