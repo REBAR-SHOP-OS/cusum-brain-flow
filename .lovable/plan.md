@@ -1,142 +1,192 @@
 
 
-# Accounting Workspace Audit and Improvements
+# Make Accounting Fully AI-Driven with Human Approvals, Follow-Ups, and Collections
 
-## Scope Audited
-17 files: `AccountingWorkspace.tsx`, `AccountingDashboard.tsx`, `AccountingInvoices.tsx`, `AccountingBills.tsx`, `AccountingPayments.tsx`, `AccountingCustomers.tsx`, `AccountingVendors.tsx`, `AccountingAccounts.tsx`, `AccountingAudit.tsx`, `AccountingPayroll.tsx`, `AccountingOrders.tsx`, `AccountingDocuments.tsx`, `AccountingReport.tsx`, `AccountingAgent.tsx`, `AccountingNavMenus.tsx`, `AccountQuickReportDrawer.tsx`, `PennyCallCard.tsx`, `ConfirmActionDialog.tsx`, `useQuickBooksData.ts`
+## Overview
 
----
-
-## Issues Found
-
-### A. BUG (Console Error): RichMarkdown ref warning
-The console shows: "Function components cannot be given refs. Attempts to access this ref will fail." `AccountingAgent` passes a ref to `RichMarkdown`, which is a plain function component. This generates a React warning on every render.
-
-**Fix**: Wrap `RichMarkdown` with `React.forwardRef` or remove the ref usage from `AccountingAgent`.
-
-### B. CRITICAL: `as any` casts throughout (6 files)
-
-| File | Issue |
-|------|-------|
-| `AccountingVendors.tsx` | Lines 21, 26-28, 33, 72 -- pervasive `as any` on typed data |
-| `AccountingAudit.tsx` | Line 100 -- `(f: any, i: number)` for audit findings |
-| `AccountingInvoices.tsx` | Line 153 -- `(inv as any).SyncToken` |
-| `AccountQuickReportDrawer.tsx` | Line 28 -- `qbAction: ... => Promise<any>` |
-| `useQuickBooksData.ts` | Lines 231-236 -- chained `as unknown as QBInvoice` casts on mirror data |
-
-**Fix**: Replace `as any` with proper typed interfaces. For `AccountingVendors.tsx`, use the existing `QBVendor` and `QBBill` types directly.
-
-### C. BUG: Hardcoded colors instead of design tokens (8 files)
-
-| File | Hardcoded Colors |
-|------|-----------------|
-| `AccountingInvoices.tsx` | `bg-emerald-500/10 text-emerald-500`, `bg-blue-500/10 text-blue-500` |
-| `AccountingBills.tsx` | Same pattern |
-| `AccountingPayments.tsx` | `bg-emerald-500/5`, `text-emerald-500`, `border-emerald-500/30` |
-| `AccountingCustomers.tsx` | `bg-emerald-500/10 text-emerald-500` |
-| `AccountingVendors.tsx` | Same |
-| `AccountingAccounts.tsx` | Same |
-| `AccountingDashboard.tsx` | `text-emerald-500` |
-| `AccountingReport.tsx` | `text-emerald-500`, `text-blue-500` across all 3 reports |
-
-**Fix**: Replace with design tokens (`text-success`, `text-primary`, `bg-success/10`, etc.).
-
-### D. BUG: No `displayName` on any accounting component
-
-None of the 15+ accounting components have `displayName` set.
-
-**Fix**: Add `ComponentName.displayName = "ComponentName"` to all components.
-
-### E. BUG: Missing error handling in `useQuickBooksData.loadAll`
-
-`loadAll()` catches errors and shows a toast, but the `connected` state is never set to an error state. If `checkConnection` succeeds but `loadFromMirror` and the QB API both fail, the user sees an empty dashboard with no indication of failure.
-
-**Fix**: Add an `error` state to the hook and surface it in `AccountingWorkspace.tsx` with a retry button.
-
-### F. BUG: `useEffect` missing dependencies in `AccountingWorkspace.tsx`
-
-Line 45-53: `useEffect` depends on `hasAccess` but calls `qb.loadAll()` and `webPhoneActions.initialize()` which are not stable references. The `eslint-plugin-react-hooks` would flag this. Also, the WebPhone init check `webPhoneState.status === "idle"` creates a stale closure.
-
-**Fix**: Add proper dependencies or wrap in stable refs.
-
-### G. BUG: `AccountingAgent` auto-greet has race condition
-
-Line 103: The condition `qbSummary.invoices.length === 0 && qbSummary.bills.length === 0` uses `&&` instead of `||`, meaning the auto-greet fires even if only one of invoices/bills is empty. The intent is to wait until data is loaded.
-
-**Fix**: Change `&&` to `||` in the guard condition so it only fires when ALL data is loaded.
-
-### H. IMPROVEMENT: Penny agent `qbSummary` missing dependencies
-
-Line 172: `useEffect` for auto-greet lists `[autoGreet, qbSummary]` but `qbSummary` is a new object on every render (returned from a hook with `useState`). This means the effect re-evaluates on every render but is guarded by `hasGreeted.current`. This is safe but wasteful.
-
-**Fix**: Memoize the dependency or extract specific values.
-
-### I. BUG: Audit "Confirm" dialog does nothing
-
-Line 269 in `AccountingAudit.tsx`: The confirm dialog's `onConfirm` handler is `() => setConfirmAction(null)` -- it just closes the dialog without performing any action. The `action` field from audit findings is never executed.
-
-**Fix**: Implement the action handler to route audit finding actions (e.g., navigate to invoices, trigger collection) or remove the action buttons if they're not functional.
-
-### J. MISSING: No Vizzy auto-report integration
-
-None of the accounting components use the `reportToVizzy` utility for unrecoverable errors. If the QB connection fails repeatedly or data loading crashes, it silently fails.
-
-**Fix**: Add `reportToVizzy` calls in critical error paths: `loadAll` failures, audit failures, and payroll correction failures.
-
-### K. IMPROVEMENT: `AccountingReport.tsx` is a placeholder
-
-The Balance Sheet, P&L, and Cash Flow reports are very basic summaries (3 cards each) built from client-side aggregation of invoices/bills. They don't use the actual GL data from the mirror tables. The bottom disclaimer says "For the full report, check your QuickBooks dashboard."
-
-**Fix**: Add a note explaining these are summary views. Low priority -- not a bug.
+Transform the Accounting workspace from a passive data viewer into an **AI-driven command center** where Penny proactively manages collections, follow-ups, and financial actions -- all gated by human approval before execution.
 
 ---
 
-## Plan (Priority Order)
+## What Changes
 
-### Phase 1: Fix Active Bug (A)
-- Fix the `RichMarkdown` ref warning in `AccountingAgent.tsx` by removing the ref pass-through or wrapping `RichMarkdown` with `forwardRef`.
+### 1. New Database Table: `penny_collection_queue`
 
-### Phase 2: Type Safety (B)
-Remove all `as any` casts in:
-- `AccountingVendors.tsx` (use `QBVendor` / `QBBill` types)
-- `AccountingAudit.tsx` (type the findings array)
-- `AccountingInvoices.tsx` (add `SyncToken` to `QBInvoice` interface)
-- `AccountQuickReportDrawer.tsx` (type the return properly)
+A structured queue for AI-generated collection and follow-up actions that require human approval before execution.
 
-### Phase 3: Error Handling + Vizzy (E, J)
-- Add `error` state to `useQuickBooksData` hook
-- Surface error state in `AccountingWorkspace.tsx` with retry button
-- Add `reportToVizzy` calls on repeated QB load failures and audit failures
+| Column | Type | Purpose |
+|--------|------|---------|
+| id | uuid | Primary key |
+| company_id | uuid | Multi-tenant isolation |
+| invoice_id | text | QuickBooks invoice reference |
+| customer_name | text | For display |
+| customer_email | text | For email actions |
+| customer_phone | text | For call actions |
+| amount | numeric | Outstanding balance |
+| days_overdue | integer | Aging days |
+| action_type | text | `email_reminder`, `call_collection`, `send_invoice`, `escalate` |
+| action_payload | jsonb | Draft email body, call script, etc. |
+| status | text | `pending_approval`, `approved`, `executed`, `rejected`, `failed` |
+| priority | text | `low`, `medium`, `high`, `critical` |
+| ai_reasoning | text | Why Penny recommends this action |
+| approved_by | uuid | Who approved |
+| approved_at | timestamptz | When approved |
+| executed_at | timestamptz | When executed |
+| execution_result | jsonb | Outcome details |
+| followup_date | date | When to follow up next |
+| followup_count | integer | How many times followed up |
+| created_at | timestamptz | Default now() |
 
-### Phase 4: Fix Audit Dialog (I)
-- Wire the confirm action dialog in `AccountingAudit.tsx` to actually perform the action (navigate to relevant tab) or remove the action buttons
+RLS: Authenticated users with accounting or admin role, filtered by company_id.
 
-### Phase 5: Fix Agent Logic (F, G)
-- Fix the auto-greet guard condition (`&&` to `||`)
-- Fix `useEffect` dependency array in `AccountingWorkspace.tsx`
+### 2. New Component: `AccountingActionQueue.tsx`
 
-### Phase 6: Standards (C, D)
-- Replace hardcoded colors with design tokens across all 8 files
-- Add `displayName` to all 15+ components
+A dedicated "AI Actions" tab in the accounting workspace showing Penny's recommended actions in a prioritized queue:
+
+- Grouped by priority (Critical / High / Medium / Low)
+- Each card shows: customer, amount, days overdue, Penny's reasoning, and the proposed action (email draft / call script)
+- **Approve** button executes the action (sends email, initiates call, sends invoice)
+- **Reject** button dismisses with optional reason
+- **Modify & Approve** lets users edit the draft before sending
+- **Schedule** button sets a follow-up date
+- Badge counters in the nav showing pending approvals
+
+### 3. New Edge Function: `penny-auto-actions`
+
+A cron-triggered (or on-demand) edge function that:
+
+1. Reads overdue invoices from the QuickBooks mirror/API
+2. Applies Penny's rule engine:
+   - **7+ days overdue**: Queue a friendly email reminder (action_type: `email_reminder`)
+   - **14+ days overdue**: Queue a call collection (action_type: `call_collection`)  
+   - **30+ days overdue**: Queue an invoice re-send + firm email (action_type: `send_invoice`)
+   - **60+ days overdue**: Queue escalation to CEO/Vizzy (action_type: `escalate`)
+3. Uses Lovable AI (Gemini Flash) to generate personalized email drafts and call scripts based on customer history
+4. Inserts into `penny_collection_queue` with `status: pending_approval`
+5. Deduplicates: won't create a new action if one already exists for the same invoice in `pending_approval` status
+
+### 4. New Edge Function: `penny-execute-action`
+
+Executes approved actions:
+- `email_reminder` / `send_invoice`: Calls the existing `quickbooks-oauth` send-invoice action or drafts a Gmail via the existing email infrastructure
+- `call_collection`: Creates a `call_task` record and returns a call card for Penny
+- `escalate`: Creates a `human_task` assigned to Vizzy (CEO agent)
+- Updates `penny_collection_queue` status to `executed` with result
+
+### 5. Enhanced `AccountingDashboard.tsx`
+
+Add a new summary card: **"Penny's Queue"** showing:
+- Pending approvals count (with badge)
+- Total AR at risk
+- Next follow-up due date
+- Clicking navigates to the new "actions" tab
+
+### 6. Enhanced `AccountingNavMenus.tsx`
+
+Add "AI Actions" tab with a notification badge showing pending approval count.
+
+### 7. Enhanced `AccountingAgent.tsx` (Penny Chat)
+
+Update Penny's prompt to:
+- Proactively mention pending actions from the queue in daily briefings
+- Allow users to say "approve all low-risk" to batch-approve email reminders
+- Allow "show my queue" to display pending actions inline
+- After a collection call outcome is logged, auto-queue the next follow-up action
+
+### 8. Enhanced `generate-suggestions` Edge Function
+
+Add new Penny suggestion rules:
+- "X invoices ready for collection email -- approve in AI Actions"
+- "Customer Y has been followed up Z times with no payment -- escalate?"
+- "Follow-up overdue: last contact was N days ago for Invoice #X"
 
 ---
 
 ## Technical Details
 
-### Files Modified (12 files)
+### Files Created (4 new)
+
+| File | Purpose |
+|------|---------|
+| `src/components/accounting/AccountingActionQueue.tsx` | Main AI actions queue UI with approve/reject/schedule |
+| `src/hooks/usePennyQueue.ts` | Hook for CRUD on `penny_collection_queue` with realtime |
+| `supabase/functions/penny-auto-actions/index.ts` | AI-powered action generation engine |
+| `supabase/functions/penny-execute-action/index.ts` | Action execution after approval |
+
+### Files Modified (6)
 
 | File | Changes |
 |------|---------|
-| `src/hooks/useQuickBooksData.ts` | Add `error` state, add `SyncToken` to `QBInvoice`, Vizzy reporting |
-| `src/pages/AccountingWorkspace.tsx` | Surface error state, fix useEffect deps |
-| `src/components/accounting/AccountingAgent.tsx` | Fix ref warning, fix auto-greet guard |
-| `src/components/accounting/AccountingVendors.tsx` | Remove all `as any`, design tokens, `displayName` |
-| `src/components/accounting/AccountingInvoices.tsx` | Remove `as any`, design tokens, `displayName` |
-| `src/components/accounting/AccountingBills.tsx` | Design tokens, `displayName` |
-| `src/components/accounting/AccountingPayments.tsx` | Design tokens, `displayName` |
-| `src/components/accounting/AccountingCustomers.tsx` | Design tokens, `displayName` |
-| `src/components/accounting/AccountingAccounts.tsx` | Design tokens, `displayName` |
-| `src/components/accounting/AccountingAudit.tsx` | Fix action dialog, type findings, design tokens, `displayName`, Vizzy |
-| `src/components/accounting/AccountingReport.tsx` | Design tokens, `displayName` |
-| `src/components/accounting/AccountingDashboard.tsx` | Design tokens, `displayName` |
+| `src/pages/AccountingWorkspace.tsx` | Add "actions" tab routing, listen for pending count |
+| `src/components/accounting/AccountingNavMenus.tsx` | Add "AI Actions" nav item with badge |
+| `src/components/accounting/AccountingDashboard.tsx` | Add Penny Queue summary card |
+| `src/components/accounting/AccountingAgent.tsx` | Enhance prompt context with queue data, post-call auto-followup |
+| `supabase/functions/generate-suggestions/index.ts` | Add follow-up overdue and batch-ready rules |
+| `supabase/config.toml` | Register new edge functions |
+
+### Database Migration
+
+```sql
+CREATE TABLE public.penny_collection_queue (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id uuid NOT NULL,
+  invoice_id text,
+  customer_name text NOT NULL,
+  customer_email text,
+  customer_phone text,
+  amount numeric DEFAULT 0,
+  days_overdue integer DEFAULT 0,
+  action_type text NOT NULL,
+  action_payload jsonb DEFAULT '{}',
+  status text NOT NULL DEFAULT 'pending_approval',
+  priority text NOT NULL DEFAULT 'medium',
+  ai_reasoning text,
+  approved_by uuid REFERENCES auth.users(id),
+  approved_at timestamptz,
+  executed_at timestamptz,
+  execution_result jsonb,
+  followup_date date,
+  followup_count integer DEFAULT 0,
+  created_at timestamptz DEFAULT now()
+);
+
+-- Validation trigger for status/priority/action_type
+-- RLS policies for authenticated users with company_id filter
+-- Realtime enabled
+```
+
+### AI Action Generation Flow
+
+```
+Cron (every 4h) or Manual trigger
+        |
+        v
+[penny-auto-actions]
+  1. Read overdue invoices from qb_transactions mirror
+  2. Check existing queue (skip duplicates)
+  3. Apply aging rules (7d / 14d / 30d / 60d)
+  4. Call Lovable AI to draft personalized emails/scripts
+  5. Insert into penny_collection_queue (pending_approval)
+        |
+        v
+[AccountingActionQueue UI]
+  User sees: customer, amount, AI reasoning, draft email
+  User clicks: Approve / Reject / Modify / Schedule
+        |
+        v
+[penny-execute-action]
+  Executes: send email / create call task / escalate
+  Updates: status -> executed, logs result
+  Auto-queues: next follow-up based on outcome
+```
+
+### Approval UI Pattern
+
+Each action card in the queue:
+- Shows the full draft (email body or call script) in an expandable section
+- "Approve" sends it immediately
+- "Edit & Approve" opens an inline editor
+- "Reject" marks it dismissed with an optional reason
+- "Schedule" sets a follow-up date and snoozes the action
+- Color-coded by priority: red (critical/60d+), amber (high/30d+), blue (medium/14d+), gray (low/7d+)
 
