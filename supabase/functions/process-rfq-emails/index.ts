@@ -391,6 +391,31 @@ serve(async (req) => {
       .eq("company_id", profile.company_id);
     const customers = allCustomers || [];
 
+    // Fetch all contacts for sender-email matching
+    const { data: allContacts } = await supabaseAdmin
+      .from("contacts")
+      .select("id, email, customer_id")
+      .eq("company_id", profile.company_id)
+      .not("email", "is", null);
+    const contacts = allContacts || [];
+
+    // Build map: lowercase email → customer_id
+    const emailToCustomerId = new Map<string, string>();
+    for (const c of contacts) {
+      if (c.email) emailToCustomerId.set(c.email.toLowerCase().trim(), c.customer_id!);
+    }
+
+    // Fetch active leads (not archived/closed/loss) for routing
+    const excludedStages = ["archived", "closed", "loss"];
+    const { data: activeLeadsData } = await supabaseAdmin
+      .from("leads")
+      .select("id, title, customer_id, notes, updated_at, stage")
+      .eq("company_id", profile.company_id)
+      .not("stage", "in", `(${excludedStages.join(",")})`)
+      .order("updated_at", { ascending: false })
+      .limit(500);
+    const activeLeads = activeLeadsData || [];
+
     // Look up who is assigned to existing leads by customer (for auto-assignment)
     const { data: assignmentHistory } = await supabaseAdmin
       .from("leads")
@@ -407,6 +432,98 @@ serve(async (req) => {
         const match = lead.notes.match(/Assigned:\s*([^|\n]+)/);
         if (match) customerAssignments.set(lead.customer_id, match[1].trim());
       }
+    }
+
+    // Fetch profiles for resolving assigned person → user_id
+    const { data: allProfiles } = await supabaseAdmin
+      .from("profiles")
+      .select("id, user_id, full_name")
+      .eq("company_id", profile.company_id);
+    const profilesList = allProfiles || [];
+
+    /**
+     * Find an existing active lead that matches the incoming email.
+     * Priority: 1) sender email → customer → lead, 2) subject keyword match against lead titles
+     */
+    function findMatchingLead(
+      senderEmail: string,
+      senderCompany: string,
+      emailSubject: string,
+    ): { leadId: string; leadTitle: string; assignedTo: string | null } | null {
+      const senderLower = senderEmail.toLowerCase().trim();
+
+      // Priority 1: Sender email matches a contact → find active lead for that customer
+      const custIdFromEmail = emailToCustomerId.get(senderLower);
+      if (custIdFromEmail) {
+        const lead = activeLeads.find(l => l.customer_id === custIdFromEmail);
+        if (lead) {
+          const assignMatch = lead.notes?.match(/Assigned:\s*([^|\n]+)/);
+          return { leadId: lead.id, leadTitle: lead.title, assignedTo: assignMatch?.[1]?.trim() || null };
+        }
+      }
+
+      // Priority 1b: Sender company fuzzy-matches a customer → find active lead
+      if (senderCompany) {
+        const matchedCust = findMatchingCustomer(senderCompany, customers);
+        if (matchedCust) {
+          const lead = activeLeads.find(l => l.customer_id === matchedCust.id);
+          if (lead) {
+            const assignMatch = lead.notes?.match(/Assigned:\s*([^|\n]+)/);
+            return { leadId: lead.id, leadTitle: lead.title, assignedTo: assignMatch?.[1]?.trim() || null };
+          }
+        }
+      }
+
+      // Priority 2: Subject keyword match against lead titles
+      if (emailSubject) {
+        const subjectTokens = new Set(
+          emailSubject.toLowerCase()
+            .replace(/^(re|fw|fwd):\s*/gi, "")
+            .replace(/[^a-z0-9\s]/g, "")
+            .split(/\s+/)
+            .filter(t => t.length > 3)
+        );
+        if (subjectTokens.size > 0) {
+          let bestLead: typeof activeLeads[0] | null = null;
+          let bestScore = 0;
+          for (const lead of activeLeads) {
+            const leadTokens = new Set(
+              lead.title.toLowerCase()
+                .replace(/[^a-z0-9\s]/g, "")
+                .split(/\s+/)
+                .filter(t => t.length > 3)
+            );
+            let overlap = 0;
+            for (const t of subjectTokens) {
+              if (leadTokens.has(t)) overlap++;
+            }
+            const score = subjectTokens.size > 0 ? overlap / subjectTokens.size : 0;
+            if (overlap >= 2 && score > bestScore) {
+              bestScore = score;
+              bestLead = lead;
+            }
+          }
+          if (bestLead && bestScore >= 0.4) {
+            const assignMatch = bestLead.notes?.match(/Assigned:\s*([^|\n]+)/);
+            return { leadId: bestLead.id, leadTitle: bestLead.title, assignedTo: assignMatch?.[1]?.trim() || null };
+          }
+        }
+      }
+
+      return null;
+    }
+
+    /** Resolve an assigned person's name to their user_id */
+    function resolveAssigneeUserId(assignedName: string | null): string | null {
+      if (!assignedName) return null;
+      const nameLower = assignedName.toLowerCase().trim();
+      const exact = profilesList.find(p => p.full_name?.toLowerCase().trim() === nameLower);
+      if (exact?.user_id) return exact.user_id;
+      // Fuzzy: check if any profile's name contains the assigned name or vice versa
+      const fuzzy = profilesList.find(p =>
+        p.full_name?.toLowerCase().includes(nameLower) || nameLower.includes(p.full_name?.toLowerCase() || "___")
+      );
+      return fuzzy?.user_id || null;
     }
 
     // Fetch recent emails involving @rebar.shop (last 30 days)
@@ -460,24 +577,40 @@ serve(async (req) => {
       emailId: string;
       from: string;
       subject: string;
-      action: "created" | "skipped" | "filtered";
+      action: "created" | "skipped" | "filtered" | "routed";
       lead?: LeadExtraction;
       customerAction?: "matched" | "created";
       customerName?: string;
+      routedToLead?: string;
     }> = [];
 
     let created = 0;
     let skipped = 0;
     let filtered = 0;
+    let routed = 0;
 
     // Get the starting lead number once
     let nextNumber = await getNextLeadNumber(supabaseAdmin);
     let currentNum = parseInt(nextNumber.replace("S", ""), 10);
 
+    // Also check lead_activities for already-routed emails (dedupe by source_email_id in metadata)
+    const { data: existingActivities } = await supabaseAdmin
+      .from("lead_activities")
+      .select("metadata")
+      .eq("company_id", profile.company_id)
+      .eq("activity_type", "email")
+      .not("metadata", "is", null)
+      .limit(1000);
+    const routedEmailIds = new Set<string>();
+    for (const act of existingActivities || []) {
+      const m = act.metadata as Record<string, unknown> | null;
+      if (m?.source_email_id) routedEmailIds.add(m.source_email_id as string);
+    }
+
     for (const email of candidateEmails) {
       const sourceEmailId = `comm_${email.id}`;
 
-      if (processedIds.has(sourceEmailId)) {
+      if (processedIds.has(sourceEmailId) || routedEmailIds.has(sourceEmailId)) {
         skipped++;
         results.push({ emailId: email.id, from: email.from_address || "", subject: email.subject || "", action: "skipped" });
         continue;
@@ -487,6 +620,78 @@ serve(async (req) => {
       const subject = email.subject || "";
       const meta = email.metadata as Record<string, unknown> | null;
       const body = (meta?.body as string) || email.body_preview || "";
+
+      // === ROUTE TO EXISTING LEAD ===
+      // Extract sender email from "Name <email>" format
+      const senderEmailMatch = from.match(/<([^>]+)>/) || [null, from];
+      const senderEmail = (senderEmailMatch[1] || from).trim();
+      // Extract rough company from email domain
+      const senderDomain = senderEmail.split("@")[1] || "";
+      const senderCompanyGuess = senderDomain.split(".")[0] || "";
+
+      const matchedLead = findMatchingLead(senderEmail, senderCompanyGuess, subject);
+
+      if (matchedLead) {
+        try {
+          console.log(`Routing email "${subject}" to existing lead: ${matchedLead.leadTitle}`);
+
+          // Download attachments to the matched lead
+          const emailAttachments = (meta?.attachments as Array<{ filename: string; mimeType: string; attachmentId: string; size?: number }>) || [];
+          const attachmentNames: string[] = [];
+          for (const att of emailAttachments.slice(0, 5)) {
+            if (email.source_id) {
+              const stored = await downloadAndStoreAttachment(
+                supabaseAdmin, user.id, email.source_id, att, matchedLead.leadId
+              );
+              if (stored) attachmentNames.push(stored.filename);
+            }
+          }
+
+          // Insert timeline activity on the existing lead
+          await supabaseAdmin.from("lead_activities").insert({
+            lead_id: matchedLead.leadId,
+            company_id: profile.company_id,
+            activity_type: "email",
+            title: "Follow-up email received",
+            description: [
+              `📧 From: ${from}`,
+              `Subject: ${subject}`,
+              body ? `Preview: ${body.substring(0, 300)}...` : "",
+              attachmentNames.length > 0 ? `📎 ${attachmentNames.length} attachment(s): ${attachmentNames.join(", ")}` : "",
+            ].filter(Boolean).join("\n"),
+            created_by: "Blitz AI",
+            metadata: { source_email_id: sourceEmailId },
+          });
+
+          // Notify the assigned person
+          const assigneeUserId = resolveAssigneeUserId(matchedLead.assignedTo);
+          if (assigneeUserId) {
+            await supabaseAdmin.from("notifications").insert({
+              user_id: assigneeUserId,
+              type: "notification",
+              title: `New email on lead: ${matchedLead.leadTitle}`,
+              description: `Email from ${senderEmail} — Subject: ${subject}`,
+              priority: "normal",
+              link_to: "/pipeline",
+              agent_name: "Blitz",
+              agent_color: "bg-sky-500",
+              status: "unread",
+            });
+          }
+
+          routed++;
+          routedEmailIds.add(sourceEmailId);
+          results.push({
+            emailId: email.id, from, subject,
+            action: "routed",
+            routedToLead: matchedLead.leadTitle,
+          });
+          continue;
+        } catch (routeErr) {
+          console.error(`Failed to route email to lead ${matchedLead.leadId}:`, routeErr);
+          // Fall through to normal processing
+        }
+      }
 
       try {
         // === KEYWORD FAST-TRACK ===
@@ -727,7 +932,7 @@ serve(async (req) => {
     
 
     return new Response(
-      JSON.stringify({ created, skipped, filtered, prefiltered, total: emails.length, leads: results }),
+      JSON.stringify({ created, skipped, filtered, routed, prefiltered, total: emails.length, leads: results }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
