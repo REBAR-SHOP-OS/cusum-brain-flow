@@ -45,7 +45,7 @@ export function ProspectIntroDialog({ prospect, open, onOpenChange, onSent }: Pr
             customer_name: prospect.contact_name,
             notes: `Industry: ${prospect.industry}\nCity: ${prospect.city}\nFit: ${prospect.fit_reason}\nAngle: ${prospect.intro_angle}`,
           },
-          userMessage: `Draft a cold introduction email to ${prospect.contact_name} (${prospect.contact_title}) at ${prospect.company_name}. Use this angle: ${prospect.intro_angle}. Keep it professional, concise, and non-spammy. The email is from rebar.shop — a Canadian rebar fabrication company.`,
+          userMessage: `Draft a cold introduction email to ${prospect.contact_name.split(" ")[0]} (full name: ${prospect.contact_name}, title: ${prospect.contact_title}) at ${prospect.company_name}. Use this angle: ${prospect.intro_angle}. The email is from rebar.shop — a Canadian rebar fabrication company. Address them by first name "${prospect.contact_name.split(" ")[0]}" only. Sign off as "The rebar.shop Sales Team" — do NOT use any placeholder names.`,
         },
       });
       if (error) throw new Error(error.message);

@@ -387,7 +387,7 @@ ${odooSnapshot}`;
 
     // ── draft_intro (cold introduction for AI prospects) ──
     if (action === "draft_intro") {
-      const prompt = `Draft a cold introduction email for this prospect:\n\n${context}\n\nAdditional context from user: ${userMessage || ""}\n\nWrite a short (4-6 sentences), professional, non-spammy introduction email from the rebar.shop sales team. Reference the specific industry and why rebar.shop is a good fit. Don't be pushy — focus on value and invitation to connect.`;
+      const prompt = `Draft a cold introduction email for this prospect:\n\n${context}\n\nAdditional context from user: ${userMessage || ""}\n\nCRITICAL RULES:\n1. NEVER use placeholder text like [Sales Rep Name], [Your Name], [Company Name], or any bracketed tokens. NEVER.\n2. Address the recipient by their FIRST NAME ONLY (e.g., "Hi Sarah,").\n3. Open with a specific observation about their company or industry.\n4. Keep to 3-4 sentences max in the body. Be warm but direct — no filler like "I hope this finds you well".\n5. End with a soft call to action (e.g., "Would you be open to a brief conversation?").\n6. Sign off EXACTLY as: "Best regards,\\nThe rebar.shop Sales Team"\n7. Do NOT include any sender name other than "The rebar.shop Sales Team".`;
       const data = await callAI(
         [{ role: "system", content: enrichedSystemPrompt }, { role: "user", content: prompt }],
         [{
