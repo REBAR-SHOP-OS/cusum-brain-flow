@@ -92,6 +92,24 @@ serve(async (req) => {
       }
     }
 
+    // ========== Pre-load customer name map for invoice lookups ==========
+    const customerNameMap = new Map<string, string>();
+    const { data: allCustomers } = await supabase.from("customers").select("id, name");
+    if (allCustomers) {
+      for (const c of allCustomers) customerNameMap.set(c.id, c.name);
+    }
+
+    // Helper to resolve customer name from accounting_mirror row
+    const resolveCustomerName = (inv: any) => {
+      // First try our customers table via customer_id FK
+      if (inv.customer_id && customerNameMap.has(inv.customer_id)) {
+        return customerNameMap.get(inv.customer_id)!;
+      }
+      // Fallback to QuickBooks embedded data
+      const invData = inv.data as any;
+      return invData?.CustomerRef?.name ?? "Unknown";
+    };
+
     // ========== VIZZY (CEO) ==========
     if (agentMap.vizzy) {
       // Overdue invoices from accounting_mirror
@@ -112,7 +130,7 @@ serve(async (req) => {
           const severity = daysPast > 90 ? "critical" : daysPast > 30 ? "warning" : "info";
           if (isDuplicate("invoice", inv.id, "overdue_ar")) continue;
 
-          const customerName = invData?.CustomerRef?.name ?? "Unknown";
+          const customerName = resolveCustomerName(inv);
           const row = {
             company_id: inv.company_id,
             agent_id: agentMap.vizzy,
@@ -127,7 +145,7 @@ serve(async (req) => {
             entity_id: inv.id,
             status: "open",
             actions: [
-              { label: "View Invoice", action: "navigate", path: `/accounting?tab=invoices&search=${encodeURIComponent(customerName)}` },
+              { label: "View Invoice", action: "navigate", path: `/customer-action/${inv.customer_id || "unknown"}?invoice=${inv.id}` },
             ],
           };
           pushDual(row, `vizzy:overdue_ar:${inv.id}`, agentMap.vizzy);
@@ -286,7 +304,7 @@ serve(async (req) => {
           const severity = daysPast >= 90 ? "critical" : daysPast >= 60 ? "warning" : "info";
           if (isDuplicate("invoice", inv.id, "penny_overdue_ar")) continue;
 
-          const customerName = invData?.CustomerRef?.name ?? "Unknown";
+          const customerName = resolveCustomerName(inv);
           const tier = daysPast >= 90 ? "90+" : daysPast >= 60 ? "60-89" : "30-59";
           const row = {
             company_id: inv.company_id,
@@ -302,7 +320,7 @@ serve(async (req) => {
             entity_id: inv.id,
             status: "open",
             actions: [
-              { label: "View Invoice", action: "navigate", path: `/accounting?tab=invoices&search=${encodeURIComponent(customerName)}` },
+              { label: "View Invoice", action: "navigate", path: `/customer-action/${inv.customer_id || "unknown"}?invoice=${inv.id}` },
             ],
           };
           pushDual(row, `penny:overdue_ar:${inv.id}:${tier}`, agentMap.penny);
