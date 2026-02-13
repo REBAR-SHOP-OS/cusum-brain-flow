@@ -17,7 +17,7 @@ import { startOfDay, startOfWeek, startOfMonth, startOfQuarter, startOfYear, sub
 type Lead = Tables<"leads">;
 type LeadWithCustomer = Lead & { customers: { name: string; company_name: string | null } | null };
 
-// Pipeline stages from Odoo analysis
+// Pipeline stages (originally derived from Odoo, now native to ERP)
 export const PIPELINE_STAGES = [
   { id: "new", label: "New", color: "bg-blue-500" },
   { id: "telephonic_enquiries", label: "Telephonic Enquiries", color: "bg-cyan-500" },
@@ -129,7 +129,7 @@ export default function Pipeline() {
     const set = new Set<string>();
     leads.forEach((l) => {
       const meta = l.metadata as Record<string, unknown> | null;
-      const sp = meta?.odoo_salesperson as string;
+      const sp = meta?.salesperson as string || meta?.odoo_salesperson as string;
       if (sp) set.add(sp);
     });
     return Array.from(set).sort();
@@ -145,7 +145,7 @@ export default function Pipeline() {
   const filteredLeads = useMemo(() => {
     return leads.filter((lead) => {
       const meta = lead.metadata as Record<string, unknown> | null;
-      const sp = (meta?.odoo_salesperson as string) || "";
+      const sp = (meta?.salesperson as string) || (meta?.odoo_salesperson as string) || "";
 
       if (pipelineFilters.unassigned && sp) return false;
       if (pipelineFilters.myPipeline && !sp) return false; // would need current user mapping
@@ -183,7 +183,7 @@ export default function Pipeline() {
         .sort((a, b) => {
           const getStars = (l: LeadWithCustomer) => {
             const meta = l.metadata as Record<string, unknown> | null;
-            const op = meta?.odoo_priority as string | undefined;
+            const op = meta?.priority as string || meta?.odoo_priority as string | undefined;
             if (op) return Math.min(parseInt(op) || 0, 3);
             if (l.priority === "high") return 3;
             if (l.priority === "medium") return 2;

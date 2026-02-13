@@ -3,13 +3,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { FileText, Package, Calculator, ClipboardList, Eye, Loader2, RefreshCw, ArrowRight } from "lucide-react";
+import { FileText, Package, Calculator, ClipboardList, Eye, Loader2, ArrowRight } from "lucide-react";
 import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
 import { InvoiceTemplate } from "./documents/InvoiceTemplate";
 import { PackingSlipTemplate } from "./documents/PackingSlipTemplate";
 import { QuotationTemplate } from "./documents/QuotationTemplate";
 import { EstimationTemplate } from "./documents/EstimationTemplate";
-import { useOdooQuotations } from "@/hooks/useOdooQuotations";
+import { useArchivedQuotations } from "@/hooks/useArchivedQuotations";
 import { ConvertQuoteDialog } from "@/components/orders/ConvertQuoteDialog";
 
 interface Props {
@@ -32,7 +32,7 @@ export function AccountingDocuments({ data }: Props) {
   const [activeDoc, setActiveDoc] = useState<DocType>("quotation");
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [previewType, setPreviewType] = useState<DocType | null>(null);
-  const { quotations, isLoading: quotationsLoading, isSyncing, syncQuotations } = useOdooQuotations();
+  const { quotations, isLoading: quotationsLoading } = useArchivedQuotations();
   const [convertQuote, setConvertQuote] = useState<{ id: string; quote_number: string; total_amount: number | null; customer_name: string } | null>(null);
 
   const openPreview = (type: DocType, id: string) => {
@@ -159,13 +159,11 @@ export function AccountingDocuments({ data }: Props) {
         ))}
       </div>
 
-      {/* Sync button for quotations */}
-      {activeDoc === "quotation" && (
+      {/* Archived quotations info */}
+      {activeDoc === "quotation" && quotations.length > 0 && (
         <div className="flex items-center gap-2">
-          <Button onClick={syncQuotations} size="sm" variant="outline" disabled={isSyncing} className="gap-2">
-            {isSyncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-            Sync Odoo Quotations
-          </Button>
+          <Badge variant="outline" className="text-xs">Archived</Badge>
+          <span className="text-xs text-muted-foreground">{quotations.length} historical quotations</span>
           {quotationsLoading && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
         </div>
       )}
@@ -201,7 +199,7 @@ export function AccountingDocuments({ data }: Props) {
           ))}
 
           {activeDoc === "quotation" && quotations.length > 0 && quotations.map((q) => {
-            const odooCustomer = (q.metadata as Record<string, unknown>)?.odoo_customer as string || "Unknown";
+            const customer = (q.metadata as Record<string, unknown>)?.odoo_customer as string || "Unknown";
             const isSale = q.odoo_status === "Sales Order";
             return (
               <Card key={q.id} className="hover:ring-2 hover:ring-primary/20 transition-all">
@@ -211,7 +209,7 @@ export function AccountingDocuments({ data }: Props) {
                       <ClipboardList className="w-5 h-5 text-primary" />
                     </div>
                     <div>
-                      <p className="font-semibold">{q.quote_number} — {odooCustomer}</p>
+                      <p className="font-semibold">{q.quote_number} — {customer}</p>
                       <p className="text-sm text-muted-foreground">
                         {new Date(q.created_at).toLocaleDateString()} · {fmt(Number(q.total_amount) || 0)}
                         {q.salesperson && <span className="ml-2 text-muted-foreground">· {q.salesperson}</span>}
@@ -230,7 +228,7 @@ export function AccountingDocuments({ data }: Props) {
                             id: q.id,
                             quote_number: q.quote_number,
                             total_amount: q.total_amount,
-                            customer_name: odooCustomer,
+                            customer_name: customer,
                           });
                         }}
                       >
@@ -294,7 +292,7 @@ export function AccountingDocuments({ data }: Props) {
             <p className="text-center text-muted-foreground py-12">No invoices found. Sync from QuickBooks first.</p>
           )}
           {activeDoc === "quotation" && quotations.length === 0 && data.estimates.length === 0 && (
-            <p className="text-center text-muted-foreground py-12">No quotations found. Click "Sync Odoo Quotations" to import.</p>
+            <p className="text-center text-muted-foreground py-12">No quotations found.</p>
           )}
           {activeDoc === "estimation" && data.estimates.length === 0 && (
             <p className="text-center text-muted-foreground py-12">No estimates found. Sync from QuickBooks first.</p>

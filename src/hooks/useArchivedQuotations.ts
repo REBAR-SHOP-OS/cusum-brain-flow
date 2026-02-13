@@ -1,11 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
-// Read-only hook — Odoo sync has been decommissioned.
-// Quotation data is preserved as a historical archive in the quotes table.
-export function useOdooQuotations() {
+// Read-only hook — returns archived quotations from the quotes table.
+// These were originally imported from Odoo and are preserved as a historical archive.
+export function useArchivedQuotations() {
   const { data: quotations = [], isLoading } = useQuery({
-    queryKey: ["odoo-quotations"],
+    queryKey: ["archived-quotations"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("quotes")
@@ -17,5 +17,5 @@ export function useOdooQuotations() {
     },
   });
 
-  return { quotations, isLoading, isSyncing: false, syncQuotations: async () => {} };
+  return { quotations, isLoading };
 }
