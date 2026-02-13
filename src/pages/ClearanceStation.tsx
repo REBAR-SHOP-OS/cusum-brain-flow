@@ -11,13 +11,14 @@ import {
   ShieldCheck,
   Loader2,
   ChevronRight,
+  AlertTriangle,
 } from "lucide-react";
 import { ClearanceCard } from "@/components/clearance/ClearanceCard";
 
 export default function ClearanceStation() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { byProject, clearedCount, totalCount, isLoading } = useClearanceData();
+  const { byProject, clearedCount, totalCount, isLoading, error } = useClearanceData();
   const { isAdmin, isWorkshop } = useUserRole();
   const canWrite = isAdmin || isWorkshop;
 
@@ -27,6 +28,18 @@ export default function ClearanceStation() {
     return (
       <div className="flex items-center justify-center h-full">
         <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-20 text-destructive">
+        <AlertTriangle className="w-12 h-12 mx-auto mb-3 opacity-60" />
+        <p className="text-sm">Failed to load clearance data</p>
+        <Button variant="outline" size="sm" className="mt-3" onClick={() => window.location.reload()}>
+          Retry
+        </Button>
       </div>
     );
   }
@@ -78,7 +91,6 @@ export default function ClearanceStation() {
             <p className="text-sm">No items awaiting clearance</p>
           </div>
         ) : !selectedProject ? (
-          /* ─── Project Folder List ─── */
           <div className="p-4 space-y-3">
             <p className="text-sm text-muted-foreground mb-2">
               Select a project to view its clearance items.
@@ -109,7 +121,6 @@ export default function ClearanceStation() {
             })}
           </div>
         ) : (
-          /* ─── Items inside selected project ─── */
           <div className="p-4 space-y-4">
             <div className="flex items-center gap-3 mb-2">
               <ShieldCheck className="w-5 h-5 text-primary" />

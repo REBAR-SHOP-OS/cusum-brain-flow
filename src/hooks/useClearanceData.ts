@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useEffect } from "react";
 import { useAuth } from "@/lib/auth";
+import { useCompanyId } from "@/hooks/useCompanyId";
 
 export interface ClearanceItem {
   id: string;
@@ -15,7 +16,6 @@ export interface ClearanceItem {
   bend_completed_pieces: number;
   plan_name: string;
   project_name: string | null;
-  // Evidence
   evidence_id: string | null;
   material_photo_url: string | null;
   tag_scan_url: string | null;
@@ -25,22 +25,22 @@ export interface ClearanceItem {
 
 export function useClearanceData() {
   const { user } = useAuth();
+  const { companyId } = useCompanyId();
   const queryClient = useQueryClient();
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["clearance-items"],
-    enabled: !!user,
+    queryKey: ["clearance-items", companyId],
+    enabled: !!user && !!companyId,
     queryFn: async () => {
-      // Get all items in clearance phase
       const { data: items, error: itemsError } = await supabase
         .from("cut_plan_items")
-        .select("*, cut_plans!inner(id, name, project_name)")
-        .eq("phase", "clearance");
+        .select("*, cut_plans!inner(id, name, project_name, company_id)")
+        .eq("phase", "clearance")
+        .eq("cut_plans.company_id", companyId!);
 
       if (itemsError) throw itemsError;
       if (!items?.length) return [];
 
-      // Get matching evidence records
       const itemIds = items.map((i: any) => i.id);
       const { data: evidence } = await supabase
         .from("clearance_evidence")
@@ -75,7 +75,6 @@ export function useClearanceData() {
     },
   });
 
-  // Realtime
   useEffect(() => {
     if (!user) return;
     const channel = supabase
@@ -93,7 +92,6 @@ export function useClearanceData() {
   const clearedCount = (data || []).filter((i) => i.evidence_status === "cleared").length;
   const totalCount = (data || []).length;
 
-  // Group by project
   const byProject = new Map<string, ClearanceItem[]>();
   for (const item of data || []) {
     const key = item.project_name || item.plan_name || "Unassigned";
