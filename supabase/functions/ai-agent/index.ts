@@ -3877,86 +3877,70 @@ You MUST respond with ONLY valid JSON (no markdown, no code blocks) in this exac
             if (Array.isArray(posts) && posts.length > 0) {
               console.log(`📸 Pixel: Generated ${posts.length} post prompts, now generating images...`);
               
-              const GPT_API_KEY = Deno.env.get("GPT_API_KEY");
-              
-              if (GPT_API_KEY) {
-                // Step 2: Generate images in parallel (max 5)
-                const imagePromises = posts.slice(0, 5).map(async (post: any, idx: number) => {
-                  try {
-                    console.log(`📸 Generating image ${idx + 1}/5: ${post.product}`);
-                    const imgResp = await fetch("https://api.openai.com/v1/images/generations", {
-                      method: "POST",
-                      headers: {
-                        "Authorization": `Bearer ${GPT_API_KEY}`,
-                        "Content-Type": "application/json",
-                      },
-                      body: JSON.stringify({
-                        model: "gpt-image-1",
-                        prompt: post.image_prompt,
-                        size: "1536x1024",
-                        quality: "high",
-                        output_format: "png",
-                        n: 1,
-                      }),
-                    });
-                    
-                    if (imgResp.ok) {
-                      const imgData = await imgResp.json();
-                      const imageData = imgData.data?.[0];
-                      const rawB64 = imageData?.b64_json || "";
-                      let imageUrl = imageData?.url || "";
+              // Step 2: Generate images in parallel using Gemini Image via Lovable AI Gateway
+              const imagePromises = posts.slice(0, 5).map(async (post: any, idx: number) => {
+                try {
+                  console.log(`📸 Generating image ${idx + 1}/5: ${post.product}`);
+                  const imgResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+                    method: "POST",
+                    headers: {
+                      "Authorization": `Bearer ${LOVABLE_KEY}`,
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                      model: "google/gemini-2.5-flash-image",
+                      messages: [{ role: "user", content: post.image_prompt }],
+                      modalities: ["image", "text"],
+                    }),
+                  });
+                  
+                  if (imgResp.ok) {
+                    const imgData = await imgResp.json();
+                    // Gemini image response: images array with image_url.url containing data:image/png;base64,...
+                    const b64DataUri = imgData.images?.[0]?.image_url?.url || "";
+                    let imageUrl = "";
 
-                      // Upload base64 to Storage to avoid huge JSON responses
-                      if (rawB64 && !imageUrl) {
-                        try {
-                          const bytes = Uint8Array.from(atob(rawB64), c => c.charCodeAt(0));
-                          const dateStr = new Date().toISOString().split("T")[0];
-                          const filePath = `pixel/${dateStr}/post-${idx + 1}-${crypto.randomUUID().slice(0,6)}.png`;
+                    if (b64DataUri) {
+                      try {
+                        // Extract raw base64 from data URI
+                        const rawB64 = b64DataUri.replace(/^data:image\/\w+;base64,/, "");
+                        const bytes = Uint8Array.from(atob(rawB64), c => c.charCodeAt(0));
+                        const dateStr = new Date().toISOString().split("T")[0];
+                        const filePath = `pixel/${dateStr}/post-${idx + 1}-${crypto.randomUUID().slice(0,6)}.png`;
 
-                          const storageClient = createClient(
-                            Deno.env.get("SUPABASE_URL")!,
-                            Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-                          );
+                        const storageClient = createClient(
+                          Deno.env.get("SUPABASE_URL")!,
+                          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+                        );
 
-                          const { error: upErr } = await storageClient.storage
-                            .from("social-images")
-                            .upload(filePath, bytes, { contentType: "image/png", upsert: false });
+                        const { error: upErr } = await storageClient.storage
+                          .from("social-images")
+                          .upload(filePath, bytes, { contentType: "image/png", upsert: false });
 
-                          if (upErr) {
-                            console.error(`Storage upload error for image ${idx + 1}:`, upErr.message);
-                          } else {
-                            const { data: pubData } = storageClient.storage.from("social-images").getPublicUrl(filePath);
-                            imageUrl = pubData.publicUrl;
-                            console.log(`📸 Image ${idx + 1} uploaded to storage: ${imageUrl}`);
-                          }
-                        } catch (uploadErr) {
-                          console.error(`Upload failed for image ${idx + 1}:`, uploadErr);
+                        if (upErr) {
+                          console.error(`Storage upload error for image ${idx + 1}:`, upErr.message);
+                        } else {
+                          const { data: pubData } = storageClient.storage.from("social-images").getPublicUrl(filePath);
+                          imageUrl = pubData.publicUrl;
+                          console.log(`📸 Image ${idx + 1} uploaded to storage: ${imageUrl}`);
                         }
+                      } catch (uploadErr) {
+                        console.error(`Upload failed for image ${idx + 1}:`, uploadErr);
                       }
-
-                      return {
-                        slot: post.time || `Slot ${idx + 1}`,
-                        theme: post.theme || "",
-                        product: post.product || "",
-                        caption: post.caption || "",
-                        caption_fa: post.caption_fa || "",
-                        hashtags: post.hashtags || "",
-                        imageUrl,
-                      };
-                    } else {
-                      console.error(`Image ${idx + 1} generation failed:`, imgResp.status);
-                      return {
-                        slot: post.time || `Slot ${idx + 1}`,
-                        theme: post.theme || "",
-                        product: post.product || "",
-                        caption: post.caption || "",
-                        caption_fa: post.caption_fa || "",
-                        hashtags: post.hashtags || "",
-                        imageUrl: "",
-                      };
                     }
-                  } catch (imgErr) {
-                    console.error(`Image ${idx + 1} error:`, imgErr);
+
+                    return {
+                      slot: post.time || `Slot ${idx + 1}`,
+                      theme: post.theme || "",
+                      product: post.product || "",
+                      caption: post.caption || "",
+                      caption_fa: post.caption_fa || "",
+                      hashtags: post.hashtags || "",
+                      imageUrl,
+                    };
+                  } else {
+                    const errText = await imgResp.text();
+                    console.error(`Image ${idx + 1} generation failed: ${imgResp.status} - ${errText}`);
                     return {
                       slot: post.time || `Slot ${idx + 1}`,
                       theme: post.theme || "",
@@ -3967,23 +3951,22 @@ You MUST respond with ONLY valid JSON (no markdown, no code blocks) in this exac
                       imageUrl: "",
                     };
                   }
-                });
-                
-                pixelImageResults = await Promise.all(imagePromises);
-                console.log(`📸 Pixel: ${pixelImageResults.filter(r => r.imageUrl).length}/5 images generated successfully`);
-              } else {
-                console.warn("GPT_API_KEY not available for image generation");
-                // Store posts without images
-                pixelImageResults = posts.slice(0, 5).map((post: any) => ({
-                  slot: post.time || "",
-                  theme: post.theme || "",
-                  product: post.product || "",
-                  caption: post.caption || "",
-                  caption_fa: post.caption_fa || "",
-                  hashtags: post.hashtags || "",
-                  imageUrl: "",
-                }));
-              }
+                } catch (imgErr) {
+                  console.error(`Image ${idx + 1} error:`, imgErr);
+                  return {
+                    slot: post.time || `Slot ${idx + 1}`,
+                    theme: post.theme || "",
+                    product: post.product || "",
+                    caption: post.caption || "",
+                    caption_fa: post.caption_fa || "",
+                    hashtags: post.hashtags || "",
+                    imageUrl: "",
+                  };
+                }
+              });
+              
+              pixelImageResults = await Promise.all(imagePromises);
+              console.log(`📸 Pixel: ${pixelImageResults.filter(r => r.imageUrl).length}/5 images generated successfully`);
             }
           } catch (parseErr) {
             console.error("Failed to parse prompt generation response:", parseErr);
