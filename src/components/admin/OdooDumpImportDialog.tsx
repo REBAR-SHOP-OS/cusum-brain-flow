@@ -6,13 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
   Upload, CheckCircle, AlertTriangle, XCircle, FileArchive,
 } from "lucide-react";
-import { BlobReader, BlobWriter, TextWriter, ZipReader } from "@zip.js/zip.js";
+import { BlobReader, BlobWriter, ZipReader } from "@zip.js/zip.js";
 
 /* ── types ── */
 interface MappingRow {
@@ -35,48 +34,79 @@ interface Props {
 
 const BATCH = 5;
 
-/** Parse ir_attachment rows from Odoo dump.sql COPY block */
-function parseMappingFromSql(sql: string): MappingRow[] {
-  // Find the COPY block for ir_attachment
-  // Format: COPY public.ir_attachment (id, ..., store_fname, ..., name, ..., mimetype, ...) FROM stdin;
-  const copyMatch = sql.match(
-    /COPY public\.ir_attachment\s*\(([^)]+)\)\s*FROM stdin;/i
-  );
-  if (!copyMatch) return [];
+/**
+ * Stream-parse dump.sql for the ir_attachment COPY block.
+ * Reads chunk-by-chunk so we never load the full 1GB+ file into memory.
+ */
+async function streamParseMappingFromEntry(
+  entry: any,
+  onStatus: (msg: string) => void
+): Promise<MappingRow[]> {
+  const blob: Blob = await entry.getData(new BlobWriter());
+  const stream = blob.stream();
+  const reader = stream.getReader();
+  const decoder = new TextDecoder("utf-8");
 
-  const columns = copyMatch[1].split(",").map((c) => c.trim().toLowerCase());
-  const idIdx = columns.indexOf("id");
-  const storeFnameIdx = columns.indexOf("store_fname");
-  const nameIdx = columns.indexOf("name");
-  const mimetypeIdx = columns.indexOf("mimetype");
-  const resModelIdx = columns.indexOf("res_model");
-
-  if (idIdx < 0 || storeFnameIdx < 0 || nameIdx < 0 || mimetypeIdx < 0) return [];
-
-  // Extract lines between the COPY header and the terminating \. 
-  const startIdx = sql.indexOf("\n", sql.indexOf(copyMatch[0])) + 1;
-  const endMarker = "\n\\.\n";
-  const endIdx = sql.indexOf(endMarker, startIdx);
-  if (endIdx < 0) return [];
-
-  const block = sql.slice(startIdx, endIdx);
+  let leftover = "";
+  let phase: "searching" | "header" | "rows" | "done" = "searching";
+  let columns: string[] = [];
+  let idIdx = -1, storeFnameIdx = -1, nameIdx = -1, mimetypeIdx = -1, resModelIdx = -1;
   const rows: MappingRow[] = [];
+  let bytesRead = 0;
 
-  for (const line of block.split("\n")) {
-    if (!line || line === "\\.") break;
-    const cols = line.split("\t");
-    // Filter to crm.lead only
-    if (resModelIdx >= 0 && cols[resModelIdx] !== "crm.lead") continue;
-    const storeFname = cols[storeFnameIdx];
-    if (!storeFname || storeFname === "\\N") continue;
+  while (phase !== "done") {
+    const { value, done } = await reader.read();
+    if (done) break;
 
-    rows.push({
-      id: parseInt(cols[idIdx], 10),
-      store_fname: storeFname,
-      name: cols[nameIdx] || "",
-      mimetype: cols[mimetypeIdx] || "application/octet-stream",
-    });
+    bytesRead += value.byteLength;
+    if (bytesRead % (50 * 1024 * 1024) < value.byteLength) {
+      onStatus(`Scanning dump.sql… ${Math.round(bytesRead / 1024 / 1024)} MB read, ${rows.length} attachments found`);
+    }
+
+    const chunk = leftover + decoder.decode(value, { stream: true });
+    const lines = chunk.split("\n");
+    leftover = lines.pop() ?? "";
+
+    for (const line of lines) {
+      if (phase === "searching") {
+        if (line.match(/^COPY public\.ir_attachment\s*\(/i)) {
+          // Parse column names from the COPY header
+          const colMatch = line.match(/\(([^)]+)\)/);
+          if (colMatch) {
+            columns = colMatch[1].split(",").map((c) => c.trim().toLowerCase());
+            idIdx = columns.indexOf("id");
+            storeFnameIdx = columns.indexOf("store_fname");
+            nameIdx = columns.indexOf("name");
+            mimetypeIdx = columns.indexOf("mimetype");
+            resModelIdx = columns.indexOf("res_model");
+            if (idIdx >= 0 && storeFnameIdx >= 0 && nameIdx >= 0 && mimetypeIdx >= 0) {
+              phase = "rows";
+            }
+          }
+        }
+        continue;
+      }
+
+      if (phase === "rows") {
+        if (line === "\\." || line.startsWith("\\.\r")) {
+          phase = "done";
+          break;
+        }
+        const cols = line.split("\t");
+        if (resModelIdx >= 0 && cols[resModelIdx] !== "crm.lead") continue;
+        const storeFname = cols[storeFnameIdx];
+        if (!storeFname || storeFname === "\\N") continue;
+        rows.push({
+          id: parseInt(cols[idIdx], 10),
+          store_fname: storeFname,
+          name: cols[nameIdx] || "",
+          mimetype: cols[mimetypeIdx] || "application/octet-stream",
+        });
+      }
+    }
   }
+
+  reader.cancel();
   return rows;
 }
 
@@ -151,7 +181,7 @@ export function OdooDumpImportDialog({ open, onOpenChange }: Props) {
     []
   );
 
-  /* ── Single ZIP handler: extract mapping from dump.sql + match filestore ── */
+  /* ── Single ZIP handler ── */
   const handleZipSelect = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
@@ -161,7 +191,7 @@ export function OdooDumpImportDialog({ open, onOpenChange }: Props) {
       const reader = new ZipReader(new BlobReader(file));
       const entries = await reader.getEntries();
 
-      // 1. Find dump.sql and extract mapping
+      // 1. Find dump.sql and stream-parse mapping
       setStatusMsg("Looking for dump.sql…");
       const dumpEntry = entries.find((e) => e.filename.endsWith("dump.sql") && !e.directory);
       if (!dumpEntry) {
@@ -170,9 +200,7 @@ export function OdooDumpImportDialog({ open, onOpenChange }: Props) {
         return;
       }
 
-      setStatusMsg("Parsing ir_attachment from dump.sql (this may take a moment)…");
-      const sqlText = await (dumpEntry as any).getData(new TextWriter());
-      const mapping = parseMappingFromSql(sqlText);
+      const mapping = await streamParseMappingFromEntry(dumpEntry, setStatusMsg);
 
       if (mapping.length === 0) {
         toast.error("No ir_attachment rows for crm.lead found in dump.sql");
@@ -249,7 +277,7 @@ export function OdooDumpImportDialog({ open, onOpenChange }: Props) {
             <Upload className="h-5 w-5" /> Import from Odoo Dump
           </DialogTitle>
           <DialogDescription>
-            Select your Odoo dump ZIP file — it will auto-extract the mapping from dump.sql and upload matching files.
+            Select your Odoo dump ZIP — mapping is auto-extracted from dump.sql (streamed, works with large files).
           </DialogDescription>
         </DialogHeader>
 
@@ -259,32 +287,26 @@ export function OdooDumpImportDialog({ open, onOpenChange }: Props) {
               <FileArchive className="h-4 w-4" /> Select Odoo Dump ZIP
             </Label>
             <p className="text-xs text-muted-foreground">
-              The ZIP should contain <code className="bg-muted px-1 rounded">dump.sql</code> and a{" "}
-              <code className="bg-muted px-1 rounded">filestore/</code> folder.
+              ZIP should contain <code className="bg-muted px-1 rounded">dump.sql</code> + <code className="bg-muted px-1 rounded">filestore/</code>.
             </p>
             <Input type="file" accept=".zip" disabled={uploading} onChange={handleZipSelect} />
           </div>
 
-          {statusMsg && !uploading && uploaded === 0 && (
+          {statusMsg && (
             <p className="text-xs text-muted-foreground italic">{statusMsg}</p>
           )}
 
-          {/* Abort button */}
           {uploading && (
-            <div className="flex items-center gap-2">
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => { abortRef.current = true; }}
-                className="gap-1"
-              >
-                <XCircle className="h-3.5 w-3.5" /> Abort
-              </Button>
-              <span className="text-xs text-muted-foreground">{statusMsg}</span>
-            </div>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => { abortRef.current = true; }}
+              className="gap-1"
+            >
+              <XCircle className="h-3.5 w-3.5" /> Abort
+            </Button>
           )}
 
-          {/* Progress */}
           {(uploading || uploaded > 0) && (
             <div className="space-y-2">
               <Progress value={pct} className="h-2" />
