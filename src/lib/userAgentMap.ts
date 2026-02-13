@@ -74,17 +74,6 @@ const userAgentMappings: Record<string, UserAgentMapping> = {
       { title: "Bank reconciliation", prompt: "Help me reconcile recent bank transactions with QuickBooks entries.", icon: "CreditCard", category: "Banking" },
     ],
   },
-  "josh@rebar.shop": {
-    agentKey: "assistant",
-    userRole: "operations",
-    heroText: "How can **Vizzy** help you today?",
-    quickActions: [
-      { title: "Today's deliveries", prompt: "Show me today's delivery schedule — routes, stops, and any issues.", icon: "Truck", category: "Delivery" },
-      { title: "Production status", prompt: "What's the current production queue? Show what's running, queued, and blocked.", icon: "Factory", category: "Production" },
-      { title: "Customer inquiries", prompt: "Show me any customer inquiries or messages that need a response today.", icon: "MessageSquare", category: "Support" },
-      { title: "Office tasks", prompt: "What tasks are assigned to me today? Show priorities and deadlines.", icon: "CheckSquare", category: "Tasks" },
-    ],
-  },
   "ben@rebar.shop": {
     agentKey: "estimating",
     userRole: "estimator",
