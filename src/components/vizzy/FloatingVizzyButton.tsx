@@ -1,14 +1,10 @@
 import React from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { useSuperAdmin } from "@/hooks/useSuperAdmin";
 import vizzyAvatar from "@/assets/vizzy-avatar.png";
 
 export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
   function FloatingVizzyButton(_props, ref) {
     const isMobile = useIsMobile();
-    const { isSuperAdmin } = useSuperAdmin();
-
-    if (!isSuperAdmin) return null;
 
     const handleClick = () => {
       window.dispatchEvent(new CustomEvent("toggle-live-chat"));
