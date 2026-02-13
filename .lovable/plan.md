@@ -1,49 +1,42 @@
 
 
-# Fix: "Failed to fetch" Errors During Odoo Dump Import
+# Fix: Back Arrow Should Return to Production Card Pool
 
 ## Problem
 
-170 out of 8106 files failed with "Failed to fetch" / "TypeError: Failed to fetch". The current retry logic (3 attempts, exponential backoff up to 4s) is insufficient for a 12GB ZIP with 8000+ files -- browser connections drop under sustained load.
+The back arrow in the Cutter Station view navigates to `/shopfloor/station` (the machine selector page). The user wants it to go back to the **production card pool** -- the list of cards for the current machine.
+
+The CutterStationView is rendered conditionally inside `StationView` when `selectedItemId` is set. Clearing `selectedItemId` returns to the pool without a route change.
 
 ## Changes
 
-### 1. Increase Retry Resilience
+### 1. Add `onBack` prop to CutterStationView
 
-In the `retryAsync` helper and `processQueue`:
-- Increase retries from 3 to 5 (backoff: 1s, 2s, 4s, 8s, 16s)
-- Add a small delay between batches (500ms) to let the browser breathe
-- Reduce batch parallelism from 5 to 3 for large queues to reduce memory pressure
+Add an optional `onBack?: () => void` callback prop. Pass it through to `StationHeader` via the existing `backTo` mechanism or a new click handler.
 
-### 2. Add "Retry Failed" Button
+### 2. Pass `onBack` from StationView
 
-After import completes with failures:
-- Store the failed queue items in a ref so they can be re-attempted
-- Show a "Retry 170 Failed" button next to the error count
-- Clicking it re-runs `processQueue` with only the failed items (no ZIP re-parse needed)
-- Button disappears when retry succeeds with 0 failures
+In `StationView.tsx`, pass `onBack={() => setSelectedItemId(null)}` to `CutterStationView` (and `BenderStationView` for consistency).
 
-### 3. Track Failed Items for Retry
+### 3. Wire up StationHeader
 
-Currently failures only store error strings. Change to also store the original queue entry (`{ pending, mapping, getBlob }`) so retry can re-use them.
+Add an `onBack` prop to `StationHeader`. When provided, the back arrow calls `onBack()` instead of `navigate(backTo)`.
 
 ## Technical Details
 
-### File: `src/components/admin/OdooDumpImportDialog.tsx`
+### File: `src/components/shopfloor/StationHeader.tsx`
+- Add `onBack?: () => void` to props interface
+- Change back button: `onClick={() => onBack ? onBack() : navigate(backTo)}`
 
-**retryAsync** -- increase retries to 5, increase base delay to 1500ms
+### File: `src/components/shopfloor/CutterStationView.tsx`
+- Add `onBack?: () => void` to `CutterStationViewProps`
+- Pass `onBack={onBack}` to both `StationHeader` usages (lines 373 and 388)
 
-**processQueue** -- add 500ms inter-batch delay, collect failed queue entries into a ref
+### File: `src/components/shopfloor/BenderStationView.tsx`
+- Same pattern: add `onBack` prop and pass to `StationHeader`
 
-**New state/ref:**
-- `failedQueueRef = useRef<QueueItem[]>([])` -- stores failed items for retry
-- After completion, if failures exist, show "Retry N Failed" button that calls `processQueue(failedQueueRef.current)`
+### File: `src/pages/StationView.tsx`
+- Pass `onBack={() => setSelectedItemId(null)}` to both `CutterStationView` and `BenderStationView`
 
-**UI** -- Add retry button below the error list:
-```text
-[170 failed]
-[errors list...]
-[====== RETRY 170 FAILED ======]  <- green button, only shown when not uploading and failures > 0
-```
+Four files, small changes each.
 
-### No other files modified.
