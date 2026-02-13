@@ -211,18 +211,28 @@ export function OdooDumpImportDialog({ open, onOpenChange }: Props) {
 
       // 2. Fetch pending files from DB
       setStatusMsg("Fetching pending files from database…");
-      const { data, error } = await supabase
-        .from("lead_files")
-        .select("odoo_id, lead_id, file_name")
-        .not("odoo_id", "is", null)
-        .is("storage_path", null);
-
-      if (error) {
-        toast.error("Failed to fetch pending files");
-        await reader.close();
-        return;
+      const allPending: PendingFile[] = [];
+      let from = 0;
+      const PAGE = 1000;
+      while (true) {
+        const { data, error } = await supabase
+          .from("lead_files")
+          .select("odoo_id, lead_id, file_name")
+          .not("odoo_id", "is", null)
+          .is("storage_path", null)
+          .range(from, from + PAGE - 1);
+        if (error) {
+          toast.error("Failed to fetch pending files");
+          await reader.close();
+          return;
+        }
+        allPending.push(...(data as unknown as PendingFile[]));
+        setStatusMsg(`Fetching pending files… ${allPending.length} so far`);
+        if (data.length < PAGE) break;
+        from += PAGE;
       }
-      const pending = (data ?? []) as unknown as PendingFile[];
+      setStatusMsg(`Found ${allPending.length} pending files in database`);
+      const pending = allPending;
 
       // 3. Build lookup and match
       const mappingById = new Map<number, MappingRow>();
