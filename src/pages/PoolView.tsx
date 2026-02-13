@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { useCompanyId } from "@/hooks/useCompanyId";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -20,6 +21,7 @@ import {
   Flame,
   Search,
   ExternalLink,
+  AlertTriangle,
 } from "lucide-react";
 
 type PoolPhase = "queued" | "cutting" | "cut_done" | "bending" | "clearance" | "complete";
@@ -41,12 +43,13 @@ interface PoolItem {
 }
 
 const PHASES: PoolPhase[] = ["queued", "cutting", "cut_done", "bending", "clearance", "complete"];
+const ITEMS_LIMIT = 500;
 
 const PHASE_CONFIG: Record<string, { label: string; shortLabel: string; icon: React.ElementType; color: string; bg: string; actionLabel?: string; actionRoute?: string; actionColor?: string }> = {
   queued:    { label: "POOL → CUTTER",       shortLabel: "POOL→CUT",  icon: Layers,      color: "text-muted-foreground", bg: "bg-muted",          actionLabel: "Open Cutter",   actionRoute: "/shopfloor/station", actionColor: "bg-primary hover:bg-primary/90 text-primary-foreground" },
-  cutting:   { label: "CUTTING",              shortLabel: "CUTTING",   icon: Scissors,    color: "text-blue-500",         bg: "bg-blue-500/10" },
-  cut_done:  { label: "POOL → BENDER",        shortLabel: "POOL→BEND", icon: Flame,       color: "text-orange-500",       bg: "bg-orange-500/10",  actionLabel: "Open Bender",   actionRoute: "/shopfloor/station", actionColor: "bg-orange-500 hover:bg-orange-600 text-white" },
-  bending:   { label: "BENDING",              shortLabel: "BENDING",   icon: RotateCcw,   color: "text-orange-500",       bg: "bg-orange-500/10" },
+  cutting:   { label: "CUTTING",              shortLabel: "CUTTING",   icon: Scissors,    color: "text-primary",          bg: "bg-primary/10" },
+  cut_done:  { label: "POOL → BENDER",        shortLabel: "POOL→BEND", icon: Flame,       color: "text-warning",          bg: "bg-warning/10",     actionLabel: "Open Bender",   actionRoute: "/shopfloor/station", actionColor: "bg-warning hover:bg-warning/90 text-warning-foreground" },
+  bending:   { label: "BENDING",              shortLabel: "BENDING",   icon: RotateCcw,   color: "text-warning",          bg: "bg-warning/10" },
   clearance: { label: "CLEARANCE",            shortLabel: "QC",        icon: ShieldCheck,  color: "text-primary",          bg: "bg-primary/10",     actionLabel: "Review QC",     actionRoute: "/shopfloor/clearance", actionColor: "bg-primary hover:bg-primary/90 text-primary-foreground" },
   complete:  { label: "COMPLETE → DISPATCH",  shortLabel: "DISPATCH",  icon: PackageCheck, color: "text-success",          bg: "bg-success/10",     actionLabel: "View Dispatch", actionRoute: "/deliveries", actionColor: "bg-success hover:bg-success/90 text-success-foreground" },
 };
@@ -54,6 +57,7 @@ const PHASE_CONFIG: Record<string, { label: string; shortLabel: string; icon: Re
 export default function PoolView() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { companyId } = useCompanyId();
   const [searchParams, setSearchParams] = useSearchParams();
   const activePhase = (searchParams.get("phase") as PoolPhase | null) || null;
   const [search, setSearch] = useState("");
@@ -66,33 +70,37 @@ export default function PoolView() {
     }
   };
 
-  const { data: items = [], isLoading } = useQuery({
-    queryKey: ["pool-view-items"],
-    enabled: !!user,
+  const { data: items = [], isLoading, error } = useQuery({
+    queryKey: ["pool-view-items", companyId],
+    enabled: !!user && !!companyId,
     refetchInterval: 10000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("cut_plan_items")
-        .select("*, cut_plans!inner(name, project_name)")
+        .select("*, cut_plans!inner(name, project_name, company_id)")
+        .eq("cut_plans.company_id", companyId!)
         .in("phase", PHASES)
         .order("phase")
-        .limit(500);
+        .limit(ITEMS_LIMIT);
       if (error) throw error;
-      return (data || []).map((item: any) => ({
-        id: item.id,
-        bar_code: item.bar_code,
-        mark_number: item.mark_number,
-        drawing_ref: item.drawing_ref,
-        bend_type: item.bend_type,
-        phase: item.phase,
-        total_pieces: item.total_pieces,
-        completed_pieces: item.completed_pieces || 0,
-        bend_completed_pieces: item.bend_completed_pieces || 0,
-        asa_shape_code: item.asa_shape_code,
-        cut_length_mm: item.cut_length_mm,
-        plan_name: item.cut_plans?.name || "",
-        project_name: item.cut_plans?.project_name || null,
-      })) as PoolItem[];
+      return (data || []).map((item: Record<string, unknown>) => {
+        const cutPlans = item.cut_plans as Record<string, unknown> | undefined;
+        return {
+          id: item.id as string,
+          bar_code: item.bar_code as string,
+          mark_number: item.mark_number as string | null,
+          drawing_ref: item.drawing_ref as string | null,
+          bend_type: item.bend_type as string,
+          phase: item.phase as string,
+          total_pieces: item.total_pieces as number,
+          completed_pieces: (item.completed_pieces as number) || 0,
+          bend_completed_pieces: (item.bend_completed_pieces as number) || 0,
+          asa_shape_code: item.asa_shape_code as string | null,
+          cut_length_mm: item.cut_length_mm as number,
+          plan_name: (cutPlans?.name as string) || "",
+          project_name: (cutPlans?.project_name as string) || null,
+        };
+      }) as PoolItem[];
     },
   });
 
@@ -102,7 +110,6 @@ export default function PoolView() {
     grouped.set(phase, items.filter((i) => i.phase === phase));
   }
 
-  // Determine which phases to show
   const visiblePhases = activePhase ? [activePhase] : PHASES;
 
   // Search filter
@@ -116,6 +123,18 @@ export default function PoolView() {
       (item.project_name?.toLowerCase().includes(searchLower))
     );
   };
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-destructive gap-3 py-20">
+        <AlertTriangle className="w-12 h-12 opacity-60" />
+        <p className="text-sm">Failed to load material pool</p>
+        <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
+          Retry
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full bg-background">
@@ -134,9 +153,16 @@ export default function PoolView() {
             </p>
           </div>
         </div>
-        <Badge variant="outline" className="font-mono text-xs">
-          {items.length} ITEMS
-        </Badge>
+        <div className="flex items-center gap-2">
+          {items.length >= ITEMS_LIMIT && (
+            <Badge variant="outline" className="text-[9px] text-warning border-warning/30">
+              Showing first {ITEMS_LIMIT}
+            </Badge>
+          )}
+          <Badge variant="outline" className="font-mono text-xs">
+            {items.length} ITEMS
+          </Badge>
+        </div>
       </header>
 
       {/* Flow Diagram Summary — clickable */}
@@ -174,7 +200,6 @@ export default function PoolView() {
 
       {/* Filter Tabs + Search */}
       <div className="px-4 sm:px-6 py-3 border-b border-border bg-card/30 flex flex-col sm:flex-row items-start sm:items-center gap-3">
-        {/* Phase tabs */}
         <div className="flex items-center gap-1 overflow-x-auto">
           <button
             onClick={() => setPhaseFilter(null)}
@@ -206,7 +231,6 @@ export default function PoolView() {
           })}
         </div>
 
-        {/* Search */}
         <div className="relative w-full sm:w-64 sm:ml-auto">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
           <Input
@@ -282,7 +306,7 @@ export default function PoolView() {
                           >
                             {/* Phase accent */}
                             <div className={`absolute top-0 left-0 right-0 h-1 ${
-                              isBend ? "bg-orange-500" : "bg-blue-500"
+                              isBend ? "bg-warning" : "bg-primary"
                             }`} />
                             <CardContent className="p-4 pt-5 space-y-2">
                               <div className="flex items-start justify-between">
@@ -298,8 +322,8 @@ export default function PoolView() {
                                   variant="outline"
                                   className={`text-[9px] tracking-wider ${
                                     isBend
-                                      ? "border-orange-500/30 text-orange-500"
-                                      : "border-blue-500/30 text-blue-500"
+                                      ? "border-warning/30 text-warning"
+                                      : "border-primary/30 text-primary"
                                   }`}
                                 >
                                   {isBend ? "BEND" : "STRAIGHT"}
@@ -360,3 +384,5 @@ export default function PoolView() {
     </div>
   );
 }
+
+PoolView.displayName = "PoolView";

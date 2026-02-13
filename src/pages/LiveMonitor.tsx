@@ -8,6 +8,7 @@ import { LiveMachineCard } from "@/components/shopfloor/LiveMachineCard";
 import { ProjectLanesView } from "@/components/shopfloor/ProjectLanesView";
 import { MachineFilters } from "@/components/shopfloor/MachineFilters";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -19,8 +20,10 @@ import {
   Wifi,
   Layers,
   LayoutGrid,
+  ArrowLeft,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
 import { AgentSuggestionsPanel } from "@/components/agent/AgentSuggestionsPanel";
 
 export default function LiveMonitor() {
@@ -28,6 +31,7 @@ export default function LiveMonitor() {
   const { projectLanes, queueItems } = useProductionQueues();
   const { isAdmin, isWorkshop } = useUserRole();
   const canWrite = isAdmin || isWorkshop;
+  const navigate = useNavigate();
 
   const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -62,10 +66,10 @@ export default function LiveMonitor() {
     params?: Record<string, unknown>
   ) => {
     try {
-      await manageMachine({ action: action as any, machineId, ...params });
+      await manageMachine({ action: action as Parameters<typeof manageMachine>[0]["action"], machineId, ...params });
       toast.success(`${action.replace("-", " ").replace(/\b\w/g, (c) => c.toUpperCase())} successful`);
-    } catch (err: any) {
-      toast.error(err.message || "Action failed");
+    } catch (err: unknown) {
+      toast.error((err as Error).message || "Action failed");
     }
   };
 
@@ -73,8 +77,8 @@ export default function LiveMonitor() {
     try {
       await smartDispatch({ action: "start-task", queueItemId });
       toast.success("Task started");
-    } catch (err: any) {
-      toast.error(err.message || "Failed to start task");
+    } catch (err: unknown) {
+      toast.error((err as Error).message || "Failed to start task");
     }
   };
 
@@ -82,8 +86,8 @@ export default function LiveMonitor() {
     try {
       await smartDispatch({ action: "move-task", queueItemId, targetMachineId });
       toast.success("Task moved");
-    } catch (err: any) {
-      toast.error(err.message || "Failed to move task");
+    } catch (err: unknown) {
+      toast.error((err as Error).message || "Failed to move task");
     }
   };
 
@@ -91,18 +95,23 @@ export default function LiveMonitor() {
     <div className="flex flex-col h-full">
       {/* Header */}
       <header className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-border">
-        <div>
-          <h1 className="text-xl font-semibold flex items-center gap-2">
-            <Factory className="w-5 h-5" />
-            Live Monitor
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {machines.length} machine{machines.length !== 1 ? "s" : ""} •{" "}
-            {activeTaskCount} active task{activeTaskCount !== 1 ? "s" : ""} •
-            Real-time
-          </p>
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" className="w-8 h-8" onClick={() => navigate("/shop-floor")}>
+            <ArrowLeft className="w-4 h-4" />
+          </Button>
+          <div>
+            <h1 className="text-xl font-semibold flex items-center gap-2">
+              <Factory className="w-5 h-5" />
+              Live Monitor
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              {machines.length} machine{machines.length !== 1 ? "s" : ""} •{" "}
+              {activeTaskCount} active task{activeTaskCount !== 1 ? "s" : ""} •
+              Real-time
+            </p>
+          </div>
         </div>
-        <Badge variant="outline" className="gap-1 text-xs text-[hsl(var(--success))]">
+        <Badge variant="outline" className="gap-1 text-xs text-success">
           <Wifi className="w-3 h-3" />
           Live
         </Badge>
@@ -117,8 +126,8 @@ export default function LiveMonitor() {
       <div className="px-4 sm:px-6 py-3 border-b border-border bg-muted/30">
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
           <StatCard label="Total" value={machines.length} icon={<Factory className="w-4 h-4 text-primary" />} />
-          <StatCard label="Running" value={runningCount} icon={<Play className="w-4 h-4 text-[hsl(var(--success))]" />} />
-          <StatCard label="Blocked" value={blockedCount} icon={<AlertTriangle className="w-4 h-4 text-[hsl(var(--warning))]" />} />
+          <StatCard label="Running" value={runningCount} icon={<Play className="w-4 h-4 text-success" />} />
+          <StatCard label="Blocked" value={blockedCount} icon={<AlertTriangle className="w-4 h-4 text-warning" />} />
           <StatCard label="Down" value={downCount} icon={<XCircle className="w-4 h-4 text-destructive" />} />
           <StatCard label="Tasks" value={queueItems.length} icon={<Layers className="w-4 h-4 text-primary" />} />
         </div>
@@ -166,8 +175,12 @@ export default function LiveMonitor() {
             <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
           </div>
         ) : error ? (
-          <div className="flex items-center justify-center h-64 text-destructive">
+          <div className="flex flex-col items-center justify-center h-64 text-destructive gap-3">
+            <AlertTriangle className="w-12 h-12 opacity-60" />
             <p>Failed to load machines</p>
+            <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
+              Retry
+            </Button>
           </div>
         ) : viewTab === "machines" ? (
           filteredMachines.length === 0 ? (
@@ -179,7 +192,6 @@ export default function LiveMonitor() {
             <ScrollArea className="h-full">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4 sm:p-6">
                 {filteredMachines.map((machine) => {
-                  // Find active task for this machine
                   const machineTask = queueItems.find(
                     (q) => q.machine_id === machine.id && q.status === "running"
                   );
@@ -192,7 +204,6 @@ export default function LiveMonitor() {
                         operators={operators}
                         onAction={handleAction}
                       />
-                      {/* Current task overlay */}
                       {machineTask?.task && (
                         <div className="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs">
                           <div className="flex items-center justify-between">
@@ -237,6 +248,8 @@ export default function LiveMonitor() {
   );
 }
 
+LiveMonitor.displayName = "LiveMonitor";
+
 function StatCard({ label, value, icon }: { label: string; value: number; icon: React.ReactNode }) {
   return (
     <div className="flex items-center gap-3 p-3 rounded-lg bg-background border border-border">
@@ -248,3 +261,5 @@ function StatCard({ label, value, icon }: { label: string; value: number; icon: 
     </div>
   );
 }
+
+StatCard.displayName = "StatCard";

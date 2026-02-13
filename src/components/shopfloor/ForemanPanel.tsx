@@ -270,6 +270,8 @@ export function ForemanPanel({ foreman, compact = false, onAlternativeAction }: 
   );
 }
 
+ForemanPanel.displayName = "ForemanPanel";
+
 function PlaybookCard({ entry }: { entry: PlaybookEntry }) {
   const severityColor = {
     info: "text-primary bg-primary/10 border-primary/30",
@@ -296,3 +298,5 @@ function PlaybookCard({ entry }: { entry: PlaybookEntry }) {
     </div>
   );
 }
+
+PlaybookCard.displayName = "PlaybookCard";

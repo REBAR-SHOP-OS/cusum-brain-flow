@@ -50,13 +50,13 @@ export function ProductionCard({
       // On bender bed: reset bend_completed_pieces, phase back to cut_done
       // On cutter bed: reset completed_pieces, phase back to queued
       const isBenderPhase = item.phase === "bending" || item.phase === "cut_done";
-      const updatePayload = isBenderPhase
+      const updatePayload: Record<string, unknown> = isBenderPhase
         ? { bend_completed_pieces: 0, phase: "cut_done" }
         : { completed_pieces: 0, phase: "queued" };
 
       const { error } = await supabase
         .from("cut_plan_items")
-        .update(updatePayload as any)
+        .update(updatePayload)
         .eq("id", item.id);
 
       if (error) throw error;
@@ -84,7 +84,7 @@ export function ProductionCard({
         {/* Color accent bar at bottom — full width, thicker */}
         <div
           className={`absolute bottom-0 left-0 right-0 h-2 ${
-            isBend ? "bg-orange-500" : "bg-blue-500"
+            isBend ? "bg-warning" : "bg-primary"
           }`}
         />
 
@@ -138,8 +138,8 @@ export function ProductionCard({
             variant="outline"
             className={`text-[9px] font-bold tracking-wider px-2 py-0.5 ${
               isBend
-                ? "bg-orange-500/10 text-orange-600 border-orange-500/30"
-                : "bg-blue-500/10 text-blue-600 border-blue-500/30"
+                ? "bg-warning/10 text-warning border-warning/30"
+                : "bg-primary/10 text-primary border-primary/30"
             }`}
           >
             {isBend ? "BEND REQ" : "STRAIGHT"}
@@ -199,6 +199,8 @@ export function ProductionCard({
           currentMachineId={machineId}
         />
       )}
-    </>
+  </>
   );
 }
+
+ProductionCard.displayName = "ProductionCard";

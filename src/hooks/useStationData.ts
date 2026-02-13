@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useEffect } from "react";
 import { useAuth } from "@/lib/auth";
+import { useCompanyId } from "@/hooks/useCompanyId";
 
 export interface StationItem {
   id: string;
@@ -33,7 +34,11 @@ export interface BarSizeGroup {
   straightItems: StationItem[];
 }
 
-/** Cutter bar-size distribution rules: machine ID → allowed bar sizes (numeric mm from bar_code) */
+/**
+ * TODO: Hardcoded machine UUIDs for cutter distribution rules.
+ * These should be moved to the machine_capabilities table and queried dynamically
+ * to avoid breakage when machines are re-created or deployed to another company.
+ */
 const CUTTER_DISTRIBUTION: Record<string, { maxMm: number } | { minMm: number }> = {
   // CUTTER-01: 10M, 15M only
   "e2dfa6e1-8a49-48eb-82a8-2be40e20d4b3": { maxMm: 15 },
@@ -52,36 +57,39 @@ function passesDistribution(machineId: string, barCode: string): boolean {
 
 export function useStationData(machineId: string | null, machineType?: string) {
   const { user } = useAuth();
+  const { companyId } = useCompanyId();
   const queryClient = useQueryClient();
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["station-data", machineId, machineType],
-    enabled: !!user && !!machineId,
+    queryKey: ["station-data", machineId, machineType, companyId],
+    enabled: !!user && !!machineId && !!companyId,
     queryFn: async () => {
       if (machineType === "bender") {
         // Bender: show ALL bend items that are cut_done or bending (regardless of machine assignment)
         const { data: items, error: itemsError } = await supabase
           .from("cut_plan_items")
-          .select("*, cut_plans!inner(id, name, project_name)")
+          .select("*, cut_plans!inner(id, name, project_name, company_id)")
           .eq("bend_type", "bend")
+          .eq("cut_plans.company_id", companyId!)
           .or("phase.eq.cut_done,phase.eq.bending");
 
         if (itemsError) throw itemsError;
 
-        return (items || []).map((item: any) => ({
+        return (items || []).map((item: Record<string, unknown>) => ({
           ...item,
-          bend_completed_pieces: item.bend_completed_pieces || 0,
-          phase: item.phase || "queued",
+          bend_completed_pieces: (item.bend_completed_pieces as number) || 0,
+          phase: (item.phase as string) || "queued",
           bend_dimensions: item.bend_dimensions as Record<string, number> | null,
-          plan_name: item.cut_plans?.name || "",
-          project_name: item.cut_plans?.project_name || null,
+          plan_name: (item.cut_plans as Record<string, unknown>)?.name || "",
+          project_name: (item.cut_plans as Record<string, unknown>)?.project_name || null,
         })) as StationItem[];
       }
 
-      // Cutter / default: plans assigned to this machine or unassigned
+      // Cutter / default: plans assigned to this machine or unassigned, scoped by company
       const { data: plans, error: plansError } = await supabase
         .from("cut_plans")
         .select("id, name, project_name, machine_id")
+        .eq("company_id", companyId!)
         .or(`machine_id.eq.${machineId},machine_id.is.null`)
         .in("status", ["draft", "queued", "running"]);
 
@@ -100,13 +108,13 @@ export function useStationData(machineId: string | null, machineType?: string) {
       if (itemsError) throw itemsError;
 
       return (items || [])
-        .filter((item: any) => passesDistribution(machineId!, item.bar_code))
-        .map((item: any) => {
-          const plan = planMap.get(item.cut_plan_id);
+        .filter((item: Record<string, unknown>) => passesDistribution(machineId!, item.bar_code as string))
+        .map((item: Record<string, unknown>) => {
+          const plan = planMap.get(item.cut_plan_id as string);
           return {
             ...item,
-            bend_completed_pieces: item.bend_completed_pieces || 0,
-            phase: item.phase || "queued",
+            bend_completed_pieces: (item.bend_completed_pieces as number) || 0,
+            phase: (item.phase as string) || "queued",
             bend_dimensions: item.bend_dimensions as Record<string, number> | null,
             plan_name: plan?.name || "",
             project_name: plan?.project_name || null,
@@ -124,19 +132,19 @@ export function useStationData(machineId: string | null, machineType?: string) {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "cut_plan_items" },
-        () => queryClient.invalidateQueries({ queryKey: ["station-data", machineId, machineType] })
+        () => queryClient.invalidateQueries({ queryKey: ["station-data", machineId, machineType, companyId] })
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "cut_plans" },
-        () => queryClient.invalidateQueries({ queryKey: ["station-data", machineId, machineType] })
+        () => queryClient.invalidateQueries({ queryKey: ["station-data", machineId, machineType, companyId] })
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user, machineId, machineType, queryClient]);
+  }, [user, machineId, machineType, companyId, queryClient]);
 
   // Group by bar size
   const groups: BarSizeGroup[] = [];

@@ -84,7 +84,7 @@ export function TransferMachineDialog({
       // Move the item to the target plan
       const { error: moveError } = await supabase
         .from("cut_plan_items")
-        .update({ cut_plan_id: targetPlanId } as any)
+        .update({ cut_plan_id: targetPlanId })
         .eq("id", item.id);
 
       if (moveError) throw moveError;
@@ -136,7 +136,7 @@ export function TransferMachineDialog({
                     variant="outline"
                     className={`text-[9px] ${
                       m.status === "idle"
-                        ? "border-green-500/30 text-green-600"
+                        ? "border-success/30 text-success"
                         : m.status === "running"
                         ? "border-primary/30 text-primary"
                         : "border-destructive/30 text-destructive"
@@ -158,3 +158,5 @@ export function TransferMachineDialog({
     </Dialog>
   );
 }
+
+TransferMachineDialog.displayName = "TransferMachineDialog";
