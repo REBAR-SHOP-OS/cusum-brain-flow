@@ -98,6 +98,7 @@ export function AIExtractView() {
   const [showHistory, setShowHistory] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
   const [showRejectDialog, setShowRejectDialog] = useState(false);
+  const [deleteProjectConfirm, setDeleteProjectConfirm] = useState<{ id: string; name: string } | null>(null);
 
   // Inline editing state
   const [editingRows, setEditingRows] = useState<Record<string, Record<string, any>>>({});
@@ -183,7 +184,7 @@ export function AIExtractView() {
         company_id: profile.company_id,
       });
       if (error) throw new Error(error.message);
-      await queryClient.invalidateQueries({ queryKey: ["erp-contacts"] });
+      await queryClient.invalidateQueries({ queryKey: ["erp-contacts-all"] });
       setCustomer(newCustomerName.trim());
       setNewCustomerName("");
       setShowAddCustomer(false);
@@ -195,16 +196,27 @@ export function AIExtractView() {
     }
   };
 
+  const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.size > MAX_FILE_SIZE) {
+      toast({ title: "File too large", description: "Maximum file size is 20MB.", variant: "destructive" });
+      return;
+    }
     setUploadedFile(file);
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     const file = e.dataTransfer.files?.[0];
-    if (file) setUploadedFile(file);
+    if (!file) return;
+    if (file.size > MAX_FILE_SIZE) {
+      toast({ title: "File too large", description: "Maximum file size is 20MB.", variant: "destructive" });
+      return;
+    }
+    setUploadedFile(file);
   };
 
   const removeFile = () => {
@@ -705,11 +717,9 @@ export function AIExtractView() {
                                               <span>{p.name}</span>
                                               <button
                                                 className="ml-2 p-0.5 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition-colors"
-                                                onClick={async (e) => {
+                                                onClick={(e) => {
                                                   e.stopPropagation();
-                                                  if (!confirm(`Delete project "${p.name}"?`)) return;
-                                                  await supabase.from("projects").delete().eq("id", p.id);
-                                                  if (selectedProjectId === p.id) { setSelectedProjectId(""); setSelectedBarlistId(""); }
+                                                  setDeleteProjectConfirm({ id: p.id, name: p.name });
                                                 }}
                                               >
                                                 <Trash2 className="w-3.5 h-3.5" />
@@ -729,11 +739,9 @@ export function AIExtractView() {
                                               <span>{p.name}</span>
                                               <button
                                                 className="ml-2 p-0.5 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition-colors"
-                                                onClick={async (e) => {
+                                                onClick={(e) => {
                                                   e.stopPropagation();
-                                                  if (!confirm(`Delete project "${p.name}"?`)) return;
-                                                  await supabase.from("projects").delete().eq("id", p.id);
-                                                  if (selectedProjectId === p.id) { setSelectedProjectId(""); setSelectedBarlistId(""); }
+                                                  setDeleteProjectConfirm({ id: p.id, name: p.name });
                                                 }}
                                               >
                                                 <Trash2 className="w-3.5 h-3.5" />
@@ -839,10 +847,10 @@ export function AIExtractView() {
               </CardContent>
             </Card>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase mb-1.5 block">
-                  Manifest Name
+                  Manifest Name <span className="text-destructive">*</span>
                 </label>
                 <Input value={manifestName} onChange={(e) => setManifestName(e.target.value)}
                   className="bg-card border-border" placeholder="e.g. 23 HALFORD ROAD - HAB (3)" />
@@ -971,7 +979,7 @@ export function AIExtractView() {
                     </div>
                     <div className="flex items-center gap-2">
                       {!processing && (
-                        <Button onClick={handleExtract} className="gap-1.5" disabled={!profile?.company_id}>
+                        <Button onClick={handleExtract} className="gap-1.5" disabled={!uploadedFile || !profile?.company_id || !manifestName.trim() || (!selectedProjectId && !(createNewProject && newProjectName.trim()))}>
                           <Sparkles className="w-4 h-4" /> Extract & Map
                         </Button>
                       )}
@@ -1317,6 +1325,33 @@ export function AIExtractView() {
         )}
       </div>
     </ScrollArea>
+
+    {/* Delete project confirmation dialog */}
+    <AlertDialog open={!!deleteProjectConfirm} onOpenChange={(open) => { if (!open) setDeleteProjectConfirm(null); }}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete Project</AlertDialogTitle>
+          <AlertDialogDescription>
+            Are you sure you want to delete "{deleteProjectConfirm?.name}"? This action cannot be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+            onClick={async () => {
+              if (!deleteProjectConfirm) return;
+              await supabase.from("projects").delete().eq("id", deleteProjectConfirm.id);
+              if (selectedProjectId === deleteProjectConfirm.id) { setSelectedProjectId(""); setSelectedBarlistId(""); }
+              setDeleteProjectConfirm(null);
+              toast({ title: "Project deleted" });
+            }}
+          >
+            Delete
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
     </div>
   );
 }
