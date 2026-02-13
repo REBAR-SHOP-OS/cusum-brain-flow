@@ -3,6 +3,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Progress } from "@/components/ui/progress";
 import {
   Building, Mail, Phone, Calendar, DollarSign, Pencil, Trash2,
   TrendingUp, Clock, User, FileText, Star, ArrowRight,
@@ -35,6 +37,15 @@ const priorityConfig: Record<string, { label: string; class: string }> = {
   low: { label: "Low", class: "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20" },
 };
 
+function getInitials(name: string): string {
+  return name
+    .split(" ")
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+}
+
 export function LeadDetailDrawer({
   lead,
   open,
@@ -45,54 +56,66 @@ export function LeadDetailDrawer({
 }: LeadDetailDrawerProps) {
   if (!lead) return null;
 
+  const meta = (lead.metadata ?? {}) as Record<string, unknown>;
   const currentStageIndex = PIPELINE_STAGES.findIndex((s) => s.id === lead.stage);
   const currentStage = PIPELINE_STAGES[currentStageIndex];
-  const nextStage = PIPELINE_STAGES[currentStageIndex + 1];
   const priority = priorityConfig[lead.priority || "medium"] || priorityConfig.medium;
   const age = formatDistanceToNow(new Date(lead.created_at), { addSuffix: false });
 
-  const parseAssignedFrom = (notes: string | null) => {
+  // Odoo metadata
+  const odooEmail = (meta.odoo_email as string) || null;
+  const odooPhone = (meta.odoo_phone as string) || null;
+  const odooContact = (meta.odoo_contact as string) || null;
+  const salesperson = (meta.odoo_salesperson as string) || null;
+  const probability = (meta.odoo_probability as number) ?? lead.probability ?? 0;
+  const revenue = (meta.odoo_revenue as number) ?? lead.expected_value ?? 0;
+
+  const contactName = odooContact || lead.customers?.name || null;
+  const companyName = lead.customers?.company_name || null;
+
+  // Legacy notes parsing
+  const parseField = (notes: string | null, key: string) => {
     if (!notes) return null;
-    const match = notes.match(/Assigned:\s*([^|]+)/);
+    const match = notes.match(new RegExp(`${key}:\\s*([^|]+)`));
     return match ? match[1].trim() : null;
   };
-
-  const parseCityFrom = (notes: string | null) => {
-    if (!notes) return null;
-    const match = notes.match(/City:\s*([^|]+)/);
-    return match ? match[1].trim() : null;
-  };
-
-  const parseQuoteFrom = (notes: string | null) => {
-    if (!notes) return null;
-    const match = notes.match(/Quote:\s*(\S+)/);
-    return match ? match[1].trim() : null;
-  };
-
-  const assigned = parseAssignedFrom(lead.notes);
-  const city = parseCityFrom(lead.notes);
-  const quoteRef = parseQuoteFrom(lead.notes);
+  const assigned = parseField(lead.notes, "Assigned");
+  const city = parseField(lead.notes, "City");
+  const quoteRef = parseField(lead.notes, "Quote");
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full sm:max-w-lg overflow-y-auto p-0">
         {/* Header */}
         <div className="p-6 pb-4 border-b border-border">
-          <SheetHeader className="text-left mb-4">
+          <SheetHeader className="text-left mb-3">
             <div className="flex items-start justify-between gap-3">
               <SheetTitle className="text-lg font-bold leading-tight pr-4">
                 {lead.title}
               </SheetTitle>
+              <div className="flex items-center gap-1 shrink-0">
+                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => { onOpenChange(false); onEdit(lead); }}>
+                  <Pencil className="w-3.5 h-3.5" />
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7 text-destructive hover:text-destructive"
+                  onClick={() => {
+                    if (confirm("Delete this lead?")) {
+                      onDelete(lead.id);
+                      onOpenChange(false);
+                    }
+                  }}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </Button>
+              </div>
             </div>
           </SheetHeader>
 
-          <div className="flex items-center gap-2 flex-wrap">
-            {currentStage && (
-              <Badge variant="outline" className="gap-1.5">
-                <div className={cn("w-2 h-2 rounded-full", currentStage.color)} />
-                {currentStage.label}
-              </Badge>
-            )}
+          {/* Badges */}
+          <div className="flex items-center gap-2 flex-wrap mb-4">
             <Badge variant="outline" className={priority.class}>
               {priority.label}
             </Badge>
@@ -102,35 +125,105 @@ export function LeadDetailDrawer({
             </Badge>
           </div>
 
-          {/* Quick Actions */}
-          <div className="flex items-center gap-2 mt-4">
-            {nextStage && (
-              <Button
-                size="sm"
-                onClick={() => onStageChange(lead.id, nextStage.id)}
-                className="gap-1.5"
+          {/* Stage Navigation Chips */}
+          <div className="flex gap-1 overflow-x-auto pb-2 mb-4 -mx-1 px-1">
+            {PIPELINE_STAGES.map((stage, i) => (
+              <button
+                key={stage.id}
+                onClick={() => onStageChange(lead.id, stage.id)}
+                className={cn(
+                  "shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition-all",
+                  i === currentStageIndex
+                    ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                    : i < currentStageIndex
+                    ? "bg-primary/10 text-primary border-primary/20 hover:bg-primary/20"
+                    : "bg-muted text-muted-foreground border-border hover:bg-accent"
+                )}
               >
-                <ArrowRight className="w-3.5 h-3.5" />
-                Move to {nextStage.label}
-              </Button>
+                {stage.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Key Info Section */}
+          <div className="space-y-2.5">
+            {/* Contact & Company */}
+            {(contactName || companyName) && (
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                  <Building className="w-4 h-4 text-primary" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{companyName || contactName}</p>
+                  {companyName && contactName && companyName !== contactName && (
+                    <p className="text-xs text-muted-foreground truncate">{contactName}</p>
+                  )}
+                </div>
+              </div>
             )}
-            <Button size="sm" variant="outline" onClick={() => { onOpenChange(false); onEdit(lead); }} className="gap-1.5">
-              <Pencil className="w-3.5 h-3.5" />
-              Edit
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                if (confirm("Delete this lead?")) {
-                  onDelete(lead.id);
-                  onOpenChange(false);
-                }
-              }}
-              className="gap-1.5 text-destructive hover:text-destructive"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </Button>
+
+            {/* Contact details row */}
+            <div className="flex items-center gap-3 flex-wrap text-xs">
+              {odooEmail && (
+                <a href={`mailto:${odooEmail}`} className="flex items-center gap-1 text-primary hover:underline truncate max-w-[200px]">
+                  <Mail className="w-3 h-3 shrink-0" />
+                  {odooEmail}
+                </a>
+              )}
+              {odooPhone && (
+                <a href={`tel:${odooPhone}`} className="flex items-center gap-1 text-primary hover:underline">
+                  <Phone className="w-3 h-3 shrink-0" />
+                  {odooPhone}
+                </a>
+              )}
+            </div>
+
+            {/* Salesperson, Revenue, Probability, Close Date */}
+            <div className="grid grid-cols-2 gap-2">
+              {salesperson && (
+                <div className="flex items-center gap-2 rounded-md border border-border p-2">
+                  <Avatar className="h-6 w-6 text-[10px]">
+                    <AvatarFallback className="bg-primary/10 text-primary text-[10px]">
+                      {getInitials(salesperson)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0">
+                    <p className="text-[10px] text-muted-foreground leading-none">Salesperson</p>
+                    <p className="text-xs font-medium truncate">{salesperson}</p>
+                  </div>
+                </div>
+              )}
+              {revenue > 0 && (
+                <div className="flex items-center gap-2 rounded-md border border-border p-2">
+                  <DollarSign className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-[10px] text-muted-foreground leading-none">Revenue</p>
+                    <p className="text-xs font-medium">${revenue.toLocaleString()}</p>
+                  </div>
+                </div>
+              )}
+              {probability > 0 && (
+                <div className="flex items-center gap-2 rounded-md border border-border p-2">
+                  <TrendingUp className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] text-muted-foreground leading-none">Probability</p>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-medium">{probability}%</span>
+                      <Progress value={probability} className="h-1.5 flex-1" />
+                    </div>
+                  </div>
+                </div>
+              )}
+              {lead.expected_close_date && (
+                <div className="flex items-center gap-2 rounded-md border border-border p-2">
+                  <Calendar className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-[10px] text-muted-foreground leading-none">Close Date</p>
+                    <p className="text-xs font-medium">{format(new Date(lead.expected_close_date), "MMM d, yyyy")}</p>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -156,45 +249,12 @@ export function LeadDetailDrawer({
             </TabsContent>
 
             <TabsContent value="details" className="space-y-5 mt-0">
-              {/* Customer Info */}
-              {lead.customers && (
-                <div className="rounded-lg border border-border p-4 space-y-3">
-                  <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Customer</h4>
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                      <Building className="w-5 h-5 text-primary" />
-                    </div>
-                    <div>
-                      <p className="font-medium text-sm">{lead.customers.company_name || lead.customers.name}</p>
-                      {lead.customers.company_name && lead.customers.company_name !== lead.customers.name && (
-                        <p className="text-xs text-muted-foreground">{lead.customers.name}</p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Key Details Grid */}
+              {/* Secondary details grid */}
               <div className="grid grid-cols-2 gap-3">
-                {assigned && (
-                  <DetailItem icon={User} label="Assigned To" value={assigned} />
-                )}
-                {city && (
-                  <DetailItem icon={Building} label="City" value={city} />
-                )}
-                {quoteRef && (
-                  <DetailItem icon={FileText} label="Quote Ref" value={quoteRef} />
-                )}
-                {lead.source && (
-                  <DetailItem icon={Star} label="Source" value={lead.source} />
-                )}
-                {lead.expected_close_date && (
-                  <DetailItem
-                    icon={Calendar}
-                    label="Expected Close"
-                    value={format(new Date(lead.expected_close_date), "MMM d, yyyy")}
-                  />
-                )}
+                {assigned && <DetailItem icon={User} label="Assigned To" value={assigned} />}
+                {city && <DetailItem icon={Building} label="City" value={city} />}
+                {quoteRef && <DetailItem icon={FileText} label="Quote Ref" value={quoteRef} />}
+                {lead.source && <DetailItem icon={Star} label="Source" value={lead.source} />}
               </div>
 
               {/* Stage Progress */}
