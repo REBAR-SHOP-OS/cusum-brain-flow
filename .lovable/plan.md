@@ -1,39 +1,49 @@
 
 
-# Fix: "Bars to Load" Changes Not Reflected in Slot Tracker
+# Fix: "Failed to fetch" Errors During Odoo Dump Import
 
 ## Problem
 
-When the operator changes "BARS TO LOAD" (e.g., from 1 to 4), the Slot Tracker still shows "1 BARS LOADED". This happens because:
+170 out of 8106 files failed with "Failed to fetch" / "TypeError: Failed to fetch". The current retry logic (3 attempts, exponential backoff up to 4s) is insufficient for a 12GB ZIP with 8000+ files -- browser connections drop under sustained load.
 
-1. The bar count spinner in the Cut Engine is **not disabled while a run is active** -- operators can change it mid-run
-2. `slotTracker.startWithBars(bars)` is only called once during "LOCK & START" -- subsequent bar changes are ignored by the Slot Tracker
-3. Physically, you cannot add/remove bars mid-cut, so the spinner should be locked during a run
+## Changes
 
-## Fix
+### 1. Increase Retry Resilience
 
-### 1. Disable Bar Count Changes While Running
+In the `retryAsync` helper and `processQueue`:
+- Increase retries from 3 to 5 (backoff: 1s, 2s, 4s, 8s, 16s)
+- Add a small delay between batches (500ms) to let the browser breathe
+- Reduce batch parallelism from 5 to 3 for large queues to reduce memory pressure
 
-In `CutEngine.tsx`, add `isRunning` to the disabled condition on both the increment and decrement bar buttons. This prevents operators from changing bars after locking, which matches physical reality.
+### 2. Add "Retry Failed" Button
 
-### 2. Ensure Correct Initial Bar Count
+After import completes with failures:
+- Store the failed queue items in a ref so they can be re-attempted
+- Show a "Retry 170 Failed" button next to the error count
+- Clicking it re-runs `processQueue` with only the failed items (no ZIP re-parse needed)
+- Button disappears when retry succeeds with 0 failures
 
-The current flow already passes `bars` correctly to `onLockAndStart` -- the issue is only that post-lock changes aren't synced. Disabling the spinner during a run fully resolves this.
+### 3. Track Failed Items for Retry
+
+Currently failures only store error strings. Change to also store the original queue entry (`{ pending, mapping, getBlob }`) so retry can re-use them.
 
 ## Technical Details
 
-### File: `src/components/shopfloor/CutEngine.tsx`
+### File: `src/components/admin/OdooDumpImportDialog.tsx`
 
-**Change 1** -- Decrement button (line 213): Add `|| isRunning` to `disabled`
+**retryAsync** -- increase retries to 5, increase base delay to 1500ms
 
+**processQueue** -- add 500ms inter-batch delay, collect failed queue entries into a ref
+
+**New state/ref:**
+- `failedQueueRef = useRef<QueueItem[]>([])` -- stores failed items for retry
+- After completion, if failures exist, show "Retry N Failed" button that calls `processQueue(failedQueueRef.current)`
+
+**UI** -- Add retry button below the error list:
+```text
+[170 failed]
+[errors list...]
+[====== RETRY 170 FAILED ======]  <- green button, only shown when not uploading and failures > 0
 ```
-disabled={bars <= 1 || isRunning}
-```
 
-**Change 2** -- Increment button (line 231): Add `|| isRunning` to `disabled`
-
-```
-disabled={bars >= maxBars || isRunning}
-```
-
-This is a two-line change. No other files need modification.
+### No other files modified.
