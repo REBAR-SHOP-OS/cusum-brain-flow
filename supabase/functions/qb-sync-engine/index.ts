@@ -813,14 +813,18 @@ serve(async (req) => {
     const svcKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const svc = createClient(svcUrl, svcKey);
 
-    // Auth: accept service role key OR authenticated user with admin/accounting role
+    // Auth: accept service role key, cron secret, OR authenticated user
     const authHeader = req.headers.get("Authorization") || "";
     const token = authHeader.replace("Bearer ", "");
+    const cronSecret = req.headers.get("x-cron-secret") || "";
 
     let companyId: string | null = null;
+    const mcpKey = Deno.env.get("MCP_API_KEY") || "";
 
     if (token === svcKey) {
       // Service role — get company_id from body
+    } else if (cronSecret && mcpKey && cronSecret === mcpKey) {
+      // Cron job auth via shared secret — get company_id from body
     } else {
       // User auth
       const anonClient = createClient(svcUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
