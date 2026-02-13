@@ -462,11 +462,15 @@ showFileUpload={true}
         )}
       </div>
 
+      {/* Right Panel - Post View (Social agent only) */}
+      {agentId === "social" && (
+        <div className="w-80 border-l border-border flex-shrink-0 hidden md:flex flex-col bg-card">
+          <PixelPostViewPanel post={viewingPost} onClose={() => setViewingPost(null)} />
+        </div>
+      )}
+
       <PixelBrainDialog open={brainOpen} onOpenChange={setBrainOpen} />
       <ImageGeneratorDialog open={imageGenOpen} onOpenChange={setImageGenOpen} />
-      {agentId === "social" && (
-        <PixelPostViewPanel post={viewingPost} onClose={() => setViewingPost(null)} />
-      )}
       {agentId === "assistant" && isSuperAdmin && (
         <VizzyApprovalDialog pendingAction={pendingAction} />
       )}
