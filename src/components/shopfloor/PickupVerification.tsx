@@ -116,3 +116,5 @@ export function PickupVerification({
     </div>
   );
 }
+
+PickupVerification.displayName = "PickupVerification";

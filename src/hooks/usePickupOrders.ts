@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useCompanyId } from "@/hooks/useCompanyId";
+import { useQueryClient } from "@tanstack/react-query";
 
 export interface PickupOrder {
   id: string;
@@ -28,46 +30,90 @@ export interface PickupOrderItem {
 
 export function usePickupOrders() {
   const { toast } = useToast();
+  const { companyId } = useCompanyId();
+  const queryClient = useQueryClient();
   const [orders, setOrders] = useState<PickupOrder[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
 
   const fetchOrders = useCallback(async () => {
+    if (!companyId) return;
     setLoading(true);
-    const { data, error } = await (supabase as any)
+    setError(null);
+
+    const { data, error: fetchErr } = await supabase
       .from("pickup_orders")
       .select("*, customer:customers(name, company_name)")
+      .eq("company_id", companyId)
       .order("created_at", { ascending: false });
 
-    if (error) {
-      toast({ title: "Error loading pickup orders", description: error.message, variant: "destructive" });
+    if (fetchErr) {
+      setError(fetchErr);
+      toast({ title: "Error loading pickup orders", description: fetchErr.message, variant: "destructive" });
     } else {
-      setOrders(data || []);
+      setOrders((data as PickupOrder[]) || []);
     }
     setLoading(false);
-  }, [toast]);
+  }, [companyId, toast]);
 
   useEffect(() => { fetchOrders(); }, [fetchOrders]);
 
-  const authorizeRelease = async (orderId: string, signatureData: string, authorizedBy: string) => {
-    const { error } = await supabase
-      .from("pickup_orders")
-      .update({
-        status: "released",
-        signature_data: signatureData,
-        authorized_by: authorizedBy,
-        authorized_at: new Date().toISOString(),
+  // Fix 5: Realtime subscriptions
+  useEffect(() => {
+    if (!companyId) return;
+    const channel = supabase
+      .channel("pickup-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "pickup_orders" }, () => fetchOrders())
+      .on("postgres_changes", { event: "*", schema: "public", table: "pickup_order_items" }, () => {
+        queryClient.invalidateQueries({ queryKey: ["pickup-items"] });
       })
-      .eq("id", orderId);
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [companyId, fetchOrders, queryClient]);
 
-    if (error) {
-      toast({ title: "Error authorizing release", description: error.message, variant: "destructive" });
+  // Fix 3: Store signature in blob storage instead of DB
+  const authorizeRelease = async (orderId: string, signatureData: string, authorizedBy: string) => {
+    try {
+      let signaturePath: string | null = null;
+
+      // Upload signature to storage
+      const blob = await (await fetch(signatureData)).blob();
+      const path = `${companyId}/signatures/${orderId}-${Date.now()}.png`;
+      const { error: uploadErr } = await supabase.storage
+        .from("clearance-photos")
+        .upload(path, blob, { contentType: "image/png", upsert: true });
+
+      if (uploadErr) {
+        console.error("Signature upload failed, storing inline:", uploadErr.message);
+        // Fallback: store inline if upload fails (graceful degradation)
+        signaturePath = signatureData;
+      } else {
+        signaturePath = path;
+      }
+
+      const { error } = await supabase
+        .from("pickup_orders")
+        .update({
+          status: "released",
+          signature_data: signaturePath,
+          authorized_by: authorizedBy,
+          authorized_at: new Date().toISOString(),
+        })
+        .eq("id", orderId);
+
+      if (error) {
+        toast({ title: "Error authorizing release", description: error.message, variant: "destructive" });
+        return false;
+      }
+      await fetchOrders();
+      return true;
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
       return false;
     }
-    await fetchOrders();
-    return true;
   };
 
-  return { orders, loading, fetchOrders, authorizeRelease };
+  return { orders, loading, error, fetchOrders, authorizeRelease };
 }
 
 export function usePickupOrderItems(orderId: string | null) {
@@ -86,7 +132,7 @@ export function usePickupOrderItems(orderId: string | null) {
     if (error) {
       toast({ title: "Error loading items", description: error.message, variant: "destructive" });
     } else {
-      setItems(data || []);
+      setItems((data as PickupOrderItem[]) || []);
     }
     setLoading(false);
   }, [orderId, toast]);

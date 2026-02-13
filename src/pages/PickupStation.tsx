@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { usePickupOrders, usePickupOrderItems } from "@/hooks/usePickupOrders";
 import { useCompletedBundles } from "@/hooks/useCompletedBundles";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -7,7 +8,8 @@ import { PickupVerification } from "@/components/shopfloor/PickupVerification";
 import { ReadyBundleList } from "@/components/dispatch/ReadyBundleList";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Package, MapPin } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Loader2, Package, MapPin, ArrowLeft, AlertTriangle } from "lucide-react";
 
 const statusColors: Record<string, string> = {
   pending: "bg-muted text-muted-foreground",
@@ -17,8 +19,9 @@ const statusColors: Record<string, string> = {
 };
 
 export default function PickupStation() {
+  const navigate = useNavigate();
   const { user } = useAuth();
-  const { orders, loading, authorizeRelease } = usePickupOrders();
+  const { orders, loading, error, authorizeRelease } = usePickupOrders();
   const { isAdmin, isWorkshop } = useUserRole();
   const canWrite = isAdmin || isWorkshop;
 
@@ -45,15 +48,33 @@ export default function PickupStation() {
     );
   }
 
+  // Fix 4: Error state
+  if (error) {
+    return (
+      <div className="text-center py-20 text-destructive">
+        <AlertTriangle className="w-12 h-12 mx-auto mb-3 opacity-60" />
+        <p className="text-sm">Failed to load pickup orders</p>
+        <Button variant="outline" size="sm" className="mt-3" onClick={() => window.location.reload()}>
+          Retry
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
+      {/* Header with back button */}
       <header className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-border">
-        <div>
-          <h1 className="text-xl font-bold tracking-wide uppercase">Pickup Station</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Verify identity and authorize material release
-          </p>
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/shop-floor")}>
+            <ArrowLeft className="w-5 h-5" />
+          </Button>
+          <div>
+            <h1 className="text-xl font-bold tracking-wide uppercase">Pickup Station</h1>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Verify identity and authorize material release
+            </p>
+          </div>
         </div>
       </header>
 
