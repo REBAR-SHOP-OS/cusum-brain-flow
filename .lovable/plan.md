@@ -1,121 +1,146 @@
 
 
-# Audit All Agents — Full System Review
+# World-Class AI-Driven Social Media Engine for Rebar.shop
 
-## Summary of Findings
+## Current State Assessment
 
-After reviewing the entire agent infrastructure (3,760-line edge function, 18 agent configs, model routing, context fetching, and governance rules), here is a comprehensive audit.
+The Social Media Manager has a solid foundation but has 9 critical gaps preventing it from being a fully automated, intelligence-driven system:
 
----
-
-## Agent Registry (18 agents configured in frontend)
-
-| # | Key | Name | Agent Type | Model Routing | Has Dedicated Context | Issues Found |
-|---|-----|------|-----------|---------------|----------------------|--------------|
-| 1 | sales | Blitz | sales | Flash-Lite / Flash-preview | Yes (leads, pipeline) | None |
-| 2 | support | Haven | support | Flash-Lite / Flash-preview | Yes (tasks, deliveries, machines) | None |
-| 3 | accounting | Penny | accounting | Flash-Lite / Flash | Yes (QB live, emails, AR, tasks) | None |
-| 4 | legal | Tally | legal | Default (Flash-preview) | No dedicated fetch | **Issue 1** |
-| 5 | estimating | Gauge | estimation | Flash / Pro | Yes (leads, files, emails, rebar standards) | None |
-| 6 | shopfloor | Forge | support | Same as Haven | Shares support context | **Issue 2** |
-| 7 | delivery | Atlas | support | Same as Haven | Shares support context | **Issue 3** |
-| 8 | email | Relay | support | Same as Haven | Shares support context | **Issue 4** |
-| 9 | social | Pixel | social | Flash / Flash-preview | Yes (social posts, image gen) | None |
-| 10 | eisenhower | Eisenhower | eisenhower | Default (Flash-preview) | No dedicated fetch | **Issue 5** |
-| 11 | data | Prism | support | Same as Haven | Shares support context | **Issue 6** |
-| 12 | bizdev | Buddy | bizdev | Flash-preview | No dedicated fetch | **Issue 7** |
-| 13 | webbuilder | Commet | webbuilder | Flash-preview | No dedicated fetch | **Issue 8** |
-| 14 | assistant | Vizzy | assistant | Pro | Yes (full cross-department) | None |
-| 15 | copywriting | Penn | copywriting | Flash-preview | No dedicated fetch | **Issue 9** |
-| 16 | talent | Scouty | talent | Flash | No dedicated fetch | **Issue 10** |
-| 17 | seo | Seomi | seo | Flash-preview | No dedicated fetch | **Issue 11** |
-| 18 | growth | Gigi | growth | Default (Flash-preview) | No dedicated fetch | **Issue 12** |
+1. **Brand Kit not persisted** -- resets on refresh (local state only)
+2. **Auto-generate uses wrong image model** -- `gemini-2.5-flash` cannot generate images; should use `gemini-3-pro-image-preview`
+3. **Images upload to wrong bucket** -- `estimation-files` instead of `social-images`
+4. **LinkedIn publishing not wired** -- OAuth exists but `social-publish` only supports Facebook/Instagram
+5. **No scheduled publishing cron** -- "Scheduled" is just a label; nothing triggers publish at the scheduled time
+6. **No business intelligence injection** -- posts are generic; not informed by real data (leads, orders, Google Analytics, Search Console)
+7. **No competitor/industry research** -- content is created in a vacuum
+8. **Multi-platform generation** -- auto-generate creates 5 posts for 1 platform only, not cross-platform
+9. **No LinkedIn Copilot integration** -- LinkedIn posts don't leverage LinkedIn-specific best practices or article format
 
 ---
 
-## Issues Found
+## Implementation Plan
 
-### Critical Issues
+### Phase 1 -- Fix Foundations (Critical Bugs)
 
-**Issue 2, 3, 4, 6 — Forge, Atlas, Relay, Prism all route to `agentType: "support"`**
-These 4 agents share Haven's agent type, meaning they all get Haven's system prompt and context. They have distinct frontend identities (Shop Floor, Delivery, Email, Data) but the backend treats them all as generic "support." They are essentially Haven wearing different hats.
-- **Impact**: Users talking to Forge about machine maintenance get Haven's customer support prompt. Atlas gets no delivery-specific intelligence. Relay has no email-focused logic. Prism has no analytics capability.
-- **Fix**: Give each a unique agent type and dedicated system prompt + context fetch.
+**1.1 Persist Brand Kit to database**
+- Create `brand_kit` table: `id, user_id, business_name, logo_url, brand_voice, description, value_prop, colors (jsonb), media_urls (text[]), updated_at`
+- Update `BrandKitDialog.tsx` to load from and save to database
+- Inject brand kit data into Pixel's context in `ai-agent` edge function
 
-**Issue 1 — Tally (Legal) has no dedicated context fetch**
-The `fetchContext` function has no `if (agent === "legal")` branch. Tally only gets the base context (15 recent emails + 15 customers). No contracts, no lien deadlines, no compliance data.
-- **Fix**: Add a legal context fetch (orders with lien deadlines, contracts, compliance dates).
+**1.2 Fix auto-generate image model**
+- In `auto-generate-post/index.ts`, replace `google/gemini-2.5-flash` with `google/gemini-3-pro-image-preview` for image generation
+- Upload to `social-images` bucket instead of `estimation-files`
 
-### Moderate Issues
+**1.3 Fix storage bucket routing**
+- All social media uploads route to `social-images` (public bucket, already exists)
 
-**Issue 5 — Eisenhower has no dedicated context**
-No `fetchContext` branch for "eisenhower". It only gets the shared base context. No task data, no priority history.
-- **Fix**: Fetch user's tasks, priorities, and recent Eisenhower sessions.
+### Phase 2 -- Business Intelligence Engine
 
-**Issues 7-12 — Bizdev, Webbuilder, Copywriting, Talent, SEO, Growth have no context**
-These 6 agents have system prompts but zero dedicated data fetching. They operate on just the base 15 emails + 15 customers. They are effectively "prompt-only" agents with no real data access.
-- **Fix**: Add relevant context fetches (e.g., Bizdev gets leads + competitors, Talent gets employee data, etc.).
+**2.1 New edge function: `social-intelligence`**
+- Gathers real business data before content generation:
+  - Recent orders/leads from database (what products are selling, new customers)
+  - Google Analytics data (top pages, traffic trends) via stored Google OAuth tokens
+  - Google Search Console data (top queries, CTR, impressions) via stored tokens
+  - Recent customer communications (what questions are being asked)
+  - LinkedIn company page analytics (if connected)
+- Returns a structured `BusinessInsightReport` that feeds into content generation
 
-### Minor/Cosmetic Issues
+**2.2 Inject intelligence into Pixel's context**
+- Update `fetchContext` for `social` agent to call `social-intelligence` 
+- Pixel's prompt receives real data: "Your top-selling product this week is Rebar Stirrups (12 orders). Traffic to rebar.shop increased 15% from Search Console. Top search query: 'rebar fabrication Ontario'"
+- Content becomes data-driven: posts reference real trends, real products, real performance
 
-**Accounting image mismatch**: Penny uses `socialHelper` image (line 54). Should use `accountingHelper`.
+**2.3 Update auto-generate pipeline**
+- Before generating posts, call `social-intelligence` to get fresh business data
+- Inject insights into the generation prompt so every auto-generated post is grounded in real business performance
 
-**Social image mismatch**: Pixel uses `accountingHelper` image (line 108). Should use `socialHelper`.
+### Phase 3 -- Multi-Platform Cross-Posting
 
-**Legal image placeholder**: Tally uses `accountingHelper` with a TODO comment (line 63).
+**3.1 Upgrade auto-generate to multi-platform**
+- Generate platform-optimized variations for each time slot:
+  - Facebook: longer captions, community engagement focus
+  - Instagram: visual-first, hashtag strategy (30 max), story-style CTAs
+  - LinkedIn: professional/B2B angle, industry thought leadership, article-style
+  - Twitter/X: concise, thread-ready, engagement hooks
+- Each platform gets content adapted to its best practices, not copy-pasted
+
+**3.2 Add LinkedIn publishing to `social-publish`**
+- Wire the existing `linkedin-oauth` `create-post` action into the `social-publish` edge function
+- Add `"linkedin"` to the platform enum in the Zod schema
+- Support text posts and image posts via LinkedIn's UGC API (already built in `linkedin-oauth`)
+
+### Phase 4 -- Automated Scheduled Publishing (Cron)
+
+**4.1 New edge function: `social-cron-publish`**
+- Queries `social_posts` for posts with `status = 'scheduled'` and `scheduled_date <= now()`
+- For each due post, calls the appropriate platform publish function (Facebook, Instagram, LinkedIn)
+- Updates status to `published` on success, `failed` on error
+- Logs results for audit trail
+
+**4.2 Set up pg_cron job**
+- Run every 5 minutes: check for scheduled posts that are due
+- Uses service role key for authentication
+
+### Phase 5 -- LinkedIn Copilot Mode
+
+**5.1 LinkedIn-specific content intelligence**
+- When generating LinkedIn content, the prompt includes:
+  - B2B construction industry trends
+  - Professional thought leadership angle
+  - LinkedIn algorithm best practices (engagement in first hour, comment prompts, carousel-style text)
+  - Company page optimization tips
+- LinkedIn posts get a distinct treatment: longer, more professional, article-preview format
+
+**5.2 LinkedIn article drafts**
+- For weekly/monthly cadence, generate LinkedIn article outlines (not just posts)
+- Topics derived from business intelligence: "How AI is transforming rebar fabrication" based on actual operational data
+
+### Phase 6 -- Research-Driven Content
+
+**6.1 Industry trend injection**
+- Use Lovable AI to analyze construction industry trends before generating content
+- Prompt includes: Ontario construction market updates, OHSA regulatory changes, infrastructure spending
+- Content references real-world events and industry developments
+
+**6.2 Competitor awareness**
+- Knowledge base items tagged `social-strategy` already feed into Pixel
+- Add a structured competitor analysis section to the knowledge base
+- Pixel references competitive positioning when creating content
 
 ---
 
-## Model Routing Summary
+## Technical Details
 
-| Agent | Simple Query | Complex Query | Notes |
-|-------|-------------|--------------|-------|
-| Vizzy (assistant) | Pro | Pro | Always Pro for reliable instruction following |
-| Gauge (estimation) | Flash | Pro | Pro for deep analysis, Flash for quick Q&A |
-| Penny (accounting) | Flash-Lite | Flash | Flash for complex financial + call requests |
-| Blitz (sales) | Flash-Lite | Flash-preview | Flash-preview for pipeline analysis |
-| Haven (support) | Flash-Lite | Flash-preview | Flash-preview for escalations |
-| Pixel (social) | Flash | Flash-preview | High temperature for creativity |
-| Penn (copywriting) | Flash-preview | Flash-preview | Always Flash-preview |
-| Seomi (seo) | Flash-preview | Flash-preview | Always Flash-preview |
-| Buddy (bizdev) | Flash-preview | Flash-preview | Always Flash-preview |
-| Scouty (talent) | Flash | Flash | Always Flash |
-| Commet (webbuilder) | Flash-preview | Flash-preview | Always Flash-preview |
-| Gigi (growth) | Flash-preview | Flash-preview | Default fallback |
-| Tally (legal) | Flash-preview | Flash-preview | Default fallback (no dedicated routing) |
-| Eisenhower | Flash-preview | Flash-preview | Default fallback (no dedicated routing) |
+### New Database Table
+```text
+brand_kit:
+  id (uuid, PK)
+  user_id (uuid, FK to auth.users, unique)
+  business_name (text)
+  logo_url (text, nullable)
+  brand_voice (text)
+  description (text)
+  value_prop (text)
+  colors (jsonb)
+  media_urls (text[])
+  created_at (timestamptz)
+  updated_at (timestamptz)
+```
 
-**Issue 13 — Legal has no dedicated model routing**: Falls through to default. Legal analysis (contracts, compliance) would benefit from Pro or at least Flash for precision.
+### New Edge Functions
+- `social-intelligence` -- Gathers business data from DB + Google APIs
+- `social-cron-publish` -- Scheduled publishing cron handler
 
----
+### Modified Edge Functions
+- `auto-generate-post` -- Multi-platform + intelligence injection + correct image model
+- `social-publish` -- Add LinkedIn support
+- `ai-agent` -- Inject brand kit + business intelligence into Pixel's context
 
-## Governance & Security (All Good)
+### Modified Components
+- `BrandKitDialog.tsx` -- Database persistence
+- `SocialMediaManager.tsx` -- Multi-platform auto-generate options
+- `PostReviewPanel.tsx` -- Enable Publish button for LinkedIn
 
-- Role-based access control: Properly enforced per user role (admin/accounting/office/sales/workshop/field)
-- No-cross-interference policy: Injected into all agent prompts
-- Draft-only mode: Correctly blocks external actions when `comms_agent_pairing.draft_only` or `comms_config.no_act_global` is set
-- Rate limiting: 10 requests/60 seconds per user -- working correctly
-- Auth: JWT validation on every request -- correct
-
----
-
-## Recommended Fix Plan
-
-### Phase 1 — Image Fixes (cosmetic, quick win)
-1. Swap Penny's image from `socialHelper` to `accountingHelper`
-2. Swap Pixel's image from `accountingHelper` to `socialHelper`
-3. Add a dedicated legal helper image or use a distinct existing one for Tally
-
-### Phase 2 — Give Forge, Atlas, Relay, Prism unique agent types
-1. Add new agent types: `"shopfloor"`, `"delivery"`, `"email"`, `"data"` to the `AgentType` union
-2. Update `agentConfigs.ts` to use these new types
-3. Add dedicated system prompts in `agentPrompts` for each
-4. Add dedicated `fetchContext` branches for each
-5. Add model routing for each in `selectModel`
-
-### Phase 3 — Add context fetches for prompt-only agents
-Add `fetchContext` branches for: legal, eisenhower, bizdev, webbuilder, copywriting, talent, seo, growth — pulling relevant data from existing tables.
-
-### Phase 4 — Add model routing for legal + eisenhower
-Give Tally a dedicated `selectModel` case (Flash for simple, Pro for contract analysis). Give Eisenhower a case optimized for prioritization tasks.
+### pg_cron Job
+- Every 5 minutes: invoke `social-cron-publish` to publish due posts
 
