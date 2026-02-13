@@ -1,179 +1,133 @@
 
-# Full Odoo-ERP Pipeline Reconciliation Plan
 
-## Audit Findings
+# Odoo-Style Header Rebuild for Rebar ERP
 
-### 1. Data Summary
-- **Total ERP leads (odoo_sync)**: 2,823
-- **Unique Odoo IDs**: 2,691
-- **Duplicate groups**: 132 (132 extra records with same odoo_id)
-- **Non-odoo leads**: 44 (RFQ email scans, manual)
-- **Archived orphans**: 34 (no odoo_id, legacy data)
+## Current ERP Header vs Odoo Header
 
-### 2. Critical Issues Found
+### Odoo Header Structure (Backend/CRM)
+The Odoo backend navbar is a single 46px-tall bar with a dark purple background (`#714B67` / `#7C3AED`-ish), structured as:
 
-**A. 132 Duplicate Groups**
-Each duplicate pair has one "old" record (created Feb 10, with S-prefix title like `S03617, ...`) and one "new" record (created Feb 13, with Odoo's native title). The root cause is a bug in `odoo-crm-sync`: when loading existing leads, `Map.set(odoo_id, lead_id)` keeps only the LAST match. If there were already duplicates before the dedup map was added, or if a prior sync run created entries without `odoo_id` in metadata, the map misses them.
+```text
+[Grid Icon] [Module Name] [Breadcrumb > Trail] .............. [Search] [Messaging] [Bell] [Avatar]
+|___ LEFT GROUP (app nav) ___|                                |_____ RIGHT GROUP (utilities) _____|
+```
 
-**B. Probability Not Normalized**
-- 874 won leads have probability < 100 (should be 100)
-- 37 lost leads have probability > 10 (should be 0)
-- The sync blindly copies Odoo's ML probability instead of enforcing won=100, lost=0.
+- **Grid icon**: 3x3 dot grid, opens app switcher (module list)
+- **Module name**: Bold text of current module (e.g., "CRM", "Inventory")
+- **Breadcrumb**: `>` separated path (e.g., "Pipeline" or "Pipeline > Lead Name")
+- **Search bar**: Inline expandable input, not a modal trigger
+- **Messaging**: Chat bubble icon with unread counter badge
+- **Notifications**: Bell icon with counter badge
+- **User avatar**: Circle with initials, dropdown with Preferences, My Profile, Log out
 
-**C. Stage-Mismatch Duplicates**
-~18 duplicate pairs have conflicting stages (e.g., one says `hot_enquiries`, the other says `lost`). The newer record (from Odoo's latest sync) has the authoritative stage.
+### Current ERP Header Issues (vs Odoo)
+1. Brand logo + "REBAR OS" text takes up left side (Odoo uses grid icon + module name)
+2. Warehouse selector clutters the header (not in Odoo)
+3. Search opens a command palette modal (Odoo does inline search)
+4. Wrench (admin console) icon visible in header (not Odoo-like)
+5. Theme toggle in header (Odoo has no theme toggle in navbar)
+6. User menu is a plain icon, not an avatar with initials
+7. No breadcrumb system
+8. No module name indicator
 
 ---
 
-## Execution Plan
+## Changes
 
-### PHASE 1: Deduplicate 132 Groups (DB operations)
+### File: `src/components/layout/TopBar.tsx` (Major rewrite)
 
-For each duplicate group:
-- **Survivor**: the record most recently updated (newer `synced_at`)
-- **Victim**: the older record
-- Merge: copy any non-null fields from victim into survivor (e.g., `customer_id` if survivor is null)
-- Delete victim
-- Log old_id to survivor_id mapping
+**Left group:**
+1. Replace brand logo with a 3x3 grid icon (LayoutGrid from lucide) that toggles the sidebar visibility or navigates to `/home`
+2. Add **active module name** derived from current route (e.g., "CRM" on `/pipeline`, "Inventory" on `/office`)
+3. Add **breadcrumb** showing current page path using `useLocation()`
 
-SQL strategy:
+**Right group (strict order):**
+1. Search input (inline style, not a button -- but keeps opening CommandBar on click since true inline search requires backend changes)
+2. Notifications bell with badge (keep as-is)
+3. User avatar with initials dropdown (rebuild UserMenu)
+
+**Removed from header:**
+- Brand logo and "REBAR OS" text (grid icon replaces it)
+- Warehouse selector (move into user dropdown as a sub-option)
+- Wrench/Admin Console button (move into user dropdown)
+- Theme toggle (move into user dropdown under "Preferences")
+
+**Visual changes:**
+- Header height: 46px (Odoo standard)
+- Background: Use `bg-primary` (purple-ish) with white text, matching Odoo's signature purple navbar. Falls back to theme-appropriate color.
+- Icon size: 20px (Odoo standard)
+- Font: 13px for module name (semibold), 12px for breadcrumb
+
+### File: `src/components/layout/UserMenu.tsx` (Expand)
+
+Rebuild to match Odoo's user dropdown:
+- Show user avatar with initials at top
+- User name/email display
+- "Preferences" item (links to `/settings`, includes theme toggle sub-menu)
+- "My Profile" item
+- Warehouse selector (moved from header, admin/office only)
+- Admin Console toggle (super admin only, moved from header)
+- Separator
+- "Log out" at bottom
+
+### File: `src/components/layout/TopBar.tsx` -- Breadcrumb Logic
+
+Add a route-to-module mapping:
 ```text
--- For each duplicate group, keep the record with latest synced_at
--- Delete the other, after merging customer_id if needed
-WITH dupes AS (
-  SELECT metadata->>'odoo_id' as odoo_id,
-    array_agg(id ORDER BY (metadata->>'synced_at')::timestamptz DESC NULLS LAST) as ids
-  FROM leads WHERE source = 'odoo_sync' AND metadata->>'odoo_id' IS NOT NULL
-  GROUP BY metadata->>'odoo_id' HAVING COUNT(*) > 1
-)
--- survivor = ids[1], victim = ids[2]
--- DELETE from leads WHERE id IN (all victims)
+/home        -> Dashboard
+/pipeline    -> CRM > Pipeline
+/customers   -> CRM > Customers
+/shop-floor  -> Manufacturing > Shop Floor
+/deliveries  -> Logistics > Deliveries
+/office      -> Office Portal
+/admin/*     -> Administration
+/settings    -> Settings
+/inbox       -> Messaging > Inbox
+/tasks       -> Messaging > Tasks
 ```
 
-### PHASE 2: Fix Probability Normalization
-
-```text
-UPDATE leads SET probability = 100 
-WHERE source = 'odoo_sync' AND stage = 'won' AND probability != 100;
-
-UPDATE leads SET probability = 0 
-WHERE source = 'odoo_sync' AND stage = 'lost' AND probability != 0;
-```
-
-### PHASE 3: Fix Sync Function to Prevent Future Duplicates
-
-File: `supabase/functions/odoo-crm-sync/index.ts`
-
-Changes:
-1. **Dedup-safe map loading**: When building `odooIdMap`, if multiple records share the same `odoo_id`, keep the one with latest `synced_at` and DELETE the others immediately.
-2. **Probability override**: After stage mapping, force `probability = 100` for `won` and `probability = 0` for `lost`.
-3. **Title update**: Also update `title` on existing records (currently only stage/probability/metadata are updated, so old S-prefix titles persist).
-
-```text
-// In the update block, add title:
-.update({
-  title: ol.name || existingTitle,   // <-- NEW
-  stage: erpStage,
-  probability: erpStage === 'won' ? 100 : erpStage === 'lost' ? 0 : Math.round(...),
-  ...
-})
-```
-
-### PHASE 4: Stage Mapping Table (No Changes Needed)
-
-Current mapping is already deterministic and complete:
-
-| Odoo Stage | ERP Stage |
-|---|---|
-| New | new |
-| Telephonic Enquiries | telephonic_enquiries |
-| Qualified | qualified |
-| RFI | rfi |
-| Addendums | addendums |
-| Estimation-Ben | estimation_ben |
-| Estimation-Karthick(Mavericks) | estimation_karthick |
-| QC - Ben | qc_ben |
-| Hot Enquiries | hot_enquiries |
-| Quotation Priority | quotation_priority |
-| Quotation Bids | quotation_bids |
-| Shop Drawing | shop_drawing |
-| Shop Drawing Sent for Approval | shop_drawing_approval |
-| Fabrication In Shop | shop_drawing |
-| Delivered/Pickup Done | won |
-| Ready To Dispatch/Pickup | won |
-| Won | won |
-| Loss | lost |
-| Merged | lost |
-| No rebars(Our of Scope) | lost |
-
-### PHASE 5: Field Mapping Table
-
-| Odoo Field | ERP Column | ERP Metadata Key | Rule |
-|---|---|---|---|
-| id | -- | odoo_id | Unique dedup key |
-| name | title | -- | Direct copy |
-| stage_id[1] | stage | odoo_stage | Via STAGE_MAP |
-| partner_name | -- (via customer_id) | odoo_partner | Customer lookup/create |
-| contact_name | -- | odoo_contact | Stored in metadata |
-| email_from | -- | odoo_email | Stored in metadata |
-| phone | -- | odoo_phone | Stored in metadata |
-| expected_revenue | expected_value | odoo_revenue | Direct copy |
-| probability | probability | odoo_probability | Normalized: won=100, lost=0 |
-| user_id[1] | -- | odoo_salesperson | Stored in metadata |
-| city | -- | odoo_city | Stored in metadata |
-| priority | priority | odoo_priority | 3=high, 2=medium, else=low |
-
-### PHASE 6: Sync Policy Document
-
-```text
-SOURCE OF TRUTH:
-  - Odoo: stage, probability, expected_value, contacts, activity
-  - ERP: internal ops fields (work orders, production, financials)
-
-CONFLICT RESOLUTION:
-  - Odoo always wins for synced fields
-  - ERP-only fields are never overwritten by sync
-
-DEDUP RULE:
-  - metadata->>'odoo_id' is the unique key
-  - On sync, if multiple ERP records share same odoo_id, 
-    keep latest, delete rest
-
-SYNC WINDOW: 5 days (write_date filter)
-
-PROBABILITY NORMALIZATION:
-  - won stage -> 100%
-  - lost stage -> 0%
-  - all other stages -> Odoo's ML probability (rounded)
-```
-
-### PHASE 7: UX Alignment (No Major Changes)
-
-The current Pipeline UI already mirrors Odoo's Kanban layout:
-- Same stage names and order
-- Same drawer navigation with stage chips
-- Same color coding (emerald=won, zinc=lost)
-- Probability and revenue displayed identically
-
-No UX changes needed -- already aligned.
+The breadcrumb renders as clickable segments separated by `>` chevrons.
 
 ---
 
-## Summary of Changes
+## Mapping Table
 
-| Action | Scope | Records Affected |
+| Odoo Element | Current ERP Element | New ERP Element |
 |---|---|---|
-| Delete duplicate victims | DB | 132 records |
-| Fix won probability | DB | 874 records |
-| Fix lost probability | DB | 37 records |
-| Update sync function (dedup + prob normalization + title sync) | Code | 1 file |
-| Total leads after cleanup | -- | ~2,691 unique |
+| Grid app-switcher | Brand logo | LayoutGrid icon (click -> /home) |
+| Module name | "REBAR OS" text | Dynamic module name from route |
+| Breadcrumb | None | Route-based breadcrumb trail |
+| Search bar | Command button (modal) | Styled as inline input, still opens CommandBar |
+| Messaging icon | None | Not adding (no chat system exists) |
+| Bell + badge | Bell button | Keep (same position, Odoo-matching style) |
+| User avatar | User icon button | Avatar circle with initials |
+| Theme toggle | Standalone header button | Inside user dropdown "Preferences" |
+| Warehouse selector | Standalone header dropdown | Inside user dropdown |
+| Admin console | Wrench button | Inside user dropdown |
 
-## Verification Checklist
+## Interaction Parity
 
-- [ ] Record count: unique odoo_ids = ERP lead count (for odoo_sync source)
-- [ ] Zero duplicate groups (COUNT by odoo_id HAVING > 1 = 0)
-- [ ] All won leads have probability = 100
-- [ ] All lost leads have probability = 0
-- [ ] Future syncs don't create duplicates (re-run sync, verify no new dupes)
-- [ ] Stage parity: ERP stages match Odoo stages via mapping table
+| Behavior | Odoo | ERP (New) |
+|---|---|---|
+| Click grid icon | Opens app switcher overlay | Navigates to /home (dashboard) |
+| Click module name | Goes to module default view | Navigates to module root route |
+| Click breadcrumb segment | Navigates to that level | Same |
+| Click search area | Focuses inline search | Opens CommandBar (closest equivalent) |
+| Click bell | Opens notification panel | Same (InboxPanel) |
+| Click avatar | Opens user dropdown | Same (expanded UserMenu) |
+| Keyboard Cmd+K | N/A in Odoo | Kept for power users (hidden) |
+
+## Risk List
+
+1. **Search behavior difference**: Odoo uses inline search with facets; ERP uses command palette. Keeping modal approach to avoid major refactor -- visually styled to look inline.
+2. **No app switcher overlay**: Odoo's grid opens a full module grid. ERP uses sidebar navigation instead. Grid icon goes to /home as a reasonable substitute.
+3. **Purple header in dark mode**: May clash with dark theme. Will use CSS variable approach so dark mode gets a slightly muted purple.
+4. **Warehouse selector hidden**: Power users who relied on quick warehouse switching will need to open user menu. Acceptable tradeoff for header cleanliness.
+
+## Technical Notes
+
+- New hook or utility: `useActiveModule()` -- derives module name + breadcrumb from `useLocation().pathname`
+- No new dependencies required
+- All moved items (theme, warehouse, admin) remain accessible, just relocated to UserMenu dropdown
+- Header height change from `h-12` (48px) to `h-[46px]` for exact Odoo match
+
