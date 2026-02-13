@@ -133,6 +133,12 @@ export interface CEOMetrics {
 
   // Live capacity forecast
   capacityForecast: CapacityForecastDay[];
+
+  // QC & SLA metrics
+  blockedJobs: number;
+  qcBacklog: number;
+  revenueHeld: number;
+  slaBreach: { total: number; leads: number; orders: number };
 }
 
 function calculateHealthScore(params: {
@@ -439,6 +445,20 @@ async function fetchCEOMetrics(): Promise<CEOMetrics> {
 
   const machineStatuses = machines.map((m) => ({ id: m.id, name: m.name, type: m.type, status: m.status }));
 
+  // QC & SLA metrics
+  const [blockedOrdersRes, qcBacklogRes, revenueHeldRes, slaBreachLeadsRes, slaBreachOrdersRes] = await Promise.all([
+    supabase.from("orders").select("id", { count: "exact", head: true }).eq("production_locked", true).in("status", ["confirmed", "in_production"]),
+    supabase.from("orders").select("id", { count: "exact", head: true }).eq("qc_final_approved", false).in("status", ["in_production"]),
+    supabase.from("orders").select("total_amount").eq("qc_evidence_uploaded", false).in("status", ["in_production"]),
+    supabase.from("leads").select("id", { count: "exact", head: true }).eq("sla_breached", true).not("stage", "in", "(won,lost,archived_orphan)"),
+    supabase.from("sla_escalation_log").select("id, entity_type", { count: "exact", head: true }).is("resolved_at", null),
+  ]);
+
+  const blockedJobs = blockedOrdersRes.count || 0;
+  const qcBacklog = qcBacklogRes.count || 0;
+  const revenueHeld = (revenueHeldRes.data || []).reduce((s: number, o: any) => s + (o.total_amount || 0), 0);
+  const slaBreachTotal = (slaBreachLeadsRes.count || 0) + (slaBreachOrdersRes.count || 0);
+
   const healthScore = calculateHealthScore({
     productionProgress,
     machinesRunning,
@@ -491,6 +511,10 @@ async function fetchCEOMetrics(): Promise<CEOMetrics> {
     arAgingBuckets,
     atRiskJobs,
     capacityForecast,
+    blockedJobs,
+    qcBacklog,
+    revenueHeld,
+    slaBreach: { total: slaBreachTotal, leads: slaBreachLeadsRes.count || 0, orders: slaBreachOrdersRes.count || 0 },
   };
 }
 

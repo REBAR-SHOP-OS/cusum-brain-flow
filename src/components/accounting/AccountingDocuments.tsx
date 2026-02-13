@@ -103,7 +103,8 @@ export function AccountingDocuments({ data }: Props) {
     terms: [
       "Quote valid for 30 days from date of issue.",
       "Shop drawings required prior to fabrication.",
-      "One revision included at no extra charge.",
+      "One (1) shop drawing revision included. Additional revisions billable via Change Order.",
+      "Revisions impacting quantities, bar sizes, coatings, or scope are re-priced regardless of count.",
       "Delivery charges apply based on distance.",
     ],
   });

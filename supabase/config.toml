@@ -165,3 +165,6 @@ verify_jwt = false
 
 [functions.qb-sync-engine]
 verify_jwt = false
+
+[functions.check-sla-breaches]
+verify_jwt = false
