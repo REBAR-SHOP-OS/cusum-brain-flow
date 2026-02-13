@@ -1,62 +1,84 @@
 
 
-# Fix Search (Odoo-Style) and Add Full Contact Info to Prospects
+# Clean the "New" Pipeline Column
 
-## Two Changes
+## Root Cause
 
-### 1. Pipeline Search -- Clone Odoo Style
+The `process-rfq-emails` edge function fetches emails where `from_address` OR `to_address` contains `@rebar.shop`. This means **outgoing emails** (from neel@rebar.shop, rfq@rebar.shop, saurabh@rebar.shop, etc.) get picked up and classified as new leads. The `shouldSkipSender` function only skips known bot/system senders, not your own team's outgoing mail.
 
-Currently the search bar and filters are on separate rows with the search inline among action buttons. The Odoo style (image reference) puts the search bar as a wide, prominent input on its own with a dropdown arrow that opens the filter/group-by/favorites panel.
+Result: 14 of the 21 "New" leads are internal/outgoing emails that should never have been created.
 
-**Changes to `src/pages/Pipeline.tsx`:**
-- Move the search input to be full-width on its own row (below title row), styled like Odoo's search bar
-- Add a dropdown arrow button on the right side of the search bar that toggles the filter popover
-- Remove the separate "Filters" button row -- merge it into the search bar dropdown
+## Current "New" Column Audit (21 leads)
 
-**Changes to `src/components/pipeline/PipelineFilters.tsx`:**
-- Restructure so the filter panel can be triggered externally (via a `isOpen`/`onOpenChange` prop from the parent search bar dropdown arrow)
-- Keep the 3-column layout (Filters | Group By | Favorites) as-is -- it already matches the Odoo screenshot
+| Category | Count | Examples | Action |
+|----------|-------|----------|--------|
+| Internal @rebar.shop outgoing emails | 14 | "RFQ-TSDC" x5, "Internal Communication" x2, "Daily Report", "Oakville Ford Wall" | Archive all |
+| Duplicate external (Re: thread) | 1 | Torpave "Re: Trinity Lutheran Church" (duplicate of the original) | Archive duplicate |
+| Legitimate external RFQs | 2 | Cadeploy, Torpave Trinity Lutheran Church (original) | Keep in New |
+| Odoo sync leads | 4 | amigun Aanuoluwapo, English, Concrete-pro, Installer Daniel | Keep in New |
 
-**New layout:**
+## Changes
+
+### 1. Data Cleanup -- Archive the 15 junk leads
+
+Move the 14 internal-email leads + 1 duplicate "Re:" lead to a new `archived_orphan` stage so they're out of the pipeline but not deleted (audit trail preserved). This is a one-time SQL update via migration.
+
+### 2. Edge Function Fix -- Block internal outgoing emails
+
+In `supabase/functions/process-rfq-emails/index.ts`, update `shouldSkipSender` to **always skip** any email where the `from_address` contains `@rebar.shop`. Your team members are senders, not leads. External customers emailing rfq@rebar.shop will have the external address in `from_address`, so they'll still pass through correctly.
+
+Current logic (broken):
 ```
-Row 1: Pipeline title + stats | [action buttons: Scan RFQ, Odoo Sync, Prospect, Blitz, Add Lead]
-Row 2: [ Search leads, customers, source...                              | v ]  <-- full-width search with dropdown arrow
-        (clicking arrow opens filter panel below, same 3-column layout)
+if from contains @rebar.shop:
+  only skip if sender name matches OdooBot
+  otherwise: let through (BUG -- creates leads from outgoing mail)
 ```
 
-### 2. Prospect Table -- Show All Contact Info (Phone Column)
+Fixed logic:
+```
+if from contains @rebar.shop:
+  ALWAYS skip (outgoing/internal emails are never inbound RFQs)
+```
 
-The prospect table currently hides the phone number. The AI already collects phone numbers but they're not displayed.
+### 3. Edge Function Fix -- Block "Re:/FW:" subjects without a match
 
-**Changes to `src/components/prospecting/ProspectTable.tsx`:**
-- Add a "Phone" column after the Email column
-- Display `p.phone` in the new column
-
-**Changes to `supabase/functions/prospect-leads/index.ts`:**
-- Make `phone` a required field in the AI tool schema (move from optional to `required` array)
-- Ensure the prompt emphasizes generating realistic Ontario phone numbers (area codes 416, 647, 905, 613, etc.)
-
----
+Add a guard: if the subject starts with `Re:` or `FW:` and the multi-signal scoring engine found NO match (score < 0.4), escalate instead of creating a new lead. A reply to a conversation that doesn't match any existing lead is suspicious -- it shouldn't land in "New".
 
 ## Technical Details
 
-### Pipeline.tsx header restructure
-- Row 1 keeps title/stats on left, action buttons on right (same as now but without the search input)
-- Row 2 is a new full-width search bar with:
-  - Search icon on left
-  - Input spanning full width
-  - ChevronDown button on right that toggles `PipelineFilters` popover
-  - Active filter chips appear below the search bar when filters are active
+### File: `supabase/functions/process-rfq-emails/index.ts`
 
-### PipelineFilters.tsx refactor
-- Accept `open` and `onOpenChange` props instead of managing its own Popover state internally
-- The parent controls when the panel shows (triggered by the dropdown arrow on the search bar)
-- The 3-column content stays identical
+**Change A -- `shouldSkipSender` function (line ~341):**
+- Add rule: if `from_address` contains `@rebar.shop`, return `true` (skip). This catches all outgoing/internal emails regardless of the specific sender name.
 
-### ProspectTable.tsx phone column
-- Add `Phone` TableHead after Email
-- Add `p.phone` TableCell, hidden on smaller screens (`hidden md:table-cell`)
+**Change B -- Reply guard (around line ~1032, before AI classification):**
+- Before calling `analyzeEmailWithAI`, check if subject starts with `Re:`, `RE:`, `Fwd:`, `FW:`. If so and no match was found (score < 0.4), escalate to Neel instead of creating a new lead. Replies without a match indicate a conversation the system lost track of.
 
-### prospect-leads edge function
-- Add `"phone"` to the `required` array in the tool schema
-- Update prompt to specify Ontario area codes for realistic phone generation
+### Database Migration
+
+Archive the 15 bad leads:
+```sql
+UPDATE leads SET stage = 'archived_orphan'
+WHERE stage = 'new'
+  AND id IN (
+    -- 14 internal @rebar.shop leads
+    'd6d8b1f8-...', '1646c31b-...', '37b5ed89-...', '44ed97dc-...', 
+    '480b93ed-...', '99097728-...', 'e757a2a9-...', '5c8e31fd-...', 
+    'e4cbaf99-...', 'e56798f8-...', '232b304b-...', '683deae8-...', 
+    'd4428bea-...', 'a5c922ed-...',
+    -- 1 duplicate Re: Torpave
+    'b8b58fca-...'
+  );
+```
+
+## Result After Cleanup
+
+The "New" column will have 6 clean leads:
+- S01284, Cadeploy: Cadeploy Rebar Estimation (external RFQ)
+- S01282, Torpave Group: Trinity Lutheran Church (external RFQ)
+- S01470, amigun Aanuoluwapo (Odoo sync)
+- S01471, English (Odoo sync)
+- S02454, Concrete-pro's opportunity (Odoo sync)
+- S02496, Installer Daniel (Odoo sync)
+
+Future scans will never pollute "New" with internal/outgoing emails or unmatched replies again.
