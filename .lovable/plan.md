@@ -11,7 +11,7 @@
 | orders | 17 | 0 (pending) | All 17 pending | ⚠️ Manual review |
 | leads | 2,712 | 2,678 linked | 34 `archived_orphan` | ✅ Done |
 | lead_activities | 44,083 | -- | Historical archive | No action needed |
-| lead_files | 18,323 | 616 migrated | 17,707 pending | 🔴 In progress |
+| lead_files | 18,323 | 753 migrated | ~17,570 pending | 🔴 In progress |
 | accounting_mirror | 1,902 | 1,901 linked | 1 orphan (QB #2232) | ✅ 16 deleted |
 | deliveries | 0 | -- | -- | Clean |
 
@@ -40,7 +40,7 @@
 
 | # | Issue | Root Cause | Required Fix | Priority |
 |---|-------|-----------|-------------|----------|
-| 13 | 17,707 lead files still on Odoo URLs | Migration only 3.4% complete | Run `archive-odoo-files` ~390 more batches | P0 CRITICAL |
+| 13 | ~17,570 lead files still on Odoo URLs | Migration only 4.1% complete | Run `archive-odoo-files` ~190 more batches | P0 CRITICAL |
 | 14 | 1 orphaned invoice (QB #2232, $0 bal) | QB customer 894 not in ERP | Manually sync customer 894 from QB or link | P2 |
 | 15 | 17 orders in "pending" with no QB invoice | Created from Odoo quotes, never pushed to QB | Accounting team must review and push to QB | P2 |
 | 16 | `odoo-file-proxy` edge function still live | Needed until file migration completes | Delete after all 18,323 files migrated | P3 |
@@ -48,11 +48,23 @@
 | 18 | LeadTimeline.tsx still uses odoo-file-proxy | Fallback for unmigrated files | Remove after migration completes | P3 |
 | 19 | Odoo secrets still configured | Needed for file migration | Remove after migration: ODOO_URL, ODOO_USERNAME, ODOO_API_KEY, ODOO_DATABASE | P3 |
 
+### ℹ️ COSMETIC (no action needed)
+
+These read archived Odoo metadata from the database — no live API dependency:
+- `PipelineColumn.tsx`: reads `odoo_revenue` from lead metadata
+- `Pipeline.tsx`: reads `odoo_salesperson`, `odoo_priority` from metadata
+- `LeadCard.tsx`: reads `odoo_priority`, `odoo_salesperson`, `odoo_email`, `odoo_revenue`
+- `PipelineAISheet.tsx`: reads `odoo_salesperson`, `odoo_revenue`
+- `AccountingDocuments.tsx`: reads `odoo_customer`, `odoo_status` from quotes
+- `LeadFiles.tsx`: displays files with `odoo_id` label
+- `InboxEmailViewer.tsx`: filters out `odoo.com?utm` tracking links
+- `import-crm-data`: one-time import script with hardcoded data, no live Odoo calls
+
 ---
 
 ## Safe Odoo Shutdown Checklist
 
-- [ ] **BLOCKER**: All 18,323 lead files migrated to storage (currently 616/18,323 = 3.4%)
+- [ ] **BLOCKER**: All 18,323 lead files migrated to storage (currently ~753/18,323 = 4.1%)
 - [x] 782 Odoo-only customers flagged as `archived_odoo_only`
 - [x] 16 stale invoices cleaned from mirror (deleted from QB)
 - [x] 75 orphaned quotes flagged as `archived_orphan`
@@ -75,8 +87,8 @@
 
 ## How to Complete File Migration
 
-The `archive-odoo-files` edge function migrates ~45 files per batch (50s timeout).
-At 17,707 remaining, you need ~394 more batches.
+The `archive-odoo-files` edge function migrates ~91 files per batch (50s timeout).
+At ~17,570 remaining, you need ~193 more batches.
 
 **To run manually:**
 ```
