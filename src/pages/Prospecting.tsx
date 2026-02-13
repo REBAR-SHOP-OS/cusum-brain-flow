@@ -192,13 +192,73 @@ export default function Prospecting() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["prospects"] }),
   });
 
-  // Mark emailed
-  const markEmailedMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("prospects").update({ status: "emailed" }).eq("id", id);
-      if (error) throw error;
+  // Email + auto-approve + follow-up activity
+  const emailAndFollowUpMutation = useMutation({
+    mutationFn: async (prospect: any) => {
+      // 1. Mark prospect as emailed
+      const { error: emailErr } = await supabase
+        .from("prospects")
+        .update({ status: "emailed" })
+        .eq("id", prospect.id);
+      if (emailErr) throw emailErr;
+
+      let leadId = prospect.lead_id;
+
+      // 2. If no lead yet, auto-approve (create lead in prospecting stage)
+      if (!leadId) {
+        const { data: lead, error: leadErr } = await supabase
+          .from("leads")
+          .insert({
+            title: `${prospect.company_name} — ${prospect.contact_name}`,
+            description: prospect.fit_reason,
+            source: "ai_prospecting",
+            stage: "prospecting",
+            company_id: prospect.company_id,
+            expected_value: prospect.estimated_value,
+            metadata: {
+              prospect_id: prospect.id,
+              intro_angle: prospect.intro_angle,
+              contact_title: prospect.contact_title,
+              email: prospect.email,
+              phone: prospect.phone,
+              city: prospect.city,
+              industry: prospect.industry,
+            },
+          })
+          .select("id")
+          .single();
+        if (leadErr) throw leadErr;
+        leadId = lead.id;
+
+        // Update prospect with lead_id and approved status
+        await supabase
+          .from("prospects")
+          .update({ status: "emailed", lead_id: leadId })
+          .eq("id", prospect.id);
+      }
+
+      // 3. Create follow-up activity (5 days out)
+      const dueDate = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000);
+      const today = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+
+      const { error: actErr } = await supabase.from("lead_activities").insert({
+        lead_id: leadId,
+        company_id: prospect.company_id,
+        activity_type: "follow_up",
+        title: `Follow up with ${prospect.contact_name} at ${prospect.company_name}`,
+        description: `Introduction email sent on ${today}. Follow up in 3-5 business days.`,
+        due_date: dueDate.toISOString(),
+      });
+      if (actErr) throw actErr;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["prospects"] }),
+    onSuccess: () => {
+      toast({ title: "Email sent & follow-up scheduled", description: "A follow-up activity has been created on the lead." });
+      qc.invalidateQueries({ queryKey: ["prospects"] });
+      qc.invalidateQueries({ queryKey: ["leads"] });
+    },
+    onError: (err) => {
+      toast({ title: "Follow-up failed", description: err.message, variant: "destructive" });
+    },
   });
 
   const groupEntries = Object.entries(groupedProspects) as [string, any[]][];
@@ -302,9 +362,9 @@ export default function Prospecting() {
           prospect={introProspect}
           mode={emailMode}
           open={!!introProspect}
-          onOpenChange={(open) => !open && setIntroProspect(null)}
+      onOpenChange={(open) => !open && setIntroProspect(null)}
           onSent={() => {
-            markEmailedMutation.mutate(introProspect.id);
+            emailAndFollowUpMutation.mutate(introProspect);
             setIntroProspect(null);
           }}
         />
