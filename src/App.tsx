@@ -58,6 +58,7 @@ import CEOPortal from "./pages/CEOPortal";
 import Transcribe from "./pages/Transcribe";
 import TranscribeWatch from "./pages/TranscribeWatch";
 import VizzyPage from "./pages/VizzyPage";
+import LiveChat from "./pages/LiveChat";
 const queryClient = new QueryClient();
 
 /** Helper to wrap protected routes with layout + page-level error boundary */
@@ -153,6 +154,8 @@ const App = () => (
 
                     {/* Vizzy – standalone voice page for Siri Shortcut */}
                     <Route path="/vizzy" element={<ProtectedRoute><VizzyPage /></ProtectedRoute>} />
+                    {/* Full-screen live chat */}
+                    <Route path="/chat" element={<P><LiveChat /></P>} />
 
                     {/* Legacy redirects */}
                     <Route path="/inbox-manager" element={<Navigate to="/inbox" replace />} />
