@@ -1,21 +1,37 @@
-import { useState } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompanyId } from "@/hooks/useCompanyId";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Pickaxe } from "lucide-react";
+import { Loader2, Pickaxe, Search } from "lucide-react";
 import { ProspectTable } from "@/components/prospecting/ProspectTable";
 import { ProspectIntroDialog } from "@/components/prospecting/ProspectIntroDialog";
+import {
+  ProspectingFilters,
+  DEFAULT_PROSPECT_FILTERS,
+  type ProspectingFilterState,
+  type ProspectGroupByOption,
+} from "@/components/prospecting/ProspectingFilters";
 
 export default function Prospecting() {
   const [region, setRegion] = useState("Canada/USA");
   const [introProspect, setIntroProspect] = useState<any | null>(null);
   const [emailMode, setEmailMode] = useState<"intro" | "followup">("intro");
+  const [searchInput, setSearchInput] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [filters, setFilters] = useState<ProspectingFilterState>({ ...DEFAULT_PROSPECT_FILTERS });
+  const [groupBy, setGroupBy] = useState<ProspectGroupByOption>("none");
   const { companyId } = useCompanyId();
   const { toast } = useToast();
   const qc = useQueryClient();
+
+  // Debounce search
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchInput), 300);
+    return () => clearTimeout(t);
+  }, [searchInput]);
 
   // Fetch latest batch
   const { data: batches = [] } = useQuery({
@@ -49,6 +65,63 @@ export default function Prospecting() {
     enabled: !!latestBatch?.id,
   });
 
+  // Unique industries & cities for filter dropdowns
+  const industries = useMemo(() => {
+    const set = new Set(prospects.map((p: any) => p.industry).filter(Boolean));
+    return Array.from(set).sort() as string[];
+  }, [prospects]);
+
+  const cities = useMemo(() => {
+    const set = new Set(prospects.map((p: any) => p.city).filter(Boolean));
+    return Array.from(set).sort() as string[];
+  }, [prospects]);
+
+  // Filtered prospects
+  const filteredProspects = useMemo(() => {
+    let result = prospects as any[];
+
+    // Search
+    if (debouncedSearch) {
+      const q = debouncedSearch.toLowerCase();
+      result = result.filter((p: any) =>
+        [p.company_name, p.contact_name, p.email, p.city, p.industry, p.fit_reason]
+          .some((v) => v && String(v).toLowerCase().includes(q))
+      );
+    }
+
+    // Status filters (OR logic: if any active, show only matching)
+    const statusActive = filters.statusPending || filters.statusApproved || filters.statusRejected || filters.statusEmailed;
+    if (statusActive) {
+      result = result.filter((p: any) => {
+        if (filters.statusPending && p.status === "pending") return true;
+        if (filters.statusApproved && p.status === "approved") return true;
+        if (filters.statusRejected && p.status === "rejected") return true;
+        if (filters.statusEmailed && p.status === "emailed") return true;
+        return false;
+      });
+    }
+
+    if (filters.industry) {
+      result = result.filter((p: any) => p.industry === filters.industry);
+    }
+    if (filters.city) {
+      result = result.filter((p: any) => p.city === filters.city);
+    }
+
+    return result;
+  }, [prospects, debouncedSearch, filters]);
+
+  // Grouped prospects
+  const groupedProspects = useMemo(() => {
+    if (groupBy === "none") return { "": filteredProspects };
+    return filteredProspects.reduce((acc: Record<string, any[]>, p: any) => {
+      const key = p[groupBy] || "Unassigned";
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(p);
+      return acc;
+    }, {} as Record<string, any[]>);
+  }, [filteredProspects, groupBy]);
+
   // Dig leads mutation
   const digMutation = useMutation({
     mutationFn: async () => {
@@ -72,7 +145,6 @@ export default function Prospecting() {
   // Approve prospect → create lead
   const approveMutation = useMutation({
     mutationFn: async (prospect: any) => {
-      // Create lead in pipeline
       const { data: lead, error: leadErr } = await supabase
         .from("leads")
         .insert({
@@ -96,7 +168,6 @@ export default function Prospecting() {
         .single();
       if (leadErr) throw leadErr;
 
-      // Update prospect
       const { error } = await supabase
         .from("prospects")
         .update({ status: "approved", lead_id: lead.id })
@@ -130,17 +201,30 @@ export default function Prospecting() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["prospects"] }),
   });
 
+  const groupEntries = Object.entries(groupedProspects) as [string, any[]][];
+
   return (
     <div className="flex flex-col h-full">
-      <header className="px-4 sm:px-6 py-3 border-b border-border shrink-0">
+      <header className="px-4 sm:px-6 py-3 border-b border-border shrink-0 space-y-2">
+        {/* Row 1: Title + controls */}
         <div className="flex items-center gap-3 flex-wrap">
           <div className="mr-auto">
             <h1 className="text-lg font-semibold">AI Lead Prospecting</h1>
             <p className="text-xs text-muted-foreground">
               {prospects.length > 0
-                ? `${prospects.length} prospects · ${prospects.filter((p) => p.status === "approved").length} approved`
+                ? `${filteredProspects.length} of ${prospects.length} prospects · ${prospects.filter((p: any) => p.status === "approved").length} approved`
                 : "Click Dig to generate 50 AI leads"}
             </p>
+          </div>
+
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+            <Input
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Search prospects…"
+              className="pl-8 w-44 lg:w-56 h-8 text-sm"
+            />
           </div>
 
           <Input
@@ -164,6 +248,16 @@ export default function Prospecting() {
             Dig 50 Leads
           </Button>
         </div>
+
+        {/* Row 2: Filters */}
+        <ProspectingFilters
+          filters={filters}
+          onFiltersChange={setFilters}
+          groupBy={groupBy}
+          onGroupByChange={setGroupBy}
+          industries={industries}
+          cities={cities}
+        />
       </header>
 
       <div className="flex-1 overflow-auto p-4">
@@ -176,19 +270,30 @@ export default function Prospecting() {
           <div className="flex items-center justify-center h-64">
             <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
           </div>
-        ) : prospects.length === 0 ? (
+        ) : filteredProspects.length === 0 && prospects.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 gap-2 text-muted-foreground">
             <Pickaxe className="w-10 h-10" />
             <p className="text-sm">No prospects yet. Click "Dig 50 Leads" to start.</p>
           </div>
+        ) : filteredProspects.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-64 gap-2 text-muted-foreground">
+            <Search className="w-10 h-10" />
+            <p className="text-sm">No prospects match your search or filters.</p>
+          </div>
         ) : (
-          <ProspectTable
-            prospects={prospects}
-            onApprove={(p) => approveMutation.mutate(p)}
-            onReject={(id) => rejectMutation.mutate(id)}
-            onSendIntro={(p) => { setEmailMode("intro"); setIntroProspect(p); }}
-            onSendFollowup={(p) => { setEmailMode("followup"); setIntroProspect(p); }}
-          />
+          <div className="space-y-4">
+            {groupEntries.map(([label, groupProspects]) => (
+              <ProspectTable
+                key={label}
+                prospects={groupProspects}
+                groupLabel={groupBy !== "none" ? label : undefined}
+                onApprove={(p) => approveMutation.mutate(p)}
+                onReject={(id) => rejectMutation.mutate(id)}
+                onSendIntro={(p) => { setEmailMode("intro"); setIntroProspect(p); }}
+                onSendFollowup={(p) => { setEmailMode("followup"); setIntroProspect(p); }}
+              />
+            ))}
+          </div>
         )}
       </div>
 
