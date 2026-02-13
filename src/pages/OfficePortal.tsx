@@ -13,12 +13,11 @@ import { InventoryView } from "@/components/office/InventoryView";
 import { OptimizationView } from "@/components/office/OptimizationView";
 import { TagsExportView } from "@/components/office/TagsExportView";
 import { PackingSlipsView } from "@/components/office/PackingSlipsView";
-import { TranscribeView } from "@/components/office/TranscribeView";
+
 import { PayrollAuditView } from "@/components/office/PayrollAuditView";
 
 const sectionComponents: Record<OfficeSection, React.ComponentType> = {
   "ai-extract": AIExtractView,
-  "ai-transcribe": TranscribeView,
   "detailed-list": DetailedListView,
   "production-queue": ProductionQueueView,
   "inventory": InventoryView,
