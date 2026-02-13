@@ -13,6 +13,7 @@ import {
 import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { PIPELINE_STAGES } from "@/pages/Pipeline";
+import { useUserRole } from "@/hooks/useUserRole";
 import { LeadTimeline } from "./LeadTimeline";
 import { LeadEmailThread } from "./LeadEmailThread";
 import { LeadFiles } from "./LeadFiles";
@@ -54,6 +55,8 @@ export function LeadDetailDrawer({
   onDelete,
   onStageChange,
 }: LeadDetailDrawerProps) {
+  const { isAdmin } = useUserRole();
+
   if (!lead) return null;
 
   const meta = (lead.metadata ?? {}) as Record<string, unknown>;
@@ -93,24 +96,9 @@ export function LeadDetailDrawer({
               <SheetTitle className="text-lg font-bold leading-tight pr-4">
                 {lead.title}
               </SheetTitle>
-              <div className="flex items-center gap-1 shrink-0">
-                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => { onOpenChange(false); onEdit(lead); }}>
-                  <Pencil className="w-3.5 h-3.5" />
-                </Button>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-7 w-7 text-destructive hover:text-destructive"
-                  onClick={() => {
-                    if (confirm("Delete this lead?")) {
-                      onDelete(lead.id);
-                      onOpenChange(false);
-                    }
-                  }}
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </Button>
-              </div>
+              <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" onClick={() => { onOpenChange(false); onEdit(lead); }}>
+                <Pencil className="w-3.5 h-3.5" />
+              </Button>
             </div>
           </SheetHeader>
 
@@ -351,6 +339,22 @@ export function LeadDetailDrawer({
         {/* Footer */}
         <div className="border-t border-border p-4 text-xs text-muted-foreground flex items-center justify-between">
           <span>Created {format(new Date(lead.created_at), "MMM d, yyyy")}</span>
+          {isAdmin && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-destructive hover:text-destructive hover:bg-destructive/10 gap-1.5 h-7 text-xs"
+              onClick={() => {
+                if (confirm("Delete this lead?")) {
+                  onDelete(lead.id);
+                  onOpenChange(false);
+                }
+              }}
+            >
+              <Trash2 className="w-3 h-3" />
+              Delete Lead
+            </Button>
+          )}
           <span>Updated {formatDistanceToNow(new Date(lead.updated_at), { addSuffix: true })}</span>
         </div>
       </SheetContent>
