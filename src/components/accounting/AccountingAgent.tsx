@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { cn } from "@/lib/utils";
+import { useAgentSuggestions } from "@/hooks/useAgentSuggestions";
 import { Send, Loader2, Minimize2, Maximize2, Shrink, Mail, DollarSign, ListChecks, PhoneOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { sendAgentMessage, ChatMessage } from "@/lib/agent";
@@ -49,6 +50,7 @@ const checkingPhases = [
 ];
 
 export const AccountingAgent = React.forwardRef<HTMLDivElement, AccountingAgentProps>(function AccountingAgent({ onViewModeChange, viewMode: externalMode, qbSummary, autoGreet, webPhoneState, webPhoneActions }, ref) {
+  const { suggestions: pennySuggestions } = useAgentSuggestions("penny");
   const { bridgeState, startBridge, stopBridge } = useCallAiBridge();
   const { activeTask, createCallTask, startCall, onCallConnected, completeCall, failCall, cancelCall, clearTask } = useCallTask();
   const [showOutcome, setShowOutcome] = useState(false);
@@ -124,6 +126,13 @@ export const AccountingAgent = React.forwardRef<HTMLDivElement, AccountingAgentP
       })),
       unpaidInvoiceCount: qbSummary.invoices.filter(i => i.Balance > 0).length,
       unpaidBillCount: qbSummary.bills.filter(b => b.Balance > 0).length,
+      pennySuggestions: pennySuggestions.slice(0, 10).map(s => ({
+        title: s.title,
+        description: s.description,
+        impact: s.impact,
+        severity: s.severity,
+        category: s.category,
+      })),
     };
 
     const greetMsg = `Daily briefing request. Today is ${new Date().toLocaleDateString("en-CA", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}. Use the context data I'm providing to create a prioritized daily action list for ${userName}. 
@@ -135,8 +144,9 @@ FORMAT REQUIREMENTS — follow exactly:
 3. **🚨 URGENT — Act Now** section: Overdue invoices, overdue bills, anything past-due. Use a markdown table: | # | Action | Source | Amount | Days Overdue |
 4. **📅 TODAY — Due Today** section: Items due today or needing same-day action. Numbered list with source tags [QuickBooks] [Email] [Task]
 5. **📋 THIS WEEK — Upcoming** section: Items due this week. Numbered list with source tags
-6. **🏦 Cash Position**: One-line bank balance summary
-7. **✅ Bottom Line**: "You're on track" OR "X items need immediate action — start with #1 above"
+6. **💡 PENNY SUGGESTIONS** section: Include ALL items from pennySuggestions in the context — these are AI-generated action items I've identified. Show each with its severity, impact, and recommended action.
+7. **🏦 Cash Position**: One-line bank balance summary
+8. **✅ Bottom Line**: "You're on track" OR "X items need immediate action — start with #1 above"
 
 RULES:
 - Tag every item with its source: [QuickBooks], [Email], or [Task]
@@ -207,6 +217,9 @@ RULES:
         })),
         unpaidInvoiceCount: qbSummary.invoices.filter(i => i.Balance > 0).length,
         unpaidBillCount: qbSummary.bills.filter(b => b.Balance > 0).length,
+        pennySuggestions: pennySuggestions.slice(0, 10).map(s => ({
+          title: s.title, description: s.description, impact: s.impact, severity: s.severity, category: s.category,
+        })),
       } : {};
 
       const response = await sendAgentMessage(
@@ -532,6 +545,9 @@ RULES:
       })),
       unpaidInvoiceCount: qbSummary.invoices.filter(i => i.Balance > 0).length,
       unpaidBillCount: qbSummary.bills.filter(b => b.Balance > 0).length,
+      pennySuggestions: pennySuggestions.slice(0, 10).map(s => ({
+        title: s.title, description: s.description, impact: s.impact, severity: s.severity, category: s.category,
+      })),
     } : {};
 
     sendAgentMessage("accounting", text, history, qbContext)
