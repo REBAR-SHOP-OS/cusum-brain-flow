@@ -1,46 +1,64 @@
 
-
-# Audit & Improve Lead Detail Drawer (Odoo Parity)
+# Re-establish Odoo CRM Pipeline Sync
 
 ## Problem
-The lead detail drawer is missing key fields that Odoo prominently displays: email, phone, responsible salesperson, contact name, Odoo probability, and revenue. These are stored in `metadata` but only partially surfaced, mostly in the "Details" tab rather than upfront.
+The Odoo CRM sync function was previously removed from the codebase (comment says "Odoo has been decommissioned"), but the database still holds 2,700+ leads with `source: odoo_sync` and rich metadata (`odoo_id`, `odoo_stage`, `odoo_salesperson`, etc.). The last sync was around Feb 10, 2026. You need this sync restored.
 
-## Changes
+## Solution
+Create a new `odoo-crm-sync` edge function that pulls `crm.lead` records from Odoo via JSON-RPC (using the same Bearer token auth pattern proven in `odoo-file-proxy`) and upserts them into the `leads` table.
 
-### 1. LeadDetailDrawer.tsx -- Surface Key Fields in Header
+## Stage Mapping (Odoo -> ERP)
+Based on existing synced data:
 
-Add a compact "key info" section between the badges and quick actions, displaying:
-- **Customer/Contact** name (from `metadata.odoo_contact` or `customers.name`)
-- **Email** (from `metadata.odoo_email`, clickable mailto link)
-- **Phone** (from `metadata.odoo_phone`, clickable tel link)
-- **Responsible/Salesperson** (from `metadata.odoo_salesperson`, with avatar initials)
-- **Expected Revenue** (from `metadata.odoo_revenue` or `lead.expected_value`)
-- **Probability** (from `metadata.odoo_probability` or `lead.probability`) shown inline with a small progress indicator
-- **Expected Closing** date
+| Odoo Stage | ERP Stage |
+|---|---|
+| New | new |
+| Telephonic Enquiries | telephonic_enquiries |
+| Qualified | qualified |
+| RFI | rfi |
+| Addendums | addendums |
+| Estimation-Ben | estimation_ben |
+| Estimation-Karthick(Mavericks) | estimation_karthick |
+| QC - Ben | qc_ben |
+| Hot Enquiries | hot_enquiries |
+| Quotation Priority | quotation_priority |
+| Quotation Bids | quotation_bids |
+| Shop Drawing | shop_drawing |
+| Shop Drawing Sent for Approval | shop_drawing_approval |
+| Fabrication In Shop | shop_drawing |
+| Delivered/Pickup Done | won |
+| Ready To Dispatch/Pickup | won |
+| Won | won |
+| Loss | lost |
+| Merged | lost |
+| No rebars(Our of Scope) | lost |
 
-This mirrors Odoo's layout where these fields are visible at the top of the form without switching tabs.
+## Technical Details
 
-### 2. LeadDetailDrawer.tsx -- Improve Stage Navigation
+### 1. New Edge Function: `supabase/functions/odoo-crm-sync/index.ts`
+- Uses `requireAuth` from shared auth module (admin-only access)
+- Authenticates to Odoo via JSON-RPC with `Bearer ${ODOO_API_KEY}` (proven pattern)
+- Calls `execute_kw` on `crm.lead` model to fetch all opportunities
+- Fields fetched: `id`, `name`, `stage_id`, `email_from`, `phone`, `contact_name`, `user_id` (salesperson), `probability`, `expected_revenue`, `type`, `partner_name`
+- Upserts into `leads` table using `metadata->>'odoo_id'` as the dedup key
+- For existing leads (matched by `odoo_id`), updates stage, probability, revenue, contact info, and sets `synced_at`
+- For new leads, creates customer record if needed, then inserts the lead
+- Returns stats: `{ created, updated, skipped, errors }`
 
-Replace the current single "Move to Next Stage" button with a horizontal scrollable stage bar (similar to Odoo's stage tabs at the top). Each stage is a clickable pill/chip showing the stage name, with the current stage highlighted. This lets users jump to any stage directly, not just the next one.
+### 2. Config: `supabase/config.toml`
+- Add `[functions.odoo-crm-sync]` with `verify_jwt = false`
 
-### 3. LeadDetailDrawer.tsx -- Details Tab Cleanup
+### 3. Pipeline Page: Add Sync Button
+- Add an "Odoo Sync" button next to the existing "Scan RFQ" button in `src/pages/Pipeline.tsx`
+- Calls the `odoo-crm-sync` edge function
+- Shows toast with sync results
 
-Since key fields are now in the header, the Details tab will focus on:
-- Estimation weight (from metadata if available)
-- Tags
-- Source
-- SLA deadline/breach status
-- Pipeline progress bar (kept for visual reference)
+### 4. Fix `pipeline-ai/index.ts`
+- Remove the "Odoo has been decommissioned" comment
+- Restore awareness that pipeline data includes Odoo-synced leads
 
-### Technical Details
+### Secrets Required
+All Odoo secrets already exist: `ODOO_URL`, `ODOO_API_KEY`, `ODOO_USERNAME`, `ODOO_DATABASE`
 
-All data is already available in the `lead` object:
-- `lead.metadata` contains: `odoo_email`, `odoo_phone`, `odoo_contact`, `odoo_salesperson`, `odoo_probability`, `odoo_revenue`, `odoo_stage`
-- `lead.customers` has `name` and `company_name`
-- `lead.expected_value`, `lead.probability`, `lead.expected_close_date` are direct fields
-
-No database changes needed. No new queries needed. This is purely a UI restructuring of `LeadDetailDrawer.tsx` to better surface existing data.
-
-### File Changes
-- **`src/components/pipeline/LeadDetailDrawer.tsx`** -- Restructure header to show key fields inline (email, phone, salesperson, revenue, probability, closing date); add stage navigation chips; clean up Details tab to avoid duplication.
+### No Database Changes Needed
+The `leads` table already has all required columns including `metadata` (jsonb) for storing Odoo-specific fields.
