@@ -189,3 +189,6 @@ verify_jwt = false
 
 [functions.penny-execute-action]
 verify_jwt = false
+
+[functions.odoo-crm-sync]
+verify_jwt = false

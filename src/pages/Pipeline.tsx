@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, Mail, Loader2, Sparkles } from "lucide-react";
+import { Plus, Search, Mail, Loader2, Sparkles, RefreshCw } from "lucide-react";
 import { PipelineBoard } from "@/components/pipeline/PipelineBoard";
 import { PipelineAnalytics } from "@/components/pipeline/PipelineAnalytics";
 import { LeadFormModal } from "@/components/pipeline/LeadFormModal";
@@ -59,6 +59,7 @@ export default function Pipeline() {
   const [selectedLead, setSelectedLead] = useState<LeadWithCustomer | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isScanningRfq, setIsScanningRfq] = useState(false);
+  const [isSyncingOdoo, setIsSyncingOdoo] = useState(false);
   
   const [pipelineFilters, setPipelineFilters] = useState<PipelineFilterState>({ ...DEFAULT_FILTERS });
   const [groupBy, setGroupBy] = useState<GroupByOption>("none");
@@ -255,6 +256,28 @@ export default function Pipeline() {
       setIsScanningRfq(false);
     }
   };
+  const handleOdooSync = async () => {
+    setIsSyncingOdoo(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("odoo-crm-sync");
+      if (error) throw error;
+
+      queryClient.invalidateQueries({ queryKey: ["leads"] });
+      toast({
+        title: `Odoo Sync Complete`,
+        description: `${data.created} created, ${data.updated} updated, ${data.errors} errors (${data.total} total)`,
+      });
+    } catch (err) {
+      console.error("Odoo sync error:", err);
+      toast({
+        title: "Odoo sync failed",
+        description: err instanceof Error ? err.message : "Failed to sync",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSyncingOdoo(false);
+    }
+  };
 
 
   return (
@@ -288,6 +311,10 @@ export default function Pipeline() {
           <Button onClick={handleScanRfq} size="sm" variant="ghost" disabled={isScanningRfq} className="gap-1.5 h-8 px-2.5">
             {isScanningRfq ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Mail className="w-3.5 h-3.5" />}
             <span className="hidden lg:inline text-xs">Scan RFQ</span>
+          </Button>
+          <Button onClick={handleOdooSync} size="sm" variant="ghost" disabled={isSyncingOdoo} className="gap-1.5 h-8 px-2.5">
+            {isSyncingOdoo ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+            <span className="hidden lg:inline text-xs">Odoo Sync</span>
           </Button>
           <Button onClick={() => setIsAISheetOpen(true)} size="sm" variant="ghost" className="gap-1.5 h-8 px-2.5 text-primary hover:bg-primary/10">
             <Sparkles className="w-3.5 h-3.5" />

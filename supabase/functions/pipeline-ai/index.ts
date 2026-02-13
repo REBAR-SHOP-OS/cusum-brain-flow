@@ -81,7 +81,7 @@ serve(async (req) => {
     const { lead, activities, action, userMessage, pipelineStats, auditType } = body;
 
     // ── pipeline_audit (no lead context needed) ──
-    // Odoo has been decommissioned — pipeline data now comes from ERP database only
+    // Pipeline data includes Odoo-synced leads (source: odoo_sync) with metadata fields
     const odooSnapshot = "";
 
     if (action === "pipeline_audit") {
