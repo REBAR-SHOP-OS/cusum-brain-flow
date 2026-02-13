@@ -4153,6 +4153,108 @@ export type Database = {
           },
         ]
       }
+      prospect_batches: {
+        Row: {
+          company_id: string
+          created_at: string
+          created_by: string
+          id: string
+          prospect_count: number
+          region: string
+          status: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          created_by: string
+          id?: string
+          prospect_count?: number
+          region?: string
+          status?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          prospect_count?: number
+          region?: string
+          status?: string
+        }
+        Relationships: []
+      }
+      prospects: {
+        Row: {
+          batch_id: string
+          city: string | null
+          company_id: string
+          company_name: string
+          contact_name: string
+          contact_title: string | null
+          created_at: string
+          email: string | null
+          estimated_value: number | null
+          fit_reason: string | null
+          id: string
+          industry: string | null
+          intro_angle: string | null
+          lead_id: string | null
+          phone: string | null
+          status: string
+        }
+        Insert: {
+          batch_id: string
+          city?: string | null
+          company_id: string
+          company_name: string
+          contact_name: string
+          contact_title?: string | null
+          created_at?: string
+          email?: string | null
+          estimated_value?: number | null
+          fit_reason?: string | null
+          id?: string
+          industry?: string | null
+          intro_angle?: string | null
+          lead_id?: string | null
+          phone?: string | null
+          status?: string
+        }
+        Update: {
+          batch_id?: string
+          city?: string | null
+          company_id?: string
+          company_name?: string
+          contact_name?: string
+          contact_title?: string | null
+          created_at?: string
+          email?: string | null
+          estimated_value?: number | null
+          fit_reason?: string | null
+          id?: string
+          industry?: string | null
+          intro_angle?: string | null
+          lead_id?: string | null
+          phone?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prospects_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "prospect_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prospects_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       purchase_order_lines: {
         Row: {
           bar_code: string

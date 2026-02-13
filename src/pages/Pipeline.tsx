@@ -3,7 +3,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, Mail, Loader2, Sparkles, RefreshCw } from "lucide-react";
+import { Plus, Search, Mail, Loader2, Sparkles, RefreshCw, Pickaxe } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { PipelineBoard } from "@/components/pipeline/PipelineBoard";
 import { PipelineAnalytics } from "@/components/pipeline/PipelineAnalytics";
 import { LeadFormModal } from "@/components/pipeline/LeadFormModal";
@@ -19,6 +20,7 @@ type LeadWithCustomer = Lead & { customers: { name: string; company_name: string
 
 // Pipeline stages (originally derived from Odoo, now native to ERP)
 export const PIPELINE_STAGES = [
+  { id: "prospecting", label: "Prospecting", color: "bg-indigo-500" },
   { id: "new", label: "New", color: "bg-blue-500" },
   { id: "telephonic_enquiries", label: "Telephonic Enquiries", color: "bg-cyan-500" },
   { id: "qualified", label: "Qualified", color: "bg-teal-500" },
@@ -67,6 +69,7 @@ export default function Pipeline() {
   const [isAISheetOpen, setIsAISheetOpen] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   // Debounce search input by 300ms
   useEffect(() => {
@@ -337,6 +340,10 @@ export default function Pipeline() {
           <Button onClick={handleOdooSync} size="sm" variant="ghost" disabled={isSyncingOdoo} className="gap-1.5 h-8 px-2.5">
             {isSyncingOdoo ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
             <span className="hidden lg:inline text-xs">Odoo Sync</span>
+          </Button>
+          <Button onClick={() => navigate("/prospecting")} size="sm" variant="ghost" className="gap-1.5 h-8 px-2.5">
+            <Pickaxe className="w-3.5 h-3.5" />
+            <span className="hidden lg:inline text-xs">Prospect</span>
           </Button>
           <Button onClick={() => setIsAISheetOpen(true)} size="sm" variant="ghost" className="gap-1.5 h-8 px-2.5 text-primary hover:bg-primary/10">
             <Sparkles className="w-3.5 h-3.5" />
