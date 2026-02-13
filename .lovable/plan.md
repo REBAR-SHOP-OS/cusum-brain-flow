@@ -1,192 +1,117 @@
 
 
-# Make Accounting Fully AI-Driven with Human Approvals, Follow-Ups, and Collections
+# Fix Penny's Data Access and Mobile Chat Overflow
 
-## Overview
+## Problems Identified
 
-Transform the Accounting workspace from a passive data viewer into an **AI-driven command center** where Penny proactively manages collections, follow-ups, and financial actions -- all gated by human approval before execution.
+### Problem 1: Penny sees zeros / incomplete data
+Three root causes:
+
+**A. Server-side (ai-agent edge function):**
+- QB API queries use `MAXRESULTS 50` for customers, `MAXRESULTS 30` for invoices, `MAXRESULTS 20` for payments -- missing older data
+- P&L report only fetches from January 1 of the CURRENT year, not from business inception
+- No bills are fetched at all in `fetchQuickBooksLiveContext`
+- No vendors fetched
+
+**B. Client-side (AccountingAgent.tsx):**
+- Follow-up messages (lines 193-199 and 507-512) only send 5 summary counts to Penny: `totalReceivable`, `totalPayable`, `overdueInvoiceCount`, `overdueBillCount`, `unpaidInvoiceCount`
+- No invoice details, customer names, amounts, aging data, or account balances
+- The auto-greet passes rich data but every subsequent question gets almost nothing
+
+### Problem 2: Chat panel overflows on mobile
+- The mobile overlay panel (line 236-248) uses `inset-x-3 bottom-3` with no height cap, so the chat grows beyond the viewport
+- No close/minimize button visible on mobile -- the only way to close is the header button which scrolls out of view
 
 ---
 
-## What Changes
+## Plan
 
-### 1. New Database Table: `penny_collection_queue`
+### Phase 1: Expand server-side QB data fetching (ai-agent edge function)
 
-A structured queue for AI-generated collection and follow-up actions that require human approval before execution.
+In `fetchQuickBooksLiveContext`:
+- Increase `MAXRESULTS` to 200 for customers, 200 for invoices, 100 for payments, 100 for accounts
+- Fetch ALL invoices (not just open ones) with a second query: `SELECT * FROM Invoice ORDERBY TxnDate DESC MAXRESULTS 200`
+- Add bills query: `SELECT * FROM Bill WHERE Balance > '0' MAXRESULTS 100`
+- Add vendors query: `SELECT * FROM Vendor MAXRESULTS 100`
+- Change P&L date range from current year start to business inception (use company fiscal year or default to 5 years back)
+- Add Aged Receivable report: `reports/AgedReceivableDetail`
+- Add Aged Payable report: `reports/AgedPayableDetail`
 
-| Column | Type | Purpose |
-|--------|------|---------|
-| id | uuid | Primary key |
-| company_id | uuid | Multi-tenant isolation |
-| invoice_id | text | QuickBooks invoice reference |
-| customer_name | text | For display |
-| customer_email | text | For email actions |
-| customer_phone | text | For call actions |
-| amount | numeric | Outstanding balance |
-| days_overdue | integer | Aging days |
-| action_type | text | `email_reminder`, `call_collection`, `send_invoice`, `escalate` |
-| action_payload | jsonb | Draft email body, call script, etc. |
-| status | text | `pending_approval`, `approved`, `executed`, `rejected`, `failed` |
-| priority | text | `low`, `medium`, `high`, `critical` |
-| ai_reasoning | text | Why Penny recommends this action |
-| approved_by | uuid | Who approved |
-| approved_at | timestamptz | When approved |
-| executed_at | timestamptz | When executed |
-| execution_result | jsonb | Outcome details |
-| followup_date | date | When to follow up next |
-| followup_count | integer | How many times followed up |
-| created_at | timestamptz | Default now() |
+### Phase 2: Pass full context in follow-up messages (AccountingAgent.tsx)
 
-RLS: Authenticated users with accounting or admin role, filtered by company_id.
+In both `handleSend` (line 193) and `handleSendDirect` (line 507), expand the `qbContext` to include:
+- Full overdue invoices list (top 20 with customer, amount, days overdue)
+- Full overdue bills list (top 20)
+- All bank account balances
+- Recent payments (last 10)
+- Total unpaid invoice and bill counts
+- Customer list with balances (top 20)
+- Penny collection queue summary (pending count, total AR at risk)
 
-### 2. New Component: `AccountingActionQueue.tsx`
+This ensures every follow-up question Penny answers has the same rich data as the auto-greet.
 
-A dedicated "AI Actions" tab in the accounting workspace showing Penny's recommended actions in a prioritized queue:
+### Phase 3: Fix mobile chat overflow and add minimize access
 
-- Grouped by priority (Critical / High / Medium / Low)
-- Each card shows: customer, amount, days overdue, Penny's reasoning, and the proposed action (email draft / call script)
-- **Approve** button executes the action (sends email, initiates call, sends invoice)
-- **Reject** button dismisses with optional reason
-- **Modify & Approve** lets users edit the draft before sending
-- **Schedule** button sets a follow-up date
-- Badge counters in the nav showing pending approvals
+In `AccountingWorkspace.tsx` mobile overlay (line 236-248):
+- Add `max-h-[75vh]` when not fullscreen so the chat never exceeds 75% of viewport height
+- The AccountingAgent component already has minimize/fullscreen buttons in its header, but the mobile overlay needs a close button
+- Add a visible close (X) button at the top-right of the mobile overlay for quick dismissal
 
-### 3. New Edge Function: `penny-auto-actions`
-
-A cron-triggered (or on-demand) edge function that:
-
-1. Reads overdue invoices from the QuickBooks mirror/API
-2. Applies Penny's rule engine:
-   - **7+ days overdue**: Queue a friendly email reminder (action_type: `email_reminder`)
-   - **14+ days overdue**: Queue a call collection (action_type: `call_collection`)  
-   - **30+ days overdue**: Queue an invoice re-send + firm email (action_type: `send_invoice`)
-   - **60+ days overdue**: Queue escalation to CEO/Vizzy (action_type: `escalate`)
-3. Uses Lovable AI (Gemini Flash) to generate personalized email drafts and call scripts based on customer history
-4. Inserts into `penny_collection_queue` with `status: pending_approval`
-5. Deduplicates: won't create a new action if one already exists for the same invoice in `pending_approval` status
-
-### 4. New Edge Function: `penny-execute-action`
-
-Executes approved actions:
-- `email_reminder` / `send_invoice`: Calls the existing `quickbooks-oauth` send-invoice action or drafts a Gmail via the existing email infrastructure
-- `call_collection`: Creates a `call_task` record and returns a call card for Penny
-- `escalate`: Creates a `human_task` assigned to Vizzy (CEO agent)
-- Updates `penny_collection_queue` status to `executed` with result
-
-### 5. Enhanced `AccountingDashboard.tsx`
-
-Add a new summary card: **"Penny's Queue"** showing:
-- Pending approvals count (with badge)
-- Total AR at risk
-- Next follow-up due date
-- Clicking navigates to the new "actions" tab
-
-### 6. Enhanced `AccountingNavMenus.tsx`
-
-Add "AI Actions" tab with a notification badge showing pending approval count.
-
-### 7. Enhanced `AccountingAgent.tsx` (Penny Chat)
-
-Update Penny's prompt to:
-- Proactively mention pending actions from the queue in daily briefings
-- Allow users to say "approve all low-risk" to batch-approve email reminders
-- Allow "show my queue" to display pending actions inline
-- After a collection call outcome is logged, auto-queue the next follow-up action
-
-### 8. Enhanced `generate-suggestions` Edge Function
-
-Add new Penny suggestion rules:
-- "X invoices ready for collection email -- approve in AI Actions"
-- "Customer Y has been followed up Z times with no payment -- escalate?"
-- "Follow-up overdue: last contact was N days ago for Invoice #X"
+In `AccountingAgent.tsx` root div (line 277):
+- Ensure `h-full` and `max-h-full` so the chat respects its container's height constraint
+- The messages area already has `overflow-y-auto` which is correct
 
 ---
 
 ## Technical Details
 
-### Files Created (4 new)
-
-| File | Purpose |
-|------|---------|
-| `src/components/accounting/AccountingActionQueue.tsx` | Main AI actions queue UI with approve/reject/schedule |
-| `src/hooks/usePennyQueue.ts` | Hook for CRUD on `penny_collection_queue` with realtime |
-| `supabase/functions/penny-auto-actions/index.ts` | AI-powered action generation engine |
-| `supabase/functions/penny-execute-action/index.ts` | Action execution after approval |
-
-### Files Modified (6)
+### Files Modified (3)
 
 | File | Changes |
 |------|---------|
-| `src/pages/AccountingWorkspace.tsx` | Add "actions" tab routing, listen for pending count |
-| `src/components/accounting/AccountingNavMenus.tsx` | Add "AI Actions" nav item with badge |
-| `src/components/accounting/AccountingDashboard.tsx` | Add Penny Queue summary card |
-| `src/components/accounting/AccountingAgent.tsx` | Enhance prompt context with queue data, post-call auto-followup |
-| `supabase/functions/generate-suggestions/index.ts` | Add follow-up overdue and batch-ready rules |
-| `supabase/config.toml` | Register new edge functions |
+| `supabase/functions/ai-agent/index.ts` | Expand QB queries: higher MAXRESULTS, add bills/vendors, extend P&L date range, add aged reports |
+| `src/components/accounting/AccountingAgent.tsx` | Pass full QB data (invoices, bills, accounts, payments, queue) in follow-up message context |
+| `src/pages/AccountingWorkspace.tsx` | Add `max-h-[75vh]` and close button to mobile chat overlay |
 
-### Database Migration
+### Key Changes
 
-```sql
-CREATE TABLE public.penny_collection_queue (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  company_id uuid NOT NULL,
-  invoice_id text,
-  customer_name text NOT NULL,
-  customer_email text,
-  customer_phone text,
-  amount numeric DEFAULT 0,
-  days_overdue integer DEFAULT 0,
-  action_type text NOT NULL,
-  action_payload jsonb DEFAULT '{}',
-  status text NOT NULL DEFAULT 'pending_approval',
-  priority text NOT NULL DEFAULT 'medium',
-  ai_reasoning text,
-  approved_by uuid REFERENCES auth.users(id),
-  approved_at timestamptz,
-  executed_at timestamptz,
-  execution_result jsonb,
-  followup_date date,
-  followup_count integer DEFAULT 0,
-  created_at timestamptz DEFAULT now()
-);
+**ai-agent/index.ts -- fetchQuickBooksLiveContext:**
+- Invoices: `SELECT * FROM Invoice ORDERBY TxnDate DESC MAXRESULTS 200` (all, not just open)
+- Bills: `SELECT * FROM Bill ORDERBY TxnDate DESC MAXRESULTS 100` (new)
+- Vendors: `SELECT * FROM Vendor MAXRESULTS 100` (new)
+- Customers: increase from 50 to 200
+- Payments: increase from 20 to 100
+- P&L: change start date from current Jan 1 to 5 years back (covers business history)
+- Add Aged Receivables and Aged Payables summary reports
 
--- Validation trigger for status/priority/action_type
--- RLS policies for authenticated users with company_id filter
--- Realtime enabled
+**AccountingAgent.tsx -- qbContext in handleSend and handleSendDirect:**
+```typescript
+const qbContext = qbSummary ? {
+  totalReceivable: qbSummary.totalReceivable,
+  totalPayable: qbSummary.totalPayable,
+  overdueInvoices: qbSummary.overdueInvoices.slice(0, 20).map(i => ({
+    doc: i.DocNumber, customer: i.CustomerRef?.name, balance: i.Balance, due: i.DueDate
+  })),
+  overdueBills: qbSummary.overdueBills.slice(0, 20).map(b => ({
+    doc: b.DocNumber, vendor: b.VendorRef?.name, balance: b.Balance, due: b.DueDate
+  })),
+  bankAccounts: qbSummary.accounts.filter(a => a.AccountType === "Bank")
+    .map(a => ({ name: a.Name, balance: a.CurrentBalance })),
+  recentPayments: qbSummary.payments.slice(0, 10).map(p => ({
+    amount: p.TotalAmt, date: p.TxnDate
+  })),
+  unpaidInvoiceCount: qbSummary.invoices.filter(i => i.Balance > 0).length,
+  unpaidBillCount: qbSummary.bills.filter(b => b.Balance > 0).length,
+} : {};
 ```
 
-### AI Action Generation Flow
-
+**AccountingWorkspace.tsx -- mobile overlay:**
+```typescript
+<div className={cn(
+  "lg:hidden fixed z-50",
+  agentMode === "fullscreen"
+    ? "inset-0 bg-background p-3"
+    : "inset-x-3 bottom-3 max-h-[75vh] rounded-xl shadow-2xl overflow-hidden"
+)}>
 ```
-Cron (every 4h) or Manual trigger
-        |
-        v
-[penny-auto-actions]
-  1. Read overdue invoices from qb_transactions mirror
-  2. Check existing queue (skip duplicates)
-  3. Apply aging rules (7d / 14d / 30d / 60d)
-  4. Call Lovable AI to draft personalized emails/scripts
-  5. Insert into penny_collection_queue (pending_approval)
-        |
-        v
-[AccountingActionQueue UI]
-  User sees: customer, amount, AI reasoning, draft email
-  User clicks: Approve / Reject / Modify / Schedule
-        |
-        v
-[penny-execute-action]
-  Executes: send email / create call task / escalate
-  Updates: status -> executed, logs result
-  Auto-queues: next follow-up based on outcome
-```
-
-### Approval UI Pattern
-
-Each action card in the queue:
-- Shows the full draft (email body or call script) in an expandable section
-- "Approve" sends it immediately
-- "Edit & Approve" opens an inline editor
-- "Reject" marks it dismissed with an optional reason
-- "Schedule" sets a follow-up date and snoozes the action
-- Color-coded by priority: red (critical/60d+), amber (high/30d+), blue (medium/14d+), gray (low/7d+)
 
