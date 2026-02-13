@@ -7,13 +7,12 @@ import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
-  Upload, FolderOpen, CheckCircle, AlertTriangle, XCircle, FileText, FileArchive,
+  Upload, CheckCircle, AlertTriangle, XCircle, FileArchive,
 } from "lucide-react";
-import { BlobReader, BlobWriter, ZipReader, type Entry } from "@zip.js/zip.js";
+import { BlobReader, BlobWriter, TextWriter, ZipReader } from "@zip.js/zip.js";
 
 /* ── types ── */
 interface MappingRow {
@@ -36,66 +35,65 @@ interface Props {
 
 const BATCH = 5;
 
-export function OdooDumpImportDialog({ open, onOpenChange }: Props) {
-  const [mapping, setMapping] = useState<MappingRow[]>([]);
-  const [pending, setPending] = useState<PendingFile[]>([]);
-  const [step, setStep] = useState<1 | 2>(1);
+/** Parse ir_attachment rows from Odoo dump.sql COPY block */
+function parseMappingFromSql(sql: string): MappingRow[] {
+  // Find the COPY block for ir_attachment
+  // Format: COPY public.ir_attachment (id, ..., store_fname, ..., name, ..., mimetype, ...) FROM stdin;
+  const copyMatch = sql.match(
+    /COPY public\.ir_attachment\s*\(([^)]+)\)\s*FROM stdin;/i
+  );
+  if (!copyMatch) return [];
 
+  const columns = copyMatch[1].split(",").map((c) => c.trim().toLowerCase());
+  const idIdx = columns.indexOf("id");
+  const storeFnameIdx = columns.indexOf("store_fname");
+  const nameIdx = columns.indexOf("name");
+  const mimetypeIdx = columns.indexOf("mimetype");
+  const resModelIdx = columns.indexOf("res_model");
+
+  if (idIdx < 0 || storeFnameIdx < 0 || nameIdx < 0 || mimetypeIdx < 0) return [];
+
+  // Extract lines between the COPY header and the terminating \. 
+  const startIdx = sql.indexOf("\n", sql.indexOf(copyMatch[0])) + 1;
+  const endMarker = "\n\\.\n";
+  const endIdx = sql.indexOf(endMarker, startIdx);
+  if (endIdx < 0) return [];
+
+  const block = sql.slice(startIdx, endIdx);
+  const rows: MappingRow[] = [];
+
+  for (const line of block.split("\n")) {
+    if (!line || line === "\\.") break;
+    const cols = line.split("\t");
+    // Filter to crm.lead only
+    if (resModelIdx >= 0 && cols[resModelIdx] !== "crm.lead") continue;
+    const storeFname = cols[storeFnameIdx];
+    if (!storeFname || storeFname === "\\N") continue;
+
+    rows.push({
+      id: parseInt(cols[idIdx], 10),
+      store_fname: storeFname,
+      name: cols[nameIdx] || "",
+      mimetype: cols[mimetypeIdx] || "application/octet-stream",
+    });
+  }
+  return rows;
+}
+
+export function OdooDumpImportDialog({ open, onOpenChange }: Props) {
   const [uploading, setUploading] = useState(false);
   const [uploaded, setUploaded] = useState(0);
   const [failed, setFailed] = useState(0);
+  const [total, setTotal] = useState(0);
   const [errors, setErrors] = useState<string[]>([]);
+  const [statusMsg, setStatusMsg] = useState("");
   const abortRef = useRef(false);
-  const folderInputRef = useRef<HTMLInputElement>(null);
-
-  /* ── Step 1: parse CSV ── */
-  const handleCsvUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const text = await file.text();
-    const lines = text.trim().split("\n");
-    const header = lines[0].toLowerCase();
-    if (!header.includes("id") || !header.includes("store_fname")) {
-      toast.error("CSV must have columns: id, store_fname, name, mimetype");
-      return;
-    }
-    const rows: MappingRow[] = [];
-    for (let i = 1; i < lines.length; i++) {
-      const cols = lines[i].split(",");
-      if (cols.length < 4) continue;
-      rows.push({
-        id: parseInt(cols[0], 10),
-        store_fname: cols[1].trim(),
-        name: cols[2].trim(),
-        mimetype: cols[3].trim(),
-      });
-    }
-    setMapping(rows);
-
-    const { data, error } = await supabase
-      .from("lead_files")
-      .select("odoo_id, lead_id, file_name")
-      .not("odoo_id", "is", null)
-      .is("storage_path", null);
-
-    if (error) {
-      toast.error("Failed to fetch pending files");
-      return;
-    }
-    const pendingRows = (data ?? []) as unknown as PendingFile[];
-    setPending(pendingRows);
-
-    const matchCount = pendingRows.filter((p) =>
-      rows.some((m) => m.id === p.odoo_id)
-    ).length;
-
-    toast.success(`Mapping loaded: ${rows.length} entries, ${matchCount} match pending files`);
-  }, []);
 
   /* ── shared upload helper ── */
   const processQueue = useCallback(
     async (queue: { pending: PendingFile; mapping: MappingRow; getBlob: () => Promise<Blob> }[]) => {
       toast.info(`Starting upload of ${queue.length} files…`);
+      setTotal(queue.length);
       setUploading(true);
       setUploaded(0);
       setFailed(0);
@@ -114,7 +112,8 @@ export function OdooDumpImportDialog({ open, onOpenChange }: Props) {
           batch.map(async ({ pending: p, mapping: m, getBlob }) => {
             try {
               const blob = await getBlob();
-              const storagePath = `odoo-archive/${p.lead_id}/${p.odoo_id}-${m.name}`;
+              const safeName = m.name.replace(/[~#%&{}\\<>*?/$!'":@+`|=]/g, "_");
+              const storagePath = `odoo-archive/${p.lead_id}/${p.odoo_id}-${safeName}`;
               const { error: upErr } = await supabase.storage
                 .from("estimation-files")
                 .upload(storagePath, blob, {
@@ -146,84 +145,73 @@ export function OdooDumpImportDialog({ open, onOpenChange }: Props) {
       }
 
       setUploading(false);
+      setStatusMsg(`Import complete: ${ok} uploaded, ${fail} failed`);
       toast.success(`Import complete: ${ok} uploaded, ${fail} failed`);
     },
     []
   );
 
-  /* ── Step 2a: folder upload ── */
-  const handleFolderSelect = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const files = e.target.files;
-      if (!files || files.length === 0) return;
-      if (mapping.length === 0) {
-        toast.error("Please upload the mapping CSV first");
-        return;
-      }
-
-      const fileMap = new Map<string, File>();
-      for (let i = 0; i < files.length; i++) {
-        const f = files[i];
-        const rel = f.webkitRelativePath;
-        const idx = rel.indexOf("/");
-        if (idx >= 0) fileMap.set(rel.slice(idx + 1), f);
-      }
-
-      const mappingById = new Map<number, MappingRow>();
-      mapping.forEach((m) => mappingById.set(m.id, m));
-
-      const queue = pending
-        .map((p) => {
-          const m = mappingById.get(p.odoo_id);
-          if (!m) return null;
-          const file = fileMap.get(m.store_fname);
-          if (!file) return null;
-          return { pending: p, mapping: m, getBlob: () => Promise.resolve(file as Blob) };
-        })
-        .filter(Boolean) as { pending: PendingFile; mapping: MappingRow; getBlob: () => Promise<Blob> }[];
-
-      if (queue.length === 0) {
-        toast.error("No matching files found in the selected folder");
-        return;
-      }
-      await processQueue(queue);
-    },
-    [mapping, pending, processQueue]
-  );
-
-  /* ── Step 2b: ZIP file upload ── */
+  /* ── Single ZIP handler: extract mapping from dump.sql + match filestore ── */
   const handleZipSelect = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
-      if (mapping.length === 0) {
-        toast.error("Please upload the mapping CSV first");
+
+      setStatusMsg("Opening ZIP…");
+      const reader = new ZipReader(new BlobReader(file));
+      const entries = await reader.getEntries();
+
+      // 1. Find dump.sql and extract mapping
+      setStatusMsg("Looking for dump.sql…");
+      const dumpEntry = entries.find((e) => e.filename.endsWith("dump.sql") && !e.directory);
+      if (!dumpEntry) {
+        toast.error("No dump.sql found in the ZIP");
+        await reader.close();
         return;
       }
 
-      toast.info("Scanning ZIP file…");
+      setStatusMsg("Parsing ir_attachment from dump.sql (this may take a moment)…");
+      const sqlText = await (dumpEntry as any).getData(new TextWriter());
+      const mapping = parseMappingFromSql(sqlText);
 
+      if (mapping.length === 0) {
+        toast.error("No ir_attachment rows for crm.lead found in dump.sql");
+        await reader.close();
+        return;
+      }
+      toast.success(`Found ${mapping.length} attachment mappings in dump.sql`);
+
+      // 2. Fetch pending files from DB
+      setStatusMsg("Fetching pending files from database…");
+      const { data, error } = await supabase
+        .from("lead_files")
+        .select("odoo_id, lead_id, file_name")
+        .not("odoo_id", "is", null)
+        .is("storage_path", null);
+
+      if (error) {
+        toast.error("Failed to fetch pending files");
+        await reader.close();
+        return;
+      }
+      const pending = (data ?? []) as unknown as PendingFile[];
+
+      // 3. Build lookup and match
       const mappingById = new Map<number, MappingRow>();
       mapping.forEach((m) => mappingById.set(m.id, m));
 
-      // Build a set of store_fname we actually need
       const neededFnames = new Map<string, { pending: PendingFile; mapping: MappingRow }>();
       for (const p of pending) {
         const m = mappingById.get(p.odoo_id);
         if (m) neededFnames.set(m.store_fname, { pending: p, mapping: m });
       }
 
-      const reader = new ZipReader(new BlobReader(file));
-      const entries = await reader.getEntries();
-
-      // Build queue by matching ZIP entry filenames to store_fname
+      setStatusMsg("Matching filestore entries…");
       const queue: { pending: PendingFile; mapping: MappingRow; getBlob: () => Promise<Blob> }[] = [];
 
       for (const entry of entries) {
         if (entry.directory) continue;
-        // ZIP path might be like "filestore/ab/ab12cd34..." or just "ab/ab12cd34..."
         const fname = entry.filename;
-        // Try matching after "filestore/" prefix or the raw path
         const filestoreIdx = fname.indexOf("filestore/");
         const relPath = filestoreIdx >= 0 ? fname.slice(filestoreIdx + "filestore/".length) : fname;
 
@@ -239,7 +227,7 @@ export function OdooDumpImportDialog({ open, onOpenChange }: Props) {
       }
 
       if (queue.length === 0) {
-        toast.error("No matching files found in the ZIP");
+        toast.error(`No matching files found (${pending.length} pending, ${mapping.length} mappings)`);
         await reader.close();
         return;
       }
@@ -248,10 +236,9 @@ export function OdooDumpImportDialog({ open, onOpenChange }: Props) {
       await processQueue(queue);
       await reader.close();
     },
-    [mapping, pending, processQueue]
+    [processQueue]
   );
 
-  const total = pending.filter((p) => mapping.some((m) => m.id === p.odoo_id)).length;
   const pct = total > 0 ? Math.round((uploaded / total) * 100) : 0;
 
   return (
@@ -262,123 +249,68 @@ export function OdooDumpImportDialog({ open, onOpenChange }: Props) {
             <Upload className="h-5 w-5" /> Import from Odoo Dump
           </DialogTitle>
           <DialogDescription>
-            Upload files directly from your downloaded Odoo dump — no API needed.
+            Select your Odoo dump ZIP file — it will auto-extract the mapping from dump.sql and upload matching files.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Step 1 */}
           <div className="space-y-2">
             <Label className="flex items-center gap-2 font-semibold">
-              <Badge variant="outline">1</Badge> Upload Mapping CSV
+              <FileArchive className="h-4 w-4" /> Select Odoo Dump ZIP
             </Label>
             <p className="text-xs text-muted-foreground">
-              Extract from your dump SQL:{" "}
-              <code className="bg-muted px-1 rounded text-[10px]">
-                COPY (SELECT id, store_fname, name, mimetype FROM ir_attachment WHERE res_model='crm.lead') TO '/tmp/mapping.csv' CSV HEADER;
-              </code>
+              The ZIP should contain <code className="bg-muted px-1 rounded">dump.sql</code> and a{" "}
+              <code className="bg-muted px-1 rounded">filestore/</code> folder.
             </p>
-            <Input type="file" accept=".csv" onChange={handleCsvUpload} />
-            {mapping.length > 0 && (
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <FileText className="h-3 w-3" />
-                {mapping.length} mappings loaded • {total} match pending files
-              </div>
-            )}
+            <Input type="file" accept=".zip" disabled={uploading} onChange={handleZipSelect} />
           </div>
 
-          {/* Step 2 */}
-          <div className="space-y-2">
-            <Label className="flex items-center gap-2 font-semibold">
-              <Badge variant="outline">2</Badge> Select Dump Source
-            </Label>
+          {statusMsg && !uploading && uploaded === 0 && (
+            <p className="text-xs text-muted-foreground italic">{statusMsg}</p>
+          )}
 
-            {mapping.length === 0 && (
-              <p className="text-xs text-muted-foreground italic">Upload mapping CSV above first</p>
-            )}
+          {/* Abort button */}
+          {uploading && (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => { abortRef.current = true; }}
+                className="gap-1"
+              >
+                <XCircle className="h-3.5 w-3.5" /> Abort
+              </Button>
+              <span className="text-xs text-muted-foreground">{statusMsg}</span>
+            </div>
+          )}
 
-            <Tabs defaultValue="zip" className="w-full">
-                <TabsList className="w-full">
-                  <TabsTrigger value="zip" className="flex-1 gap-1">
-                    <FileArchive className="h-3.5 w-3.5" /> ZIP File
-                  </TabsTrigger>
-                  <TabsTrigger value="folder" className="flex-1 gap-1">
-                    <FolderOpen className="h-3.5 w-3.5" /> Extracted Folder
-                  </TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="zip" className="space-y-2 mt-2">
-                  <p className="text-xs text-muted-foreground">
-                    Select the Odoo dump <code className="bg-muted px-1 rounded">.zip</code> file directly — no extraction needed.
-                  </p>
-                  <Input type="file" accept=".zip" disabled={uploading} onChange={handleZipSelect} />
-                </TabsContent>
-
-                <TabsContent value="folder" className="space-y-2 mt-2">
-                  <p className="text-xs text-muted-foreground">
-                    Select the <code className="bg-muted px-1 rounded">filestore/</code> folder from your extracted dump.
-                  </p>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={uploading}
-                      onClick={() => folderInputRef.current?.click()}
-                      className="gap-1"
-                    >
-                      <FolderOpen className="h-3.5 w-3.5" /> Choose Folder
-                    </Button>
-                  </div>
-                  <input
-                    ref={folderInputRef}
-                    type="file"
-                    className="hidden"
-                    {...({ webkitdirectory: "", directory: "", multiple: true } as any)}
-                    onChange={handleFolderSelect}
-                  />
-                </TabsContent>
-              </Tabs>
-
-              {/* Abort button */}
-              {uploading && (
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => { abortRef.current = true; }}
-                  className="gap-1"
-                >
-                  <XCircle className="h-3.5 w-3.5" /> Abort
-                </Button>
-              )}
-
-              {/* Progress */}
-              {(uploading || uploaded > 0) && (
-                <div className="space-y-2">
-                  <Progress value={pct} className="h-2" />
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1">
-                      <CheckCircle className="h-3 w-3 text-primary" />
-                      {uploaded} / {total}
-                    </span>
-                    {failed > 0 && (
-                      <span className="flex items-center gap-1 text-destructive">
-                        <AlertTriangle className="h-3 w-3" /> {failed} failed
-                      </span>
-                    )}
-                    <span>{pct}%</span>
-                  </div>
-                  {errors.length > 0 && (
-                    <div className="max-h-32 overflow-y-auto space-y-1">
-                      {errors.slice(0, 20).map((err, i) => (
-                        <div key={i} className="text-[10px] bg-destructive/10 text-destructive rounded px-2 py-0.5 font-mono break-all">
-                          {err}
-                        </div>
-                      ))}
+          {/* Progress */}
+          {(uploading || uploaded > 0) && (
+            <div className="space-y-2">
+              <Progress value={pct} className="h-2" />
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span className="flex items-center gap-1">
+                  <CheckCircle className="h-3 w-3 text-primary" />
+                  {uploaded} / {total}
+                </span>
+                {failed > 0 && (
+                  <span className="flex items-center gap-1 text-destructive">
+                    <AlertTriangle className="h-3 w-3" /> {failed} failed
+                  </span>
+                )}
+                <span>{pct}%</span>
+              </div>
+              {errors.length > 0 && (
+                <div className="max-h-32 overflow-y-auto space-y-1">
+                  {errors.slice(0, 20).map((err, i) => (
+                    <div key={i} className="text-[10px] bg-destructive/10 text-destructive rounded px-2 py-0.5 font-mono break-all">
+                      {err}
                     </div>
-                  )}
+                  ))}
                 </div>
               )}
             </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>
