@@ -385,6 +385,36 @@ ${odooSnapshot}`;
     }
 
 
+    // ── draft_intro (cold introduction for AI prospects) ──
+    if (action === "draft_intro") {
+      const prompt = `Draft a cold introduction email for this prospect:\n\n${context}\n\nAdditional context from user: ${userMessage || ""}\n\nWrite a short (4-6 sentences), professional, non-spammy introduction email from the rebar.shop sales team. Reference the specific industry and why rebar.shop is a good fit. Don't be pushy — focus on value and invitation to connect.`;
+      const data = await callAI(
+        [{ role: "system", content: enrichedSystemPrompt }, { role: "user", content: prompt }],
+        [{
+          type: "function",
+          function: {
+            name: "draft_email_result",
+            description: "Return a drafted introduction email",
+            parameters: {
+              type: "object",
+              properties: {
+                subject: { type: "string" },
+                body: { type: "string" },
+                tone: { type: "string" },
+              },
+              required: ["subject", "body", "tone"],
+              additionalProperties: false,
+            },
+          },
+        }],
+        { type: "function", function: { name: "draft_email_result" } }
+      );
+
+      const result = extractToolResult(data) || { subject: "", body: data.choices?.[0]?.message?.content || "", tone: "professional" };
+      return new Response(JSON.stringify(result), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     // ── analyze (free-form) ──
     if (action === "analyze") {

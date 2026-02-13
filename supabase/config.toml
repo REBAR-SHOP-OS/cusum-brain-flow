@@ -192,3 +192,6 @@ verify_jwt = false
 
 [functions.odoo-crm-sync]
 verify_jwt = false
+
+[functions.prospect-leads]
+verify_jwt = false
