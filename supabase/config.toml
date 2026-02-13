@@ -164,3 +164,6 @@ verify_jwt = false
 
 [functions.archive-odoo-files]
 verify_jwt = false
+
+[functions.relink-orphan-invoices]
+verify_jwt = false
