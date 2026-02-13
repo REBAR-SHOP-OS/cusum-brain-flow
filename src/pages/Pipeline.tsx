@@ -2,8 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Plus, Search, Mail, Loader2, Sparkles, RefreshCw, Pickaxe } from "lucide-react";
+import { Plus, Mail, Loader2, Sparkles, RefreshCw, Pickaxe } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { PipelineBoard } from "@/components/pipeline/PipelineBoard";
 import { PipelineAnalytics } from "@/components/pipeline/PipelineAnalytics";
@@ -309,7 +308,7 @@ export default function Pipeline() {
     <div className="flex flex-col h-full">
       {/* Header */}
       <header className="px-4 sm:px-6 py-2.5 border-b border-border shrink-0 space-y-2">
-        {/* Row 1: Title, stats, search, actions */}
+      {/* Row 1: Title, stats, actions */}
         <div className="flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-3 mr-auto">
             <div>
@@ -321,16 +320,6 @@ export default function Pipeline() {
             <div className="hidden md:flex">
               <PipelineAnalytics leads={filteredLeads} />
             </div>
-          </div>
-
-          <div className="relative w-40 lg:w-56">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-            <Input
-              placeholder="Search leads, customers, source..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-8 h-8 text-sm"
-            />
           </div>
 
           <Button onClick={handleScanRfq} size="sm" variant="ghost" disabled={isScanningRfq} className="gap-1.5 h-8 px-2.5">
@@ -355,7 +344,7 @@ export default function Pipeline() {
           </Button>
         </div>
 
-        {/* Row 2: Filters */}
+        {/* Row 2: Odoo-style search bar with integrated filter dropdown */}
         <PipelineFilters
           filters={pipelineFilters}
           onFiltersChange={setPipelineFilters}
@@ -363,6 +352,8 @@ export default function Pipeline() {
           onGroupByChange={setGroupBy}
           salespersons={salespersons}
           sources={sources}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
         />
       </header>
 
