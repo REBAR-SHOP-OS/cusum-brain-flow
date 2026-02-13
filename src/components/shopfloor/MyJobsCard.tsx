@@ -27,6 +27,11 @@ export function MyJobsCard() {
     queryKey: ["my-work-orders", profile?.full_name],
     enabled: !!profile?.full_name,
     queryFn: async () => {
+      /**
+       * TODO: assigned_to is a text field matching full_name, not a profile ID.
+       * This is fragile — duplicate names or name changes will break assignment.
+       * Ideally migrate assigned_to to reference profile IDs.
+       */
       const { data, error } = await supabase
         .from("work_orders")
         .select("id, work_order_number, status, priority, scheduled_start, workstation")
@@ -53,8 +58,8 @@ export function MyJobsCard() {
 
   const statusColor: Record<string, string> = {
     pending: "bg-muted text-muted-foreground",
-    queued: "bg-yellow-500/20 text-yellow-500",
-    in_progress: "bg-blue-500/20 text-blue-500",
+    queued: "bg-warning/20 text-warning",
+    in_progress: "bg-primary/20 text-primary",
   };
 
   return (
@@ -99,3 +104,5 @@ export function MyJobsCard() {
     </Card>
   );
 }
+
+MyJobsCard.displayName = "MyJobsCard";

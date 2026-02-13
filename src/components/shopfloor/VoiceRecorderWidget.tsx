@@ -179,3 +179,5 @@ export function VoiceRecorderWidget() {
     </div>
   );
 }
+
+VoiceRecorderWidget.displayName = "VoiceRecorderWidget";

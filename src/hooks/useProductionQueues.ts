@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { useCompanyId } from "@/hooks/useCompanyId";
 import { useEffect } from "react";
 import type { QueueItemWithTask } from "@/lib/dispatchService";
 export type { QueueItemWithTask };
@@ -13,19 +14,20 @@ export interface ProjectLane {
 
 export function useProductionQueues() {
   const { user } = useAuth();
+  const { companyId } = useCompanyId();
   const queryClient = useQueryClient();
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["production-queues"],
-    enabled: !!user,
+    queryKey: ["production-queues", companyId],
+    enabled: !!user && !!companyId,
     queryFn: async () => {
-      // Fetch queue items with joined tasks
-      const { data: queueItems, error: qErr } = await (supabase as any)
+      const { data: queueItems, error: qErr } = await supabase
         .from("machine_queue_items")
         .select(`
           id, task_id, machine_id, project_id, work_order_id, barlist_id, position, status, created_at,
           task:production_tasks(id, task_type, bar_code, grade, setup_key, priority, status, mark_number, drawing_ref, cut_length_mm, asa_shape_code, qty_required, qty_completed, project_id, work_order_id, barlist_id)
         `)
+        .eq("company_id", companyId!)
         .in("status", ["queued", "running"])
         .order("position", { ascending: true });
 
@@ -42,14 +44,14 @@ export function useProductionQueues() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("work_orders")
-        .select("id, order_number")
+        .select("id, work_order_number")
         .in("id", projectIds);
       if (error) throw error;
       return data || [];
     },
   });
 
-  const woMap = new Map((workOrders || []).map((wo: any) => [wo.id, wo.order_number]));
+  const woMap = new Map((workOrders || []).map((wo) => [wo.id, wo.work_order_number]));
 
   // Realtime subscriptions
   useEffect(() => {
@@ -58,13 +60,13 @@ export function useProductionQueues() {
     const channel = supabase
       .channel("production-queues-live")
       .on("postgres_changes", { event: "*", schema: "public", table: "machine_queue_items" },
-        () => queryClient.invalidateQueries({ queryKey: ["production-queues"] }))
+        () => queryClient.invalidateQueries({ queryKey: ["production-queues", companyId] }))
       .on("postgres_changes", { event: "*", schema: "public", table: "production_tasks" },
-        () => queryClient.invalidateQueries({ queryKey: ["production-queues"] }))
+        () => queryClient.invalidateQueries({ queryKey: ["production-queues", companyId] }))
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [user, queryClient]);
+  }, [user, companyId, queryClient]);
 
   // Group by machine
   const byMachine = new Map<string, QueueItemWithTask[]>();

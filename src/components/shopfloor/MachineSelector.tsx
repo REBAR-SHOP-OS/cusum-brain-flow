@@ -154,3 +154,5 @@ export function MachineSelector({ machines }: MachineSelectorProps) {
     </div>
   );
 }
+
+MachineSelector.displayName = "MachineSelector";

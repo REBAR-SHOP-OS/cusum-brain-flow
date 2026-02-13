@@ -386,3 +386,5 @@ export function LiveMachineCard({
     </Card>
   );
 }
+
+LiveMachineCard.displayName = "LiveMachineCard";

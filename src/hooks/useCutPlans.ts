@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
+import { useCompanyId } from "@/hooks/useCompanyId";
 
 export interface CutPlan {
   id: string;
@@ -62,15 +63,18 @@ export interface MachineOption {
 
 export function useCutPlans() {
   const { user } = useAuth();
+  const { companyId } = useCompanyId();
   const { toast } = useToast();
   const [plans, setPlans] = useState<CutPlan[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchPlans = useCallback(async () => {
+    if (!companyId) { setPlans([]); setLoading(false); return; }
     setLoading(true);
     const { data, error } = await supabase
       .from("cut_plans")
       .select("*")
+      .eq("company_id", companyId)
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -79,14 +83,25 @@ export function useCutPlans() {
       setPlans((data as CutPlan[]) || []);
     }
     setLoading(false);
-  }, [toast]);
+  }, [companyId, toast]);
 
   useEffect(() => { fetchPlans(); }, [fetchPlans]);
 
-  const createPlan = async (name: string, companyId: string) => {
+  // Realtime subscription for cut_plans
+  useEffect(() => {
+    if (!user || !companyId) return;
+    const channel = supabase
+      .channel("cut-plans-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "cut_plans" },
+        () => fetchPlans())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user, companyId, fetchPlans]);
+
+  const createPlan = async (name: string, planCompanyId: string) => {
     const { data, error } = await supabase
       .from("cut_plans")
-      .insert({ name, company_id: companyId, created_by: user?.id || null })
+      .insert({ name, company_id: planCompanyId, created_by: user?.id || null })
       .select()
       .single();
 
@@ -113,7 +128,6 @@ export function useCutPlans() {
   };
 
   const deletePlan = async (planId: string) => {
-    // Delete items first, then the plan
     const { error: itemsErr } = await supabase
       .from("cut_plan_items")
       .delete()
@@ -218,7 +232,6 @@ export function useMachineCapabilities(machineModel: string | null, process: str
   useEffect(() => {
     if (!machineModel) { setCapabilities([]); return; }
 
-    // Find machines with this model, then get their capabilities
     supabase
       .from("machines")
       .select("id")

@@ -2,10 +2,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useEffect } from "react";
 import { useAuth } from "@/lib/auth";
+import { useCompanyId } from "@/hooks/useCompanyId";
 import type { LiveMachine, QueuedRun } from "@/types/machine";
 
 export function useLiveMonitorData() {
   const { user } = useAuth();
+  const { companyId } = useCompanyId();
   const queryClient = useQueryClient();
 
   const {
@@ -13,17 +15,17 @@ export function useLiveMonitorData() {
     isLoading,
     error,
   } = useQuery({
-    queryKey: ["live-machines"],
-    enabled: !!user,
+    queryKey: ["live-machines", companyId],
+    enabled: !!user && !!companyId,
     queryFn: async () => {
-      // Fetch machines with joined operator name & current run
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("machines")
         .select(
           `*,
            operator:profiles!current_operator_profile_id(id, full_name),
            current_run:machine_runs!current_run_id(id, status, process, started_at, notes)`
         )
+        .eq("company_id", companyId!)
         .order("name");
       if (error) throw error;
 
@@ -42,7 +44,7 @@ export function useLiveMonitorData() {
         if (queuedRuns) {
           const runsByMachine = new Map<string, QueuedRun[]>();
           for (const run of queuedRuns) {
-            const machineId = (run as any).machine_id as string;
+            const machineId = (run as Record<string, unknown>).machine_id as string;
             if (!runsByMachine.has(machineId)) runsByMachine.set(machineId, []);
             runsByMachine.get(machineId)!.push({
               id: run.id,
@@ -65,16 +67,17 @@ export function useLiveMonitorData() {
 
   // Available operators for assignment dropdown
   const { data: operators } = useQuery({
-    queryKey: ["available-operators"],
-    enabled: !!user,
+    queryKey: ["available-operators", companyId],
+    enabled: !!user && !!companyId,
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("profiles_safe" as any)
+        .from("profiles")
         .select("id, full_name")
+        .eq("company_id", companyId!)
         .eq("is_active", true)
         .order("full_name");
       if (error) throw error;
-      return (data as unknown) as {id: string; full_name: string}[] || [];
+      return (data as { id: string; full_name: string }[]) || [];
     },
   });
 
@@ -87,19 +90,19 @@ export function useLiveMonitorData() {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "machines" },
-        () => queryClient.invalidateQueries({ queryKey: ["live-machines"] })
+        () => queryClient.invalidateQueries({ queryKey: ["live-machines", companyId] })
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "machine_runs" },
-        () => queryClient.invalidateQueries({ queryKey: ["live-machines"] })
+        () => queryClient.invalidateQueries({ queryKey: ["live-machines", companyId] })
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user, queryClient]);
+  }, [user, companyId, queryClient]);
 
   return {
     machines: machines ?? [],

@@ -9,6 +9,7 @@ import { ProductionCard } from "@/components/shopfloor/ProductionCard";
 import { StationHeader } from "@/components/shopfloor/StationHeader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, AlertTriangle, LayoutGrid } from "lucide-react";
 import { useState } from "react";
@@ -17,7 +18,7 @@ export default function StationView() {
   const { machineId } = useParams<{ machineId: string }>();
   const { machines, isLoading: machinesLoading } = useLiveMonitorData();
   const machine = machines.find((m) => m.id === machineId);
-  const { groups, items, isLoading: dataLoading } = useStationData(machineId || null, machine?.type);
+  const { groups, items, isLoading: dataLoading, error } = useStationData(machineId || null, machine?.type);
   const { isAdmin, isWorkshop } = useUserRole();
   const canWrite = isAdmin || isWorkshop;
   const [activeTab, setActiveTab] = useState("production");
@@ -32,6 +33,18 @@ export default function StationView() {
     return (
       <div className="flex items-center justify-center h-full">
         <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-destructive gap-3 py-20">
+        <AlertTriangle className="w-12 h-12 opacity-60" />
+        <p className="text-sm">Failed to load station data</p>
+        <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
+          Retry
+        </Button>
       </div>
     );
   }
@@ -116,7 +129,6 @@ export default function StationView() {
             <ScrollArea className="h-[calc(100vh-180px)]">
               <div className="space-y-10 py-4 pr-3">
                 {isBender ? (
-                  /* Bender: flat card grid — no path split */
                   items.length === 0 ? (
                     <div className="text-center py-12 text-muted-foreground text-sm">
                       No items queued to this bender yet
@@ -137,7 +149,6 @@ export default function StationView() {
                     </div>
                   )
                 ) : (
-                  /* Cutter: grouped by bar size with path split */
                   groups.length === 0 ? (
                     <div className="text-center py-12 text-muted-foreground text-sm">
                       No items queued to this machine yet
@@ -194,3 +205,5 @@ export default function StationView() {
     </div>
   );
 }
+
+StationView.displayName = "StationView";
