@@ -12,6 +12,7 @@ import { ProspectIntroDialog } from "@/components/prospecting/ProspectIntroDialo
 export default function Prospecting() {
   const [region, setRegion] = useState("Canada/USA");
   const [introProspect, setIntroProspect] = useState<any | null>(null);
+  const [emailMode, setEmailMode] = useState<"intro" | "followup">("intro");
   const { companyId } = useCompanyId();
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -185,7 +186,8 @@ export default function Prospecting() {
             prospects={prospects}
             onApprove={(p) => approveMutation.mutate(p)}
             onReject={(id) => rejectMutation.mutate(id)}
-            onSendIntro={(p) => setIntroProspect(p)}
+            onSendIntro={(p) => { setEmailMode("intro"); setIntroProspect(p); }}
+            onSendFollowup={(p) => { setEmailMode("followup"); setIntroProspect(p); }}
           />
         )}
       </div>
@@ -193,6 +195,7 @@ export default function Prospecting() {
       {introProspect && (
         <ProspectIntroDialog
           prospect={introProspect}
+          mode={emailMode}
           open={!!introProspect}
           onOpenChange={(open) => !open && setIntroProspect(null)}
           onSent={() => {

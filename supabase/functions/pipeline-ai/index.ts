@@ -185,7 +185,7 @@ ${odooSnapshot}`;
 
     // ── draft_followup ──
     if (action === "draft_followup") {
-      const prompt = `Draft a brief, professional follow-up email for this lead:\n\n${context}\n\nWrite a short, warm follow-up email (3-5 sentences) from the rebar.shop sales team. Be professional but not overly formal. Reference the specific project if possible.`;
+      const prompt = `Draft a brief, professional follow-up email for this lead:\n\n${context}\n\nAdditional context from user: ${userMessage || ""}\n\nCRITICAL RULES:\n1. NEVER use placeholder text like [Sales Rep Name], [Your Name], [Company Name], or any bracketed tokens. NEVER.\n2. Address the recipient by their FIRST NAME ONLY (e.g., "Hi Sarah,").\n3. Reference the previous introduction and their specific company/project.\n4. Keep to 3-5 sentences. Be warm but direct — no filler like "I hope this finds you well".\n5. End with a soft call to action.\n6. Sign off EXACTLY as: "Best regards,\\nThe rebar.shop Sales Team"\n7. Do NOT include any sender name other than "The rebar.shop Sales Team".`;
       const data = await callAI(
         [{ role: "system", content: enrichedSystemPrompt }, { role: "user", content: prompt }],
         [{
@@ -216,7 +216,7 @@ ${odooSnapshot}`;
 
     // ── draft_email ──
     if (action === "draft_email") {
-      const prompt = `Draft a professional email for this lead. The user wants: ${userMessage || "a general check-in email"}.\n\n${context}\n\nWrite the email from the rebar.shop sales team.`;
+      const prompt = `Draft a professional email for this lead. The user wants: ${userMessage || "a general check-in email"}.\n\n${context}\n\nCRITICAL RULES:\n1. NEVER use placeholder text like [Sales Rep Name], [Your Name], [Company Name], or any bracketed tokens. NEVER.\n2. Address the recipient by their FIRST NAME ONLY (e.g., "Hi Sarah,").\n3. Keep the email concise (3-5 sentences). Be warm but direct.\n4. Sign off EXACTLY as: "Best regards,\\nThe rebar.shop Sales Team"\n5. Do NOT include any sender name other than "The rebar.shop Sales Team".`;
       const data = await callAI(
         [{ role: "system", content: enrichedSystemPrompt }, { role: "user", content: prompt }],
         [{

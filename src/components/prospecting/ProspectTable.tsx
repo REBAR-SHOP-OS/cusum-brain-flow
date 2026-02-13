@@ -26,6 +26,7 @@ interface Props {
   onApprove: (prospect: Prospect) => void;
   onReject: (id: string) => void;
   onSendIntro: (prospect: Prospect) => void;
+  onSendFollowup: (prospect: Prospect) => void;
 }
 
 const STATUS_BADGE: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
@@ -35,7 +36,7 @@ const STATUS_BADGE: Record<string, { label: string; variant: "default" | "second
   emailed: { label: "Emailed", variant: "secondary" },
 };
 
-export function ProspectTable({ prospects, onApprove, onReject, onSendIntro }: Props) {
+export function ProspectTable({ prospects, onApprove, onReject, onSendIntro, onSendFollowup }: Props) {
   return (
     <Table>
       <TableHeader>
@@ -85,6 +86,11 @@ export function ProspectTable({ prospects, onApprove, onReject, onSendIntro }: P
                   {(p.status === "approved" || p.status === "pending") && p.email && (
                     <Button size="icon" variant="ghost" className="h-7 w-7 text-primary hover:bg-primary/10" onClick={() => onSendIntro(p)} title="Send intro email">
                       <Send className="w-3.5 h-3.5" />
+                    </Button>
+                  )}
+                  {p.status === "emailed" && p.email && (
+                    <Button size="icon" variant="ghost" className="h-7 w-7 text-primary hover:bg-primary/10" onClick={() => onSendFollowup(p)} title="Send follow-up">
+                      <Mail className="w-3.5 h-3.5" />
                     </Button>
                   )}
                 </div>
