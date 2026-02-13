@@ -196,13 +196,14 @@
 }
 
 /* ============================================
-   Zebra Label Print Styles
-   Printer driver controls label size
+   Zebra Label Print Styles — 4x6 Continuous Roll
    ============================================ */
 @media print {
-  @page { margin: 0; }
+  @page {
+    size: 4in 6in;
+    margin: 0;
+  }
 
-  /* Hide everything except tags */
   body * { visibility: hidden !important; }
 
   .rebar-tag,
@@ -212,8 +213,8 @@
 
   .rebar-tag {
     position: relative !important;
-    width: 100% !important;
-    height: auto !important;
+    width: 4in !important;
+    height: 6in !important;
     max-width: none !important;
     margin: 0 !important;
     padding: 0 !important;
@@ -235,25 +236,14 @@
 
   .rebar-tag .bg-black { background: #000 !important; }
   .rebar-tag .bg-white { background: #fff !important; }
+  .rebar-tag img { image-rendering: pixelated; }
 
-  .rebar-tag svg path, .rebar-tag svg circle { stroke: #000 !important; fill: none !important; }
-  .rebar-tag svg text { fill: #000 !important; }
-}
-
-/* Print styles for document templates */
-@media print {
-  body * {
-    visibility: hidden;
-  }
+  /* Document print styles */
   .print\:shadow-none,
   .print\:shadow-none * {
     visibility: visible !important;
   }
   .print\:hidden {
     display: none !important;
-  }
-  @page {
-    size: A4;
-    margin: 10mm;
   }
 }
