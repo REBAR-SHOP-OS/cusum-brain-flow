@@ -1,36 +1,49 @@
 
+# Audit & Improve Pipeline Search Box
 
-# اصلاح دسترسی saurabh@rebar.shop به Pipeline
+## Current Issues
 
-## مشکل
-کاربر `saurabh@rebar.shop` نقش‌های `workshop` و `office` را دارد ولی نقش `sales` را ندارد. سیاست‌های امنیتی جدول `leads` فقط به نقش‌های `admin`، `sales` و `accounting` اجازه دسترسی می‌دهند.
+1. **Limited search scope**: Only searches `title` and `description` fields. Does not search by customer name, company name, source, or notes.
+2. **No debounce**: Every keystroke triggers a new database query, causing unnecessary load.
+3. **No client-side customer search**: Customer data (`customers.name`, `customers.company_name`) comes from a joined table and cannot be filtered in the same `.or()` clause on the `leads` table.
+4. **Placeholder too vague**: Just says "Search..." with no hint of what fields are searchable.
 
-## راه‌حل
-یک دستور SQL برای اضافه کردن نقش `sales` به کاربر:
+## Changes
+
+### File: `src/pages/Pipeline.tsx`
+
+1. **Add debounced search**: Introduce a `debouncedSearch` state that updates 300ms after the user stops typing. Use this for the query key and DB filter instead of the raw `searchQuery`.
+
+2. **Expand server-side search**: Add `source` and `notes` to the `.or()` filter:
+   ```
+   title.ilike.%query%, description.ilike.%query%, source.ilike.%query%, notes.ilike.%query%
+   ```
+
+3. **Add client-side customer filtering**: After fetching leads, apply an additional filter to include leads where `customers.name` or `customers.company_name` matches the search query -- since these are from a joined table and can't be filtered server-side in the same `.or()`.
+
+4. **Update placeholder text**: Change from "Search..." to "Search leads, customers, source..."
+
+### Technical Details
 
 ```text
-INSERT INTO user_roles (user_id, role)
-VALUES ('1a618127-a569-4134-b4cc-42da73a70399', 'sales')
-ON CONFLICT (user_id, role) DO NOTHING;
+New state:
+  const [debouncedSearch, setDebouncedSearch] = useState("")
+
+New useEffect for debounce:
+  useEffect with 300ms setTimeout on searchQuery changes
+
+Query changes:
+  queryKey: ["leads", debouncedSearch]
+  .or filter: title, description, source, notes (all ilike)
+
+Post-fetch filter (inside queryFn, after collecting allLeads):
+  If debouncedSearch is set, also include leads where
+  customers.name or customers.company_name matches (case-insensitive)
+
+Input placeholder: "Search leads, customers, source..."
 ```
 
-همچنین اگر نقش `workshop` لازم نیست، می‌توان آن را حذف کرد (اختیاری):
-
-```text
-DELETE FROM user_roles 
-WHERE user_id = '1a618127-a569-4134-b4cc-42da73a70399' 
-AND role = 'workshop';
-```
-
-و department پروفایل به `office` تنظیم شود:
-
-```text
-UPDATE profiles SET department = 'office' 
-WHERE user_id = '1a618127-a569-4134-b4cc-42da73a70399';
-```
-
-## نتیجه
-- با اضافه شدن نقش `sales`، RLS جدول `leads` اجازه خواندن/نوشتن داده‌ها را می‌دهد
-- Pipeline و Customers برای کاربر قابل مشاهده خواهد بود
-- تغییر کد لازم نیست -- فقط تنظیم دیتابیس
-
+### Result
+- Searches across title, description, source, notes, customer name, and company name
+- Fewer unnecessary DB calls thanks to debounce
+- Better UX with descriptive placeholder
