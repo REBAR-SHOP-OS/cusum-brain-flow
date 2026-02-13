@@ -79,7 +79,7 @@ export function MaterialFlowDiagram() {
           return (
             <div key={stage.phase} className="flex items-center gap-1 shrink-0">
               <button
-                onClick={() => navigate("/shopfloor/pool")}
+                onClick={() => navigate(`/shopfloor/pool?phase=${stage.phase}`)}
                 className={`flex flex-col items-center gap-1 px-3 py-3 rounded-lg border-2 transition-all min-w-[72px] ${
                   isActive
                     ? `${stage.border} ${stage.bg} shadow-sm`
