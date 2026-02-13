@@ -1,3 +1,4 @@
+import React from "react";
 import { AlertTriangle, Info, XCircle, Clock, ArrowRight, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -19,7 +20,7 @@ const severityConfig = {
   info: { icon: Info, color: "text-blue-500", bg: "bg-blue-500/10", badge: "outline" as const, border: "border-l-blue-500" },
 };
 
-export function AgentSuggestionCard({ suggestion, agentName, onAct, onSnooze, onDismiss }: AgentSuggestionCardProps) {
+export const AgentSuggestionCard = React.forwardRef<HTMLDivElement, AgentSuggestionCardProps>(function AgentSuggestionCard({ suggestion, agentName, onAct, onSnooze, onDismiss }, ref) {
   const navigate = useNavigate();
   const config = severityConfig[suggestion.severity as keyof typeof severityConfig] ?? severityConfig.info;
   const Icon = config.icon;
@@ -35,7 +36,7 @@ export function AgentSuggestionCard({ suggestion, agentName, onAct, onSnooze, on
   };
 
   return (
-    <Card className={`border-l-4 transition-all hover:shadow-md ${config.border}`}>
+    <Card ref={ref} className={`border-l-4 transition-all hover:shadow-md ${config.border}`}>
       <CardContent className="p-4 space-y-2">
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2">
@@ -79,4 +80,5 @@ export function AgentSuggestionCard({ suggestion, agentName, onAct, onSnooze, on
       </CardContent>
     </Card>
   );
-}
+});
+AgentSuggestionCard.displayName = "AgentSuggestionCard";
