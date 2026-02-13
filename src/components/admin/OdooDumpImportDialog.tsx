@@ -142,7 +142,7 @@ export function OdooDumpImportDialog({ open, onOpenChange }: Props) {
           batch.map(async ({ pending: p, mapping: m, getBlob }) => {
             try {
               const blob = await getBlob();
-              const safeName = m.name.replace(/[~#%&{}\[\]()<>\\*?/$!'":@+`|=]/g, "_");
+              const safeName = m.name.replace(/[^\w.\-]/g, "_");
               const storagePath = `odoo-archive/${p.lead_id}/${p.odoo_id}-${safeName}`;
               const { error: upErr } = await supabase.storage
                 .from("estimation-files")
