@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -11,6 +11,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Camera, Pen, Loader2, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { useCompanyId } from "@/hooks/useCompanyId";
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
 interface PODCaptureDialogProps {
   open: boolean;
@@ -25,11 +27,27 @@ export function PODCaptureDialog({ open, onOpenChange, stopId, onComplete }: POD
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-  const companyId = useCompanyId();
+  const { companyId } = useCompanyId();
+
+  // Fix 3: Reset state when dialog opens/closes
+  useEffect(() => {
+    if (!open) {
+      setSignature("");
+      setPhotoFile(null);
+      setPhotoPreview(null);
+    }
+  }, [open]);
 
   const handlePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    // Fix 2: File size validation
+    if (file.size > MAX_FILE_SIZE) {
+      toast.error("File too large — max 10MB per photo");
+      return;
+    }
+
     setPhotoFile(file);
     setPhotoPreview(URL.createObjectURL(file));
   };
@@ -37,7 +55,7 @@ export function PODCaptureDialog({ open, onOpenChange, stopId, onComplete }: POD
   const handleSubmit = async () => {
     setSaving(true);
     try {
-      let photoUrl: string | null = null;
+      let photoPath: string | null = null;
 
       if (photoFile && companyId) {
         const path = `${companyId}/pod/${stopId}-${Date.now()}.jpg`;
@@ -45,18 +63,22 @@ export function PODCaptureDialog({ open, onOpenChange, stopId, onComplete }: POD
           .from("clearance-photos")
           .upload(path, photoFile);
         if (uploadErr) throw uploadErr;
-        const { data: urlData } = supabase.storage
-          .from("clearance-photos")
-          .getPublicUrl(path);
-        photoUrl = urlData.publicUrl;
+        photoPath = path; // Store path, not public URL
       }
 
-      const updates: Record<string, any> = {
+      const updates: {
+        status: string;
+        arrival_time: string;
+        departure_time: string;
+        pod_signature?: string;
+        pod_photo_url?: string;
+      } = {
         status: "completed",
+        arrival_time: new Date().toISOString(), // Fix 5: Set arrival_time
         departure_time: new Date().toISOString(),
       };
       if (signature) updates.pod_signature = signature;
-      if (photoUrl) updates.pod_photo_url = photoUrl;
+      if (photoPath) updates.pod_photo_url = photoPath;
 
       const { error } = await supabase
         .from("delivery_stops")
@@ -137,3 +159,5 @@ export function PODCaptureDialog({ open, onOpenChange, stopId, onComplete }: POD
     </Dialog>
   );
 }
+
+PODCaptureDialog.displayName = "PODCaptureDialog";
