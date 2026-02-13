@@ -14,6 +14,7 @@ import {
   Bookmark,
   X,
   Layers,
+  Search,
 } from "lucide-react";
 import { PIPELINE_STAGES } from "@/pages/Pipeline";
 import {
@@ -74,6 +75,8 @@ interface PipelineFiltersProps {
   onGroupByChange: (g: GroupByOption) => void;
   salespersons: string[];
   sources: string[];
+  searchQuery: string;
+  onSearchChange: (q: string) => void;
 }
 
 function activeFilterCount(f: PipelineFilterState): number {
@@ -101,6 +104,8 @@ export function PipelineFilters({
   onGroupByChange,
   salespersons,
   sources,
+  searchQuery,
+  onSearchChange,
 }: PipelineFiltersProps) {
   const [isOpen, setIsOpen] = useState(false);
   const count = activeFilterCount(filters);
@@ -152,25 +157,47 @@ export function PipelineFilters({
   };
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="space-y-1.5">
+      {/* Odoo-style search bar */}
       <Popover open={isOpen} onOpenChange={setIsOpen}>
-        <PopoverTrigger asChild>
-          <Button variant="outline" size="sm" className="gap-2 h-8">
-            <Filter className="w-3.5 h-3.5" />
-            Filters
-            {count > 0 && (
-              <Badge variant="secondary" className="h-4 px-1 text-[10px] min-w-[16px] justify-center">
-                {count}
-              </Badge>
-            )}
-            <ChevronDown className="w-3 h-3 text-muted-foreground" />
-          </Button>
-        </PopoverTrigger>
+        <div className="flex items-center border border-border rounded-md bg-background h-9">
+          <Search className="w-4 h-4 text-muted-foreground ml-3 shrink-0" />
+          <input
+            type="text"
+            placeholder="Search leads, customers, source..."
+            value={searchQuery}
+            onChange={(e) => onSearchChange(e.target.value)}
+            className="flex-1 bg-transparent border-none outline-none text-sm px-2.5 h-full text-foreground placeholder:text-muted-foreground"
+          />
+          {count > 0 && (
+            <div className="flex items-center gap-1 px-1 overflow-x-auto">
+              {filters.myPipeline && <FilterChip label="My Pipeline" onRemove={() => toggle("myPipeline")} />}
+              {filters.unassigned && <FilterChip label="Unassigned" onRemove={() => toggle("unassigned")} />}
+              {filters.openOpportunities && <FilterChip label="Open" onRemove={() => toggle("openOpportunities")} />}
+              {filters.won && <FilterChip label="Won" onRemove={() => toggle("won")} />}
+              {filters.lost && <FilterChip label="Lost" onRemove={() => toggle("lost")} />}
+              {filters.salesperson && <FilterChip label={`SP: ${filters.salesperson}`} onRemove={() => toggle("salesperson", null)} />}
+              {filters.stage && <FilterChip label={`Stage: ${filters.stage}`} onRemove={() => toggle("stage", null)} />}
+              {filters.source && <FilterChip label={`Source: ${filters.source}`} onRemove={() => toggle("source", null)} />}
+              {filters.creationDateRange && <FilterChip label={`Created: ${filters.creationDateRange}`} onRemove={() => toggle("creationDateRange", null)} />}
+              {filters.closedDateRange && <FilterChip label={`Closed: ${filters.closedDateRange}`} onRemove={() => toggle("closedDateRange", null)} />}
+              {groupBy !== "none" && <FilterChip label={`Group: ${groupBy}`} onRemove={() => onGroupByChange("none")} />}
+            </div>
+          )}
+          <PopoverTrigger asChild>
+            <button
+              className="flex items-center justify-center h-full px-2.5 border-l border-border hover:bg-accent transition-colors shrink-0"
+              title="Filters & Group By"
+            >
+              <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${isOpen ? "rotate-180" : ""}`} />
+            </button>
+          </PopoverTrigger>
+        </div>
 
         <PopoverContent
           className="w-[640px] p-0"
-          align="start"
-          sideOffset={6}
+          align="end"
+          sideOffset={4}
         >
           <div className="grid grid-cols-3 divide-x divide-border">
             {/* ── Column 1: Filters ── */}
@@ -283,23 +310,6 @@ export function PipelineFilters({
           )}
         </PopoverContent>
       </Popover>
-
-      {/* Active filter chips */}
-      {count > 0 && (
-        <div className="flex items-center gap-1.5 overflow-x-auto">
-          {filters.myPipeline && <FilterChip label="My Pipeline" onRemove={() => toggle("myPipeline")} />}
-          {filters.unassigned && <FilterChip label="Unassigned" onRemove={() => toggle("unassigned")} />}
-          {filters.openOpportunities && <FilterChip label="Open" onRemove={() => toggle("openOpportunities")} />}
-          {filters.won && <FilterChip label="Won" onRemove={() => toggle("won")} />}
-          {filters.lost && <FilterChip label="Lost" onRemove={() => toggle("lost")} />}
-          {filters.salesperson && <FilterChip label={`SP: ${filters.salesperson}`} onRemove={() => toggle("salesperson", null)} />}
-          {filters.stage && <FilterChip label={`Stage: ${filters.stage}`} onRemove={() => toggle("stage", null)} />}
-          {filters.source && <FilterChip label={`Source: ${filters.source}`} onRemove={() => toggle("source", null)} />}
-          {filters.creationDateRange && <FilterChip label={`Created: ${filters.creationDateRange}`} onRemove={() => toggle("creationDateRange", null)} />}
-          {filters.closedDateRange && <FilterChip label={`Closed: ${filters.closedDateRange}`} onRemove={() => toggle("closedDateRange", null)} />}
-          {groupBy !== "none" && <FilterChip label={`Group: ${groupBy}`} onRemove={() => onGroupByChange("none")} />}
-        </div>
-      )}
     </div>
   );
 }

@@ -73,6 +73,8 @@ For each prospect, provide realistic but AI-generated data:
 - Why this company is a good fit for rebar.shop
 - A specific angle for introducing rebar.shop to them
 
+IMPORTANT: Every prospect MUST include a realistic phone number with an Ontario area code (416, 647, 437, 905, 289, 365, 613, 343, 519, 226, 548, 705, 249, 807).
+
 Make prospects diverse across industries, cities, and company sizes. Include both large firms and mid-market companies.`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -112,7 +114,7 @@ Make prospects diverse across industries, cities, and company sizes. Include bot
                         fit_reason: { type: "string" },
                         intro_angle: { type: "string" },
                       },
-                      required: ["company_name", "contact_name", "contact_title", "email", "city", "industry", "fit_reason", "intro_angle"],
+                      required: ["company_name", "contact_name", "contact_title", "email", "phone", "city", "industry", "fit_reason", "intro_angle"],
                       additionalProperties: false,
                     },
                   },

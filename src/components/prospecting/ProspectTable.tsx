@@ -53,6 +53,7 @@ export function ProspectTable({ prospects, onApprove, onReject, onSendIntro, onS
             <TableHead className="w-[140px]">Contact</TableHead>
             <TableHead className="hidden lg:table-cell">Title</TableHead>
             <TableHead className="hidden md:table-cell">Email</TableHead>
+            <TableHead className="hidden md:table-cell">Phone</TableHead>
             <TableHead className="hidden xl:table-cell">City</TableHead>
             <TableHead className="hidden xl:table-cell">Industry</TableHead>
             <TableHead className="hidden 2xl:table-cell">Fit Reason</TableHead>
@@ -73,6 +74,7 @@ export function ProspectTable({ prospects, onApprove, onReject, onSendIntro, onS
                 <TableCell className="text-sm">{p.contact_name}</TableCell>
                 <TableCell className="hidden lg:table-cell text-xs text-muted-foreground">{p.contact_title}</TableCell>
                 <TableCell className="hidden md:table-cell text-xs text-muted-foreground">{p.email}</TableCell>
+                <TableCell className="hidden md:table-cell text-xs text-muted-foreground">{p.phone}</TableCell>
                 <TableCell className="hidden xl:table-cell text-xs">{p.city}</TableCell>
                 <TableCell className="hidden xl:table-cell text-xs">{p.industry}</TableCell>
                 <TableCell className="hidden 2xl:table-cell text-xs text-muted-foreground max-w-[200px] truncate">{p.fit_reason}</TableCell>
