@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import {
   Popover,
   PopoverContent,
@@ -15,7 +15,9 @@ import {
   X,
   Layers,
   Search,
+  Sparkles,
 } from "lucide-react";
+import { SearchHints } from "@/components/pipeline/SearchHints";
 import { PIPELINE_STAGES } from "@/pages/Pipeline";
 import {
   FilterToggle,
@@ -108,7 +110,16 @@ export function PipelineFilters({
   onSearchChange,
 }: PipelineFiltersProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [showHints, setShowHints] = useState(false);
   const count = activeFilterCount(filters);
+
+  const handleHintSelect = useCallback((suggestion: string) => {
+    // Append the suggestion to the current search query
+    const current = searchQuery.trim();
+    const newQuery = current ? `${current} ${suggestion}` : suggestion;
+    onSearchChange(newQuery);
+    setShowHints(false);
+  }, [searchQuery, onSearchChange]);
 
   const toggle = (key: keyof PipelineFilterState, value?: unknown) => {
     const next = { ...filters };
@@ -160,14 +171,21 @@ export function PipelineFilters({
     <div className="space-y-1.5">
       {/* Odoo-style search bar */}
       <Popover open={isOpen} onOpenChange={setIsOpen}>
-        <div className="flex items-center border border-border rounded-md bg-background h-9">
-          <Search className="w-4 h-4 text-muted-foreground ml-3 shrink-0" />
+        <div className="relative flex items-center border border-border rounded-md bg-background h-9">
+          <Sparkles className="w-3.5 h-3.5 text-primary/60 ml-3 shrink-0" />
           <input
             type="text"
-            placeholder="Search leads, customers, source..."
+            placeholder="Search: today, won, hot, stale, over 50k..."
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
+            onFocus={() => setShowHints(true)}
             className="flex-1 bg-transparent border-none outline-none text-sm px-2.5 h-full text-foreground placeholder:text-muted-foreground"
+          />
+          <SearchHints
+            visible={showHints && !isOpen}
+            inputValue={searchQuery}
+            onSelect={handleHintSelect}
+            onClose={() => setShowHints(false)}
           />
           {count > 0 && (
             <div className="flex items-center gap-1 px-1 overflow-x-auto">
