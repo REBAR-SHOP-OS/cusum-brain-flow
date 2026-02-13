@@ -1,55 +1,89 @@
 
 
-# Enhance Live Chat: Toggle Button + Full Input Toolbar
+# Pixel Agent: Post Cards with View Panel (UI-Only)
 
-## Two Changes
+## What Changes
 
-### 1. Floating Button Toggle
-Clicking the floating button when already on `/chat` will navigate back (close chat). Currently it only opens.
+### 1. New Component: `PixelPostCard`
+**File:** `src/components/social/PixelPostCard.tsx` (new)
 
-**File:** `src/components/vizzy/FloatingVizzyButton.tsx`
-- Import `useLocation` from react-router-dom
-- If `location.pathname === "/chat"`, call `navigate(-1)`; otherwise navigate to `/chat`
+A compact card displayed inline in chat messages when Pixel generates posts. Each card shows:
+- Agent avatar + "Created a post" text
+- Status badge (Published / Scheduled / Draft)
+- **View** button on the right
 
-### 2. Add All Chat Tools to the Input Area
+Clicking "View" triggers a callback to open the detail panel.
 
-The full-screen chat currently has a plain textarea + send button. We'll add all the available chat components to it:
+### 2. New Component: `PixelPostViewPanel`
+**File:** `src/components/social/PixelPostViewPanel.tsx` (new)
 
-- **Formatting Toolbar** (Bold, Italic, Code, List, Link) -- shown above the textarea
-- **Quick Templates** (template icon button) -- in the toolbar row below textarea
-- **Emoji Picker** (smiley icon button) -- in the toolbar row
-- **Voice Input** (microphone button) -- in the toolbar row
-- **Slash Commands** (triggered by typing `/`) -- popup menu above input
-- **Mention Menu** (triggered by typing `@`) -- popup menu above input
+A right-side sliding panel (Sheet) that opens when the user clicks "View" on a post card. Contains:
 
-**File:** `src/pages/LiveChat.tsx`
-- Import all chat components: `FormattingToolbar`, `QuickTemplates`, `EmojiPicker`, `VoiceInputButton`, `SlashCommandMenu`, `MentionMenu`
-- Add state for: `showFormatting`, `mentionOpen`, `mentionFilter`, `mentionIndex`, `slashOpen`, `slashFilter`, `slashIndex`
-- Add voice input support using `webkitSpeechRecognition` (same pattern as existing ChatInput)
-- Detect `@` and `/` typing to trigger mention/slash menus
-- Add a toolbar row below the textarea with: Quick Templates, Emoji, Voice, Formatting toggle
-- Wire formatting toolbar to insert markdown syntax around selection in textarea
-- Wire slash commands and mentions to replace trigger text in input
+- **Header**: "Social Media Post" title with close (X) button
+- **Image preview**: Shows the generated image for the post
+- **Action buttons**: "Regenerate image" and "AI Edit" (UI only, non-functional for now)
+- **Calendar section**: A date picker (using the existing Calendar component) and a time picker (hour:minute selector) so the user can choose when to schedule the post
+- **Social accounts selector**: Icons/buttons for Instagram, Facebook, YouTube, TikTok -- the user can toggle which accounts to post to. These are UI-only placeholders (no real accounts connected yet)
+- **"View in calendar"** button (UI only)
+- **"Duplicate"** button (UI only)
 
-### Layout of Enhanced Input Area
+No actual publishing or scheduling happens -- purely visual/UI.
 
+### 3. Integration into `AgentWorkspace.tsx`
+**File:** `src/pages/AgentWorkspace.tsx` (edit, social agent section only)
+
+- Import `PixelPostViewPanel`
+- Add state: `viewingPost` (the post data to show in the panel)
+- When `agentId === "social"`, render `PixelPostViewPanel` alongside the chat
+- Pass a callback to `ChatThread` so post cards can trigger opening the panel
+
+### 4. Custom Rendering for Pixel's Chat Messages
+**File:** `src/components/social/PixelChatRenderer.tsx` (new)
+
+A wrapper that detects when Pixel's agent messages contain generated post data (images with social-images URL pattern) and renders them as `PixelPostCard` components instead of plain markdown. Non-post messages render normally with `RichMarkdown`.
+
+### What Does NOT Change
+- No other agents are affected
+- No database changes
+- No API calls or publishing logic
+- No changes to existing components (ChatMessage, RichMarkdown, PostReviewPanel, etc.)
+- The existing SocialMediaManager page remains untouched
+
+## Technical Details
+
+### PixelPostCard layout
 ```text
-+----------------------------------------------+
-| [FormattingToolbar - Bold/Italic/Code/etc]   |  (togglable)
-+----------------------------------------------+
-| [SlashCommandMenu popup]  [MentionMenu popup]|  (contextual popups)
-+----------------------------------------------+
-| [ textarea ............................. ]    |
-+----------------------------------------------+
-| [Templates] [Emoji] [Voice] [Format] | [Send]|
-+----------------------------------------------+
+[ Avatar | "Created a post"     | [View] ]
+[        | check Published      |        ]
 ```
 
-### Technical Details
+### PixelPostViewPanel layout
+```text
++----------------------------------+
+| X          Social Media Post     |
++----------------------------------+
+| [  Generated Image Preview  ]   |
+|                                  |
+| [Regenerate image] [AI Edit]    |
+|                                  |
+| --- Schedule ---                 |
+| [Calendar date picker]           |
+| [Time: HH:MM picker]            |
+|                                  |
+| --- Accounts ---                 |
+| [IG] [FB] [YT] [TT]            |
+|                                  |
+| [View in calendar]               |
+| [Duplicate]                      |
++----------------------------------+
+```
 
-| File | Change |
+### Files Summary
+
+| File | Action |
 |------|--------|
-| `src/components/vizzy/FloatingVizzyButton.tsx` | Add `useLocation`, toggle navigation logic |
-| `src/pages/LiveChat.tsx` | Import and integrate FormattingToolbar, QuickTemplates, EmojiPicker, VoiceInputButton, SlashCommandMenu, MentionMenu |
+| `src/components/social/PixelPostCard.tsx` | Create |
+| `src/components/social/PixelPostViewPanel.tsx` | Create |
+| `src/components/social/PixelChatRenderer.tsx` | Create |
+| `src/pages/AgentWorkspace.tsx` | Edit (social section only) |
 
-No new files needed -- all components already exist and just need to be wired into the LiveChat page.
