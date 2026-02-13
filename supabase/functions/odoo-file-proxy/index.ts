@@ -44,26 +44,30 @@ async function fetchOdooFileMeta(
 async function fetchOdooFileBinary(
   odoo: { url: string; apiKey: string; login: string; db: string },
   attachmentId: string,
-): Promise<Response> {
-  // Use /web/content which returns raw binary — avoids base64 memory doubling
-  const contentUrl = `${odoo.url}/web/content/${attachmentId}?download=true`;
-  const sessionRes = await fetch(`${odoo.url}/web/session/authenticate`, {
+): Promise<Uint8Array> {
+  // Use JSON-RPC to read base64 data — works reliably with API key auth
+  const res = await fetch(`${odoo.url}/jsonrpc`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${odoo.apiKey}` },
     body: JSON.stringify({
-      jsonrpc: "2.0", id: Date.now(),
-      params: { db: odoo.db, login: odoo.login, password: odoo.apiKey },
+      jsonrpc: "2.0", method: "call", id: Date.now(),
+      params: {
+        service: "object", method: "execute_kw",
+        args: [odoo.db, 2, odoo.apiKey, "ir.attachment", "read",
+          [[parseInt(attachmentId)]], { fields: ["datas"] }],
+      },
     }),
   });
-  const cookies = sessionRes.headers.get("set-cookie") || "";
-  const sessionId = cookies.match(/session_id=([^;]+)/)?.[1];
-  if (!sessionId) throw new Error("Failed to authenticate with Odoo");
+  const json = await res.json();
+  const record = json?.result?.[0];
+  if (!record || !record.datas) throw new Error(`Attachment ${attachmentId} not found or empty`);
 
-  const fileRes = await fetch(contentUrl, {
-    headers: { Cookie: `session_id=${sessionId}` },
-  });
-  if (!fileRes.ok) throw new Error(`Odoo /web/content returned ${fileRes.status}`);
-  return fileRes;
+  const binaryStr = atob(record.datas);
+  const bytes = new Uint8Array(binaryStr.length);
+  for (let i = 0; i < binaryStr.length; i++) {
+    bytes[i] = binaryStr.charCodeAt(i);
+  }
+  return bytes;
 }
 
 serve(async (req) => {
@@ -100,12 +104,12 @@ serve(async (req) => {
     const odoo = await getOdooFileUrl();
 
     // Get metadata (small call) and binary stream separately to avoid base64 memory doubling
-    const [meta, binaryRes] = await Promise.all([
+    const [meta, bytes] = await Promise.all([
       fetchOdooFileMeta(odoo, odooId),
       fetchOdooFileBinary(odoo, odooId),
     ]);
 
-    return new Response(binaryRes.body, {
+    return new Response(bytes, {
       headers: {
         ...corsHeaders,
         "Content-Type": meta.mimeType,
