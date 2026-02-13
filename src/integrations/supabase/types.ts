@@ -2779,6 +2779,47 @@ export type Database = {
           },
         ]
       }
+      loading_evidence: {
+        Row: {
+          captured_by: string | null
+          company_id: string | null
+          created_at: string | null
+          cut_plan_id: string | null
+          id: string
+          notes: string | null
+          photo_url: string
+          project_name: string | null
+        }
+        Insert: {
+          captured_by?: string | null
+          company_id?: string | null
+          created_at?: string | null
+          cut_plan_id?: string | null
+          id?: string
+          notes?: string | null
+          photo_url: string
+          project_name?: string | null
+        }
+        Update: {
+          captured_by?: string | null
+          company_id?: string | null
+          created_at?: string | null
+          cut_plan_id?: string | null
+          id?: string
+          notes?: string | null
+          photo_url?: string
+          project_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "loading_evidence_cut_plan_id_fkey"
+            columns: ["cut_plan_id"]
+            isOneToOne: false
+            referencedRelation: "cut_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       machine_capabilities: {
         Row: {
           bar_code: string
