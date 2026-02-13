@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -54,6 +54,7 @@ function getDateCutoff(rangeId: string): Date | null {
 
 export default function Pipeline() {
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [selectedLead, setSelectedLead] = useState<LeadWithCustomer | null>(null);
@@ -66,10 +67,15 @@ export default function Pipeline() {
   const [isAISheetOpen, setIsAISheetOpen] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  
+
+  // Debounce search input by 300ms
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   const { data: leads = [], isLoading } = useQuery({
-    queryKey: ["leads", searchQuery],
+    queryKey: ["leads", debouncedSearch],
     queryFn: async () => {
       const PAGE = 1000;
       let allLeads: LeadWithCustomer[] = [];
@@ -82,8 +88,8 @@ export default function Pipeline() {
           .order("updated_at", { ascending: false })
           .range(from, from + PAGE - 1);
 
-        if (searchQuery) {
-          query = query.or(`title.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%`);
+        if (debouncedSearch) {
+          query = query.or(`title.ilike.%${debouncedSearch}%,description.ilike.%${debouncedSearch}%,source.ilike.%${debouncedSearch}%,notes.ilike.%${debouncedSearch}%`);
         }
 
         const { data, error } = await query;
@@ -92,6 +98,22 @@ export default function Pipeline() {
         allLeads = allLeads.concat(data as LeadWithCustomer[]);
         if (data.length < PAGE) break;
         from += PAGE;
+      }
+
+      // Client-side filter for customer name/company (joined table can't be filtered server-side)
+      if (debouncedSearch) {
+        const q = debouncedSearch.toLowerCase();
+        allLeads = allLeads.filter((lead) => {
+          // Already matched by server-side filter on title/description/source/notes
+          // But also include if customer name or company matches
+          const titleMatch = lead.title?.toLowerCase().includes(q);
+          const descMatch = lead.description?.toLowerCase().includes(q);
+          const sourceMatch = lead.source?.toLowerCase().includes(q);
+          const notesMatch = lead.notes?.toLowerCase().includes(q);
+          const custNameMatch = lead.customers?.name?.toLowerCase().includes(q);
+          const custCompanyMatch = lead.customers?.company_name?.toLowerCase().includes(q);
+          return titleMatch || descMatch || sourceMatch || notesMatch || custNameMatch || custCompanyMatch;
+        });
       }
 
       return allLeads;
@@ -301,7 +323,7 @@ export default function Pipeline() {
           <div className="relative w-40 lg:w-56">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
             <Input
-              placeholder="Search..."
+              placeholder="Search leads, customers, source..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-8 h-8 text-sm"
