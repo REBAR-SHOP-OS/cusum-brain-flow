@@ -83,17 +83,43 @@ Deno.serve(async (req) => {
 
     const companyId = sampleLead?.company_id || "a0000000-0000-0000-0000-000000000001";
 
-    // Load existing odoo_id index for fast dedup
+    // Load existing odoo_id index for fast dedup — keep latest synced_at per odoo_id
     const { data: existingLeads } = await serviceClient
       .from("leads")
       .select("id, metadata")
       .eq("source", "odoo_sync");
 
-    const odooIdMap = new Map<string, string>();
+    // Build map keeping only the most-recently-synced record per odoo_id
+    const odooIdMap = new Map<string, { id: string; syncedAt: string }>();
+    const victimIds: string[] = [];
+
     for (const l of existingLeads || []) {
       const meta = l.metadata as Record<string, unknown> | null;
       const oid = meta?.odoo_id as string;
-      if (oid) odooIdMap.set(oid, l.id);
+      if (!oid) continue;
+
+      const syncedAt = (meta?.synced_at as string) || "";
+      const existing = odooIdMap.get(oid);
+
+      if (!existing) {
+        odooIdMap.set(oid, { id: l.id, syncedAt });
+      } else if (syncedAt > existing.syncedAt) {
+        // Current record is newer → it's the survivor, old one is victim
+        victimIds.push(existing.id);
+        odooIdMap.set(oid, { id: l.id, syncedAt });
+      } else {
+        // Current record is older → it's the victim
+        victimIds.push(l.id);
+      }
+    }
+
+    // Clean up any duplicates found during map loading
+    if (victimIds.length > 0) {
+      console.log(`Dedup: deleting ${victimIds.length} duplicate leads`);
+      for (let i = 0; i < victimIds.length; i += 50) {
+        const batch = victimIds.slice(i, i + 50);
+        await serviceClient.from("leads").delete().in("id", batch);
+      }
     }
 
     let created = 0, updated = 0, skipped = 0, errors = 0;
@@ -121,15 +147,20 @@ Deno.serve(async (req) => {
           synced_at: new Date().toISOString(),
         };
 
-        const existingId = odooIdMap.get(odooId);
+        const existingEntry = odooIdMap.get(odooId);
+        const existingId = existingEntry?.id;
+
+        // Normalize probability: won=100, lost=0, others=Odoo ML value
+        const normalizedProb = erpStage === "won" ? 100 : erpStage === "lost" ? 0 : Math.round(Number(ol.probability) || 0);
 
         if (existingId) {
-          // Update existing lead
+          // Update existing lead (including title to fix S-prefix legacy titles)
           const { error } = await serviceClient
             .from("leads")
             .update({
+              title: ol.name || "Untitled",
               stage: erpStage,
-              probability: Math.round(Number(ol.probability) || 0),
+              probability: normalizedProb,
               expected_value: Number(ol.expected_revenue) || 0,
               metadata,
               updated_at: new Date().toISOString(),
@@ -168,7 +199,7 @@ Deno.serve(async (req) => {
             .insert({
               title: ol.name || "Untitled",
               stage: erpStage,
-              probability: Math.round(Number(ol.probability) || 0),
+              probability: normalizedProb,
               expected_value: Number(ol.expected_revenue) || 0,
               source: "odoo_sync",
               customer_id: customerId,
