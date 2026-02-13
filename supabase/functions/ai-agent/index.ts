@@ -3762,6 +3762,7 @@ Respond with ONLY valid JSON (no markdown):
       let effectiveHasDate = hasDate;
       if (!hasDate) {
         const contentPlanPatterns = [
+          /^1$/, // Shortcut: just "1" triggers slot 1 generation
           /\b(?:plan|generate|create|make|build|schedule)\b.*\b(?:post|content|image)/i,
           /\b(?:post|content|image).*\b(?:plan|generate|create|make|build|schedule)\b/i,
           /\b\d+\s*(?:post|image)/i,
