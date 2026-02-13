@@ -244,7 +244,8 @@ RULES:
 
   const postBriefingActions = [
     "Drill into overdue AR",
-    "Show email details",
+    "Show my queue",
+    "Approve all low-risk",
     "Cash flow forecast",
     "Create follow-up tasks",
   ];

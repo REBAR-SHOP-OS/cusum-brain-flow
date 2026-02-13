@@ -183,3 +183,9 @@ verify_jwt = false
 
 [functions.elevenlabs-transcribe]
 verify_jwt = false
+
+[functions.penny-auto-actions]
+verify_jwt = false
+
+[functions.penny-execute-action]
+verify_jwt = false

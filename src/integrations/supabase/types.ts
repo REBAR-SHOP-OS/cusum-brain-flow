@@ -3758,6 +3758,75 @@ export type Database = {
           },
         ]
       }
+      penny_collection_queue: {
+        Row: {
+          action_payload: Json | null
+          action_type: string
+          ai_reasoning: string | null
+          amount: number | null
+          approved_at: string | null
+          approved_by: string | null
+          company_id: string
+          created_at: string | null
+          customer_email: string | null
+          customer_name: string
+          customer_phone: string | null
+          days_overdue: number | null
+          executed_at: string | null
+          execution_result: Json | null
+          followup_count: number | null
+          followup_date: string | null
+          id: string
+          invoice_id: string | null
+          priority: string
+          status: string
+        }
+        Insert: {
+          action_payload?: Json | null
+          action_type: string
+          ai_reasoning?: string | null
+          amount?: number | null
+          approved_at?: string | null
+          approved_by?: string | null
+          company_id: string
+          created_at?: string | null
+          customer_email?: string | null
+          customer_name: string
+          customer_phone?: string | null
+          days_overdue?: number | null
+          executed_at?: string | null
+          execution_result?: Json | null
+          followup_count?: number | null
+          followup_date?: string | null
+          id?: string
+          invoice_id?: string | null
+          priority?: string
+          status?: string
+        }
+        Update: {
+          action_payload?: Json | null
+          action_type?: string
+          ai_reasoning?: string | null
+          amount?: number | null
+          approved_at?: string | null
+          approved_by?: string | null
+          company_id?: string
+          created_at?: string | null
+          customer_email?: string | null
+          customer_name?: string
+          customer_phone?: string | null
+          days_overdue?: number | null
+          executed_at?: string | null
+          execution_result?: Json | null
+          followup_count?: number | null
+          followup_date?: string | null
+          id?: string
+          invoice_id?: string | null
+          priority?: string
+          status?: string
+        }
+        Relationships: []
+      }
       pickup_order_items: {
         Row: {
           created_at: string

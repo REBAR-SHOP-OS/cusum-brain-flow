@@ -11,6 +11,7 @@ import {
 interface AccountingNavProps {
   activeTab: string;
   onNavigate: (tab: string) => void;
+  pendingCount?: number;
 }
 
 type MenuItem = { label: string; tab: string } | { type: "separator" } | { type: "label"; label: string };
@@ -18,6 +19,7 @@ type Menu = { label: string; tab?: string; items?: MenuItem[] };
 
 const menus: Menu[] = [
   { label: "Dashboard", tab: "dashboard" },
+  { label: "AI Actions", tab: "actions" },
   {
     label: "Customers",
     items: [
@@ -75,22 +77,28 @@ const menus: Menu[] = [
   },
 ];
 
-export function AccountingNavMenus({ activeTab, onNavigate }: AccountingNavProps) {
+export function AccountingNavMenus({ activeTab, onNavigate, pendingCount = 0 }: AccountingNavProps) {
   return (
     <nav className="flex items-center gap-0.5">
       {menus.map((menu) => {
         if (!menu.items) {
-          // Direct link (Dashboard)
+          // Direct link (Dashboard, AI Actions)
           const isActive = activeTab === menu.tab;
+          const showBadge = menu.tab === "actions" && pendingCount > 0;
           return (
             <Button
               key={menu.label}
               variant={isActive ? "default" : "ghost"}
               size="sm"
-              className="text-xs font-medium h-8 px-3"
+              className="text-xs font-medium h-8 px-3 relative"
               onClick={() => onNavigate(menu.tab!)}
             >
               {menu.label}
+              {showBadge && (
+                <span className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                  {pendingCount > 9 ? "9+" : pendingCount}
+                </span>
+              )}
             </Button>
           );
         }

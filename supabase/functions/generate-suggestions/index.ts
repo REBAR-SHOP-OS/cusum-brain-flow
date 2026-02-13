@@ -336,7 +336,62 @@ serve(async (req) => {
           pushDual(row, `penny:paid_revision:${order.id}`, agentMap.penny);
         }
       }
-    }
+      }
+
+      // Penny: Collection queue follow-up overdue
+      const { data: overdueFollowups } = await supabase
+        .from("penny_collection_queue")
+        .select("id, company_id, invoice_id, customer_name, amount, days_overdue, followup_date, followup_count, action_type")
+        .eq("status", "pending_approval")
+        .not("followup_date", "is", null);
+
+      if (overdueFollowups) {
+        const today = now.toISOString().split("T")[0];
+        for (const item of overdueFollowups) {
+          if (!item.company_id || !item.followup_date || item.followup_date > today) continue;
+          const dedupeKey = `penny:followup_overdue:${item.id}`;
+          if (isTaskDupe(dedupeKey)) continue;
+
+          const row = {
+            company_id: item.company_id,
+            agent_id: agentMap.penny,
+            suggestion_type: "action",
+            category: "followup_overdue",
+            title: `Follow-up overdue: ${item.customer_name} — $${item.amount}`,
+            description: `Last contact was for Invoice ${item.invoice_id || "unknown"}. Follow-up ${item.followup_count} times with no payment.`,
+            severity: item.followup_count >= 3 ? "critical" : "warning",
+            reason: `Scheduled follow-up on ${item.followup_date} is past due. ${item.followup_count} previous attempts.`,
+            impact: `$${item.amount} at risk`,
+            entity_type: "penny_queue",
+            entity_id: item.id,
+            status: "open",
+            actions: [{ label: "View AI Actions", action: "navigate", path: "/accounting?tab=actions" }],
+          };
+          pushDual(row, dedupeKey, agentMap.penny);
+        }
+
+        // Batch-ready summary
+        const pendingEmails = overdueFollowups.filter(i => i.action_type === "email_reminder");
+        if (pendingEmails.length >= 3 && !isTaskDupe("penny:batch_emails_ready")) {
+          const totalAmt = pendingEmails.reduce((s, i) => s + (i.amount || 0), 0);
+          const row = {
+            company_id: pendingEmails[0].company_id,
+            agent_id: agentMap.penny,
+            suggestion_type: "action",
+            category: "batch_emails_ready",
+            title: `${pendingEmails.length} invoices ready for collection email`,
+            description: `$${totalAmt.toLocaleString()} in AR — approve batch in AI Actions`,
+            severity: "info",
+            reason: `${pendingEmails.length} email reminders are queued and ready to send.`,
+            impact: `$${totalAmt.toLocaleString()} AR`,
+            entity_type: "penny_queue",
+            entity_id: "batch",
+            status: "open",
+            actions: [{ label: "Review in AI Actions", action: "navigate", path: "/accounting?tab=actions" }],
+          };
+          pushDual(row, "penny:batch_emails_ready", agentMap.penny);
+        }
+      }
 
     // ========== FORGE (Shop Floor) ==========
     if (agentMap.forge) {
