@@ -1,79 +1,36 @@
 
-# Customer Action Page from Agent Suggestions
+
+# Open Live Chat as Full-Screen Page
 
 ## Problem
-When clicking "Act" on agent suggestion cards (like overdue invoice alerts), users are taken to the generic accounting page. Instead, they should be taken to a **dedicated customer action page** showing the full customer history with quick action buttons.
+The Live Chat currently opens as a small floating panel (340px wide, 500px max height) in the bottom-right corner. The user wants it to open as a full, big-screen experience instead.
 
 ## Solution
 
-### 1. New Page: `/customer-action/:customerId`
+When the floating agent button is clicked, navigate to a dedicated `/chat` route that shows the chat interface full-screen, instead of toggling the small widget overlay.
 
-Create a new page `src/pages/CustomerAction.tsx` that shows:
+### Changes
 
-- **Customer header** with name, company, status, and contact info
-- **Action buttons bar**: Call, Email, Schedule Activity
-  - **Call**: Triggers the existing RingCentral WebRTC call flow using the customer's primary contact phone
-  - **Email**: Opens a compose email dialog or mailto link for the primary contact
-  - **Schedule Activity**: Opens a dialog to create a follow-up activity event (date picker + notes) saved to `activity_events`
-- **History tabs** (reuses data patterns from `CustomerDetail`):
-  - Orders (from `orders` table)
-  - Quotes (from `quotes` table)
-  - Communications (from `communications` table)
-  - Invoices/AR (from `accounting_mirror` where `customer_id` matches)
-  - Activity log (from `activity_events`)
+#### 1. New Page: `src/pages/LiveChat.tsx`
+- Full-screen chat page reusing the existing `useAdminChat` hook
+- Same features as the widget (send, stream, clear, cancel, markdown rendering) but laid out across the full viewport
+- Back button in the header to return to the previous page
+- Agent avatar and name in the header (personalized per user like the floating button)
 
-### 2. Update `AgentSuggestionCard.tsx` — "Act" Button Logic
+#### 2. `src/components/vizzy/FloatingVizzyButton.tsx`
+- Change `handleClick` from dispatching `toggle-live-chat` event to navigating to `/chat` using `useNavigate()`
 
-When "Act" is clicked on a suggestion with `entity_type === "invoice"`:
+#### 3. `src/App.tsx`
+- Add the `/chat` route pointing to the new `LiveChat` page
 
-1. Look up the `accounting_mirror` record using `entity_id` to get the `customer_id`
-2. Navigate to `/customer-action/{customer_id}` with the invoice context as a query param
-3. Falls back to existing navigation behavior for non-invoice suggestions
-
-### 3. Update Suggestion Generation — Fix "Unknown" Customer Names
-
-The suggestion titles show "Unknown" because the generate-suggestions function doesn't resolve customer names. Update the `generate-suggestions` edge function to join `accounting_mirror.customer_id` with the `customers` table to include the customer name in the suggestion title (e.g., "NTL Contracting -- $155 overdue (3d)" instead of "Unknown -- $155 overdue (3d)").
-
-### 4. Add Route in `App.tsx`
-
-Register the new `/customer-action/:customerId` route.
-
-### 5. Schedule Activity Dialog
-
-A small dialog component (`ScheduleActivityDialog.tsx`) with:
-- Date picker for follow-up date
-- Activity type dropdown (Call, Email, Meeting, Follow-up)
-- Notes text field
-- Saves to `activity_events` table with `entity_type: "customer"`, `entity_id: customerId`
-
----
+#### 4. `src/components/layout/LiveChatWidget.tsx`
+- No changes needed initially -- it can remain for backward compatibility, but the floating button will no longer trigger it
 
 ## Technical Summary
 
 | File | Change |
 |------|--------|
-| `src/pages/CustomerAction.tsx` | New page with customer history + action buttons |
-| `src/components/customers/ScheduleActivityDialog.tsx` | New dialog for scheduling follow-up activities |
-| `src/components/agent/AgentSuggestionCard.tsx` | Update "Act" to resolve customer from invoice and navigate to customer action page |
-| `src/App.tsx` | Add `/customer-action/:customerId` route |
-| `supabase/functions/generate-suggestions/index.ts` | Resolve customer names for suggestion titles |
+| `src/pages/LiveChat.tsx` | New full-screen chat page using `useAdminChat` |
+| `src/components/vizzy/FloatingVizzyButton.tsx` | Navigate to `/chat` instead of toggling widget |
+| `src/App.tsx` | Register `/chat` route |
 
-## Data Flow
-
-```text
-AgentSuggestionCard "Act" click
-  |
-  +--> suggestion.entity_type === "invoice"?
-  |      |
-  |      +--> Fetch accounting_mirror by entity_id --> get customer_id
-  |      |
-  |      +--> Navigate to /customer-action/{customer_id}?invoice={entity_id}
-  |
-  +--> Other entity types: existing behavior (navigate to path in actions)
-
-CustomerAction page
-  |
-  +--> Fetch customer from customers table
-  +--> Fetch contacts, orders, quotes, communications, accounting_mirror, activity_events
-  +--> Show action buttons: Call (WebRTC), Email (mailto/compose), Schedule (dialog)
-```
