@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Plus, Save, Loader2, X, Camera } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useBrandKit } from "@/hooks/useBrandKit";
 import brandLogo from "@/assets/brand-logo.png";
 
 // Helper images
@@ -45,6 +46,7 @@ interface BrandKitDialogProps {
 
 export function BrandKitDialog({ open, onOpenChange }: BrandKitDialogProps) {
   const { toast } = useToast();
+  const { brandKit, saveBrandKit } = useBrandKit();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
 
@@ -77,6 +79,19 @@ export function BrandKitDialog({ open, onOpenChange }: BrandKitDialogProps) {
   );
   const helperInputRef = useRef<HTMLInputElement>(null);
   const [activeHelperId, setActiveHelperId] = useState<string | null>(null);
+
+  // Load brand kit from DB when available
+  useEffect(() => {
+    if (brandKit) {
+      setBusinessName(brandKit.business_name || "Rebar.shop");
+      if (brandKit.logo_url) setLogoUrl(brandKit.logo_url);
+      if (brandKit.brand_voice) setBrandVoice(brandKit.brand_voice);
+      if (brandKit.description) setDescription(brandKit.description);
+      if (brandKit.value_prop) setValueProp(brandKit.value_prop);
+      if (brandKit.colors) setColors(brandKit.colors);
+      if (brandKit.media_urls?.length > 0) setMediaImages(brandKit.media_urls);
+    }
+  }, [brandKit]);
 
   const colorRefs = {
     primary: useRef<HTMLInputElement>(null),
@@ -159,10 +174,22 @@ export function BrandKitDialog({ open, onOpenChange }: BrandKitDialogProps) {
 
   const handleSave = async () => {
     setSaving(true);
-    await new Promise((r) => setTimeout(r, 600));
-    setSaving(false);
-    toast({ title: "Brand Kit saved", description: "Your brand kit has been updated." });
-    onOpenChange(false);
+    try {
+      await saveBrandKit.mutateAsync({
+        business_name: businessName,
+        logo_url: logoUrl,
+        brand_voice: brandVoice,
+        description,
+        value_prop: valueProp,
+        colors,
+        media_urls: mediaImages,
+      });
+      onOpenChange(false);
+    } catch {
+      // Error handled by mutation
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (

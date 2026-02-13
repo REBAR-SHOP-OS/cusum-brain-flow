@@ -41,7 +41,7 @@ serve(async (req) => {
     }
 
     const publishSchema = z.object({
-      platform: z.enum(["facebook", "instagram"]),
+      platform: z.enum(["facebook", "instagram", "linkedin"]),
       message: z.string().min(1).max(63206),
       image_url: z.string().url().max(2000).optional(),
       post_id: z.string().uuid().optional(),
@@ -109,6 +109,9 @@ serve(async (req) => {
         );
       }
       result = await publishToInstagram(igAccounts[0].id, pageAccessToken, message, image_url);
+    } else if (platform === "linkedin") {
+      // LinkedIn uses integration_connections, not user_meta_tokens
+      result = await publishToLinkedIn(supabaseAdmin, userId, message, image_url);
     } else {
       return new Response(
         JSON.stringify({ error: `Publishing to ${platform} is not yet supported.` }),
@@ -253,5 +256,107 @@ async function publishToInstagram(
     return { id: publishData.id };
   } catch (err) {
     return { error: `Instagram publish failed: ${err instanceof Error ? err.message : "Unknown"}` };
+  }
+}
+
+async function publishToLinkedIn(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  text: string,
+  imageUrl?: string
+): Promise<{ id?: string; error?: string }> {
+  try {
+    const { data: connection } = await supabase
+      .from("integration_connections")
+      .select("config")
+      .eq("user_id", userId)
+      .eq("integration_id", "linkedin")
+      .maybeSingle();
+
+    if (!connection) return { error: "LinkedIn not connected. Please connect it from Integrations." };
+    const config = connection.config as { access_token: string; expires_at: number };
+
+    if (config.expires_at < Date.now()) return { error: "LinkedIn token expired. Please reconnect." };
+
+    // Get LinkedIn user URN
+    const profileRes = await fetch("https://api.linkedin.com/v2/userinfo", {
+      headers: { Authorization: `Bearer ${config.access_token}` },
+    });
+    if (!profileRes.ok) return { error: "Failed to get LinkedIn identity" };
+    const profile = await profileRes.json();
+
+    const payload: any = {
+      author: `urn:li:person:${profile.sub}`,
+      lifecycleState: "PUBLISHED",
+      specificContent: {
+        "com.linkedin.ugc.ShareContent": {
+          shareCommentary: { text },
+          shareMediaCategory: "NONE",
+        },
+      },
+      visibility: { "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC" },
+    };
+
+    // Handle image upload to LinkedIn if provided
+    if (imageUrl) {
+      try {
+        const registerRes = await fetch("https://api.linkedin.com/v2/assets?action=registerUpload", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${config.access_token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            registerUploadRequest: {
+              recipes: ["urn:li:digitalmediaRecipe:feedshare-image"],
+              owner: `urn:li:person:${profile.sub}`,
+              serviceRelationships: [{ relationshipType: "OWNER", identifier: "urn:li:userGeneratedContent" }],
+            },
+          }),
+        });
+
+        if (registerRes.ok) {
+          const registerData = await registerRes.json();
+          const uploadUrl = registerData.value?.uploadMechanism?.["com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"]?.uploadUrl;
+          const asset = registerData.value?.asset;
+
+          if (uploadUrl && asset) {
+            const imgRes = await fetch(imageUrl);
+            if (imgRes.ok) {
+              const imgBlob = await imgRes.blob();
+              await fetch(uploadUrl, {
+                method: "PUT",
+                headers: { Authorization: `Bearer ${config.access_token}`, "Content-Type": imgBlob.type || "image/png" },
+                body: imgBlob,
+              });
+              payload.specificContent["com.linkedin.ugc.ShareContent"].shareMediaCategory = "IMAGE";
+              payload.specificContent["com.linkedin.ugc.ShareContent"].media = [{ status: "READY", media: asset }];
+            }
+          }
+        }
+      } catch (e) {
+        console.error("LinkedIn image upload error:", e);
+      }
+    }
+
+    const postRes = await fetch("https://api.linkedin.com/v2/ugcPosts", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.access_token}`,
+        "Content-Type": "application/json",
+        "X-Restli-Protocol-Version": "2.0.0",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!postRes.ok) {
+      const errText = await postRes.text();
+      console.error("LinkedIn post error:", errText);
+      return { error: `LinkedIn API error (${postRes.status})` };
+    }
+
+    return { id: postRes.headers.get("x-restli-id") || "published" };
+  } catch (err) {
+    return { error: `LinkedIn publish failed: ${err instanceof Error ? err.message : "Unknown"}` };
   }
 }

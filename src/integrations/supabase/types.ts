@@ -326,6 +326,48 @@ export type Database = {
           },
         ]
       }
+      brand_kit: {
+        Row: {
+          brand_voice: string
+          business_name: string
+          colors: Json
+          created_at: string
+          description: string
+          id: string
+          logo_url: string | null
+          media_urls: string[]
+          updated_at: string
+          user_id: string
+          value_prop: string
+        }
+        Insert: {
+          brand_voice?: string
+          business_name?: string
+          colors?: Json
+          created_at?: string
+          description?: string
+          id?: string
+          logo_url?: string | null
+          media_urls?: string[]
+          updated_at?: string
+          user_id: string
+          value_prop?: string
+        }
+        Update: {
+          brand_voice?: string
+          business_name?: string
+          colors?: Json
+          created_at?: string
+          description?: string
+          id?: string
+          logo_url?: string | null
+          media_urls?: string[]
+          updated_at?: string
+          user_id?: string
+          value_prop?: string
+        }
+        Relationships: []
+      }
       call_tasks: {
         Row: {
           agent_id: string | null

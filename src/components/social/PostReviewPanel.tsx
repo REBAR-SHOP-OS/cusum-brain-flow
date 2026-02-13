@@ -353,7 +353,7 @@ export function PostReviewPanel({
               {/* ── Footer Actions ── */}
               {!editing && (
                 <div className="p-4 border-t space-y-2">
-                  {(post.platform === "facebook" || post.platform === "instagram") && (
+                  {(post.platform === "facebook" || post.platform === "instagram" || post.platform === "linkedin") && (
                     <Button
                       className="w-full gap-2 bg-green-600 hover:bg-green-700 text-white"
                       onClick={async () => {
