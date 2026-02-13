@@ -1,5 +1,5 @@
 import React from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuth } from "@/lib/auth";
 import { getUserPrimaryAgent } from "@/lib/userAgentMap";
@@ -9,13 +9,18 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
   function FloatingVizzyButton(_props, ref) {
     const isMobile = useIsMobile();
     const navigate = useNavigate();
+    const location = useLocation();
     const { user } = useAuth();
     const agent = getUserPrimaryAgent(user?.email);
     const avatarImg = agent?.image || assistantHelper;
     const agentName = agent?.name || "Vizzy";
 
     const handleClick = () => {
-      navigate("/chat");
+      if (location.pathname === "/chat") {
+        navigate(-1);
+      } else {
+        navigate("/chat");
+      }
     };
 
     return (
