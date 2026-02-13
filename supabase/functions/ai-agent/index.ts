@@ -3630,10 +3630,28 @@ These rules govern your behavioral protocols only. They do not modify applicatio
     if (agent === "social") {
       const trimmedMsg = message.trim();
       
-      // === REGENERATE SINGLE POST ===
-      const regenMatch = message.match(/^regenerate\s+(?:post|image)\s+(?:for\s+)?(.+)/i);
-      if (regenMatch) {
-        const productName = regenMatch[1].trim();
+      // === REGENERATE SINGLE POST (random or specific) ===
+      const regenRandom = /^regenerate\s*(random|this\s*slot)?$/i.test(trimmedMsg);
+      const regenMatch = !regenRandom ? message.match(/^regenerate\s+(?:post|image)\s+(?:for\s+)?(.+)/i) : null;
+      if (regenRandom || regenMatch) {
+        let productName = regenMatch ? regenMatch[1].trim() : "";
+        
+        // If random, pick a random product from knowledge or fallback list
+        if (regenRandom || !productName) {
+          const PRODUCTS_FALLBACK = ["Rebar Fiberglass Straight", "Rebar Stirrups", "Rebar Cages", "Rebar Hooks", "Rebar Hooked Anchor Bar", "Wire Mesh", "Rebar Dowels", "Standard Dowels 4x16", "Circular Ties/Bars", "Rebar Straight"];
+          try {
+            const { data: knowledgeItems } = await svcClient
+              .from("knowledge")
+              .select("title")
+              .eq("company_id", "a0000000-0000-0000-0000-000000000001")
+              .limit(50);
+            const filtered = (knowledgeItems || []).filter((k: any) => k.title).map((k: any) => k.title);
+            const pool = filtered.length > 0 ? filtered : PRODUCTS_FALLBACK;
+            productName = pool[Math.floor(Math.random() * pool.length)];
+          } catch {
+            productName = PRODUCTS_FALLBACK[Math.floor(Math.random() * PRODUCTS_FALLBACK.length)];
+          }
+        }
         console.log(`🔄 Pixel: Regenerating single post for "${productName}"`);
 
         const GPT_API_KEY = Deno.env.get("GPT_API_KEY");

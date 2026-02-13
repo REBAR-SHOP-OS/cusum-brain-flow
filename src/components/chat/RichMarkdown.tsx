@@ -3,7 +3,7 @@ import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
 import {
   CheckCircle2, AlertTriangle, Info, TrendingUp, TrendingDown,
-  Minus, ArrowRight, RefreshCw
+  Minus, ArrowRight, RefreshCw, Download
 } from "lucide-react";
 
 interface RichMarkdownProps {
@@ -192,25 +192,26 @@ export function RichMarkdown({ content, className, onRegenerateImage }: RichMark
                   className="rounded-lg max-w-full max-h-[400px] object-contain border border-border/30"
                   loading="lazy"
                 />
-                <div className="flex items-center gap-3 mt-1">
+                <div className="flex items-center gap-1.5 mt-1">
                   {src && (
                     <a
                       href={src}
                       download={alt || "image.png"}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors"
+                      title="Download"
+                      className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-muted hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
                     >
-                      ⬇️ Download
+                      <Download className="w-3.5 h-3.5" />
                     </a>
                   )}
                   {isSocialImage && onRegenerateImage && src && (
                     <button
                       onClick={() => onRegenerateImage(src, alt || "")}
-                      className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors"
+                      title="Regenerate"
+                      className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-muted hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
                     >
-                      <RefreshCw className="w-3 h-3" />
-                      Regenerate
+                      <RefreshCw className="w-3.5 h-3.5" />
                     </button>
                   )}
                 </div>

@@ -317,8 +317,7 @@ export default function AgentWorkspace() {
   }, [pendingPixelSlot, pixelDateMessage, handleSendInternal, lastPixelPost, user, selectedDate]);
 
   const handleRegenerateImage = useCallback((imageUrl: string, alt: string) => {
-    const productName = alt || "this product";
-    handleSendInternal(`Regenerate post for ${productName}`);
+    handleSendInternal(`regenerate random`);
   }, [handleSendInternal]);
 
   const [mobileHistoryOpen, setMobileHistoryOpen] = useState(false);
