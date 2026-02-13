@@ -82,13 +82,6 @@ export function AppSidebar() {
 
   const navGroups: NavGroup[] = [
     {
-      label: "Production",
-      items: [
-        { name: "Shop Floor", href: "/shop-floor", icon: Factory, roles: ["admin", "workshop", "office"], lockReason: "Requires Workshop or Office role", tourId: "nav-shop-floor" },
-        { name: "Office Tools", href: "/office", icon: LayoutGrid, roles: ["admin", "office"], lockReason: "Requires Office role", tourId: "nav-office-portal" },
-      ],
-    },
-    {
       label: "Office",
       items: [
         { name: "Dashboard", href: "/home", icon: Home, tourId: "nav-dashboard" },
@@ -96,6 +89,13 @@ export function AppSidebar() {
         { name: "Pipeline", href: "/pipeline", icon: Kanban, roles: ["admin", "sales", "office", "accounting"], lockReason: "Requires Sales or Office role", tourId: "nav-pipeline" },
         { name: "Customers", href: "/customers", icon: Users, tourId: "nav-customers" },
         { name: "Accounting", href: "/accounting", icon: DollarSign, roles: ["admin", "accounting", "office"], lockReason: "Requires Accounting role", tourId: "nav-accounting" },
+      ],
+    },
+    {
+      label: "Production",
+      items: [
+        { name: "Shop Floor", href: "/shop-floor", icon: Factory, roles: ["admin", "workshop", "office"], lockReason: "Requires Workshop or Office role", tourId: "nav-shop-floor" },
+        { name: "Office Tools", href: "/office", icon: LayoutGrid, roles: ["admin", "office"], lockReason: "Requires Office role", tourId: "nav-office-portal" },
       ],
     },
     {
