@@ -154,6 +154,9 @@ export default function AgentWorkspace() {
 
     // Build context with user role info
     const extraContext: Record<string, unknown> = {};
+    if (agentId === "social") {
+      extraContext.selectedDate = format(selectedDate, "yyyy-MM-dd");
+    }
     if (mapping) {
       extraContext.userRole = mapping.userRole;
       if (mapping.userRole === "ceo") extraContext.isCEO = true;

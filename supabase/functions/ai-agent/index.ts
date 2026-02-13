@@ -3797,10 +3797,10 @@ Respond with ONLY valid JSON (no markdown):
           /\bthis\s+month/i,
         ];
         if (contentPlanPatterns.some(p => p.test(message))) {
-          const todayStr = new Date().toISOString().split("T")[0];
+          const todayStr = (body.context?.selectedDate as string) || new Date().toISOString().split("T")[0];
           message = todayStr;
           effectiveHasDate = true;
-          console.log("📸 Pixel: Content plan request detected, using today's date →", todayStr);
+          console.log("📸 Pixel: Content plan request detected, using selected date →", todayStr);
         }
       }
       
