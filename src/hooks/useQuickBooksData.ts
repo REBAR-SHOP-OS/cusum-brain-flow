@@ -2,6 +2,8 @@ import { useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
+// ─── QB Interfaces ─────────────────────────────────────────────────
+
 export interface QBInvoice {
   Id: string;
   DocNumber: string;
@@ -119,6 +121,44 @@ export interface QBTimeActivity {
   Description?: string;
 }
 
+// ─── ERP Mirror helpers ────────────────────────────────────────────
+
+async function loadMirrorTransactions(entityType: string): Promise<unknown[]> {
+  const all: unknown[] = [];
+  let page = 0;
+  const PAGE_SIZE = 1000;
+  while (true) {
+    const { data } = await supabase
+      .from("qb_transactions")
+      .select("qb_id, entity_type, doc_number, total_amt, balance, txn_date, customer_qb_id, vendor_qb_id, raw_json, is_voided, is_deleted")
+      .eq("entity_type", entityType)
+      .eq("is_deleted", false)
+      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+    const rows = data || [];
+    all.push(...rows);
+    if (rows.length < PAGE_SIZE) break;
+    page++;
+  }
+  return all;
+}
+
+function mirrorTxnToQBFormat(row: Record<string, unknown>): Record<string, unknown> {
+  // Prefer raw_json if available, fall back to parsed fields
+  const raw = row.raw_json as Record<string, unknown> | null;
+  if (raw && Object.keys(raw).length > 2) return raw;
+  return {
+    Id: row.qb_id,
+    DocNumber: row.doc_number,
+    TotalAmt: row.total_amt,
+    Balance: row.balance,
+    TxnDate: row.txn_date,
+    CustomerRef: row.customer_qb_id ? { value: row.customer_qb_id } : undefined,
+    VendorRef: row.vendor_qb_id ? { value: row.vendor_qb_id } : undefined,
+  };
+}
+
+// ─── Main Hook ─────────────────────────────────────────────────────
+
 export function useQuickBooksData() {
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState<string | null>(null);
@@ -157,6 +197,90 @@ export function useQuickBooksData() {
     }
   }, [qbAction]);
 
+  // ─── ERP-native load: read from mirror tables first, fallback to QB API ───
+
+  const loadFromMirror = useCallback(async (): Promise<boolean> => {
+    try {
+      // Check if mirror has data
+      const { count } = await supabase
+        .from("qb_transactions")
+        .select("id", { count: "exact", head: true })
+        .eq("is_deleted", false)
+        .limit(1);
+
+      if (!count || count === 0) return false; // No mirror data, use API
+
+      // Load from mirror tables in parallel
+      const [
+        mirrorInvoices, mirrorBills, mirrorPayments,
+        mirrorEstimates, mirrorPOs, mirrorCMs,
+        mirrorAccountsData, mirrorCustomersData, mirrorVendorsData, mirrorItemsData,
+      ] = await Promise.all([
+        loadMirrorTransactions("Invoice"),
+        loadMirrorTransactions("Bill"),
+        loadMirrorTransactions("Payment"),
+        loadMirrorTransactions("Estimate"),
+        loadMirrorTransactions("PurchaseOrder"),
+        loadMirrorTransactions("CreditMemo"),
+        supabase.from("qb_accounts").select("*").eq("is_deleted", false).limit(5000),
+        supabase.from("qb_customers").select("*").eq("is_deleted", false).limit(5000),
+        supabase.from("qb_vendors").select("*").eq("is_deleted", false).limit(5000),
+        supabase.from("qb_items").select("*").eq("is_deleted", false).limit(5000),
+      ]);
+
+      setInvoices((mirrorInvoices as Record<string, unknown>[]).map(r => mirrorTxnToQBFormat(r) as unknown as QBInvoice));
+      setBills((mirrorBills as Record<string, unknown>[]).map(r => mirrorTxnToQBFormat(r) as unknown as QBBill));
+      setPayments((mirrorPayments as Record<string, unknown>[]).map(r => mirrorTxnToQBFormat(r) as unknown as QBPayment));
+      setEstimates((mirrorEstimates as Record<string, unknown>[]).map(r => mirrorTxnToQBFormat(r) as unknown as QBEstimate));
+      setPurchaseOrders((mirrorPOs as Record<string, unknown>[]).map(r => mirrorTxnToQBFormat(r) as unknown as QBPurchaseOrder));
+      setCreditMemos((mirrorCMs as Record<string, unknown>[]).map(r => mirrorTxnToQBFormat(r) as unknown as QBCreditMemo));
+
+      if (mirrorAccountsData.data) {
+        setAccounts(mirrorAccountsData.data.map((a: Record<string, unknown>) => {
+          const raw = a.raw_json as Record<string, unknown> | null;
+          return (raw && Object.keys(raw).length > 2 ? raw : {
+            Id: a.qb_id, Name: a.name, AccountType: a.account_type,
+            AccountSubType: a.account_sub_type, CurrentBalance: a.current_balance, Active: a.is_active,
+          }) as unknown as QBAccount;
+        }));
+      }
+
+      if (mirrorCustomersData.data) {
+        setCustomers(mirrorCustomersData.data.map((c: Record<string, unknown>) => ({
+          Id: c.qb_id as string, DisplayName: c.display_name as string,
+          CompanyName: (c.company_name as string) || "", Balance: (c.balance as number) || 0,
+          Active: c.is_active as boolean,
+        })));
+      }
+
+      if (mirrorVendorsData.data) {
+        setVendors(mirrorVendorsData.data.map((v: Record<string, unknown>) => {
+          const raw = v.raw_json as Record<string, unknown> | null;
+          return (raw && Object.keys(raw).length > 2 ? raw : {
+            Id: v.qb_id, DisplayName: v.display_name, CompanyName: v.company_name,
+            Balance: v.balance, Active: v.is_active,
+          }) as unknown as QBVendor;
+        }));
+      }
+
+      if (mirrorItemsData.data) {
+        setItems(mirrorItemsData.data.map((it: Record<string, unknown>) => {
+          const raw = it.raw_json as Record<string, unknown> | null;
+          return (raw && Object.keys(raw).length > 2 ? raw : {
+            Id: it.qb_id, Name: it.name, Type: it.type,
+            UnitPrice: it.unit_price, Active: it.is_active, Description: it.description,
+          }) as unknown as QBItem;
+        }));
+      }
+
+      console.log("[QB] Loaded from ERP mirror tables");
+      return true;
+    } catch (err) {
+      console.warn("[QB] Mirror load failed, falling back to API:", err);
+      return false;
+    }
+  }, []);
+
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
@@ -166,25 +290,34 @@ export function useQuickBooksData() {
         return;
       }
 
-      // Phase 1: Dashboard-critical data + full accounts list
+      // Try ERP mirror first (instant, no QB latency)
+      const mirrorLoaded = await loadFromMirror();
+      if (mirrorLoaded) {
+        setLoading(false);
+        // Background: load employees & time activities from QB API (not mirrored yet)
+        Promise.allSettled([
+          qbAction("list-employees").then(d => setEmployees(d.employees || [])),
+          qbAction("list-time-activities").then(d => setTimeActivities(d.timeActivities || [])),
+          qbAction("get-company-info").then(d => setCompanyInfo(d)),
+        ]).catch(() => {});
+        return;
+      }
+
+      // Fallback: load from QB API (original behavior)
       const dashboardData = await qbAction("dashboard-summary");
       setInvoices(dashboardData.invoices || []);
       setBills(dashboardData.bills || []);
       setPayments(dashboardData.payments || []);
 
-      // Fetch full Chart of Accounts immediately (not in background batch)
       try {
         const fullAccounts = await qbAction("list-accounts");
         setAccounts(fullAccounts.accounts || []);
-        console.log("[QB] Full accounts loaded:", (fullAccounts.accounts || []).length);
-      } catch (accErr) {
-        console.warn("[QB] list-accounts failed, falling back to dashboard bank accounts:", accErr);
+      } catch {
         setAccounts(dashboardData.accounts || []);
       }
 
-      setLoading(false); // Dashboard cards render immediately
+      setLoading(false);
 
-      // Phase 2: Load secondary data in background (no loading spinner)
       const [
         vendorsResult, estimatesResult, companyInfoResult, itemsResult,
         poResult, cmResult, empResult, taResult,
@@ -211,7 +344,7 @@ export function useQuickBooksData() {
       if (empResult.status === "fulfilled") setEmployees(empResult.value.employees || []);
       if (taResult.status === "fulfilled") setTimeActivities(taResult.value.timeActivities || []);
 
-      // Load synced customers from our DB (paginate past Supabase 1000-row default)
+      // Load synced customers from DB
       const allDbCustomers: typeof dbCustomersPage = [];
       let dbPage = 0;
       const DB_PAGE_SIZE = 1000;
@@ -227,10 +360,9 @@ export function useQuickBooksData() {
         if (rows.length < DB_PAGE_SIZE) break;
         dbPage++;
       }
-      const dbCustomers = allDbCustomers;
-      
-      if (dbCustomers) {
-        setCustomers(dbCustomers.map(c => ({
+
+      if (allDbCustomers.length > 0) {
+        setCustomers(allDbCustomers.map(c => ({
           Id: c.quickbooks_id!,
           DisplayName: c.name,
           CompanyName: c.company_name || "",
@@ -244,7 +376,7 @@ export function useQuickBooksData() {
     } finally {
       setLoading(false);
     }
-  }, [checkConnection, qbAction, toast]);
+  }, [checkConnection, loadFromMirror, qbAction, toast]);
 
   const syncEntity = useCallback(async (entity: string) => {
     setSyncing(entity);
@@ -284,6 +416,52 @@ export function useQuickBooksData() {
     return data;
   }, [qbAction, toast, loadAll]);
 
+  // Trigger full sync engine
+  const triggerFullSync = useCallback(async () => {
+    setSyncing("full-sync");
+    try {
+      const data = await qbAction("full-sync");
+      toast({ title: "✅ Full sync complete", description: `Synced all QB data to ERP mirror` });
+      await loadAll();
+      return data;
+    } catch (err) {
+      toast({ title: "Full sync failed", description: String(err), variant: "destructive" });
+    } finally {
+      setSyncing(null);
+    }
+  }, [qbAction, toast, loadAll]);
+
+  const triggerIncrementalSync = useCallback(async () => {
+    setSyncing("incremental");
+    try {
+      const data = await qbAction("incremental-sync");
+      toast({ title: "✅ Incremental sync complete", description: `${data.synced || 0} records updated` });
+      await loadAll();
+      return data;
+    } catch (err) {
+      toast({ title: "Incremental sync failed", description: String(err), variant: "destructive" });
+    } finally {
+      setSyncing(null);
+    }
+  }, [qbAction, toast, loadAll]);
+
+  const triggerReconcile = useCallback(async () => {
+    setSyncing("reconcile");
+    try {
+      const data = await qbAction("reconcile");
+      const diff = data.trial_balance_diff;
+      toast({
+        title: diff > 0.01 ? "⚠️ Trial Balance Mismatch" : "✅ Reconciliation complete",
+        description: diff > 0.01 ? `Difference: $${diff.toFixed(2)}` : "QB and ERP match",
+      });
+      return data;
+    } catch (err) {
+      toast({ title: "Reconciliation failed", description: String(err), variant: "destructive" });
+    } finally {
+      setSyncing(null);
+    }
+  }, [qbAction, toast]);
+
   // Computed summaries
   const totalReceivable = invoices.reduce((sum, inv) => sum + (inv.Balance || 0), 0);
   const totalPayable = bills.reduce((sum, b) => sum + (b.Balance || 0), 0);
@@ -295,5 +473,6 @@ export function useQuickBooksData() {
     invoices, bills, payments, vendors, customers, accounts, estimates, items, purchaseOrders, creditMemos, employees, timeActivities, companyInfo,
     totalReceivable, totalPayable, overdueInvoices, overdueBills,
     checkConnection, loadAll, syncEntity, createEntity, sendInvoice, voidInvoice, createPayrollCorrection, qbAction,
+    triggerFullSync, triggerIncrementalSync, triggerReconcile,
   };
 }
