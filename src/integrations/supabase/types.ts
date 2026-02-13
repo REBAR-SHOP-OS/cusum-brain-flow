@@ -2639,6 +2639,146 @@ export type Database = {
           },
         ]
       }
+      leave_balances: {
+        Row: {
+          company_id: string
+          created_at: string
+          id: string
+          personal_days_entitled: number
+          personal_days_used: number
+          profile_id: string
+          sick_days_entitled: number
+          sick_days_used: number
+          updated_at: string
+          vacation_days_entitled: number
+          vacation_days_used: number
+          year: number
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          id?: string
+          personal_days_entitled?: number
+          personal_days_used?: number
+          profile_id: string
+          sick_days_entitled?: number
+          sick_days_used?: number
+          updated_at?: string
+          vacation_days_entitled?: number
+          vacation_days_used?: number
+          year?: number
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          id?: string
+          personal_days_entitled?: number
+          personal_days_used?: number
+          profile_id?: string
+          sick_days_entitled?: number
+          sick_days_used?: number
+          updated_at?: string
+          vacation_days_entitled?: number
+          vacation_days_used?: number
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leave_balances_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leave_balances_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      leave_requests: {
+        Row: {
+          company_id: string
+          created_at: string
+          end_date: string
+          id: string
+          leave_type: string
+          profile_id: string
+          reason: string | null
+          review_note: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          start_date: string
+          status: string
+          total_days: number
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          end_date: string
+          id?: string
+          leave_type: string
+          profile_id: string
+          reason?: string | null
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          start_date: string
+          status?: string
+          total_days?: number
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          end_date?: string
+          id?: string
+          leave_type?: string
+          profile_id?: string
+          reason?: string | null
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          start_date?: string
+          status?: string
+          total_days?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leave_requests_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leave_requests_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leave_requests_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leave_requests_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       machine_capabilities: {
         Row: {
           bar_code: string
