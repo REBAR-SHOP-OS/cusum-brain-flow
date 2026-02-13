@@ -25,11 +25,12 @@ interface CutterStationViewProps {
   items: StationItem[];
   canWrite: boolean;
   initialIndex?: number;
+  onBack?: () => void;
 }
 
 const REMNANT_THRESHOLD_MM = 300;
 
-export function CutterStationView({ machine, items, canWrite, initialIndex = 0 }: CutterStationViewProps) {
+export function CutterStationView({ machine, items, canWrite, initialIndex = 0, onBack }: CutterStationViewProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
@@ -374,6 +375,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0 }
           machineName={machine.name}
           machineModel={machine.model}
           canWrite={canWrite}
+          onBack={onBack}
           showBedsSuffix={true}
         />
         <div className="flex-1 flex items-center justify-center text-muted-foreground">
@@ -393,6 +395,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0 }
         drawingRef={currentItem.drawing_ref}
         remainingCount={remaining}
         canWrite={canWrite}
+        onBack={onBack}
         showBedsSuffix={false}
       />
 
