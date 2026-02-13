@@ -1,133 +1,134 @@
 
 
-# Odoo-Style Header Rebuild for Rebar ERP
+# AI Lead Prospecting Pipeline
 
-## Current ERP Header vs Odoo Header
+## Overview
 
-### Odoo Header Structure (Backend/CRM)
-The Odoo backend navbar is a single 46px-tall bar with a dark purple background (`#714B67` / `#7C3AED`-ish), structured as:
+Add a new **"Prospecting"** pipeline stage and a dedicated prospecting page where users can click a button to have AI generate 50 new lead prospects. The AI uses web intelligence to find relevant construction/rebar industry leads. Users review each prospect in an audit table, and with one click can send a personalized introduction email via the existing Gmail integration.
 
+## New Pipeline Stage
+
+Add `prospecting` as the first stage in `PIPELINE_STAGES`:
 ```text
-[Grid Icon] [Module Name] [Breadcrumb > Trail] .............. [Search] [Messaging] [Bell] [Avatar]
-|___ LEFT GROUP (app nav) ___|                                |_____ RIGHT GROUP (utilities) _____|
+{ id: "prospecting", label: "Prospecting", color: "bg-indigo-500" }
 ```
+This stage holds AI-discovered leads that haven't been qualified yet.
 
-- **Grid icon**: 3x3 dot grid, opens app switcher (module list)
-- **Module name**: Bold text of current module (e.g., "CRM", "Inventory")
-- **Breadcrumb**: `>` separated path (e.g., "Pipeline" or "Pipeline > Lead Name")
-- **Search bar**: Inline expandable input, not a modal trigger
-- **Messaging**: Chat bubble icon with unread counter badge
-- **Notifications**: Bell icon with counter badge
-- **User avatar**: Circle with initials, dropdown with Preferences, My Profile, Log out
+## New Edge Function: `prospect-leads`
 
-### Current ERP Header Issues (vs Odoo)
-1. Brand logo + "REBAR OS" text takes up left side (Odoo uses grid icon + module name)
-2. Warehouse selector clutters the header (not in Odoo)
-3. Search opens a command palette modal (Odoo does inline search)
-4. Wrench (admin console) icon visible in header (not Odoo-like)
-5. Theme toggle in header (Odoo has no theme toggle in navbar)
-6. User menu is a plain icon, not an avatar with initials
-7. No breadcrumb system
-8. No module name indicator
+A backend function that uses **Lovable AI** (Gemini 3 Flash) to generate 50 realistic, targeted lead prospects for rebar fabrication. The AI is prompted with:
+- Your company profile (rebar.shop, Canadian rebar fabrication)
+- Target industries (general contractors, structural engineers, developers, precast companies)
+- Geographic focus (user can specify region or default to Canada/USA)
+- Output: structured JSON array of 50 prospects via tool calling
 
----
+Each prospect includes:
+- Company name, contact name, title/role
+- Email (best guess format based on company domain)
+- Phone (if inferable)
+- Industry vertical, city/region
+- Estimated project value range
+- Reason for fit (why this is a good lead)
+- Suggested introduction angle
 
-## Changes
+## New DB Table: `prospect_batches`
 
-### File: `src/components/layout/TopBar.tsx` (Major rewrite)
+Stores each prospecting run:
 
-**Left group:**
-1. Replace brand logo with a 3x3 grid icon (LayoutGrid from lucide) that toggles the sidebar visibility or navigates to `/home`
-2. Add **active module name** derived from current route (e.g., "CRM" on `/pipeline`, "Inventory" on `/office`)
-3. Add **breadcrumb** showing current page path using `useLocation()`
-
-**Right group (strict order):**
-1. Search input (inline style, not a button -- but keeps opening CommandBar on click since true inline search requires backend changes)
-2. Notifications bell with badge (keep as-is)
-3. User avatar with initials dropdown (rebuild UserMenu)
-
-**Removed from header:**
-- Brand logo and "REBAR OS" text (grid icon replaces it)
-- Warehouse selector (move into user dropdown as a sub-option)
-- Wrench/Admin Console button (move into user dropdown)
-- Theme toggle (move into user dropdown under "Preferences")
-
-**Visual changes:**
-- Header height: 46px (Odoo standard)
-- Background: Use `bg-primary` (purple-ish) with white text, matching Odoo's signature purple navbar. Falls back to theme-appropriate color.
-- Icon size: 20px (Odoo standard)
-- Font: 13px for module name (semibold), 12px for breadcrumb
-
-### File: `src/components/layout/UserMenu.tsx` (Expand)
-
-Rebuild to match Odoo's user dropdown:
-- Show user avatar with initials at top
-- User name/email display
-- "Preferences" item (links to `/settings`, includes theme toggle sub-menu)
-- "My Profile" item
-- Warehouse selector (moved from header, admin/office only)
-- Admin Console toggle (super admin only, moved from header)
-- Separator
-- "Log out" at bottom
-
-### File: `src/components/layout/TopBar.tsx` -- Breadcrumb Logic
-
-Add a route-to-module mapping:
-```text
-/home        -> Dashboard
-/pipeline    -> CRM > Pipeline
-/customers   -> CRM > Customers
-/shop-floor  -> Manufacturing > Shop Floor
-/deliveries  -> Logistics > Deliveries
-/office      -> Office Portal
-/admin/*     -> Administration
-/settings    -> Settings
-/inbox       -> Messaging > Inbox
-/tasks       -> Messaging > Tasks
-```
-
-The breadcrumb renders as clickable segments separated by `>` chevrons.
-
----
-
-## Mapping Table
-
-| Odoo Element | Current ERP Element | New ERP Element |
+| Column | Type | Notes |
 |---|---|---|
-| Grid app-switcher | Brand logo | LayoutGrid icon (click -> /home) |
-| Module name | "REBAR OS" text | Dynamic module name from route |
-| Breadcrumb | None | Route-based breadcrumb trail |
-| Search bar | Command button (modal) | Styled as inline input, still opens CommandBar |
-| Messaging icon | None | Not adding (no chat system exists) |
-| Bell + badge | Bell button | Keep (same position, Odoo-matching style) |
-| User avatar | User icon button | Avatar circle with initials |
-| Theme toggle | Standalone header button | Inside user dropdown "Preferences" |
-| Warehouse selector | Standalone header dropdown | Inside user dropdown |
-| Admin console | Wrench button | Inside user dropdown |
+| id | uuid | PK |
+| created_by | uuid | FK profiles |
+| company_id | uuid | FK companies |
+| region | text | Target region |
+| status | text | generating, ready, archived |
+| prospect_count | int | Number generated |
+| created_at | timestamptz | |
 
-## Interaction Parity
+## New DB Table: `prospects`
 
-| Behavior | Odoo | ERP (New) |
+Stores individual AI-generated prospects:
+
+| Column | Type | Notes |
 |---|---|---|
-| Click grid icon | Opens app switcher overlay | Navigates to /home (dashboard) |
-| Click module name | Goes to module default view | Navigates to module root route |
-| Click breadcrumb segment | Navigates to that level | Same |
-| Click search area | Focuses inline search | Opens CommandBar (closest equivalent) |
-| Click bell | Opens notification panel | Same (InboxPanel) |
-| Click avatar | Opens user dropdown | Same (expanded UserMenu) |
-| Keyboard Cmd+K | N/A in Odoo | Kept for power users (hidden) |
+| id | uuid | PK |
+| batch_id | uuid | FK prospect_batches |
+| company_name | text | Prospect company |
+| contact_name | text | Decision maker |
+| contact_title | text | Their role |
+| email | text | Best-guess email |
+| phone | text | nullable |
+| city | text | |
+| industry | text | vertical |
+| estimated_value | numeric | nullable |
+| fit_reason | text | Why they're a good lead |
+| intro_angle | text | Suggested pitch angle |
+| status | text | pending, approved, rejected, emailed |
+| lead_id | uuid | FK leads, set when promoted |
+| company_id | uuid | FK companies |
+| created_at | timestamptz | |
 
-## Risk List
+## New Page: `/prospecting`
 
-1. **Search behavior difference**: Odoo uses inline search with facets; ERP uses command palette. Keeping modal approach to avoid major refactor -- visually styled to look inline.
-2. **No app switcher overlay**: Odoo's grid opens a full module grid. ERP uses sidebar navigation instead. Grid icon goes to /home as a reasonable substitute.
-3. **Purple header in dark mode**: May clash with dark theme. Will use CSS variable approach so dark mode gets a slightly muted purple.
-4. **Warehouse selector hidden**: Power users who relied on quick warehouse switching will need to open user menu. Acceptable tradeoff for header cleanliness.
+A dedicated page (linked from Pipeline header) with:
 
-## Technical Notes
+1. **Header**: "AI Lead Prospecting" + region selector + "Dig 50 Leads" button
+2. **Results Table**: Shows prospects from the latest batch in a clean audit table
+3. **Each row shows**: Company, Contact, Title, Email, City, Industry, Fit Reason, Status
+4. **Row actions**:
+   - **Approve** (thumbs up) -- marks as approved, creates a real lead in `leads` table at `prospecting` stage
+   - **Reject** (thumbs down) -- marks as rejected, grays out
+   - **Send Intro** (mail icon) -- opens a pre-filled email dialog with AI-generated introduction email, sends via `gmail-send`
 
-- New hook or utility: `useActiveModule()` -- derives module name + breadcrumb from `useLocation().pathname`
-- No new dependencies required
-- All moved items (theme, warehouse, admin) remain accessible, just relocated to UserMenu dropdown
-- Header height change from `h-12` (48px) to `h-[46px]` for exact Odoo match
+## AI Introduction Email
+
+When user clicks "Send Intro" on an approved prospect:
+1. Call `pipeline-ai` with a new `draft_intro` action that generates a personalized cold introduction email
+2. Show the draft in a dialog for user review/edit
+3. On send, use existing `gmail-send` function
+4. Update prospect status to `emailed`
+5. Auto-create the lead in `leads` table if not already promoted
+
+## File Changes Summary
+
+| File | Action | Description |
+|---|---|---|
+| `src/pages/Pipeline.tsx` | Edit | Add `prospecting` stage, add "Prospect" button in header |
+| `src/pages/Prospecting.tsx` | Create | New page with audit table + dig button |
+| `src/components/prospecting/ProspectTable.tsx` | Create | Audit table component |
+| `src/components/prospecting/ProspectIntroDialog.tsx` | Create | Email preview/send dialog |
+| `supabase/functions/prospect-leads/index.ts` | Create | AI prospecting edge function |
+| `supabase/functions/pipeline-ai/index.ts` | Edit | Add `draft_intro` action |
+| `src/App.tsx` | Edit | Add `/prospecting` route |
+| `src/hooks/useActiveModule.ts` | Edit | Add prospecting to route map |
+| DB migration | Create | `prospect_batches` + `prospects` tables with RLS |
+| `supabase/config.toml` | Edit | Add prospect-leads function config |
+
+## Technical Details
+
+### Edge Function (`prospect-leads/index.ts`)
+- Uses Lovable AI gateway (`https://ai.gateway.lovable.dev/v1/chat/completions`)
+- Model: `google/gemini-3-flash-preview`
+- Uses tool calling to return structured array of 50 prospects
+- Inserts results into `prospects` table via service client
+- Returns batch ID to frontend
+
+### Lead Promotion Flow
+When a prospect is approved:
+1. Insert into `leads` table with `stage: "prospecting"`, `source: "ai_prospecting"`
+2. Store prospect metadata (fit_reason, intro_angle) in `leads.metadata`
+3. Link back via `prospects.lead_id`
+
+### RLS Policies
+- Both tables scoped to `company_id` matching user's company
+- Read/write for authenticated users within same company
+
+### Introduction Email Template
+The AI generates a personalized email based on:
+- Prospect's company, industry, city
+- The fit reason and intro angle
+- rebar.shop's value proposition
+- Professional, non-spammy tone
+
+User can edit before sending. Email is sent through existing Gmail integration.
 
