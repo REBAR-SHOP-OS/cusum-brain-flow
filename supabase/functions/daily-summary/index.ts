@@ -3,7 +3,18 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { decryptToken } from "../_shared/tokenEncryption.ts";
 import { requireAuth, corsHeaders } from "../_shared/auth.ts";
 
-// ... keep existing code (REPORT_MAILBOXES and REPORT_KEYWORDS)
+const REPORT_MAILBOXES = [
+  "sattar@rebar.shop",
+  "ben@rebar.shop",
+  "estimation@rebar.shop",
+];
+
+const REPORT_KEYWORDS = [
+  "report", "summary", "analytics", "dashboard", "digest",
+  "weekly", "daily", "monthly", "stats", "performance",
+  "ringcentral", "wincher", "semrush", "call summary",
+  "google analytics", "search console", "transcript",
+];
 
 interface MailboxEmail {
   mailbox: string;
