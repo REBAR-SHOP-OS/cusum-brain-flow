@@ -63,7 +63,7 @@ export default function AgentWorkspace() {
   const [aiModel, setAiModel] = useState<string>("gemini");
 
 
-  const { sessions, loading: sessionsLoading, fetchSessions, createSession, addMessage, getSessionMessages, deleteSession } = useChatSessions();
+  const { sessions, loading: sessionsLoading, fetchSessions, createSession, addMessage, getSessionMessages, deleteSession, updateSessionTitle } = useChatSessions();
   const hasConversation = messages.length > 0;
   const suggestions = agentSuggestions[agentId || "sales"] || agentSuggestions.sales;
 
@@ -325,8 +325,13 @@ export default function AgentWorkspace() {
   
 
   const handleDateChange = useCallback((date: Date | undefined) => {
-    if (date) setSelectedDate(date);
-  }, []);
+    if (date) {
+      setSelectedDate(date);
+      if (agentId === "social" && activeSessionId) {
+        updateSessionTitle(activeSessionId, format(date, "yyyy-MM-dd"));
+      }
+    }
+  }, [agentId, activeSessionId, updateSessionTitle]);
 
   return (
     <div className="flex h-full">
