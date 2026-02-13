@@ -1,14 +1,19 @@
 import { useRef, useEffect } from "react";
 import { Bot } from "lucide-react";
 import { ChatMessage, Message } from "./ChatMessage";
+import { PixelPostData } from "@/components/social/PixelPostCard";
 
 interface ChatThreadProps {
   messages: Message[];
   isLoading?: boolean;
   onRegenerateImage?: (imageUrl: string, alt: string) => void;
+  onViewPost?: (post: PixelPostData) => void;
+  agentImage?: string;
+  agentName?: string;
+  isPixelAgent?: boolean;
 }
 
-export function ChatThread({ messages, isLoading, onRegenerateImage }: ChatThreadProps) {
+export function ChatThread({ messages, isLoading, onRegenerateImage, onViewPost, agentImage, agentName, isPixelAgent }: ChatThreadProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -34,7 +39,15 @@ export function ChatThread({ messages, isLoading, onRegenerateImage }: ChatThrea
   return (
     <div className="flex-1 overflow-y-auto scrollbar-thin p-4 space-y-4">
       {messages.map((message) => (
-        <ChatMessage key={message.id} message={message} onRegenerateImage={onRegenerateImage} />
+        <ChatMessage
+          key={message.id}
+          message={message}
+          onRegenerateImage={onRegenerateImage}
+          onViewPost={onViewPost}
+          agentImage={agentImage}
+          agentName={agentName}
+          isPixelAgent={isPixelAgent}
+        />
       ))}
       {isLoading && (
         <div className="flex gap-3 items-start animate-fade-in">

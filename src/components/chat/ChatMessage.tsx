@@ -4,6 +4,8 @@ import { User, Bot, FileIcon, Download } from "lucide-react";
 import { UploadedFile } from "./ChatInput";
 import { MessageActions } from "./MessageActions";
 import { RichMarkdown } from "./RichMarkdown";
+import { PixelChatRenderer } from "@/components/social/PixelChatRenderer";
+import { PixelPostData } from "@/components/social/PixelPostCard";
 
 export interface Message {
   id: string;
@@ -19,9 +21,13 @@ interface ChatMessageProps {
   message: Message;
   onRegenerate?: () => void;
   onRegenerateImage?: (imageUrl: string, alt: string) => void;
+  onViewPost?: (post: PixelPostData) => void;
+  agentImage?: string;
+  agentName?: string;
+  isPixelAgent?: boolean;
 }
 
-export function ChatMessage({ message, onRegenerate, onRegenerateImage }: ChatMessageProps) {
+export function ChatMessage({ message, onRegenerate, onRegenerateImage, onViewPost, agentImage, agentName, isPixelAgent }: ChatMessageProps) {
   const isUser = message.role === "user";
 
   return (
@@ -82,6 +88,14 @@ export function ChatMessage({ message, onRegenerate, onRegenerateImage }: ChatMe
             <p className="text-sm leading-relaxed whitespace-pre-wrap">
               {message.content || (message.files?.length ? "📎 Files attached" : "")}
             </p>
+          ) : isPixelAgent && onViewPost && agentImage && agentName ? (
+            <PixelChatRenderer
+              content={message.content || ""}
+              agentImage={agentImage}
+              agentName={agentName}
+              onViewPost={onViewPost}
+              onRegenerateImage={onRegenerateImage}
+            />
           ) : (
             <RichMarkdown content={message.content || ""} onRegenerateImage={onRegenerateImage} />
           )}

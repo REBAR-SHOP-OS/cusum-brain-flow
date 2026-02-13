@@ -21,6 +21,8 @@ import { PixelBrainDialog } from "@/components/social/PixelBrainDialog";
 import { ImageGeneratorDialog } from "@/components/social/ImageGeneratorDialog";
 import { useSuperAdmin } from "@/hooks/useSuperAdmin";
 import { VizzyApprovalDialog, PendingAction } from "@/components/vizzy/VizzyApprovalDialog";
+import { PixelPostViewPanel } from "@/components/social/PixelPostViewPanel";
+import { PixelPostData } from "@/components/social/PixelPostCard";
 import { useWebPhone } from "@/hooks/useWebPhone";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -57,6 +59,7 @@ export default function AgentWorkspace() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [autoBriefingSent, setAutoBriefingSent] = useState(false);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  const [viewingPost, setViewingPost] = useState<PixelPostData | null>(null);
 
   const { sessions, loading: sessionsLoading, fetchSessions, createSession, addMessage, getSessionMessages, deleteSession } = useChatSessions();
   const hasConversation = messages.length > 0;
@@ -438,7 +441,15 @@ showFileUpload={true}
           </div>
         ) : (
           <>
-            <ChatThread messages={messages} isLoading={isLoading} onRegenerateImage={handleRegenerateImage} />
+            <ChatThread
+              messages={messages}
+              isLoading={isLoading}
+              onRegenerateImage={handleRegenerateImage}
+              onViewPost={agentId === "social" ? setViewingPost : undefined}
+              agentImage={config.image}
+              agentName={config.name}
+              isPixelAgent={agentId === "social"}
+            />
             <ChatInput
               onSend={handleSend}
               placeholder={config.placeholder}
@@ -453,6 +464,9 @@ showFileUpload={true}
 
       <PixelBrainDialog open={brainOpen} onOpenChange={setBrainOpen} />
       <ImageGeneratorDialog open={imageGenOpen} onOpenChange={setImageGenOpen} />
+      {agentId === "social" && (
+        <PixelPostViewPanel post={viewingPost} onClose={() => setViewingPost(null)} />
+      )}
       {agentId === "assistant" && isSuperAdmin && (
         <VizzyApprovalDialog pendingAction={pendingAction} />
       )}
