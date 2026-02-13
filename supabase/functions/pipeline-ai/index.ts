@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { fetchOdooSnapshot } from "./odooHelpers.ts";
 import { requireAuth, corsHeaders } from "../_shared/auth.ts";
 
 // ... keep existing code (systemPrompt, buildLeadContext, callAI, extractToolResult)
@@ -15,8 +14,8 @@ serve(async (req) => {
     const { lead, activities, action, userMessage, pipelineStats, auditType } = body;
 
     // ── pipeline_audit (no lead context needed) ──
-    // Fetch live Odoo data once per request (shared across actions)
-    const odooSnapshot = await fetchOdooSnapshot();
+    // Odoo has been decommissioned — pipeline data now comes from ERP database only
+    const odooSnapshot = "";
 
     if (action === "pipeline_audit") {
       const auditSystemPrompt = `${systemPrompt}
