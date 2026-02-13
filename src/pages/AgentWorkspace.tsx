@@ -410,7 +410,7 @@ export default function AgentWorkspace() {
                 <div className="mt-4 p-3 rounded-lg bg-muted/50 border border-border inline-block">
                   <p className="text-sm text-muted-foreground">📅 Selected date:</p>
                   <p className="text-lg font-bold text-primary">{format(selectedDate, "yyyy-MM-dd (EEEE, MMMM d)")}</p>
-                  <p className="text-xs text-muted-foreground mt-1">Send <strong>1</strong> to generate content for this date</p>
+                  
                 </div>
               )}
             </div>
