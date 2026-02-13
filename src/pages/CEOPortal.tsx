@@ -6,22 +6,19 @@ import { FixRequestQueue } from "@/components/ceo/FixRequestQueue";
 
 import { OdooMigrationStatusCard } from "@/components/admin/OdooMigrationStatusCard";
 import { SLATrackerCard } from "@/components/ceo/SLATrackerCard";
-import { useUserRole } from "@/hooks/useUserRole";
-import { Navigate } from "react-router-dom";
+import { useSuperAdmin } from "@/hooks/useSuperAdmin";
 import { Shield } from "lucide-react";
 
 export default function CEOPortal() {
-  const { isAdmin, isLoading } = useUserRole();
+  const { isSuperAdmin } = useSuperAdmin();
 
-  if (isLoading) return null;
-
-  if (!isAdmin) {
+  if (!isSuperAdmin) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
           <Shield className="w-16 h-16 text-muted-foreground/30 mx-auto mb-4" />
           <h2 className="text-xl font-semibold mb-2">Access Restricted</h2>
-          <p className="text-muted-foreground">Only administrators can access the CEO Portal.</p>
+          <p className="text-muted-foreground">Only the super admin can access the CEO Portal.</p>
         </div>
       </div>
     );
