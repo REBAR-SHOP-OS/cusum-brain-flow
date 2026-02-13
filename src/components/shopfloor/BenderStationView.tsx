@@ -14,6 +14,7 @@ import { useMachineCapabilities } from "@/hooks/useCutPlans";
 import { useForemanBrain } from "@/hooks/useForemanBrain";
 import { recordCompletion } from "@/lib/foremanLearningService";
 import { Check, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import type { ForemanContext } from "@/lib/foremanBrain";
 import type { LiveMachine } from "@/types/machine";
 import type { StationItem } from "@/hooks/useStationData";
@@ -158,6 +159,38 @@ export function BenderStationView({ machine, items, canWrite, initialIndex = 0, 
         onBack={onBack}
         showBedsSuffix={false}
       />
+
+      {/* Remaining progress strip */}
+      {(() => {
+        const remaining = items.filter((i) => (i.bend_completed_pieces ?? i.completed_pieces ?? 0) < i.total_pieces).length;
+        return (
+          <div className={cn(
+            "flex items-center justify-between px-6 py-2 border-b border-border",
+            remaining <= 3 ? "bg-green-500/10" : remaining <= 10 ? "bg-amber-500/10" : "bg-muted/30"
+          )}>
+            <div className="flex items-center gap-3">
+              <span className={cn(
+                "text-2xl font-black font-mono",
+                remaining <= 3 ? "text-green-500" : remaining <= 10 ? "text-amber-500" : "text-foreground"
+              )}>
+                {remaining}
+              </span>
+              <span className="text-xs text-muted-foreground uppercase tracking-wider">
+                marks remaining of {items.length}
+              </span>
+            </div>
+            <div className="w-32 h-2 bg-muted rounded-full overflow-hidden">
+              <div 
+                className={cn(
+                  "h-full rounded-full transition-all",
+                  remaining <= 3 ? "bg-green-500" : remaining <= 10 ? "bg-amber-500" : "bg-primary"
+                )}
+                style={{ width: `${((items.length - remaining) / items.length) * 100}%` }}
+              />
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Main content */}
       <div className="flex-1 overflow-auto p-4 sm:p-6">
