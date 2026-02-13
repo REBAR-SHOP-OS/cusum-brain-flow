@@ -1,85 +1,65 @@
 
 
-# Notification Center Audit and Improvements
+# Dashboard-First Login with Role-Based Agent Suggestions
 
-## Issues Found
+## What Changes
 
-1. **No backdrop/overlay** -- Clicking outside the panel doesn't close it; no visual dimming of background content
-2. **No priority indicator** -- The `priority` field (low/normal/high) is stored but never displayed visually
-3. **No "Mark all read" action** -- Only "Dismiss all" exists; users can't bulk-mark as read
-4. **Empty state is plain** -- Just text, no icon or visual warmth
-5. **No tab-based filtering** -- All three sections (Notifications, To-do, Ideas) are always stacked vertically, requiring scrolling
-6. **Dismiss button too close to expand chevron** -- Easy to accidentally dismiss when trying to expand
-7. **No animation on open/close** -- Panel appears/disappears abruptly
-8. **Section counts missing** -- No badge counts next to section headers
-9. **No keyboard shortcut to close** -- Escape key doesn't close the panel
+1. **All users land on `/home` (dashboard) after login** instead of `/inbox`
+2. **Replace "Quick Actions" on the dashboard with role-specific AI suggestions** from each user's assigned agent (e.g., Vizzy for admin, Penny for accounting, Forge for workshop)
+3. **Remove `AgentSuggestionsPanel` from other pages** (CEO Portal, Shop Floor, Live Monitor) since the dashboard becomes the single hub for suggestions
 
-## Plan
+## How It Works
 
-### 1. Add backdrop overlay with click-to-close
-- Render a semi-transparent backdrop behind the panel
-- Click on backdrop closes the panel
-- Add Escape key listener to close
-
-### 2. Add tab navigation (Notifications | To-do | Ideas)
-- Replace stacked sections with a simple tab bar at the top
-- Each tab shows its count badge
-- Cleaner UX, less scrolling
-
-### 3. Show priority indicators
-- High priority: red dot/left border accent
-- Normal: no indicator (default)
-- Low: subtle muted styling
-
-### 4. Add slide-in animation
-- Use CSS transition or framer-motion for smooth slide-in from left
-
-### 5. Improve empty states
-- Add contextual icons (Bell, CheckSquare, Lightbulb) per section
-- Slightly larger, friendlier empty state
-
-### 6. Add "Mark all read" button
-- Add a "Mark all read" action in the hook and expose it in the Notifications tab header
-
-### 7. Fix button layout
-- Move dismiss (X) button to only show on hover or in expanded view
-- Keep the expand chevron as the primary click affordance
-
----
+- On login (email/password, Google, Apple), users are redirected to `/home`
+- The dashboard detects the user's primary agent from their email mapping (via `userAgentMap`) and their roles (via `useUserRole`)
+- Instead of hardcoded "Quick Actions" cards, the dashboard renders the `AgentSuggestionsPanel` for the user's assigned agent -- showing real, dynamic AI suggestions with Act/Snooze/Dismiss workflow
+- Users without a specific agent mapping get a generic fallback (Vizzy suggestions)
+- The RoleGuard already handles restricting page access per role -- no changes needed there
 
 ## Technical Details
 
 ### Files Modified
 
-| File | Changes |
-|------|---------|
-| `src/components/panels/InboxPanel.tsx` | Rewrite panel layout: add backdrop overlay, tab navigation with counts, priority indicators (colored left border), slide-in animation via framer-motion, improved empty states with icons, hover-reveal dismiss button, Escape key handler |
-| `src/hooks/useNotifications.ts` | Add `markAllRead` function that bulk-updates all unread notifications to "read" status |
+| File | Change |
+|------|--------|
+| `src/pages/Login.tsx` | Change all `navigate("/inbox")` and `redirect_uri` references to `/home` (lines 36, 47, 57, 65) |
+| `src/pages/Home.tsx` | Remove "Quick Actions" section (lines 177-200). Replace with `AgentSuggestionsPanel` using the user's primary agent code. Remove `useCases`, `defaultUseCases`, `handleUseCaseClick`, and related imports |
+| `src/pages/CEOPortal.tsx` | Remove `AgentSuggestionsPanel` import and usage (lines 6, 35) |
+| `src/pages/ShopFloor.tsx` | Remove `AgentSuggestionsPanel` import and usage (lines 13, 104-107) |
+| `src/pages/LiveMonitor.tsx` | Remove `AgentSuggestionsPanel` import and usage (lines 27, 120-123) |
 
-### Hook Addition (`useNotifications.ts`)
-```typescript
-const markAllRead = useCallback(async () => {
-  const unreadIds = notifications
-    .filter((n) => n.status === "unread")
-    .map((n) => n.id);
-  if (unreadIds.length === 0) return;
-  await supabase
-    .from("notifications")
-    .update({ status: "read" })
-    .in("id", unreadIds);
-  setNotifications((prev) =>
-    prev.map((n) => (n.status === "unread" ? { ...n, status: "read" as const } : n))
-  );
-}, [notifications]);
+### Agent Resolution Logic (Home.tsx)
+
+The dashboard will determine which agent to show suggestions for:
+
+```text
+1. Check userAgentMap for email -> agentKey (e.g., "accounting" -> penny)
+2. Fallback: check useUserRole() roles:
+   - admin -> vizzy
+   - accounting -> penny
+   - workshop -> forge
+   - sales -> blitz (sales agent code)
+3. Default: vizzy
 ```
 
-### UI Structure (InboxPanel)
-- Backdrop: `fixed inset-0 bg-black/30 z-39` with onClick={onClose}
-- Panel: animated with `framer-motion` (slideX from -320 to 0)
-- Tab bar: three buttons (All | To-do | Ideas) with unread count badges
-- Priority: `border-l-2 border-destructive` for high priority items
-- Empty states: Icon + text per tab type
-- Dismiss button: `opacity-0 group-hover:opacity-100` pattern
+Map agent keys to suggestion codes:
 
-No database changes required.
+| Agent Key | Suggestion Code | Agent Name |
+|-----------|----------------|------------|
+| assistant | vizzy | Vizzy |
+| accounting | penny | Penny |
+| shopfloor | forge | Forge |
+| sales | blitz | Blitz |
+| estimating | gauge | Gauge |
+| support | haven | Haven |
+| email | relay | Relay |
+
+### Login Redirect Changes (Login.tsx)
+
+```
+Line 36: navigate("/inbox") -> navigate("/home")
+Line 47: redirect_uri: .../inbox -> redirect_uri: .../home  
+Line 57: navigate("/inbox") -> navigate("/home")
+Line 65: redirect_uri: .../inbox -> redirect_uri: .../home
+```
 
