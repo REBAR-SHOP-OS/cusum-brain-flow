@@ -1,6 +1,7 @@
 import { ArrowLeft, Shield, ShieldOff, Eye, ChevronDown, Building, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 
 interface StationHeaderProps {
@@ -88,8 +89,18 @@ export function StationHeader({
           <span className="hidden sm:inline">Pool</span>
         </Button>
         {remainingCount !== undefined && (
-          <Badge variant="outline" className="font-mono text-xs hidden sm:flex">
-            ⏱ {remainingCount} REMAINING
+          <Badge 
+            className={cn(
+              "font-mono text-sm font-bold px-3 py-1.5",
+              remainingCount <= 3 
+                ? "bg-green-500/20 text-green-400 border-green-500/40 animate-pulse" 
+                : remainingCount <= 10 
+                  ? "bg-amber-500/20 text-amber-400 border-amber-500/40"
+                  : "border-primary/40 text-primary"
+            )}
+            variant="outline"
+          >
+            {remainingCount} REMAINING
           </Badge>
         )}
 
