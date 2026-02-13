@@ -156,6 +156,10 @@ export function OdooDumpImportDialog({ open, onOpenChange }: Props) {
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = e.target.files;
       if (!files || files.length === 0) return;
+      if (mapping.length === 0) {
+        toast.error("Please upload the mapping CSV first");
+        return;
+      }
 
       const fileMap = new Map<string, File>();
       for (let i = 0; i < files.length; i++) {
@@ -192,6 +196,10 @@ export function OdooDumpImportDialog({ open, onOpenChange }: Props) {
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
+      if (mapping.length === 0) {
+        toast.error("Please upload the mapping CSV first");
+        return;
+      }
 
       toast.info("Scanning ZIP file…");
 
@@ -303,7 +311,7 @@ export function OdooDumpImportDialog({ open, onOpenChange }: Props) {
                   <p className="text-xs text-muted-foreground">
                     Select the Odoo dump <code className="bg-muted px-1 rounded">.zip</code> file directly — no extraction needed.
                   </p>
-                  <Input type="file" accept=".zip" disabled={uploading || mapping.length === 0} onChange={handleZipSelect} />
+                  <Input type="file" accept=".zip" disabled={uploading} onChange={handleZipSelect} />
                 </TabsContent>
 
                 <TabsContent value="folder" className="space-y-2 mt-2">
@@ -314,7 +322,7 @@ export function OdooDumpImportDialog({ open, onOpenChange }: Props) {
                     <Button
                       variant="outline"
                       size="sm"
-                      disabled={uploading || mapping.length === 0}
+                      disabled={uploading}
                       onClick={() => folderInputRef.current?.click()}
                       className="gap-1"
                     >
