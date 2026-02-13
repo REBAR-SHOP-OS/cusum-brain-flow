@@ -210,7 +210,7 @@ export function CutEngine({
               darkMode && "border-slate-600 bg-slate-700 hover:bg-slate-600 text-white"
             )}
             onClick={() => { const n = Math.max(1, bars - 1); setBars(n); setOperatorOverride(true); onBarsChange?.(n); }}
-            disabled={bars <= 1}
+            disabled={bars <= 1 || isRunning}
           >
             <ChevronDown className="w-4 h-4" />
           </Button>
@@ -228,7 +228,7 @@ export function CutEngine({
               darkMode && "border-slate-600 bg-slate-700 hover:bg-slate-600 text-white"
             )}
             onClick={() => { const n = Math.min(maxBars, bars + 1); setBars(n); setOperatorOverride(true); onBarsChange?.(n); }}
-            disabled={bars >= maxBars}
+            disabled={bars >= maxBars || isRunning}
           >
             <ChevronUp className="w-4 h-4" />
           </Button>
