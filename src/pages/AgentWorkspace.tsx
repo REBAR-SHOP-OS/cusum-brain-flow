@@ -57,6 +57,7 @@ export default function AgentWorkspace() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [autoBriefingSent, setAutoBriefingSent] = useState(false);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   
 
   const { sessions, loading: sessionsLoading, fetchSessions, createSession, addMessage, getSessionMessages, deleteSession } = useChatSessions();
@@ -247,7 +248,7 @@ export default function AgentWorkspace() {
     } finally {
       setIsLoading(false);
     }
-  }, [messages, config.agentType, config.name, activeSessionId, createSession, addMessage, mapping]);
+  }, [messages, config.agentType, config.name, activeSessionId, createSession, addMessage, mapping, selectedDate]);
 
   const handleRegenerateImage = useCallback((imageUrl: string, alt: string) => {
     const productName = alt || "this product";
@@ -257,7 +258,7 @@ export default function AgentWorkspace() {
   const [mobileHistoryOpen, setMobileHistoryOpen] = useState(false);
   const [brainOpen, setBrainOpen] = useState(false);
   const [imageGenOpen, setImageGenOpen] = useState(false);
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  
 
   const handleDateChange = useCallback((date: Date | undefined) => {
     if (date) setSelectedDate(date);
