@@ -2659,6 +2659,42 @@ async function fetchContext(supabase: ReturnType<typeof createClient>, agent: st
         hasImage: !!p.image_url,
         hashtags: p.hashtags,
       }));
+
+      // Fetch brand kit for Pixel's context
+      const { data: brandKit } = await supabase
+        .from("brand_kit")
+        .select("business_name, brand_voice, description, value_prop, colors")
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (brandKit) {
+        context.brandKit = brandKit;
+      }
+
+      // Fetch business intelligence
+      try {
+        const intelligenceRes = await fetch(
+          `${Deno.env.get("SUPABASE_URL")}/functions/v1/social-intelligence`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+              "Content-Type": "application/json",
+            },
+          }
+        );
+        if (intelligenceRes.ok) {
+          const intelligence = await intelligenceRes.json();
+          context.businessIntelligence = {
+            trendingSummary: intelligence.trendingSummary,
+            searchConsoleTopQueries: intelligence.searchConsole?.topQueries?.slice(0, 5),
+            topLeads: intelligence.topLeads?.slice(0, 3),
+            customerQuestions: intelligence.customerQuestions?.slice(0, 5),
+            socialPerformance: intelligence.socialPerformance,
+          };
+        }
+      } catch (e) {
+        console.error("Failed to fetch business intelligence for Pixel:", e);
+      }
     }
 
   } catch (error) {
