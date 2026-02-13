@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { Send, Paperclip, X, Loader2, Sparkles, Hash, Type, Headset } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -30,14 +30,14 @@ interface ChatInputProps {
   onLiveChatClick?: () => void;
 }
 
-export function ChatInput({
+export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(function ChatInput({
   onSend,
   placeholder = "Message...",
   disabled,
   showFileUpload = false,
   showSmartMode = false,
   onLiveChatClick,
-}: ChatInputProps) {
+}, ref) {
   const [value, setValue] = useState("");
   const [smartMode, setSmartMode] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
@@ -252,7 +252,7 @@ export function ChatInput({
 
   return (
     <TooltipProvider delayDuration={300}>
-      <div className="p-4 border-t border-border">
+      <div ref={ref} className="p-4 border-t border-border">
         {/* Uploaded files preview */}
         {uploadedFiles.length > 0 && (
           <div className="mb-3 flex flex-wrap gap-2">
@@ -440,4 +440,5 @@ export function ChatInput({
       </div>
     </TooltipProvider>
   );
-}
+});
+ChatInput.displayName = "ChatInput";
