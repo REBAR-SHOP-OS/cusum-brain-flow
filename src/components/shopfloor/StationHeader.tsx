@@ -1,4 +1,4 @@
-import { ArrowLeft, Shield, ShieldOff, Eye, ChevronDown, Building } from "lucide-react";
+import { ArrowLeft, Shield, ShieldOff, Eye, ChevronDown, Building, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useNavigate } from "react-router-dom";
@@ -75,6 +75,16 @@ export function StationHeader({
 
       {/* Right: Actions */}
       <div className="flex items-center gap-2">
+        {/* Pool back-link for bidirectional navigation */}
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-1.5 text-xs rounded-full border-border"
+          onClick={() => navigate("/shopfloor/pool")}
+        >
+          <Layers className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">Pool</span>
+        </Button>
         {remainingCount !== undefined && (
           <Badge variant="outline" className="font-mono text-xs hidden sm:flex">
             ⏱ {remainingCount} REMAINING
