@@ -8,7 +8,6 @@ import {
   FileBox, 
   DollarSign,
   ArrowLeft,
-  Languages
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -16,7 +15,6 @@ import brandLogo from "@/assets/brand-logo.png";
 
 export type OfficeSection = 
   | "ai-extract"
-  | "ai-transcribe"
   | "detailed-list"
   | "production-queue"
   | "inventory"
@@ -32,7 +30,6 @@ interface OfficeSidebarProps {
 
 const officeTools: { id: OfficeSection; label: string; icon: React.ElementType }[] = [
   { id: "ai-extract", label: "AI Extract", icon: FileText },
-  { id: "ai-transcribe", label: "AI Transcribe", icon: Languages },
   { id: "detailed-list", label: "Detailed List", icon: List },
   { id: "production-queue", label: "Production Queue", icon: ListOrdered },
   { id: "inventory", label: "Inventory", icon: Package },
