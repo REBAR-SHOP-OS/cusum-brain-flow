@@ -1,134 +1,162 @@
 
 
-# Audit and Improve: Optimization Engine + View
+# Audit and Optimize: Zebra Z411 on 4x6 Continuous Roll Tags
 
 ## Issues Found
 
-### Engine (`cutOptimizer.ts`)
+### 1. Wrong Orientation
+The card is **6in wide x 4in tall** (landscape). The Zebra Z411 with 4x6 continuous roll feeds labels **4in wide x 6in tall** (portrait). Every tag currently prints clipped or scaled incorrectly.
 
-1. **Oversized pieces silently dropped** -- any piece longer than stock length is skipped with no warning. The user has no idea data was lost.
-2. **No kerf (blade width) allowance** -- real saws consume 3-5mm per cut. Current math assumes zero-width cuts, making efficiency numbers optimistic and plans that fail on the floor.
-3. **No minimum remainder threshold** -- a 50mm offcut is scrap, not a usable remnant. The engine doesn't distinguish between usable remnants and waste.
-4. **Standard mode doesn't group same-length pieces** -- stopper moves are unnecessarily high because pieces aren't sorted by length before sequential packing.
-5. **Only First Fit Decreasing** -- no Best Fit Decreasing option (finds the tightest-fitting bar, not just the first one with space), which often produces less waste.
+### 2. Conflicting Print CSS
+Two separate `@media print` blocks in `index.css` (lines 202-241 and 244-259) fight each other. The second block sets `@page { size: A4; margin: 10mm }` which overrides the label-specific `@page { margin: 0 }`. Tags print with A4 margins on a 4-inch-wide roll.
 
-### View (`OptimizationView.tsx`)
+### 3. Print CSS Destroys Tag Height
+Line 216: `height: auto !important` removes the fixed tag height, so the tag collapses or overflows unpredictably instead of filling exactly one 4x6 label.
 
-6. **"Apply Plan" is fake** -- `handleApplyPlan` does a 1.2s `setTimeout` and shows a toast. Nothing is persisted to the database.
-7. **Inconsistent header** -- says "Supervisor Hub" instead of "Optimization" once a session is selected.
-8. **No skipped-pieces warning** -- if oversized pieces are filtered out, the user sees fewer items with no explanation.
-9. **No empty-state when all rows are filtered** -- if every row has null length/quantity, the loader spins forever because results stay null.
-10. **Breakdown defaults to standard when no plan is selected** -- confusing because the user hasn't chosen yet but sees standard data.
-11. **Missing `displayName` and `forwardRef`** -- both `OptimizationView` and `PlanCard` lack these per project component standards.
+### 4. No Thermal Print Optimization
+- Font sizes are too small for 203 DPI thermal heads (anything below 8pt may be illegible)
+- The fake barcode (CSS divs) won't scan -- it's decorative
+- `border-foreground/80` uses CSS variables that resolve to transparent in forced-color print contexts
+- Shape images use `crossOrigin="anonymous"` which can fail on thermal printer RIP software
+
+### 5. Layout Too Cramped for 4-inch Width
+The main body grid (`grid-cols-[110px_1fr_1.2fr]`) was designed for 6 inches of horizontal space. At 4 inches wide, the center and right columns are squeezed, making dimensions and shape images unreadable.
+
+### 6. Redundant Information
+The tag repeats the same data in multiple places (Qty, Size, Mark, KG, Dwg appear twice each). On a smaller 4x6 portrait format, this wastes space.
 
 ---
 
 ## Plan
 
-### 1. Engine Improvements (`cutOptimizer.ts`)
+### 1. Flip Card to 4x6 Portrait (`RebarTagCard.tsx`)
 
-- **Add kerf parameter** (default 5mm). Subtract kerf from available space after each cut placement.
-- **Track skipped (oversized) pieces** and return them in results so the UI can warn.
-- **Add remnant threshold** (default 300mm). Remainders below this are classified as "scrap" vs "usable remnant" in the result.
-- **Sort standard-mode pieces by length** to reduce stopper moves while keeping sequential packing.
-- **Add Best Fit Decreasing** as a third mode option -- finds the bar with the least remaining space that still fits the piece.
-- **Add `totalScrapKg` and `totalRemnantKg`** to the summary for clearer waste breakdown.
+Change the card dimensions from `6in x 4in` to `4in x 6in`. Restructure the internal layout to work vertically:
 
-### 2. View Fixes (`OptimizationView.tsx`)
+- **Top strip**: Timestamp + branding (keep as-is, it's compact)
+- **Header row**: Mark, Size, Grade, Qty, Length -- change from 5-column grid to a 3+2 or stacked layout that fits 4 inches
+- **Main body**: Switch from 3-column horizontal to a 2-row vertical layout:
+  - Top half: Summary fields + dimensions (side by side, 2 columns)
+  - Bottom half: Shape image (full width, more vertical space)
+- **Footer**: Ref/Dwg/Job info + branding
+- Remove duplicate fields (Qty, Size, KG, Dwg only appear once each)
 
-- **Fix header** to say "Optimization" consistently.
-- **Add skipped-pieces banner** -- if any pieces exceed stock length, show an amber warning with count and details.
-- **Fix empty-state** -- if cutItems is empty after filtering, show a message instead of infinite loader.
-- **Default breakdown to optimized** (the recommended plan) when no plan is selected yet.
-- **Add `displayName`** to both `OptimizationView` and `PlanCard`.
-- **Show kerf setting** next to stock length selector (small input, default 5mm).
-- **Show waste breakdown** -- split "Net Waste" in PlanCard into "Scrap" and "Usable Remnants".
+### 2. Fix Print CSS (`index.css`)
 
-### 3. Persist "Apply Plan" to Database
+- Merge the two conflicting `@media print` blocks into one
+- Set `@page { size: 4in 6in; margin: 0; }` specifically for tag printing
+- Set fixed `width: 4in !important; height: 6in !important` on `.rebar-tag`
+- Use solid `border-color: #000` instead of CSS variable references
+- Ensure `page-break-after: always` works for continuous roll (one tag per "page")
 
-- Create a `cut_plans` table (if not existing) or use existing structure to save the selected plan.
-- Replace the fake `setTimeout` with an actual insert of the optimization result linked to the session.
+### 3. Thermal-Friendly Styling
+
+- Minimum font size: 9px (anything smaller is illegible at 203 DPI)
+- Replace all `border-foreground/80` with solid `border-black` in the tag
+- Increase key data font sizes (Mark, Qty, Length) for glance-readability on the shop floor
+- Remove the fake CSS barcode from footer (it doesn't scan and wastes space)
+- Add `image-rendering: pixelated` for shape images to prevent thermal blurring
+
+### 4. Optimize Cards View Container (`TagsExportView.tsx`)
+
+- Change `max-w-[6.5in]` to `max-w-[4.5in]` in the cards grid container so the on-screen preview matches the actual print output
 
 ---
 
 ## Technical Details
 
-### File: `src/lib/cutOptimizer.ts`
+### File: `src/components/office/RebarTagCard.tsx`
 
-**New parameters and types:**
+Complete restructure to 4x6 portrait layout:
 
-```typescript
-export interface OptimizerConfig {
-  stockLengthMm: number;
-  kerfMm: number;           // default 5
-  minRemnantMm: number;     // default 300
-  mode: "standard" | "optimized" | "best-fit";
+```
++---------------------------+  4in
+|  DATE/TIME    REBAR SHOP  |
++---------------------------+
+| MARK  | SIZE  | GRADE     |
+| (2xl) | (2xl) | (2xl)     |
++-------+-------+-----------+
+| QTY   | LENGTH| WEIGHT    |
+| (2xl) | (2xl) | (lg)      |
++-------+-------+-----------+
+|  Shape   |  A: ___  G: ___|
+|  Circle  |  B: ___  H: ___|
+|  + Type  |  C: ___  J: ___|
+|          |  D: ___  K: ___|
+|          |  E: ___  O: ___|
+|          |  F: ___  R: ___|
++----------+----------------+
+|     SHAPE IMAGE            |
+|     (full width)           |
++----------------------------+
+| Ref:____  Dwg:____         |
+| Item:___  Job:____         |
++----------------------------+
+| R.S         REBAR.SHOP     |
++----------------------------+  6in
+```
+
+Key sizing:
+- Mark/Size/Grade: `text-2xl font-black` (readable from arm's length)
+- Qty/Length: `text-2xl font-black`
+- Dimensions: `text-xs font-bold` (compact but legible at 203 DPI)
+- All borders: solid `border-black` instead of CSS variables
+- Shape image area: taller, full width for better visibility
+
+### File: `src/index.css` (lines 198-259)
+
+Merge both print blocks into one clean block:
+
+```css
+@media print {
+  @page {
+    size: 4in 6in;
+    margin: 0;
+  }
+
+  body * { visibility: hidden !important; }
+
+  .rebar-tag,
+  .rebar-tag * {
+    visibility: visible !important;
+  }
+
+  .rebar-tag {
+    position: relative !important;
+    width: 4in !important;
+    height: 6in !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 1px solid #000 !important;
+    border-radius: 0 !important;
+    background: #fff !important;
+    color: #000 !important;
+    box-shadow: none !important;
+    overflow: hidden !important;
+    page-break-after: always;
+    page-break-inside: avoid;
+  }
+
+  .rebar-tag * {
+    color: #000 !important;
+    border-color: #000 !important;
+    background: transparent !important;
+  }
+
+  .rebar-tag .bg-black { background: #000 !important; }
+  .rebar-tag .bg-white { background: #fff !important; }
+  .rebar-tag img { image-rendering: pixelated; }
 }
-
-// Add to OptimizationResult
-skippedPieces: { mark: string; lengthMm: number }[];
-usableRemnantCount: number;
-scrapCount: number;
 ```
 
-**Kerf logic** -- after placing a piece, subtract `piece.lengthMm + kerfMm` from remainder (except for the last piece on a bar where no kerf is needed after it).
+### File: `src/components/office/TagsExportView.tsx`
 
-**Best Fit Decreasing** -- new function that sorts descending like FFD but picks the bar with the smallest `remainderMm` that still fits the piece.
-
-**Standard mode** -- sort pieces by length before sequential packing to group same-length cuts and reduce stopper moves.
-
-### File: `src/components/office/OptimizationView.tsx`
-
-**Skipped pieces warning:**
+Line 281: Change container max-width:
 ```tsx
-{skippedCount > 0 && (
-  <div className="flex items-center gap-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
-    <AlertTriangle className="w-5 h-5 text-amber-500" />
-    <p className="text-sm text-amber-200">
-      {skippedCount} pieces exceed {stockLength/1000}M stock -- skipped from optimization
-    </p>
-  </div>
-)}
-```
-
-**Kerf input** next to stock length buttons:
-```tsx
-<div className="flex items-center gap-1">
-  <span className="text-xs text-muted-foreground">Kerf:</span>
-  <input type="number" value={kerf} onChange={...} className="w-12 h-8 text-xs" />
-  <span className="text-xs text-muted-foreground">mm</span>
-</div>
-```
-
-**Empty state fix:**
-```tsx
-if (!rowsLoading && cutItems.length === 0) {
-  return <EmptyState message="No valid cut items found in this session." />;
-}
-```
-
-### Database: `cut_plans` table
-
-```sql
-CREATE TABLE IF NOT EXISTS cut_plans (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  session_id uuid REFERENCES extract_sessions(id),
-  company_id uuid REFERENCES companies(id),
-  mode text NOT NULL,
-  stock_length_mm integer NOT NULL,
-  kerf_mm integer DEFAULT 5,
-  plan_data jsonb NOT NULL,
-  total_stock_bars integer,
-  total_waste_kg numeric,
-  efficiency numeric,
-  created_by uuid,
-  created_at timestamptz DEFAULT now()
-);
-ALTER TABLE cut_plans ENABLE ROW LEVEL SECURITY;
+<div className="p-6 grid grid-cols-1 gap-6 max-w-[4.5in] mx-auto">
 ```
 
 ### Files Modified
-- `src/lib/cutOptimizer.ts` -- kerf, remnant threshold, best-fit mode, skipped tracking
-- `src/components/office/OptimizationView.tsx` -- UI fixes, kerf input, warnings, persist apply, displayName
-- Database migration -- `cut_plans` table for persisting applied plans
-
+- `src/components/office/RebarTagCard.tsx` -- portrait 4x6 layout, larger fonts, thermal-optimized
+- `src/index.css` -- merged print blocks, correct page size, solid borders
+- `src/components/office/TagsExportView.tsx` -- preview container width fix
