@@ -3934,8 +3934,8 @@ You MUST respond with ONLY valid JSON (no markdown, no code blocks) in this exac
             }];
             
             // Set nextSlot for sequential flow
-            (context as any).__pixelCurrentSlot = currentSlot;
-            (context as any).__pixelNextSlot = currentSlot < 5 ? currentSlot + 1 : null;
+            (mergedContext as any).__pixelCurrentSlot = currentSlot;
+            (mergedContext as any).__pixelNextSlot = currentSlot < 5 ? currentSlot + 1 : null;
             
           } catch (parseErr) {
             console.error("Failed to parse prompt generation response:", parseErr);
@@ -4001,8 +4001,8 @@ RULES:
 
     // If Pixel generated images, build the reply directly without another AI call
     if (agent === "social" && pixelImageResults.length > 0) {
-      const currentSlot = (context as any).__pixelCurrentSlot || 1;
-      const nextSlot = (context as any).__pixelNextSlot || null;
+      const currentSlot = (mergedContext as any).__pixelCurrentSlot || 1;
+      const nextSlot = (mergedContext as any).__pixelNextSlot || null;
       
       const post = pixelImageResults[0];
       let pixelReply = `## 📅 Post ${currentSlot}/5 — ${message}\n\n`;
