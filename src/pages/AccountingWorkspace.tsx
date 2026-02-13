@@ -1,13 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { cn } from "@/lib/utils";
-// Tabs removed — using dropdown nav menus instead
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import {
-  LayoutDashboard, FileText, Receipt, CreditCard, Users,
-  Landmark, ShieldCheck, Loader2, Plug, RefreshCw, Banknote,
-  MessageCircle, X, ShieldAlert,
+  Loader2, Plug, RefreshCw,
+  X, ShieldAlert, AlertTriangle,
 } from "lucide-react";
 import { AccountingNavMenus } from "@/components/accounting/AccountingNavMenus";
 import { useQuickBooksData } from "@/hooks/useQuickBooksData";
@@ -42,12 +39,19 @@ export default function AccountingWorkspace() {
 
   const hasAccess = isAdmin || hasRole("accounting");
 
+  // Stable refs for init-once logic
+  const loadAllRef = useRef(qb.loadAll);
+  loadAllRef.current = qb.loadAll;
+  const webPhoneActionsRef = useRef(webPhoneActions);
+  webPhoneActionsRef.current = webPhoneActions;
+  const webPhoneStatusRef = useRef(webPhoneState.status);
+  webPhoneStatusRef.current = webPhoneState.status;
+
   useEffect(() => {
     if (hasAccess) {
-      qb.loadAll();
-      // Initialize WebPhone in the background for collections calling
-      if (webPhoneState.status === "idle") {
-        webPhoneActions.initialize();
+      loadAllRef.current();
+      if (webPhoneStatusRef.current === "idle") {
+        webPhoneActionsRef.current.initialize();
       }
     }
   }, [hasAccess]);
@@ -75,6 +79,28 @@ export default function AccountingWorkspace() {
             <p className="text-lg text-muted-foreground">
               The Accounting workspace is restricted. Contact an admin if you need access.
             </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Error state with retry
+  if (qb.error && !qb.loading && qb.connected !== false) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Card className="max-w-lg w-full">
+          <CardContent className="p-10 text-center space-y-6">
+            <div className="p-6 rounded-2xl bg-destructive/10 w-fit mx-auto">
+              <AlertTriangle className="w-16 h-16 text-destructive" />
+            </div>
+            <h1 className="text-2xl font-bold">Failed to Load Data</h1>
+            <p className="text-lg text-muted-foreground">
+              QuickBooks data couldn't be loaded. Please try again.
+            </p>
+            <Button size="lg" className="h-14 text-lg px-8" onClick={() => qb.loadAll()}>
+              <RefreshCw className="w-5 h-5 mr-2" /> Retry
+            </Button>
           </CardContent>
         </Card>
       </div>
@@ -230,3 +256,5 @@ export default function AccountingWorkspace() {
     </div>
   );
 }
+
+AccountingWorkspace.displayName = "AccountingWorkspace";

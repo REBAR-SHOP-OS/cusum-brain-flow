@@ -5,8 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ConfirmActionDialog } from "./ConfirmActionDialog";
-import { FileText, Send, Ban, Plus, Search } from "lucide-react";
-import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
+import { FileText, Send, Ban, Search } from "lucide-react";
+import type { useQuickBooksData, QBInvoice } from "@/hooks/useQuickBooksData";
 
 interface Props {
   data: ReturnType<typeof useQuickBooksData>;
@@ -51,14 +51,13 @@ export function AccountingInvoices({ data }: Props) {
   };
 
   const getStatus = (inv: { Balance: number; DueDate: string }) => {
-    if (inv.Balance === 0) return { label: "Paid", color: "bg-emerald-500/10 text-emerald-500" };
+    if (inv.Balance === 0) return { label: "Paid", color: "bg-success/10 text-success" };
     if (new Date(inv.DueDate) < new Date()) return { label: "Overdue", color: "bg-destructive/10 text-destructive" };
-    return { label: "Open", color: "bg-blue-500/10 text-blue-500" };
+    return { label: "Open", color: "bg-primary/10 text-primary" };
   };
 
   return (
     <div className="space-y-4">
-      {/* Search + actions */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
@@ -71,18 +70,17 @@ export function AccountingInvoices({ data }: Props) {
         </div>
       </div>
 
-      {/* Summary cards */}
       <div className="grid grid-cols-3 gap-3">
-        <Card className="bg-emerald-500/5">
+        <Card className="bg-success/5">
           <CardContent className="p-4 text-center">
             <p className="text-sm text-muted-foreground">Paid</p>
-            <p className="text-2xl font-bold text-emerald-500">{invoices.filter(i => i.Balance === 0).length}</p>
+            <p className="text-2xl font-bold text-success">{invoices.filter(i => i.Balance === 0).length}</p>
           </CardContent>
         </Card>
-        <Card className="bg-blue-500/5">
+        <Card className="bg-primary/5">
           <CardContent className="p-4 text-center">
             <p className="text-sm text-muted-foreground">Open</p>
-            <p className="text-2xl font-bold text-blue-500">{invoices.filter(i => i.Balance > 0 && new Date(i.DueDate) >= new Date()).length}</p>
+            <p className="text-2xl font-bold text-primary">{invoices.filter(i => i.Balance > 0 && new Date(i.DueDate) >= new Date()).length}</p>
           </CardContent>
         </Card>
         <Card className="bg-destructive/5">
@@ -93,7 +91,6 @@ export function AccountingInvoices({ data }: Props) {
         </Card>
       </div>
 
-      {/* Invoice table */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -150,7 +147,7 @@ export function AccountingInvoices({ data }: Props) {
                                 size="sm"
                                 variant="ghost"
                                 className="h-9 gap-1 text-destructive hover:text-destructive"
-                                onClick={() => setVoidTarget({ id: inv.Id, doc: inv.DocNumber, syncToken: (inv as any).SyncToken || "0" })}
+                                onClick={() => setVoidTarget({ id: inv.Id, doc: inv.DocNumber, syncToken: inv.SyncToken || "0" })}
                               >
                                 <Ban className="w-4 h-4" /> Void
                               </Button>
@@ -167,7 +164,6 @@ export function AccountingInvoices({ data }: Props) {
         </CardContent>
       </Card>
 
-      {/* Send confirmation */}
       <ConfirmActionDialog
         open={!!sendTarget}
         onOpenChange={() => setSendTarget(null)}
@@ -179,7 +175,6 @@ export function AccountingInvoices({ data }: Props) {
         loading={actionLoading}
       />
 
-      {/* Void confirmation */}
       <ConfirmActionDialog
         open={!!voidTarget}
         onOpenChange={() => setVoidTarget(null)}
@@ -193,3 +188,5 @@ export function AccountingInvoices({ data }: Props) {
     </div>
   );
 }
+
+AccountingInvoices.displayName = "AccountingInvoices";

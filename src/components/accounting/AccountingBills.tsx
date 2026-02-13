@@ -85,9 +85,9 @@ export function AccountingBills({ data }: Props) {
                           <TableCell className="text-right font-semibold">{fmt(b.Balance)}</TableCell>
                           <TableCell>
                             <Badge className={`border-0 text-sm ${
-                              isPaid ? "bg-emerald-500/10 text-emerald-500" :
+                              isPaid ? "bg-success/10 text-success" :
                               isOverdue ? "bg-destructive/10 text-destructive" :
-                              "bg-blue-500/10 text-blue-500"
+                              "bg-primary/10 text-primary"
                             }`}>
                               {isPaid ? "Paid" : isOverdue ? "Overdue" : "Open"}
                             </Badge>
@@ -128,7 +128,7 @@ export function AccountingBills({ data }: Props) {
                         <TableCell>{v.PrimaryEmailAddr?.Address || "—"}</TableCell>
                         <TableCell className="text-right font-semibold">{fmt(v.Balance || 0)}</TableCell>
                         <TableCell>
-                          <Badge className={`border-0 text-sm ${v.Active ? "bg-emerald-500/10 text-emerald-500" : "bg-muted text-muted-foreground"}`}>
+                          <Badge className={`border-0 text-sm ${v.Active ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"}`}>
                             {v.Active ? "Active" : "Inactive"}
                           </Badge>
                         </TableCell>
@@ -144,3 +144,5 @@ export function AccountingBills({ data }: Props) {
     </div>
   );
 }
+
+AccountingBills.displayName = "AccountingBills";

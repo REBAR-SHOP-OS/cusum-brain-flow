@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Store, Search } from "lucide-react";
-import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
+import type { useQuickBooksData, QBVendor, QBBill } from "@/hooks/useQuickBooksData";
 
 interface Props {
   data: ReturnType<typeof useQuickBooksData>;
@@ -13,24 +13,30 @@ interface Props {
 const fmt = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
 
+interface EnrichedVendor extends QBVendor {
+  openBalance: number;
+  overdue: number;
+  billCount: number;
+}
+
 export function AccountingVendors({ data }: Props) {
   const { vendors, bills } = data;
   const [search, setSearch] = useState("");
 
   const filtered = vendors.filter(
-    (v: any) =>
+    (v) =>
       (v.DisplayName || "").toLowerCase().includes(search.toLowerCase()) ||
       (v.CompanyName || "").toLowerCase().includes(search.toLowerCase())
   );
 
-  const enriched = filtered.map((v: any) => {
-    const vendorBills = bills.filter((b: any) => b.VendorRef?.value === v.Id);
-    const openBalance = vendorBills.reduce((sum: number, b: any) => sum + (b.Balance || 0), 0);
-    const overdue = vendorBills.filter((b: any) => b.Balance > 0 && new Date(b.DueDate) < new Date()).length;
+  const enriched: EnrichedVendor[] = filtered.map((v) => {
+    const vendorBills = bills.filter((b) => b.VendorRef?.value === v.Id);
+    const openBalance = vendorBills.reduce((sum, b) => sum + (b.Balance || 0), 0);
+    const overdue = vendorBills.filter((b) => b.Balance > 0 && new Date(b.DueDate) < new Date()).length;
     return { ...v, openBalance, overdue, billCount: vendorBills.length };
   });
 
-  enriched.sort((a: any, b: any) => (a.DisplayName || "").localeCompare(b.DisplayName || "", undefined, { sensitivity: 'base' }));
+  enriched.sort((a, b) => (a.DisplayName || "").localeCompare(b.DisplayName || "", undefined, { sensitivity: 'base' }));
 
   return (
     <div className="space-y-4">
@@ -69,7 +75,7 @@ export function AccountingVendors({ data }: Props) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {enriched.map((v: any) => (
+                {enriched.map((v) => (
                   <TableRow key={v.Id} className="text-base">
                     <TableCell className="font-semibold">{v.DisplayName}</TableCell>
                     <TableCell>{v.CompanyName || "—"}</TableCell>
@@ -85,7 +91,7 @@ export function AccountingVendors({ data }: Props) {
                       )}
                     </TableCell>
                     <TableCell>
-                      <Badge className={`border-0 text-sm ${v.Active ? "bg-emerald-500/10 text-emerald-500" : "bg-muted text-muted-foreground"}`}>
+                      <Badge className={`border-0 text-sm ${v.Active ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"}`}>
                         {v.Active ? "Active" : "Inactive"}
                       </Badge>
                     </TableCell>
@@ -99,3 +105,5 @@ export function AccountingVendors({ data }: Props) {
     </div>
   );
 }
+
+AccountingVendors.displayName = "AccountingVendors";

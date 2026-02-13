@@ -17,7 +17,6 @@ interface Props {
 const fmt = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(n);
 
-/** Simple mini bar chart for due-date distribution */
 function MiniBarChart({ data }: { data: { label: string; value: number; highlight?: boolean }[] }) {
   const max = Math.max(...data.map((d) => d.value), 1);
   return (
@@ -36,6 +35,7 @@ function MiniBarChart({ data }: { data: { label: string; value: number; highligh
     </div>
   );
 }
+MiniBarChart.displayName = "MiniBarChart";
 
 function InvoicesCard({ data, onNavigate }: Props) {
   const { invoices, overdueInvoices, totalReceivable } = data;
@@ -105,6 +105,7 @@ function InvoicesCard({ data, onNavigate }: Props) {
     </Card>
   );
 }
+InvoicesCard.displayName = "InvoicesCard";
 
 function BillsCard({ data, onNavigate }: Props) {
   const { bills, overdueBills, totalPayable } = data;
@@ -166,6 +167,7 @@ function BillsCard({ data, onNavigate }: Props) {
     </Card>
   );
 }
+BillsCard.displayName = "BillsCard";
 
 function BankAccountCard({
   name,
@@ -181,7 +183,7 @@ function BankAccountCard({
   onNavigate: () => void;
 }) {
   const Icon = icon === "savings" ? PiggyBank : Wallet;
-  const accentColor = icon === "savings" ? "text-emerald-500" : "text-primary";
+  const accentColor = icon === "savings" ? "text-success" : "text-primary";
 
   return (
     <Card className="cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all" onClick={onNavigate}>
@@ -217,6 +219,7 @@ function BankAccountCard({
     </Card>
   );
 }
+BankAccountCard.displayName = "BankAccountCard";
 
 function CashCard({ data, onNavigate }: Props) {
   const totalPayments = data.payments.reduce((s, p) => s + p.TotalAmt, 0);
@@ -246,9 +249,9 @@ function CashCard({ data, onNavigate }: Props) {
     </Card>
   );
 }
+CashCard.displayName = "CashCard";
 
 export function AccountingDashboard({ data, onNavigate }: Props) {
-  // Separate checking and savings accounts (filter by Bank type for safety)
   const bankAccounts = data.accounts.filter((a) => a.AccountType === "Bank" && a.Active);
   const checkingAccounts = bankAccounts.filter((a) => a.AccountSubType !== "Savings");
   const savingsAccounts = bankAccounts.filter((a) => a.AccountSubType === "Savings");
@@ -261,7 +264,6 @@ export function AccountingDashboard({ data, onNavigate }: Props) {
       <InvoicesCard data={data} onNavigate={onNavigate} />
       <BillsCard data={data} onNavigate={onNavigate} />
 
-      {/* Checking Accounts */}
       <BankAccountCard
         name={checkingAccounts.length === 1 ? checkingAccounts[0].Name : "Checking"}
         balance={checkingAccounts.length === 1 ? checkingAccounts[0].CurrentBalance : totalChecking}
@@ -270,7 +272,6 @@ export function AccountingDashboard({ data, onNavigate }: Props) {
         onNavigate={() => onNavigate("accounts")}
       />
 
-      {/* Savings Accounts */}
       <BankAccountCard
         name={savingsAccounts.length === 1 ? savingsAccounts[0].Name : "Savings"}
         balance={savingsAccounts.length === 1 ? savingsAccounts[0].CurrentBalance : totalSavings}
@@ -283,3 +284,5 @@ export function AccountingDashboard({ data, onNavigate }: Props) {
     </div>
   );
 }
+
+AccountingDashboard.displayName = "AccountingDashboard";

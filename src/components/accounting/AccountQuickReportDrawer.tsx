@@ -21,11 +21,16 @@ interface Transaction {
   balance: number;
 }
 
+interface QuickReportResult {
+  transactions?: Transaction[];
+  beginningBalance?: number;
+}
+
 interface Props {
   open: boolean;
   onClose: () => void;
   account: { Id: string; Name: string; CurrentBalance: number } | null;
-  qbAction: (action: string, body?: Record<string, unknown>) => Promise<any>;
+  qbAction: (action: string, body?: Record<string, unknown>) => Promise<QuickReportResult>;
 }
 
 const fmt = (n: number) =>
@@ -81,7 +86,6 @@ export function AccountQuickReportDrawer({ open, onClose, account, qbAction }: P
   const [endDate, setEndDate] = useState<Date>(new Date());
   const [typeFilter, setTypeFilter] = useState("All");
 
-  // Sync dates when period changes (unless custom)
   useEffect(() => {
     if (period !== "custom") {
       const { start, end } = computeDatesForPeriod(period);
@@ -121,8 +125,6 @@ export function AccountQuickReportDrawer({ open, onClose, account, qbAction }: P
     return transactions.filter((t) => t.type === typeFilter);
   }, [transactions, typeFilter]);
 
-  const isCustom = period === "custom";
-
   return (
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
       <SheetContent side="right" className="sm:max-w-4xl w-full overflow-y-auto p-0">
@@ -141,9 +143,7 @@ export function AccountQuickReportDrawer({ open, onClose, account, qbAction }: P
             </div>
           </div>
 
-          {/* Toolbar row */}
           <div className="flex items-center gap-3 mt-3 flex-wrap">
-            {/* Report Period */}
             <div className="flex items-center gap-1.5">
               <span className="text-sm text-muted-foreground whitespace-nowrap">Report period</span>
               <Select value={period} onValueChange={setPeriod}>
@@ -158,7 +158,6 @@ export function AccountQuickReportDrawer({ open, onClose, account, qbAction }: P
               </Select>
             </div>
 
-            {/* Date pickers — always visible for custom, otherwise show read-only dates */}
             <div className="flex items-center gap-1.5">
               <span className="text-sm text-muted-foreground">From</span>
               <DatePick value={startDate} onChange={(d) => { setPeriod("custom"); setStartDate(d); }} />
@@ -168,7 +167,6 @@ export function AccountQuickReportDrawer({ open, onClose, account, qbAction }: P
 
             <div className="h-6 w-px bg-border mx-1 hidden sm:block" />
 
-            {/* Transaction Type Filter */}
             <div className="flex items-center gap-1.5">
               <span className="text-sm text-muted-foreground whitespace-nowrap">Type</span>
               <Select value={typeFilter} onValueChange={setTypeFilter}>
@@ -243,6 +241,8 @@ export function AccountQuickReportDrawer({ open, onClose, account, qbAction }: P
   );
 }
 
+AccountQuickReportDrawer.displayName = "AccountQuickReportDrawer";
+
 function DatePick({ value, onChange }: { value: Date; onChange: (d: Date) => void }) {
   return (
     <Popover>
@@ -264,3 +264,5 @@ function DatePick({ value, onChange }: { value: Date; onChange: (d: Date) => voi
     </Popover>
   );
 }
+
+DatePick.displayName = "DatePick";

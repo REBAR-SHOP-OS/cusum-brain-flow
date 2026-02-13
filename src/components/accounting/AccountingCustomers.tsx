@@ -23,7 +23,6 @@ export function AccountingCustomers({ data }: Props) {
       (c.CompanyName || "").toLowerCase().includes(search.toLowerCase())
   );
 
-  // Enrich with invoice stats
   const enriched = filtered.map((c) => {
     const custInvoices = invoices.filter(i => i.CustomerRef?.value === c.Id);
     const openBalance = custInvoices.reduce((sum, i) => sum + (i.Balance || 0), 0);
@@ -86,7 +85,7 @@ export function AccountingCustomers({ data }: Props) {
                       )}
                     </TableCell>
                     <TableCell>
-                      <Badge className={`border-0 text-sm ${c.Active ? "bg-emerald-500/10 text-emerald-500" : "bg-muted text-muted-foreground"}`}>
+                      <Badge className={`border-0 text-sm ${c.Active ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"}`}>
                         {c.Active ? "Active" : "Inactive"}
                       </Badge>
                     </TableCell>
@@ -100,3 +99,5 @@ export function AccountingCustomers({ data }: Props) {
     </div>
   );
 }
+
+AccountingCustomers.displayName = "AccountingCustomers";
