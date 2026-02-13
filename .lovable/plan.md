@@ -1,97 +1,149 @@
 
 
-# Responsive Audit — All Devices (Mobile / Tablet / Desktop)
+# Time Clock Enhancement — Leave Requests, Sick Days, Vacation Calculator
 
-## Summary
+## Current State
 
-After inspecting the layout components, key pages, and data-heavy views across 1920px desktop, 834px tablet, and 390px mobile viewports, I found **8 issues** ranging from critical overflow bugs to cosmetic duplications.
+The Time Clock system has:
+- Clock in/out with face recognition and kiosk mode
+- Real-time team status board
+- Payroll audit with Ontario ESA compliance
+- `time_clock_entries` table (clock_in, clock_out, break_minutes, notes)
+- `employee_salaries` table (salary_amount, salary_type)
 
----
-
-## Issues Found
-
-### CRITICAL — Content Overflow / Unusable on Mobile + Tablet
-
-**Issue 1: PayrollOverviewTab — fixed 9-column grid overflows**
-- File: `src/components/office/payroll/PayrollOverviewTab.tsx`
-- The employee table uses `grid-cols-[24px_1fr_90px_70px_70px_70px_70px_60px_90px]` (minimum ~614px) with no horizontal scroll wrapper.
-- On mobile (390px) and tablet (834px with sidebar), rows overflow and clip off-screen.
-- **Fix**: Wrap the table in a `ScrollArea` with horizontal scrolling, or stack key columns on mobile and hide secondary columns behind a responsive breakpoint.
-
-**Issue 2: DetailedListView — 1200px fixed min-width, no horizontal scrollbar on mobile**
-- File: `src/components/office/DetailedListView.tsx`
-- Uses `min-w-[1200px]` inside a `ScrollArea`. The `ScrollArea` component by default only shows vertical scrolling.
-- **Fix**: Ensure the `ScrollArea` has `orientation="both"` or wrap with `overflow-x-auto` div so horizontal scroll works on touch devices.
-
-**Issue 3: AIExtractView — 1400px fixed min-width table**
-- File: `src/components/office/AIExtractView.tsx`
-- Same pattern: `min-w-[1400px]` inside a `ScrollArea` — needs horizontal scrolling enabled for mobile/tablet.
-
-### MODERATE — Layout/UX Issues
-
-**Issue 4: Sidebar group labels clipped at collapsed width**
-- File: `src/components/layout/AppSidebar.tsx`
-- Group labels ("PRODUCTION", "LOGISTICS", "QA", "SYSTEM") render at collapsed `w-14` with `whitespace-nowrap` and `overflow-hidden`. They are partially visible (showing "PRODUCT", "LOGISTIC") which looks broken.
-- **Fix**: Hide labels entirely when sidebar is collapsed using `opacity-0 group-hover/sidebar:opacity-100` (same pattern used for nav item labels), or use `invisible` at collapsed state.
-
-**Issue 5: Duplicate "Admin" entry in MobileNavV2**
-- File: `src/components/layout/MobileNavV2.tsx` lines 30-31
-- The "Admin" menu item is listed twice in the `moreItems` array.
-- **Fix**: Remove the duplicate line.
-
-**Issue 6: Home page `pb-20` + AppLayout `pb-14` double bottom padding on mobile**
-- Files: `src/pages/Home.tsx` line 152 and `src/components/layout/AppLayout.tsx` line 31
-- `AppLayout` adds `pb-14` to `<main>` for mobile nav clearance. `Home.tsx` also adds `pb-20 md:pb-0`. Combined = 56px+80px = 136px wasted space on mobile at bottom of home page.
-- **Fix**: Remove `pb-20 md:pb-0` from Home.tsx since AppLayout already handles this globally.
-
-### MINOR — Cosmetic
-
-**Issue 7: OfficeSidebar fixed `w-[180px]` doesn't collapse on tablet**
-- File: `src/components/office/OfficeSidebar.tsx`
-- Unlike the main `AppSidebar` which is hidden on mobile (`hidden md:flex`), the `OfficeSidebar` is always 180px wide. On tablet-sized screens (768-1024px), it consumes significant horizontal space.
-- **Fix**: Add responsive collapsing behavior or hide behind a toggle on smaller screens, consistent with the main sidebar pattern.
-
-**Issue 8: Accounting payroll journal entry grid can overflow**
-- File: `src/components/accounting/AccountingPayroll.tsx`
-- Uses `grid-cols-[1fr_100px_100px_auto]` which works on desktop but can compress on mobile.
-- **Fix**: Stack vertically on small screens.
+**Missing entirely:**
+- No leave/time-off request system
+- No sick day tracking
+- No vacation entitlement calculation
+- No approval workflow for time off
+- No balance tracking (days used vs. available)
 
 ---
 
-## Implementation Plan
+## What We Will Build
 
-### Step 1 — Fix critical overflow tables (Issues 1, 2, 3)
-- Wrap PayrollOverviewTab table in `<div className="overflow-x-auto">` 
-- Ensure DetailedListView and AIExtractView ScrollAreas support horizontal scrolling
-- These 3 fixes prevent content from being clipped/invisible on mobile and tablet
+### 1. Database Tables
 
-### Step 2 — Remove duplicate Admin nav item (Issue 5)
-- Delete duplicate line 31 in MobileNavV2.tsx
+**`leave_balances`** — Each employee's annual entitlements
+- profile_id, year, vacation_days_entitled, vacation_days_used, sick_days_entitled, sick_days_used, personal_days_entitled, personal_days_used, company_id
+- Auto-populated based on Ontario ESA rules (2 weeks minimum vacation after 1 year, 3 weeks after 5 years)
 
-### Step 3 — Fix sidebar label clipping (Issue 4)
-- Add `opacity-0 group-hover/sidebar:opacity-100 transition-opacity` to the group label `<span>` in AppSidebar.tsx so labels are hidden when collapsed and shown on hover
+**`leave_requests`** — Individual time-off requests
+- profile_id, leave_type (vacation / sick / personal / bereavement / unpaid), start_date, end_date, total_days, reason, status (pending / approved / denied / cancelled), reviewed_by, reviewed_at, company_id
 
-### Step 4 — Fix double bottom padding (Issue 6)
-- Remove `pb-20 md:pb-0` from Home.tsx container div since AppLayout already handles mobile nav clearance
+### 2. Ontario ESA Vacation Calculator
 
-### Step 5 — OfficeSidebar tablet responsiveness (Issue 7)
-- Add `hidden md:flex` pattern to OfficeSidebar, with a mobile toggle button, matching the main sidebar behavior
+Automatically calculates entitlements based on:
+- **Vacation**: 2 weeks (10 days) after 1 year of employment, 3 weeks (15 days) after 5+ years
+- **Sick days**: 3 unpaid sick days per year (ESA minimum)
+- **Personal emergency leave**: 2 days per year
+- Vacation pay: 4% of gross earnings (under 5 years) or 6% (5+ years)
+- Integrates with `employee_salaries` to show vacation pay amounts
 
-### Step 6 — Accounting grid stacking (Issue 8)
-- Make the journal entry grid responsive: stack on mobile, grid on desktop
+### 3. New UI Tabs on Time Clock Page
+
+Add a **tabbed interface** below the clock-in card:
+
+**Tab: Team Status** (existing team grid, moved into tab)
+
+**Tab: My Leave**
+- Balance cards: Vacation (X/Y days), Sick (X/Y days), Personal (X/Y days)
+- Calendar view showing booked days
+- "Request Time Off" button opening a dialog form
+- List of my past/pending requests with status badges
+
+**Tab: Team Calendar** (admin/manager view)
+- Calendar grid showing who is off on which days
+- Pending requests requiring approval with approve/deny buttons
+- Summary stats: how many people off today, upcoming leaves
+
+### 4. Request Workflow
+
+- Employee submits request (leave type, dates, reason)
+- Request appears as "Pending" with yellow badge
+- Admin sees pending requests in Team Calendar tab
+- Admin approves or denies with optional note
+- On approval: balance is automatically decremented
+- On denial: employee gets notification via toast
+- Realtime updates via Supabase channel subscription
+
+### 5. Payroll Integration
+
+- When payroll engine runs, it checks `leave_requests` for the week
+- Sick/personal days flagged as exceptions in payroll snapshots
+- Vacation days calculate vacation pay based on salary
 
 ---
 
-## Files to Modify
+## Technical Details
+
+### New Database Migration
+
+```text
+leave_balances:
+  id (uuid, PK, default gen_random_uuid())
+  profile_id (uuid, FK to profiles, NOT NULL)
+  year (integer, NOT NULL, default extract(year from now()))
+  vacation_days_entitled (numeric, default 10)
+  vacation_days_used (numeric, default 0)
+  sick_days_entitled (numeric, default 3)
+  sick_days_used (numeric, default 0)
+  personal_days_entitled (numeric, default 2)
+  personal_days_used (numeric, default 0)
+  company_id (uuid, NOT NULL)
+  created_at (timestamptz, default now())
+  updated_at (timestamptz, default now())
+  UNIQUE(profile_id, year)
+
+leave_requests:
+  id (uuid, PK, default gen_random_uuid())
+  profile_id (uuid, FK to profiles, NOT NULL)
+  leave_type (text, NOT NULL) -- vacation, sick, personal, bereavement, unpaid
+  start_date (date, NOT NULL)
+  end_date (date, NOT NULL)
+  total_days (numeric, NOT NULL, default 1)
+  reason (text)
+  status (text, NOT NULL, default 'pending') -- pending, approved, denied, cancelled
+  reviewed_by (uuid, FK to profiles, nullable)
+  reviewed_at (timestamptz, nullable)
+  review_note (text, nullable)
+  company_id (uuid, NOT NULL)
+  created_at (timestamptz, default now())
+  updated_at (timestamptz, default now())
+```
+
+- RLS policies: employees see own data + admins see all company data
+- Validation trigger: ensure leave_type and status are valid values
+- Trigger: on leave_request status change to 'approved', auto-update leave_balances
+- Enable realtime on both tables
+
+### New Files
+
+| File | Purpose |
+|------|---------|
+| `src/hooks/useLeaveManagement.ts` | Hook for fetching balances, requests, CRUD operations |
+| `src/components/timeclock/LeaveBalanceCards.tsx` | Visual balance cards (vacation/sick/personal with progress rings) |
+| `src/components/timeclock/LeaveRequestDialog.tsx` | Form dialog to submit a new leave request |
+| `src/components/timeclock/MyLeaveTab.tsx` | "My Leave" tab content |
+| `src/components/timeclock/TeamCalendarTab.tsx` | Admin team calendar with approval workflow |
+
+### Modified Files
 
 | File | Changes |
 |------|---------|
-| `src/components/office/payroll/PayrollOverviewTab.tsx` | Wrap table in `overflow-x-auto` container |
-| `src/components/office/DetailedListView.tsx` | Add horizontal scroll support |
-| `src/components/office/AIExtractView.tsx` | Add horizontal scroll support |
-| `src/components/layout/MobileNavV2.tsx` | Remove duplicate Admin entry (line 31) |
-| `src/components/layout/AppSidebar.tsx` | Hide group labels when collapsed |
-| `src/pages/Home.tsx` | Remove redundant `pb-20` padding |
-| `src/components/office/OfficeSidebar.tsx` | Add responsive collapse for tablet |
-| `src/components/accounting/AccountingPayroll.tsx` | Stack journal grid on mobile |
+| `src/pages/TimeClock.tsx` | Add Tabs component wrapping Team Status + My Leave + Team Calendar |
+| `src/hooks/useTimeClock.ts` | No changes needed (clock entries remain separate) |
+
+### Vacation Pay Calculation Logic
+
+```text
+if employment_years < 5:
+  vacation_pay = annual_salary * 0.04
+  entitled_days = 10
+else:
+  vacation_pay = annual_salary * 0.06
+  entitled_days = 15
+```
+
+This runs client-side using data from `employee_salaries` and `profiles.created_at`.
 
