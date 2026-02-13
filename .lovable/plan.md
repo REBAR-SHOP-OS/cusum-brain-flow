@@ -1,31 +1,35 @@
 
 
-# Fix: ReactMarkdown forwardRef Warning in AccountingAgent
+# Fix: forwardRef Warnings for AccountingAgent and AgentSuggestionCard
 
 ## Problem
-The `ReactMarkdown` component from `react-markdown` v10 does not support `forwardRef`. When React's reconciler attempts to pass a ref, it triggers the warning. This is a known issue with `react-markdown` v10.
+Two remaining `forwardRef` warnings on the Accounting page:
+1. `AccountingAgent` -- rendered in `AccountingWorkspace`
+2. `AgentSuggestionCard` -- rendered in `AgentSuggestionsPanel`
+
+Both are plain function components that receive refs from parent wrappers.
 
 ## Fix
-Replace the raw `ReactMarkdown` usage in `AccountingAgent.tsx` with the project's existing `RichMarkdown` component, which already wraps `ReactMarkdown` in a proper `div` container. This eliminates the ref warning and also gives Penny's messages the same rich styling (status badges, styled tables, etc.) used elsewhere.
 
-### Technical Detail
+### 1. `src/components/accounting/AccountingAgent.tsx`
+Wrap with `React.forwardRef`. Since this component has many props and hooks, the simplest approach is to wrap the existing function:
 
-**File: `src/components/accounting/AccountingAgent.tsx`**
+```tsx
+export const AccountingAgent = React.forwardRef<HTMLDivElement, AccountingAgentProps>(
+  (props, ref) => { /* existing component body, add ref to root div */ }
+);
+AccountingAgent.displayName = "AccountingAgent";
+```
 
-1. Replace the `react-markdown` and `remark-gfm` imports with `RichMarkdown`:
-   - Remove: `import ReactMarkdown from "react-markdown"` and `import remarkGfm from "remark-gfm"`
-   - Add: `import { RichMarkdown } from "@/components/chat/RichMarkdown"`
+### 2. `src/components/agent/AgentSuggestionCard.tsx`
+Same pattern -- wrap with `React.forwardRef` and pass ref to the root `Card` element.
 
-2. Replace the rendering block (lines 371-374):
-   ```tsx
-   // Before
-   <div className="prose prose-sm dark:prose-invert max-w-none ...">
-     <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
-   </div>
+```tsx
+export const AgentSuggestionCard = React.forwardRef<HTMLDivElement, AgentSuggestionCardProps>(
+  (props, ref) => { /* existing body, pass ref to Card */ }
+);
+AgentSuggestionCard.displayName = "AgentSuggestionCard";
+```
 
-   // After
-   <RichMarkdown content={msg.content} />
-   ```
-
-One file, two changes. The `RichMarkdown` component already handles all markdown rendering with proper DOM wrapping, so no ref is ever passed to the `ReactMarkdown` function component.
+Two files, minimal changes, zero risk.
 
