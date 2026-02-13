@@ -1,12 +1,13 @@
 // forwardRef cache bust
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Paperclip, X, Loader2, Sparkles, Hash, Type, Headset } from "lucide-react";
+import { Send, Paperclip, X, Loader2, Sparkles, Hash, Type, Headset, Brain, ChevronDown, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { TooltipProvider, Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { VoiceInputButton } from "./VoiceInputButton";
 import { EmojiPicker } from "./EmojiPicker";
 import { SlashCommandMenu, SlashCommand } from "./SlashCommandMenu";
@@ -29,6 +30,9 @@ interface ChatInputProps {
   showFileUpload?: boolean;
   showSmartMode?: boolean;
   onLiveChatClick?: () => void;
+  minimalToolbar?: boolean;
+  selectedModel?: string;
+  onModelChange?: (model: string) => void;
 }
 
 export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(function ChatInput({
@@ -38,6 +42,9 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
   showFileUpload = false,
   showSmartMode = false,
   onLiveChatClick,
+  minimalToolbar = false,
+  selectedModel = "gemini",
+  onModelChange,
 }, ref) {
   const [value, setValue] = useState("");
   const [smartMode, setSmartMode] = useState(false);
@@ -325,60 +332,64 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
           {/* Bottom toolbar */}
           <div className="flex items-center gap-0.5 px-2 pb-2">
             {/* Left actions */}
-            <EmojiPicker onSelect={handleEmojiSelect} disabled={disabled} />
-            <VoiceInputButton isListening={speech.isListening} isSupported={speech.isSupported} onToggle={handleVoiceToggle} disabled={disabled} />
-            <QuickTemplates onSelect={handleTemplateSelect} disabled={disabled} />
+            {!minimalToolbar && (
+              <>
+                <EmojiPicker onSelect={handleEmojiSelect} disabled={disabled} />
+                <VoiceInputButton isListening={speech.isListening} isSupported={speech.isSupported} onToggle={handleVoiceToggle} disabled={disabled} />
+                <QuickTemplates onSelect={handleTemplateSelect} disabled={disabled} />
 
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  onClick={() => setShowFormatting(!showFormatting)}
-                  className={cn(
-                    "p-2 rounded-md transition-colors",
-                    showFormatting ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                  )}
-                >
-                  <Type className="w-5 h-5" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="top">Formatting</TooltipContent>
-            </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={() => setShowFormatting(!showFormatting)}
+                      className={cn(
+                        "p-2 rounded-md transition-colors",
+                        showFormatting ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                      )}
+                    >
+                      <Type className="w-5 h-5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">Formatting</TooltipContent>
+                </Tooltip>
 
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const textarea = textareaRef.current;
-                    if (textarea) {
-                      const start = textarea.selectionStart;
-                      const newVal = value.slice(0, start) + "/" + value.slice(start);
-                      handleValueChange(newVal);
-                      textarea.focus();
-                    }
-                  }}
-                  className="p-2 text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-muted/50"
-                >
-                  <Hash className="w-5 h-5" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="top">Commands (/)</TooltipContent>
-            </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const textarea = textareaRef.current;
+                        if (textarea) {
+                          const start = textarea.selectionStart;
+                          const newVal = value.slice(0, start) + "/" + value.slice(start);
+                          handleValueChange(newVal);
+                          textarea.focus();
+                        }
+                      }}
+                      className="p-2 text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-muted/50"
+                    >
+                      <Hash className="w-5 h-5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">Commands (/)</TooltipContent>
+                </Tooltip>
 
-            {onLiveChatClick && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={onLiveChatClick}
-                    className="p-2 text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-muted/50"
-                  >
-                    <Headset className="w-5 h-5" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="top">Voice Chat</TooltipContent>
-              </Tooltip>
+                {onLiveChatClick && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={onLiveChatClick}
+                        className="p-2 text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-muted/50"
+                      >
+                        <Headset className="w-5 h-5" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top">Voice Chat</TooltipContent>
+                  </Tooltip>
+                )}
+              </>
             )}
 
             {showFileUpload && (
@@ -403,6 +414,48 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
               </>
             )}
 
+            {/* AI Model Selector (shown in minimal mode) */}
+            {minimalToolbar && onModelChange && (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className="flex items-center gap-1 px-2 py-1.5 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+                  >
+                    <Brain className="w-4 h-4" />
+                    <span>{selectedModel === "chatgpt" ? "ChatGPT" : "Gemini"}</span>
+                    <ChevronDown className="w-3 h-3" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent side="top" align="start" className="w-40 p-1 z-50 bg-popover">
+                  <button
+                    type="button"
+                    onClick={() => onModelChange("gemini")}
+                    className={cn(
+                      "flex items-center gap-2 w-full px-3 py-2 text-sm rounded-md transition-colors",
+                      selectedModel === "gemini" ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted text-foreground"
+                    )}
+                  >
+                    {selectedModel === "gemini" && <Check className="w-3.5 h-3.5" />}
+                    {selectedModel !== "gemini" && <span className="w-3.5" />}
+                    Gemini
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onModelChange("chatgpt")}
+                    className={cn(
+                      "flex items-center gap-2 w-full px-3 py-2 text-sm rounded-md transition-colors",
+                      selectedModel === "chatgpt" ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted text-foreground"
+                    )}
+                  >
+                    {selectedModel === "chatgpt" && <Check className="w-3.5 h-3.5" />}
+                    {selectedModel !== "chatgpt" && <span className="w-3.5" />}
+                    ChatGPT
+                  </button>
+                </PopoverContent>
+              </Popover>
+            )}
+
             {/* Spacer */}
             <div className="flex-1" />
 
@@ -419,25 +472,27 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
         </div>
 
         {/* Footer: Smart mode + disclaimer */}
-        <div className="flex items-center justify-between mt-2 px-1">
-          {showSmartMode ? (
-            <button
-              onClick={() => setSmartMode(!smartMode)}
-              className={cn(
-                "flex items-center gap-1.5 text-xs font-medium rounded-full px-2.5 py-1 transition-colors",
-                smartMode ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <Sparkles className={cn("w-3.5 h-3.5", smartMode && "text-primary")} />
-              Smart mode {smartMode ? "on" : "off"}
-            </button>
-          ) : (
-            <div />
-          )}
-          <p className="text-xs text-muted-foreground">
-            Type <kbd className="px-1 py-0.5 rounded bg-muted text-[10px] font-mono">/</kbd> for commands · <kbd className="px-1 py-0.5 rounded bg-muted text-[10px] font-mono">@</kbd> to mention
-          </p>
-        </div>
+        {!minimalToolbar && (
+          <div className="flex items-center justify-between mt-2 px-1">
+            {showSmartMode ? (
+              <button
+                onClick={() => setSmartMode(!smartMode)}
+                className={cn(
+                  "flex items-center gap-1.5 text-xs font-medium rounded-full px-2.5 py-1 transition-colors",
+                  smartMode ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <Sparkles className={cn("w-3.5 h-3.5", smartMode && "text-primary")} />
+                Smart mode {smartMode ? "on" : "off"}
+              </button>
+            ) : (
+              <div />
+            )}
+            <p className="text-xs text-muted-foreground">
+              Type <kbd className="px-1 py-0.5 rounded bg-muted text-[10px] font-mono">/</kbd> for commands · <kbd className="px-1 py-0.5 rounded bg-muted text-[10px] font-mono">@</kbd> to mention
+            </p>
+          </div>
+        )}
       </div>
     </TooltipProvider>
   );
