@@ -1,36 +1,88 @@
 
-# Fix "Failed to fetch" on Lead File Downloads
+# Make "Act" Button Navigate to the Exact Entity
 
 ## Problem
 
-Files attached to leads (PDFs, DWGs, ZIPs, images, etc.) fail to download with "TypeError: Failed to fetch" errors. This affects all file types displayed in the pipeline lead timeline.
+When clicking "Act" on a suggestion card (e.g., "Unknown -- $1695 overdue (23d)"), the user is taken to a generic page like `/accounting?tab=invoices` instead of being deep-linked to the specific invoice, customer, or order. The user has to manually search for the entity.
 
-## Root Cause
+## Solution (Two Parts)
 
-The `LeadTimeline.tsx` component uses `supabase.storage.from("estimation-files").getPublicUrl(...)` to generate download URLs. However, the `estimation-files` bucket is **private** (not public). `getPublicUrl()` generates a URL that requires no authentication, which returns a 403 error on private buckets.
+### Part 1: Frontend -- Make AccountingWorkspace read URL params
 
-Other components (`LeadEmailThread.tsx`, `LeadFiles.tsx`) already use `getSignedFileUrl()` correctly -- only the timeline is broken.
+**File: `src/pages/AccountingWorkspace.tsx`**
 
-## Fix
+- Read `?tab=` and `?search=` query parameters from the URL using `useSearchParams`
+- On mount, if `tab` param is present, set `activeTab` to that value (e.g., `invoices`, `actions`)
+- If `search` param is present, pass it down to the active tab component as an initial search value
 
-### File: `src/components/pipeline/LeadTimeline.tsx`
+**File: `src/components/accounting/AccountingInvoices.tsx`**
 
-Replace the `getPublicUrl()` call with `getSignedFileUrl()` from `@/lib/storageUtils` (the same utility used everywhere else).
+- Accept an optional `initialSearch` prop
+- Initialize the `search` state from `initialSearch` instead of empty string, so the invoice list auto-filters to the specific entity on load
 
-**Before (broken):**
+### Part 2: Backend -- Generate entity-specific deep links
+
+**File: `supabase/functions/generate-suggestions/index.ts`**
+
+Update all `actions` paths to include the specific entity identifier as a search parameter so the user lands on the right tab with the right entity pre-filtered:
+
+| Suggestion Type | Current Path | New Path |
+|---|---|---|
+| Overdue invoice (Vizzy) | `/accounting?tab=invoices` | `/accounting?tab=invoices&search=CustomerName` |
+| Overdue invoice (Penny) | `/accounting?tab=invoices` | `/accounting?tab=invoices&search=CustomerName` |
+| $0 order | `/orders` (dead -- no `/orders` route) | `/accounting?tab=orders&search=OrderNumber` |
+| Blocked production | `/orders` | `/accounting?tab=orders&search=OrderNumber` |
+| Missing QB customer | `/customers` | `/customers?search=CustomerName` |
+| Idle machine | `/shop-floor` | `/shop-floor` (no change -- already correct) |
+| At-risk job | `/shop-floor` | `/shop-floor` (no change) |
+| Collection follow-up | `/accounting?tab=actions` | `/accounting?tab=actions` (already correct) |
+| Paid revision | `/orders` | `/accounting?tab=orders&search=OrderNumber` |
+
+### Part 3: Customers page -- read search param
+
+**File: `src/pages/Customers.tsx`**
+
+- Read `?search=` from the URL and use it as the initial search filter value, so "View Customer" links land with the customer pre-highlighted.
+
+## Technical Details
+
+### AccountingWorkspace.tsx changes
 ```typescript
-const { data } = supabase.storage.from("estimation-files").getPublicUrl(f.storage_path!);
-const a = document.createElement("a");
-a.href = data.publicUrl;
+import { useSearchParams } from "react-router-dom";
+
+// Inside component:
+const [searchParams] = useSearchParams();
+const urlTab = searchParams.get("tab");
+const urlSearch = searchParams.get("search") || "";
+
+// Initialize activeTab from URL if present
+const [activeTab, setActiveTab] = useState(urlTab || "dashboard");
+
+// Pass urlSearch to active tab components:
+// <AccountingInvoices data={qb} initialSearch={activeTab === "invoices" ? urlSearch : ""} />
 ```
 
-**After (fixed):**
+### AccountingInvoices.tsx changes
 ```typescript
-const signedUrl = await getSignedFileUrl(f.storage_path!);
-if (!signedUrl) return;
-window.open(signedUrl, "_blank");
+interface Props {
+  data: ReturnType<typeof useQuickBooksData>;
+  initialSearch?: string;
+}
+
+// Initialize search from prop:
+const [search, setSearch] = useState(initialSearch || "");
 ```
 
-This is a one-line logic change -- import `getSignedFileUrl` and replace the public URL call with a signed URL call, matching the pattern already used in `LeadEmailThread.tsx` and `LeadFiles.tsx`.
+### generate-suggestions/index.ts changes (example for overdue invoices)
+```typescript
+// Before:
+actions: [{ label: "View AR", action: "navigate", path: "/accounting?tab=invoices" }]
 
-No database or backend changes needed.
+// After:
+actions: [{ label: "View Invoice", action: "navigate", 
+  path: `/accounting?tab=invoices&search=${encodeURIComponent(customerName)}` }]
+```
+
+Similar pattern applied to all suggestion types with entity-specific search terms (customer name, order number, etc.).
+
+### No database changes required
