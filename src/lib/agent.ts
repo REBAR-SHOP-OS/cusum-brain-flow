@@ -11,6 +11,7 @@ export interface AgentResponse {
   reply: string;
   context?: Record<string, unknown>;
   createdNotifications?: { type: string; title: string; assigned_to_name?: string }[];
+  nextSlot?: number | null;
 }
 
 export interface AttachedFile {
@@ -23,10 +24,11 @@ export async function sendAgentMessage(
   message: string,
   history?: ChatMessage[],
   context?: Record<string, unknown>,
-  attachedFiles?: AttachedFile[]
+  attachedFiles?: AttachedFile[],
+  pixelSlot?: number
 ): Promise<AgentResponse> {
   const { data, error } = await supabase.functions.invoke("ai-agent", {
-    body: { agent, message, history, context, attachedFiles },
+    body: { agent, message, history, context, attachedFiles, pixelSlot },
   });
 
   if (error) {

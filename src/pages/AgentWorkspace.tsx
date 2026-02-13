@@ -58,6 +58,8 @@ export default function AgentWorkspace() {
   const [autoBriefingSent, setAutoBriefingSent] = useState(false);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [pendingPixelSlot, setPendingPixelSlot] = useState<number | null>(null);
+  const [pixelDateMessage, setPixelDateMessage] = useState<string>("");
   
 
   const { sessions, loading: sessionsLoading, fetchSessions, createSession, addMessage, getSessionMessages, deleteSession } = useChatSessions();
@@ -122,7 +124,7 @@ export default function AgentWorkspace() {
     }
   }, [location.state]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleSend = useCallback(async (content: string) => {
+  const handleSendInternal = useCallback(async (content: string, slotOverride?: number) => {
     const userMsg: Message = {
       id: crypto.randomUUID(),
       role: "user",
@@ -163,7 +165,15 @@ export default function AgentWorkspace() {
         content: m.content,
       }));
 
-      const response = await sendAgentMessage(config.agentType, content, history, extraContext);
+      const response = await sendAgentMessage(config.agentType, content, history, extraContext, undefined, slotOverride);
+
+      // Track pixel sequential flow
+      if (agentId === "social" && response.nextSlot) {
+        setPendingPixelSlot(response.nextSlot);
+        setPixelDateMessage(content);
+      } else if (agentId === "social" && response.nextSlot === null) {
+        setPendingPixelSlot(null);
+      }
 
       // Build reply with created notification badges
       let replyContent = response.reply;
@@ -188,11 +198,9 @@ export default function AgentWorkspace() {
                 if (approved) {
                   try {
                     if (actionData.type === "ringcentral_call") {
-                      // Use WebRTC browser calling
                       const success = await webPhoneActions.call(actionData.phone, actionData.contact_name);
                       if (!success) throw new Error("WebPhone call failed");
                     } else {
-                      // SMS still goes through edge function
                       const { data, error } = await supabase.functions.invoke("ringcentral-action", {
                         body: actionData,
                       });
@@ -211,7 +219,6 @@ export default function AgentWorkspace() {
           } catch (e) {
             console.warn("Failed to parse vizzy-action:", e);
           }
-          // Remove the action block from displayed content
           replyContent = replyContent.replace(/\[VIZZY-ACTION\][\s\S]*?\[\/VIZZY-ACTION\]/, "").trim();
         }
       }
@@ -250,10 +257,21 @@ export default function AgentWorkspace() {
     }
   }, [messages, config.agentType, config.name, activeSessionId, createSession, addMessage, mapping, selectedDate]);
 
+  const handleSend = useCallback((content: string) => {
+    handleSendInternal(content);
+  }, [handleSendInternal]);
+
+  const handleApprovePixelSlot = useCallback(() => {
+    if (pendingPixelSlot && pixelDateMessage) {
+      handleSendInternal(pixelDateMessage, pendingPixelSlot);
+      setPendingPixelSlot(null);
+    }
+  }, [pendingPixelSlot, pixelDateMessage, handleSendInternal]);
+
   const handleRegenerateImage = useCallback((imageUrl: string, alt: string) => {
     const productName = alt || "this product";
-    handleSend(`Regenerate post for ${productName}`);
-  }, [handleSend]);
+    handleSendInternal(`Regenerate post for ${productName}`);
+  }, [handleSendInternal]);
 
   const [mobileHistoryOpen, setMobileHistoryOpen] = useState(false);
   const [brainOpen, setBrainOpen] = useState(false);
@@ -450,6 +468,8 @@ showFileUpload={true}
               agentImage={config.image}
               agentName={config.name}
               isPixelAgent={agentId === "social"}
+              pendingPixelSlot={pendingPixelSlot}
+              onApprovePixelSlot={handleApprovePixelSlot}
             />
             <ChatInput
               onSend={handleSend}

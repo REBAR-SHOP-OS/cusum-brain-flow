@@ -17,6 +17,7 @@ interface AgentRequest {
   history?: ChatMessage[];
   context?: Record<string, unknown>;
   attachedFiles?: { name: string; url: string }[];
+  pixelSlot?: number;
 }
 
 interface RebarStandard {
@@ -3343,7 +3344,7 @@ serve(async (req) => {
       );
     }
 
-    const { agent, message: rawMessage, history = [], context: userContext, attachedFiles = [] }: AgentRequest = await req.json();
+    const { agent, message: rawMessage, history = [], context: userContext, attachedFiles = [], pixelSlot }: AgentRequest = await req.json();
     let message = rawMessage;
 
     if (!agent || !message) {
@@ -3778,7 +3779,20 @@ Respond with ONLY valid JSON (no markdown):
       }
       
       if (effectiveHasDate) {
-        console.log("📸 Pixel: Date detected — starting 5-image generation flow");
+        // Determine which slot to generate (1-5), default to 1
+        const currentSlot = pixelSlot || 1;
+        const slotIndex = Math.max(0, Math.min(4, currentSlot - 1));
+        
+        const SLOT_SCHEDULE = [
+          { slot: "1", time: "06:30 AM", theme: "Motivational / self-care / start of work day" },
+          { slot: "2", time: "07:30 AM", theme: "Creative promotional post" },
+          { slot: "3", time: "08:00 AM", theme: "Inspirational — emphasizing strength & scale" },
+          { slot: "4", time: "12:30 PM", theme: "Inspirational — emphasizing innovation & efficiency" },
+          { slot: "5", time: "02:30 PM", theme: "Creative promotional for company products" },
+        ];
+        
+        const targetSlot = SLOT_SCHEDULE[slotIndex];
+        console.log(`📸 Pixel: Generating SINGLE post for slot ${currentSlot}/5 (${targetSlot.time})`);
         
         // Fetch Pixel Brain knowledge (agent-specific instructions)
         let pixelBrainContext = "";
@@ -3790,8 +3804,7 @@ Respond with ONLY valid JSON (no markdown):
             .order("created_at", { ascending: false })
             .limit(20);
           
-          // Filter for social/pixel knowledge by checking metadata or category
-          const socialKnowledge = (pixelKnowledge || []).filter((k: any) => true); // all knowledge is relevant
+          const socialKnowledge = (pixelKnowledge || []).filter((k: any) => true);
           
           if (socialKnowledge.length > 0) {
             pixelBrainContext = "\n\n## 🧠 Pixel Brain Knowledge:\n" + 
@@ -3801,7 +3814,7 @@ Respond with ONLY valid JSON (no markdown):
           console.warn("Pixel Brain knowledge fetch failed:", e);
         }
         
-        // Step 1: Generate 5 image prompts + captions via AI
+        // Step 1: Generate 1 post prompt + caption via AI
         const LOVABLE_KEY = Deno.env.get("LOVABLE_API_KEY");
         const promptGenResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
           method: "POST",
@@ -3816,16 +3829,12 @@ Respond with ONLY valid JSON (no markdown):
                 role: "system",
                 content: `You are Pixel, the social media manager for Rebar.shop — an AI-driven rebar fabrication company in Ontario, Canada.
                 
-Given a date, generate exactly 5 social media posts following this daily schedule:
-| Slot | Time (EST) | Theme |
-|------|-----------|-------|
-| 1 | 06:30 AM | Motivational / self-care / start of work day |
-| 2 | 07:30 AM | Creative promotional post |
-| 3 | 08:00 AM | Inspirational — emphasizing strength & scale |
-| 4 | 12:30 PM | Inspirational — emphasizing innovation & efficiency |
-| 5 | 02:30 PM | Creative promotional for company products |
+Generate exactly ONE social media post for this specific time slot:
+- Slot: ${targetSlot.slot}
+- Time: ${targetSlot.time} EST
+- Theme: ${targetSlot.theme}
 
-ALLOWED PRODUCTS (each post MUST feature a DIFFERENT product):
+ALLOWED PRODUCTS (pick ONE randomly):
 Rebar Fiberglass Straight, Rebar Stirrups, Rebar Cages, Rebar Hooks, Rebar Hooked Anchor Bar, Wire Mesh, Rebar Dowels, Standard Dowels 4x16, Circular Ties/Bars, Rebar Straight
 
 MANDATORY IMAGE RULES:
@@ -3837,131 +3846,97 @@ MANDATORY IMAGE RULES:
 ${pixelBrainContext}
 
 You MUST respond with ONLY valid JSON (no markdown, no code blocks) in this exact format:
-[
-  {
-    "slot": "1",
-    "time": "06:30 AM",
-    "theme": "Motivational",
-    "product": "Rebar Cages",
-    "caption": "English caption here...",
-    "caption_fa": "فارسی ترجمه...",
-    "hashtags": "#RebarShop #Construction ...",
-    "image_prompt": "A detailed prompt for DALL-E to generate a realistic construction image featuring Rebar Cages with REBAR.SHOP logo overlay, ..."
-  },
-  ...
-]`
+{
+  "slot": "${targetSlot.slot}",
+  "time": "${targetSlot.time}",
+  "theme": "${targetSlot.theme}",
+  "product": "Product Name",
+  "caption": "English caption here...",
+  "caption_fa": "فارسی ترجمه...",
+  "hashtags": "#RebarShop #Construction ...",
+  "image_prompt": "A detailed prompt for image generation featuring the product with REBAR.SHOP logo overlay, ..."
+}`
               },
-              { role: "user", content: `Generate 5 posts for: ${message}` }
+              { role: "user", content: `Generate 1 post for slot ${targetSlot.slot} (${targetSlot.time}) on: ${message}` }
             ],
-            max_tokens: 4000,
-            temperature: 0.8,
+            max_tokens: 2000,
+            temperature: 0.9,
           }),
         });
         
         if (promptGenResponse.ok) {
           const promptGenData = await promptGenResponse.json();
           let rawContent = promptGenData.choices?.[0]?.message?.content || "";
-          
-          // Clean markdown code blocks if present
           rawContent = rawContent.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
           
           try {
-            const posts = JSON.parse(rawContent);
+            const post = JSON.parse(rawContent);
+            console.log(`📸 Pixel: Generated post prompt for slot ${currentSlot}, now generating image...`);
             
-            if (Array.isArray(posts) && posts.length > 0) {
-              console.log(`📸 Pixel: Generated ${posts.length} post prompts, now generating images...`);
-              
-              // Step 2: Generate images in parallel using Gemini Image via Lovable AI Gateway
-              const imagePromises = posts.slice(0, 5).map(async (post: any, idx: number) => {
-                try {
-                  console.log(`📸 Generating image ${idx + 1}/5: ${post.product}`);
-                  const imgResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-                    method: "POST",
-                    headers: {
-                      "Authorization": `Bearer ${LOVABLE_KEY}`,
-                      "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({
-                      model: "google/gemini-2.5-flash-image",
-                      messages: [{ role: "user", content: post.image_prompt }],
-                      modalities: ["image", "text"],
-                    }),
-                  });
-                  
-                  if (imgResp.ok) {
-                    const imgData = await imgResp.json();
-                    // Gemini image response: images array with image_url.url containing data:image/png;base64,...
-                    const b64DataUri = imgData.images?.[0]?.image_url?.url || "";
-                    let imageUrl = "";
-
-                    if (b64DataUri) {
-                      try {
-                        // Extract raw base64 from data URI
-                        const rawB64 = b64DataUri.replace(/^data:image\/\w+;base64,/, "");
-                        const bytes = Uint8Array.from(atob(rawB64), c => c.charCodeAt(0));
-                        const dateStr = new Date().toISOString().split("T")[0];
-                        const filePath = `pixel/${dateStr}/post-${idx + 1}-${crypto.randomUUID().slice(0,6)}.png`;
-
-                        const storageClient = createClient(
-                          Deno.env.get("SUPABASE_URL")!,
-                          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-                        );
-
-                        const { error: upErr } = await storageClient.storage
-                          .from("social-images")
-                          .upload(filePath, bytes, { contentType: "image/png", upsert: false });
-
-                        if (upErr) {
-                          console.error(`Storage upload error for image ${idx + 1}:`, upErr.message);
-                        } else {
-                          const { data: pubData } = storageClient.storage.from("social-images").getPublicUrl(filePath);
-                          imageUrl = pubData.publicUrl;
-                          console.log(`📸 Image ${idx + 1} uploaded to storage: ${imageUrl}`);
-                        }
-                      } catch (uploadErr) {
-                        console.error(`Upload failed for image ${idx + 1}:`, uploadErr);
-                      }
-                    }
-
-                    return {
-                      slot: post.time || `Slot ${idx + 1}`,
-                      theme: post.theme || "",
-                      product: post.product || "",
-                      caption: post.caption || "",
-                      caption_fa: post.caption_fa || "",
-                      hashtags: post.hashtags || "",
-                      imageUrl,
-                    };
-                  } else {
-                    const errText = await imgResp.text();
-                    console.error(`Image ${idx + 1} generation failed: ${imgResp.status} - ${errText}`);
-                    return {
-                      slot: post.time || `Slot ${idx + 1}`,
-                      theme: post.theme || "",
-                      product: post.product || "",
-                      caption: post.caption || "",
-                      caption_fa: post.caption_fa || "",
-                      hashtags: post.hashtags || "",
-                      imageUrl: "",
-                    };
-                  }
-                } catch (imgErr) {
-                  console.error(`Image ${idx + 1} error:`, imgErr);
-                  return {
-                    slot: post.time || `Slot ${idx + 1}`,
-                    theme: post.theme || "",
-                    product: post.product || "",
-                    caption: post.caption || "",
-                    caption_fa: post.caption_fa || "",
-                    hashtags: post.hashtags || "",
-                    imageUrl: "",
-                  };
-                }
+            // Step 2: Generate image
+            let imageUrl = "";
+            try {
+              console.log(`📸 Generating image for slot ${currentSlot}: ${post.product}`);
+              const imgResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                  "Authorization": `Bearer ${LOVABLE_KEY}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  model: "google/gemini-2.5-flash-image",
+                  messages: [{ role: "user", content: post.image_prompt }],
+                  modalities: ["image", "text"],
+                }),
               });
               
-              pixelImageResults = await Promise.all(imagePromises);
-              console.log(`📸 Pixel: ${pixelImageResults.filter(r => r.imageUrl).length}/5 images generated successfully`);
+              if (imgResp.ok) {
+                const imgData = await imgResp.json();
+                const b64DataUri = imgData.images?.[0]?.image_url?.url || "";
+                if (b64DataUri) {
+                  try {
+                    const rawB64 = b64DataUri.replace(/^data:image\/\w+;base64,/, "");
+                    const bytes = Uint8Array.from(atob(rawB64), c => c.charCodeAt(0));
+                    const dateStr = new Date().toISOString().split("T")[0];
+                    const filePath = `pixel/${dateStr}/post-${currentSlot}-${crypto.randomUUID().slice(0,6)}.png`;
+                    const storageClient = createClient(
+                      Deno.env.get("SUPABASE_URL")!,
+                      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+                    );
+                    const { error: upErr } = await storageClient.storage
+                      .from("social-images")
+                      .upload(filePath, bytes, { contentType: "image/png", upsert: false });
+                    if (!upErr) {
+                      const { data: pubData } = storageClient.storage.from("social-images").getPublicUrl(filePath);
+                      imageUrl = pubData.publicUrl;
+                      console.log(`📸 Image for slot ${currentSlot} uploaded: ${imageUrl}`);
+                    }
+                  } catch (uploadErr) {
+                    console.error(`Upload failed for slot ${currentSlot}:`, uploadErr);
+                  }
+                }
+              } else {
+                const errText = await imgResp.text();
+                console.error(`Image generation failed for slot ${currentSlot}: ${imgResp.status} - ${errText}`);
+              }
+            } catch (imgErr) {
+              console.error(`Image error for slot ${currentSlot}:`, imgErr);
             }
+            
+            pixelImageResults = [{
+              slot: post.time || targetSlot.time,
+              theme: post.theme || targetSlot.theme,
+              product: post.product || "",
+              caption: post.caption || "",
+              caption_fa: post.caption_fa || "",
+              hashtags: post.hashtags || "",
+              imageUrl,
+            }];
+            
+            // Set nextSlot for sequential flow
+            (context as any).__pixelCurrentSlot = currentSlot;
+            (context as any).__pixelNextSlot = currentSlot < 5 ? currentSlot + 1 : null;
+            
           } catch (parseErr) {
             console.error("Failed to parse prompt generation response:", parseErr);
           }
@@ -4026,27 +4001,32 @@ RULES:
 
     // If Pixel generated images, build the reply directly without another AI call
     if (agent === "social" && pixelImageResults.length > 0) {
-      let pixelReply = `## 📅 Content Plan — ${message}\n\n`;
-      for (let i = 0; i < pixelImageResults.length; i++) {
-        const post = pixelImageResults[i];
-        pixelReply += `### ${i + 1}. ⏰ ${post.slot} — ${post.theme}\n`;
-        pixelReply += `**Product: ${post.product}**\n\n`;
-        pixelReply += `> ${post.caption}\n\n`;
-        if ((post as any).caption_fa) {
-          pixelReply += `> 🇮🇷 ${(post as any).caption_fa}\n\n`;
-        }
-        pixelReply += `> ${post.hashtags}\n\n`;
-        if (post.imageUrl) {
-          pixelReply += `![${post.product}](${post.imageUrl})\n\n`;
-        } else {
-          pixelReply += `⚠️ Image generation failed for this slot.\n\n`;
-        }
-        pixelReply += `---\n\n`;
+      const currentSlot = (context as any).__pixelCurrentSlot || 1;
+      const nextSlot = (context as any).__pixelNextSlot || null;
+      
+      const post = pixelImageResults[0];
+      let pixelReply = `## 📅 Post ${currentSlot}/5 — ${message}\n\n`;
+      pixelReply += `### ⏰ ${post.slot} — ${post.theme}\n`;
+      pixelReply += `**Product: ${post.product}**\n\n`;
+      pixelReply += `> ${post.caption}\n\n`;
+      if ((post as any).caption_fa) {
+        pixelReply += `> 🇮🇷 ${(post as any).caption_fa}\n\n`;
       }
-      pixelReply += `✅ **${pixelImageResults.filter(r => r.imageUrl).length}/5** images generated successfully. You can request regeneration of any specific post.`;
+      pixelReply += `> ${post.hashtags}\n\n`;
+      if (post.imageUrl) {
+        pixelReply += `![${post.product}](${post.imageUrl})\n\n`;
+      } else {
+        pixelReply += `⚠️ Image generation failed for this slot.\n\n`;
+      }
+      
+      if (nextSlot) {
+        pixelReply += `\n---\n✅ Post ${currentSlot} ready. Click **Approve & Next** to generate post ${nextSlot}/5.`;
+      } else {
+        pixelReply += `\n---\n🎉 **All 5 posts completed!** You can request regeneration of any specific post.`;
+      }
 
       return new Response(
-        JSON.stringify({ reply: pixelReply, context: mergedContext }),
+        JSON.stringify({ reply: pixelReply, context: mergedContext, nextSlot }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
