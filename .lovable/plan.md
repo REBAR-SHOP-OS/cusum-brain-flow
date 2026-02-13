@@ -1,49 +1,21 @@
 
 
-# Support ZIP File Import (No Extraction Needed)
+# Fix: Show ZIP Option Immediately
 
-Instead of requiring you to extract the 12GB ZIP first and select the `filestore/` folder, the import dialog will accept the ZIP file directly. A streaming ZIP library reads only the files we need without loading 12GB into memory.
+The ZIP upload tab is already coded but hidden behind Step 1 — it only appears after uploading the CSV mapping file. This makes it look like ZIP isn't supported.
 
----
+## Changes
 
-## What Changes
+### File: `src/components/admin/OdooDumpImportDialog.tsx`
 
-### Current Flow (requires extraction)
-1. Extract ZIP on your computer
-2. Upload mapping CSV
-3. Select the extracted `filestore/` folder
+- Remove the step gating on Step 2 — always show both steps visible from the start
+- Disable the ZIP/folder file inputs until the CSV mapping is loaded (with a hint: "Upload mapping CSV first")
+- This way the user can immediately see the ZIP option exists, while still requiring the CSV first (since we need the mapping to know which files to extract)
 
-### New Flow (just select the ZIP)
-1. Upload mapping CSV
-2. Select the `.zip` file directly -- done
+### Details
 
----
-
-## How It Works
-
-- Uses the `zip.js` library which can read ZIP entries on-demand from a local file (random access, no full decompression into memory)
-- After the mapping CSV is loaded, you pick the ZIP file
-- The system scans the ZIP's file listing, matches entries to the mapping CSV, then extracts and uploads only the matched files in batches of 5
-- Progress bar, abort button, and error handling remain the same
-
----
-
-## Technical Details
-
-### New Dependency
-- `@zip.js/zip.js` -- mature streaming ZIP library with File/Blob reader support
-
-### Files to Modify
-- **`src/components/admin/OdooDumpImportDialog.tsx`**
-  - Replace the folder picker (Step 2) with a file input accepting `.zip`
-  - Use `zip.js` `BlobReader` + `ZipReader` to list entries in the ZIP
-  - Match ZIP entry paths (e.g., `filestore/ab/ab12cd34...`) to mapping CSV `store_fname` values
-  - Extract each matched entry as a `Blob`, then upload to storage
-  - Keep the same batch-of-5 parallel upload pattern
-  - Keep the existing folder picker as a fallback option (tab or toggle: "ZIP file" vs "Extracted folder")
-
-### Memory Efficiency
-- `zip.js` reads the ZIP via random access on the local `File` object -- it does NOT load 12GB into memory
-- Each file is extracted individually, uploaded, then garbage collected
-- Only 5 files in memory at any time (batch size)
+- Line 286: Change `{(step === 2 || uploading || uploaded > 0) &&` to always render Step 2
+- Add a `disabled` state to the ZIP and folder inputs when `mapping.length === 0`
+- Remove the "Next" button since both steps are always visible
+- Add a small note under Step 2 when CSV isn't loaded yet: "Upload mapping CSV above first"
 
