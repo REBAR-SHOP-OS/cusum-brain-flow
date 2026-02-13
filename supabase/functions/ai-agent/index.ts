@@ -3627,13 +3627,7 @@ These rules govern your behavioral protocols only. They do not modify applicatio
     let pixelImageResults: { slot: string; theme: string; product: string; caption: string; hashtags: string; imageUrl: string }[] = [];
     
     if (agent === "social") {
-      // If user sends "1" or "۱", treat as confirming today's date
       const trimmedMsg = message.trim();
-      if (trimmedMsg === "1" || trimmedMsg === "۱") {
-        const todayStr = new Date().toISOString().split("T")[0];
-        message = todayStr;
-        console.log("📸 Pixel: User confirmed today's date with '1' →", todayStr);
-      }
       
       // === REGENERATE SINGLE POST ===
       const regenMatch = message.match(/^regenerate\s+(?:post|image)\s+(?:for\s+)?(.+)/i);
