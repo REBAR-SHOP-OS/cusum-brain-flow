@@ -27,14 +27,20 @@ interface PendingFile {
   file_name: string;
 }
 
+interface QueueItem {
+  pending: PendingFile;
+  mapping: MappingRow;
+  getBlob: () => Promise<Blob>;
+}
+
 interface Props {
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }
 
-const BATCH = 5;
+const BATCH = 3;
 
-async function retryAsync<T>(fn: () => Promise<T>, retries = 3, delayMs = 1000): Promise<T> {
+async function retryAsync<T>(fn: () => Promise<T>, retries = 5, delayMs = 1500): Promise<T> {
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
       return await fn();
@@ -130,10 +136,11 @@ export function OdooDumpImportDialog({ open, onOpenChange }: Props) {
   const [errors, setErrors] = useState<string[]>([]);
   const [statusMsg, setStatusMsg] = useState("");
   const abortRef = useRef(false);
+  const failedQueueRef = useRef<QueueItem[]>([]);
 
   /* ── shared upload helper ── */
   const processQueue = useCallback(
-    async (queue: { pending: PendingFile; mapping: MappingRow; getBlob: () => Promise<Blob> }[]) => {
+    async (queue: QueueItem[]) => {
       toast.info(`Starting upload of ${queue.length} files…`);
       setTotal(queue.length);
       setUploading(true);
@@ -141,17 +148,20 @@ export function OdooDumpImportDialog({ open, onOpenChange }: Props) {
       setFailed(0);
       setErrors([]);
       abortRef.current = false;
+      failedQueueRef.current = [];
 
       let ok = 0;
       let fail = 0;
       const errs: string[] = [];
+      const failedItems: QueueItem[] = [];
 
       for (let i = 0; i < queue.length; i += BATCH) {
         if (abortRef.current) break;
         const batch = queue.slice(i, i + BATCH);
 
         await Promise.all(
-          batch.map(async ({ pending: p, mapping: m, getBlob }) => {
+          batch.map(async (item) => {
+            const { pending: p, mapping: m, getBlob } = item;
             try {
               const safeName = m.name.replace(/[^\w.\-]/g, "_");
               const storagePath = `odoo-archive/${p.lead_id}/${p.odoo_id}-${safeName}`;
@@ -180,14 +190,21 @@ export function OdooDumpImportDialog({ open, onOpenChange }: Props) {
             } catch (err: any) {
               fail++;
               errs.push(`${m.name}: ${err?.message ?? "unknown"}`);
+              failedItems.push(item);
             }
           })
         );
         setUploaded(ok);
         setFailed(fail);
         setErrors([...errs]);
+
+        // breathe between batches
+        if (i + BATCH < queue.length) {
+          await new Promise(r => setTimeout(r, 500));
+        }
       }
 
+      failedQueueRef.current = failedItems;
       setUploading(false);
       setStatusMsg(`Import complete: ${ok} uploaded, ${fail} failed`);
       toast.success(`Import complete: ${ok} uploaded, ${fail} failed`);
@@ -259,7 +276,7 @@ export function OdooDumpImportDialog({ open, onOpenChange }: Props) {
       }
 
       setStatusMsg("Matching filestore entries…");
-      const queue: { pending: PendingFile; mapping: MappingRow; getBlob: () => Promise<Blob> }[] = [];
+      const queue: QueueItem[] = [];
 
       for (const entry of entries) {
         if (entry.directory) continue;
@@ -356,6 +373,17 @@ export function OdooDumpImportDialog({ open, onOpenChange }: Props) {
                 </div>
               )}
             </div>
+          )}
+
+          {!uploading && failed > 0 && failedQueueRef.current.length > 0 && (
+            <Button
+              variant="default"
+              className="w-full gap-2 bg-green-600 hover:bg-green-700 text-white"
+              onClick={() => processQueue(failedQueueRef.current)}
+            >
+              <AlertTriangle className="h-4 w-4" />
+              Retry {failedQueueRef.current.length} Failed
+            </Button>
           )}
         </div>
       </DialogContent>
