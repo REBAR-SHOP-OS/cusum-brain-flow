@@ -1,53 +1,40 @@
 
-
-# Fix AI Introduction Email Template
+# Fix Follow-Up & Draft Email Prompts + Add Follow-Up Action to Prospecting
 
 ## Problem
-The AI-generated introduction emails contain placeholder text like `[Sales Rep Name]` instead of using a proper signature. The email should never include brackets or placeholder tokens.
+The `draft_followup` and `draft_email` actions in `pipeline-ai` still lack the anti-placeholder rules applied to `draft_intro`. Also, the prospecting table has no way to send a follow-up after the initial intro has been sent (status = "emailed").
 
 ## Changes
 
-### 1. `supabase/functions/pipeline-ai/index.ts` -- Update `draft_intro` prompt (line ~390)
+### 1. `supabase/functions/pipeline-ai/index.ts` -- Fix `draft_followup` prompt (line 188)
 
-Update the prompt to explicitly instruct the AI:
-- **Never** use placeholder brackets like `[Sales Rep Name]`, `[Your Name]`, etc.
-- Always sign emails as "The rebar.shop Sales Team"
-- Address the prospect by their first name (derived from contact_name)
-- Keep the tone warm but direct -- no filler phrases like "I hope this finds you well"
-- Open with a specific observation about the prospect's company/industry
-- Close with a soft CTA (open to a brief chat?) and sign off cleanly
+Add the same critical rules:
+- No placeholder brackets
+- First-name greeting
+- Sign off as "The rebar.shop Sales Team"
+- 3-5 sentences, warm but direct
 
-Updated prompt wording:
-```
-Draft a cold introduction email. CRITICAL RULES:
-1. NEVER use placeholder text like [Sales Rep Name] or [Your Name] -- sign as "The rebar.shop Sales Team"
-2. Address the recipient by first name only (e.g., "Hi Sarah,")
-3. Open with a specific observation about their company or industry
-4. Keep to 3-4 sentences max in the body
-5. End with a soft call to action
-6. Sign off: "Best regards,\nThe rebar.shop Sales Team"
-```
+### 2. `supabase/functions/pipeline-ai/index.ts` -- Fix `draft_email` prompt (line 219)
 
-### 2. `src/components/prospecting/ProspectIntroDialog.tsx` -- Pass first name in userMessage (line ~48)
+Same anti-placeholder rules applied to the general `draft_email` action.
 
-Extract the first name from `prospect.contact_name` and pass it explicitly in the prompt context so the AI has a clean first name to use in the greeting.
+### 3. `src/components/prospecting/ProspectTable.tsx` -- Add "Send Follow-up" button for emailed prospects
+
+Add a new button (mail icon) visible when `status === "emailed"` so users can send a follow-up after the initial intro. This calls a new `onSendFollowup` callback.
+
+### 4. `src/components/prospecting/ProspectIntroDialog.tsx` -- Support follow-up mode
+
+Add a `mode` prop (`"intro" | "followup"`). When in follow-up mode:
+- Dialog title changes to "Send Follow-up"
+- Uses `draft_followup` action instead of `draft_intro`
+- Passes prospect context so the AI references the prior introduction
+
+### 5. `src/pages/Prospecting.tsx` -- Wire up follow-up flow
+
+- Add state for follow-up mode
+- Pass `onSendFollowup` handler to `ProspectTable`
+- Open `ProspectIntroDialog` in follow-up mode when triggered
 
 ## Result
-Emails will look like:
-
-```
-Hi Sarah,
-
-We noticed Windy City Structural Group specializes in high-density urban 
-infrastructure -- an area where precision rebar fabrication makes a real 
-difference. At rebar.shop, we provide advanced fabrication capabilities 
-tailored for complex high-rise reinforcement with reliable scheduling.
-
-Would you be open to a brief conversation about how we can support your 
-upcoming projects?
-
-Best regards,
-The rebar.shop Sales Team
-```
-
-No more `[Sales Rep Name]` placeholders.
+- All email actions produce clean, placeholder-free emails signed by "The rebar.shop Sales Team"
+- Emailed prospects show a follow-up button so reps can keep the conversation going
