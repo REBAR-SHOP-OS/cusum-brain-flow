@@ -1,27 +1,50 @@
 
 
-# Fix Floating Vizzy Button: Visible to All Users + Fix Avatar
+# Per-User Agent Floating Button
 
-## Changes
+## What Changes
+
+The floating button currently shows Vizzy for everyone. Instead, each user will see their **own assigned agent**:
+
+| User | Sees | Avatar |
+|------|------|--------|
+| Sattar (CEO) | Vizzy | assistant-helper.png |
+| Vicky (Accountant) | Penny | accounting-helper.png |
+| Kourosh (Shop) | Forge | shopfloor-helper.png |
+| Saurabh/Neel (Sales) | Blitz | sales-helper.png |
+| Radin (AI Manager) | Relay (Haven) | support-helper.png |
+| Ben (Estimator) | Gauge | estimating-helper.png |
+| Josh (Operations) | Vizzy | assistant-helper.png |
+| Unknown users | Vizzy (default) | assistant-helper.png |
+
+## File Changes
 
 ### 1. `src/components/vizzy/FloatingVizzyButton.tsx`
 
-- **Remove the `useSuperAdmin` guard** — delete the import of `useSuperAdmin`, the `isSuperAdmin` check, and the `if (!isSuperAdmin) return null;` line. The button will render for every logged-in user.
-- **Use the correct Vizzy avatar image** — the current `src/assets/vizzy-avatar.png` file will be replaced with the actual uploaded Vizzy character image (the one with glasses, teal glow from the screenshot). The import path stays the same.
+- Import `useAuth` and `getUserPrimaryAgent` (from `userAgentMap`)
+- Get the logged-in user's email, look up their assigned agent via `getUserPrimaryAgent(email)`
+- Use the agent's `image` for the avatar instead of the hardcoded `vizzy-avatar.png`
+- Fall back to `assistant-helper.png` (Vizzy) if no mapping exists
+- Remove the `vizzy-avatar.png` import (no longer needed)
 
-### 2. `src/components/layout/LiveChatWidget.tsx`
+### 2. `src/assets/vizzy-avatar.png`
 
-- No changes needed — it already works for all users via the `toggle-live-chat` event.
+- No longer used by the floating button (can be kept for other uses, but the button will use agent-specific images from `src/assets/helpers/`)
 
-### 3. `src/components/layout/AppLayout.tsx`
+### 3. No other file changes needed
 
-- No changes needed — it already renders `FloatingVizzyButton` unconditionally.
+`AppLayout.tsx` and `LiveChatWidget.tsx` remain untouched -- the button already renders for all users and the chat toggle event works as-is.
 
-## Technical Summary
+## Technical Detail
 
-| File | Change |
-|------|--------|
-| `src/components/vizzy/FloatingVizzyButton.tsx` | Remove `useSuperAdmin` import and guard. All users see the button. |
-| `src/assets/vizzy-avatar.png` | Replace with the correct Vizzy character image from the user's upload |
+```text
+FloatingVizzyButton
+  |
+  +--> useAuth() --> user.email
+  |
+  +--> getUserPrimaryAgent(email) --> AgentConfig { name, image, ... }
+  |
+  +--> Render agent.image as avatar (fallback: assistantHelper)
+  +--> aria-label: "Open {agent.name} AI Assistant"
+```
 
-The button keeps its teal pulsing ring, hover scale effect, green status dot, and mobile-aware positioning. The only difference is it now shows for everyone.
