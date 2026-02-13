@@ -1,123 +1,107 @@
 
 
-# Odoo vs ERP Pipeline Sync Audit and Fix
+# Intelligent Pipeline Search Box
 
-## Findings
+## Problem
 
-### 1. DUPLICATE BUG (Critical -- actively creating duplicates every sync)
+The search box currently does plain text matching against lead titles, descriptions, sources, notes, and customer names. Typing "today" returns 0 results because no lead contains the word "today" in its text fields. Users expect natural language queries like "today", "won", "hot leads", "stale", "Torpave", or "value > 50k" to just work.
 
-**Root cause**: The dedup query on line 87-90 of `odoo-crm-sync/index.ts` uses `serviceClient.from("leads").select("id, metadata").eq("source", "odoo_sync")` **without pagination**. Supabase returns max 1,000 rows by default. With 2,711 odoo_sync leads, ~1,711 leads are invisible to the dedup map. Every sync run creates new records for those 1,711 leads instead of updating them.
+## Solution
 
-**Evidence**: 13 duplicate pairs found, all created today (Feb 13) in two sync runs ~45 min apart (21:39 and 22:23 UTC). Both copies have identical data; the only difference is `synced_at` timestamp.
+Add a **client-side smart query parser** that intercepts known natural language patterns and converts them into filter state + text search, before the debounced query fires. No AI API call needed -- this is instant, deterministic parsing.
 
-| odoo_id | Title | Victim ID (older) | Survivor ID (newer) |
-|---------|-------|-------------------|---------------------|
-| 1683 | S00434: Carleton U Southam Hall | 951ac2e2 | babe21c9 |
-| 2073 | S00603: NRC M19 Corridor 102 | 770359ff | ae106b04 |
-| 2377 | S00921: New Child and Family Well-Being Centre | 5ad25126 | a732e5ee |
-| 2397 | OCDSB Riverview AS Washroom | 3d0ca0cc | 2fe16770 |
-| 2657 | Hillcrest High School Phase 2 | 1ed2d038 | 8f3f4919 |
-| 2697 | 980 GRANDRAVINE | 23a857cf | 00519956 |
-| 2743 | Blantyre Park Outdoor Pool | 2d0c56d0 | a4145ceb |
-| 2973 | DCC Construct 427 Mission Support | b002765b | 753bfead |
-| 3271 | Huntsmill Park Playground | fbbd531f | 0c940d99 |
-| 3328 | Trinity Lutheran Church | 1f6aebda | 8d7da6d6 |
-| 3579 | Marline Cages | 9d2c6400 | b28c7a1f |
-| 3731 | PFence Microsoft DC YTO11 | 5ccd4b8c | (second entry) |
-| 3982 | (13th pair) | (older) | (newer) |
+### Supported Queries (examples)
 
-### 2. "New" Column -- CLEAN
+| User types | Parsed as |
+|---|---|
+| `today` | Filter: creationDateRange = "today" |
+| `this week` / `this month` | Filter: creationDateRange = "this_week" / "this_month" |
+| `won` / `lost` | Filter: won = true / lost = true |
+| `hot` / `hot leads` | Text search for leads in "hot_enquiries" stage |
+| `stale` / `inactive` | Filter: leads not updated in 7+ days |
+| `unassigned` | Filter: unassigned = true |
+| `value > 50000` / `over 100k` | Client filter on expected_revenue |
+| `Torpave` | Falls through to normal text search (no pattern match) |
+| `new today` | Stage = "new" AND creationDateRange = "today" |
+| `won this month` | won = true AND creationDateRange = "this_month" |
 
-6 leads, all legitimate:
-- 2 external email RFQs (Cadeploy, Torpave)
-- 4 Odoo-synced leads with `odoo_stage = "New"`
+### How It Works
 
-No action needed here.
+```text
+User input --> Smart Parser --> { filters: PipelineFilterState, textQuery: string }
+                                    |                              |
+                            Applied to filter state        Sent to debounced search
+```
 
-### 3. Stage Mapping -- CORRECT
-
-The `STAGE_MAP` deterministically maps all 22 Odoo stages. Probability normalization (won=100, lost=0) is correct. `expected_value` is set from `expected_revenue`.
+1. Parser runs synchronously on every keystroke (lightweight regex matching)
+2. Recognized tokens are extracted and converted to filter mutations
+3. Remaining unrecognized text becomes the standard text search query
+4. Visual feedback: recognized tokens appear as filter chips in the search bar (already supported)
 
 ## Changes
 
-### Phase 1: Fix the pagination bug in `odoo-crm-sync` (prevents future duplicates)
+### 1. New utility: `src/lib/smartSearchParser.ts`
 
-Replace the single unpaginated query (lines 87-90) with a paginated loop that fetches ALL odoo_sync leads in batches of 1,000 using `.range()`:
-
-```text
-Before (broken):
-  const { data: existingLeads } = await serviceClient
-    .from("leads")
-    .select("id, metadata")
-    .eq("source", "odoo_sync");
-  // Returns max 1,000 rows silently
-
-After (fixed):
-  // Paginate to load ALL odoo_sync leads (2,700+)
-  const allExisting: Array<{ id: string; metadata: unknown }> = [];
-  let from = 0;
-  const PAGE = 1000;
-  while (true) {
-    const { data, error } = await serviceClient
-      .from("leads")
-      .select("id, metadata")
-      .eq("source", "odoo_sync")
-      .range(from, from + PAGE - 1);
-    if (error) throw new Error("Failed to load existing leads: " + error.message);
-    if (!data || data.length === 0) break;
-    allExisting.push(...data);
-    if (data.length < PAGE) break;
-    from += PAGE;
-  }
-  // Then use allExisting instead of existingLeads
+A pure function that takes a search string and returns:
+```typescript
+interface SmartSearchResult {
+  filters: Partial<PipelineFilterState>;
+  textQuery: string;           // leftover text for DB search
+  staleThresholdDays?: number; // for client-side "stale" filtering
+  revenueFilter?: { op: "gt" | "lt" | "eq"; value: number };
+  stageFilter?: string;       // direct stage id match
+}
 ```
 
-This ensures every existing lead is visible to the dedup map, preventing duplicate creation.
+Pattern matching rules (processed in order, tokens removed after match):
+- **Date patterns**: "today", "this week", "this month", "this quarter", "this year", "last 7 days", "last 30 days"
+- **Status patterns**: "won", "lost", "open", "archived"
+- **Assignment**: "unassigned", "my pipeline", "my leads"
+- **Stage names**: Any exact or fuzzy match to PIPELINE_STAGES labels (e.g., "hot" matches "Hot Enquiries", "proposal" matches "Proposal")
+- **Stale/activity**: "stale", "inactive", "no activity", "stuck" (triggers 7-day threshold)
+- **Revenue**: "value > N", "over Nk", "above N", "under N", "below Nk"
+- **Combinators**: Multiple tokens can coexist ("won this month", "hot unassigned")
 
-### Phase 2: Delete the 13 duplicate victims (data cleanup)
+### 2. Update `PipelineFilters.tsx`
 
-Delete the 13 older duplicate records (keeping the newer `synced_at` survivor in each pair). This is a data operation, not a schema change.
+- Show a subtle "sparkle" icon or hint text in the search placeholder indicating smart search capability
+- When smart parser returns filters, display them as removable chips (already works)
+- Add a small tooltip/hint dropdown below the search showing recognized commands as user types (optional autocomplete)
 
-Victim IDs to delete:
-```
-951ac2e2-39cc-46c9-af7c-6af85833e848
-770359ff-1b82-4dd3-a505-7ed6e969bf1a
-5ad25126-6029-47e7-a853-effeb085271a
-3d0ca0cc-4c14-47ac-963a-c9b54c79eb74
-1ed2d038-781b-4601-afa4-d6b2b7bcc4b3
-23a857cf-4401-427e-a703-0723ac1b418c
-2d0c56d0-bae8-4ef8-81de-62b22016aada
-b002765b-e40c-4090-a529-91a4b794d4f9
-fbbd531f-7e70-41cf-b529-ce8aa9b317a4
-1f6aebda-2046-46c1-bc0f-8e84780bfc7f
-9d2c6400-b066-461d-8b72-518024c0daf1
-5ccd4b8c-7e26-45f7-bd37-32436634a606
-(+ 13th from odoo_id 3982)
-```
+### 3. Update `Pipeline.tsx`
 
-Rollback map: each deleted victim maps to its survivor (same odoo_id, newer synced_at).
+- Import and call `parseSmartSearch(searchQuery)` in the debounce effect
+- Apply returned filters to `pipelineFilters` state
+- Apply `textQuery` to `debouncedSearch` (only the non-filter text goes to the DB)
+- Apply `staleThresholdDays` and `revenueFilter` as additional client-side filters in `filteredLeads` memo
+- Apply `stageFilter` as an additional filter
 
-### Phase 3: Deploy and validate
+### 4. Search hint dropdown (new component): `src/components/pipeline/SearchHints.tsx`
 
-1. Deploy the fixed `odoo-crm-sync` edge function
-2. Trigger a sync run
-3. Verify: zero new duplicates created, all updates go to existing records
+A small floating dropdown that appears when the search box is focused, showing:
+- Recently used smart queries
+- Quick suggestions based on current input (e.g., typing "t" shows "today", "this week", "this month")
+- This makes discoverability easy without documentation
 
 ## Technical Details
 
-### File modified: `supabase/functions/odoo-crm-sync/index.ts`
+### File: `src/lib/smartSearchParser.ts` (new)
 
-**Lines 86-90** -- Replace the single query with the paginated loop described above, then update the variable name from `existingLeads` to `allExisting` in the `for` loop on line 96.
+Pure function, no side effects, fully testable. Uses regex patterns and string matching against PIPELINE_STAGES. Handles case insensitivity and partial matches.
 
-### Data operation (not migration)
+### File: `src/components/pipeline/SearchHints.tsx` (new)
 
-Delete 13 duplicate lead records by ID after confirming survivor exists for each odoo_id.
+Small popover component anchored to the search input. Shows categorized suggestions (Date, Status, Stage, Revenue). Clicking a suggestion fills the search box.
 
-## Validation Checklist
+### File: `src/components/pipeline/PipelineFilters.tsx` (modify)
 
-- [ ] All 2,711+ odoo_sync leads loaded into dedup map (no 1,000-row cap)
-- [ ] 13 duplicate pairs resolved (victims deleted, survivors retained)
-- [ ] Zero new duplicates after next sync run
-- [ ] "New" column still has exactly 6 legitimate leads
-- [ ] Stage/probability/value match Odoo for all synced records
+- Update placeholder to "Search or type: today, won, hot, stale..."
+- Add search hints dropdown trigger on focus
+- Pass parsed smart filters up to parent
 
+### File: `src/pages/Pipeline.tsx` (modify)
+
+- Import `parseSmartSearch`
+- In the debounce effect, parse the query and split into filters vs text
+- Add stale/revenue client-side filters to `filteredLeads` memo
+- Merge smart-parsed filters with manual filter panel filters (smart search overrides, manual panel can add more)
