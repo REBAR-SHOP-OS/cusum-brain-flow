@@ -1,13 +1,13 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Send, Loader2, Square, Trash2, Type, Hash } from "lucide-react";
+import { ArrowLeft, Send, Loader2, Square, Trash2, Type, Hash, Headset } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAdminChat } from "@/hooks/useAdminChat";
 import { RichMarkdown } from "@/components/chat/RichMarkdown";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAuth } from "@/lib/auth";
-import { getUserPrimaryAgent } from "@/lib/userAgentMap";
+import { getUserPrimaryAgent, getUserPrimaryAgentKey } from "@/lib/userAgentMap";
 import assistantHelper from "@/assets/helpers/assistant-helper.png";
 import { FormattingToolbar } from "@/components/chat/FormattingToolbar";
 import { EmojiPicker } from "@/components/chat/EmojiPicker";
@@ -23,8 +23,10 @@ export default function LiveChat() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const agent = getUserPrimaryAgent(user?.email);
+  const agentKey = getUserPrimaryAgentKey(user?.email);
   const avatarImg = agent?.image || assistantHelper;
   const agentName = agent?.name || "Vizzy";
+  const showVoiceChat = agentKey === "assistant" || agentKey === "accounting";
   const { toast } = useToast();
 
   const [input, setInput] = useState("");
@@ -321,8 +323,23 @@ export default function LiveChat() {
                       <Hash className="w-5 h-5" />
                     </button>
                   </TooltipTrigger>
-                  <TooltipContent side="top">Commands (/)</TooltipContent>
+                <TooltipContent side="top">Commands (/)</TooltipContent>
                 </Tooltip>
+
+                {showVoiceChat && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={() => navigate("/vizzy")}
+                        className="p-2 text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-muted/50"
+                      >
+                        <Headset className="w-5 h-5" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top">Voice Chat</TooltipContent>
+                  </Tooltip>
+                )}
 
                 {/* Spacer */}
                 <div className="flex-1" />
