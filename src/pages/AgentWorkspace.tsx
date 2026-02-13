@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { format } from "date-fns";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { ChevronDown, PanelLeftClose, PanelLeft, Brain, ImageIcon, CalendarIcon, PhoneOff } from "lucide-react";
+import { ChevronDown, PanelLeftClose, PanelLeft, Brain, CalendarIcon, PhoneOff } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,6 @@ import { agentConfigs } from "@/components/agent/agentConfigs";
 import { useAuth } from "@/lib/auth";
 import { getUserAgentMapping } from "@/lib/userAgentMap";
 import { PixelBrainDialog } from "@/components/social/PixelBrainDialog";
-import { ImageGeneratorDialog } from "@/components/social/ImageGeneratorDialog";
 import { useSuperAdmin } from "@/hooks/useSuperAdmin";
 import { VizzyApprovalDialog, PendingAction } from "@/components/vizzy/VizzyApprovalDialog";
 import { useWebPhone } from "@/hooks/useWebPhone";
@@ -324,7 +323,6 @@ export default function AgentWorkspace() {
 
   const [mobileHistoryOpen, setMobileHistoryOpen] = useState(false);
   const [brainOpen, setBrainOpen] = useState(false);
-  const [imageGenOpen, setImageGenOpen] = useState(false);
   
 
   const handleDateChange = useCallback((date: Date | undefined) => {
@@ -445,10 +443,10 @@ export default function AgentWorkspace() {
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8"
-                onClick={() => setImageGenOpen(true)}
-                title="AI Image Generator (ChatGPT)"
+                onClick={() => setBrainOpen(true)}
+                title="Pixel Brain – Knowledge & Instructions"
               >
-                <ImageIcon className="w-4 h-4" />
+                <Brain className="w-4 h-4" />
               </Button>
               <Button
                 variant="ghost"
@@ -541,7 +539,7 @@ export default function AgentWorkspace() {
 
 
       <PixelBrainDialog open={brainOpen} onOpenChange={setBrainOpen} />
-      <ImageGeneratorDialog open={imageGenOpen} onOpenChange={setImageGenOpen} />
+      
       {agentId === "assistant" && isSuperAdmin && (
         <VizzyApprovalDialog pendingAction={pendingAction} />
       )}
