@@ -5,6 +5,7 @@ import { MobileNavV2 } from "./MobileNavV2";
 import { AppTour } from "@/components/tour/AppTour";
 import { RoleGuard } from "@/components/auth/RoleGuard";
 import { LiveChatWidget } from "./LiveChatWidget";
+import { FloatingVizzyButton } from "@/components/vizzy/FloatingVizzyButton";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -41,7 +42,10 @@ export function AppLayout({ children }: AppLayoutProps) {
         {/* Mobile bottom nav */}
         <MobileNavV2 />
 
-        {/* Live Chat Widget (no floating button — triggered from ChatInput toolbar) */}
+        {/* Floating Vizzy avatar — always visible for super admin */}
+        <FloatingVizzyButton />
+
+        {/* Live Chat Widget — triggered by Vizzy button */}
         <LiveChatWidget />
       </div>
     </RoleGuard>

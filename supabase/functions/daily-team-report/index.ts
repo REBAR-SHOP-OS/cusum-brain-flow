@@ -6,8 +6,13 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    // Auth guard — must be authenticated
-    try { await requireAuth(req); } catch (res) { if (res instanceof Response) return res; throw res; }
+    // Auth guard — accept service role key (for cron) or authenticated user
+    const authHeader = req.headers.get("Authorization") || "";
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    const isServiceRole = authHeader === `Bearer ${serviceKey}`;
+    if (!isServiceRole) {
+      try { await requireAuth(req); } catch (res) { if (res instanceof Response) return res; throw res; }
+    }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
