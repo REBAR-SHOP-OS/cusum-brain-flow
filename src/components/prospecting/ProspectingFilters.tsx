@@ -162,7 +162,7 @@ export function ProspectingFilters({
               <FilterToggle label="Pending" active={filters.statusPending} onClick={() => toggle("statusPending")} />
               <FilterToggle label="Approved" active={filters.statusApproved} onClick={() => toggle("statusApproved")} />
               <FilterToggle label="Rejected" active={filters.statusRejected} onClick={() => toggle("statusRejected")} />
-              <FilterToggle label="Emailed" active={filters.statusEmailed} onClick={() => toggle("statusEmailed")} />
+              
 
               <Separator className="my-1.5" />
 
@@ -243,7 +243,7 @@ export function ProspectingFilters({
           {filters.statusPending && <FilterChip label="Pending" onRemove={() => toggle("statusPending")} />}
           {filters.statusApproved && <FilterChip label="Approved" onRemove={() => toggle("statusApproved")} />}
           {filters.statusRejected && <FilterChip label="Rejected" onRemove={() => toggle("statusRejected")} />}
-          {filters.statusEmailed && <FilterChip label="Emailed" onRemove={() => toggle("statusEmailed")} />}
+          
           {filters.industry && <FilterChip label={`Industry: ${filters.industry}`} onRemove={() => toggle("industry", null)} />}
           {filters.city && <FilterChip label={`City: ${filters.city}`} onRemove={() => toggle("city", null)} />}
           {groupBy !== "none" && <FilterChip label={`Group: ${groupBy}`} onRemove={() => onGroupByChange("none")} />}

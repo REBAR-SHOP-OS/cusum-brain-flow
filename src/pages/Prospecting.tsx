@@ -58,6 +58,7 @@ export default function Prospecting() {
         .from("prospects")
         .select("*")
         .eq("batch_id", latestBatch!.id)
+        .neq("status", "emailed")
         .order("created_at", { ascending: true });
       if (error) throw error;
       return data;
@@ -90,13 +91,12 @@ export default function Prospecting() {
     }
 
     // Status filters (OR logic: if any active, show only matching)
-    const statusActive = filters.statusPending || filters.statusApproved || filters.statusRejected || filters.statusEmailed;
+    const statusActive = filters.statusPending || filters.statusApproved || filters.statusRejected;
     if (statusActive) {
       result = result.filter((p: any) => {
         if (filters.statusPending && p.status === "pending") return true;
         if (filters.statusApproved && p.status === "approved") return true;
         if (filters.statusRejected && p.status === "rejected") return true;
-        if (filters.statusEmailed && p.status === "emailed") return true;
         return false;
       });
     }
