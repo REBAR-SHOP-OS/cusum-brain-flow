@@ -83,17 +83,29 @@ Deno.serve(async (req) => {
 
     const companyId = sampleLead?.company_id || "a0000000-0000-0000-0000-000000000001";
 
-    // Load existing odoo_id index for fast dedup — keep latest synced_at per odoo_id
-    const { data: existingLeads } = await serviceClient
-      .from("leads")
-      .select("id, metadata")
-      .eq("source", "odoo_sync");
+    // Load ALL existing odoo_sync leads with pagination (Supabase caps at 1000/query)
+    const allExisting: Array<{ id: string; metadata: unknown }> = [];
+    let from = 0;
+    const PAGE = 1000;
+    while (true) {
+      const { data, error } = await serviceClient
+        .from("leads")
+        .select("id, metadata")
+        .eq("source", "odoo_sync")
+        .range(from, from + PAGE - 1);
+      if (error) throw new Error("Failed to load existing leads: " + error.message);
+      if (!data || data.length === 0) break;
+      allExisting.push(...data);
+      if (data.length < PAGE) break;
+      from += PAGE;
+    }
+    console.log(`Loaded ${allExisting.length} existing odoo_sync leads for dedup`);
 
     // Build map keeping only the most-recently-synced record per odoo_id
     const odooIdMap = new Map<string, { id: string; syncedAt: string }>();
     const victimIds: string[] = [];
 
-    for (const l of existingLeads || []) {
+    for (const l of allExisting) {
       const meta = l.metadata as Record<string, unknown> | null;
       const oid = meta?.odoo_id as string;
       if (!oid) continue;
