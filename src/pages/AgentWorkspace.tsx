@@ -136,7 +136,9 @@ export default function AgentWorkspace() {
     if (!sessionId) {
       const sessionTitle = agentId === "eisenhower"
         ? format(new Date(), "yyyy-MM-dd (EEE, MMM d)")
-        : content;
+        : agentId === "social"
+          ? format(selectedDate, "yyyy-MM-dd")
+          : content;
       sessionId = await createSession(sessionTitle, config.name);
       setActiveSessionId(sessionId);
     }
