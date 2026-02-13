@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { PipelineAISheet } from "@/components/pipeline/PipelineAISheet";
 import { useToast } from "@/hooks/use-toast";
 import type { Tables } from "@/integrations/supabase/types";
 import { startOfDay, startOfWeek, startOfMonth, startOfQuarter, startOfYear, subDays } from "date-fns";
+import { parseSmartSearch, type SmartSearchResult } from "@/lib/smartSearchParser";
 
 type Lead = Tables<"leads">;
 type LeadWithCustomer = Lead & { customers: { name: string; company_name: string | null } | null };
@@ -56,6 +57,7 @@ function getDateCutoff(rangeId: string): Date | null {
 export default function Pipeline() {
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [smartResult, setSmartResult] = useState<SmartSearchResult | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [selectedLead, setSelectedLead] = useState<LeadWithCustomer | null>(null);
@@ -70,9 +72,18 @@ export default function Pipeline() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
-  // Debounce search input by 300ms
+  // Smart search: parse query, apply filter tokens, debounce remaining text
   useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 300);
+    const parsed = parseSmartSearch(searchQuery);
+    setSmartResult(parsed);
+
+    // Merge smart-parsed filters into pipeline filters
+    if (Object.keys(parsed.filters).length > 0) {
+      setPipelineFilters((prev) => ({ ...prev, ...parsed.filters }));
+    }
+
+    // Only debounce the leftover text query (not the filter tokens)
+    const timer = setTimeout(() => setDebouncedSearch(parsed.textQuery), 300);
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
@@ -166,7 +177,7 @@ export default function Pipeline() {
     return Array.from(set).sort();
   }, [leads]);
 
-  // Apply client-side filters
+  // Apply client-side filters (including smart search extras)
   const filteredLeads = useMemo(() => {
     return leads.filter((lead) => {
       const meta = lead.metadata as Record<string, unknown> | null;
@@ -196,9 +207,25 @@ export default function Pipeline() {
         if (cutoff && new Date(lead.expected_close_date) < cutoff) return false;
       }
 
+      // Smart search: stage filter
+      if (smartResult?.stageFilter && lead.stage !== smartResult.stageFilter) return false;
+
+      // Smart search: stale filter (not updated in N days)
+      if (smartResult?.staleThresholdDays) {
+        const threshold = subDays(new Date(), smartResult.staleThresholdDays);
+        if (new Date(lead.updated_at) > threshold) return false;
+      }
+
+      // Smart search: revenue filter
+      if (smartResult?.revenueFilter) {
+        const rev = (lead.expected_value as number) || 0;
+        if (smartResult.revenueFilter.op === "gt" && rev <= smartResult.revenueFilter.value) return false;
+        if (smartResult.revenueFilter.op === "lt" && rev >= smartResult.revenueFilter.value) return false;
+      }
+
       return true;
     });
-  }, [leads, pipelineFilters]);
+  }, [leads, pipelineFilters, smartResult]);
 
   const leadsByStage = useMemo(() => {
     const grouped: Record<string, LeadWithCustomer[]> = {};
