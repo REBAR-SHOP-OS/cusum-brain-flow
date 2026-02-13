@@ -10,7 +10,7 @@ import { CreateChannelDialog } from "@/components/teamhub/CreateChannelDialog";
 import { StartMeetingDialog } from "@/components/teamhub/StartMeetingDialog";
 import { MeetingRoom } from "@/components/teamhub/MeetingRoom";
 import { MeetingReportDialog } from "@/components/teamhub/MeetingReportDialog";
-import { MessageSquare, Globe, Users, Sparkles, Menu } from "lucide-react";
+import { MessageSquare, Globe, Users, Sparkles, Menu, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { toast } from "sonner";
@@ -32,7 +32,7 @@ export default function TeamHub() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [reportMeetingId, setReportMeetingId] = useState<string | null>(null);
 
-  const activeChannelId = selectedChannelId || channels[0]?.id || null;
+  const activeChannelId = selectedChannelId || (channelsLoading ? null : channels[0]?.id || null);
   const activeChannel = channels.find((c) => c.id === activeChannelId);
 
   const { messages, isLoading: msgsLoading } = useTeamMessages(activeChannelId);
@@ -207,6 +207,10 @@ export default function TeamHub() {
                   onStartMeeting={() => setShowMeetingDialog(true)}
                   onJoinMeeting={(m) => setActiveMeeting(m)}
                 />
+              ) : channelsLoading ? (
+                <div className="flex items-center justify-center h-full">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary/40" />
+                </div>
               ) : (
                 <div className="flex items-center justify-center h-full px-6">
                   <div className="text-center space-y-4">

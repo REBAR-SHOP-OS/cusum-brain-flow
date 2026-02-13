@@ -5,29 +5,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import {
   Send,
   Loader2,
   Globe,
   Hash,
-  Smile,
-  Paperclip,
-  AtSign,
-  Bold,
-  Italic,
-  List,
-  Code,
-  Users,
-  Pin,
-  Search,
-  MoreHorizontal,
   Languages,
-  ChevronDown,
   MessageSquare,
   Video,
   Phone,
@@ -200,76 +182,22 @@ export function MessageThread({
           </div>
         </div>
         <div className="flex items-center gap-1">
-          <TooltipProvider>
-            {/* Meeting buttons */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 hover:text-primary"
-                  onClick={onStartMeeting}
-                >
-                  <Video className="w-4 h-4 text-muted-foreground" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Start meeting</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8">
-                  <Phone className="w-4 h-4 text-muted-foreground" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Audio call</TooltipContent>
-            </Tooltip>
-            <div className="w-px h-4 bg-border mx-0.5" />
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8">
-                  <Users className="w-4 h-4 text-muted-foreground" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>{memberCount} members</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8">
-                  <Pin className="w-4 h-4 text-muted-foreground" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Pinned messages</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8">
-                  <Search className="w-4 h-4 text-muted-foreground" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Search in channel</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 hover:text-primary"
+            onClick={onStartMeeting}
+          >
+            <Video className="w-4 h-4 text-muted-foreground" />
+          </Button>
         </div>
       </div>
 
       {/* Mobile action bar */}
-      <div className="flex md:hidden items-center justify-between px-3 py-1.5 border-b border-border bg-card/30">
-        <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onStartMeeting}>
-            <Video className="w-4 h-4 text-muted-foreground" />
-          </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8">
-            <Phone className="w-4 h-4 text-muted-foreground" />
-          </Button>
-        </div>
-        <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="h-8 w-8">
-            <Users className="w-4 h-4 text-muted-foreground" />
-          </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8">
-            <Search className="w-4 h-4 text-muted-foreground" />
-          </Button>
-        </div>
+      <div className="flex md:hidden items-center px-3 py-1.5 border-b border-border bg-card/30">
+        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onStartMeeting}>
+          <Video className="w-4 h-4 text-muted-foreground" />
+        </Button>
       </div>
 
       {/* Active Meeting Banner */}
@@ -421,16 +349,7 @@ export function MessageThread({
 
                       {/* Message actions (on hover) */}
                       <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-start gap-0.5 pt-1">
-                        <Button variant="ghost" size="icon" className="h-6 w-6">
-                          <Smile className="w-3.5 h-3.5 text-muted-foreground" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-6 w-6">
-                          <MessageSquare className="w-3.5 h-3.5 text-muted-foreground" />
-                        </Button>
                         <ContentActions content={msg.original_text} size="xs" source="teamhub" sourceRef={msg.id} />
-                        <Button variant="ghost" size="icon" className="h-6 w-6">
-                          <MoreHorizontal className="w-3.5 h-3.5 text-muted-foreground" />
-                        </Button>
                       </div>
                     </div>
                   );
@@ -445,26 +364,6 @@ export function MessageThread({
 
       {/* Composer */}
       <div className="border-t border-border p-2 md:p-4 bg-card/50 backdrop-blur-sm safe-area-bottom">
-        {/* Formatting toolbar - hidden on mobile */}
-        <div className="hidden md:flex items-center gap-0.5 mb-2">
-          <Button variant="ghost" size="icon" className="h-7 w-7">
-            <Bold className="w-3.5 h-3.5 text-muted-foreground" />
-          </Button>
-          <Button variant="ghost" size="icon" className="h-7 w-7">
-            <Italic className="w-3.5 h-3.5 text-muted-foreground" />
-          </Button>
-          <Button variant="ghost" size="icon" className="h-7 w-7">
-            <List className="w-3.5 h-3.5 text-muted-foreground" />
-          </Button>
-          <Button variant="ghost" size="icon" className="h-7 w-7">
-            <Code className="w-3.5 h-3.5 text-muted-foreground" />
-          </Button>
-          <div className="w-px h-4 bg-border mx-1" />
-          <Button variant="ghost" size="icon" className="h-7 w-7">
-            <AtSign className="w-3.5 h-3.5 text-muted-foreground" />
-          </Button>
-        </div>
-
         {/* Input area */}
         <div className="relative rounded-xl border border-border bg-background focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20 transition-all">
           <Textarea
@@ -486,13 +385,7 @@ export function MessageThread({
           {/* Bottom bar */}
           <div className="flex items-center justify-between px-2 pb-1.5 md:pb-2">
             <div className="flex items-center gap-0.5">
-              <Button variant="ghost" size="icon" className="h-7 w-7">
-                <Paperclip className="w-3.5 h-3.5 text-muted-foreground" />
-              </Button>
-              <Button variant="ghost" size="icon" className="h-7 w-7">
-                <Smile className="w-3.5 h-3.5 text-muted-foreground" />
-              </Button>
-              <Badge variant="outline" className="text-[9px] px-1.5 py-0 gap-1 ml-1 hidden sm:inline-flex">
+              <Badge variant="outline" className="text-[9px] px-1.5 py-0 gap-1 hidden sm:inline-flex">
                 {myLangInfo.flag} {myLangInfo.name}
               </Badge>
             </div>
