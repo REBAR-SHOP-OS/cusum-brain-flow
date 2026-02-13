@@ -7,8 +7,8 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const TIME_LIMIT_MS = 50_000;
-const BATCH_SIZE = 20;
+const TIME_LIMIT_MS = 45_000;
+const BATCH_SIZE = 5;
 const BUCKET = "estimation-files";
 
 async function fetchOdooFile(
@@ -146,7 +146,7 @@ serve(async (req) => {
       .select("id, odoo_id, file_name, lead_id")
       .not("odoo_id", "is", null)
       .is("storage_path", null)
-      .limit(BATCH_SIZE * 5);
+      .limit(BATCH_SIZE);
 
     if (queryErr) throw queryErr;
     if (!pendingFiles || pendingFiles.length === 0) {
