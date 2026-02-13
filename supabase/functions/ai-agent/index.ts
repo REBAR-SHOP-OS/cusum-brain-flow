@@ -3763,7 +3763,27 @@ Respond with ONLY valid JSON (no markdown):
       
       const hasDate = datePatterns.some(p => p.test(message));
       
-      if (hasDate) {
+      // Fallback: detect content plan requests without explicit date
+      let effectiveHasDate = hasDate;
+      if (!hasDate) {
+        const contentPlanPatterns = [
+          /\b(?:plan|generate|create|make|build|schedule)\b.*\b(?:post|content|image)/i,
+          /\b(?:post|content|image).*\b(?:plan|generate|create|make|build|schedule)\b/i,
+          /\b\d+\s*(?:post|image)/i,
+          /(?:محتوا|پست|تصویر|عکس).*(?:بساز|تولید|ایجاد|بزن)/i,
+          /(?:بساز|تولید|ایجاد).*(?:محتوا|پست|تصویر|عکس)/i,
+          /\bthis\s+week/i,
+          /\bthis\s+month/i,
+        ];
+        if (contentPlanPatterns.some(p => p.test(message))) {
+          const todayStr = new Date().toISOString().split("T")[0];
+          message = todayStr;
+          effectiveHasDate = true;
+          console.log("📸 Pixel: Content plan request detected, using today's date →", todayStr);
+        }
+      }
+      
+      if (effectiveHasDate) {
         console.log("📸 Pixel: Date detected — starting 5-image generation flow");
         
         // Fetch Pixel Brain knowledge (agent-specific instructions)
