@@ -1,5 +1,6 @@
 import React, { Component, ErrorInfo } from "react";
 import { AlertTriangle, RefreshCw, Home, Bug, ChevronDown, ChevronUp } from "lucide-react";
+import { reportToVizzy } from "@/lib/vizzyAutoReport";
 
 interface ErrorLogEntry {
   timestamp: string;
@@ -77,13 +78,10 @@ export class SmartErrorBoundary extends Component<Props, State> {
     // Auto-recovery: retry with exponential backoff
     if (this.state.retryCount < maxRetries) {
       const delay = Math.min(1000 * Math.pow(2, this.state.retryCount), 8000);
-      // Auto-recovering with exponential backoff
       this.setState({ isAutoRecovering: true });
 
       this.retryTimer = setTimeout(() => {
-        // Clear any stale cache that might cause the error
         this.clearQueryCache();
-
         this.setState((prev) => ({
           hasError: false,
           error: null,
@@ -92,6 +90,13 @@ export class SmartErrorBoundary extends Component<Props, State> {
           isAutoRecovering: false,
         }));
       }, delay);
+    } else {
+      // All retries exhausted — report to Vizzy
+      const page = window.location.pathname;
+      reportToVizzy(
+        `${error.name}: ${error.message} (auto-recovery failed after ${maxRetries} attempts)`,
+        `${this.props.level || "app"} error on ${page}`
+      );
     }
   }
 

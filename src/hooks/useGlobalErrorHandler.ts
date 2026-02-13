@@ -1,5 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { toast } from "sonner";
+import { reportToVizzy } from "@/lib/vizzyAutoReport";
 
 /**
  * Global error handler that catches:
@@ -10,16 +11,30 @@ import { toast } from "sonner";
  * Shows user-friendly toasts and logs to localStorage for diagnostics.
  */
 export function useGlobalErrorHandler() {
+  // Track repeated errors for auto-escalation to Vizzy
+  const errorCounts = useRef<Record<string, number>>({});
+
   useEffect(() => {
+    const escalateIfRepeated = (type: string, message: string) => {
+      const key = `${type}:${message.slice(0, 80)}`;
+      errorCounts.current[key] = (errorCounts.current[key] || 0) + 1;
+      // If same error happens 3+ times in a session, report to Vizzy
+      if (errorCounts.current[key] === 3) {
+        reportToVizzy(
+          `Repeated ${type}: ${message}`,
+          `Global handler on ${window.location.pathname}`
+        );
+      }
+    };
+
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
       event.preventDefault();
       const message = event.reason?.message || String(event.reason) || "Unknown async error";
-      
-      // Skip noisy/expected errors
       if (isIgnoredError(message)) return;
 
       console.error("[GlobalErrorHandler] Unhandled rejection:", event.reason);
       logError("unhandled_rejection", message);
+      escalateIfRepeated("unhandled_rejection", message);
 
       toast.error("Something went wrong", {
         description: truncate(message, 100),
@@ -29,13 +44,12 @@ export function useGlobalErrorHandler() {
 
     const handleError = (event: ErrorEvent) => {
       const message = event.message || "Unknown error";
-      
       if (isIgnoredError(message)) return;
 
       console.error("[GlobalErrorHandler] Uncaught error:", event.error);
       logError("uncaught_error", message);
+      escalateIfRepeated("uncaught_error", message);
 
-      // Don't show toast for React rendering errors (ErrorBoundary handles those)
       if (!message.includes("Minified React error") && !message.includes("render")) {
         toast.error("Unexpected error", {
           description: truncate(message, 100),
