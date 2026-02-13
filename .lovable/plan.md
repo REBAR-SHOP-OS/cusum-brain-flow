@@ -1,88 +1,73 @@
 
-# Make "Act" Button Navigate to the Exact Entity
 
-## Problem
+# Fix 4 Security Findings
 
-When clicking "Act" on a suggestion card (e.g., "Unknown -- $1695 overdue (23d)"), the user is taken to a generic page like `/accounting?tab=invoices` instead of being deep-linked to the specific invoice, customer, or order. The user has to manually search for the entity.
+## Overview
 
-## Solution (Two Parts)
+Four security scanner findings need resolution. Two require actual database changes, and two are already properly secured (will be marked as resolved).
 
-### Part 1: Frontend -- Make AccountingWorkspace read URL params
+---
 
-**File: `src/pages/AccountingWorkspace.tsx`**
+## Finding 1: "Employee Personal Information Could Be Stolen" (profiles)
 
-- Read `?tab=` and `?search=` query parameters from the URL using `useSearchParams`
-- On mount, if `tab` param is present, set `activeTab` to that value (e.g., `invoices`, `actions`)
-- If `search` param is present, pass it down to the active tab component as an initial search value
+**Current state:** The `profiles_safe` view (with `security_invoker=on`) exposes `phone` and `email` columns to all authenticated company members via the base table's "Company members can read company profiles" policy.
 
-**File: `src/components/accounting/AccountingInvoices.tsx`**
+**Fix:** Remove `phone` from the `profiles_safe` view. Email is needed for team features (SettingsPeople, mentions, etc.) but phone numbers are only used in admin contexts (AdminPanel) which queries the base `profiles` table directly with admin-only RLS.
 
-- Accept an optional `initialSearch` prop
-- Initialize the `search` state from `initialSearch` instead of empty string, so the invoice list auto-filters to the specific entity on load
-
-### Part 2: Backend -- Generate entity-specific deep links
-
-**File: `supabase/functions/generate-suggestions/index.ts`**
-
-Update all `actions` paths to include the specific entity identifier as a search parameter so the user lands on the right tab with the right entity pre-filtered:
-
-| Suggestion Type | Current Path | New Path |
-|---|---|---|
-| Overdue invoice (Vizzy) | `/accounting?tab=invoices` | `/accounting?tab=invoices&search=CustomerName` |
-| Overdue invoice (Penny) | `/accounting?tab=invoices` | `/accounting?tab=invoices&search=CustomerName` |
-| $0 order | `/orders` (dead -- no `/orders` route) | `/accounting?tab=orders&search=OrderNumber` |
-| Blocked production | `/orders` | `/accounting?tab=orders&search=OrderNumber` |
-| Missing QB customer | `/customers` | `/customers?search=CustomerName` |
-| Idle machine | `/shop-floor` | `/shop-floor` (no change -- already correct) |
-| At-risk job | `/shop-floor` | `/shop-floor` (no change) |
-| Collection follow-up | `/accounting?tab=actions` | `/accounting?tab=actions` (already correct) |
-| Paid revision | `/orders` | `/accounting?tab=orders&search=OrderNumber` |
-
-### Part 3: Customers page -- read search param
-
-**File: `src/pages/Customers.tsx`**
-
-- Read `?search=` from the URL and use it as the initial search filter value, so "View Customer" links land with the customer pre-highlighted.
-
-## Technical Details
-
-### AccountingWorkspace.tsx changes
-```typescript
-import { useSearchParams } from "react-router-dom";
-
-// Inside component:
-const [searchParams] = useSearchParams();
-const urlTab = searchParams.get("tab");
-const urlSearch = searchParams.get("search") || "";
-
-// Initialize activeTab from URL if present
-const [activeTab, setActiveTab] = useState(urlTab || "dashboard");
-
-// Pass urlSearch to active tab components:
-// <AccountingInvoices data={qb} initialSearch={activeTab === "invoices" ? urlSearch : ""} />
+**Migration:**
+```sql
+CREATE OR REPLACE VIEW public.profiles_safe
+WITH (security_invoker=on) AS
+  SELECT id, user_id, full_name, title, department, duties,
+         email, avatar_url, is_active, preferred_language,
+         employee_type, created_at, updated_at
+  FROM public.profiles;
+-- phone column removed
 ```
 
-### AccountingInvoices.tsx changes
-```typescript
-interface Props {
-  data: ReturnType<typeof useQuickBooksData>;
-  initialSearch?: string;
-}
+---
 
-// Initialize search from prop:
-const [search, setSearch] = useState(initialSearch || "");
+## Finding 2: "Email Account Credentials Could Be Compromised" (user_gmail_tokens)
+
+**Current state:** RLS is enabled. There are INSERT and UPDATE policies but no SELECT policy. While RLS default-denies reads, an explicit deny-all SELECT policy is best practice (defense in depth). No frontend code queries this table -- only edge functions via service role.
+
+**Fix:** Add an explicit deny-all SELECT policy.
+
+**Migration:**
+```sql
+CREATE POLICY "No direct token reads"
+  ON public.user_gmail_tokens
+  FOR SELECT
+  TO authenticated, anon
+  USING (false);
 ```
 
-### generate-suggestions/index.ts changes (example for overdue invoices)
-```typescript
-// Before:
-actions: [{ label: "View AR", action: "navigate", path: "/accounting?tab=invoices" }]
+---
 
-// After:
-actions: [{ label: "View Invoice", action: "navigate", 
-  path: `/accounting?tab=invoices&search=${encodeURIComponent(customerName)}` }]
-```
+## Finding 3: "Employee Salary Information Could Be Leaked" (employee_salaries)
 
-Similar pattern applied to all suggestion types with entity-specific search terms (customer name, order number, etc.).
+**Current state:** Already properly secured -- SELECT restricted to `has_role(auth.uid(), 'admin') AND company_id = get_user_company_id(auth.uid())`. Only admin users within the same company can access salary data. Financial access audit trigger is also in place.
 
-### No database changes required
+**Action:** Mark finding as resolved (no code change needed).
+
+---
+
+## Finding 4: "Financial Records Could Be Accessed by Unauthorized Users" (accounting_mirror)
+
+**Current state:** Already properly secured -- SELECT restricted to `has_any_role(auth.uid(), ['admin', 'accounting']) AND company_id = get_user_company_id(auth.uid())`. Only admin/accounting roles within the same company can access. Financial access audit trigger is in place.
+
+**Action:** Mark finding as resolved (no code change needed).
+
+---
+
+## Summary of Changes
+
+| Item | Action |
+|------|--------|
+| `profiles_safe` view | Recreate without `phone` column |
+| `user_gmail_tokens` table | Add explicit deny-all SELECT policy |
+| `employee_salaries` finding | Mark as resolved (already secure) |
+| `accounting_mirror` finding | Mark as resolved (already secure) |
+
+No frontend code changes needed -- `phone` is not used from `profiles_safe` in any component (only from the base `profiles` table in admin-only pages).
+
