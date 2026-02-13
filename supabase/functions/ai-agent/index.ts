@@ -3892,7 +3892,7 @@ You MUST respond with ONLY valid JSON (no markdown, no code blocks) in this exac
               
               if (imgResp.ok) {
                 const imgData = await imgResp.json();
-                const b64DataUri = imgData.images?.[0]?.image_url?.url || "";
+                const b64DataUri = imgData.choices?.[0]?.message?.images?.[0]?.image_url?.url || imgData.images?.[0]?.image_url?.url || "";
                 if (b64DataUri) {
                   try {
                     const rawB64 = b64DataUri.replace(/^data:image\/\w+;base64,/, "");
