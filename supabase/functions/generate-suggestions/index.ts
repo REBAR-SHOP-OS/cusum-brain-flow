@@ -163,6 +163,7 @@ serve(async (req) => {
             ],
           };
           pushDual(row, `vizzy:zero_total:${order.id}`, agentMap.vizzy);
+        }
       }
 
       // Jobs blocked by revision / change order
