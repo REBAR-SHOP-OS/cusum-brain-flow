@@ -162,3 +162,6 @@ verify_jwt = false
 
 [functions.relink-orphan-invoices]
 verify_jwt = false
+
+[functions.qb-sync-engine]
+verify_jwt = false

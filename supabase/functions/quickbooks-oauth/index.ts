@@ -365,6 +365,23 @@ serve(async (req) => {
       case "account-quick-report":
         return handleAccountQuickReport(supabase, userId, body);
 
+      // ── Sync Engine Delegation ─────────────────────────────────
+      case "full-sync":
+      case "incremental-sync":
+      case "reconcile": {
+        const companyId = await getUserCompanyId(supabase, userId);
+        const syncAction = action === "full-sync" ? "backfill" : action === "incremental-sync" ? "incremental" : "reconcile";
+        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+        const svcKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+        const syncRes = await fetch(`${supabaseUrl}/functions/v1/qb-sync-engine`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${svcKey}` },
+          body: JSON.stringify({ action: syncAction, company_id: companyId }),
+        });
+        const syncData = await syncRes.json();
+        return jsonRes(syncData, syncRes.status);
+      }
+
       default:
         return jsonRes({ error: `Unknown action: ${action}` }, 400);
     }
