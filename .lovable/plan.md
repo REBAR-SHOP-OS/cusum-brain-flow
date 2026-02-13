@@ -1,16 +1,26 @@
 
+# Fix: Add Missing Characters to Filename Sanitization
 
-# Fix: Enable File Inputs Without CSV Gate
+## Problem
+3 out of 407 files failed with "Invalid key" errors. The filenames contain square brackets `[`, `]` and parentheses `(`, `)` which are not included in the current sanitization regex, causing Supabase storage to reject them.
 
-The "Choose File" buttons are disabled because the code requires the CSV mapping to be uploaded first. The fix is to allow selecting files at any time, but show a warning if no CSV mapping is loaded when they try to process.
+Examples from the screenshot:
+- `S6-0[1].pdf` -- brackets
+- `[F1 to 3].pdf` -- brackets
+- `(3).pdf` -- parentheses
 
-## Changes
+## Fix
 
 ### File: `src/components/admin/OdooDumpImportDialog.tsx`
 
-1. **Remove `disabled` gate from ZIP input** (line ~306): Change `disabled={uploading || mapping.length === 0}` to `disabled={uploading}`
-2. **Remove `disabled` gate from folder button** (line ~317): Change `disabled={uploading || mapping.length === 0}` to `disabled={uploading}`  
-3. **Add early validation in handlers**: In both `handleZipSelect` and `handleFolderSelect`, check if `mapping.length === 0` and show a toast error "Please upload the mapping CSV first" and return early
+**Line 145** -- Update the sanitization regex to include `[`, `]`, `(`, `)`:
 
-This way the buttons are always clickable, but the user gets clear feedback if they try to use them without the CSV.
+```typescript
+// Before:
+const safeName = m.name.replace(/[~#%&{}\\<>*?/$!'":@+`|=]/g, "_");
 
+// After:
+const safeName = m.name.replace(/[~#%&{}\[\]()<>\\*?/$!'":@+`|=]/g, "_");
+```
+
+This is a one-line change. After applying it, re-running the import will process those 3 files successfully.
