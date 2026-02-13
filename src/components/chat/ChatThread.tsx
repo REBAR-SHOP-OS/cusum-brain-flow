@@ -1,7 +1,8 @@
 import { useRef, useEffect } from "react";
-import { Bot } from "lucide-react";
+import { Bot, CheckCircle } from "lucide-react";
 import { ChatMessage, Message } from "./ChatMessage";
 import { PixelPostData } from "@/components/social/PixelPostCard";
+import { Button } from "@/components/ui/button";
 
 interface ChatThreadProps {
   messages: Message[];
@@ -11,9 +12,11 @@ interface ChatThreadProps {
   agentImage?: string;
   agentName?: string;
   isPixelAgent?: boolean;
+  pendingPixelSlot?: number | null;
+  onApprovePixelSlot?: () => void;
 }
 
-export function ChatThread({ messages, isLoading, onRegenerateImage, onViewPost, agentImage, agentName, isPixelAgent }: ChatThreadProps) {
+export function ChatThread({ messages, isLoading, onRegenerateImage, onViewPost, agentImage, agentName, isPixelAgent, pendingPixelSlot, onApprovePixelSlot }: ChatThreadProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -49,6 +52,19 @@ export function ChatThread({ messages, isLoading, onRegenerateImage, onViewPost,
           isPixelAgent={isPixelAgent}
         />
       ))}
+      {/* Pixel Approve & Next button */}
+      {!isLoading && pendingPixelSlot && onApprovePixelSlot && (
+        <div className="flex justify-center py-3 animate-fade-in">
+          <Button
+            onClick={onApprovePixelSlot}
+            className="gap-2 px-6"
+            size="lg"
+          >
+            <CheckCircle className="w-5 h-5" />
+            Approve & Generate Post {pendingPixelSlot}/5
+          </Button>
+        </div>
+      )}
       {isLoading && (
         <div className="flex gap-3 items-start animate-fade-in">
           <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
