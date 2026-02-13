@@ -1908,6 +1908,118 @@ export type Database = {
           },
         ]
       }
+      gl_lines: {
+        Row: {
+          account_id: string | null
+          class_id: string | null
+          credit: number
+          customer_id: string | null
+          debit: number
+          description: string | null
+          gl_transaction_id: string
+          id: string
+          location_id: string | null
+          vendor_id: string | null
+        }
+        Insert: {
+          account_id?: string | null
+          class_id?: string | null
+          credit?: number
+          customer_id?: string | null
+          debit?: number
+          description?: string | null
+          gl_transaction_id: string
+          id?: string
+          location_id?: string | null
+          vendor_id?: string | null
+        }
+        Update: {
+          account_id?: string | null
+          class_id?: string | null
+          credit?: number
+          customer_id?: string | null
+          debit?: number
+          description?: string | null
+          gl_transaction_id?: string
+          id?: string
+          location_id?: string | null
+          vendor_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gl_lines_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "qb_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gl_lines_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "qb_customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gl_lines_gl_transaction_id_fkey"
+            columns: ["gl_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "gl_transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gl_lines_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "qb_vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gl_transactions: {
+        Row: {
+          company_id: string
+          created_at: string
+          currency: string | null
+          entity_type: string | null
+          id: string
+          memo: string | null
+          qb_transaction_id: string | null
+          source: string
+          txn_date: string | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          currency?: string | null
+          entity_type?: string | null
+          id?: string
+          memo?: string | null
+          qb_transaction_id?: string | null
+          source?: string
+          txn_date?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          currency?: string | null
+          entity_type?: string | null
+          id?: string
+          memo?: string | null
+          qb_transaction_id?: string | null
+          source?: string
+          txn_date?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gl_transactions_qb_transaction_id_fkey"
+            columns: ["qb_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "qb_transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       human_tasks: {
         Row: {
           actions: Json | null
@@ -3755,6 +3867,351 @@ export type Database = {
           received_by?: string | null
           status?: string
           supplier_name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      qb_accounts: {
+        Row: {
+          account_sub_type: string | null
+          account_type: string | null
+          company_id: string
+          created_at: string
+          current_balance: number | null
+          id: string
+          is_active: boolean | null
+          is_deleted: boolean | null
+          last_synced_at: string | null
+          name: string | null
+          qb_id: string
+          qb_realm_id: string
+          raw_json: Json
+          sync_token: string | null
+          updated_at: string
+        }
+        Insert: {
+          account_sub_type?: string | null
+          account_type?: string | null
+          company_id: string
+          created_at?: string
+          current_balance?: number | null
+          id?: string
+          is_active?: boolean | null
+          is_deleted?: boolean | null
+          last_synced_at?: string | null
+          name?: string | null
+          qb_id: string
+          qb_realm_id: string
+          raw_json?: Json
+          sync_token?: string | null
+          updated_at?: string
+        }
+        Update: {
+          account_sub_type?: string | null
+          account_type?: string | null
+          company_id?: string
+          created_at?: string
+          current_balance?: number | null
+          id?: string
+          is_active?: boolean | null
+          is_deleted?: boolean | null
+          last_synced_at?: string | null
+          name?: string | null
+          qb_id?: string
+          qb_realm_id?: string
+          raw_json?: Json
+          sync_token?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      qb_company_info: {
+        Row: {
+          company_id: string
+          created_at: string
+          id: string
+          last_synced_at: string | null
+          qb_realm_id: string
+          raw_json: Json
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          id?: string
+          last_synced_at?: string | null
+          qb_realm_id: string
+          raw_json?: Json
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          id?: string
+          last_synced_at?: string | null
+          qb_realm_id?: string
+          raw_json?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      qb_customers: {
+        Row: {
+          balance: number | null
+          company_id: string
+          company_name: string | null
+          created_at: string
+          display_name: string | null
+          id: string
+          is_active: boolean | null
+          is_deleted: boolean | null
+          last_synced_at: string | null
+          qb_id: string
+          qb_realm_id: string
+          raw_json: Json
+          sync_token: string | null
+          updated_at: string
+        }
+        Insert: {
+          balance?: number | null
+          company_id: string
+          company_name?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_deleted?: boolean | null
+          last_synced_at?: string | null
+          qb_id: string
+          qb_realm_id: string
+          raw_json?: Json
+          sync_token?: string | null
+          updated_at?: string
+        }
+        Update: {
+          balance?: number | null
+          company_id?: string
+          company_name?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_deleted?: boolean | null
+          last_synced_at?: string | null
+          qb_id?: string
+          qb_realm_id?: string
+          raw_json?: Json
+          sync_token?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      qb_items: {
+        Row: {
+          company_id: string
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean | null
+          is_deleted: boolean | null
+          last_synced_at: string | null
+          name: string | null
+          qb_id: string
+          qb_realm_id: string
+          raw_json: Json
+          sync_token: string | null
+          type: string | null
+          unit_price: number | null
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_deleted?: boolean | null
+          last_synced_at?: string | null
+          name?: string | null
+          qb_id: string
+          qb_realm_id: string
+          raw_json?: Json
+          sync_token?: string | null
+          type?: string | null
+          unit_price?: number | null
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_deleted?: boolean | null
+          last_synced_at?: string | null
+          name?: string | null
+          qb_id?: string
+          qb_realm_id?: string
+          raw_json?: Json
+          sync_token?: string | null
+          type?: string | null
+          unit_price?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      qb_sync_logs: {
+        Row: {
+          action: string
+          company_id: string
+          created_at: string
+          duration_ms: number | null
+          entity_type: string | null
+          error_count: number | null
+          errors: string[] | null
+          id: string
+          qb_ids_processed: string[] | null
+          synced_count: number | null
+          trial_balance_diff: number | null
+        }
+        Insert: {
+          action: string
+          company_id: string
+          created_at?: string
+          duration_ms?: number | null
+          entity_type?: string | null
+          error_count?: number | null
+          errors?: string[] | null
+          id?: string
+          qb_ids_processed?: string[] | null
+          synced_count?: number | null
+          trial_balance_diff?: number | null
+        }
+        Update: {
+          action?: string
+          company_id?: string
+          created_at?: string
+          duration_ms?: number | null
+          entity_type?: string | null
+          error_count?: number | null
+          errors?: string[] | null
+          id?: string
+          qb_ids_processed?: string[] | null
+          synced_count?: number | null
+          trial_balance_diff?: number | null
+        }
+        Relationships: []
+      }
+      qb_transactions: {
+        Row: {
+          balance: number | null
+          company_id: string
+          created_at: string
+          customer_qb_id: string | null
+          doc_number: string | null
+          entity_type: string
+          id: string
+          is_deleted: boolean | null
+          is_voided: boolean | null
+          last_synced_at: string | null
+          qb_id: string
+          qb_realm_id: string
+          raw_json: Json
+          sync_token: string | null
+          total_amt: number | null
+          txn_date: string | null
+          updated_at: string
+          vendor_qb_id: string | null
+        }
+        Insert: {
+          balance?: number | null
+          company_id: string
+          created_at?: string
+          customer_qb_id?: string | null
+          doc_number?: string | null
+          entity_type: string
+          id?: string
+          is_deleted?: boolean | null
+          is_voided?: boolean | null
+          last_synced_at?: string | null
+          qb_id: string
+          qb_realm_id: string
+          raw_json?: Json
+          sync_token?: string | null
+          total_amt?: number | null
+          txn_date?: string | null
+          updated_at?: string
+          vendor_qb_id?: string | null
+        }
+        Update: {
+          balance?: number | null
+          company_id?: string
+          created_at?: string
+          customer_qb_id?: string | null
+          doc_number?: string | null
+          entity_type?: string
+          id?: string
+          is_deleted?: boolean | null
+          is_voided?: boolean | null
+          last_synced_at?: string | null
+          qb_id?: string
+          qb_realm_id?: string
+          raw_json?: Json
+          sync_token?: string | null
+          total_amt?: number | null
+          txn_date?: string | null
+          updated_at?: string
+          vendor_qb_id?: string | null
+        }
+        Relationships: []
+      }
+      qb_vendors: {
+        Row: {
+          balance: number | null
+          company_id: string
+          company_name: string | null
+          created_at: string
+          display_name: string | null
+          id: string
+          is_active: boolean | null
+          is_deleted: boolean | null
+          last_synced_at: string | null
+          qb_id: string
+          qb_realm_id: string
+          raw_json: Json
+          sync_token: string | null
+          updated_at: string
+        }
+        Insert: {
+          balance?: number | null
+          company_id: string
+          company_name?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_deleted?: boolean | null
+          last_synced_at?: string | null
+          qb_id: string
+          qb_realm_id: string
+          raw_json?: Json
+          sync_token?: string | null
+          updated_at?: string
+        }
+        Update: {
+          balance?: number | null
+          company_id?: string
+          company_name?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_deleted?: boolean | null
+          last_synced_at?: string | null
+          qb_id?: string
+          qb_realm_id?: string
+          raw_json?: Json
+          sync_token?: string | null
           updated_at?: string
         }
         Relationships: []
