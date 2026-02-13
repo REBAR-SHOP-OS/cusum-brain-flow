@@ -1,113 +1,89 @@
-import { useState } from "react";
-import { Search, Sparkles, Warehouse, ChevronDown, Wrench, Bell } from "lucide-react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { LayoutGrid, Search, Bell, ChevronRight } from "lucide-react";
 import { useNotifications } from "@/hooks/useNotifications";
+import { useActiveModule } from "@/hooks/useActiveModule";
 import { InboxPanel } from "@/components/panels/InboxPanel";
-import { Button } from "@/components/ui/button";
-import { useWorkspace } from "@/contexts/WorkspaceContext";
-import { useUserRole } from "@/hooks/useUserRole";
-import { useSuperAdmin } from "@/hooks/useSuperAdmin";
 import { UserMenu } from "./UserMenu";
-import { ThemeToggle } from "./ThemeToggle";
 import { CommandBar } from "./CommandBar";
-import brandLogo from "@/assets/brand-logo.png";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-
-const warehouses = [
-  { id: "main", label: "Main Yard" },
-  { id: "yard-b", label: "Yard B" },
-  { id: "offsite", label: "Off-site Storage" },
-];
 
 export function TopBar() {
-  const { warehouse, setWarehouse, toggleIntelligencePanel, intelligencePanelOpen } = useWorkspace();
-  const { isAdmin, isOffice } = useUserRole();
-  const { isSuperAdmin } = useSuperAdmin();
+  const navigate = useNavigate();
+  const { module, breadcrumb } = useActiveModule();
   const [commandOpen, setCommandOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const { unreadCount } = useNotifications();
-  const currentWarehouse = warehouses.find((w) => w.id === warehouse) ?? warehouses[0];
+
+  // Keep Cmd+K shortcut
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setCommandOpen((o) => !o);
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, []);
 
   return (
     <>
-      <header className="h-12 shrink-0 border-b border-border bg-card flex items-center gap-2 px-3 z-30">
-        {/* Logo */}
-        <img src={brandLogo} alt="RSOS" className="w-7 h-7 rounded-full object-contain" />
-        <span className="text-xs font-bold tracking-wider text-foreground uppercase hidden sm:block mr-2">
-          REBAR OS
-        </span>
+      <header className="h-[46px] shrink-0 bg-primary text-primary-foreground flex items-center px-3 z-30">
+        {/* Left: Grid icon */}
+        <button
+          onClick={() => navigate("/home")}
+          className="w-8 h-8 flex items-center justify-center rounded hover:bg-white/10 transition-colors mr-3"
+          title="Home"
+        >
+          <LayoutGrid className="w-5 h-5" />
+        </button>
 
-        {/* Warehouse Selector */}
-        {(isAdmin || isOffice) && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="gap-1.5 text-xs h-8">
-                <Warehouse className="w-3.5 h-3.5" />
-                <span className="hidden md:inline">{currentWarehouse.label}</span>
-                <ChevronDown className="w-3 h-3 opacity-50" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              {warehouses.map((w) => (
-                <DropdownMenuItem
-                  key={w.id}
-                  onClick={() => setWarehouse(w.id)}
-                  className={warehouse === w.id ? "bg-accent" : ""}
-                >
-                  {w.label}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
+        {/* Module name + breadcrumb */}
+        <nav className="flex items-center gap-1 text-[13px] min-w-0">
+          {breadcrumb.map((crumb, i) => (
+            <span key={crumb.href + crumb.label} className="flex items-center gap-1 min-w-0">
+              {i > 0 && <ChevronRight className="w-3.5 h-3.5 opacity-60 shrink-0" />}
+              <button
+                onClick={() => navigate(crumb.href)}
+                className={`truncate hover:underline ${
+                  i === 0 ? "font-semibold" : "opacity-80 font-normal"
+                }`}
+              >
+                {crumb.label}
+              </button>
+            </span>
+          ))}
+        </nav>
 
-        {/* Command bar trigger */}
-        <Button
-          variant="outline"
-          size="sm"
-          className="ml-auto gap-2 text-xs text-muted-foreground h-8 w-48 md:w-64 justify-start"
+        {/* Spacer */}
+        <div className="flex-1" />
+
+        {/* Right group */}
+        {/* Search (inline-styled, triggers CommandBar) */}
+        <button
           onClick={() => setCommandOpen(true)}
+          className="flex items-center gap-2 h-[30px] px-3 rounded bg-white/10 hover:bg-white/20 transition-colors text-[12px] opacity-80 hover:opacity-100 w-48 md:w-56 mr-2"
           data-tour="topbar-search"
         >
-          <Search className="w-3.5 h-3.5" />
-          <span>Search or command…</span>
-          <kbd className="ml-auto text-[10px] bg-muted px-1.5 py-0.5 rounded hidden md:inline">⌘K</kbd>
-        </Button>
+          <Search className="w-4 h-4 shrink-0" />
+          <span className="truncate">Search…</span>
+        </button>
 
-        {/* Admin Console Toggle - Super Admin only */}
-        {isSuperAdmin && (
-          <Button
-            variant={intelligencePanelOpen ? "secondary" : "ghost"}
-            size="sm"
-            className="h-8 w-8 p-0"
-            onClick={toggleIntelligencePanel}
-            title="Admin Console"
-          >
-            <Wrench className="w-4 h-4" />
-          </Button>
-        )}
-
-        {/* Notifications bell */}
-        <Button
-          variant="ghost"
-          size="sm"
-          className="relative h-8 w-8 p-0"
+        {/* Notifications */}
+        <button
+          className="relative w-8 h-8 flex items-center justify-center rounded hover:bg-white/10 transition-colors mr-1"
           onClick={() => setNotifOpen(true)}
           data-tour="topbar-notifications"
         >
-          <Bell className="w-4 h-4" />
+          <Bell className="w-5 h-5" />
           {unreadCount > 0 && (
             <span className="absolute -top-0.5 -right-0.5 bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1">
               {unreadCount > 9 ? "9+" : unreadCount}
             </span>
           )}
-        </Button>
+        </button>
 
-        <ThemeToggle />
+        {/* User avatar dropdown */}
         <div data-tour="topbar-user">
           <UserMenu />
         </div>
