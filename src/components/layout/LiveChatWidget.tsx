@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { MessageCircle, X, Send, Loader2, Square, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -6,7 +6,7 @@ import { useAdminChat } from "@/hooks/useAdminChat";
 import { RichMarkdown } from "@/components/chat/RichMarkdown";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
-export function LiveChatWidget() {
+export const LiveChatWidget = React.forwardRef<HTMLDivElement, {}>(function LiveChatWidget(_props, ref) {
   const [open, setOpen] = useState(false);
 
   // Listen for external toggle requests
@@ -138,4 +138,5 @@ export function LiveChatWidget() {
 
     </>
   );
-}
+});
+LiveChatWidget.displayName = "LiveChatWidget";

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
@@ -75,11 +75,12 @@ interface AutomationCardProps {
   onClick?: () => void;
 }
 
-function AutomationCard({ automation, onToggle, onClick }: AutomationCardProps) {
+const AutomationCard = React.forwardRef<HTMLDivElement, AutomationCardProps>(function AutomationCard({ automation, onToggle, onClick }, ref) {
   const Icon = iconComponents[automation.icon];
 
   return (
     <div
+      ref={ref}
       onClick={onClick}
       className={cn(
         "relative overflow-hidden rounded-2xl p-4 text-white transition-transform hover:scale-[1.02] cursor-pointer",
@@ -121,9 +122,10 @@ function AutomationCard({ automation, onToggle, onClick }: AutomationCardProps) 
       <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent pointer-events-none" />
     </div>
   );
-}
+});
+AutomationCard.displayName = "AutomationCard";
 
-export function AutomationsSection() {
+export const AutomationsSection = React.forwardRef<HTMLElement, {}>(function AutomationsSection(_props, ref) {
   const navigate = useNavigate();
   const [automations, setAutomations] = useState(defaultAutomations);
 
@@ -140,7 +142,7 @@ export function AutomationsSection() {
   };
 
   return (
-    <section className="mb-8">
+    <section ref={ref} className="mb-8">
       <div className="flex items-center gap-2 mb-4">
         <Bot className="w-5 h-5 text-primary" />
         <h2 className="text-lg font-semibold">Automations</h2>
@@ -161,4 +163,5 @@ export function AutomationsSection() {
       </div>
     </section>
   );
-}
+});
+AutomationsSection.displayName = "AutomationsSection";

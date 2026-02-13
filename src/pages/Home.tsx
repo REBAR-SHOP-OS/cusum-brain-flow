@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { routeToAgent } from "@/lib/agentRouter";
@@ -246,9 +246,10 @@ export default function Home() {
   );
 }
 
-function HelperCard({ helper, isPrimary, onClick }: { helper: Helper; isPrimary?: boolean; onClick: () => void }) {
+const HelperCard = React.forwardRef<HTMLDivElement, { helper: Helper; isPrimary?: boolean; onClick: () => void }>(function HelperCard({ helper, isPrimary, onClick }, ref) {
   return (
     <Card
+      ref={ref}
       className={`overflow-hidden cursor-pointer group hover:scale-[1.02] active:scale-[0.98] transition-transform duration-150 ease-out ${isPrimary ? "ring-2 ring-primary" : ""}`}
       onClick={onClick}
     >
@@ -264,4 +265,5 @@ function HelperCard({ helper, isPrimary, onClick }: { helper: Helper; isPrimary?
       </div>
     </Card>
   );
-}
+});
+HelperCard.displayName = "HelperCard";

@@ -1,7 +1,7 @@
 import { Link, useLocation } from "react-router-dom";
 import { Home, Inbox, CheckSquare, Factory, Menu, X, Truck, Settings, Shield, Phone, Users, Kanban, LayoutGrid, Brain, DollarSign, MessageSquare, BarChart3, Clock, Share2, FileText, Bot } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useState } from "react";
+import React, { useState } from "react";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAuth } from "@/lib/auth";
 import { useCustomerPortalData } from "@/hooks/useCustomerPortalData";
@@ -31,7 +31,7 @@ const moreItems = [
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 
-export function MobileNavV2() {
+export const MobileNavV2 = React.forwardRef<HTMLElement, {}>(function MobileNavV2(_props, ref) {
   const location = useLocation();
   const [showMore, setShowMore] = useState(false);
   const { roles, isAdmin } = useUserRole();
@@ -49,7 +49,7 @@ export function MobileNavV2() {
       { name: "HR", href: "/agent/talent", icon: Bot },
     ];
     return (
-      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-card border-t border-border md:hidden safe-area-bottom">
+      <nav ref={ref} className="fixed bottom-0 left-0 right-0 z-40 bg-card border-t border-border md:hidden safe-area-bottom">
         <div className="flex items-center justify-around h-14">
           {extNav.map((item) => {
             const isActive = location.pathname.startsWith(item.href);
@@ -158,4 +158,5 @@ export function MobileNavV2() {
       </nav>
     </>
   );
-}
+});
+MobileNavV2.displayName = "MobileNavV2";

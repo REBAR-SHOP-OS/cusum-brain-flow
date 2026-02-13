@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { X, Send, Loader2, Wrench, Trash2, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { RichMarkdown } from "@/components/chat/RichMarkdown";
 import { ContentActions } from "@/components/shared/ContentActions";
 
-export function IntelligencePanel() {
+export const IntelligencePanel = React.forwardRef<HTMLElement, {}>(function IntelligencePanel(_props, ref) {
   const { intelligencePanelOpen, setIntelligencePanelOpen } = useWorkspace();
   const { messages, isStreaming, sendMessage, clearChat, cancelStream } = useAdminChat();
   const [input, setInput] = useState("");
@@ -35,7 +35,7 @@ export function IntelligencePanel() {
   if (!intelligencePanelOpen) return null;
 
   return (
-    <aside className="w-80 shrink-0 border-l border-border bg-card flex flex-col h-full animate-slide-in">
+    <aside ref={ref} className="w-80 shrink-0 border-l border-border bg-card flex flex-col h-full animate-slide-in">
       {/* Header */}
       <div className="h-12 flex items-center justify-between px-3 border-b border-border shrink-0">
         <div className="flex items-center gap-2">
@@ -133,4 +133,5 @@ export function IntelligencePanel() {
       </div>
     </aside>
   );
-}
+});
+IntelligencePanel.displayName = "IntelligencePanel";
