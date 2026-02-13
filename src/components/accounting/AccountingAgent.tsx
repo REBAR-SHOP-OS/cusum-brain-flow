@@ -109,12 +109,12 @@ export const AccountingAgent = React.forwardRef<HTMLDivElement, AccountingAgentP
       overdueInvoiceCount: qbSummary.overdueInvoices.length,
       overdueInvoiceTotal: qbSummary.overdueInvoices.reduce((s, i) => s + i.Balance, 0),
       overdueInvoicesList: qbSummary.overdueInvoices.slice(0, 10).map(i => ({
-        doc: i.DocNumber, customer: i.CustomerRef.name, balance: i.Balance, due: i.DueDate,
+        doc: i.DocNumber, customer: i.CustomerRef?.name ?? "Unknown", balance: i.Balance, due: i.DueDate,
       })),
       overdueBillCount: qbSummary.overdueBills.length,
       overdueBillTotal: qbSummary.overdueBills.reduce((s, b) => s + b.Balance, 0),
       overdueBillsList: qbSummary.overdueBills.slice(0, 10).map(b => ({
-        doc: b.DocNumber, vendor: b.VendorRef.name, balance: b.Balance, due: b.DueDate,
+        doc: b.DocNumber, vendor: b.VendorRef?.name ?? "Unknown", balance: b.Balance, due: b.DueDate,
       })),
       bankAccounts: qbSummary.accounts
         .filter(a => a.AccountType === "Bank")
