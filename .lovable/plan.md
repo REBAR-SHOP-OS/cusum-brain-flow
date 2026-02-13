@@ -1,43 +1,53 @@
 
 
-# Admin-Only Delete & Safer Placement in Lead Detail Drawer
+# Fix AI Introduction Email Template
 
 ## Problem
-The delete button (trash icon) sits right next to the edit button in the drawer header. Any user can accidentally (or intentionally) delete leads. The screenshot shows this circled as a concern -- delete should be admin-only and moved to a less dangerous location.
+The AI-generated introduction emails contain placeholder text like `[Sales Rep Name]` instead of using a proper signature. The email should never include brackets or placeholder tokens.
 
 ## Changes
 
-### File: `src/components/pipeline/LeadDetailDrawer.tsx`
+### 1. `supabase/functions/pipeline-ai/index.ts` -- Update `draft_intro` prompt (line ~390)
 
-**1. Import `useUserRole` hook**
-Add `import { useUserRole } from "@/hooks/useUserRole"` to check admin status.
+Update the prompt to explicitly instruct the AI:
+- **Never** use placeholder brackets like `[Sales Rep Name]`, `[Your Name]`, etc.
+- Always sign emails as "The rebar.shop Sales Team"
+- Address the prospect by their first name (derived from contact_name)
+- Keep the tone warm but direct -- no filler phrases like "I hope this finds you well"
+- Open with a specific observation about the prospect's company/industry
+- Close with a soft CTA (open to a brief chat?) and sign off cleanly
 
-**2. Remove delete button from header**
-The header currently has edit (pencil) and delete (trash) side by side. Remove the trash button entirely from the header area. Keep only the pencil (edit) button there.
-
-**3. Add admin-only delete at the bottom of the drawer**
-Move the delete action to the **footer** of the drawer, visible only to admins. It will be styled as a subtle destructive text button (e.g., "Delete Lead") placed in the footer bar alongside the created/updated timestamps. This makes it:
-- Hard to hit accidentally (far from primary actions)
-- Admin-gated (non-admins never see it)
-- Still accessible when genuinely needed
-
-### Layout After Change
-
-**Header (top-right):**
+Updated prompt wording:
 ```
-[Pencil/Edit]  [X close]
-```
-
-**Footer (bottom):**
-```
-Created Feb 10, 2026          [Delete Lead]  (admin only)          Updated 2h ago
+Draft a cold introduction email. CRITICAL RULES:
+1. NEVER use placeholder text like [Sales Rep Name] or [Your Name] -- sign as "The rebar.shop Sales Team"
+2. Address the recipient by first name only (e.g., "Hi Sarah,")
+3. Open with a specific observation about their company or industry
+4. Keep to 3-4 sentences max in the body
+5. End with a soft call to action
+6. Sign off: "Best regards,\nThe rebar.shop Sales Team"
 ```
 
-The "Delete Lead" button uses `text-destructive` styling with a small trash icon, requiring a confirmation dialog before executing.
+### 2. `src/components/prospecting/ProspectIntroDialog.tsx` -- Pass first name in userMessage (line ~48)
 
-### Technical Detail
+Extract the first name from `prospect.contact_name` and pass it explicitly in the prompt context so the AI has a clean first name to use in the greeting.
 
-- `useUserRole()` is called inside the component to get `isAdmin`
-- The delete button is conditionally rendered: `{isAdmin && ( ... )}`
-- Role check uses the existing `user_roles` table via the established hook -- no client-side shortcuts
-- No other behavioral changes; edit, stage change, and all tabs remain unchanged
+## Result
+Emails will look like:
+
+```
+Hi Sarah,
+
+We noticed Windy City Structural Group specializes in high-density urban 
+infrastructure -- an area where precision rebar fabrication makes a real 
+difference. At rebar.shop, we provide advanced fabrication capabilities 
+tailored for complex high-rise reinforcement with reliable scheduling.
+
+Would you be open to a brief conversation about how we can support your 
+upcoming projects?
+
+Best regards,
+The rebar.shop Sales Team
+```
+
+No more `[Sales Rep Name]` placeholders.
