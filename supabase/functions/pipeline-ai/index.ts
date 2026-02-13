@@ -1,7 +1,74 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { requireAuth, corsHeaders } from "../_shared/auth.ts";
 
-// ... keep existing code (systemPrompt, buildLeadContext, callAI, extractToolResult)
+const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") || "";
+
+const systemPrompt = `You are Blitz, an AI sales assistant for rebar.shop — a Canadian rebar fabrication company.
+You help sales reps manage their pipeline, draft communications, score leads, and recommend actions.
+Be concise, professional, and data-driven. Format numbers clearly. Use metric units (tonnes, mm).
+When drafting emails, write from the perspective of the rebar.shop sales team.`;
+
+function buildLeadContext(lead: any, activities?: any[]): string {
+  const parts: string[] = [];
+  parts.push(`Lead: ${lead.title || "Untitled"}`);
+  if (lead.customer_name) parts.push(`Customer: ${lead.customer_name}`);
+  if (lead.stage) parts.push(`Stage: ${lead.stage}`);
+  if (lead.priority) parts.push(`Priority: ${lead.priority}`);
+  if (lead.probability != null) parts.push(`Probability: ${lead.probability}%`);
+  if (lead.expected_revenue) parts.push(`Expected Revenue: $${Number(lead.expected_revenue).toLocaleString()}`);
+  if (lead.source) parts.push(`Source: ${lead.source}`);
+  if (lead.notes) parts.push(`Notes: ${lead.notes}`);
+  if (lead.created_at) parts.push(`Created: ${lead.created_at}`);
+  if (lead.next_action_date) parts.push(`Next Action: ${lead.next_action_date}`);
+  if (lead.assigned_to) parts.push(`Assigned To: ${lead.assigned_to}`);
+
+  if (activities && activities.length > 0) {
+    parts.push("\nRecent Activities:");
+    for (const a of activities.slice(0, 10)) {
+      parts.push(`- [${a.event_type}] ${a.description || ""} (${a.created_at})`);
+    }
+  }
+
+  return parts.join("\n");
+}
+
+async function callAI(messages: any[], tools?: any[], toolChoice?: any): Promise<any> {
+  const body: any = {
+    model: "gemini-2.5-flash",
+    messages,
+    temperature: 0.7,
+  };
+  if (tools) body.tools = tools;
+  if (toolChoice) body.tool_choice = toolChoice;
+
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${GEMINI_API_KEY}`,
+      },
+      body: JSON.stringify(body),
+    }
+  );
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`AI API error ${res.status}: ${text}`);
+  }
+  return res.json();
+}
+
+function extractToolResult(data: any): any | null {
+  const msg = data.choices?.[0]?.message;
+  if (msg?.tool_calls?.[0]?.function?.arguments) {
+    try {
+      return JSON.parse(msg.tool_calls[0].function.arguments);
+    } catch { return null; }
+  }
+  return null;
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
