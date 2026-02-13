@@ -305,27 +305,43 @@ export function LeadTimeline({ lead }: LeadTimelineProps) {
               const FileIcon = getFileIcon(f.mime_type || "", ext);
               const iconColor = getFileIconColor(ext);
 
-              const isOdooFile = f.file_url?.includes("/web/content/") && f.odoo_id;
+              const hasStoragePath = f.storage_path;
+              const isOdooFile = !hasStoragePath && f.file_url?.includes("/web/content/") && f.odoo_id;
 
               const handleDownload = async (e: React.MouseEvent) => {
-                if (!isOdooFile) return; // let browser handle non-odoo links
                 e.preventDefault();
                 try {
-                  const { data: sessionData } = await supabase.auth.getSession();
-                  const token = sessionData.session?.access_token;
-                  if (!token) return;
-                  const proxyUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/odoo-file-proxy?id=${f.odoo_id}`;
-                  const res = await fetch(proxyUrl, {
-                    headers: { Authorization: `Bearer ${token}` },
-                  });
-                  if (!res.ok) throw new Error("Download failed");
-                  const blob = await res.blob();
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement("a");
-                  a.href = url;
-                  a.download = f.file_name || `file-${f.odoo_id}`;
-                  a.click();
-                  URL.revokeObjectURL(url);
+                  if (hasStoragePath) {
+                    // Serve from storage bucket
+                    const { data: sessionData } = await supabase.auth.getSession();
+                    const token = sessionData.session?.access_token;
+                    if (!token) return;
+                    const { data } = supabase.storage.from("estimation-files").getPublicUrl(f.storage_path!);
+                    const a = document.createElement("a");
+                    a.href = data.publicUrl;
+                    a.download = f.file_name || "file";
+                    a.target = "_blank";
+                    a.click();
+                  } else if (isOdooFile) {
+                    // Legacy: still on Odoo proxy (not yet migrated)
+                    const { data: sessionData } = await supabase.auth.getSession();
+                    const token = sessionData.session?.access_token;
+                    if (!token) return;
+                    const proxyUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/odoo-file-proxy?id=${f.odoo_id}`;
+                    const res = await fetch(proxyUrl, {
+                      headers: { Authorization: `Bearer ${token}` },
+                    });
+                    if (!res.ok) throw new Error("Download failed");
+                    const blob = await res.blob();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = f.file_name || `file-${f.odoo_id}`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  } else if (f.file_url) {
+                    window.open(f.file_url, "_blank");
+                  }
                 } catch (err) {
                   console.error("File download error:", err);
                 }
@@ -345,7 +361,7 @@ export function LeadTimeline({ lead }: LeadTimelineProps) {
                   )}
                   <div className="flex gap-3 py-1 pl-11">
                     <div className="space-y-1.5 max-w-[320px]">
-                      {isImage && isOdooFile && (
+                      {isOdooFile && !hasStoragePath && (
                         <OdooImagePreview odooId={f.odoo_id!} fileName={f.file_name || "image"} />
                       )}
                       <button
