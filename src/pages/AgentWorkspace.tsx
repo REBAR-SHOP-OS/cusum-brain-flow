@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { ChatThread } from "@/components/chat/ChatThread";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { Message } from "@/components/chat/ChatMessage";
-import { sendAgentMessage, AgentType, ChatMessage as AgentChatMessage } from "@/lib/agent";
+import { sendAgentMessage, AgentType, ChatMessage as AgentChatMessage, PixelPost } from "@/lib/agent";
 import { AgentSuggestions } from "@/components/agent/AgentSuggestions";
 import { agentSuggestions } from "@/components/agent/agentSuggestionsData";
 import { AgentHistorySidebar } from "@/components/agent/AgentHistorySidebar";
@@ -60,6 +60,7 @@ export default function AgentWorkspace() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [pendingPixelSlot, setPendingPixelSlot] = useState<number | null>(null);
   const [pixelDateMessage, setPixelDateMessage] = useState<string>("");
+  const [lastPixelPost, setLastPixelPost] = useState<PixelPost | null>(null);
   
 
   const { sessions, loading: sessionsLoading, fetchSessions, createSession, addMessage, getSessionMessages, deleteSession } = useChatSessions();
@@ -175,6 +176,11 @@ export default function AgentWorkspace() {
         setPendingPixelSlot(null);
       }
 
+      // Store pixel post data for saving on approval
+      if (agentId === "social" && response.pixelPost) {
+        setLastPixelPost(response.pixelPost);
+      }
+
       // Build reply with created notification badges
       let replyContent = response.reply;
 
@@ -261,12 +267,54 @@ export default function AgentWorkspace() {
     handleSendInternal(content);
   }, [handleSendInternal]);
 
-  const handleApprovePixelSlot = useCallback(() => {
+  const handleApprovePixelSlot = useCallback(async () => {
+    // Save current post to social_posts as draft
+    if (lastPixelPost && user) {
+      try {
+        const scheduledDate = new Date(selectedDate);
+        // Parse slot time (e.g. "06:30 AM") and set on date
+        const timeMatch = lastPixelPost.slot.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+        if (timeMatch) {
+          let hours = parseInt(timeMatch[1]);
+          const minutes = parseInt(timeMatch[2]);
+          const ampm = timeMatch[3].toUpperCase();
+          if (ampm === "PM" && hours !== 12) hours += 12;
+          if (ampm === "AM" && hours === 12) hours = 0;
+          scheduledDate.setHours(hours, minutes, 0, 0);
+        }
+
+        const { error } = await supabase.from("social_posts").insert({
+          platform: lastPixelPost.platform || "instagram",
+          status: "draft",
+          title: lastPixelPost.theme || lastPixelPost.product || "Pixel Post",
+          content: lastPixelPost.caption,
+          image_url: lastPixelPost.imageUrl || null,
+          hashtags: lastPixelPost.hashtags ? lastPixelPost.hashtags.split(/\s+/).filter(Boolean) : [],
+          scheduled_date: scheduledDate.toISOString(),
+          user_id: user.id,
+        });
+        if (error) {
+          console.error("Failed to save pixel post:", error);
+          toast.error("Failed to save post to calendar");
+        } else {
+          toast.success("Post saved to calendar as draft ✅");
+        }
+      } catch (err) {
+        console.error("Error saving pixel post:", err);
+        toast.error("Error saving post");
+      }
+    }
+
+    // Continue to next slot or clear state for final post
     if (pendingPixelSlot && pixelDateMessage) {
       handleSendInternal(pixelDateMessage, pendingPixelSlot);
       setPendingPixelSlot(null);
+      setLastPixelPost(null);
+    } else {
+      // Final post (slot 5) — just clear state
+      setLastPixelPost(null);
     }
-  }, [pendingPixelSlot, pixelDateMessage, handleSendInternal]);
+  }, [pendingPixelSlot, pixelDateMessage, handleSendInternal, lastPixelPost, user, selectedDate]);
 
   const handleRegenerateImage = useCallback((imageUrl: string, alt: string) => {
     const productName = alt || "this product";
@@ -469,6 +517,7 @@ showFileUpload={true}
               agentName={config.name}
               isPixelAgent={agentId === "social"}
               pendingPixelSlot={pendingPixelSlot}
+              hasUnsavedPixelPost={!!lastPixelPost && !pendingPixelSlot}
               onApprovePixelSlot={handleApprovePixelSlot}
             />
             <ChatInput

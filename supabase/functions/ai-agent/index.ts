@@ -4026,7 +4026,20 @@ RULES:
       }
 
       return new Response(
-        JSON.stringify({ reply: pixelReply, context: mergedContext, nextSlot }),
+        JSON.stringify({ 
+          reply: pixelReply, 
+          context: mergedContext, 
+          nextSlot,
+          pixelPost: {
+            caption: post.caption || "",
+            hashtags: post.hashtags || "",
+            imageUrl: post.imageUrl || "",
+            platform: "instagram",
+            slot: post.slot || "",
+            theme: post.theme || "",
+            product: post.product || "",
+          }
+        }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

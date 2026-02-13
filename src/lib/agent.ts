@@ -7,11 +7,22 @@ export interface ChatMessage {
   content: string;
 }
 
+export interface PixelPost {
+  caption: string;
+  hashtags: string;
+  imageUrl: string;
+  platform: string;
+  slot: string;
+  theme: string;
+  product: string;
+}
+
 export interface AgentResponse {
   reply: string;
   context?: Record<string, unknown>;
   createdNotifications?: { type: string; title: string; assigned_to_name?: string }[];
   nextSlot?: number | null;
+  pixelPost?: PixelPost;
 }
 
 export interface AttachedFile {
