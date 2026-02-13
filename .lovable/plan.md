@@ -1,24 +1,21 @@
 
-# تنظیم عنوان سشن Pixel بر اساس تاریخ انتخابی
+# رفع باگ: عدم همخوانی تاریخ در Recents با تاریخ انتخابی
+
+## مشکل
+متغیر `selectedDate` در لیست وابستگی‌های `handleSend` (useCallback) وجود ندارد. به همین دلیل وقتی کاربر تاریخ را تغییر می‌دهد، تابع `handleSend` همچنان مقدار قدیمی `selectedDate` (تاریخ امروز) را می‌بیند.
 
 ## تغییر
-در فایل `src/pages/AgentWorkspace.tsx` (خطوط 137-139)، منطق تعیین عنوان سشن را تغییر می‌دهیم تا برای ایجنت `social` (Pixel) به جای متن پیام، تاریخ انتخاب‌شده (`selectedDate`) استفاده شود.
 
-### قبل:
-```typescript
-const sessionTitle = agentId === "eisenhower"
-  ? format(new Date(), "yyyy-MM-dd (EEE, MMM d)")
-  : content;
-```
+### فایل `src/pages/AgentWorkspace.tsx`
+اضافه کردن `selectedDate` به آرایه وابستگی‌های `useCallback` در `handleSend`:
 
-### بعد:
 ```typescript
-const sessionTitle = agentId === "eisenhower"
-  ? format(new Date(), "yyyy-MM-dd (EEE, MMM d)")
-  : agentId === "social"
-    ? format(selectedDate, "yyyy-MM-dd")
-    : content;
+// قبل:
+}, [messages, config.agentType, config.name, activeSessionId, createSession, addMessage, mapping]);
+
+// بعد:
+}, [messages, config.agentType, config.name, activeSessionId, createSession, addMessage, mapping, selectedDate]);
 ```
 
 ## نتیجه
-وقتی کاربر در Pixel تاریخی را انتخاب کند و پیامی بفرستد، عنوان سشن در بخش Recents به صورت تاریخ انتخابی (مثلا `2026-02-13`) نمایش داده می‌شود.
+با این تغییر، هر بار که کاربر تاریخ را در تقویم عوض کند، `handleSend` مقدار جدید را می‌بیند و عنوان سشن در Recents دقیقا با تاریخ انتخابی یکی خواهد بود.
