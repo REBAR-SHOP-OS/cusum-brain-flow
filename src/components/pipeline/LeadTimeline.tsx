@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
+import { getSignedFileUrl } from "@/lib/storageUtils";
 import { useToast } from "@/hooks/use-toast";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -312,16 +313,9 @@ export function LeadTimeline({ lead }: LeadTimelineProps) {
                 e.preventDefault();
                 try {
                   if (hasStoragePath) {
-                    // Serve from storage bucket
-                    const { data: sessionData } = await supabase.auth.getSession();
-                    const token = sessionData.session?.access_token;
-                    if (!token) return;
-                    const { data } = supabase.storage.from("estimation-files").getPublicUrl(f.storage_path!);
-                    const a = document.createElement("a");
-                    a.href = data.publicUrl;
-                    a.download = f.file_name || "file";
-                    a.target = "_blank";
-                    a.click();
+                    const signedUrl = await getSignedFileUrl(f.storage_path!);
+                    if (!signedUrl) return;
+                    window.open(signedUrl, "_blank");
                   } else if (isOdooFile) {
                     // Legacy: still on Odoo proxy (not yet migrated)
                     const { data: sessionData } = await supabase.auth.getSession();
