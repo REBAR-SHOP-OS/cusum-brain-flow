@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompletedBundles } from "@/hooks/useCompletedBundles";
@@ -160,6 +160,24 @@ export default function Deliveries() {
   const refreshStops = () => {
     queryClient.invalidateQueries({ queryKey: ["delivery-stops", selectedDelivery?.id, companyId] });
   };
+
+  // Fix 6: Realtime subscriptions
+  useEffect(() => {
+    if (!companyId) return;
+    const channel = supabase
+      .channel("deliveries-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "deliveries" }, () =>
+        queryClient.invalidateQueries({ queryKey: ["deliveries", companyId] })
+      )
+      .on("postgres_changes", { event: "*", schema: "public", table: "delivery_stops" }, () => {
+        queryClient.invalidateQueries({ queryKey: ["deliveries", companyId] });
+        if (selectedDelivery) {
+          queryClient.invalidateQueries({ queryKey: ["delivery-stops", selectedDelivery.id, companyId] });
+        }
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [companyId, selectedDelivery?.id, queryClient]);
 
   if (error) {
     return (

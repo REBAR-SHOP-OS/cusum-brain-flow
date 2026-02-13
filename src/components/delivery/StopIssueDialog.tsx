@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -22,6 +22,11 @@ export function StopIssueDialog({ open, onOpenChange, stopId, onComplete }: Stop
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // Fix 4: Reset reason when dialog closes
+  useEffect(() => {
+    if (!open) setReason("");
+  }, [open]);
+
   const handleSubmit = async () => {
     if (!reason.trim()) return;
     setSaving(true);
@@ -38,7 +43,6 @@ export function StopIssueDialog({ open, onOpenChange, stopId, onComplete }: Stop
       toast.success("Issue logged");
       onComplete();
       onOpenChange(false);
-      setReason("");
     } catch (err: any) {
       toast.error(err.message || "Failed to log issue");
     } finally {
@@ -77,3 +81,5 @@ export function StopIssueDialog({ open, onOpenChange, stopId, onComplete }: Stop
     </Dialog>
   );
 }
+
+StopIssueDialog.displayName = "StopIssueDialog";

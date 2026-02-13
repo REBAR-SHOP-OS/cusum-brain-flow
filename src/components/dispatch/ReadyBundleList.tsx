@@ -40,7 +40,7 @@ export function ReadyBundleList({ bundles, title, onSelect }: ReadyBundleListPro
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-[10px]">
+            <Badge variant="default" className="text-[10px]">
               Ready
             </Badge>
             <ChevronRight className="w-4 h-4 text-muted-foreground" />
@@ -50,3 +50,5 @@ export function ReadyBundleList({ bundles, title, onSelect }: ReadyBundleListPro
     </div>
   );
 }
+
+ReadyBundleList.displayName = "ReadyBundleList";
