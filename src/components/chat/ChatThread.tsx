@@ -13,10 +13,11 @@ interface ChatThreadProps {
   agentName?: string;
   isPixelAgent?: boolean;
   pendingPixelSlot?: number | null;
+  hasUnsavedPixelPost?: boolean;
   onApprovePixelSlot?: () => void;
 }
 
-export function ChatThread({ messages, isLoading, onRegenerateImage, onViewPost, agentImage, agentName, isPixelAgent, pendingPixelSlot, onApprovePixelSlot }: ChatThreadProps) {
+export function ChatThread({ messages, isLoading, onRegenerateImage, onViewPost, agentImage, agentName, isPixelAgent, pendingPixelSlot, hasUnsavedPixelPost, onApprovePixelSlot }: ChatThreadProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -62,6 +63,19 @@ export function ChatThread({ messages, isLoading, onRegenerateImage, onViewPost,
           >
             <CheckCircle className="w-5 h-5" />
             Approve & Generate Post {pendingPixelSlot}/5
+          </Button>
+        </div>
+      )}
+      {/* Last post (slot 5) approve button */}
+      {!isLoading && !pendingPixelSlot && hasUnsavedPixelPost && onApprovePixelSlot && (
+        <div className="flex justify-center py-3 animate-fade-in">
+          <Button
+            onClick={onApprovePixelSlot}
+            className="gap-2 px-6"
+            size="lg"
+          >
+            <CheckCircle className="w-5 h-5" />
+            Approve Final Post ✅
           </Button>
         </div>
       )}
