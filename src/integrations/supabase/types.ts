@@ -2896,6 +2896,39 @@ export type Database = {
           },
         ]
       }
+      migration_logs: {
+        Row: {
+          created_at: string
+          elapsed_s: number
+          errors: string[]
+          failed: number
+          id: string
+          migrated: number
+          remaining: number
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          elapsed_s?: number
+          errors?: string[]
+          failed?: number
+          id?: string
+          migrated?: number
+          remaining?: number
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          elapsed_s?: number
+          errors?: string[]
+          failed?: number
+          id?: string
+          migrated?: number
+          remaining?: number
+          status?: string
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           agent_color: string | null
