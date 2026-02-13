@@ -1,18 +1,25 @@
 
-# Lock Prospect Digging to Ontario, Canada
+# Hide Emailed Prospects from Prospecting Page
 
-## Changes
+## Problem
+After sending an email, prospects with "emailed" status still appear on the Prospecting page. Since they've been auto-approved and have a lead in the pipeline, they should no longer clutter the prospecting view.
 
-### 1. `src/pages/Prospecting.tsx`
-- Change default region from `"Canada/USA"` to `"Ontario, Canada"`
-- Remove the region input field from the UI since it should always be Ontario, Canada
-- Keep `region` as a constant rather than user-editable state
+## Change
 
-### 2. `supabase/functions/prospect-leads/index.ts`
-- Change the fallback default from `"Canada/USA"` to `"Ontario, Canada"`
-- Update the AI system prompt to focus specifically on Ontario cities and contractors
+### `src/pages/Prospecting.tsx` -- Filter out emailed prospects from the query
 
-## Technical Details
-- The region input field will be removed from the header bar, simplifying the UI
-- The edge function will still accept a `region` parameter for future flexibility, but defaults to Ontario
-- AI prompt will reference Ontario-specific cities (Toronto, Ottawa, Hamilton, London, etc.)
+Add `.neq("status", "emailed")` to the prospects query (around line 60) so emailed prospects are excluded at the database level. This means:
+
+- Prospects disappear from the Prospecting page once emailed
+- They remain accessible as leads on the Pipeline page
+- The status filter toggle for "Emailed" will also be removed from `ProspectingFilters` since it's no longer relevant
+- Count displays will reflect only active (non-emailed) prospects
+
+### `src/components/prospecting/ProspectingFilters.tsx` -- Remove "Emailed" toggle
+
+Remove the `statusEmailed` filter toggle since emailed prospects won't appear on this page anymore.
+
+## Result
+- Emailed prospects vanish from the Prospecting page immediately after sending
+- They live on as leads in the Pipeline under the "prospecting" stage
+- Cleaner prospecting view focused only on pending/approved/rejected prospects
