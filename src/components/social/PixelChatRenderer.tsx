@@ -10,20 +10,30 @@ interface PixelChatRendererProps {
   onRegenerateImage?: (imageUrl: string, alt: string) => void;
 }
 
-/** Extract social-images URLs from markdown content */
-function extractPostImages(content: string): { imageUrl: string; caption: string }[] {
+/** Extract social-images URLs and nearby hashtags from markdown content */
+function extractPostData(content: string): { imageUrl: string; caption: string; hashtags: string }[] {
   const imgRegex = /!\[([^\]]*)\]\((https?:\/\/[^\s)]*social-images[^\s)]*)\)/g;
-  const results: { imageUrl: string; caption: string }[] = [];
+  const results: { imageUrl: string; caption: string; hashtags: string }[] = [];
   let match;
   while ((match = imgRegex.exec(content)) !== null) {
-    results.push({ caption: match[1], imageUrl: match[2] });
+    results.push({ caption: match[1], imageUrl: match[2], hashtags: "" });
   }
+
+  // Extract hashtags from content (lines or inline sequences of #word)
+  const hashtagMatches = content.match(/#[a-zA-Z]\w*/g);
+  const allHashtags = hashtagMatches ? hashtagMatches.join(" ") : "";
+
+  // Distribute hashtags to posts (simple: all hashtags go to all posts for now)
+  results.forEach((r) => {
+    r.hashtags = allHashtags;
+  });
+
   return results;
 }
 
 const PixelChatRenderer = React.forwardRef<HTMLDivElement, PixelChatRendererProps>(
   ({ content, agentImage, agentName, onViewPost, onRegenerateImage }, ref) => {
-    const images = extractPostImages(content);
+    const images = extractPostData(content);
 
     if (images.length === 0) {
       return (
@@ -42,12 +52,15 @@ const PixelChatRenderer = React.forwardRef<HTMLDivElement, PixelChatRendererProp
     // Clean up leftover empty lines and download/regen links tied to images
     textContent = textContent.replace(/\[⬇️ Download\]\([^)]*social-images[^)]*\)/g, "");
     textContent = textContent.replace(/🔄\s*Regenerate/g, "");
+    // Remove standalone hashtag lines (they're shown on the card)
+    textContent = textContent.replace(/^[\s]*#[a-zA-Z]\w*(\s+#[a-zA-Z]\w*)*[\s]*$/gm, "");
     textContent = textContent.trim();
 
     const posts: PixelPostData[] = images.map((img, i) => ({
       id: `post-${i}-${img.imageUrl.slice(-8)}`,
       imageUrl: img.imageUrl,
       caption: img.caption,
+      hashtags: img.hashtags,
       status: "draft" as const,
     }));
 
@@ -60,8 +73,6 @@ const PixelChatRenderer = React.forwardRef<HTMLDivElement, PixelChatRendererProp
           <PixelPostCard
             key={post.id}
             post={post}
-            agentImage={agentImage}
-            agentName={agentName}
             onView={onViewPost}
           />
         ))}

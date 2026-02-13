@@ -1,8 +1,9 @@
-import React, { useState } from "react";
-import { RefreshCw, Wand2, CalendarDays, Copy, Instagram, Facebook, Youtube, ImageIcon } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { RefreshCw, Wand2, CalendarDays, Copy, Instagram, Facebook, Youtube, ImageIcon, Hash, AlignLeft } from "lucide-react";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
+import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { PixelPostData } from "./PixelPostCard";
@@ -28,6 +29,8 @@ interface PixelPostViewPanelProps {
 
 const PixelPostViewPanel = React.forwardRef<HTMLDivElement, PixelPostViewPanelProps>(
   ({ post, onClose }, ref) => {
+    const [caption, setCaption] = useState("");
+    const [hashtags, setHashtags] = useState("");
     const [selectedDate, setSelectedDate] = useState<Date>(new Date());
     const [selectedHour, setSelectedHour] = useState("09");
     const [selectedMinute, setSelectedMinute] = useState("00");
@@ -37,6 +40,14 @@ const PixelPostViewPanel = React.forwardRef<HTMLDivElement, PixelPostViewPanelPr
       { id: "youtube", name: "YouTube", icon: Youtube, active: false },
       { id: "tiktok", name: "TikTok", icon: TikTokIcon, active: false },
     ]);
+
+    // Sync local state when post changes
+    useEffect(() => {
+      if (post) {
+        setCaption(post.caption || "");
+        setHashtags(post.hashtags || "");
+      }
+    }, [post]);
 
     const toggleAccount = (id: string) => {
       setAccounts((prev) =>
@@ -55,7 +66,7 @@ const PixelPostViewPanel = React.forwardRef<HTMLDivElement, PixelPostViewPanelPr
             <ImageIcon className="w-6 h-6 text-muted-foreground" />
           </div>
           <p className="text-sm font-medium text-muted-foreground">No post selected</p>
-          <p className="text-xs text-muted-foreground/70 mt-1">Click "View" on a post to see details here</p>
+          <p className="text-xs text-muted-foreground/70 mt-1">Click "✓" on a post to review it here</p>
         </div>
       );
     }
@@ -87,6 +98,34 @@ const PixelPostViewPanel = React.forwardRef<HTMLDivElement, PixelPostViewPanelPr
               <Wand2 className="w-3.5 h-3.5" />
               AI Edit
             </Button>
+          </div>
+
+          {/* Caption Edit */}
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <AlignLeft className="w-4 h-4 text-primary" />
+              Caption
+            </h3>
+            <Textarea
+              value={caption}
+              onChange={(e) => setCaption(e.target.value)}
+              placeholder="Write a caption..."
+              className="min-h-[80px] text-sm resize-none"
+            />
+          </div>
+
+          {/* Hashtags Edit */}
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <Hash className="w-4 h-4 text-primary" />
+              Hashtags
+            </h3>
+            <Textarea
+              value={hashtags}
+              onChange={(e) => setHashtags(e.target.value)}
+              placeholder="#hashtag1 #hashtag2 ..."
+              className="min-h-[60px] text-sm resize-none text-primary/80"
+            />
           </div>
 
           {/* Schedule Section */}
