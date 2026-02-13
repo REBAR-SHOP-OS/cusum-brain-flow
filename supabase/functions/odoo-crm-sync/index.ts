@@ -52,7 +52,7 @@ Deno.serve(async (req) => {
   try {
     const { serviceClient } = await requireAuth(req);
 
-    const odooUrl = Deno.env.get("ODOO_URL")!;
+    const odooUrl = Deno.env.get("ODOO_URL")!.trim();
     const odooKey = Deno.env.get("ODOO_API_KEY")!;
     const odooDB = Deno.env.get("ODOO_DATABASE")!;
 
