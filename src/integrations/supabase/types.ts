@@ -5940,7 +5940,6 @@ export type Database = {
           full_name: string | null
           id: string | null
           is_active: boolean | null
-          phone: string | null
           preferred_language: string | null
           title: string | null
           updated_at: string | null
@@ -5956,7 +5955,6 @@ export type Database = {
           full_name?: string | null
           id?: string | null
           is_active?: boolean | null
-          phone?: string | null
           preferred_language?: string | null
           title?: string | null
           updated_at?: string | null
@@ -5972,7 +5970,6 @@ export type Database = {
           full_name?: string | null
           id?: string | null
           is_active?: boolean | null
-          phone?: string | null
           preferred_language?: string | null
           title?: string | null
           updated_at?: string | null
