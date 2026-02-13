@@ -25,6 +25,7 @@ import CutterPlanning from "./pages/CutterPlanning";
 import StationDashboard from "./pages/StationDashboard";
 import StationView from "./pages/StationView";
 import PickupStation from "./pages/PickupStation";
+import PoolView from "./pages/PoolView";
 import Deliveries from "./pages/Deliveries";
 import Brain from "./pages/Brain";
 import Integrations from "./pages/Integrations";
@@ -116,6 +117,7 @@ const App = () => (
                     <Route path="/shopfloor/cutter" element={<P><CutterPlanning /></P>} />
                     <Route path="/shopfloor/station" element={<P><StationDashboard /></P>} />
                     <Route path="/shopfloor/station/:machineId" element={<P><StationView /></P>} />
+                    <Route path="/shopfloor/pool" element={<P><PoolView /></P>} />
                     <Route path="/shopfloor/pickup" element={<P><PickupStation /></P>} />
                     <Route path="/shopfloor/clearance" element={<P><ClearanceStation /></P>} />
                     <Route path="/shopfloor/live-monitor" element={<P><LiveMonitor /></P>} />

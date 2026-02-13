@@ -27,7 +27,14 @@ const hubCards: HubCard[] = [
     to: "/office",
   },
   {
+    label: "MATERIAL POOL",
+    subtitle: "STAGING & FLOW",
+    icon: <Factory className="w-7 h-7" />,
+    to: "/shopfloor/pool",
+  },
+  {
     label: "SHOP FLOOR",
+    subtitle: "MACHINES & STATIONS",
     icon: <Factory className="w-7 h-7" />,
     to: "/shopfloor/station",
   },
@@ -38,8 +45,9 @@ const hubCards: HubCard[] = [
   },
   {
     label: "LOADING ST.",
+    subtitle: "PREP & DISPATCH",
     icon: <LoadingIcon className="w-7 h-7" />,
-    to: "/shop-floor",
+    to: "/deliveries",
   },
   {
     label: "DELIVERY",

@@ -2,6 +2,7 @@ import { useLiveMonitorData } from "@/hooks/useLiveMonitorData";
 import { useCutPlans } from "@/hooks/useCutPlans";
 import { useProductionQueues } from "@/hooks/useProductionQueues";
 import { MachineSelector } from "@/components/shopfloor/MachineSelector";
+import { MaterialFlowDiagram } from "@/components/shopfloor/MaterialFlowDiagram";
 import { ActiveProductionHub } from "@/components/shopfloor/ActiveProductionHub";
 import { Badge } from "@/components/ui/badge";
 import { Cloud, Radio, Loader2, Settings, FolderOpen, FileText, Layers, Play, Pause, CheckCircle2 } from "lucide-react";
@@ -60,6 +61,9 @@ export default function StationDashboard() {
           </div>
         ) : (
           <>
+            {/* Material Flow Diagram */}
+            <MaterialFlowDiagram />
+
             <ActiveProductionHub machines={machines} activePlans={activePlans} />
 
             {/* Live Queue - Cut Plans */}
