@@ -13,10 +13,13 @@ import {
   Star,
   Bookmark,
   X,
-  Check,
   Layers,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import {
+  FilterToggle,
+  FilterChip,
+  FieldFilter,
+} from "@/components/ui/filter-popover";
 
 // ── Types ──
 
@@ -244,93 +247,6 @@ export function ProspectingFilters({
           {filters.industry && <FilterChip label={`Industry: ${filters.industry}`} onRemove={() => toggle("industry", null)} />}
           {filters.city && <FilterChip label={`City: ${filters.city}`} onRemove={() => toggle("city", null)} />}
           {groupBy !== "none" && <FilterChip label={`Group: ${groupBy}`} onRemove={() => onGroupByChange("none")} />}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Sub-components ──
-
-function FilterToggle({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        "flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-sm transition-colors",
-        active ? "bg-primary/10 text-primary font-medium" : "hover:bg-accent text-foreground"
-      )}
-    >
-      {active && <Check className="w-3 h-3" />}
-      <span className={cn(!active && "pl-5")}>{label}</span>
-    </button>
-  );
-}
-
-function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }) {
-  return (
-    <Badge
-      variant="secondary"
-      className="shrink-0 gap-1 h-6 text-[11px] cursor-pointer hover:bg-destructive/10 group pr-1"
-    >
-      {label}
-      <X
-        className="w-3 h-3 text-muted-foreground group-hover:text-destructive"
-        onClick={(e) => {
-          e.stopPropagation();
-          onRemove();
-        }}
-      />
-    </Badge>
-  );
-}
-
-function FieldFilter({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: string | null;
-  options: string[];
-  onChange: (v: string | null) => void;
-}) {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <div>
-      <button
-        onClick={() => setOpen(!open)}
-        className={cn(
-          "flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-sm transition-colors",
-          value ? "bg-primary/10 text-primary font-medium" : "hover:bg-accent text-foreground"
-        )}
-      >
-        {value && <Check className="w-3 h-3" />}
-        <span className={cn(!value && "pl-5", "flex-1 text-left truncate")}>
-          {value || label}
-        </span>
-        <ChevronDown className={cn("w-3 h-3 transition-transform", open && "rotate-180")} />
-      </button>
-      {open && (
-        <div className="ml-5 mt-0.5 space-y-0.5 max-h-40 overflow-y-auto">
-          {options.map((opt) => (
-            <button
-              key={opt}
-              onClick={() => {
-                onChange(value === opt ? null : opt);
-                setOpen(false);
-              }}
-              className={cn(
-                "flex items-center gap-2 w-full px-2 py-1 rounded text-xs transition-colors",
-                value === opt ? "bg-primary/10 text-primary" : "hover:bg-accent"
-              )}
-            >
-              {value === opt && <Check className="w-2.5 h-2.5" />}
-              <span className={cn(value !== opt && "pl-4", "truncate")}>{opt}</span>
-            </button>
-          ))}
         </div>
       )}
     </div>
