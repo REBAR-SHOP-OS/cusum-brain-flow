@@ -1,161 +1,83 @@
 
-# Shop Drawing QC, Revision Control, and Escalation System
+# Import Odoo Dump -- Local Filestore Upload
 
-This plan implements your full end-to-end quality control workflow, revision billing enforcement, SLA escalation, and boss dashboards -- all layered on top of the existing schema with minimal structural changes (flags + triggers only, no table redesigns).
-
----
-
-## Phase 1: Database Schema Additions (Migration)
-
-### A) Orders table -- new safety lock columns
-- `shop_drawing_status` TEXT DEFAULT 'draft' (draft, qc_internal, sent_to_customer, customer_revision, approved)
-- `customer_revision_count` INT DEFAULT 0
-- `billable_revision_required` BOOLEAN DEFAULT FALSE
-- `qc_internal_approved_at` TIMESTAMPTZ NULL
-- `customer_approved_at` TIMESTAMPTZ NULL
-- `production_locked` BOOLEAN DEFAULT TRUE
-- `pending_change_order` BOOLEAN DEFAULT FALSE
-- `qc_final_approved` BOOLEAN DEFAULT FALSE
-- `qc_evidence_uploaded` BOOLEAN DEFAULT FALSE
-
-### B) Leads table -- SLA tracking columns
-- `sla_deadline` TIMESTAMPTZ NULL (auto-set by trigger on stage change)
-- `sla_breached` BOOLEAN DEFAULT FALSE
-- `escalated_to` TEXT NULL
-
-### C) New table: `sla_escalation_log`
-Audit trail of every SLA breach and escalation event.
-- `id`, `entity_type` (lead/order), `entity_id`, `stage`, `sla_hours`, `breached_at`, `escalated_to`, `resolved_at`, `company_id`
-
-### D) Validation triggers
-
-1. **`trg_block_production_without_approval`** on `cut_plan_items` BEFORE UPDATE: If `phase` is moving to 'cutting', join to parent order and block if `shop_drawing_status != 'approved'` OR `pending_change_order = TRUE` OR `qc_internal_approved_at IS NULL`.
-
-2. **`trg_auto_billable_revision`** on `orders` BEFORE UPDATE: If `customer_revision_count` changes to >= 1 AND `billable_revision_required` is FALSE, auto-set `billable_revision_required = TRUE` and `pending_change_order = TRUE`.
-
-3. **`trg_block_delivery_without_qc`** on `deliveries` BEFORE UPDATE: If status is moving to 'loading' or 'in_transit', join to related order and block if `qc_evidence_uploaded = FALSE` OR `qc_final_approved = FALSE`.
-
-4. **`trg_set_sla_deadline`** on `leads` BEFORE UPDATE: When `stage` changes, auto-compute `sla_deadline` based on the SLA matrix (e.g., new -> 24h, estimation -> 48h, shop_drawing -> 72h, customer approval -> 5 days).
+Since the current API-based migration is slow (5%, ~48h remaining, errors), you can skip Odoo's API entirely and upload files directly from your downloaded 12GB dump.
 
 ---
 
-## Phase 2: SLA Escalation Engine (Edge Function)
+## How It Works
 
-New edge function: `check-sla-breaches`
+An Odoo.sh dump contains a `filestore/` folder where each attachment is stored by its checksum (e.g., `ab/ab12cd34...`). We need to match those files to the 17,366 `lead_files` records that still need migration.
 
-- Runs on cron (every 15 minutes)
-- Queries `leads` WHERE `sla_deadline < NOW()` AND `sla_breached = FALSE`
-- Queries `orders` WHERE `production_locked = TRUE` AND age > 12h, or `qc_evidence_uploaded = FALSE` AND age > 4h
-- For each breach: sets `sla_breached = TRUE`, logs to `sla_escalation_log`, creates a `human_task` for the appropriate escalation target
-- Escalation targets follow the matrix:
-  - Intake/Customer Approval/Revisions > 1 -> Sales Mgr
-  - Estimation QC/Shop Drawing/Production Blocked/QC Evidence/Delivery -> Ops Mgr
+### Two-Step Process:
 
----
+**Step 1 -- Upload a mapping file**
+You'll extract a small CSV from the dump's SQL that maps each Odoo attachment ID to its filestore path and filename. A simple query against the dump gives us:
+`odoo_id, store_fname, name, mimetype`
 
-## Phase 3: generate-suggestions Engine Updates
-
-Expand the existing `generate-suggestions` edge function with new rules:
-
-### Vizzy (CEO) -- new rules
-- Jobs blocked by revision / change order
-- QC failure rate (orders with `qc_final_approved = FALSE` past deadline)
-- Revenue waiting on QC/Delivery (orders with `qc_evidence_uploaded = FALSE`)
-- Repeat revision offenders (customers with > 2 revisions across orders)
-
-### Penny (Accounting) -- new rule
-- Paid revision opportunities (orders with `billable_revision_required = TRUE` and no change order invoiced)
-
-### Forge (Shop Floor) -- new rule
-- Production blocked reasons (orders with `production_locked = TRUE` -- detail why: missing shop drawing, pending CO, missing QC)
+**Step 2 -- Select filestore folder and auto-upload**
+Using a folder picker, select the extracted `filestore/` directory. The system reads the mapping, finds matching files, and uploads them in parallel batches directly to storage -- no Odoo API needed.
 
 ---
 
-## Phase 4: Boss Dashboard Views
+## What Gets Built
 
-### A) CEO Portal additions (CEODashboardView)
-New KPI cards and sections:
-- **Blocked Jobs** count (orders with `production_locked = TRUE`)
-- **QC Backlog** (orders awaiting `qc_final_approved`)
-- **Revenue Held** (sum of `total_amount` where `qc_evidence_uploaded = FALSE`)
-- **Revision Offenders** mini-table (customers ranked by total revision count)
-- **SLA Breach Summary** card with counts by category
+### 1. "Import from Dump" Button on the Migration Card
+- Appears next to the existing Play button
+- Opens a dialog with the two-step flow
 
-### B) New SLA Tracker component
-`src/components/ceo/SLATrackerCard.tsx`
-- Compact table showing active SLA timers per stage
-- Color-coded: green (on track), amber (< 2h remaining), red (breached)
-- Click-through to the lead/order
+### 2. Import Dialog (`OdooDumpImportDialog.tsx`)
+- **Step 1**: Upload mapping CSV (tiny file, a few MB)
+  - Parses it and shows: "Found X attachments matching Y pending lead_files"
+- **Step 2**: Folder picker for the `filestore/` directory
+  - Reads files from selected folder
+  - Matches them to lead_files via the mapping (odoo_id -> store_fname -> local file)
+  - Uploads in parallel batches of 5 files to the `estimation-files` storage bucket
+  - Updates each `lead_files` record with `storage_path` and `file_url`
+  - Shows live progress (X / Y uploaded, errors)
 
-### C) Pipeline stage enhancements
-Add visual indicators on pipeline board:
-- Shop drawing status badge on lead cards when in `shop_drawing` or `shop_drawing_approval` stage
-- SLA countdown timer badge
-- Revision count badge
-
----
-
-## Phase 5: Order Detail Workflow UI
-
-### Order detail panel additions
-- **Shop Drawing Status** stepper (draft -> QC Internal -> Sent to Customer -> Customer Revision -> Approved)
-- **Revision Counter** with visual warning at 1+ (shows "Billable" badge)
-- **QC Checklist** section:
-  - QC Internal Approval (checkbox, stamps timestamp)
-  - Customer Approval (checkbox, stamps timestamp)
-  - QC Evidence Uploaded (checkbox)
-  - QC Final Approved (checkbox)
-- **Production Lock** indicator (red lock icon when locked, green unlock when all gates pass)
-- **Change Order** banner when `pending_change_order = TRUE`
-
----
-
-## Phase 6: Quote Terms Auto-Include
-
-Update `AccountingDocuments.tsx` default terms to include:
-```
-"One (1) shop drawing revision included. Additional revisions billable via Change Order."
-"Revisions impacting quantities, bar sizes, coatings, or scope are re-priced regardless of count."
-```
+### 3. All Processing Happens Client-Side
+- No edge function needed for the import itself
+- Browser reads files one at a time (no 12GB in memory)
+- Uploads directly to storage bucket using the Supabase client
+- Updates the database directly
+- Progress bar and error handling built into the dialog
 
 ---
 
 ## Technical Details
 
 ### Files to Create
-1. `supabase/migrations/XXXXX_shop_drawing_qc_system.sql` -- all schema changes, triggers
-2. `supabase/functions/check-sla-breaches/index.ts` -- SLA cron engine
-3. `src/components/ceo/SLATrackerCard.tsx` -- SLA dashboard widget
-4. `src/components/orders/ShopDrawingStepper.tsx` -- visual stepper component
-5. `src/components/orders/QCChecklist.tsx` -- QC gate checklist
-6. `src/components/orders/ProductionLockBanner.tsx` -- lock status banner
+- `src/components/admin/OdooDumpImportDialog.tsx` -- The import dialog with mapping + folder upload
 
 ### Files to Modify
-7. `supabase/functions/generate-suggestions/index.ts` -- add new Vizzy/Penny/Forge rules
-8. `src/hooks/useCEODashboard.ts` -- add blocked jobs, QC backlog, SLA breach metrics
-9. `src/components/office/CEODashboardView.tsx` -- render new KPI cards and SLA tracker
-10. `src/pages/CEOPortal.tsx` -- add SLA tracker card
-11. `src/components/accounting/AccountingDocuments.tsx` -- update default quote terms
-12. `src/pages/Pipeline.tsx` -- add SLA/revision badges to pipeline cards
-13. `supabase/config.toml` -- register new edge function
+- `src/components/admin/OdooMigrationStatusCard.tsx` -- Add "Import Dump" button
 
-### SLA Matrix (encoded in trigger + edge function)
-
+### Mapping CSV Format (user extracts from dump.sql)
 ```text
-Stage                    SLA      Escalation Target
------------------------------------------------------
-Intake (new)             24h      Sales Mgr
-Estimation               48h      Sales Mgr
-QC on Estimate           24h      Ops Mgr
-Shop Drawing Draft       72h      Ops Mgr
-QC on Shop Drawing       24h      Ops Mgr
-Customer Approval        5 days   Sales Mgr
-Production Blocked       12h      Ops Mgr
-QC Evidence Pending      4h       Ops Mgr
-Delivery Pending         24h      Ops Mgr
-Revisions > 1            Immediate Sales + Ops
+id,store_fname,name,mimetype
+40650,ab/ab12cd34ef...,image003.png,image/png
+40649,cd/cd56ef78ab...,image002.png,image/png
 ```
 
-### Cron Setup
-- `check-sla-breaches` runs every 15 minutes via `pg_cron`
-- Uses same `x-cron-secret` pattern as existing `qb-incremental-sync`
+### Upload Logic (client-side)
+```text
+For each pending lead_file (odoo_id with no storage_path):
+  1. Look up store_fname from mapping CSV
+  2. Find that file in the selected filestore folder
+  3. Upload to estimation-files/odoo-archive/{lead_id}/{odoo_id}-{filename}
+  4. Update lead_files row with storage_path + file_url
+  5. Show progress, skip and log errors
+```
+
+### Parallel Batch Upload
+- 5 concurrent uploads at a time
+- Each file is read individually (FileReader API) so memory stays low
+- Abort button to stop mid-import
+- Resume-safe: skips files that already have storage_path
+
+### Instructions for the User
+The dialog will include clear instructions on how to:
+1. Extract the dump ZIP
+2. Run a simple SQL/grep command to generate the mapping CSV from `dump.sql`
+3. Select the `filestore/` folder
