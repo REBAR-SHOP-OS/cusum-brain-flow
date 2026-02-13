@@ -4,78 +4,77 @@
 
 ## مشکل شناسایی‌شده
 
-در حال حاضر تولید تصویر فقط زمانی فعال می‌شود که کاربر یک **تاریخ مشخص** وارد کند (مثلاً "2026-02-13"، "today"، یا "1"). اما وقتی کاربر پیام‌هایی مثل "Plan this week's social content" یا "محتوای این هفته رو بساز" ارسال می‌کند، هیچ‌کدام از الگوهای تاریخ (datePatterns) تطبیق پیدا نمی‌کنند و تصویری تولید نمی‌شود.
-
-### جریان فعلی (خراب)
+لاگ‌ها نشان می‌دهند که هر 5 درخواست تولید تصویر با خطای **400** از OpenAI رد می‌شوند:
 
 ```text
-کاربر: "Plan this week's social content"
-  → datePatterns check → هیچ تاریخی پیدا نشد
-  → رد شدن از بخش تولید تصویر
-  → ارسال به AI معمولی → پاسخ متنی بدون تصویر
+Image 1 generation failed: 400
+Image 2 generation failed: 400
+...
+Image 5 generation failed: 400
+📸 Pixel: 0/5 images generated successfully
 ```
 
-### جریان درست (بعد از اصلاح)
+متن خطا لاگ نمی‌شود، اما دلایل احتمالی 400:
+- پارامتر `output_format: "png"` ممکن است برای `gpt-image-1` پشتیبانی نشود
+- prompt خیلی طولانی باشد
+- مشکل content policy
 
-```text
-کاربر: "Plan this week's social content"
-  → datePatterns check → هیچ تاریخی پیدا نشد
-  → contentPlanPatterns check → "plan" + "content" = تطبیق!
-  → تاریخ امروز به‌صورت خودکار تنظیم می‌شود
-  → شروع تولید 5 تصویر
-```
+## راه‌حل
 
-## تغییرات
+**تغییر مدل تولید تصویر از OpenAI به Lovable AI Gateway (Gemini Image)**
+
+به جای استفاده از `gpt-image-1` که به `GPT_API_KEY` نیاز دارد و خطا می‌دهد، از مدل `google/gemini-2.5-flash-image` از طریق Lovable AI Gateway استفاده می‌کنیم. این مدل:
+- نیازی به API Key جداگانه ندارد (از `LOVABLE_API_KEY` موجود استفاده می‌کند)
+- پایدارتر است
+- تصاویر را به‌صورت base64 برمی‌گرداند
+
+همچنین خطای 400 را لاگ می‌کنیم تا اگر مشکلی در آینده پیش آمد قابل ردیابی باشد.
+
+## تغییر فنی
 
 ### فایل: `supabase/functions/ai-agent/index.ts`
 
-**یک بلوک شرطی جدید** بعد از بررسی datePatterns و قبل از `if (hasDate)` اضافه می‌شود:
+بخش تولید تصویر (خطوط 3886-3901) تغییر می‌کند:
 
-اگر تاریخی پیدا نشد ولی پیام حاوی کلمات کلیدی مربوط به تولید محتوا باشد (مثل "plan", "content", "generate", "create posts", "پست بساز", "محتوا", "تولید"), تاریخ امروز به‌صورت خودکار استفاده شود و جریان تولید تصویر فعال شود.
-
-الگوهای جدید شناسایی:
-
-| الگو | مثال |
-|------|-------|
-| plan + content/posts | "Plan this week's social content" |
-| generate/create + posts/content | "Generate 5 posts for today" |
-| محتوا/پست + بساز/تولید | "محتوای امروز رو بساز" |
-| عدد + posts | "Create 5 posts" |
-| schedule + week/month | "Schedule this week" |
-
-کد تغییر:
-
+**قبل (خراب):**
 ```typescript
-// After: const hasDate = datePatterns.some(p => p.test(message));
-// Add content plan detection as fallback
-let effectiveHasDate = hasDate;
-if (!hasDate) {
-  const contentPlanPatterns = [
-    /\b(?:plan|generate|create|make|build|schedule)\b.*\b(?:post|content|image)/i,
-    /\b(?:post|content|image).*\b(?:plan|generate|create|make|build|schedule)\b/i,
-    /\b\d+\s*(?:post|image)/i,
-    /(?:محتوا|پست|تصویر|عکس).*(?:بساز|تولید|ایجاد|بزن)/i,
-    /(?:بساز|تولید|ایجاد).*(?:محتوا|پست|تصویر|عکس)/i,
-    /\bthis\s+week/i,
-    /\bthis\s+month/i,
-  ];
-  if (contentPlanPatterns.some(p => p.test(message))) {
-    const todayStr = new Date().toISOString().split("T")[0];
-    message = todayStr;
-    effectiveHasDate = true;
-    console.log("📸 Pixel: Content plan request detected, using today's date →", todayStr);
-  }
-}
-
-// Change: if (hasDate) → if (effectiveHasDate)
+const imgResp = await fetch("https://api.openai.com/v1/images/generations", {
+  method: "POST",
+  headers: { "Authorization": `Bearer ${GPT_API_KEY}` },
+  body: JSON.stringify({
+    model: "gpt-image-1",
+    prompt: post.image_prompt,
+    size: "1536x1024",
+    quality: "high",
+    output_format: "png",
+    n: 1,
+  }),
+});
 ```
 
-سپس `if (hasDate)` به `if (effectiveHasDate)` تغییر می‌کند.
+**بعد (درست):**
+```typescript
+const imgResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+  method: "POST",
+  headers: {
+    "Authorization": `Bearer ${LOVABLE_KEY}`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    model: "google/gemini-2.5-flash-image",
+    messages: [{ role: "user", content: post.image_prompt }],
+    modalities: ["image", "text"],
+  }),
+});
+```
 
-## چرا این کافی است؟
+- پاسخ Gemini حاوی `images[0].image_url.url` با فرمت `data:image/png;base64,...` است
+- base64 را decode کرده و در storage آپلود می‌کنیم (مانند قبل)
+- شرط `if (GPT_API_KEY)` حذف می‌شود چون دیگر نیازی به آن نیست
 
-- بقیه منطق تولید تصویر (تولید prompt توسط AI، فراخوانی GPT Image، آپلود به storage) همه درست کار می‌کنند.
-- فقط مشکل **شرط ورودی** (gate condition) بود که پیام‌های بدون تاریخ صریح را رد می‌کرد.
-- هیچ تغییری در فرانت‌اند لازم نیست.
-- هیچ تغییری در ایجنت‌های دیگر ایجاد نمی‌شود.
+### تغییرات اضافی:
+- لاگ کردن متن خطا در صورت شکست (`imgResp.text()`)
+- حذف وابستگی به `GPT_API_KEY` برای تولید تصویر در Pixel
+
+هیچ تغییری در فرانت‌اند لازم نیست.
 
