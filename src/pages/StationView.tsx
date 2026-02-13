@@ -54,6 +54,7 @@ export default function StationView() {
           items={items}
           canWrite={canWrite}
           initialIndex={itemIndex >= 0 ? itemIndex : 0}
+          onBack={() => setSelectedItemId(null)}
         />
       );
     }
@@ -65,6 +66,7 @@ export default function StationView() {
           items={items}
           canWrite={canWrite}
           initialIndex={itemIndex >= 0 ? itemIndex : 0}
+          onBack={() => setSelectedItemId(null)}
         />
       );
     }

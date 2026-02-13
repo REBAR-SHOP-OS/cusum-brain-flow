@@ -23,9 +23,10 @@ interface BenderStationViewProps {
   items: StationItem[];
   canWrite: boolean;
   initialIndex?: number;
+  onBack?: () => void;
 }
 
-export function BenderStationView({ machine, items, canWrite, initialIndex = 0 }: BenderStationViewProps) {
+export function BenderStationView({ machine, items, canWrite, initialIndex = 0, onBack }: BenderStationViewProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
@@ -135,6 +136,7 @@ export function BenderStationView({ machine, items, canWrite, initialIndex = 0 }
           machineName={machine.name}
           machineModel={machine.model}
           canWrite={canWrite}
+          onBack={onBack}
           showBedsSuffix={true}
         />
         <div className="flex-1 flex items-center justify-center text-muted-foreground">
@@ -153,6 +155,7 @@ export function BenderStationView({ machine, items, canWrite, initialIndex = 0 }
         markNumber={currentItem.mark_number}
         drawingRef={currentItem.drawing_ref}
         canWrite={canWrite}
+        onBack={onBack}
         showBedsSuffix={false}
       />
 

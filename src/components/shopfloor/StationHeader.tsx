@@ -14,6 +14,7 @@ interface StationHeaderProps {
   canWrite: boolean;
   isSupervisor?: boolean;
   onToggleSupervisor?: () => void;
+  onBack?: () => void;
   backTo?: string;
   /** Job workspace name shown in top-right chip */
   workspaceName?: string | null;
@@ -32,6 +33,7 @@ export function StationHeader({
   canWrite,
   isSupervisor = false,
   onToggleSupervisor,
+  onBack,
   backTo = "/shopfloor/station",
   workspaceName,
   showBedsSuffix = true,
@@ -49,7 +51,7 @@ export function StationHeader({
     <header className="flex items-center justify-between px-4 py-3 bg-card border-b border-border">
       {/* Left: Back + Title */}
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => navigate(backTo)}>
+        <Button variant="ghost" size="icon" onClick={() => onBack ? onBack() : navigate(backTo)}>
           <ArrowLeft className="w-5 h-5" />
         </Button>
 
