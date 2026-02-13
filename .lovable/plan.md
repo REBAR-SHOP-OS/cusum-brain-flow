@@ -1,41 +1,77 @@
 
 
-# Odoo Migration Status Panel for CEO Portal
+# Fix: Odoo Migration Cron Job Auth (Stuck at 751)
 
-## Overview
-A monitoring-only card component that polls the database every 60 seconds, displays file migration progress, and shows a "Safe to Shutdown" badge when complete.
+## Problem
+The `archive-odoo-files-batch` cron job fires every minute but **zero files are being processed**. The migration has been stuck at 751/18,323 since the cron was created.
 
-## New File
-**`src/components/admin/OdooMigrationStatusCard.tsx`**
-- Uses `@tanstack/react-query` with `refetchInterval: 60000` to poll
-- Queries `lead_files` table using two filtered counts (via two separate `.select` calls with filters, since Supabase JS doesn't support `FILTER(WHERE...)` aggregates directly -- will use an RPC or two count queries)
-- Displays: migrated count, remaining count, percentage, progress bar, estimated time remaining
-- Shows a green Badge "Safe to Shutdown Odoo" when remaining reaches 0
-- Uses existing Card, Progress, and Badge components
+**Root cause**: The cron job sends the **anon key** as the Authorization header. The edge function then calls `auth.getUser()`, which fails because the anon key is not a user session token. Every invocation returns 401 silently.
 
-## Query Strategy
-Since the Supabase JS client cannot do `COUNT(*) FILTER(WHERE ...)` in a single call, the component will run two parallel count queries:
-1. `supabase.from('lead_files').select('*', { count: 'exact', head: true }).not('odoo_id', 'is', null).is('storage_path', null)` -- remaining
-2. `supabase.from('lead_files').select('*', { count: 'exact', head: true }).not('odoo_id', 'is', null).not('storage_path', 'is', null)` -- migrated
+## Fix
 
-## ETA Calculation
-- Store the last 5 "remaining" values in a `useRef` array
-- On each poll, push the new remaining count
-- Calculate average delta per minute from the differences
-- `ETA minutes = remaining / avg_delta_per_minute`
+**Modify `supabase/functions/archive-odoo-files/index.ts`** to accept the **service role key** as an alternative auth method (for cron/automated calls), while keeping user auth for manual triggers.
 
-## CEO Portal Change
-**`src/pages/CEOPortal.tsx`** -- add the component under a "System Status" heading, placed after the existing dashboard content.
+Replace the auth block (lines 70-94) with:
 
-## Visual Design
-- Card with a "File Migration" title and a small database icon
-- Progress bar showing percentage
-- Stats row: migrated / total, remaining, ETA
-- Green badge when complete, amber "In Progress" badge otherwise
-- Minimal, consistent with existing card styling
+```typescript
+const authHeader = req.headers.get("Authorization");
+if (!authHeader?.startsWith("Bearer ")) {
+  return new Response(JSON.stringify({ error: "Unauthorized" }), {
+    status: 401,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
 
-## Technical Notes
-- No database migrations needed (read-only queries on existing `lead_files` table)
-- No edge functions touched
-- No financial data accessed
-- Temporary component -- will be removed after Odoo shutdown is confirmed
+const token = authHeader.replace("Bearer ", "");
+const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+// Allow service-role calls (from cron) OR authenticated user calls
+if (token !== serviceRoleKey) {
+  const supabaseUser = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_ANON_KEY")!,
+    { global: { headers: { Authorization: authHeader } } },
+  );
+  const { data: { user }, error: authError } = await supabaseUser.auth.getUser();
+  if (authError || !user) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+}
+```
+
+Then **update the cron job** to use the service role key instead of the anon key:
+
+```sql
+SELECT cron.alter_job(
+  (SELECT jobid FROM cron.job WHERE jobname = 'archive-odoo-files-batch'),
+  command := $$
+  select net.http_post(
+    url := 'https://uavzziigfnqpfdkczbdo.supabase.co/functions/v1/archive-odoo-files',
+    headers := '{"Content-Type":"application/json","Authorization":"Bearer SERVICE_ROLE_KEY"}'::jsonb,
+    body := concat('{"time":"', now(), '"}')::jsonb
+  ) as request_id;
+  $$
+);
+```
+
+(The actual service role key value will be pulled from the existing `SUPABASE_SERVICE_ROLE_KEY` secret.)
+
+## Changes Summary
+
+| File | Change |
+|------|--------|
+| `supabase/functions/archive-odoo-files/index.ts` | Accept service role key as valid auth for automated calls |
+| Database (cron job) | Update `archive-odoo-files-batch` to use service role key |
+
+## What This Does NOT Touch
+- No financial tables
+- No Odoo proxy fallback removal
+- No other edge functions
+- OdooMigrationStatusCard component stays as-is
+
+## Expected Result
+After deploying, the cron will authenticate successfully and process ~91 files/minute. The CEO Portal card will start showing progress updates on the next poll.
+
