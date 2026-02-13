@@ -1,39 +1,63 @@
 
-# تغییر فرآیند تولید پست Pixel: یکی‌یکی با تایید کاربر
+# ذخیره پست تایید شده در تقویم Social Media
 
-## وضعیت فعلی
-در حال حاضر وقتی کاربر درخواست تولید پست می‌دهد، هر 5 پست (کپشن + تصویر) به صورت همزمان و یکجا ساخته و نمایش داده می‌شوند.
+## هدف
+وقتی کاربر در چت Pixel روی "Approve & Generate Next" کلیک می‌کند، پست فعلی (تصویر، کپشن، هشتگ‌ها) در جدول `social_posts` با وضعیت `draft` و تاریخ انتخابی ذخیره شود تا در صفحه Social Media Calendar نمایش داده شود و منتظر تایید نهایی باشد.
 
-## تغییر پیشنهادی
-پست‌ها یکی‌یکی ساخته شوند. بعد از نمایش هر پست، کاربر باید آن را تایید کند تا پست بعدی ساخته شود.
+## تغییرات
 
-### فلوی جدید:
-1. کاربر می‌گوید "برای امروز پست بساز"
-2. بک‌اند کپشن و تصویر فقط اسلات 1 (06:30 AM) را می‌سازد و برمی‌گرداند
-3. کاربر پست را می‌بیند و تایید می‌کند
-4. اسلات 2 (07:30 AM) ساخته می‌شود
-5. تکرار تا اسلات 5
+### 1. بک‌اند: اضافه کردن اطلاعات پست به response (`supabase/functions/ai-agent/index.ts`)
+در بخشی که response پیکسل ساخته می‌شود (خطوط 4028-4031)، یک فیلد جدید `pixelPost` به JSON response اضافه می‌شود که شامل اطلاعات پست ساخته‌شده است:
 
----
+```typescript
+{
+  reply: pixelReply,
+  context: mergedContext,
+  nextSlot: nextSlot,
+  pixelPost: {
+    caption: post.caption,
+    hashtags: post.hashtags,
+    imageUrl: post.imageUrl,
+    platform: "instagram",
+    slot: post.slot,
+    theme: post.theme,
+    product: post.product
+  }
+}
+```
 
-## جزئیات فنی
+### 2. فرانت‌اند: تایپ `AgentResponse` (`src/lib/agent.ts`)
+اضافه کردن فیلد `pixelPost` به اینترفیس:
 
-### 1. فایل `supabase/functions/ai-agent/index.ts`
-- پارامتر جدید `pixelSlot` به بدنه درخواست اضافه می‌شود (مقدار پیش‌فرض: 1)
-- به جای تولید 5 پست همزمان، فقط 1 پست برای اسلات مشخص‌شده تولید می‌شود
-- پرامپت سیستمی تغییر می‌کند تا فقط 1 پست بسازد
-- تصویر فقط برای همان 1 پست ساخته می‌شود
-- در پاسخ، فیلد `nextSlot` اضافه می‌شود تا فرانت بداند اسلات بعدی چیست (یا `null` اگر آخرین پست بود)
+```typescript
+export interface AgentResponse {
+  reply: string;
+  context?: Record<string, unknown>;
+  createdNotifications?: { ... }[];
+  nextSlot?: number | null;
+  pixelPost?: {
+    caption: string;
+    hashtags: string;
+    imageUrl: string;
+    platform: string;
+    slot: string;
+    theme: string;
+    product: string;
+  };
+}
+```
 
-### 2. فایل `src/lib/agent.ts`
-- فیلد `nextSlot` به `AgentResponse` اضافه می‌شود
+### 3. فرانت‌اند: ذخیره در DB هنگام تایید (`src/pages/AgentWorkspace.tsx`)
+در تابع `handleSendInternal`، وقتی پاسخ Pixel دارای `pixelPost` باشد، آن را در state نگه می‌داریم. سپس در `handleApprovePixelSlot`، قبل از فراخوانی اسلات بعدی، پست فعلی را در `social_posts` ذخیره می‌کنیم:
 
-### 3. فایل `src/pages/AgentWorkspace.tsx`
-- state جدید: `pendingPixelSlot` (شماره اسلات بعدی) و `pixelDate` (تاریخ درخواستی)
-- وقتی پاسخ Pixel دارای `nextSlot` باشد، دکمه "تایید و ادامه" نمایش داده می‌شود
-- کلیک روی دکمه تایید، پیام خودکار برای اسلات بعدی ارسال می‌کند
-- بعد از اسلات 5، پیام "همه پست‌ها تکمیل شد" نمایش داده می‌شود
+- اضافه کردن state: `lastPixelPost` برای نگهداری اطلاعات آخرین پست ساخته شده
+- در `handleApprovePixelSlot`:
+  1. ابتدا پست را در `social_posts` با `status: "draft"` و `scheduled_date: selectedDate` ذخیره کن
+  2. سپس اسلات بعدی را بساز
+- برای آخرین پست (slot 5) که `nextSlot` نیست، یک دکمه "Approve" جداگانه نمایش داده می‌شود که فقط ذخیره می‌کند
 
-### 4. فایل `src/components/chat/ChatThread.tsx` (یا کامپوننت جدید)
-- دکمه تایید ("Approve & Next" / "تایید و ساخت بعدی") بعد از هر پست Pixel نمایش داده می‌شود
-- دکمه "بازسازی" هم برای ساخت مجدد همان اسلات باقی می‌ماند
+### 4. نمایش toast تایید
+بعد از ذخیره موفق هر پست، یک toast نمایش داده می‌شود: "Post saved to calendar as draft"
+
+## نتیجه
+پست‌های تایید شده در Pixel agent به صورت draft در تقویم Social Media ظاهر می‌شوند و کاربر می‌تواند از آنجا تایید نهایی و publish انجام دهد.
