@@ -275,21 +275,21 @@ export function OdooDumpImportDialog({ open, onOpenChange }: Props) {
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <FileText className="h-3 w-3" />
                 {mapping.length} mappings loaded • {total} match pending files
-                <Button size="sm" variant="outline" className="ml-auto h-7 text-xs" onClick={() => setStep(2)}>
-                  Next →
-                </Button>
               </div>
             )}
           </div>
 
           {/* Step 2 */}
-          {(step === 2 || uploading || uploaded > 0) && (
-            <div className="space-y-2">
-              <Label className="flex items-center gap-2 font-semibold">
-                <Badge variant="outline">2</Badge> Select Dump Source
-              </Label>
+          <div className="space-y-2">
+            <Label className="flex items-center gap-2 font-semibold">
+              <Badge variant="outline">2</Badge> Select Dump Source
+            </Label>
 
-              <Tabs defaultValue="zip" className="w-full">
+            {mapping.length === 0 && (
+              <p className="text-xs text-muted-foreground italic">Upload mapping CSV above first</p>
+            )}
+
+            <Tabs defaultValue="zip" className="w-full">
                 <TabsList className="w-full">
                   <TabsTrigger value="zip" className="flex-1 gap-1">
                     <FileArchive className="h-3.5 w-3.5" /> ZIP File
@@ -303,7 +303,7 @@ export function OdooDumpImportDialog({ open, onOpenChange }: Props) {
                   <p className="text-xs text-muted-foreground">
                     Select the Odoo dump <code className="bg-muted px-1 rounded">.zip</code> file directly — no extraction needed.
                   </p>
-                  <Input type="file" accept=".zip" disabled={uploading} onChange={handleZipSelect} />
+                  <Input type="file" accept=".zip" disabled={uploading || mapping.length === 0} onChange={handleZipSelect} />
                 </TabsContent>
 
                 <TabsContent value="folder" className="space-y-2 mt-2">
@@ -314,7 +314,7 @@ export function OdooDumpImportDialog({ open, onOpenChange }: Props) {
                     <Button
                       variant="outline"
                       size="sm"
-                      disabled={uploading}
+                      disabled={uploading || mapping.length === 0}
                       onClick={() => folderInputRef.current?.click()}
                       className="gap-1"
                     >
@@ -371,7 +371,6 @@ export function OdooDumpImportDialog({ open, onOpenChange }: Props) {
                 </div>
               )}
             </div>
-          )}
         </div>
       </DialogContent>
     </Dialog>
