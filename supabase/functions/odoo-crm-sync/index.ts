@@ -63,7 +63,7 @@ Deno.serve(async (req) => {
 
     // Fetch all opportunities from Odoo
     const leads = await odooRpc(odooUrl, odooDB, odooKey, "crm.lead", "search_read", [
-      [["type", "=", "opportunity"]],
+      [[["type", "=", "opportunity"]]],
       { fields: FIELDS },
     ]);
 
