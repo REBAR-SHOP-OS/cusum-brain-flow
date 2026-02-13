@@ -1,105 +1,165 @@
 
+# QB + Odoo to ERP Consolidation and Odoo Decommission Plan
 
-# Fix: AI Goes Silent After Greeting (Root Cause Investigation + Fix)
+## Current Data Inventory
 
-## The Real Problem
+### Data Counts Across Systems
 
-We've tuned the echo tail guard and energy gate twice now, and the AI still dies after the greeting. The parameter tweaks aren't the root cause. The issue is likely one of two deeper problems that we need to diagnose and fix simultaneously:
+| Entity | ERP (DB) Total | From Odoo | From QB | Orphaned/Manual |
+|--------|---------------|-----------|---------|-----------------|
+| Customers | 2,733 | Unknown origin | 1,946 (have QB ID) | 787 without QB ID |
+| Leads | 2,712 | 2,668 | 0 | 44 non-Odoo |
+| Quotes | 2,586 | 2,586 (all) | 0 | 0 |
+| Lead Files | 18,323 | 18,323 (all) | 0 | 0 |
+| Lead Activities | 44,083 | 41,441 | 0 | 2,642 non-Odoo |
+| Orders | 17 | 0 | 0 (none pushed) | 17 manual |
+| Accounting Mirror | 1,918 | 0 | 1,918 (all) | 0 |
 
-### Likely Cause 1: `ttsPlayingRef` never resets properly
+### Key Findings
 
-The greeting arrives as many rapid audio chunks. Each chunk sets `ttsPlayingRef = true` and creates a `BufferSource`. Because chunks overlap (next starts before previous ends), the `onEnded` callback fires for early chunks while later ones are still in `activeSourcesRef`. The 800ms timer only starts when the set is empty. But if timers from earlier chunks fire while the set was temporarily empty between chunk arrivals, and then a late chunk arrives after the timer already ran, the ref might get stuck in an inconsistent state.
+1. **Leads/Pipeline are 98% Odoo data** -- 2,668 of 2,712 leads came from Odoo sync. This data has operational value (customer history, file attachments, activity logs) and does NOT exist in QuickBooks.
+2. **All 2,586 quotes are from Odoo** -- none from QB. These represent sales history.
+3. **18,323 lead files are Odoo-proxied** -- currently served via the `odoo-file-proxy` edge function that calls Odoo's API live. These files will be LOST when Odoo is shut down unless archived.
+4. **787 customers lack a QB ID** -- these may be Odoo-only customers not in QuickBooks.
+5. **Orders are thin** -- only 17, none linked to quotes or QB invoices yet.
 
-### Likely Cause 2: Silent capture -- no audio actually reaching the processor
+---
 
-The 16kHz `captureCtx` captures from a `MediaStream` that wraps the receiver track. If the `ScriptProcessorNode` (deprecated API) fails silently or the resampling from 48kHz to 16kHz produces near-zero samples, the energy gate filters everything out. We have no visibility into this currently.
+## Phase 1: Data Comparison and Conflict Resolution
 
-## Solution: Add Diagnostic Logging + Make Capture More Robust
+### Authority Rules Applied
 
-**File: `src/hooks/useCallAiBridge.ts`**
+- **QB always wins** for: customers, invoices, payments, accounts, vendors, bills
+- **Odoo data kept** only if it adds operational value not in QB: leads, pipeline history, file attachments, activity logs, salesperson assignments
+- **ERP reflects QB** for all financial data; Odoo metadata kept as read-only archive
 
-### 1. Add state-change logging for `ttsPlayingRef`
+### Conflicts to Resolve
 
-Wrap every mutation of `ttsPlayingRef.current` in a console.log so we can see exactly when mic capture is muted/unmuted and why. This is critical for diagnosing the next test call.
+| Issue | Source | Correct Value | Impact | Fix | Priority |
+|-------|--------|--------------|--------|-----|----------|
+| 787 customers without QB ID | ERP (from Odoo) | Must match to QB or archive | Orphaned customer records | Run QB customer sync, match by name, archive unmatched | High |
+| Lead files served live from Odoo API | Odoo (live) | Must be self-hosted | Files disappear when Odoo dies | Bulk download to storage bucket before cutover | Critical |
+| Quotes reference `odoo_id` column | ERP | Keep as archive reference | No functional impact after cutover | Mark column as deprecated, keep data | Low |
+| `odoo_salesperson` in lead metadata | ERP metadata | Keep as historical reference | Pipeline filters use this field | Map to ERP profile IDs where possible | Medium |
+| "View Odoo Quotations" button in Accounting | UI | Remove | Confusing post-cutover | Remove button and Odoo tab references | Medium |
 
-### 2. Add periodic audio level logging in `onaudioprocess`
+---
 
-Every ~2 seconds, log the current RMS level and whether `ttsPlayingRef` is blocking. This tells us:
-- Is audio actually flowing from the remote track?
-- Is the energy gate filtering it?
-- Is `ttsPlayingRef` stuck on true?
+## Phase 2: Fix ERP (IDs, URLs, Relationships)
 
-### 3. Remove the energy gate temporarily
+### Database Changes
 
-Set threshold to 0 (pass all audio). The echo tail guard alone should handle echo suppression. If the conversation works without the energy gate, we know the gate was too aggressive. We can re-add it later with a calibrated value.
+1. **Customer reconciliation**: Run QB `sync-customers` to ensure all QB customers are in ERP. For the 787 without QB IDs, attempt name-matching. Unmatched get flagged `status = 'archived_odoo_only'`.
 
-### 4. Force `ttsPlayingRef = false` after a safety timeout
+2. **File migration**: Create a one-time edge function `archive-odoo-files` that:
+   - Reads all `lead_files` where `odoo_id IS NOT NULL`
+   - Downloads each file via the Odoo API
+   - Uploads to the `estimation-files` storage bucket
+   - Updates `lead_files.storage_path` and `lead_files.file_url` to point to storage
+   - Clears dependency on live Odoo API
 
-Add a global safety mechanism: if `ttsPlayingRef` has been true for more than 15 seconds continuously (no audio chunk should take that long), force it to false. This prevents permanent mic muting from edge cases.
+3. **URL cleanup**: Update `lead_files.file_url` from Odoo `/web/content/` URLs to storage bucket URLs after migration.
 
-## Technical Details
+4. **Relationship mapping**: Orders should link to QB invoices via `quickbooks_invoice_id`. The `convert-quote-to-order` flow already does this correctly.
 
-### Change 1 -- Diagnostic logging in `onaudioprocess` (lines 124-139)
+---
 
-```text
-// Add a frame counter and periodic logging
-let frameCount = 0;
-processor.onaudioprocess = (e) => {
-  frameCount++;
-  const samples = e.inputBuffer.getChannelData(0);
-  let sumSq = 0;
-  for (let i = 0; i < samples.length; i++) sumSq += samples[i] * samples[i];
-  const rms = Math.sqrt(sumSq / samples.length);
-  
-  // Log every ~2s (16000Hz / 2048 buffer = ~7.8 frames/sec, so every 16 frames)
-  if (frameCount % 16 === 0) {
-    console.log(`AI bridge audio: rms=${rms.toFixed(4)}, ttsPlaying=${ttsPlayingRef.current}, wsOpen=${ws.readyState === WebSocket.OPEN}`);
-  }
-  
-  if (ws.readyState !== WebSocket.OPEN) return;
-  if (ttsPlayingRef.current) return;
-  // Remove energy gate for now -- let all audio through
-  // if (rms < 0.005) return;
-  
-  const pcm16 = float32ToPcm16(samples);
-  const b64 = arrayBufferToBase64(pcm16.buffer);
-  ws.send(JSON.stringify({ user_audio_chunk: b64 }));
-};
-```
+## Phase 3: Migration Execution Plan
 
-### Change 2 -- Log ttsPlaying state changes in `playAiAudioChunk` (line 343)
+### Step-by-step (in order)
 
-```text
-// Before setting true:
-console.log("AI bridge: ttsPlaying -> true (chunk received)");
-ttsPlayingRef.current = true;
+1. **Sync all QB customers** -- run `sync-customers` to ensure ERP has every QB customer with correct `quickbooks_id`
+2. **Match orphan customers** -- edge function to fuzzy-match 787 Odoo-only customers to QB by name/company
+3. **Archive Odoo files** -- new edge function downloads all 18,323 files to storage bucket (batched, resumable)
+4. **Update file URLs** -- after download, update `lead_files` rows to point to storage
+5. **Freeze Odoo columns** -- mark `odoo_id`, `odoo_status`, `odoo_message_id` as deprecated (keep data, stop writing)
+6. **Remove Odoo sync UI** -- remove sync buttons, "View Odoo Quotations" button, Odoo integration card
+7. **Validate** -- run comparison queries to confirm all valuable data is accessible without Odoo
 
-// In onEnded, before setting false:
-console.log("AI bridge: ttsPlaying -> false (all chunks ended + 800ms)");
-ttsPlayingRef.current = false;
-```
+### Validation Checks
+- All `lead_files` with `odoo_id` have a valid `storage_path`
+- All customers with active orders have a `quickbooks_id`
+- Pipeline page loads without calling any Odoo endpoint
+- Accounting page works purely from QB data
 
-### Change 3 -- Safety timeout for stuck ttsPlaying in `beginAudioCapture`
+### Rollback Strategy
+- Odoo credentials stay in secrets until final validation
+- Edge functions are disabled (not deleted) first
+- Database columns are deprecated (not dropped) -- data preserved
+- If issues found, re-enable Odoo sync functions temporarily
 
-```text
-// After setting up onaudioprocess, add a repeating safety check:
-const ttsWatchdog = setInterval(() => {
-  if (ttsPlayingRef.current && activeSourcesRef.current.size === 0) {
-    console.warn("AI bridge: ttsPlaying stuck on true with no active sources, forcing false");
-    ttsPlayingRef.current = false;
-  }
-}, 3000);
-// Store interval ref for cleanup
-```
+---
 
-## Files Modified
+## Phase 4: Odoo Decommission
 
-- `src/hooks/useCallAiBridge.ts` -- diagnostic logging, remove energy gate, add ttsPlaying watchdog
+### What Must Be Preserved (read-only archive in ERP)
+- 2,668 leads and their metadata (salesperson, priority, stage history)
+- 44,083 lead activities and message history
+- 18,323 files (migrated to storage bucket)
+- 2,586 quotes with Odoo metadata in JSONB column
+- `odoo_id` columns kept for historical reference
 
-## Expected Outcome
+### What Can Be Discarded
+- Live Odoo API connections
+- `odoo-file-proxy` edge function (after file migration)
+- `sync-odoo-leads` edge function
+- `sync-odoo-quotations` edge function
+- `sync-odoo-history` edge function
+- Odoo integration status checks in `useIntegrations.ts`
+- Odoo integration card in integrations list
 
-- Console logs will show exactly what's happening during the next test call
-- If `ttsPlayingRef` was stuck, the watchdog will unstick it within 3 seconds
-- If the energy gate was filtering caller audio, removing it will let audio through
-- The logs will definitively tell us whether audio is flowing, being blocked, or absent
+### Cutover Checklist
+1. All 18,323 files confirmed downloaded to storage
+2. `LeadTimeline.tsx` updated to serve files from storage (not Odoo proxy)
+3. Pipeline page works without Odoo API calls
+4. QB customer sync covers all active customers
+5. Odoo sync buttons removed from UI
+6. Odoo removed from `ConnectionsAudit.tsx`
+7. Odoo removed from `integrationsList.ts`
+8. Edge functions disabled: `sync-odoo-leads`, `sync-odoo-quotations`, `sync-odoo-history`, `odoo-file-proxy`
 
+### Risks
+- **File migration volume**: 18,323 files may take multiple batched runs (edge function 50s limit)
+- **Customer name mismatches**: Odoo and QB may use different name formats -- fuzzy matching needed
+- **Historical salesperson data**: Pipeline filters use `metadata.odoo_salesperson` -- keep working as-is since data stays in JSONB
+
+### Final Confirmation
+Odoo can be safely shut down when ALL of the following are true:
+- [ ] All lead files accessible from storage (zero Odoo proxy calls)
+- [ ] All Odoo sync edge functions disabled
+- [ ] UI has zero references to Odoo API endpoints
+- [ ] Pipeline loads and filters work without Odoo
+- [ ] Accounting works purely from QB
+- [ ] CEO confirms "go" after 48h burn-in period
+
+---
+
+## Files to Modify
+
+### Edge Functions (new)
+- `supabase/functions/archive-odoo-files/index.ts` -- batch file migration
+
+### Edge Functions (delete after migration)
+- `supabase/functions/sync-odoo-leads/index.ts`
+- `supabase/functions/sync-odoo-quotations/index.ts`
+- `supabase/functions/sync-odoo-history/index.ts`
+- `supabase/functions/odoo-file-proxy/index.ts`
+
+### Frontend (modify)
+- `src/components/pipeline/LeadTimeline.tsx` -- serve files from storage instead of Odoo proxy
+- `src/pages/Pipeline.tsx` -- remove Odoo sync buttons
+- `src/pages/AccountingWorkspace.tsx` -- remove "View Odoo Quotations" button
+- `src/hooks/useIntegrations.ts` -- remove Odoo status checks and OAuth
+- `src/hooks/useOdooQuotations.ts` -- remove (or keep as read-only DB query without sync)
+- `src/pages/ConnectionsAudit.tsx` -- remove Odoo entry
+- `src/components/integrations/integrationsList.ts` -- remove Odoo card
+
+### Database
+- No columns dropped (archive preservation)
+- Add `status = 'archived_odoo_only'` for unmatched customers
+
+### Secrets (remove after final validation)
+- `ODOO_API_KEY`
+- `ODOO_URL`
+- `ODOO_DATABASE`
+- `ODOO_USERNAME`
