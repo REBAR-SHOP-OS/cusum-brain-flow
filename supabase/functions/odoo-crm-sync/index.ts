@@ -42,7 +42,10 @@ async function odooRpc(url: string, db: string, apiKey: string, model: string, m
     }),
   });
   const data = await res.json();
-  if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+  if (data.error) {
+    console.error("Odoo RPC error detail:", JSON.stringify(data.error));
+    throw new Error(data.error.data?.message || data.error.message || JSON.stringify(data.error));
+  }
   return data.result;
 }
 
@@ -59,7 +62,7 @@ Deno.serve(async (req) => {
     // Fetch all opportunities from Odoo
     const leads = await odooRpc(odooUrl, odooDB, odooKey, "crm.lead", "search_read", [
       [["type", "=", "opportunity"]],
-      { fields: FIELDS, limit: 0 },
+      { fields: FIELDS },
     ]);
 
     console.log(`Fetched ${leads.length} opportunities from Odoo`);
