@@ -7,10 +7,6 @@ import {
   Tag, 
   FileBox, 
   DollarSign,
-  Activity,
-  Terminal,
-  Users,
-  LayoutGrid,
   ArrowLeft,
   Languages
 } from "lucide-react";
@@ -19,7 +15,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import brandLogo from "@/assets/brand-logo.png";
 
 export type OfficeSection = 
-  | "ceo-dashboard"
   | "ai-extract"
   | "ai-transcribe"
   | "detailed-list"
@@ -27,7 +22,8 @@ export type OfficeSection =
   | "inventory"
   | "optimization"
   | "tags-export"
-  | "packing-slips";
+  | "packing-slips"
+  | "payroll";
 
 interface OfficeSidebarProps {
   active: OfficeSection;
@@ -36,20 +32,19 @@ interface OfficeSidebarProps {
 
 const officeTools: { id: OfficeSection; label: string; icon: React.ElementType }[] = [
   { id: "ai-extract", label: "AI Extract", icon: FileText },
-  
+  { id: "ai-transcribe", label: "AI Transcribe", icon: Languages },
   { id: "detailed-list", label: "Detailed List", icon: List },
   { id: "production-queue", label: "Production Queue", icon: ListOrdered },
   { id: "inventory", label: "Inventory", icon: Package },
   { id: "optimization", label: "Optimization", icon: Sparkles },
   { id: "tags-export", label: "Tags & Export", icon: Tag },
   { id: "packing-slips", label: "Packing Slips", icon: FileBox },
+  { id: "payroll", label: "Payroll", icon: DollarSign },
 ];
-
-const bottomItems: { id: OfficeSection; label: string; icon: React.ElementType }[] = [];
 
 export function OfficeSidebar({ active, onNavigate }: OfficeSidebarProps) {
   return (
-    <aside className="hidden md:flex w-[180px] shrink-0 border-r border-border bg-card flex-col h-full">
+    <aside className="flex w-[180px] shrink-0 border-r border-border bg-card flex-col h-full">
       {/* Header */}
       <div className="px-4 py-4 flex items-center gap-2">
         <img src={brandLogo} alt="Rebar.shop" className="w-7 h-7 rounded-full object-contain" />
@@ -79,23 +74,6 @@ export function OfficeSidebar({ active, onNavigate }: OfficeSidebarProps) {
           </button>
         ))}
 
-        {/* Bottom items */}
-        <div className="mt-6">
-          {bottomItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => onNavigate(item.id)}
-              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors ${
-                active === item.id
-                  ? "bg-primary/10 text-primary font-medium"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
-              }`}
-            >
-              <item.icon className="w-4 h-4 shrink-0" />
-              <span className="text-xs">{item.label}</span>
-            </button>
-          ))}
-        </div>
       </ScrollArea>
 
       {/* Footer: Switch Mode */}

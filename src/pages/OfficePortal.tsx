@@ -6,7 +6,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { OfficeSidebar, OfficeSection } from "@/components/office/OfficeSidebar";
-import { AIExtractView as FallbackView } from "@/components/office/AIExtractView";
 import { AIExtractView } from "@/components/office/AIExtractView";
 import { DetailedListView } from "@/components/office/DetailedListView";
 import { ProductionQueueView } from "@/components/office/ProductionQueueView";
@@ -15,9 +14,9 @@ import { OptimizationView } from "@/components/office/OptimizationView";
 import { TagsExportView } from "@/components/office/TagsExportView";
 import { PackingSlipsView } from "@/components/office/PackingSlipsView";
 import { TranscribeView } from "@/components/office/TranscribeView";
+import { PayrollAuditView } from "@/components/office/PayrollAuditView";
 
 const sectionComponents: Record<OfficeSection, React.ComponentType> = {
-  "ceo-dashboard": FallbackView,
   "ai-extract": AIExtractView,
   "ai-transcribe": TranscribeView,
   "detailed-list": DetailedListView,
@@ -26,6 +25,7 @@ const sectionComponents: Record<OfficeSection, React.ComponentType> = {
   "optimization": OptimizationView,
   "tags-export": TagsExportView,
   "packing-slips": PackingSlipsView,
+  "payroll": PayrollAuditView,
 };
 
 export default function OfficePortal() {
