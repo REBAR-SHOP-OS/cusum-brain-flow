@@ -40,6 +40,7 @@ const hubCards: HubCard[] = [
   },
   {
     label: "CLEARANCE",
+    subtitle: "QC & EVIDENCE",
     icon: <ShieldCheck className="w-7 h-7" />,
     to: "/shopfloor/clearance",
   },

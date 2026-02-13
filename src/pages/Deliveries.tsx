@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCompletedBundles } from "@/hooks/useCompletedBundles";
 import { useAuth } from "@/lib/auth";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useCompanyId } from "@/hooks/useCompanyId";
 import { ReadyBundleList } from "@/components/dispatch/ReadyBundleList";
 import { PODCaptureDialog } from "@/components/delivery/PODCaptureDialog";
 import { StopIssueDialog } from "@/components/delivery/StopIssueDialog";
@@ -13,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { 
   Truck, 
   MapPin, 
@@ -58,19 +60,19 @@ interface DeliveryStop {
 
 const statusColors: Record<string, string> = {
   pending: "bg-muted text-muted-foreground",
-  scheduled: "bg-yellow-500/20 text-yellow-500",
-  "in-transit": "bg-blue-500/20 text-blue-500",
-  delivered: "bg-green-500/20 text-green-500",
-  completed: "bg-green-500/20 text-green-500",
-  partial: "bg-orange-500/20 text-orange-500",
+  scheduled: "bg-accent/20 text-accent-foreground",
+  "in-transit": "bg-primary/20 text-primary",
+  delivered: "bg-primary/30 text-primary",
+  completed: "bg-primary/30 text-primary",
+  partial: "bg-destructive/20 text-destructive",
   failed: "bg-destructive/20 text-destructive",
 };
 
 const stopStatusColors: Record<string, string> = {
   pending: "bg-muted text-muted-foreground",
-  arrived: "bg-blue-500/20 text-blue-500",
-  completed: "bg-green-500/20 text-green-500",
-  skipped: "bg-orange-500/20 text-orange-500",
+  arrived: "bg-primary/20 text-primary",
+  completed: "bg-primary/30 text-primary",
+  skipped: "bg-destructive/20 text-destructive",
   failed: "bg-destructive/20 text-destructive",
 };
 
@@ -83,6 +85,7 @@ export default function Deliveries() {
   const { bundles } = useCompletedBundles();
   const { user } = useAuth();
   const { isField } = useUserRole();
+  const { companyId } = useCompanyId();
   const queryClient = useQueryClient();
 
   // Get current user's profile name for driver mode filtering
@@ -100,11 +103,13 @@ export default function Deliveries() {
   });
 
   const { data: deliveries = [], isLoading, error } = useQuery({
-    queryKey: ["deliveries"],
+    queryKey: ["deliveries", companyId],
+    enabled: !!companyId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("deliveries")
         .select("*")
+        .eq("company_id", companyId!)
         .order("scheduled_date", { ascending: true });
       
       if (error) throw error;
@@ -113,19 +118,20 @@ export default function Deliveries() {
   });
 
   const { data: stops = [] } = useQuery({
-    queryKey: ["delivery-stops", selectedDelivery?.id],
+    queryKey: ["delivery-stops", selectedDelivery?.id, companyId],
     queryFn: async () => {
-      if (!selectedDelivery) return [];
+      if (!selectedDelivery || !companyId) return [];
       const { data, error } = await supabase
         .from("delivery_stops")
         .select("*")
         .eq("delivery_id", selectedDelivery.id)
+        .eq("company_id", companyId)
         .order("stop_sequence", { ascending: true });
       
       if (error) throw error;
       return data as DeliveryStop[];
     },
-    enabled: !!selectedDelivery,
+    enabled: !!selectedDelivery && !!companyId,
   });
 
   // Apply driver mode filter
@@ -152,7 +158,7 @@ export default function Deliveries() {
   );
 
   const refreshStops = () => {
-    queryClient.invalidateQueries({ queryKey: ["delivery-stops", selectedDelivery?.id] });
+    queryClient.invalidateQueries({ queryKey: ["delivery-stops", selectedDelivery?.id, companyId] });
   };
 
   if (error) {
@@ -168,209 +174,221 @@ export default function Deliveries() {
   }
 
   return (
-    <div className="flex flex-col md:flex-row h-full">
-      {/* Delivery List */}
-      <div className={`${selectedDelivery ? 'hidden md:flex' : 'flex'} flex-1 flex-col border-r border-border`}>
-        {/* Header */}
-        <header className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-border">
-          <div>
-            <h1 className="text-xl font-semibold flex items-center gap-2">
-              <Truck className="w-5 h-5" />
-              Deliveries
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              {activeDeliveries.length} in transit • {todayDeliveries.length} today
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            {/* Driver Mode Toggle */}
-            <div className="flex items-center gap-2">
-              <label className="text-xs text-muted-foreground whitespace-nowrap">Driver Mode</label>
-              <Switch checked={driverMode} onCheckedChange={setDriverMode} />
+    <TooltipProvider>
+      <div className="flex flex-col md:flex-row h-full">
+        {/* Delivery List */}
+        <div className={`${selectedDelivery ? 'hidden md:flex' : 'flex'} flex-1 flex-col border-r border-border`}>
+          {/* Header */}
+          <header className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-border">
+            <div>
+              <h1 className="text-xl font-semibold flex items-center gap-2">
+                <Truck className="w-5 h-5" />
+                Deliveries
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                {activeDeliveries.length} in transit • {todayDeliveries.length} today
+              </p>
             </div>
-            {!driverMode && (
-              <Button size="sm" className="gap-2">
-                <Plus className="w-4 h-4" />
-                <span className="hidden sm:inline">New Delivery</span>
-              </Button>
-            )}
-          </div>
-        </header>
+            <div className="flex items-center gap-3">
+              {/* Driver Mode Toggle */}
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-muted-foreground whitespace-nowrap">Driver Mode</label>
+                <Switch checked={driverMode} onCheckedChange={setDriverMode} />
+              </div>
+              {!driverMode && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button size="sm" className="gap-2" disabled>
+                      <Plus className="w-4 h-4" />
+                      <span className="hidden sm:inline">New Delivery</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Coming soon</TooltipContent>
+                </Tooltip>
+              )}
+            </div>
+          </header>
 
-        {/* Stats Bar */}
-        <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-border bg-muted/30">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-            <StatCard 
-              label="In Transit" 
-              value={activeDeliveries.length} 
-              icon={<Truck className="w-4 h-4 text-primary" />}
-            />
-            <StatCard 
-              label="Today" 
-              value={todayDeliveries.length} 
-              icon={<Calendar className="w-4 h-4 text-muted-foreground" />}
-            />
-            <StatCard 
-              label="Upcoming" 
-              value={upcomingDeliveries.length} 
-              icon={<Clock className="w-4 h-4 text-primary" />}
-            />
-            <StatCard 
-              label="Completed" 
-              value={completedDeliveries.length} 
-              icon={<CheckCircle2 className="w-4 h-4 text-primary" />}
-            />
+          {/* Stats Bar */}
+          <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-border bg-muted/30">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+              <StatCard 
+                label="In Transit" 
+                value={activeDeliveries.length} 
+                icon={<Truck className="w-4 h-4 text-primary" />}
+              />
+              <StatCard 
+                label="Today" 
+                value={todayDeliveries.length} 
+                icon={<Calendar className="w-4 h-4 text-muted-foreground" />}
+              />
+              <StatCard 
+                label="Upcoming" 
+                value={upcomingDeliveries.length} 
+                icon={<Clock className="w-4 h-4 text-primary" />}
+              />
+              <StatCard 
+                label="Completed" 
+                value={completedDeliveries.length} 
+                icon={<CheckCircle2 className="w-4 h-4 text-primary" />}
+              />
+            </div>
+          </div>
+
+          {/* Ready Bundles from Clearance */}
+          {bundles.length > 0 && (
+            <div className="px-4 sm:px-6 py-4 border-b border-border">
+              <ReadyBundleList
+                bundles={bundles}
+                title="Cleared — Ready for Delivery"
+              />
+            </div>
+          )}
+
+          {/* Content */}
+          <div className="flex-1 overflow-hidden">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
+              <div className="px-4 sm:px-6 pt-4">
+                <TabsList>
+                  <TabsTrigger value="today">Today ({todayDeliveries.length})</TabsTrigger>
+                  <TabsTrigger value="upcoming">Upcoming ({upcomingDeliveries.length})</TabsTrigger>
+                  <TabsTrigger value="all">All ({filteredDeliveries.length})</TabsTrigger>
+                </TabsList>
+              </div>
+
+              <TabsContent value="today" className="flex-1 overflow-hidden px-4 sm:px-6 pb-6">
+                <DeliveryList 
+                  deliveries={todayDeliveries} 
+                  isLoading={isLoading}
+                  selectedId={selectedDelivery?.id}
+                  onSelect={setSelectedDelivery}
+                  emptyMessage="No deliveries scheduled for today"
+                />
+              </TabsContent>
+
+              <TabsContent value="upcoming" className="flex-1 overflow-hidden px-4 sm:px-6 pb-6">
+                <DeliveryList 
+                  deliveries={upcomingDeliveries} 
+                  isLoading={isLoading}
+                  selectedId={selectedDelivery?.id}
+                  onSelect={setSelectedDelivery}
+                  emptyMessage="No upcoming deliveries"
+                />
+              </TabsContent>
+
+              <TabsContent value="all" className="flex-1 overflow-hidden px-4 sm:px-6 pb-6">
+                <DeliveryList 
+                  deliveries={filteredDeliveries} 
+                  isLoading={isLoading}
+                  selectedId={selectedDelivery?.id}
+                  onSelect={setSelectedDelivery}
+                  emptyMessage="No deliveries found"
+                />
+              </TabsContent>
+            </Tabs>
           </div>
         </div>
 
-        {/* Ready Bundles from Clearance */}
-        {bundles.length > 0 && (
-          <div className="px-4 sm:px-6 py-4 border-b border-border">
-            <ReadyBundleList
-              bundles={bundles}
-              title="Cleared — Ready for Delivery"
-            />
-          </div>
-        )}
+        {/* Detail Panel */}
+        <div className={`${selectedDelivery ? 'flex' : 'hidden md:flex'} w-full md:w-96 flex-col bg-muted/20`}>
+          {selectedDelivery ? (
+            <>
+              <header className="px-4 sm:px-6 py-4 border-b border-border">
+                <div className="flex items-center gap-2 mb-2">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="md:hidden"
+                    onClick={() => setSelectedDelivery(null)}
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                  </Button>
+                  <h2 className="text-lg font-semibold flex-1">{selectedDelivery.delivery_number}</h2>
+                  <Badge className={statusColors[selectedDelivery.status || "pending"]}>
+                    {selectedDelivery.status || "pending"}
+                  </Badge>
+                </div>
+                <div className="text-sm text-muted-foreground space-y-1">
+                  {selectedDelivery.driver_name && (
+                    <div className="flex items-center gap-2">
+                      <User className="w-4 h-4" />
+                      {selectedDelivery.driver_name}
+                    </div>
+                  )}
+                  {selectedDelivery.vehicle && (
+                    <div className="flex items-center gap-2">
+                      <Truck className="w-4 h-4" />
+                      {selectedDelivery.vehicle}
+                    </div>
+                  )}
+                  {selectedDelivery.scheduled_date && (
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-4 h-4" />
+                      {format(new Date(selectedDelivery.scheduled_date), "MMM d, yyyy")}
+                    </div>
+                  )}
+                </div>
+              </header>
 
-        {/* Content */}
-        <div className="flex-1 overflow-hidden">
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
-            <div className="px-4 sm:px-6 pt-4">
-              <TabsList>
-                <TabsTrigger value="today">Today ({todayDeliveries.length})</TabsTrigger>
-                <TabsTrigger value="upcoming">Upcoming ({upcomingDeliveries.length})</TabsTrigger>
-                <TabsTrigger value="all">All ({filteredDeliveries.length})</TabsTrigger>
-              </TabsList>
+              <div className="flex-1 overflow-hidden">
+                <div className="px-4 sm:px-6 py-4">
+                  <h3 className="text-sm font-medium mb-3">Stops ({stops.length})</h3>
+                  <ScrollArea className="h-[calc(100vh-320px)]">
+                    <div className="space-y-3 pr-4">
+                      {stops.map((stop, index) => (
+                        <StopCard 
+                          key={stop.id} 
+                          stop={stop} 
+                          index={index}
+                          driverMode={driverMode}
+                          onPOD={() => setPodStopId(stop.id)}
+                          onIssue={() => setIssueStopId(stop.id)}
+                        />
+                      ))}
+                      {stops.length === 0 && (
+                        <p className="text-sm text-muted-foreground text-center py-8">
+                          No stops added yet
+                        </p>
+                      )}
+                    </div>
+                  </ScrollArea>
+                </div>
+              </div>
+
+              <div className="px-4 sm:px-6 py-4 border-t border-border">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button className="w-full gap-2" disabled>
+                      <MapPin className="w-4 h-4" />
+                      View Route
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Coming soon</TooltipContent>
+                </Tooltip>
+              </div>
+            </>
+          ) : (
+            <div className="flex items-center justify-center h-full text-muted-foreground">
+              <p>Select a delivery to view details</p>
             </div>
-
-            <TabsContent value="today" className="flex-1 overflow-hidden px-4 sm:px-6 pb-6">
-              <DeliveryList 
-                deliveries={todayDeliveries} 
-                isLoading={isLoading}
-                selectedId={selectedDelivery?.id}
-                onSelect={setSelectedDelivery}
-                emptyMessage="No deliveries scheduled for today"
-              />
-            </TabsContent>
-
-            <TabsContent value="upcoming" className="flex-1 overflow-hidden px-4 sm:px-6 pb-6">
-              <DeliveryList 
-                deliveries={upcomingDeliveries} 
-                isLoading={isLoading}
-                selectedId={selectedDelivery?.id}
-                onSelect={setSelectedDelivery}
-                emptyMessage="No upcoming deliveries"
-              />
-            </TabsContent>
-
-            <TabsContent value="all" className="flex-1 overflow-hidden px-4 sm:px-6 pb-6">
-              <DeliveryList 
-                deliveries={filteredDeliveries} 
-                isLoading={isLoading}
-                selectedId={selectedDelivery?.id}
-                onSelect={setSelectedDelivery}
-                emptyMessage="No deliveries found"
-              />
-            </TabsContent>
-          </Tabs>
+          )}
         </div>
+
+        {/* POD & Issue Dialogs */}
+        <PODCaptureDialog
+          open={!!podStopId}
+          onOpenChange={(open) => !open && setPodStopId(null)}
+          stopId={podStopId || ""}
+          onComplete={refreshStops}
+        />
+        <StopIssueDialog
+          open={!!issueStopId}
+          onOpenChange={(open) => !open && setIssueStopId(null)}
+          stopId={issueStopId || ""}
+          onComplete={refreshStops}
+        />
       </div>
-
-      {/* Detail Panel */}
-      <div className={`${selectedDelivery ? 'flex' : 'hidden md:flex'} w-full md:w-96 flex-col bg-muted/20`}>
-        {selectedDelivery ? (
-          <>
-            <header className="px-4 sm:px-6 py-4 border-b border-border">
-              <div className="flex items-center gap-2 mb-2">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="md:hidden"
-                  onClick={() => setSelectedDelivery(null)}
-                >
-                  <ArrowLeft className="w-4 h-4" />
-                </Button>
-                <h2 className="text-lg font-semibold flex-1">{selectedDelivery.delivery_number}</h2>
-                <Badge className={statusColors[selectedDelivery.status || "pending"]}>
-                  {selectedDelivery.status || "pending"}
-                </Badge>
-              </div>
-              <div className="text-sm text-muted-foreground space-y-1">
-                {selectedDelivery.driver_name && (
-                  <div className="flex items-center gap-2">
-                    <User className="w-4 h-4" />
-                    {selectedDelivery.driver_name}
-                  </div>
-                )}
-                {selectedDelivery.vehicle && (
-                  <div className="flex items-center gap-2">
-                    <Truck className="w-4 h-4" />
-                    {selectedDelivery.vehicle}
-                  </div>
-                )}
-                {selectedDelivery.scheduled_date && (
-                  <div className="flex items-center gap-2">
-                    <Calendar className="w-4 h-4" />
-                    {format(new Date(selectedDelivery.scheduled_date), "MMM d, yyyy")}
-                  </div>
-                )}
-              </div>
-            </header>
-
-            <div className="flex-1 overflow-hidden">
-              <div className="px-4 sm:px-6 py-4">
-                <h3 className="text-sm font-medium mb-3">Stops ({stops.length})</h3>
-                <ScrollArea className="h-[calc(100vh-320px)]">
-                  <div className="space-y-3 pr-4">
-                    {stops.map((stop, index) => (
-                      <StopCard 
-                        key={stop.id} 
-                        stop={stop} 
-                        index={index}
-                        driverMode={driverMode}
-                        onPOD={() => setPodStopId(stop.id)}
-                        onIssue={() => setIssueStopId(stop.id)}
-                      />
-                    ))}
-                    {stops.length === 0 && (
-                      <p className="text-sm text-muted-foreground text-center py-8">
-                        No stops added yet
-                      </p>
-                    )}
-                  </div>
-                </ScrollArea>
-              </div>
-            </div>
-
-            <div className="px-4 sm:px-6 py-4 border-t border-border">
-              <Button className="w-full gap-2">
-                <MapPin className="w-4 h-4" />
-                View Route
-              </Button>
-            </div>
-          </>
-        ) : (
-          <div className="flex items-center justify-center h-full text-muted-foreground">
-            <p>Select a delivery to view details</p>
-          </div>
-        )}
-      </div>
-
-      {/* POD & Issue Dialogs */}
-      <PODCaptureDialog
-        open={!!podStopId}
-        onOpenChange={(open) => !open && setPodStopId(null)}
-        stopId={podStopId || ""}
-        onComplete={refreshStops}
-      />
-      <StopIssueDialog
-        open={!!issueStopId}
-        onOpenChange={(open) => !open && setIssueStopId(null)}
-        stopId={issueStopId || ""}
-        onComplete={refreshStops}
-      />
-    </div>
+    </TooltipProvider>
   );
 }
 
@@ -385,6 +403,7 @@ function StatCard({ label, value, icon }: { label: string; value: number; icon: 
     </div>
   );
 }
+StatCard.displayName = "StatCard";
 
 interface DeliveryListProps {
   deliveries: Delivery[];
@@ -426,6 +445,7 @@ function DeliveryList({ deliveries, isLoading, selectedId, onSelect, emptyMessag
     </ScrollArea>
   );
 }
+DeliveryList.displayName = "DeliveryList";
 
 interface DeliveryCardProps {
   delivery: Delivery;
@@ -468,6 +488,7 @@ function DeliveryCard({ delivery, isSelected, onClick }: DeliveryCardProps) {
     </Card>
   );
 }
+DeliveryCard.displayName = "DeliveryCard";
 
 function StopCard({ stop, index, driverMode, onPOD, onIssue }: { 
   stop: DeliveryStop; 
@@ -528,3 +549,4 @@ function StopCard({ stop, index, driverMode, onPOD, onIssue }: {
     </Card>
   );
 }
+StopCard.displayName = "StopCard";
