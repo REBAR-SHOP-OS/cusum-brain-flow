@@ -22,7 +22,9 @@ import { AccountingReport } from "@/components/accounting/AccountingReport";
 import { AccountingAgent } from "@/components/accounting/AccountingAgent";
 import { PayrollAuditView } from "@/components/office/PayrollAuditView";
 import { AccountingOrders } from "@/components/accounting/AccountingOrders";
+import { AccountingActionQueue } from "@/components/accounting/AccountingActionQueue";
 import { AgentSuggestionsPanel } from "@/components/agent/AgentSuggestionsPanel";
+import { usePennyQueue } from "@/hooks/usePennyQueue";
 import { useIntegrations } from "@/hooks/useIntegrations";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useWebPhone } from "@/hooks/useWebPhone";
@@ -33,6 +35,7 @@ export default function AccountingWorkspace() {
   const [showAgent, setShowAgent] = useState(true);
   const [agentMode, setAgentMode] = useState<"default" | "minimized" | "fullscreen">("default");
   const qb = useQuickBooksData();
+  const { pendingCount } = usePennyQueue();
   const { startOAuth } = useIntegrations();
   const { isAdmin, hasRole, isLoading: rolesLoading } = useUserRole();
   const [webPhoneState, webPhoneActions] = useWebPhone();
@@ -156,7 +159,7 @@ export default function AccountingWorkspace() {
             <h1 className="text-lg sm:text-xl font-bold flex items-center gap-2 shrink-0">
               💰 <span>Accounting</span>
             </h1>
-            <AccountingNavMenus activeTab={activeTab} onNavigate={setActiveTab} />
+            <AccountingNavMenus activeTab={activeTab} onNavigate={setActiveTab} pendingCount={pendingCount} />
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <Button
@@ -199,6 +202,7 @@ export default function AccountingWorkspace() {
             {activeTab === "payroll" && <AccountingPayroll data={qb} />}
             {activeTab === "payroll-audit" && <PayrollAuditView />}
             {activeTab === "orders" && <AccountingOrders />}
+            {activeTab === "actions" && <AccountingActionQueue />}
             {activeTab === "documents" && <AccountingDocuments data={qb} />}
             {activeTab === "balance-sheet" && <AccountingReport data={qb} report="balance-sheet" />}
             {activeTab === "profit-loss" && <AccountingReport data={qb} report="profit-loss" />}

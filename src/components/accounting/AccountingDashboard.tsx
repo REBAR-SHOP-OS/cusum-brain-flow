@@ -3,9 +3,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   FileText, Receipt, Landmark, DollarSign,
-  Plus, AlertTriangle, MoreVertical, PiggyBank, Wallet,
+  Plus, AlertTriangle, MoreVertical, PiggyBank, Wallet, Bot,
 } from "lucide-react";
 import type { QBAccount } from "@/hooks/useQuickBooksData";
+import { usePennyQueue } from "@/hooks/usePennyQueue";
 import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
 import { useMemo } from "react";
 
@@ -251,6 +252,51 @@ function CashCard({ data, onNavigate }: Props) {
 }
 CashCard.displayName = "CashCard";
 
+function PennyQueueCard({ onNavigate }: { onNavigate: (tab: string) => void }) {
+  const { pendingCount, totalAtRisk, nextFollowup } = usePennyQueue();
+
+  return (
+    <Card
+      className="cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all"
+      onClick={() => onNavigate("actions")}
+    >
+      <CardContent className="p-5">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Bot className="w-4 h-4 text-primary" />
+            <h3 className="font-semibold text-sm text-primary">Penny's Queue</h3>
+          </div>
+          {pendingCount > 0 && (
+            <Badge variant="destructive" className="text-[10px]">{pendingCount}</Badge>
+          )}
+        </div>
+
+        <div className="space-y-1.5 text-sm">
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Pending Approvals</span>
+            <span className="font-semibold tabular-nums">{pendingCount}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">AR at Risk</span>
+            <span className="font-semibold tabular-nums">{new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(totalAtRisk)}</span>
+          </div>
+          {nextFollowup && (
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Next Follow-up</span>
+              <span className="text-xs font-medium">{nextFollowup}</span>
+            </div>
+          )}
+        </div>
+
+        <Button size="sm" variant="outline" className="text-xs mt-3 gap-1.5 text-primary" onClick={(e) => { e.stopPropagation(); onNavigate("actions"); }}>
+          <Bot className="w-3 h-3" /> Review Actions
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+PennyQueueCard.displayName = "PennyQueueCard";
+
 export function AccountingDashboard({ data, onNavigate }: Props) {
   const bankAccounts = data.accounts.filter((a) => a.AccountType === "Bank" && a.Active);
   const checkingAccounts = bankAccounts.filter((a) => a.AccountSubType !== "Savings");
@@ -281,6 +327,7 @@ export function AccountingDashboard({ data, onNavigate }: Props) {
       />
 
       <CashCard data={data} onNavigate={onNavigate} />
+      <PennyQueueCard onNavigate={onNavigate} />
     </div>
   );
 }

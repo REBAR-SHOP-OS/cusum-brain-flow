@@ -1,0 +1,140 @@
+import { useState, useEffect, useCallback } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+
+export interface PennyQueueItem {
+  id: string;
+  company_id: string;
+  invoice_id: string | null;
+  customer_name: string;
+  customer_email: string | null;
+  customer_phone: string | null;
+  amount: number;
+  days_overdue: number;
+  action_type: "email_reminder" | "call_collection" | "send_invoice" | "escalate";
+  action_payload: Record<string, unknown>;
+  status: "pending_approval" | "approved" | "executed" | "rejected" | "failed";
+  priority: "low" | "medium" | "high" | "critical";
+  ai_reasoning: string | null;
+  approved_by: string | null;
+  approved_at: string | null;
+  executed_at: string | null;
+  execution_result: Record<string, unknown> | null;
+  followup_date: string | null;
+  followup_count: number;
+  created_at: string;
+}
+
+const PRIORITY_ORDER = { critical: 0, high: 1, medium: 2, low: 3 };
+
+export function usePennyQueue() {
+  const [items, setItems] = useState<PennyQueueItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("penny_collection_queue")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      setItems((data as unknown as PennyQueueItem[]) || []);
+    } catch (err) {
+      console.error("Failed to load penny queue:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Realtime subscription
+  useEffect(() => {
+    load();
+    const channel = supabase
+      .channel("penny-queue-changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "penny_collection_queue" }, () => {
+        load();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [load]);
+
+  const pendingItems = items.filter(i => i.status === "pending_approval")
+    .sort((a, b) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority]);
+
+  const pendingCount = pendingItems.length;
+
+  const approve = useCallback(async (id: string, modifiedPayload?: Record<string, unknown>) => {
+    try {
+      const updates: Record<string, unknown> = {
+        status: "approved",
+        approved_at: new Date().toISOString(),
+      };
+      if (modifiedPayload) updates.action_payload = modifiedPayload;
+
+      const { error } = await supabase
+        .from("penny_collection_queue")
+        .update(updates)
+        .eq("id", id);
+      if (error) throw error;
+
+      // Trigger execution
+      await supabase.functions.invoke("penny-execute-action", { body: { action_id: id } });
+      toast({ title: "✅ Action approved & executing" });
+    } catch (err) {
+      toast({ title: "Approval failed", description: String(err), variant: "destructive" });
+    }
+  }, [toast]);
+
+  const reject = useCallback(async (id: string, reason?: string) => {
+    try {
+      const { error } = await supabase
+        .from("penny_collection_queue")
+        .update({
+          status: "rejected",
+          execution_result: reason ? { reject_reason: reason } : {},
+        })
+        .eq("id", id);
+      if (error) throw error;
+      toast({ title: "Action dismissed" });
+    } catch (err) {
+      toast({ title: "Reject failed", description: String(err), variant: "destructive" });
+    }
+  }, [toast]);
+
+  const schedule = useCallback(async (id: string, followupDate: string) => {
+    try {
+      const { error } = await supabase
+        .from("penny_collection_queue")
+        .update({ followup_date: followupDate, status: "pending_approval" })
+        .eq("id", id);
+      if (error) throw error;
+      toast({ title: "📅 Follow-up scheduled", description: followupDate });
+    } catch (err) {
+      toast({ title: "Schedule failed", description: String(err), variant: "destructive" });
+    }
+  }, [toast]);
+
+  const triggerAutoActions = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke("penny-auto-actions");
+      if (error) throw error;
+      toast({ title: "🤖 Penny scanned invoices", description: `${data?.queued || 0} new actions queued` });
+    } catch (err) {
+      toast({ title: "Auto-scan failed", description: String(err), variant: "destructive" });
+    }
+  }, [toast]);
+
+  const totalAtRisk = pendingItems.reduce((s, i) => s + (i.amount || 0), 0);
+  const nextFollowup = items
+    .filter(i => i.followup_date && i.status === "pending_approval")
+    .sort((a, b) => (a.followup_date! > b.followup_date! ? 1 : -1))[0]?.followup_date || null;
+
+  return {
+    items, pendingItems, pendingCount, totalAtRisk, nextFollowup,
+    loading, load, approve, reject, schedule, triggerAutoActions,
+  };
+}
+
+usePennyQueue.displayName = "usePennyQueue";
