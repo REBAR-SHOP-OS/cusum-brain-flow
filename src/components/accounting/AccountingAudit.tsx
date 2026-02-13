@@ -9,6 +9,8 @@ import {
   ShieldCheck, AlertTriangle, CheckCircle2, Loader2, Sparkles,
   RefreshCw, DollarSign, FileText, Users, Receipt,
 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
 
 interface Props {
@@ -35,137 +37,85 @@ export function AccountingAudit({ data }: Props) {
   const [hasRun, setHasRun] = useState(false);
   const [confirmAction, setConfirmAction] = useState<AuditItem | null>(null);
 
-  const runAudit = useCallback(() => {
+  const runAudit = useCallback(async () => {
     setAuditing(true);
-    // Simulate AI analysis with real data checks
-    setTimeout(() => {
-      const results: AuditItem[] = [];
-
-      // 1. Overdue invoices
-      if (overdueInvoices.length > 0) {
-        const total = overdueInvoices.reduce((s, i) => s + i.Balance, 0);
-        results.push({
-          id: "overdue-inv",
-          type: "error",
-          category: "Receivables",
-          title: `${overdueInvoices.length} Overdue Invoices — ${fmt(total)}`,
-          description: `You have ${overdueInvoices.length} invoices past due. The oldest is ${overdueInvoices.sort((a, b) => new Date(a.DueDate).getTime() - new Date(b.DueDate).getTime())[0]?.CustomerRef?.name || "unknown"}.`,
-          action: "send-reminders",
-          actionLabel: "Send Reminders",
-        });
-      } else {
-        results.push({
-          id: "overdue-inv-ok",
-          type: "success",
-          category: "Receivables",
-          title: "No Overdue Invoices",
-          description: "All invoices are current. Great job keeping up!",
-        });
-      }
-
-      // 2. Overdue bills
-      if (overdueBills.length > 0) {
-        const total = overdueBills.reduce((s, b) => s + b.Balance, 0);
-        results.push({
-          id: "overdue-bills",
-          type: "warning",
-          category: "Payables",
-          title: `${overdueBills.length} Overdue Bills — ${fmt(total)}`,
-          description: `Bills from ${overdueBills.map(b => b.VendorRef?.name).filter(Boolean).slice(0, 3).join(", ")} are past due.`,
-        });
-      }
-
-      // 3. Large open balances
-      const largeInvoices = invoices.filter(i => i.Balance > 5000);
-      if (largeInvoices.length > 0) {
-        results.push({
-          id: "large-balances",
-          type: "warning",
-          category: "Cash Flow",
-          title: `${largeInvoices.length} Invoices Over $5,000 Outstanding`,
-          description: `Total: ${fmt(largeInvoices.reduce((s, i) => s + i.Balance, 0))}. Consider following up on these.`,
-        });
-      }
-
-      // 4. Customers with no invoices
-      const customersWithInvoices = new Set(invoices.map(i => i.CustomerRef?.value));
-      const dormantCustomers = customers.filter(c => !customersWithInvoices.has(c.Id));
-      if (dormantCustomers.length > 0) {
-        results.push({
-          id: "dormant-customers",
-          type: "info",
-          category: "Customers",
-          title: `${dormantCustomers.length} Customers With No Invoices`,
-          description: `These customers are in QuickBooks but have no invoices: ${dormantCustomers.slice(0, 3).map(c => c.DisplayName).join(", ")}${dormantCustomers.length > 3 ? "..." : ""}.`,
-        });
-      }
-
-      // 5. Duplicate check (same amount, same day, same customer)
+    try {
+      // Pre-detect duplicates client-side
       const seen = new Map<string, number>();
       invoices.forEach(i => {
         const key = `${i.CustomerRef?.value}-${i.TotalAmt}-${i.TxnDate}`;
         seen.set(key, (seen.get(key) || 0) + 1);
       });
-      const duplicates = Array.from(seen.entries()).filter(([, count]) => count > 1);
-      if (duplicates.length > 0) {
-        results.push({
-          id: "duplicates",
-          type: "error",
-          category: "Data Quality",
-          title: `${duplicates.length} Possible Duplicate Invoices`,
-          description: "Found invoices with the same customer, amount, and date. Please review these manually.",
-        });
-      } else {
-        results.push({
-          id: "no-duplicates",
-          type: "success",
-          category: "Data Quality",
-          title: "No Duplicate Invoices Found",
-          description: "All invoices appear unique. Clean books!",
-        });
-      }
+      const duplicates = Array.from(seen.entries())
+        .filter(([, count]) => count > 1)
+        .map(([key]) => key);
 
-      // 6. Unbalanced payments
+      // Customers with no invoices
+      const customersWithInvoices = new Set(invoices.map(i => i.CustomerRef?.value));
+      const dormantCustomers = customers.filter(c => !customersWithInvoices.has(c.Id));
+
       const totalInvoiced = invoices.reduce((s, i) => s + i.TotalAmt, 0);
       const totalPaid = payments.reduce((s, p) => s + p.TotalAmt, 0);
-      const collectionRate = totalInvoiced > 0 ? (totalPaid / totalInvoiced * 100) : 0;
-      results.push({
-        id: "collection-rate",
-        type: collectionRate > 80 ? "success" : collectionRate > 50 ? "warning" : "error",
-        category: "Collections",
-        title: `Collection Rate: ${collectionRate.toFixed(1)}%`,
-        description: `${fmt(totalPaid)} collected out of ${fmt(totalInvoiced)} invoiced.`,
-      });
+      const totalAR = invoices.reduce((s, i) => s + i.Balance, 0);
+      const totalAP = bills.reduce((s, b) => s + b.Balance, 0);
 
-      // 7. Vendor count vs customer count
-      if (vendors.length > customers.length * 2) {
-        results.push({
-          id: "vendor-ratio",
-          type: "info",
-          category: "General",
-          title: "High Vendor-to-Customer Ratio",
-          description: `You have ${vendors.length} vendors vs ${customers.length} customers. Consider consolidating vendors.`,
-        });
-      }
+      const payload = {
+        summary: {
+          totalAR, totalAP, totalInvoiced, totalPaid,
+          invoiceCount: invoices.length,
+          billCount: bills.length,
+          paymentCount: payments.length,
+          customerCount: customers.length,
+          vendorCount: vendors.length,
+          accountCount: accounts.length,
+          collectionRate: totalInvoiced > 0 ? +(totalPaid / totalInvoiced * 100).toFixed(1) : 0,
+        },
+        overdueInvoices: overdueInvoices.slice(0, 20).map(i => ({
+          customer: i.CustomerRef?.name || "Unknown",
+          amount: i.Balance,
+          dueDate: i.DueDate,
+          daysOverdue: Math.floor((Date.now() - new Date(i.DueDate).getTime()) / 86400000),
+        })),
+        overdueBills: overdueBills.slice(0, 20).map(b => ({
+          vendor: b.VendorRef?.name || "Unknown",
+          amount: b.Balance,
+          dueDate: b.DueDate,
+        })),
+        largeOpenInvoices: invoices.filter(i => i.Balance > 5000).slice(0, 10).map(i => ({
+          customer: i.CustomerRef?.name || "Unknown",
+          amount: i.Balance,
+        })),
+        possibleDuplicates: duplicates.slice(0, 10),
+        dormantCustomers: {
+          count: dormantCustomers.length,
+          names: dormantCustomers.slice(0, 5).map(c => c.DisplayName),
+        },
+      };
 
-      // 8. Summary
-      const errors = results.filter(r => r.type === "error").length;
-      const warnings = results.filter(r => r.type === "warning").length;
-      if (errors === 0 && warnings === 0) {
-        results.unshift({
-          id: "summary-clean",
-          type: "success",
-          category: "Overall",
-          title: "🎉 Books Look Clean!",
-          description: "No critical issues found in your QuickBooks data.",
-        });
-      }
+      const { data, error } = await supabase.functions.invoke("qb-audit", { body: payload });
 
-      setAuditResults(results);
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      const findings: AuditItem[] = (data?.findings || []).map((f: any, i: number) => ({
+        id: f.id || `finding-${i}`,
+        type: f.type || "info",
+        category: f.category || "General",
+        title: f.title || "Finding",
+        description: f.description || "",
+        actionLabel: f.actionLabel,
+        action: f.action,
+      }));
+
+      setAuditResults(findings);
       setHasRun(true);
+    } catch (err: any) {
+      console.error("Audit failed:", err);
+      toast.error(err?.message || "Audit failed. Please try again.");
+    } finally {
       setAuditing(false);
-    }, 2000);
-  }, [invoices, bills, customers, vendors, payments, overdueInvoices, overdueBills]);
+    }
+  }, [invoices, bills, customers, vendors, payments, accounts, overdueInvoices, overdueBills]);
 
   const iconForType = (type: string) => {
     switch (type) {

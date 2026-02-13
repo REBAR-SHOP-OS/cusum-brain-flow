@@ -168,3 +168,6 @@ verify_jwt = false
 
 [functions.check-sla-breaches]
 verify_jwt = false
+
+[functions.qb-audit]
+verify_jwt = false
