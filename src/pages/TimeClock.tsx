@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTimeClock } from "@/hooks/useTimeClock";
+import { useLeaveManagement } from "@/hooks/useLeaveManagement";
 import { useFaceRecognition } from "@/hooks/useFaceRecognition";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
@@ -9,7 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
-import { Clock, LogIn, LogOut, ArrowLeft, Timer, ScanFace, Maximize } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Clock, LogIn, LogOut, ArrowLeft, Timer, ScanFace, Maximize, Users, CalendarDays, Palmtree } from "lucide-react";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { format, differenceInMinutes } from "date-fns";
@@ -17,6 +19,8 @@ import { toast } from "sonner";
 import { FaceCamera } from "@/components/timeclock/FaceCamera";
 import { FaceEnrollment } from "@/components/timeclock/FaceEnrollment";
 import { FaceRecognitionResult } from "@/components/timeclock/FaceRecognitionResult";
+import { MyLeaveTab } from "@/components/timeclock/MyLeaveTab";
+import { TeamCalendarTab } from "@/components/timeclock/TeamCalendarTab";
 
 function getInitials(name: string) {
   return name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
@@ -30,6 +34,7 @@ function formatDuration(mins: number) {
 
 export default function TimeClock() {
   const { allEntries, activeEntry, loading, clockIn, clockOut, myProfile, profiles } = useTimeClock();
+  const leave = useLeaveManagement();
   const { user } = useAuth();
   const face = useFaceRecognition();
 
@@ -88,7 +93,6 @@ export default function TimeClock() {
   const handleScan = async () => {
     const result = await face.recognize();
     if (result && result.confidence >= 95) {
-      // Auto-punch countdown
       setAutoPunchCountdown(3);
     }
   };
@@ -109,13 +113,11 @@ export default function TimeClock() {
 
   // Confirm punch (manual or auto)
   const handleConfirmPunch = async (profileId: string) => {
-    // Check if this profile has an active entry
     const profileActiveEntry = allEntries.find(
       (e) => e.profile_id === profileId && !e.clock_out
     );
 
     if (profileActiveEntry) {
-      // Clock out
       const { error } = await supabase
         .from("time_clock_entries")
         .update({ clock_out: new Date().toISOString() } as any)
@@ -123,7 +125,6 @@ export default function TimeClock() {
       if (error) toast.error("Failed to clock out");
       else toast.success(`${face.matchResult?.name || "Employee"} clocked out!`);
     } else {
-      // Clock in
       const { error } = await supabase
         .from("time_clock_entries")
         .insert({ profile_id: profileId } as any);
@@ -134,11 +135,8 @@ export default function TimeClock() {
     face.reset();
     setAutoPunchCountdown(0);
 
-    // In kiosk mode, auto-restart scanning after 5s
     if (kioskMode) {
-      setTimeout(() => {
-        handleScan();
-      }, 5000);
+      setTimeout(() => { handleScan(); }, 5000);
     }
   };
 
@@ -166,48 +164,25 @@ export default function TimeClock() {
     return (
       <div className="fixed inset-0 z-50 bg-background flex flex-col items-center justify-center p-6">
         <canvas ref={face.canvasRef} className="hidden" />
-        <Button
-          variant="ghost"
-          size="sm"
-          className="absolute top-4 right-4 text-muted-foreground"
-          onClick={exitKioskMode}
-        >
+        <Button variant="ghost" size="sm" className="absolute top-4 right-4 text-muted-foreground" onClick={exitKioskMode}>
           Exit Kiosk
         </Button>
-
         <div className="flex items-center gap-3 mb-6">
           <ScanFace className="w-8 h-8 text-primary" />
           <h1 className="text-3xl font-black italic tracking-tight">FACE ID KIOSK</h1>
         </div>
-
         <div className="w-full max-w-lg">
-          <FaceCamera
-            videoRef={face.videoRef as any}
-            isActive={!!face.cameraStream}
-            scanning={face.state === "scanning"}
-            stream={face.cameraStream}
-          />
+          <FaceCamera videoRef={face.videoRef as any} isActive={!!face.cameraStream} scanning={face.state === "scanning"} stream={face.cameraStream} />
         </div>
-
         <div className="w-full max-w-lg mt-4">
           {face.state === "idle" && (
             <Button onClick={handleScan} size="lg" className="w-full text-lg font-bold gap-2">
               <ScanFace className="w-5 h-5" /> Scan Face
             </Button>
           )}
-          <FaceRecognitionResult
-            state={face.state}
-            matchResult={face.matchResult}
-            isClockedIn={matchedIsClockedIn}
-            onConfirmPunch={handleConfirmPunch}
-            onReject={() => { face.reset(); }}
-            autoPunchCountdown={autoPunchCountdown}
-          />
+          <FaceRecognitionResult state={face.state} matchResult={face.matchResult} isClockedIn={matchedIsClockedIn} onConfirmPunch={handleConfirmPunch} onReject={() => { face.reset(); }} autoPunchCountdown={autoPunchCountdown} />
         </div>
-
-        <p className="text-xs text-muted-foreground mt-6">
-          {format(now, "EEEE, MMMM d, yyyy · h:mm a")}
-        </p>
+        <p className="text-xs text-muted-foreground mt-6">{format(now, "EEEE, MMMM d, yyyy · h:mm a")}</p>
       </div>
     );
   }
@@ -215,17 +190,13 @@ export default function TimeClock() {
   return (
     <div className="relative flex flex-col items-center min-h-screen bg-background overflow-hidden">
       <canvas ref={face.canvasRef} className="hidden" />
-      {/* Radial glow */}
       <div className="absolute inset-0 pointer-events-none z-0">
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] rounded-full bg-primary/8 blur-[150px]" />
       </div>
 
       {/* Header */}
       <header className="relative z-10 w-full max-w-4xl px-6 pt-8 pb-4">
-        <Link
-          to="/shop-floor"
-          className="inline-flex items-center gap-2 text-xs tracking-widest text-muted-foreground hover:text-foreground transition-colors uppercase mb-4"
-        >
+        <Link to="/shop-floor" className="inline-flex items-center gap-2 text-xs tracking-widest text-muted-foreground hover:text-foreground transition-colors uppercase mb-4">
           <ArrowLeft className="w-3.5 h-3.5" /> Back to Command Hub
         </Link>
         <div className="flex items-center justify-between">
@@ -235,9 +206,7 @@ export default function TimeClock() {
             </div>
             <div>
               <h1 className="text-3xl font-black italic text-foreground tracking-tight">TIME CLOCK</h1>
-              <p className="text-xs tracking-widest text-muted-foreground uppercase">
-                {format(now, "EEEE, MMMM d, yyyy")}
-              </p>
+              <p className="text-xs tracking-widest text-muted-foreground uppercase">{format(now, "EEEE, MMMM d, yyyy")}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -253,7 +222,7 @@ export default function TimeClock() {
         </div>
       </header>
 
-      {/* Face Enrollment - always visible */}
+      {/* Face Enrollment */}
       <div className="relative z-10 w-full max-w-4xl px-6 pt-4">
         <div className="flex items-center justify-between">
           <FaceEnrollment existingCount={enrollmentCount} onComplete={fetchEnrollmentCount} />
@@ -268,29 +237,14 @@ export default function TimeClock() {
       {/* Face Mode */}
       {faceMode ? (
         <div className="relative z-10 w-full max-w-4xl px-6 py-4 space-y-4">
-
-          <FaceCamera
-            videoRef={face.videoRef as any}
-            isActive={!!face.cameraStream}
-            scanning={face.state === "scanning"}
-            stream={face.cameraStream}
-          />
-
+          <FaceCamera videoRef={face.videoRef as any} isActive={!!face.cameraStream} scanning={face.state === "scanning"} stream={face.cameraStream} />
           {face.state === "idle" && (
             <Button onClick={handleScan} size="lg" className="w-full text-lg font-bold gap-2">
               <ScanFace className="w-5 h-5" /> Scan to Punch
             </Button>
           )}
-
           {(face.state !== "idle" && face.state !== "scanning") && (
-            <FaceRecognitionResult
-              state={face.state}
-              matchResult={face.matchResult}
-              isClockedIn={!!activeEntry}
-              onConfirmPunch={handleConfirmPunch}
-              onReject={() => face.reset()}
-              autoPunchCountdown={autoPunchCountdown}
-            />
+            <FaceRecognitionResult state={face.state} matchResult={face.matchResult} isClockedIn={!!activeEntry} onConfirmPunch={handleConfirmPunch} onReject={() => face.reset()} autoPunchCountdown={autoPunchCountdown} />
           )}
         </div>
       ) : (
@@ -321,14 +275,11 @@ export default function TimeClock() {
                           </span>
                         </>
                       ) : (
-                        <Badge variant="secondary" className="text-muted-foreground">
-                          Not Clocked In
-                        </Badge>
+                        <Badge variant="secondary" className="text-muted-foreground">Not Clocked In</Badge>
                       )}
                     </div>
                   </div>
                 </div>
-
                 {activeEntry ? (
                   <Button size="lg" variant="destructive" className="gap-2 text-base font-bold px-8" onClick={clockOut}>
                     <LogOut className="w-5 h-5" /> Clock Out
@@ -344,77 +295,85 @@ export default function TimeClock() {
         </div>
       )}
 
-      {/* Team Status */}
+      {/* Tabbed Content: Team Status / My Leave / Team Calendar */}
       <div className="relative z-10 w-full max-w-4xl px-6 py-4 flex-1">
-        <h2 className="text-sm font-bold tracking-wider uppercase text-muted-foreground mb-3">
-          Team Status Today
-        </h2>
-        <ScrollArea className="h-[calc(100vh-380px)]">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {loading ? (
-              <p className="text-muted-foreground text-sm col-span-2 text-center py-8">Loading...</p>
-            ) : (
-              activeProfiles.map((profile) => {
-                const status = statusMap.get(profile.id);
-                const isClockedIn = status?.clocked_in ?? false;
-                const clockInTime = status?.clock_in;
-                const elapsed = isClockedIn && clockInTime
-                  ? differenceInMinutes(now, new Date(clockInTime))
-                  : null;
+        <Tabs defaultValue="team-status">
+          <TabsList className="w-full">
+            <TabsTrigger value="team-status" className="flex-1 gap-1.5">
+              <Users className="w-3.5 h-3.5" /> Team Status
+            </TabsTrigger>
+            <TabsTrigger value="my-leave" className="flex-1 gap-1.5">
+              <Palmtree className="w-3.5 h-3.5" /> My Leave
+            </TabsTrigger>
+            <TabsTrigger value="team-calendar" className="flex-1 gap-1.5">
+              <CalendarDays className="w-3.5 h-3.5" /> Team Calendar
+            </TabsTrigger>
+          </TabsList>
 
-                const profileEntries = allEntries.filter((e) => e.profile_id === profile.id);
-                const totalMins = profileEntries.reduce((sum, e) => {
-                  const end = e.clock_out ? new Date(e.clock_out) : (isClockedIn ? now : new Date(e.clock_in));
-                  return sum + differenceInMinutes(end, new Date(e.clock_in));
-                }, 0);
+          <TabsContent value="team-status">
+            <ScrollArea className="h-[calc(100vh-480px)]">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {loading ? (
+                  <p className="text-muted-foreground text-sm col-span-2 text-center py-8">Loading...</p>
+                ) : (
+                  activeProfiles.map((profile) => {
+                    const status = statusMap.get(profile.id);
+                    const isClockedIn = status?.clocked_in ?? false;
+                    const clockInTime = status?.clock_in;
+                    const elapsed = isClockedIn && clockInTime ? differenceInMinutes(now, new Date(clockInTime)) : null;
+                    const profileEntries = allEntries.filter((e) => e.profile_id === profile.id);
+                    const totalMins = profileEntries.reduce((sum, e) => {
+                      const end = e.clock_out ? new Date(e.clock_out) : (isClockedIn ? now : new Date(e.clock_in));
+                      return sum + differenceInMinutes(end, new Date(e.clock_in));
+                    }, 0);
 
-                return (
-                  <Card
-                    key={profile.id}
-                    className={cn("transition-colors", isClockedIn && "border-green-500/30 bg-green-500/5")}
-                  >
-                    <CardContent className="p-4 flex items-center gap-3">
-                      <div className="relative">
-                        <Avatar className="w-10 h-10">
-                          <AvatarImage src={profile.avatar_url || ""} />
-                          <AvatarFallback className="text-xs font-bold bg-muted text-foreground">
-                            {getInitials(profile.full_name)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div
-                          className={cn(
-                            "absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-card",
-                            isClockedIn ? "bg-green-500" : "bg-muted-foreground/40"
-                          )}
-                        />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm truncate">{profile.full_name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {isClockedIn
-                            ? `In since ${format(new Date(clockInTime!), "h:mm a")} · ${formatDuration(elapsed!)}`
-                            : totalMins > 0
-                              ? `Worked ${formatDuration(totalMins)} today`
-                              : "Not clocked in"
-                          }
-                        </p>
-                      </div>
-                      <Badge
-                        variant="secondary"
-                        className={cn(
-                          "text-[10px] uppercase tracking-wider",
-                          isClockedIn && "bg-green-500/15 text-green-500"
-                        )}
-                      >
-                        {isClockedIn ? "Active" : totalMins > 0 ? formatDuration(totalMins) : "Off"}
-                      </Badge>
-                    </CardContent>
-                  </Card>
-                );
-              })
-            )}
-          </div>
-        </ScrollArea>
+                    return (
+                      <Card key={profile.id} className={cn("transition-colors", isClockedIn && "border-green-500/30 bg-green-500/5")}>
+                        <CardContent className="p-4 flex items-center gap-3">
+                          <div className="relative">
+                            <Avatar className="w-10 h-10">
+                              <AvatarImage src={profile.avatar_url || ""} />
+                              <AvatarFallback className="text-xs font-bold bg-muted text-foreground">{getInitials(profile.full_name)}</AvatarFallback>
+                            </Avatar>
+                            <div className={cn("absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-card", isClockedIn ? "bg-green-500" : "bg-muted-foreground/40")} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm truncate">{profile.full_name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {isClockedIn
+                                ? `In since ${format(new Date(clockInTime!), "h:mm a")} · ${formatDuration(elapsed!)}`
+                                : totalMins > 0 ? `Worked ${formatDuration(totalMins)} today` : "Not clocked in"}
+                            </p>
+                          </div>
+                          <Badge variant="secondary" className={cn("text-[10px] uppercase tracking-wider", isClockedIn && "bg-green-500/15 text-green-500")}>
+                            {isClockedIn ? "Active" : totalMins > 0 ? formatDuration(totalMins) : "Off"}
+                          </Badge>
+                        </CardContent>
+                      </Card>
+                    );
+                  })
+                )}
+              </div>
+            </ScrollArea>
+          </TabsContent>
+
+          <TabsContent value="my-leave">
+            <MyLeaveTab
+              balance={leave.balance}
+              requests={leave.myRequests}
+              onSubmit={leave.submitRequest}
+              onCancel={leave.cancelRequest}
+            />
+          </TabsContent>
+
+          <TabsContent value="team-calendar">
+            <TeamCalendarTab
+              requests={leave.allRequests}
+              profiles={leave.profiles}
+              onReview={leave.reviewRequest}
+            />
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );
