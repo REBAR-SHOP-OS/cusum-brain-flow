@@ -1,40 +1,58 @@
 
-# Fix Follow-Up & Draft Email Prompts + Add Follow-Up Action to Prospecting
 
-## Problem
-The `draft_followup` and `draft_email` actions in `pipeline-ai` still lack the anti-placeholder rules applied to `draft_intro`. Also, the prospecting table has no way to send a follow-up after the initial intro has been sent (status = "emailed").
+# Add Pipeline-Style Search, Filters & Group-by-User to Prospecting Page
+
+## Overview
+Clone the Pipeline page's Odoo-style header layout (search bar with icon, filter popover with 3-column layout, active filter chips) onto the Prospecting page, and add a "view per user" grouping option.
 
 ## Changes
 
-### 1. `supabase/functions/pipeline-ai/index.ts` -- Fix `draft_followup` prompt (line 188)
+### 1. New Component: `src/components/prospecting/ProspectingFilters.tsx`
 
-Add the same critical rules:
-- No placeholder brackets
-- First-name greeting
-- Sign off as "The rebar.shop Sales Team"
-- 3-5 sentences, warm but direct
+A filter popover modeled after `PipelineFilters.tsx` with three columns:
 
-### 2. `supabase/functions/pipeline-ai/index.ts` -- Fix `draft_email` prompt (line 219)
+**Column 1 -- Filters:**
+- Status toggles: Pending, Approved, Rejected, Emailed
+- Industry filter (dropdown from unique industries in data)
+- City filter (dropdown from unique cities)
 
-Same anti-placeholder rules applied to the general `draft_email` action.
+**Column 2 -- Group By:**
+- Salesperson (view per user -- groups by the user who approved/created)
+- Status
+- Industry
+- City
 
-### 3. `src/components/prospecting/ProspectTable.tsx` -- Add "Send Follow-up" button for emailed prospects
+**Column 3 -- Favorites:**
+- Save/load/delete saved filter presets (localStorage, same pattern as Pipeline)
 
-Add a new button (mail icon) visible when `status === "emailed"` so users can send a follow-up after the initial intro. This calls a new `onSendFollowup` callback.
+Exports a `ProspectingFilterState` type and `DEFAULT_PROSPECT_FILTERS` constant.
 
-### 4. `src/components/prospecting/ProspectIntroDialog.tsx` -- Support follow-up mode
+### 2. Update: `src/pages/Prospecting.tsx`
 
-Add a `mode` prop (`"intro" | "followup"`). When in follow-up mode:
-- Dialog title changes to "Send Follow-up"
-- Uses `draft_followup` action instead of `draft_intro`
-- Passes prospect context so the AI references the prior introduction
+**Header redesign to match Pipeline layout:**
+- Row 1: Title + stats on left, search input with magnifying glass icon (debounced 300ms), region input, "Dig 50 Leads" button on right
+- Row 2: `ProspectingFilters` component with active filter chips
 
-### 5. `src/pages/Prospecting.tsx` -- Wire up follow-up flow
+**Search:** Client-side filtering across `company_name`, `contact_name`, `email`, `city`, `industry`, `fit_reason` fields.
 
-- Add state for follow-up mode
-- Pass `onSendFollowup` handler to `ProspectTable`
-- Open `ProspectIntroDialog` in follow-up mode when triggered
+**Filtering:** Apply `ProspectingFilterState` filters client-side on the prospects array.
 
-## Result
-- All email actions produce clean, placeholder-free emails signed by "The rebar.shop Sales Team"
-- Emailed prospects show a follow-up button so reps can keep the conversation going
+**Grouping:** When a group-by option is selected (e.g., "status", "industry", "city"), render prospects in grouped sections with headers showing the group name and count, instead of a single flat table.
+
+### 3. Update: `src/components/prospecting/ProspectTable.tsx`
+
+Add an optional `groupLabel` prop so it can be rendered multiple times (once per group) with a section header above each table.
+
+### 4. "View Per User" Detail
+
+The group-by "Salesperson" option will group prospects by matching them to the user who approved them. Since prospects don't have an assigned salesperson field, we'll group by `status` as the primary user-workflow view, and add a batch-based grouping as well. The "Salesperson" group will show "Unassigned" for all prospects (since they're pre-pipeline), making status and industry the most useful groupings.
+
+## Technical Details
+
+- Search uses a 300ms debounce (`useEffect` + `setTimeout`) matching the Pipeline pattern
+- Search input styled identically: `Search` icon absolutely positioned at `left-2.5`, input with `pl-8 h-8 text-sm`
+- Filter state managed via `useState` in Prospecting page, passed down as props
+- Saved filters stored in `localStorage` under key `prospecting_saved_filters`
+- `useMemo` for deriving unique industries, cities, and filtered/grouped results
+- Active filter count shown as badge on the Filters button, with removable chips below
+
