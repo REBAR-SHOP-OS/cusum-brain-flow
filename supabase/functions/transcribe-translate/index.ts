@@ -7,7 +7,7 @@ SPEAKER DIARIZATION:
 - Identify each distinct speaker by voice characteristics (tone, pitch, accent, speaking style).
 - Label them initially as "Speaker 1", "Speaker 2", etc.
 - IMPORTANT: Listen carefully for when speakers address each other by name
-  (e.g. "Hey Ali", "Thank you Sarah", "Mr. Johnson", "سلام علی", etc.)
+  (e.g. "Hey Ali", "Thank you Sarah", "Mr. Johnson", etc.)
 - If you detect a speaker's name, use their REAL NAME instead of "Speaker 1/2".
 - If no name is detected for a speaker, keep "Speaker 1", "Speaker 2", etc.
 - Format each line as: "SpeakerName: their words here"
@@ -17,38 +17,73 @@ SPEAKER DIARIZATION:
 
 const TRANSLATOR_PERSONA = `You are a world-class professional translator and linguist with decades of experience. You produce translations indistinguishable from native human translators.
 
-PRIMARY LANGUAGES: English, Farsi (Persian), Hindi, Georgian, Arabic, Turkish, Urdu. You also support ALL other languages — but you have deep expertise in these primary ones, including their cultural idioms, slang, colloquialisms, and regional dialects.
+PRIMARY LANGUAGES: English, Farsi (Persian), Hindi, Georgian, Arabic, Turkish, Urdu. You also support ALL other languages.
 
 COMPREHENSION FIRST:
 - Before translating a SINGLE word, fully comprehend the speaker's meaning, intent, emotion, and cultural context in the SOURCE language.
-- Understand Farsi ta'arof (politeness conventions), Hindi honorifics (ji, sahab), Georgian cultural expressions, and Arabic/Turkish formal registers.
-- Recognize slang and colloquialisms: Farsi "dige" (emphasis/filler), Hindi "yaar" (friend/buddy), Georgian "ra" (what), "genacvale" (dear one), etc.
-- Only AFTER full comprehension, produce natural, humanized English that a native English speaker would actually say in the same context.
+- Only AFTER full comprehension, produce natural, humanized output that a native speaker would actually say in the same context.
 - NEVER do surface-level word swaps — always convey the SPIRIT and INTENT of the original.
 
 CRITICAL RULES:
-- **CODE-SWITCHING / MIXED LANGUAGE**: Speakers commonly mix languages mid-sentence (e.g. Farsi+English, Hindi+English, Georgian+English, Farsi+Hindi, Arabic+French, Turkish+English). This is code-switching and is COMPLETELY NORMAL. Do NOT get confused. Treat ALL mixed-language input as one coherent message. Identify ALL languages present (e.g. "Farsi/English mix", "Hindi/Georgian mix"). Translate the ENTIRE meaning into the target language.
-- When English words/phrases appear inside non-English speech, they are intentional. Keep technical English terms as-is if they have no natural equivalent in the target language, otherwise translate them.
+- **CODE-SWITCHING / MIXED LANGUAGE**: Speakers commonly mix languages mid-sentence. This is code-switching and is COMPLETELY NORMAL. Treat ALL mixed-language input as one coherent message.
 - Preserve ALL proper nouns, names, places, numbers, measurements, dates, and technical terms exactly as they appear
-- Translate meaning and intent, NOT word-for-word. Handle idioms, metaphors, and cultural expressions naturally
-- For names and places, keep the original and optionally add transliteration in parentheses
+- Translate meaning and intent, NOT word-for-word
 - NEVER hallucinate, add, or remove content that isn't in the original
-- NEVER add explanatory notes unless specifically asked
 - Maintain the original's register, emotion, and style
-- For ambiguous terms, choose the interpretation most consistent with context
 
-HUMANIZATION & WRITING STYLE (apply to all translations):
-- The English output must sound like a real person wrote it — warm, clear, natural, and professional
+HUMANIZATION & WRITING STYLE:
+- The output must sound like a real person wrote it — warm, clear, natural, and professional
 - Produce clear, well-structured sentences with proper punctuation and grammar
-- Break long run-on speech into clean, readable sentences — never output a wall of text
-- Eliminate filler words and verbal tics (um, uh, you know, like, so, I mean) from translations
-- Use professional prose conventions: proper paragraphing, logical flow, and natural transitions
-- Spoken language must be elevated to polished, written-quality English without losing any meaning
-- Prefer concise, direct phrasing over verbose or repetitive constructions
-- Ensure the output reads like it was written by a skilled professional writer, not transcribed from speech
-- For Farsi/Hindi/Georgian speakers: understand that their sentence structure differs from English — restructure naturally rather than following source word order
+- Eliminate filler words and verbal tics from translations
+- Ensure the output reads like polished professional writing
 
 ${DIARIZATION_INSTRUCTION}`;
+
+// ===== Post-processing system prompts =====
+const POST_PROCESS_PROMPTS: Record<string, string> = {
+  summarize: `You are an expert summarizer. Given the following transcript, produce a concise, well-structured summary that captures all key points, decisions, and important details. Use bullet points for clarity. Be thorough but concise.
+
+Respond with the summary text only, no JSON wrapper.`,
+
+  "action-items": `You are a project management expert. Given the following transcript, extract ALL actionable tasks, to-dos, and commitments made by participants.
+
+For each action item, provide:
+- **Task**: What needs to be done
+- **Assignee**: Who is responsible (if mentioned, otherwise "Unassigned")
+- **Priority**: High / Medium / Low (infer from context and urgency)
+- **Deadline**: If mentioned, otherwise "TBD"
+
+Format as a clean markdown list. Respond with the list only, no JSON wrapper.`,
+
+  "meeting-notes": `You are a professional meeting notes writer. Given the following transcript, produce structured meeting notes with these sections:
+
+## Key Points
+- Main topics discussed
+
+## Decisions Made
+- Any decisions or agreements reached
+
+## Action Items
+- Tasks assigned with owners
+
+## Follow-ups
+- Items that need follow-up or further discussion
+
+## Summary
+- 2-3 sentence overview
+
+Respond with the formatted notes only, no JSON wrapper.`,
+
+  cleanup: `You are a professional editor. Given the following transcript, clean it up by:
+1. Removing all filler words (um, uh, like, you know, I mean, so, basically)
+2. Fixing grammar and punctuation
+3. Improving sentence structure for clarity
+4. Removing false starts and repetitions
+5. Preserving ALL meaning and speaker intent
+6. Maintaining speaker labels if present
+
+Return the cleaned-up text only, no JSON wrapper.`,
+};
 
 function buildInstructions(langInstruction: string, targetInstruction: string, formalityInstruction: string, formatInstruction: string, contextInstruction: string) {
   return `${langInstruction} ${targetInstruction} ${formalityInstruction} ${formatInstruction} ${contextInstruction}`;
@@ -59,10 +94,8 @@ function buildAudioSystemPrompt(instructions: string, targetLang: string) {
 
 ${instructions}
 
-IMPORTANT: The speaker(s) may mix languages freely (e.g. Farsi+English, Hindi+English, Georgian+English, Arabic+Turkish, or any combination). Transcribe EXACTLY what was said, preserving the mixed languages in the transcript. Then translate the full meaning into ${targetLang}, ensuring the output sounds natural and humanized.
-
 Transcribe the audio accurately word-for-word with speaker labels if multiple speakers, then translate it. Respond ONLY with valid JSON:
-{"transcript":"<original transcribed text with speaker labels if multiple speakers>","detectedLang":"<primary language or 'Farsi/English mix' etc>","english":"<full translation into ${targetLang} with speaker labels preserved>","speakers":["<speaker1 name>","<speaker2 name>"]}`;
+{"transcript":"<original transcribed text>","detectedLang":"<primary language>","english":"<full translation into ${targetLang}>","speakers":["<speaker1>","<speaker2>"]}`;
 }
 
 function buildTextSystemPrompt(instructions: string, targetLang: string) {
@@ -70,33 +103,21 @@ function buildTextSystemPrompt(instructions: string, targetLang: string) {
 
 ${instructions}
 
-IMPORTANT: The text may contain multiple languages mixed together (e.g. Farsi+English, Hindi+English, Georgian+English, or any combination). This is code-switching and is intentional. First fully comprehend the meaning and cultural context, then translate the ENTIRE message into ${targetLang} with natural, humanized English.
-
 Respond ONLY with valid JSON:
-{"original":"<original text as-is with speaker labels if multiple speakers>","detectedLang":"<primary language or 'Farsi/English mix' etc>","english":"<full translation into ${targetLang} with speaker labels preserved>","speakers":["<speaker1 name>","<speaker2 name>"]}`;
+{"original":"<original text>","detectedLang":"<primary language>","english":"<full translation into ${targetLang}>","speakers":["<speaker1>","<speaker2>"]}`;
 }
 
 function buildPass2SystemPrompt(detectedLang: string, targetLang: string) {
-  return `You are a senior translation quality reviewer, editor, and prose stylist. You are reviewing a translation from ${detectedLang} to ${targetLang}.
+  return `You are a senior translation quality reviewer. Reviewing a translation from ${detectedLang} to ${targetLang}.
 
-Your job (in order of priority):
-1. **WRITING QUALITY**: Rewrite any run-on, awkward, or speech-like sentences into clean, concise, publication-quality prose. Remove verbal filler (um, uh, you know, like, so, I mean) and unnecessary repetition. Ensure the text reads like polished professional writing, not raw speech-to-text output. Improve sentence structure, flow, and readability while preserving all meaning.
-2. Check the translation for accuracy against the original
-3. Fix any mistranslations, grammar errors, or unnatural expressions
-4. Ensure proper nouns, numbers, and technical terms are preserved correctly
-5. Ensure cultural idioms are translated naturally (meaning, not literal)
-6. Verify speaker attribution consistency — same speaker must have the same label throughout
-7. Verify name detection accuracy — if speakers address each other by name, ensure correct assignment
-8. Verify correct assignment of dialogue to speakers
-9. Rate the overall translation quality as a confidence score from 0-100:
-   - 95-100: Perfect, publication-ready
-   - 85-94: Excellent, minor stylistic preferences only
-   - 70-84: Good, some improvements made
-   - 50-69: Significant corrections needed
-   - Below 50: Major issues found
+Your job:
+1. Rewrite awkward sentences into clean, publication-quality prose
+2. Fix mistranslations, grammar errors, or unnatural expressions
+3. Ensure proper nouns and technical terms are preserved
+4. Rate quality 0-100
 
 Respond ONLY with valid JSON:
-{"refined":"<refined translation with speaker labels preserved>","confidence":<number 0-100>,"notes":"<brief note on what was changed, or 'No changes needed'>","speakers":["<speaker1>","<speaker2>"]}`;
+{"refined":"<refined translation>","confidence":<number>,"notes":"<brief note>","speakers":["<speaker1>","<speaker2>"]}`;
 }
 
 serve(async (req) => {
@@ -120,6 +141,8 @@ serve(async (req) => {
     let outputFormat = "plain";
     let audioBase64 = "";
     let audioMime = "audio/mpeg";
+    let postProcess = "";
+    let customPrompt = "";
 
     if (contentType.includes("multipart/form-data")) {
       const formData = await req.formData();
@@ -150,12 +173,58 @@ serve(async (req) => {
       formality = body.formality || "neutral";
       contextHint = body.context || "";
       outputFormat = body.outputFormat || "plain";
+      postProcess = body.postProcess || "";
+      customPrompt = body.customPrompt || "";
 
       if (mode === "text" && !text.trim()) {
         return json({ error: "No text provided" }, 400);
       }
     }
 
+    // ===== POST-PROCESSING MODE =====
+    if (postProcess && text.trim()) {
+      let systemPrompt: string;
+
+      if (postProcess === "translate") {
+        // Use the full translation pipeline below
+      } else if (postProcess === "custom" && customPrompt.trim()) {
+        systemPrompt = `You are a helpful AI assistant. The user has provided a transcript and wants you to process it according to their instructions.\n\nUser instruction: ${customPrompt}\n\nRespond with the processed text only, no JSON wrapper.`;
+      } else if (POST_PROCESS_PROMPTS[postProcess]) {
+        systemPrompt = POST_PROCESS_PROMPTS[postProcess];
+      } else {
+        return json({ error: `Unknown postProcess mode: ${postProcess}` }, 400);
+      }
+
+      if (postProcess !== "translate") {
+        const ppMessages = [
+          { role: "system", content: systemPrompt! },
+          { role: "user", content: text },
+        ];
+
+        const ppResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${LOVABLE_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ model: "google/gemini-3-flash-preview", messages: ppMessages }),
+        });
+
+        if (!ppResponse.ok) {
+          if (ppResponse.status === 429) return json({ error: "Rate limit exceeded. Please try again later." }, 429);
+          if (ppResponse.status === 402) return json({ error: "AI credits exhausted. Please add funds." }, 402);
+          const errText = await ppResponse.text();
+          console.error("AI gateway error (post-process):", ppResponse.status, errText);
+          return json({ error: "AI processing failed" }, 500);
+        }
+
+        const ppData = await ppResponse.json();
+        const result = ppData.choices?.[0]?.message?.content || "";
+        return json({ result, original: text, postProcess });
+      }
+    }
+
+    // ===== TRANSLATION MODE =====
     const formalityInstruction = formality === "casual"
       ? "Use casual, informal tone."
       : formality === "formal"
@@ -239,7 +308,7 @@ serve(async (req) => {
         : { original: text, detectedLang: "unknown", english: rawContent, speakers: [] };
     }
 
-    // ===== PASS 2: Verify & refine translation =====
+    // ===== PASS 2: Verify & refine =====
     const originalForReview = mode === "audio" ? (parsed.transcript || "") : (parsed.original || text);
     const translationForReview = parsed.english || "";
 

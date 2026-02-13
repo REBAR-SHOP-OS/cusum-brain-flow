@@ -5198,6 +5198,69 @@ export type Database = {
           },
         ]
       }
+      transcription_sessions: {
+        Row: {
+          company_id: string
+          created_at: string
+          duration_seconds: number | null
+          id: string
+          process_type: string | null
+          processed_output: string | null
+          profile_id: string
+          raw_transcript: string
+          source_language: string | null
+          speaker_count: number | null
+          target_language: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          duration_seconds?: number | null
+          id?: string
+          process_type?: string | null
+          processed_output?: string | null
+          profile_id: string
+          raw_transcript?: string
+          source_language?: string | null
+          speaker_count?: number | null
+          target_language?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          duration_seconds?: number | null
+          id?: string
+          process_type?: string | null
+          processed_output?: string | null
+          profile_id?: string
+          raw_transcript?: string
+          source_language?: string | null
+          speaker_count?: number | null
+          target_language?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transcription_sessions_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transcription_sessions_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_agents: {
         Row: {
           agent_id: string
