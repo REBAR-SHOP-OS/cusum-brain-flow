@@ -61,7 +61,8 @@ export default function AgentWorkspace() {
   const [pendingPixelSlot, setPendingPixelSlot] = useState<number | null>(null);
   const [pixelDateMessage, setPixelDateMessage] = useState<string>("");
   const [lastPixelPost, setLastPixelPost] = useState<PixelPost | null>(null);
-  
+  const [aiModel, setAiModel] = useState<string>("gemini");
+
 
   const { sessions, loading: sessionsLoading, fetchSessions, createSession, addMessage, getSessionMessages, deleteSession } = useChatSessions();
   const hasConversation = messages.length > 0;
@@ -489,9 +490,12 @@ export default function AgentWorkspace() {
                 onSend={handleSend}
                 placeholder={config.placeholder}
                 disabled={isLoading}
-showFileUpload={true}
-                showSmartMode
-                onLiveChatClick={isSuperAdmin ? () => navigate("/vizzy") : undefined}
+                showFileUpload={true}
+                showSmartMode={agentId !== "social"}
+                onLiveChatClick={agentId !== "social" && isSuperAdmin ? () => navigate("/vizzy") : undefined}
+                minimalToolbar={agentId === "social"}
+                selectedModel={aiModel}
+                onModelChange={setAiModel}
               />
             </div>
 
@@ -525,8 +529,11 @@ showFileUpload={true}
               placeholder={config.placeholder}
               disabled={isLoading}
               showFileUpload={true}
-              showSmartMode
-              onLiveChatClick={isSuperAdmin ? () => navigate("/vizzy") : undefined}
+              showSmartMode={agentId !== "social"}
+              onLiveChatClick={agentId !== "social" && isSuperAdmin ? () => navigate("/vizzy") : undefined}
+              minimalToolbar={agentId === "social"}
+              selectedModel={aiModel}
+              onModelChange={setAiModel}
             />
           </>
         )}
