@@ -128,7 +128,7 @@ export function AgentHistorySidebar({
               >
                 <span className="flex-1 truncate text-xs">
                   {agentId === "social" ? (
-                    format(new Date(session.title), "yyyy-MM-dd")
+                    session.title
                   ) : (
                     <span className="flex flex-col">
                       <span className="truncate">{session.title}</span>
