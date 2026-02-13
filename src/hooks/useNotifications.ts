@@ -80,6 +80,23 @@ export function useNotifications() {
     setNotifications((prev) => prev.filter((n) => n.type !== "notification"));
   }, [notifications]);
 
+  // Mark all as read
+  const markAllRead = useCallback(async () => {
+    const unreadIds = notifications
+      .filter((n) => n.status === "unread")
+      .map((n) => n.id);
+    if (unreadIds.length === 0) return;
+    await supabase
+      .from("notifications")
+      .update({ status: "read" })
+      .in("id", unreadIds);
+    setNotifications((prev) =>
+      prev.map((n) =>
+        n.status === "unread" ? { ...n, status: "read" as const } : n
+      )
+    );
+  }, [notifications]);
+
   // Mark as actioned
   const markActioned = useCallback(async (id: string) => {
     await supabase.from("notifications").update({ status: "actioned" }).eq("id", id);
@@ -136,6 +153,7 @@ export function useNotifications() {
     loading,
     refresh: load,
     markRead,
+    markAllRead,
     dismiss,
     dismissAll,
     markActioned,
