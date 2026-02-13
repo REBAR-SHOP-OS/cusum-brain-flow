@@ -2501,6 +2501,7 @@ export type Database = {
           created_at: string
           customer_id: string | null
           description: string | null
+          escalated_to: string | null
           expected_close_date: string | null
           expected_value: number | null
           id: string
@@ -2509,6 +2510,8 @@ export type Database = {
           priority: string | null
           probability: number | null
           quote_id: string | null
+          sla_breached: boolean
+          sla_deadline: string | null
           source: string | null
           source_email_id: string | null
           stage: string
@@ -2522,6 +2525,7 @@ export type Database = {
           created_at?: string
           customer_id?: string | null
           description?: string | null
+          escalated_to?: string | null
           expected_close_date?: string | null
           expected_value?: number | null
           id?: string
@@ -2530,6 +2534,8 @@ export type Database = {
           priority?: string | null
           probability?: number | null
           quote_id?: string | null
+          sla_breached?: boolean
+          sla_deadline?: string | null
           source?: string | null
           source_email_id?: string | null
           stage?: string
@@ -2543,6 +2549,7 @@ export type Database = {
           created_at?: string
           customer_id?: string | null
           description?: string | null
+          escalated_to?: string | null
           expected_close_date?: string | null
           expected_value?: number | null
           id?: string
@@ -2551,6 +2558,8 @@ export type Database = {
           priority?: string | null
           probability?: number | null
           quote_id?: string | null
+          sla_breached?: boolean
+          sla_deadline?: string | null
           source?: string | null
           source_email_id?: string | null
           stage?: string
@@ -3168,46 +3177,73 @@ export type Database = {
       }
       orders: {
         Row: {
+          billable_revision_required: boolean
           company_id: string | null
           created_at: string
+          customer_approved_at: string | null
           customer_id: string
+          customer_revision_count: number
           id: string
           notes: string | null
           order_date: string | null
           order_number: string
+          pending_change_order: boolean
+          production_locked: boolean
+          qc_evidence_uploaded: boolean
+          qc_final_approved: boolean
+          qc_internal_approved_at: string | null
           quickbooks_invoice_id: string | null
           quote_id: string | null
           required_date: string | null
+          shop_drawing_status: string
           status: string | null
           total_amount: number | null
           updated_at: string
         }
         Insert: {
+          billable_revision_required?: boolean
           company_id?: string | null
           created_at?: string
+          customer_approved_at?: string | null
           customer_id: string
+          customer_revision_count?: number
           id?: string
           notes?: string | null
           order_date?: string | null
           order_number: string
+          pending_change_order?: boolean
+          production_locked?: boolean
+          qc_evidence_uploaded?: boolean
+          qc_final_approved?: boolean
+          qc_internal_approved_at?: string | null
           quickbooks_invoice_id?: string | null
           quote_id?: string | null
           required_date?: string | null
+          shop_drawing_status?: string
           status?: string | null
           total_amount?: number | null
           updated_at?: string
         }
         Update: {
+          billable_revision_required?: boolean
           company_id?: string | null
           created_at?: string
+          customer_approved_at?: string | null
           customer_id?: string
+          customer_revision_count?: number
           id?: string
           notes?: string | null
           order_date?: string | null
           order_number?: string
+          pending_change_order?: boolean
+          production_locked?: boolean
+          qc_evidence_uploaded?: boolean
+          qc_final_approved?: boolean
+          qc_internal_approved_at?: string | null
           quickbooks_invoice_id?: string | null
           quote_id?: string | null
           required_date?: string | null
+          shop_drawing_status?: string
           status?: string | null
           total_amount?: number | null
           updated_at?: string
@@ -4406,6 +4442,45 @@ export type Database = {
           standard_code?: string
           updated_at?: string
           weight_per_meter?: number
+        }
+        Relationships: []
+      }
+      sla_escalation_log: {
+        Row: {
+          breached_at: string
+          company_id: string
+          created_at: string
+          entity_id: string
+          entity_type: string
+          escalated_to: string
+          id: string
+          resolved_at: string | null
+          sla_hours: number
+          stage: string
+        }
+        Insert: {
+          breached_at?: string
+          company_id: string
+          created_at?: string
+          entity_id: string
+          entity_type: string
+          escalated_to: string
+          id?: string
+          resolved_at?: string | null
+          sla_hours: number
+          stage: string
+        }
+        Update: {
+          breached_at?: string
+          company_id?: string
+          created_at?: string
+          entity_id?: string
+          entity_type?: string
+          escalated_to?: string
+          id?: string
+          resolved_at?: string | null
+          sla_hours?: number
+          stage?: string
         }
         Relationships: []
       }
