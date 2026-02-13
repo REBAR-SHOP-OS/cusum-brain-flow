@@ -1,21 +1,16 @@
 
 
-# Fix: Show ZIP Option Immediately
+# Fix: Enable File Inputs Without CSV Gate
 
-The ZIP upload tab is already coded but hidden behind Step 1 — it only appears after uploading the CSV mapping file. This makes it look like ZIP isn't supported.
+The "Choose File" buttons are disabled because the code requires the CSV mapping to be uploaded first. The fix is to allow selecting files at any time, but show a warning if no CSV mapping is loaded when they try to process.
 
 ## Changes
 
 ### File: `src/components/admin/OdooDumpImportDialog.tsx`
 
-- Remove the step gating on Step 2 — always show both steps visible from the start
-- Disable the ZIP/folder file inputs until the CSV mapping is loaded (with a hint: "Upload mapping CSV first")
-- This way the user can immediately see the ZIP option exists, while still requiring the CSV first (since we need the mapping to know which files to extract)
+1. **Remove `disabled` gate from ZIP input** (line ~306): Change `disabled={uploading || mapping.length === 0}` to `disabled={uploading}`
+2. **Remove `disabled` gate from folder button** (line ~317): Change `disabled={uploading || mapping.length === 0}` to `disabled={uploading}`  
+3. **Add early validation in handlers**: In both `handleZipSelect` and `handleFolderSelect`, check if `mapping.length === 0` and show a toast error "Please upload the mapping CSV first" and return early
 
-### Details
-
-- Line 286: Change `{(step === 2 || uploading || uploaded > 0) &&` to always render Step 2
-- Add a `disabled` state to the ZIP and folder inputs when `mapping.length === 0`
-- Remove the "Next" button since both steps are always visible
-- Add a small note under Step 2 when CSV isn't loaded yet: "Upload mapping CSV above first"
+This way the buttons are always clickable, but the user gets clear feedback if they try to use them without the CSV.
 
