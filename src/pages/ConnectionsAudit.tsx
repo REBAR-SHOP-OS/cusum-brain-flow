@@ -37,7 +37,7 @@ const INTEGRATION_CHECKS: {
   { id: "google-search-console", name: "Search Console", group: "Google", fn: "google-oauth", body: { action: "check-status", integration: "google-search-console" } },
   { id: "quickbooks", name: "QuickBooks", fn: "quickbooks-oauth", body: { action: "check-status" } },
   { id: "ringcentral", name: "RingCentral", fn: "ringcentral-oauth", body: { action: "check-status" } },
-  { id: "odoo", name: "Odoo", fn: "sync-odoo-leads", body: { action: "check-status" } },
+  
   { id: "facebook", name: "Facebook", group: "Meta", fn: "facebook-oauth", body: { action: "check-status", integration: "facebook" } },
   { id: "instagram", name: "Instagram", group: "Meta", fn: "facebook-oauth", body: { action: "check-status", integration: "instagram" } },
   { id: "linkedin", name: "LinkedIn", fn: "linkedin-oauth", body: { action: "check-status" } },

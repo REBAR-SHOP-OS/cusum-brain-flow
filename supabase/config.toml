@@ -161,3 +161,6 @@ verify_jwt = false
 
 [functions.gmail-delete]
 verify_jwt = false
+
+[functions.archive-odoo-files]
+verify_jwt = false

@@ -104,13 +104,6 @@ export default function AccountingWorkspace() {
                 <Plug className="w-5 h-5 mr-2" />
                 Connect QuickBooks
               </Button>
-              <Button
-                variant="outline"
-                size="lg"
-                onClick={() => setActiveTab("documents")}
-              >
-                View Odoo Quotations Instead
-              </Button>
             </div>
           </CardContent>
         </Card>
