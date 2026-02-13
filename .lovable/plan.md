@@ -1,18 +1,24 @@
 
 
-# Remove AgentSuggestionsPanel from Accounting Workspace
+# Swap Office and Production in Sidebar
 
 ## What Changes
 
-Remove the `<AgentSuggestionsPanel>` component from `AccountingWorkspace.tsx` (line 193) and its import (line 26). Penny's suggestions are already included in the daily briefing and chat context -- showing them separately in the workspace is redundant and clutters the UI.
+In `src/components/layout/AppSidebar.tsx`, swap the order of the two nav groups in the `navGroups` array (lines 83-100) so **Office** appears first and **Production** appears second.
 
 ## Technical Details
 
 ### File Modified (1)
 
-| File | Changes |
-|------|---------|
-| `src/pages/AccountingWorkspace.tsx` | Remove import of `AgentSuggestionsPanel` (line 26) and remove `<AgentSuggestionsPanel agentCode="penny" agentName="Penny" />` (line 193) |
+| File | Change |
+|------|--------|
+| `src/components/layout/AppSidebar.tsx` | Reorder `navGroups` array: move the "Office" group (Dashboard, CEO Portal, Pipeline, Customers, Accounting) above the "Production" group (Shop Floor, Office Tools) |
 
-No other files affected. The `AgentSuggestionsPanel` component itself remains available for use in other workspaces.
+Current order:
+1. Production (Shop Floor, Office Tools)
+2. Office (Dashboard, CEO Portal, Pipeline, Customers, Accounting)
+
+New order:
+1. Office (Dashboard, CEO Portal, Pipeline, Customers, Accounting)
+2. Production (Shop Floor, Office Tools)
 
