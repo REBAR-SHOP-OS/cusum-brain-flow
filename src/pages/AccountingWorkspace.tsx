@@ -235,8 +235,20 @@ export default function AccountingWorkspace() {
       {showAgent && (
         <div className={cn(
           "lg:hidden fixed z-50",
-          agentMode === "fullscreen" ? "inset-0 bg-background p-3" : "inset-x-3 bottom-3"
+          agentMode === "fullscreen"
+            ? "inset-0 bg-background p-3"
+            : "inset-x-3 bottom-3 max-h-[75vh] rounded-xl shadow-2xl overflow-hidden"
         )}>
+          {/* Mobile close button */}
+          {agentMode !== "fullscreen" && (
+            <button
+              onClick={() => setShowAgent(false)}
+              className="absolute top-2 right-2 z-10 w-7 h-7 rounded-full bg-muted/80 backdrop-blur flex items-center justify-center hover:bg-muted transition-colors"
+              aria-label="Close Penny"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
           <AccountingAgent
             viewMode={agentMode}
             onViewModeChange={(m) => setAgentMode(m)}
