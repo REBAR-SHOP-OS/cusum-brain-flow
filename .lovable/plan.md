@@ -1,50 +1,79 @@
 
+# Customer Action Page from Agent Suggestions
 
-# Per-User Agent Floating Button
+## Problem
+When clicking "Act" on agent suggestion cards (like overdue invoice alerts), users are taken to the generic accounting page. Instead, they should be taken to a **dedicated customer action page** showing the full customer history with quick action buttons.
 
-## What Changes
+## Solution
 
-The floating button currently shows Vizzy for everyone. Instead, each user will see their **own assigned agent**:
+### 1. New Page: `/customer-action/:customerId`
 
-| User | Sees | Avatar |
-|------|------|--------|
-| Sattar (CEO) | Vizzy | assistant-helper.png |
-| Vicky (Accountant) | Penny | accounting-helper.png |
-| Kourosh (Shop) | Forge | shopfloor-helper.png |
-| Saurabh/Neel (Sales) | Blitz | sales-helper.png |
-| Radin (AI Manager) | Relay (Haven) | support-helper.png |
-| Ben (Estimator) | Gauge | estimating-helper.png |
-| Josh (Operations) | Vizzy | assistant-helper.png |
-| Unknown users | Vizzy (default) | assistant-helper.png |
+Create a new page `src/pages/CustomerAction.tsx` that shows:
 
-## File Changes
+- **Customer header** with name, company, status, and contact info
+- **Action buttons bar**: Call, Email, Schedule Activity
+  - **Call**: Triggers the existing RingCentral WebRTC call flow using the customer's primary contact phone
+  - **Email**: Opens a compose email dialog or mailto link for the primary contact
+  - **Schedule Activity**: Opens a dialog to create a follow-up activity event (date picker + notes) saved to `activity_events`
+- **History tabs** (reuses data patterns from `CustomerDetail`):
+  - Orders (from `orders` table)
+  - Quotes (from `quotes` table)
+  - Communications (from `communications` table)
+  - Invoices/AR (from `accounting_mirror` where `customer_id` matches)
+  - Activity log (from `activity_events`)
 
-### 1. `src/components/vizzy/FloatingVizzyButton.tsx`
+### 2. Update `AgentSuggestionCard.tsx` — "Act" Button Logic
 
-- Import `useAuth` and `getUserPrimaryAgent` (from `userAgentMap`)
-- Get the logged-in user's email, look up their assigned agent via `getUserPrimaryAgent(email)`
-- Use the agent's `image` for the avatar instead of the hardcoded `vizzy-avatar.png`
-- Fall back to `assistant-helper.png` (Vizzy) if no mapping exists
-- Remove the `vizzy-avatar.png` import (no longer needed)
+When "Act" is clicked on a suggestion with `entity_type === "invoice"`:
 
-### 2. `src/assets/vizzy-avatar.png`
+1. Look up the `accounting_mirror` record using `entity_id` to get the `customer_id`
+2. Navigate to `/customer-action/{customer_id}` with the invoice context as a query param
+3. Falls back to existing navigation behavior for non-invoice suggestions
 
-- No longer used by the floating button (can be kept for other uses, but the button will use agent-specific images from `src/assets/helpers/`)
+### 3. Update Suggestion Generation — Fix "Unknown" Customer Names
 
-### 3. No other file changes needed
+The suggestion titles show "Unknown" because the generate-suggestions function doesn't resolve customer names. Update the `generate-suggestions` edge function to join `accounting_mirror.customer_id` with the `customers` table to include the customer name in the suggestion title (e.g., "NTL Contracting -- $155 overdue (3d)" instead of "Unknown -- $155 overdue (3d)").
 
-`AppLayout.tsx` and `LiveChatWidget.tsx` remain untouched -- the button already renders for all users and the chat toggle event works as-is.
+### 4. Add Route in `App.tsx`
 
-## Technical Detail
+Register the new `/customer-action/:customerId` route.
+
+### 5. Schedule Activity Dialog
+
+A small dialog component (`ScheduleActivityDialog.tsx`) with:
+- Date picker for follow-up date
+- Activity type dropdown (Call, Email, Meeting, Follow-up)
+- Notes text field
+- Saves to `activity_events` table with `entity_type: "customer"`, `entity_id: customerId`
+
+---
+
+## Technical Summary
+
+| File | Change |
+|------|--------|
+| `src/pages/CustomerAction.tsx` | New page with customer history + action buttons |
+| `src/components/customers/ScheduleActivityDialog.tsx` | New dialog for scheduling follow-up activities |
+| `src/components/agent/AgentSuggestionCard.tsx` | Update "Act" to resolve customer from invoice and navigate to customer action page |
+| `src/App.tsx` | Add `/customer-action/:customerId` route |
+| `supabase/functions/generate-suggestions/index.ts` | Resolve customer names for suggestion titles |
+
+## Data Flow
 
 ```text
-FloatingVizzyButton
+AgentSuggestionCard "Act" click
   |
-  +--> useAuth() --> user.email
+  +--> suggestion.entity_type === "invoice"?
+  |      |
+  |      +--> Fetch accounting_mirror by entity_id --> get customer_id
+  |      |
+  |      +--> Navigate to /customer-action/{customer_id}?invoice={entity_id}
   |
-  +--> getUserPrimaryAgent(email) --> AgentConfig { name, image, ... }
-  |
-  +--> Render agent.image as avatar (fallback: assistantHelper)
-  +--> aria-label: "Open {agent.name} AI Assistant"
-```
+  +--> Other entity types: existing behavior (navigate to path in actions)
 
+CustomerAction page
+  |
+  +--> Fetch customer from customers table
+  +--> Fetch contacts, orders, quotes, communications, accounting_mirror, activity_events
+  +--> Show action buttons: Call (WebRTC), Email (mailto/compose), Schedule (dialog)
+```
