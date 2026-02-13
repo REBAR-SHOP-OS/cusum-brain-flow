@@ -1,41 +1,39 @@
 
+# Auto-Create Follow-Up Activity After Sending Prospect Email
 
-# Merge Pipeline and Prospecting Filter Components
+## Overview
+After sending an introduction or follow-up email from the Prospecting page, automatically log a follow-up activity on the associated lead and keep the prospect in the "prospecting" pipeline stage until it converts to a real lead.
 
-## Problem
-`PipelineFilters.tsx` and `ProspectingFilters.tsx` are nearly identical components with duplicated sub-components (`FilterToggle`, `FilterChip`, `FieldFilter`, `DateFilterDropdown`). They should be merged into a single configurable component.
+## Changes
 
-## Approach
+### 1. Update `src/pages/Prospecting.tsx` -- Enhance `markEmailedMutation`
 
-### 1. Create shared filter building blocks: `src/components/ui/filter-popover.tsx`
+Currently, `onSent` only updates the prospect status to "emailed". We'll expand it to also:
 
-Extract the shared sub-components into a reusable module:
-- `FilterToggle` -- toggle button with check icon
-- `FilterChip` -- removable badge chip
-- `FieldFilter` -- dropdown field picker
-- `DateFilterDropdown` -- date range picker
+- **Create a follow-up activity** on the linked lead (if the prospect has been approved and has a `lead_id`). The activity will be:
+  - `activity_type`: "follow_up"
+  - `title`: "Follow up with [contact_name] at [company_name]"
+  - `description`: "Introduction email sent on [date]. Follow up in 3-5 business days."
+  - `due_date`: 5 business days from now
+- **If no lead exists yet** (prospect hasn't been approved), auto-approve the prospect first (creating the lead in "prospecting" stage), then log the follow-up activity on the new lead.
+- Show a toast confirming: "Email sent and follow-up scheduled"
 
-These are currently duplicated across both files with identical code.
+### 2. Update `src/pages/Prospecting.tsx` -- Ensure "prospecting" stage persists
 
-### 2. Refactor `src/components/pipeline/PipelineFilters.tsx`
+The approve mutation already creates leads with `stage: "prospecting"`. No change needed there -- the prospect stays in the prospecting pipeline stage. It only becomes a "real lead" when a user manually moves it to "qualified" or another stage in the Pipeline page.
 
-- Remove the inline `FilterToggle`, `FilterChip`, `FieldFilter`, `DateFilterDropdown` definitions
-- Import them from the new shared module
-- Keep the Pipeline-specific filter state, types, and layout unchanged
+### 3. Update `onSent` callback (lines 306-309)
 
-### 3. Refactor `src/components/prospecting/ProspectingFilters.tsx`
+Change the `onSent` handler to call a new combined mutation that:
+1. Updates prospect status to "emailed"
+2. If no `lead_id`, creates a lead (approve flow) with stage "prospecting"
+3. Inserts a `lead_activities` row with type "follow_up" and a due date 5 business days out
+4. Invalidates both "prospects" and "leads" queries
 
-- Remove the inline `FilterToggle`, `FilterChip`, `FieldFilter` definitions
-- Import them from the new shared module
-- Keep the Prospecting-specific filter state, types, and layout unchanged
+## Technical Details
 
-### Result
-- Zero visual changes -- both pages look and work exactly the same
-- Shared sub-components live in one place, eliminating ~130 lines of duplicated code
-- Future filter UIs can reuse the same building blocks
-
-### Technical Notes
-- No prop changes to either parent component -- `Pipeline.tsx` and `Prospecting.tsx` remain untouched
-- The shared module exports pure presentational components only (no state management)
-- Both filter components keep their own `localStorage` keys for saved filters
-
+- The new mutation will be called `emailAndFollowUpMutation`
+- Due date calculation: `new Date(Date.now() + 5 * 24 * 60 * 60 * 1000)` (5 days)
+- The activity is inserted into `lead_activities` with columns: `lead_id`, `company_id`, `activity_type`, `title`, `description`, `due_date`, `created_by`
+- If the prospect already has a `lead_id` (was previously approved), we use that directly; otherwise we create the lead first
+- The prospect remains visible on the Prospecting page with "emailed" status badge
