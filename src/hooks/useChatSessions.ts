@@ -173,5 +173,22 @@ export function useChatSessions() {
     [fetchSessions]
   );
 
-  return { sessions, loading, fetchSessions, createSession, addMessage, getSessionMessages, deleteSession };
+  const updateSessionTitle = useCallback(
+    async (sessionId: string, newTitle: string) => {
+      try {
+        const { error } = await supabase
+          .from("chat_sessions")
+          .update({ title: newTitle })
+          .eq("id", sessionId);
+
+        if (error) throw error;
+        fetchSessions();
+      } catch (err) {
+        console.error("Failed to update session title:", err);
+      }
+    },
+    [fetchSessions]
+  );
+
+  return { sessions, loading, fetchSessions, createSession, addMessage, getSessionMessages, deleteSession, updateSessionTitle };
 }
