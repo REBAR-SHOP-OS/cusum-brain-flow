@@ -1,3 +1,4 @@
+// forwardRef cache bust
 import React, { useState, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChatInput } from "@/components/chat/ChatInput";

@@ -1,3 +1,4 @@
+// forwardRef cache bust
 import { Link, useLocation } from "react-router-dom";
 import { Home, Inbox, CheckSquare, Factory, Menu, X, Truck, Settings, Shield, Phone, Users, Kanban, LayoutGrid, Brain, DollarSign, MessageSquare, BarChart3, Clock, Share2, FileText, Bot } from "lucide-react";
 import { cn } from "@/lib/utils";
