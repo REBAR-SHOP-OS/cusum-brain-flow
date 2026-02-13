@@ -193,9 +193,20 @@ RULES:
       const qbContext: Record<string, unknown> = qbSummary ? {
         totalReceivable: qbSummary.totalReceivable,
         totalPayable: qbSummary.totalPayable,
-        overdueInvoiceCount: qbSummary.overdueInvoices.length,
-        overdueBillCount: qbSummary.overdueBills.length,
+        overdueInvoices: qbSummary.overdueInvoices.slice(0, 20).map(i => ({
+          doc: i.DocNumber, customer: i.CustomerRef?.name, balance: i.Balance, due: i.DueDate,
+        })),
+        overdueBills: qbSummary.overdueBills.slice(0, 20).map(b => ({
+          doc: b.DocNumber, vendor: b.VendorRef?.name, balance: b.Balance, due: b.DueDate,
+        })),
+        bankAccounts: qbSummary.accounts
+          .filter(a => a.AccountType === "Bank")
+          .map(a => ({ name: a.Name, balance: a.CurrentBalance })),
+        recentPayments: qbSummary.payments.slice(0, 10).map(p => ({
+          amount: p.TotalAmt, date: p.TxnDate,
+        })),
         unpaidInvoiceCount: qbSummary.invoices.filter(i => i.Balance > 0).length,
+        unpaidBillCount: qbSummary.bills.filter(b => b.Balance > 0).length,
       } : {};
 
       const response = await sendAgentMessage(
@@ -507,8 +518,20 @@ RULES:
     const qbContext: Record<string, unknown> = qbSummary ? {
       totalReceivable: qbSummary.totalReceivable,
       totalPayable: qbSummary.totalPayable,
-      overdueInvoiceCount: qbSummary.overdueInvoices.length,
-      overdueBillCount: qbSummary.overdueBills.length,
+      overdueInvoices: qbSummary.overdueInvoices.slice(0, 20).map(i => ({
+        doc: i.DocNumber, customer: i.CustomerRef?.name, balance: i.Balance, due: i.DueDate,
+      })),
+      overdueBills: qbSummary.overdueBills.slice(0, 20).map(b => ({
+        doc: b.DocNumber, vendor: b.VendorRef?.name, balance: b.Balance, due: b.DueDate,
+      })),
+      bankAccounts: qbSummary.accounts
+        .filter(a => a.AccountType === "Bank")
+        .map(a => ({ name: a.Name, balance: a.CurrentBalance })),
+      recentPayments: qbSummary.payments.slice(0, 10).map(p => ({
+        amount: p.TotalAmt, date: p.TxnDate,
+      })),
+      unpaidInvoiceCount: qbSummary.invoices.filter(i => i.Balance > 0).length,
+      unpaidBillCount: qbSummary.bills.filter(b => b.Balance > 0).length,
     } : {};
 
     sendAgentMessage("accounting", text, history, qbContext)

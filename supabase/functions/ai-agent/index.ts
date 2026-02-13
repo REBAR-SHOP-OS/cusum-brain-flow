@@ -1963,21 +1963,22 @@ async function fetchQuickBooksLiveContext(supabase: ReturnType<typeof createClie
           return res.ok ? res : null;
         };
 
-        // Fetch customers
+        // Fetch customers (expanded to 200)
         try {
-          const customersRes = await qbFetch(`${qbApiBase}/v3/company/${config.realm_id}/query?query=SELECT * FROM Customer MAXRESULTS 50`);
+          const customersRes = await qbFetch(`${qbApiBase}/v3/company/${config.realm_id}/query?query=SELECT * FROM Customer MAXRESULTS 200`);
           if (customersRes) {
             const customersData = await customersRes.json();
             context.qbCustomers = (customersData.QueryResponse?.Customer || []).map((c: Record<string, unknown>) => ({
               id: c.Id, name: c.DisplayName, company: c.CompanyName, balance: c.Balance,
               email: (c.PrimaryEmailAddr as Record<string, unknown>)?.Address,
+              phone: (c.PrimaryPhone as Record<string, unknown>)?.FreeFormNumber,
             }));
           }
         } catch (e) { console.error("[QB] Failed to fetch customers:", e); }
 
-        // Fetch open invoices
+        // Fetch ALL invoices (not just open — full history for Penny)
         try {
-          const invoicesRes = await qbFetch(`${qbApiBase}/v3/company/${config.realm_id}/query?query=SELECT * FROM Invoice WHERE Balance > '0' MAXRESULTS 30`);
+          const invoicesRes = await qbFetch(`${qbApiBase}/v3/company/${config.realm_id}/query?query=SELECT * FROM Invoice ORDERBY TxnDate DESC MAXRESULTS 200`);
           if (invoicesRes) {
             const invoicesData = await invoicesRes.json();
             context.qbInvoices = (invoicesData.QueryResponse?.Invoice || []).map((inv: Record<string, unknown>) => ({
@@ -1985,13 +1986,14 @@ async function fetchQuickBooksLiveContext(supabase: ReturnType<typeof createClie
               customerName: (inv.CustomerRef as Record<string, unknown>)?.name,
               customerId: (inv.CustomerRef as Record<string, unknown>)?.value,
               totalAmount: inv.TotalAmt, balance: inv.Balance, dueDate: inv.DueDate, txnDate: inv.TxnDate,
+              status: inv.Balance > 0 ? "open" : "paid",
             }));
           }
         } catch (e) { console.error("[QB] Failed to fetch invoices:", e); }
 
-        // Fetch recent payments
+        // Fetch recent payments (expanded to 100)
         try {
-          const paymentsRes = await qbFetch(`${qbApiBase}/v3/company/${config.realm_id}/query?query=SELECT * FROM Payment ORDERBY TxnDate DESC MAXRESULTS 20`);
+          const paymentsRes = await qbFetch(`${qbApiBase}/v3/company/${config.realm_id}/query?query=SELECT * FROM Payment ORDERBY TxnDate DESC MAXRESULTS 100`);
           if (paymentsRes) {
             const paymentsData = await paymentsRes.json();
             context.qbPayments = (paymentsData.QueryResponse?.Payment || []).map((pmt: Record<string, unknown>) => ({
@@ -2000,6 +2002,32 @@ async function fetchQuickBooksLiveContext(supabase: ReturnType<typeof createClie
             }));
           }
         } catch (e) { console.error("[QB] Failed to fetch payments:", e); }
+
+        // Fetch bills (NEW — Penny needs AP data)
+        try {
+          const billsRes = await qbFetch(`${qbApiBase}/v3/company/${config.realm_id}/query?query=SELECT * FROM Bill ORDERBY TxnDate DESC MAXRESULTS 100`);
+          if (billsRes) {
+            const billsData = await billsRes.json();
+            context.qbBills = (billsData.QueryResponse?.Bill || []).map((b: Record<string, unknown>) => ({
+              id: b.Id, docNumber: b.DocNumber,
+              vendorName: (b.VendorRef as Record<string, unknown>)?.name,
+              vendorId: (b.VendorRef as Record<string, unknown>)?.value,
+              totalAmount: b.TotalAmt, balance: b.Balance, dueDate: b.DueDate, txnDate: b.TxnDate,
+            }));
+          }
+        } catch (e) { console.error("[QB] Failed to fetch bills:", e); }
+
+        // Fetch vendors (NEW)
+        try {
+          const vendorsRes = await qbFetch(`${qbApiBase}/v3/company/${config.realm_id}/query?query=SELECT * FROM Vendor MAXRESULTS 100`);
+          if (vendorsRes) {
+            const vendorsData = await vendorsRes.json();
+            context.qbVendors = (vendorsData.QueryResponse?.Vendor || []).map((v: Record<string, unknown>) => ({
+              id: v.Id, name: v.DisplayName, company: v.CompanyName, balance: v.Balance,
+              email: (v.PrimaryEmailAddr as Record<string, unknown>)?.Address,
+            }));
+          }
+        } catch (e) { console.error("[QB] Failed to fetch vendors:", e); }
 
         // Fetch company info
         try {
@@ -2011,11 +2039,11 @@ async function fetchQuickBooksLiveContext(supabase: ReturnType<typeof createClie
           }
         } catch (e) { console.error("[QB] Failed to fetch company info:", e); }
 
-        // Fetch Profit & Loss (full year, monthly columns)
+        // Fetch Profit & Loss (5 years back — full business history)
         try {
-          const fiscalYearStart = `${new Date().getFullYear()}-01-01`;
+          const fiveYearsAgo = `${new Date().getFullYear() - 5}-01-01`;
           const today = new Date().toISOString().split("T")[0];
-          const plRes = await qbFetch(`${qbApiBase}/v3/company/${config.realm_id}/reports/ProfitAndLoss?start_date=${fiscalYearStart}&end_date=${today}&summarize_column_by=Month&accounting_method=Accrual`);
+          const plRes = await qbFetch(`${qbApiBase}/v3/company/${config.realm_id}/reports/ProfitAndLoss?start_date=${fiveYearsAgo}&end_date=${today}&summarize_column_by=Year&accounting_method=Accrual`);
           if (plRes) {
             const plData = await plRes.json();
             context.qbProfitAndLoss = plData;
@@ -2031,9 +2059,9 @@ async function fetchQuickBooksLiveContext(supabase: ReturnType<typeof createClie
           }
         } catch (e) { console.error("[QB] Failed to fetch Balance Sheet:", e); }
 
-        // Fetch all accounts (for expense breakdown)
+        // Fetch all accounts (expanded to 200)
         try {
-          const acctRes = await qbFetch(`${qbApiBase}/v3/company/${config.realm_id}/query?query=SELECT * FROM Account WHERE Active = true MAXRESULTS 100`);
+          const acctRes = await qbFetch(`${qbApiBase}/v3/company/${config.realm_id}/query?query=SELECT * FROM Account WHERE Active = true MAXRESULTS 200`);
           if (acctRes) {
             const acctData = await acctRes.json();
             context.qbAccounts = (acctData.QueryResponse?.Account || []).map((a: Record<string, unknown>) => ({
@@ -2042,6 +2070,24 @@ async function fetchQuickBooksLiveContext(supabase: ReturnType<typeof createClie
             }));
           }
         } catch (e) { console.error("[QB] Failed to fetch accounts:", e); }
+
+        // Fetch Aged Receivables report (NEW)
+        try {
+          const arRes = await qbFetch(`${qbApiBase}/v3/company/${config.realm_id}/reports/AgedReceivableDetail?report_date=${new Date().toISOString().split("T")[0]}`);
+          if (arRes) {
+            const arData = await arRes.json();
+            context.qbAgedReceivables = arData;
+          }
+        } catch (e) { console.error("[QB] Failed to fetch Aged Receivables:", e); }
+
+        // Fetch Aged Payables report (NEW)
+        try {
+          const apRes = await qbFetch(`${qbApiBase}/v3/company/${config.realm_id}/reports/AgedPayableDetail?report_date=${new Date().toISOString().split("T")[0]}`);
+          if (apRes) {
+            const apData = await apRes.json();
+            context.qbAgedPayables = apData;
+          }
+        } catch (e) { console.error("[QB] Failed to fetch Aged Payables:", e); }
       }
     } else {
       context.qbConnectionStatus = qbConnection?.status || "not_connected";
