@@ -1,162 +1,131 @@
 
 
-# Audit and Optimize: Zebra Z411 on 4x6 Continuous Roll Tags
+# Audit and Improve: Evidence Flow, Loading Evidence, and Packing Slip Signed Archives
 
 ## Issues Found
 
-### 1. Wrong Orientation
-The card is **6in wide x 4in tall** (landscape). The Zebra Z411 with 4x6 continuous roll feeds labels **4in wide x 6in tall** (portrait). Every tag currently prints clipped or scaled incorrectly.
+### 1. Packing Slips View Shows "No deliveries found" (Screenshot Issue)
+The `PackingSlipsView` queries the `deliveries` table, which has **0 rows**. The view is dead -- it's an empty shell. However, there ARE 74 completed items and 14 clearance items with actual evidence in `clearance_evidence`. The "Digital Archives" view should be pulling from **completed production items with clearance evidence** and **signed POD records**, not from an empty `deliveries` table.
 
-### 2. Conflicting Print CSS
-Two separate `@media print` blocks in `index.css` (lines 202-241 and 244-259) fight each other. The second block sets `@page { size: A4; margin: 10mm }` which overrides the label-specific `@page { margin: 0 }`. Tags print with A4 margins on a 4-inch-wide roll.
+### 2. No Link Between Production Evidence and Packing Slips
+The clearance evidence (material photos, tag scans, verification records) exists in `clearance_evidence` but is never surfaced in the Packing Slips archive. The archive should show completed bundles grouped by project with their QC evidence attached.
 
-### 3. Print CSS Destroys Tag Height
-Line 216: `height: auto !important` removes the fixed tag height, so the tag collapses or overflows unpredictably instead of filling exactly one 4x6 label.
+### 3. Loading Evidence Has No Dedicated View
+There's no "Loading Evidence" capture -- the system tracks `clearance_evidence` for QC photos but has no step for capturing loading photos (material being loaded onto trucks). The POD capture in `PODCaptureDialog` only fires at delivery stops, not at the warehouse loading dock.
 
-### 4. No Thermal Print Optimization
-- Font sizes are too small for 203 DPI thermal heads (anything below 8pt may be illegible)
-- The fake barcode (CSS divs) won't scan -- it's decorative
-- `border-foreground/80` uses CSS variables that resolve to transparent in forced-color print contexts
-- Shape images use `crossOrigin="anonymous"` which can fail on thermal printer RIP software
+### 4. Signed Packing Slips Not Archived
+The `PODCaptureDialog` captures signatures and photos at delivery stops, but these are stored as raw fields (`pod_signature`, `pod_photo_url`) on `delivery_stops`. There's no archive view to browse signed packing slips with their POD evidence.
 
-### 5. Layout Too Cramped for 4-inch Width
-The main body grid (`grid-cols-[110px_1fr_1.2fr]`) was designed for 6 inches of horizontal space. At 4 inches wide, the center and right columns are squeezed, making dimensions and shape images unreadable.
-
-### 6. Redundant Information
-The tag repeats the same data in multiple places (Qty, Size, Mark, KG, Dwg appear twice each). On a smaller 4x6 portrait format, this wastes space.
+### 5. Order QC Evidence Flag is Manual Only
+`qc_evidence_uploaded` on orders is a manual checkbox in `OrderDetail`. It's never automatically set when clearance evidence is actually uploaded for that order's items.
 
 ---
 
 ## Plan
 
-### 1. Flip Card to 4x6 Portrait (`RebarTagCard.tsx`)
+### 1. Rewrite PackingSlipsView Data Source
+Instead of querying the empty `deliveries` table, query `cut_plan_items` where `phase = 'complete'`, joined with `clearance_evidence` and grouped by project. This surfaces the 74+ completed items with their QC evidence.
 
-Change the card dimensions from `6in x 4in` to `4in x 6in`. Restructure the internal layout to work vertically:
+**Data flow:**
+- Query `cut_plan_items` with `phase = 'complete'` joined to `cut_plans` (for project name) and `clearance_evidence` (for photos/verification)
+- Group by project name
+- Show each project as a card with: item count, cleared count, evidence photo count, verification timestamps
 
-- **Top strip**: Timestamp + branding (keep as-is, it's compact)
-- **Header row**: Mark, Size, Grade, Qty, Length -- change from 5-column grid to a 3+2 or stacked layout that fits 4 inches
-- **Main body**: Switch from 3-column horizontal to a 2-row vertical layout:
-  - Top half: Summary fields + dimensions (side by side, 2 columns)
-  - Bottom half: Shape image (full width, more vertical space)
-- **Footer**: Ref/Dwg/Job info + branding
-- Remove duplicate fields (Qty, Size, KG, Dwg only appear once each)
+### 2. Add Evidence Gallery to Archive Cards
+When clicking "View Details" on a project card, expand or navigate to show:
+- Grid of clearance evidence photos (material + tag scans) with signed URLs
+- Verification status and who verified each item
+- Timestamp of verification
 
-### 2. Fix Print CSS (`index.css`)
+### 3. Add Loading Evidence Capture
+Create a "Loading Evidence" section that allows warehouse staff to capture photos of bundles being loaded. This uses the existing `clearance-photos` storage bucket.
 
-- Merge the two conflicting `@media print` blocks into one
-- Set `@page { size: 4in 6in; margin: 0; }` specifically for tag printing
-- Set fixed `width: 4in !important; height: 6in !important` on `.rebar-tag`
-- Use solid `border-color: #000` instead of CSS variable references
-- Ensure `page-break-after: always` works for continuous roll (one tag per "page")
+- Add a `loading_evidence` table with: `id`, `cut_plan_id`, `project_id`, `photo_url`, `notes`, `captured_by`, `captured_at`
+- Add a "Capture Loading Photo" button in the archive detail view for items that are complete but not yet on a delivery
 
-### 3. Thermal-Friendly Styling
+### 4. Surface Signed POD in Archives
+Even though `delivery_stops` is currently empty, wire up the archive to also show any delivery stops that have POD signatures/photos when deliveries exist. Add a "Signed Deliveries" tab/section alongside the production evidence section.
 
-- Minimum font size: 9px (anything smaller is illegible at 203 DPI)
-- Replace all `border-foreground/80` with solid `border-black` in the tag
-- Increase key data font sizes (Mark, Qty, Length) for glance-readability on the shop floor
-- Remove the fake CSS barcode from footer (it doesn't scan and wastes space)
-- Add `image-rendering: pixelated` for shape images to prevent thermal blurring
-
-### 4. Optimize Cards View Container (`TagsExportView.tsx`)
-
-- Change `max-w-[6.5in]` to `max-w-[4.5in]` in the cards grid container so the on-screen preview matches the actual print output
+### 5. Fix the View Details Button
+Currently the "View Details" button on each card does nothing (no `onClick`). Wire it to expand a detail panel showing all evidence for that project.
 
 ---
 
 ## Technical Details
 
-### File: `src/components/office/RebarTagCard.tsx`
+### File: `src/components/office/PackingSlipsView.tsx` -- Complete Rewrite
 
-Complete restructure to 4x6 portrait layout:
+**Replace the `deliveries` query** with completed items + evidence:
 
-```
-+---------------------------+  4in
-|  DATE/TIME    REBAR SHOP  |
-+---------------------------+
-| MARK  | SIZE  | GRADE     |
-| (2xl) | (2xl) | (2xl)     |
-+-------+-------+-----------+
-| QTY   | LENGTH| WEIGHT    |
-| (2xl) | (2xl) | (lg)      |
-+-------+-------+-----------+
-|  Shape   |  A: ___  G: ___|
-|  Circle  |  B: ___  H: ___|
-|  + Type  |  C: ___  J: ___|
-|          |  D: ___  K: ___|
-|          |  E: ___  O: ___|
-|          |  F: ___  R: ___|
-+----------+----------------+
-|     SHAPE IMAGE            |
-|     (full width)           |
-+----------------------------+
-| Ref:____  Dwg:____         |
-| Item:___  Job:____         |
-+----------------------------+
-| R.S         REBAR.SHOP     |
-+----------------------------+  6in
-```
-
-Key sizing:
-- Mark/Size/Grade: `text-2xl font-black` (readable from arm's length)
-- Qty/Length: `text-2xl font-black`
-- Dimensions: `text-xs font-bold` (compact but legible at 203 DPI)
-- All borders: solid `border-black` instead of CSS variables
-- Shape image area: taller, full width for better visibility
-
-### File: `src/index.css` (lines 198-259)
-
-Merge both print blocks into one clean block:
-
-```css
-@media print {
-  @page {
-    size: 4in 6in;
-    margin: 0;
-  }
-
-  body * { visibility: hidden !important; }
-
-  .rebar-tag,
-  .rebar-tag * {
-    visibility: visible !important;
-  }
-
-  .rebar-tag {
-    position: relative !important;
-    width: 4in !important;
-    height: 6in !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    border: 1px solid #000 !important;
-    border-radius: 0 !important;
-    background: #fff !important;
-    color: #000 !important;
-    box-shadow: none !important;
-    overflow: hidden !important;
-    page-break-after: always;
-    page-break-inside: avoid;
-  }
-
-  .rebar-tag * {
-    color: #000 !important;
-    border-color: #000 !important;
-    background: transparent !important;
-  }
-
-  .rebar-tag .bg-black { background: #000 !important; }
-  .rebar-tag .bg-white { background: #fff !important; }
-  .rebar-tag img { image-rendering: pixelated; }
-}
+```typescript
+// Query completed items grouped by project
+const { data: completedProjects = [], isLoading } = useQuery({
+  queryKey: ["archive-completed-projects"],
+  queryFn: async () => {
+    const { data: items, error } = await supabase
+      .from("cut_plan_items")
+      .select("*, cut_plans!inner(id, name, project_name), clearance_evidence(id, material_photo_url, tag_scan_url, status, verified_at, verified_by)")
+      .eq("phase", "complete");
+    if (error) throw error;
+    // Group by project
+    const byProject = new Map();
+    for (const item of items || []) {
+      const key = item.cut_plans?.project_name || item.cut_plans?.name || "Unassigned";
+      if (!byProject.has(key)) byProject.set(key, { name: key, items: [], evidenceCount: 0, clearedCount: 0 });
+      const proj = byProject.get(key);
+      proj.items.push(item);
+      const ev = item.clearance_evidence?.[0];
+      if (ev) {
+        proj.evidenceCount++;
+        if (ev.status === "cleared") proj.clearedCount++;
+      }
+    }
+    return [...byProject.values()];
+  },
+});
 ```
 
-### File: `src/components/office/TagsExportView.tsx`
+**Add detail panel** with evidence gallery when a project is selected:
+- Show each item's mark number, bar code, clearance photos
+- Use signed URLs from `clearance-photos` bucket (same pattern as `ClearanceCard`)
+- Show verification badge and timestamp
 
-Line 281: Change container max-width:
-```tsx
-<div className="p-6 grid grid-cols-1 gap-6 max-w-[4.5in] mx-auto">
+**Add "Signed Deliveries" section** that queries `delivery_stops` with POD data (ready for when deliveries are created).
+
+### Database Migration: `loading_evidence` Table
+
+```sql
+CREATE TABLE IF NOT EXISTS public.loading_evidence (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  cut_plan_id uuid REFERENCES public.cut_plans(id),
+  project_id uuid REFERENCES public.projects(id),
+  company_id uuid REFERENCES public.companies(id),
+  photo_url text NOT NULL,
+  notes text,
+  captured_by uuid,
+  created_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE public.loading_evidence ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view loading evidence for their company"
+  ON public.loading_evidence FOR SELECT
+  USING (company_id = public.get_user_company_id(auth.uid()));
+
+CREATE POLICY "Users can insert loading evidence for their company"
+  ON public.loading_evidence FOR INSERT
+  WITH CHECK (company_id = public.get_user_company_id(auth.uid()));
 ```
+
+### File: `src/components/office/PackingSlipsView.tsx` -- Loading Evidence Capture
+
+Add a photo upload button in the detail view that:
+1. Opens camera/file picker
+2. Uploads to `clearance-photos` bucket under `loading/` prefix
+3. Inserts record into `loading_evidence`
+4. Shows loading photos alongside clearance evidence
 
 ### Files Modified
-- `src/components/office/RebarTagCard.tsx` -- portrait 4x6 layout, larger fonts, thermal-optimized
-- `src/index.css` -- merged print blocks, correct page size, solid borders
-- `src/components/office/TagsExportView.tsx` -- preview container width fix
+- `src/components/office/PackingSlipsView.tsx` -- rewrite data source from deliveries to completed production items + evidence gallery + loading evidence + signed POD section
+- Database migration -- `loading_evidence` table for warehouse loading photos
+
