@@ -7,11 +7,13 @@ import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
-  Upload, FolderOpen, CheckCircle, AlertTriangle, XCircle, FileText,
+  Upload, FolderOpen, CheckCircle, AlertTriangle, XCircle, FileText, FileArchive,
 } from "lucide-react";
+import { BlobReader, BlobWriter, ZipReader, type Entry } from "@zip.js/zip.js";
 
 /* ── types ── */
 interface MappingRow {
@@ -35,12 +37,10 @@ interface Props {
 const BATCH = 5;
 
 export function OdooDumpImportDialog({ open, onOpenChange }: Props) {
-  /* step 1 – mapping */
   const [mapping, setMapping] = useState<MappingRow[]>([]);
   const [pending, setPending] = useState<PendingFile[]>([]);
   const [step, setStep] = useState<1 | 2>(1);
 
-  /* step 2 – upload */
   const [uploading, setUploading] = useState(false);
   const [uploaded, setUploaded] = useState(0);
   const [failed, setFailed] = useState(0);
@@ -72,7 +72,6 @@ export function OdooDumpImportDialog({ open, onOpenChange }: Props) {
     }
     setMapping(rows);
 
-    /* fetch pending lead_files (odoo_id set, storage_path null) */
     const { data, error } = await supabase
       .from("lead_files")
       .select("odoo_id, lead_id, file_name")
@@ -93,45 +92,9 @@ export function OdooDumpImportDialog({ open, onOpenChange }: Props) {
     toast.success(`Mapping loaded: ${rows.length} entries, ${matchCount} match pending files`);
   }, []);
 
-  /* ── Step 2: folder upload ── */
-  const handleFolderSelect = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const files = e.target.files;
-      if (!files || files.length === 0) return;
-
-      /* build lookup: store_fname → File */
-      const fileMap = new Map<string, File>();
-      for (let i = 0; i < files.length; i++) {
-        const f = files[i];
-        // webkitRelativePath is like "filestore/ab/ab12cd34..."
-        const rel = f.webkitRelativePath;
-        // extract the part after first "/"  → "ab/ab12cd34..."
-        const idx = rel.indexOf("/");
-        if (idx >= 0) {
-          fileMap.set(rel.slice(idx + 1), f);
-        }
-      }
-
-      /* build mapping lookup */
-      const mappingById = new Map<number, MappingRow>();
-      mapping.forEach((m) => mappingById.set(m.id, m));
-
-      /* filter to actionable items */
-      const queue = pending
-        .map((p) => {
-          const m = mappingById.get(p.odoo_id);
-          if (!m) return null;
-          const file = fileMap.get(m.store_fname);
-          if (!file) return null;
-          return { pending: p, mapping: m, file };
-        })
-        .filter(Boolean) as { pending: PendingFile; mapping: MappingRow; file: File }[];
-
-      if (queue.length === 0) {
-        toast.error("No matching files found in the selected folder");
-        return;
-      }
-
+  /* ── shared upload helper ── */
+  const processQueue = useCallback(
+    async (queue: { pending: PendingFile; mapping: MappingRow; getBlob: () => Promise<Blob> }[]) => {
       toast.info(`Starting upload of ${queue.length} files…`);
       setUploading(true);
       setUploaded(0);
@@ -139,7 +102,6 @@ export function OdooDumpImportDialog({ open, onOpenChange }: Props) {
       setErrors([]);
       abortRef.current = false;
 
-      /* process in batches */
       let ok = 0;
       let fail = 0;
       const errs: string[] = [];
@@ -149,12 +111,13 @@ export function OdooDumpImportDialog({ open, onOpenChange }: Props) {
         const batch = queue.slice(i, i + BATCH);
 
         await Promise.all(
-          batch.map(async ({ pending: p, mapping: m, file }) => {
+          batch.map(async ({ pending: p, mapping: m, getBlob }) => {
             try {
+              const blob = await getBlob();
               const storagePath = `odoo-archive/${p.lead_id}/${p.odoo_id}-${m.name}`;
               const { error: upErr } = await supabase.storage
                 .from("estimation-files")
-                .upload(storagePath, file, {
+                .upload(storagePath, blob, {
                   contentType: m.mimetype || "application/octet-stream",
                   upsert: true,
                 });
@@ -185,7 +148,99 @@ export function OdooDumpImportDialog({ open, onOpenChange }: Props) {
       setUploading(false);
       toast.success(`Import complete: ${ok} uploaded, ${fail} failed`);
     },
-    [mapping, pending]
+    []
+  );
+
+  /* ── Step 2a: folder upload ── */
+  const handleFolderSelect = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files;
+      if (!files || files.length === 0) return;
+
+      const fileMap = new Map<string, File>();
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        const rel = f.webkitRelativePath;
+        const idx = rel.indexOf("/");
+        if (idx >= 0) fileMap.set(rel.slice(idx + 1), f);
+      }
+
+      const mappingById = new Map<number, MappingRow>();
+      mapping.forEach((m) => mappingById.set(m.id, m));
+
+      const queue = pending
+        .map((p) => {
+          const m = mappingById.get(p.odoo_id);
+          if (!m) return null;
+          const file = fileMap.get(m.store_fname);
+          if (!file) return null;
+          return { pending: p, mapping: m, getBlob: () => Promise.resolve(file as Blob) };
+        })
+        .filter(Boolean) as { pending: PendingFile; mapping: MappingRow; getBlob: () => Promise<Blob> }[];
+
+      if (queue.length === 0) {
+        toast.error("No matching files found in the selected folder");
+        return;
+      }
+      await processQueue(queue);
+    },
+    [mapping, pending, processQueue]
+  );
+
+  /* ── Step 2b: ZIP file upload ── */
+  const handleZipSelect = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      toast.info("Scanning ZIP file…");
+
+      const mappingById = new Map<number, MappingRow>();
+      mapping.forEach((m) => mappingById.set(m.id, m));
+
+      // Build a set of store_fname we actually need
+      const neededFnames = new Map<string, { pending: PendingFile; mapping: MappingRow }>();
+      for (const p of pending) {
+        const m = mappingById.get(p.odoo_id);
+        if (m) neededFnames.set(m.store_fname, { pending: p, mapping: m });
+      }
+
+      const reader = new ZipReader(new BlobReader(file));
+      const entries = await reader.getEntries();
+
+      // Build queue by matching ZIP entry filenames to store_fname
+      const queue: { pending: PendingFile; mapping: MappingRow; getBlob: () => Promise<Blob> }[] = [];
+
+      for (const entry of entries) {
+        if (entry.directory) continue;
+        // ZIP path might be like "filestore/ab/ab12cd34..." or just "ab/ab12cd34..."
+        const fname = entry.filename;
+        // Try matching after "filestore/" prefix or the raw path
+        const filestoreIdx = fname.indexOf("filestore/");
+        const relPath = filestoreIdx >= 0 ? fname.slice(filestoreIdx + "filestore/".length) : fname;
+
+        const match = neededFnames.get(relPath);
+        if (match) {
+          const capturedEntry = entry;
+          queue.push({
+            pending: match.pending,
+            mapping: match.mapping,
+            getBlob: async () => (capturedEntry as any).getData(new BlobWriter()),
+          });
+        }
+      }
+
+      if (queue.length === 0) {
+        toast.error("No matching files found in the ZIP");
+        await reader.close();
+        return;
+      }
+
+      toast.success(`Found ${queue.length} matching files in ZIP`);
+      await processQueue(queue);
+      await reader.close();
+    },
+    [mapping, pending, processQueue]
   );
 
   const total = pending.filter((p) => mapping.some((m) => m.id === p.odoo_id)).length;
@@ -231,39 +286,62 @@ export function OdooDumpImportDialog({ open, onOpenChange }: Props) {
           {(step === 2 || uploading || uploaded > 0) && (
             <div className="space-y-2">
               <Label className="flex items-center gap-2 font-semibold">
-                <Badge variant="outline">2</Badge> Select Filestore Folder
+                <Badge variant="outline">2</Badge> Select Dump Source
               </Label>
-              <p className="text-xs text-muted-foreground">
-                Select the <code className="bg-muted px-1 rounded">filestore/</code> folder from your extracted dump.
-              </p>
-              <div className="flex gap-2">
+
+              <Tabs defaultValue="zip" className="w-full">
+                <TabsList className="w-full">
+                  <TabsTrigger value="zip" className="flex-1 gap-1">
+                    <FileArchive className="h-3.5 w-3.5" /> ZIP File
+                  </TabsTrigger>
+                  <TabsTrigger value="folder" className="flex-1 gap-1">
+                    <FolderOpen className="h-3.5 w-3.5" /> Extracted Folder
+                  </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="zip" className="space-y-2 mt-2">
+                  <p className="text-xs text-muted-foreground">
+                    Select the Odoo dump <code className="bg-muted px-1 rounded">.zip</code> file directly — no extraction needed.
+                  </p>
+                  <Input type="file" accept=".zip" disabled={uploading} onChange={handleZipSelect} />
+                </TabsContent>
+
+                <TabsContent value="folder" className="space-y-2 mt-2">
+                  <p className="text-xs text-muted-foreground">
+                    Select the <code className="bg-muted px-1 rounded">filestore/</code> folder from your extracted dump.
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={uploading}
+                      onClick={() => folderInputRef.current?.click()}
+                      className="gap-1"
+                    >
+                      <FolderOpen className="h-3.5 w-3.5" /> Choose Folder
+                    </Button>
+                  </div>
+                  <input
+                    ref={folderInputRef}
+                    type="file"
+                    className="hidden"
+                    {...({ webkitdirectory: "", directory: "", multiple: true } as any)}
+                    onChange={handleFolderSelect}
+                  />
+                </TabsContent>
+              </Tabs>
+
+              {/* Abort button */}
+              {uploading && (
                 <Button
-                  variant="outline"
+                  variant="destructive"
                   size="sm"
-                  disabled={uploading}
-                  onClick={() => folderInputRef.current?.click()}
+                  onClick={() => { abortRef.current = true; }}
                   className="gap-1"
                 >
-                  <FolderOpen className="h-3.5 w-3.5" /> Choose Folder
+                  <XCircle className="h-3.5 w-3.5" /> Abort
                 </Button>
-                {uploading && (
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => { abortRef.current = true; }}
-                    className="gap-1"
-                  >
-                    <XCircle className="h-3.5 w-3.5" /> Abort
-                  </Button>
-                )}
-              </div>
-              <input
-                ref={folderInputRef}
-                type="file"
-                className="hidden"
-                {...({ webkitdirectory: "", directory: "", multiple: true } as any)}
-                onChange={handleFolderSelect}
-              />
+              )}
 
               {/* Progress */}
               {(uploading || uploaded > 0) && (
