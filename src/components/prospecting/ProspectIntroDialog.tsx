@@ -23,12 +23,14 @@ interface Props {
     fit_reason: string | null;
     intro_angle: string | null;
   };
+  mode?: "intro" | "followup";
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSent: () => void;
 }
 
-export function ProspectIntroDialog({ prospect, open, onOpenChange, onSent }: Props) {
+export function ProspectIntroDialog({ prospect, mode = "intro", open, onOpenChange, onSent }: Props) {
+  const isFollowup = mode === "followup";
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [drafted, setDrafted] = useState(false);
@@ -37,15 +39,20 @@ export function ProspectIntroDialog({ prospect, open, onOpenChange, onSent }: Pr
   // Draft email via AI
   const draftMutation = useMutation({
     mutationFn: async () => {
+      const firstName = prospect.contact_name.split(" ")[0];
+      const action = isFollowup ? "draft_followup" : "draft_intro";
+      const userMsg = isFollowup
+        ? `Draft a follow-up email to ${firstName} (full name: ${prospect.contact_name}, title: ${prospect.contact_title}) at ${prospect.company_name}. We previously sent an introduction. Reference their industry: ${prospect.industry}. Address them by first name "${firstName}" only. Sign off as "The rebar.shop Sales Team" — do NOT use any placeholder names.`
+        : `Draft a cold introduction email to ${firstName} (full name: ${prospect.contact_name}, title: ${prospect.contact_title}) at ${prospect.company_name}. Use this angle: ${prospect.intro_angle}. The email is from rebar.shop — a Canadian rebar fabrication company. Address them by first name "${firstName}" only. Sign off as "The rebar.shop Sales Team" — do NOT use any placeholder names.`;
       const { data, error } = await supabase.functions.invoke("pipeline-ai", {
         body: {
-          action: "draft_intro",
+          action,
           lead: {
             title: prospect.company_name,
             customer_name: prospect.contact_name,
             notes: `Industry: ${prospect.industry}\nCity: ${prospect.city}\nFit: ${prospect.fit_reason}\nAngle: ${prospect.intro_angle}`,
           },
-          userMessage: `Draft a cold introduction email to ${prospect.contact_name.split(" ")[0]} (full name: ${prospect.contact_name}, title: ${prospect.contact_title}) at ${prospect.company_name}. Use this angle: ${prospect.intro_angle}. The email is from rebar.shop — a Canadian rebar fabrication company. Address them by first name "${prospect.contact_name.split(" ")[0]}" only. Sign off as "The rebar.shop Sales Team" — do NOT use any placeholder names.`,
+          userMessage: userMsg,
         },
       });
       if (error) throw new Error(error.message);
@@ -80,13 +87,13 @@ export function ProspectIntroDialog({ prospect, open, onOpenChange, onSent }: Pr
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Send Introduction — {prospect.company_name}</DialogTitle>
+          <DialogTitle>{isFollowup ? "Send Follow-up" : "Send Introduction"} — {prospect.company_name}</DialogTitle>
         </DialogHeader>
 
         {!drafted ? (
           <div className="flex flex-col items-center gap-4 py-8">
             <p className="text-sm text-muted-foreground text-center">
-              AI will draft a personalized introduction email to{" "}
+              AI will draft a personalized {isFollowup ? "follow-up" : "introduction"} email to{" "}
               <strong>{prospect.contact_name}</strong> at <strong>{prospect.company_name}</strong>
             </p>
             <Button onClick={() => draftMutation.mutate()} disabled={draftMutation.isPending} className="gap-2">
