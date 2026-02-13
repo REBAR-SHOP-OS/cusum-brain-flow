@@ -6,19 +6,10 @@ import { routeToAgent } from "@/lib/agentRouter";
 import { Card } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { AutomationsSection } from "@/components/integrations/AutomationsSection";
+import { AgentSuggestionsPanel } from "@/components/agent/AgentSuggestionsPanel";
+import { useUserRole } from "@/hooks/useUserRole";
 import { 
-  TrendingUp, 
-  FileText, 
-  Truck, 
-  Mail,
   ChevronRight,
-  Activity,
-  AlertTriangle,
-  Users,
-  Cog,
-  Wrench,
-  ListOrdered,
-  RefreshCw,
   Crown,
   Clock,
   MessageSquare,
@@ -48,8 +39,14 @@ import seoHelper from "@/assets/helpers/seo-helper.png";
 import growthHelper from "@/assets/helpers/growth-helper.png";
 import eisenhowerHelper from "@/assets/helpers/eisenhower-helper.png";
 
-const iconMap: Record<string, React.ElementType> = {
-  TrendingUp, FileText, Truck, Mail, Activity, AlertTriangle, Users, Cog, Wrench, ListOrdered, RefreshCw,
+const agentKeyToSuggestion: Record<string, { code: string; name: string }> = {
+  assistant: { code: "vizzy", name: "Vizzy" },
+  accounting: { code: "penny", name: "Penny" },
+  shopfloor: { code: "forge", name: "Forge" },
+  sales: { code: "blitz", name: "Blitz" },
+  estimating: { code: "gauge", name: "Gauge" },
+  support: { code: "haven", name: "Haven" },
+  email: { code: "relay", name: "Relay" },
 };
 
 interface Helper {
@@ -81,43 +78,29 @@ const helpers: Helper[] = [
   { id: "growth", name: "Gigi", role: "Personal Development", image: growthHelper, gradient: "from-green-400 to-emerald-600", route: "/agent/growth" },
 ];
 
-interface UseCase {
-  title: string;
-  icon: React.ElementType;
-  category: string;
-  route: string;
-  prompt: string;
-}
-
-const defaultUseCases: UseCase[] = [
-  { title: "Check my pipeline status", icon: TrendingUp, category: "Sales", route: "/agent/sales", prompt: "Check my pipeline status. Show me a summary of active leads, their stages, and expected close dates." },
-  { title: "Create a quote for a customer", icon: FileText, category: "Estimating", route: "/agent/estimating", prompt: "Help me create a new quote for a customer. Walk me through the process step by step." },
-  { title: "Track today's deliveries", icon: Truck, category: "Operations", route: "/agent/delivery", prompt: "Show me today's delivery schedule. What's the status of all active deliveries?" },
-  { title: "Summarize today's emails", icon: Mail, category: "Productivity", route: "/agent/email", prompt: "Summarize today's emails. Highlight anything urgent or requiring my attention." },
-];
-
 export default function Home() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
   const mapping = getUserAgentMapping(user?.email);
   const { isSuperAdmin } = useSuperAdmin();
+  const { roles, isAdmin, isWorkshop } = useUserRole();
 
-  // Build personalized quick actions
-  const useCases: UseCase[] = useMemo(() => {
-    if (!mapping) return defaultUseCases;
-    return mapping.quickActions.map((qa) => ({
-      title: qa.title,
-      icon: iconMap[qa.icon] || FileText,
-      category: qa.category,
-      route: `/agent/${mapping.agentKey}`,
-      prompt: qa.prompt,
-    }));
-  }, [mapping]);
+  // Resolve agent for suggestions
+  const agentSuggestion = useMemo(() => {
+    if (mapping) {
+      const mapped = agentKeyToSuggestion[mapping.agentKey];
+      if (mapped) return mapped;
+    }
+    if (isAdmin) return agentKeyToSuggestion["assistant"];
+    if (roles.includes("accounting")) return agentKeyToSuggestion["accounting"];
+    if (isWorkshop) return agentKeyToSuggestion["shopfloor"];
+    if (roles.includes("sales")) return agentKeyToSuggestion["sales"];
+    return agentKeyToSuggestion["assistant"];
+  }, [mapping, isAdmin, isWorkshop, roles]);
 
   // Reorder helpers: primary agent first
   const orderedHelpers = useMemo(() => {
-    // Hide Vizzy (assistant) for non-super-admins
     const filtered = isSuperAdmin ? helpers : helpers.filter((h) => h.id !== "assistant");
     if (!mapping) return filtered;
     const primary = filtered.find((h) => h.id === mapping.agentKey);
@@ -132,10 +115,6 @@ export default function Home() {
 
   const handleHelperClick = (helper: Helper) => {
     navigate(helper.route);
-  };
-
-  const handleUseCaseClick = (useCase: UseCase) => {
-    navigate(useCase.route, { state: { initialMessage: useCase.prompt } });
   };
 
   const handleLiveChatClick = () => {
@@ -174,29 +153,9 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Use Cases Section */}
+        {/* Agent Suggestions (replaces Quick Actions) */}
         <div className="relative z-10 w-full mb-6 sm:mb-12">
-          <div className="flex items-center justify-between mb-2 sm:mb-4">
-            <h2 className="text-sm sm:text-lg font-semibold">Quick Actions</h2>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
-            {useCases.map((useCase) => (
-              <Card
-                key={useCase.title}
-                className="p-3 sm:p-4 cursor-pointer hover:bg-muted/50 transition-colors group"
-                onClick={() => handleUseCaseClick(useCase)}
-              >
-                <p className="font-medium mb-2 sm:mb-3 line-clamp-2 text-xs sm:text-base">{useCase.title}</p>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-sm text-muted-foreground">
-                    <useCase.icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                    <span>{useCase.category}</span>
-                  </div>
-                  <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
-                </div>
-              </Card>
-            ))}
-          </div>
+          <AgentSuggestionsPanel agentCode={agentSuggestion.code} agentName={agentSuggestion.name} />
         </div>
 
         {/* Workspaces Section */}

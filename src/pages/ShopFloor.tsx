@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { MyJobsCard } from "@/components/shopfloor/MyJobsCard";
 import { VoiceRecorderWidget } from "@/components/shopfloor/VoiceRecorderWidget";
-import { AgentSuggestionsPanel } from "@/components/agent/AgentSuggestionsPanel";
+
 
 interface HubCard {
   label: string;
@@ -101,10 +101,6 @@ export default function ShopFloor() {
           <MyJobsCard />
         </div>
 
-        {/* Forge Suggestions */}
-        <div className="w-full mb-6">
-          <AgentSuggestionsPanel agentCode="forge" agentName="Forge" />
-        </div>
 
         {/* Cards Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 w-full">
