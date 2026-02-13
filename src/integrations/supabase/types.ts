@@ -3304,6 +3304,62 @@ export type Database = {
           },
         ]
       }
+      optimization_snapshots: {
+        Row: {
+          company_id: string
+          created_at: string
+          created_by: string | null
+          efficiency: number | null
+          id: string
+          kerf_mm: number
+          min_remnant_mm: number
+          mode: string
+          plan_data: Json
+          session_id: string | null
+          stock_length_mm: number
+          total_stock_bars: number | null
+          total_waste_kg: number | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          efficiency?: number | null
+          id?: string
+          kerf_mm?: number
+          min_remnant_mm?: number
+          mode: string
+          plan_data: Json
+          session_id?: string | null
+          stock_length_mm: number
+          total_stock_bars?: number | null
+          total_waste_kg?: number | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          efficiency?: number | null
+          id?: string
+          kerf_mm?: number
+          min_remnant_mm?: number
+          mode?: string
+          plan_data?: Json
+          session_id?: string | null
+          stock_length_mm?: number
+          total_stock_bars?: number | null
+          total_waste_kg?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "optimization_snapshots_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "extract_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       order_items: {
         Row: {
           bar_size: string | null
