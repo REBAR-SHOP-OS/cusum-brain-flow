@@ -8,6 +8,9 @@ import { Loader2, Plus, Trash2, Send, AlertTriangle, ChevronLeft } from "lucide-
 import { useToast } from "@/hooks/use-toast";
 import type { Order, OrderItem } from "@/hooks/useOrders";
 import { useOrders } from "@/hooks/useOrders";
+import { ShopDrawingStepper } from "./ShopDrawingStepper";
+import { QCChecklist } from "./QCChecklist";
+import { ProductionLockBanner } from "./ProductionLockBanner";
 
 const fmt = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
@@ -21,7 +24,7 @@ interface Props {
 
 export function OrderDetail({ order, onBack }: Props) {
   const { toast } = useToast();
-  const { useOrderItems, addItem, updateItem, deleteItem, updateOrderStatus, sendToQuickBooks } = useOrders();
+  const { useOrderItems, addItem, updateItem, deleteItem, updateOrderStatus, updateOrderFields, sendToQuickBooks } = useOrders();
   const { data: items = [], isLoading: itemsLoading } = useOrderItems(order.id);
   const [sending, setSending] = useState(false);
   const [newItem, setNewItem] = useState({ description: "", quantity: "1", unit_price: "0" });
@@ -52,9 +55,49 @@ export function OrderDetail({ order, onBack }: Props) {
     }
   };
 
+  const handleShopDrawingChange = (status: string) => {
+    const updates: Record<string, unknown> = { id: order.id, shop_drawing_status: status };
+    if (status === "approved") {
+      updates.customer_approved_at = new Date().toISOString();
+      updates.production_locked = false;
+    }
+    updateOrderFields.mutate(updates as any);
+  };
+
+  const handleQCToggle = (field: string, checked: boolean) => {
+    const updates: Record<string, unknown> = { id: order.id };
+    if (field === "qc_internal_approved_at") {
+      updates[field] = checked ? new Date().toISOString() : null;
+    } else if (field === "customer_approved_at") {
+      updates[field] = checked ? new Date().toISOString() : null;
+    } else {
+      updates[field] = checked;
+    }
+    // Auto-unlock production when all gates pass
+    if (field === "qc_internal_approved_at" && checked && order.shop_drawing_status === "approved" && !order.pending_change_order) {
+      updates.production_locked = false;
+    }
+    updateOrderFields.mutate(updates as any);
+  };
+
+  const handleRevisionIncrement = () => {
+    updateOrderFields.mutate({
+      id: order.id,
+      customer_revision_count: order.customer_revision_count + 1,
+      shop_drawing_status: "customer_revision",
+    } as any);
+  };
+
   const hasQBId = !!order.customers?.quickbooks_id;
   const isInvoiced = order.status === "invoiced" || order.status === "paid" || order.status === "partially_paid";
   const itemsTotal = items.reduce((s, i) => s + (i.quantity * i.unit_price), 0);
+
+  const qcGates = [
+    { label: "QC Internal Approval", checked: !!order.qc_internal_approved_at, timestamp: order.qc_internal_approved_at, field: "qc_internal_approved_at" },
+    { label: "Customer Approval", checked: !!order.customer_approved_at, timestamp: order.customer_approved_at, field: "customer_approved_at" },
+    { label: "QC Evidence Uploaded", checked: order.qc_evidence_uploaded, timestamp: null, field: "qc_evidence_uploaded" },
+    { label: "QC Final Approved", checked: order.qc_final_approved, timestamp: null, field: "qc_final_approved" },
+  ];
 
   return (
     <div className="space-y-4">
@@ -95,6 +138,41 @@ export function OrderDetail({ order, onBack }: Props) {
         </Card>
       )}
 
+      {/* Production Lock & Shop Drawing Status */}
+      <Card>
+        <CardContent className="p-4 space-y-4">
+          <ProductionLockBanner
+            productionLocked={order.production_locked}
+            pendingChangeOrder={order.pending_change_order}
+            shopDrawingStatus={order.shop_drawing_status}
+            qcInternalApproved={!!order.qc_internal_approved_at}
+            revisionCount={order.customer_revision_count}
+            billableRequired={order.billable_revision_required}
+          />
+          <ShopDrawingStepper
+            status={order.shop_drawing_status}
+            onStatusChange={handleShopDrawingChange}
+          />
+          <div className="flex gap-2 pt-2 border-t border-border">
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-xs"
+              onClick={handleRevisionIncrement}
+            >
+              + Add Revision
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* QC Checklist */}
+      <Card>
+        <CardContent className="p-4">
+          <QCChecklist gates={qcGates} onToggle={handleQCToggle} />
+        </CardContent>
+      </Card>
+
       {/* Line items */}
       <Card>
         <CardHeader className="pb-2">
@@ -108,7 +186,6 @@ export function OrderDetail({ order, onBack }: Props) {
             <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin" /></div>
           ) : (
             <>
-              {/* Existing items */}
               <div className="divide-y divide-border">
                 {items.map((item) => (
                   <LineItemRow
@@ -125,7 +202,6 @@ export function OrderDetail({ order, onBack }: Props) {
                 <p className="text-sm text-muted-foreground text-center py-4">No line items yet. Add one below.</p>
               )}
 
-              {/* Add new */}
               <div className="flex gap-2 pt-2 border-t border-border">
                 <Input
                   placeholder="Description"

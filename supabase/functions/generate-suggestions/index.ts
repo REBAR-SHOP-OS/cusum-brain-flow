@@ -163,6 +163,70 @@ serve(async (req) => {
             ],
           };
           pushDual(row, `vizzy:zero_total:${order.id}`, agentMap.vizzy);
+      }
+
+      // Jobs blocked by revision / change order
+      const { data: blockedByRevision } = await supabase
+        .from("orders")
+        .select("id, order_number, company_id, customer_revision_count, pending_change_order, production_locked, shop_drawing_status")
+        .eq("production_locked", true)
+        .in("status", ["confirmed", "in_production"]);
+
+      if (blockedByRevision) {
+        for (const order of blockedByRevision) {
+          if (!order.company_id || isDuplicate("order", order.id, "blocked_production")) continue;
+          const reasons: string[] = [];
+          if (order.shop_drawing_status !== "approved") reasons.push("shop drawing not approved");
+          if (order.pending_change_order) reasons.push("pending change order");
+          const row = {
+            company_id: order.company_id,
+            agent_id: agentMap.vizzy,
+            suggestion_type: "action",
+            category: "blocked_production",
+            title: `${order.order_number} — production blocked`,
+            description: `Reasons: ${reasons.join(", ") || "safety lock active"}.`,
+            severity: "critical",
+            reason: `Order cannot enter cutting. ${order.customer_revision_count} revision(s) recorded.`,
+            impact: "Revenue delayed",
+            entity_type: "order",
+            entity_id: order.id,
+            status: "open",
+            actions: [{ label: "View Order", action: "navigate", path: "/orders" }],
+          };
+          pushDual(row, `vizzy:blocked:${order.id}`, agentMap.vizzy);
+        }
+      }
+
+      // Revenue waiting on QC/Delivery
+      const { data: revenueHeldOrders } = await supabase
+        .from("orders")
+        .select("id, order_number, company_id, total_amount")
+        .eq("qc_evidence_uploaded", false)
+        .eq("status", "in_production")
+        .gt("total_amount", 0);
+
+      if (revenueHeldOrders) {
+        const totalHeld = revenueHeldOrders.reduce((s: number, o: any) => s + (o.total_amount || 0), 0);
+        if (totalHeld > 0 && revenueHeldOrders[0]?.company_id) {
+          const firstOrder = revenueHeldOrders[0];
+          if (!isDuplicate("order", firstOrder.id, "revenue_held_qc")) {
+            const row = {
+              company_id: firstOrder.company_id,
+              agent_id: agentMap.vizzy,
+              suggestion_type: "action",
+              category: "revenue_held_qc",
+              title: `$${totalHeld.toFixed(0)} revenue held — QC evidence missing`,
+              description: `${revenueHeldOrders.length} order(s) cannot be invoiced until QC evidence is uploaded.`,
+              severity: "warning",
+              reason: "QC evidence gates delivery and invoicing.",
+              impact: `$${totalHeld.toFixed(2)} blocked`,
+              entity_type: "order",
+              entity_id: firstOrder.id,
+              status: "open",
+              actions: [{ label: "View Orders", action: "navigate", path: "/orders" }],
+            };
+            pushDual(row, `vizzy:revenue_held:batch`, agentMap.vizzy);
+          }
         }
       }
     }
@@ -241,6 +305,34 @@ serve(async (req) => {
             ],
           };
           pushDual(row, `penny:overdue_ar:${inv.id}:${tier}`, agentMap.penny);
+        }
+      }
+
+      // Paid revision opportunities
+      const { data: revisionOpps } = await supabase
+        .from("orders")
+        .select("id, order_number, company_id, customer_revision_count")
+        .eq("billable_revision_required", true)
+        .eq("pending_change_order", true);
+
+      if (revisionOpps) {
+        for (const order of revisionOpps) {
+          if (!order.company_id || isDuplicate("order", order.id, "paid_revision")) continue;
+          const row = {
+            company_id: order.company_id,
+            agent_id: agentMap.penny,
+            suggestion_type: "action",
+            category: "paid_revision",
+            title: `${order.order_number} — billable revision opportunity`,
+            description: `${order.customer_revision_count} revisions. Change Order required for billing.`,
+            severity: "warning",
+            reason: "Customer exceeded free revision allowance.",
+            entity_type: "order",
+            entity_id: order.id,
+            status: "open",
+            actions: [{ label: "View Order", action: "navigate", path: "/orders" }],
+          };
+          pushDual(row, `penny:paid_revision:${order.id}`, agentMap.penny);
         }
       }
     }

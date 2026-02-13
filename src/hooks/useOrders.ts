@@ -32,6 +32,16 @@ export interface Order {
   notes: string | null;
   created_at: string;
   updated_at: string;
+  // Shop drawing & QC fields
+  shop_drawing_status: string;
+  customer_revision_count: number;
+  billable_revision_required: boolean;
+  qc_internal_approved_at: string | null;
+  customer_approved_at: string | null;
+  production_locked: boolean;
+  pending_change_order: boolean;
+  qc_final_approved: boolean;
+  qc_evidence_uploaded: boolean;
   // joined
   customers?: { id: string; name: string; quickbooks_id: string | null; company_name: string | null } | null;
   quotes?: { id: string; quote_number: string } | null;
@@ -119,6 +129,17 @@ export function useOrders() {
     },
   });
 
+  // ─── Update order fields (QC, shop drawing, etc.) ──
+  const updateOrderFields = useMutation({
+    mutationFn: async ({ id, ...fields }: { id: string; [key: string]: unknown }) => {
+      const { error } = await supabase.from("orders").update(fields).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+    },
+  });
+
   // ─── Convert quote to order ─────────────────────────
   const convertQuote = useCallback(async (quoteId: string) => {
     const { data, error } = await supabase.functions.invoke("convert-quote-to-order", {
@@ -192,6 +213,7 @@ export function useOrders() {
     updateItem,
     deleteItem,
     updateOrderStatus,
+    updateOrderFields,
     convertQuote,
     sendToQuickBooks,
   };

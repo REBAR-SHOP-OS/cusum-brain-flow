@@ -194,10 +194,10 @@ export function CEODashboardView() {
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         <KpiCard index={0} icon={<DollarSign className="w-4 h-4 text-emerald-500" />} label="Outstanding A/R" value={formatCurrency(m.outstandingAR)} sub={`${m.unpaidInvoices} invoices • ${m.overdueInvoices} overdue`} alertActive={m.overdueInvoices > 5} onClick={() => setOpenDrawer("ar")} />
         <KpiCard index={1} icon={<Gauge className="w-4 h-4 text-primary" />} label="Capacity Util." value={`${m.totalMachines > 0 ? Math.round((m.machinesRunning / m.totalMachines) * 100) : 0}%`} sub={`${m.machinesRunning}/${m.totalMachines} machines`} onClick={() => setOpenDrawer("capacity")} />
-        <KpiCard index={2} icon={<AlertCircle className="w-4 h-4 text-destructive" />} label="Jobs at Risk" value={String(m.machineStatuses.filter((ms) => ms.status === "blocked" || ms.status === "down").length)} sub="capacity conflicts" alertActive={m.machineStatuses.filter((ms) => ms.status === "down").length >= 1} onClick={() => setOpenDrawer("risk")} />
-        <KpiCard index={3} icon={<Clock className="w-4 h-4 text-amber-500" />} label="Runtime Today" value={formatHours(m.runHoursToday)} sub={`${m.activeRuns} active runs`} />
-        <KpiCard index={4} icon={<Target className="w-4 h-4 text-blue-500" />} label="Weighted Pipeline" value={formatCurrency(m.pipelineValue)} sub={`${m.openLeads} leads`} />
-        <KpiCard index={5} icon={<UserCheck className="w-4 h-4 text-violet-500" />} label="Team On Clock" value={`${m.teamActiveToday}/${m.totalTeam}`} sub={`${m.teamOnClockPercent}% present`} />
+        <KpiCard index={2} icon={<AlertCircle className="w-4 h-4 text-destructive" />} label="Blocked Jobs" value={String(m.blockedJobs)} sub="production locked" alertActive={m.blockedJobs > 0} onClick={() => setOpenDrawer("risk")} />
+        <KpiCard index={3} icon={<Clock className="w-4 h-4 text-amber-500" />} label="QC Backlog" value={String(m.qcBacklog)} sub="awaiting approval" alertActive={m.qcBacklog > 3} />
+        <KpiCard index={4} icon={<Target className="w-4 h-4 text-blue-500" />} label="Revenue Held" value={formatCurrency(m.revenueHeld)} sub="pending QC evidence" alertActive={m.revenueHeld > 0} />
+        <KpiCard index={5} icon={<AlertTriangle className="w-4 h-4 text-destructive" />} label="SLA Breaches" value={String(m.slaBreach.total)} sub={`${m.slaBreach.leads} leads · ${m.slaBreach.orders} orders`} alertActive={m.slaBreach.total > 0} />
       </div>
 
       {/* ─── Production + Financial Row ─── */}
