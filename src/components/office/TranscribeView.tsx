@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
-import { Mic, MicOff, Upload, FileText, Copy, Download, Trash2, ChevronDown, ChevronUp, Loader2, Languages, RefreshCw, Timer, Users, Volume2, Square } from "lucide-react";
+import { Mic, MicOff, Upload, FileText, Copy, Download, Trash2, ChevronDown, ChevronUp, Loader2, Languages, RefreshCw, Timer, Users, Volume2, Square, Save, Watch } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
@@ -11,6 +11,11 @@ import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/component
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { useRealtimeTranscribe } from "@/hooks/useRealtimeTranscribe";
+import { LiveTranscript } from "@/components/transcribe/LiveTranscript";
+import { PostProcessToolbar } from "@/components/transcribe/PostProcessToolbar";
+import { AudioWaveform } from "@/components/transcribe/AudioWaveform";
+import { useNavigate } from "react-router-dom";
 
 const LANGUAGES = [
   { value: "auto", label: "Auto-detect" },
@@ -46,46 +51,6 @@ const LANGUAGES = [
   { value: "el", label: "Greek" },
   { value: "cs", label: "Czech" },
 ];
-
-const TARGET_LANGUAGES = [
-  { value: "English", label: "English" },
-  { value: "Spanish", label: "Spanish" },
-  { value: "French", label: "French" },
-  { value: "German", label: "German" },
-  { value: "Portuguese", label: "Portuguese" },
-  { value: "Italian", label: "Italian" },
-  { value: "Dutch", label: "Dutch" },
-  { value: "Russian", label: "Russian" },
-  { value: "Chinese", label: "Chinese" },
-  { value: "Japanese", label: "Japanese" },
-  { value: "Korean", label: "Korean" },
-  { value: "Arabic", label: "Arabic" },
-  { value: "Hindi", label: "Hindi" },
-  { value: "Farsi", label: "Farsi" },
-  { value: "Turkish", label: "Turkish" },
-  { value: "Polish", label: "Polish" },
-  { value: "Vietnamese", label: "Vietnamese" },
-  { value: "Thai", label: "Thai" },
-  { value: "Indonesian", label: "Indonesian" },
-  { value: "Malay", label: "Malay" },
-  { value: "Bengali", label: "Bengali" },
-  { value: "Urdu", label: "Urdu" },
-  { value: "Swahili", label: "Swahili" },
-  { value: "Hebrew", label: "Hebrew" },
-  { value: "Greek", label: "Greek" },
-  { value: "Czech", label: "Czech" },
-];
-
-interface HistoryEntry {
-  id: string;
-  original: string;
-  english: string;
-  detectedLang: string;
-  mode: string;
-  timestamp: Date;
-  confidence?: number;
-  speakers?: string[];
-}
 
 const SPEAKER_COLORS = [
   "text-blue-700 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/40 border-blue-300 dark:border-blue-700",
@@ -167,8 +132,8 @@ function formatTime(seconds: number) {
 }
 
 export function TranscribeView() {
+  const navigate = useNavigate();
   const [sourceLang, setSourceLang] = useState("auto");
-  const targetLang = "English";
   const [formality, setFormality] = useState("neutral");
   const [contextHint, setContextHint] = useState("");
   const [outputFormat, setOutputFormat] = useState("plain");
@@ -183,48 +148,42 @@ export function TranscribeView() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
 
-  // Mic - MediaRecorder-based
-  const [isListening, setIsListening] = useState(false);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-  const mediaStreamRef = useRef<MediaStream | null>(null);
-  const [recordingTime, setRecordingTime] = useState(0);
-  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const stopDisabledRef = useRef(false);
+  // Post-process result
+  const [processedOutput, setProcessedOutput] = useState("");
+  const [processedType, setProcessedType] = useState("");
 
   // Text paste
   const [pasteText, setPasteText] = useState("");
 
-  // History
-  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  // Realtime transcription
+  const realtime = useRealtimeTranscribe();
 
-  // Recording timer
+  // Recording timer for realtime
+  const [realtimeTime, setRealtimeTime] = useState(0);
+  const realtimeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   useEffect(() => {
-    if (isListening) {
-      setRecordingTime(0);
-      stopDisabledRef.current = true;
-      setTimeout(() => { stopDisabledRef.current = false; }, 1000);
-      recordingTimerRef.current = setInterval(() => {
-        setRecordingTime(prev => prev + 1);
-      }, 1000);
+    if (realtime.isConnected) {
+      setRealtimeTime(0);
+      realtimeTimerRef.current = setInterval(() => setRealtimeTime(prev => prev + 1), 1000);
     } else {
-      if (recordingTimerRef.current) {
-        clearInterval(recordingTimerRef.current);
-        recordingTimerRef.current = null;
+      if (realtimeTimerRef.current) {
+        clearInterval(realtimeTimerRef.current);
+        realtimeTimerRef.current = null;
       }
     }
-    return () => {
-      if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
-    };
-  }, [isListening]);
+    return () => { if (realtimeTimerRef.current) clearInterval(realtimeTimerRef.current); };
+  }, [realtime.isConnected]);
 
-  const addToHistory = useCallback((entry: Omit<HistoryEntry, "id" | "timestamp">) => {
-    setHistory(prev => [{
-      ...entry,
-      id: crypto.randomUUID(),
-      timestamp: new Date(),
-    }, ...prev].slice(0, 10));
-  }, []);
+  // When realtime disconnects with content, populate originalText
+  useEffect(() => {
+    if (!realtime.isConnected && realtime.committedTranscripts.length > 0) {
+      const fullText = realtime.getFullTranscript();
+      if (fullText.trim()) {
+        setOriginalText(fullText);
+      }
+    }
+  }, [realtime.isConnected, realtime.committedTranscripts.length]);
 
   const callTranslateAPI = async (body: any, isFormData = false) => {
     setIsProcessing(true);
@@ -255,126 +214,10 @@ export function TranscribeView() {
     }
   };
 
-  // --- Mic Tab ---
-  const startListening = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaStreamRef.current = stream;
-      audioChunksRef.current = [];
-
-      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-        ? "audio/webm;codecs=opus"
-        : "audio/webm";
-      const recorder = new MediaRecorder(stream, { mimeType });
-
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) audioChunksRef.current.push(e.data);
-      };
-
-      recorder.start(1000); // collect chunks every second
-      mediaRecorderRef.current = recorder;
-      setIsListening(true);
-      setOriginalText("");
-      setEnglishText("");
-      setDetectedLang("");
-      setConfidence(null);
-      setSpeakers([]);
-    } catch (err: any) {
-      if (err.name === "NotAllowedError") {
-        toast.error("Microphone access denied. Please allow microphone permissions.");
-      } else {
-        toast.error(`Microphone error: ${err.message}`);
-      }
-    }
-  };
-
-  const stopListening = async () => {
-    if (stopDisabledRef.current) return;
-
-    const recorder = mediaRecorderRef.current;
-    if (!recorder || recorder.state === "inactive") {
-      setIsListening(false);
-      return;
-    }
-
-    // Wait for recorder to finish
-    const audioBlob = await new Promise<Blob>((resolve) => {
-      recorder.onstop = () => {
-        const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType });
-        resolve(blob);
-      };
-      recorder.stop();
-    });
-
-    // Stop mic stream
-    mediaStreamRef.current?.getTracks().forEach(t => t.stop());
-    mediaStreamRef.current = null;
-    mediaRecorderRef.current = null;
-    setIsListening(false);
-
-    if (audioBlob.size < 1000) {
-      toast.info("No speech captured — recording too short");
-      return;
-    }
-
-    toast.info("Processing recording…");
-
-    const formData = new FormData();
-    formData.append("audio", audioBlob, "recording.webm");
-    formData.append("sourceLang", sourceLang);
-    formData.append("targetLang", targetLang);
-    formData.append("formality", formality);
-    formData.append("context", contextHint);
-    formData.append("outputFormat", outputFormat);
-
-    try {
-      const result = await callTranslateAPI(formData, true);
-      setOriginalText(result.transcript || result.original || "");
-      setEnglishText(result.english || "");
-      setDetectedLang(result.detectedLang || "");
-      setConfidence(typeof result.confidence === "number" ? result.confidence : null);
-      setSpeakers(Array.isArray(result.speakers) ? result.speakers : []);
-      addToHistory({
-        original: result.transcript || result.original || "",
-        english: result.english || "",
-        detectedLang: result.detectedLang || "",
-        mode: "mic",
-        confidence: result.confidence,
-        speakers: result.speakers,
-      });
-      toast.success("Transcription & translation complete");
-    } catch (err: any) {
-      toast.error(err.message);
-    }
-  };
-
-  // Re-translate button
-  const handleRetranslate = async () => {
-    const textToRetranslate = originalText.trim();
-    if (!textToRetranslate) return;
-    try {
-      const result = await callTranslateAPI({
-        mode: "text",
-        text: textToRetranslate,
-        sourceLang,
-        targetLang,
-        formality,
-        context: contextHint,
-        outputFormat,
-      });
-      setEnglishText(result.english || "");
-      setDetectedLang(result.detectedLang || "");
-      setConfidence(typeof result.confidence === "number" ? result.confidence : null);
-      setSpeakers(Array.isArray(result.speakers) ? result.speakers : []);
-      toast.success("Re-translation complete");
-    } catch (err: any) {
-      toast.error(err.message);
-    }
-  };
-
   // --- Upload Tab ---
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [uploadProcessing, setUploadProcessing] = useState(false);
 
   const handleAudioFile = async (file: File) => {
     if (!file.type.startsWith("audio/")) {
@@ -385,32 +228,40 @@ export function TranscribeView() {
       toast.error("File too large (max 25MB)");
       return;
     }
-    const formData = new FormData();
-    formData.append("audio", file);
-    formData.append("sourceLang", sourceLang);
-    formData.append("targetLang", targetLang);
-    formData.append("formality", formality);
-    formData.append("context", contextHint);
-    formData.append("outputFormat", outputFormat);
 
+    setUploadProcessing(true);
     try {
-      const result = await callTranslateAPI(formData, true);
-      setOriginalText(result.transcript || result.original || "");
-      setEnglishText(result.english || "");
-      setDetectedLang(result.detectedLang || "");
-      setConfidence(typeof result.confidence === "number" ? result.confidence : null);
-      setSpeakers(Array.isArray(result.speakers) ? result.speakers : []);
-      addToHistory({
-        original: result.transcript || result.original || "",
-        english: result.english || "",
-        detectedLang: result.detectedLang || "",
-        mode: "upload",
-        confidence: result.confidence,
-        speakers: result.speakers,
+      // Use ElevenLabs batch transcription
+      const formData = new FormData();
+      formData.append("audio", file);
+      if (sourceLang !== "auto") {
+        formData.append("language_code", sourceLang);
+      }
+
+      const { data, error } = await supabase.functions.invoke("elevenlabs-transcribe", {
+        body: formData,
       });
-      toast.success("Transcription complete");
+
+      if (error) throw new Error(error.message);
+
+      const transcript = data?.text || "";
+      const wordSpeakers = new Set<string>();
+      if (data?.words) {
+        data.words.forEach((w: any) => {
+          if (w.speaker) wordSpeakers.add(w.speaker);
+        });
+      }
+
+      setOriginalText(transcript);
+      setDetectedLang(data?.language_code || "auto");
+      setSpeakers(Array.from(wordSpeakers));
+      setEnglishText("");
+      setConfidence(null);
+      toast.success("Transcription complete via ElevenLabs Scribe");
     } catch (err: any) {
-      toast.error(err.message);
+      toast.error(err.message || "Transcription failed");
+    } finally {
+      setUploadProcessing(false);
     }
   };
 
@@ -422,7 +273,7 @@ export function TranscribeView() {
         mode: "text",
         text: pasteText,
         sourceLang,
-        targetLang,
+        targetLang: "English",
         formality,
         context: contextHint,
         outputFormat,
@@ -432,18 +283,16 @@ export function TranscribeView() {
       setDetectedLang(result.detectedLang || "");
       setConfidence(typeof result.confidence === "number" ? result.confidence : null);
       setSpeakers(Array.isArray(result.speakers) ? result.speakers : []);
-      addToHistory({
-        original: result.original || pasteText,
-        english: result.english || "",
-        detectedLang: result.detectedLang || "",
-        mode: "text",
-        confidence: result.confidence,
-        speakers: result.speakers,
-      });
       toast.success("Translation complete");
     } catch (err: any) {
       toast.error(err.message);
     }
+  };
+
+  // Post-process handler
+  const handlePostProcessResult = (result: string, type: string) => {
+    setProcessedOutput(result);
+    setProcessedType(type);
   };
 
   // --- Actions ---
@@ -453,12 +302,42 @@ export function TranscribeView() {
   };
 
   const downloadTxt = () => {
-    const content = `Original (${detectedLang}):\n${originalText}\n\nTranslation:\n${englishText}${confidence !== null ? `\n\nConfidence: ${confidence}%` : ""}`;
+    const parts = [];
+    if (originalText) parts.push(`Original (${detectedLang}):\n${originalText}`);
+    if (englishText) parts.push(`Translation:\n${englishText}`);
+    if (processedOutput) parts.push(`${processedType}:\n${processedOutput}`);
+    if (confidence !== null) parts.push(`Confidence: ${confidence}%`);
+    const content = parts.join("\n\n");
     const blob = new Blob([content], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     a.download = `transcription-${Date.now()}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadSRT = () => {
+    if (!realtime.committedTranscripts.length && !originalText) return;
+    const entries = realtime.committedTranscripts.length > 0
+      ? realtime.committedTranscripts.map((t, i) => {
+          const startSec = t.timestamp;
+          const endSec = startSec + Math.max(3, Math.ceil(t.text.length / 15));
+          const fmtTime = (s: number) => {
+            const h = Math.floor(s / 3600);
+            const m = Math.floor((s % 3600) / 60);
+            const sec = s % 60;
+            return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")},000`;
+          };
+          return `${i + 1}\n${fmtTime(startSec)} --> ${fmtTime(endSec)}\n${t.text}\n`;
+        })
+      : originalText.split(". ").map((s, i) => `${i + 1}\n00:00:${String(i * 3).padStart(2, "0")},000 --> 00:00:${String((i + 1) * 3).padStart(2, "0")},000\n${s.trim()}\n`);
+
+    const blob = new Blob([entries.join("\n")], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `transcription-${Date.now()}.srt`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -472,7 +351,7 @@ export function TranscribeView() {
 
   const playVoice = (text: string) => {
     if (!("speechSynthesis" in window)) {
-      toast.error("Voice playback not supported in this browser");
+      toast.error("Voice playback not supported");
       return;
     }
     if (isSpeaking) {
@@ -480,14 +359,47 @@ export function TranscribeView() {
       setIsSpeaking(false);
       return;
     }
-    // Strip speaker labels for cleaner playback
     const cleanText = text.replace(/^.+?:\s/gm, "");
     const utterance = new SpeechSynthesisUtterance(cleanText);
-    utterance.lang = LANG_TO_BCP47[targetLang] || "en-US";
+    utterance.lang = "en-US";
     utterance.onend = () => setIsSpeaking(false);
     utterance.onerror = () => setIsSpeaking(false);
     setIsSpeaking(true);
     window.speechSynthesis.speak(utterance);
+  };
+
+  // Save session
+  const [saving, setSaving] = useState(false);
+  const saveSession = async () => {
+    const text = originalText || realtime.getFullTranscript();
+    if (!text.trim()) { toast.error("Nothing to save"); return; }
+    setSaving(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+      const { data: profile } = await (supabase as any)
+        .from("profiles")
+        .select("id, company_id")
+        .eq("user_id", user.id)
+        .single();
+      if (!profile) throw new Error("No profile");
+
+      await (supabase as any).from("transcription_sessions").insert({
+        profile_id: profile.id,
+        company_id: profile.company_id,
+        title: `Session ${new Date().toLocaleString()}`,
+        raw_transcript: text,
+        processed_output: processedOutput || englishText || null,
+        process_type: processedType || "transcribe",
+        source_language: detectedLang || null,
+        speaker_count: speakers.length || 1,
+      });
+      toast.success("Session saved!");
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const clearResults = () => {
@@ -499,66 +411,85 @@ export function TranscribeView() {
     setConfidence(null);
     setSpeakers([]);
     setPasteText("");
-    // Stop any active recording
-    if (mediaRecorderRef.current?.state !== "inactive") {
-      mediaRecorderRef.current?.stop();
-    }
-    mediaStreamRef.current?.getTracks().forEach(t => t.stop());
-    mediaRecorderRef.current = null;
-    mediaStreamRef.current = null;
-    setIsListening(false);
+    setProcessedOutput("");
+    setProcessedType("");
+    realtime.clearTranscripts();
   };
+
+  const hasContent = originalText || englishText || processedOutput || realtime.committedTranscripts.length > 0;
 
   return (
     <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-3">
-        <div className="p-2 rounded-lg bg-primary/10">
-          <Languages className="w-5 h-5 text-primary" />
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-primary/10">
+            <Languages className="w-5 h-5 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-foreground">AI Transcribe & Translate</h1>
+            <p className="text-xs text-muted-foreground">ElevenLabs Scribe + Gemini AI — realtime streaming & post-processing</p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-xl font-bold text-foreground">AI Transcribe & Translate</h1>
-          <p className="text-xs text-muted-foreground">World-class two-pass AI translation with confidence scoring</p>
-        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-1.5 text-xs"
+          onClick={() => navigate("/transcribe/watch")}
+        >
+          <Watch className="w-3.5 h-3.5" /> Watch Mode
+        </Button>
       </div>
 
-      {/* Tabs */}
-      <Tabs defaultValue="mic" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="mic" className="gap-1.5 text-xs">
-            <Mic className="w-3.5 h-3.5" /> Microphone
+      {/* Input Tabs */}
+      <Tabs defaultValue="realtime" className="w-full">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="realtime" className="gap-1.5 text-xs">
+            <Mic className="w-3.5 h-3.5" /> Realtime
           </TabsTrigger>
           <TabsTrigger value="upload" className="gap-1.5 text-xs">
-            <Upload className="w-3.5 h-3.5" /> Upload File
+            <Upload className="w-3.5 h-3.5" /> Upload
           </TabsTrigger>
           <TabsTrigger value="text" className="gap-1.5 text-xs">
-            <FileText className="w-3.5 h-3.5" /> Paste Text
+            <FileText className="w-3.5 h-3.5" /> Text
+          </TabsTrigger>
+          <TabsTrigger value="translate" className="gap-1.5 text-xs">
+            <Languages className="w-3.5 h-3.5" /> Translate
           </TabsTrigger>
         </TabsList>
 
-        {/* Mic Tab */}
-        <TabsContent value="mic" className="space-y-4">
+        {/* Realtime Tab */}
+        <TabsContent value="realtime" className="space-y-4">
           <Card>
             <CardContent className="p-4 flex flex-col items-center gap-4">
               <Button
                 size="lg"
-                variant={isListening ? "destructive" : "default"}
+                variant={realtime.isConnected ? "destructive" : "default"}
                 className="rounded-full h-16 w-16"
-                onClick={isListening ? stopListening : startListening}
-                disabled={isProcessing}
+                onClick={realtime.isConnected ? realtime.disconnect : realtime.connect}
+                disabled={realtime.isConnecting}
               >
-                {isProcessing ? <Loader2 className="w-6 h-6 animate-spin" /> : isListening ? <Square className="w-5 h-5" /> : <Mic className="w-6 h-6" />}
+                {realtime.isConnecting ? (
+                  <Loader2 className="w-6 h-6 animate-spin" />
+                ) : realtime.isConnected ? (
+                  <Square className="w-5 h-5" />
+                ) : (
+                  <Mic className="w-6 h-6" />
+                )}
               </Button>
               <p className="text-sm text-muted-foreground">
-                {isProcessing ? "Processing recording…" : isListening ? "Recording… speak in any language" : "Click to start recording"}
+                {realtime.isConnecting
+                  ? "Connecting to ElevenLabs Scribe…"
+                  : realtime.isConnected
+                  ? "Transcribing live — speak now"
+                  : "Click to start live transcription"}
               </p>
 
-              {/* Recording stats */}
-              {isListening && (
+              {realtime.isConnected && (
                 <div className="flex items-center gap-4 text-xs text-muted-foreground">
                   <span className="flex items-center gap-1">
                     <Timer className="w-3 h-3" />
-                    {formatTime(recordingTime)}
+                    {formatTime(realtimeTime)}
                   </span>
                   <span className="relative flex h-2 w-2">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive/75"></span>
@@ -566,8 +497,18 @@ export function TranscribeView() {
                   </span>
                 </div>
               )}
+
+              {/* Waveform */}
+              <AudioWaveform isActive={realtime.isConnected} />
             </CardContent>
           </Card>
+
+          {/* Live transcript */}
+          <LiveTranscript
+            committed={realtime.committedTranscripts}
+            partial={realtime.partialText}
+            isActive={realtime.isConnected}
+          />
         </TabsContent>
 
         {/* Upload Tab */}
@@ -588,11 +529,17 @@ export function TranscribeView() {
                 }}
                 onClick={() => fileInputRef.current?.click()}
               >
-                <Upload className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
+                {uploadProcessing ? (
+                  <Loader2 className="w-8 h-8 mx-auto text-primary animate-spin mb-2" />
+                ) : (
+                  <Upload className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
+                )}
                 <p className="text-sm text-muted-foreground">
-                  Drop audio file here or <span className="text-primary underline">browse</span>
+                  {uploadProcessing ? "Transcribing with ElevenLabs Scribe…" : (
+                    <>Drop audio file here or <span className="text-primary underline">browse</span></>
+                  )}
                 </p>
-                <p className="text-[10px] text-muted-foreground/60 mt-1">MP3, WAV, M4A — max 25MB</p>
+                <p className="text-[10px] text-muted-foreground/60 mt-1">MP3, WAV, M4A — max 25MB • Speaker diarization enabled</p>
               </div>
               <input
                 ref={fileInputRef}
@@ -626,6 +573,25 @@ export function TranscribeView() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* Translate Tab (for translating existing transcript) */}
+        <TabsContent value="translate" className="space-y-4">
+          <Card>
+            <CardContent className="p-4 space-y-3">
+              <p className="text-sm text-muted-foreground">
+                {originalText
+                  ? "Use the AI toolbar below to translate, summarize, extract action items, or process your transcript."
+                  : "Record or upload audio first, then use this tab to apply AI processing."}
+              </p>
+              {originalText && (
+                <div className="bg-muted/50 rounded-md p-3 max-h-40 overflow-y-auto">
+                  <p className="text-xs text-muted-foreground mb-1">Current transcript:</p>
+                  <p className="text-sm">{originalText.slice(0, 500)}{originalText.length > 500 ? "…" : ""}</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
 
       {/* Advanced Options */}
@@ -649,10 +615,6 @@ export function TranscribeView() {
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Output Language</label>
-                <div className="h-8 flex items-center text-xs text-muted-foreground px-2 border border-border rounded-md bg-muted/30">English (fixed)</div>
               </div>
               <div className="space-y-1">
                 <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Formality</label>
@@ -690,20 +652,33 @@ export function TranscribeView() {
         </CollapsibleContent>
       </Collapsible>
 
+      {/* AI Post-Processing Toolbar */}
+      {originalText && (
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-3">AI Processing</p>
+            <PostProcessToolbar
+              transcript={originalText}
+              onResult={handlePostProcessResult}
+            />
+          </CardContent>
+        </Card>
+      )}
+
       {/* Results */}
-      {(originalText || englishText || isProcessing) && (
+      {(hasContent || isProcessing) && (
         <Card>
           <CardContent className="p-4 space-y-4">
             {isProcessing && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="w-4 h-4 animate-spin" /> Processing with two-pass AI verification…
+                <Loader2 className="w-4 h-4 animate-spin" /> Processing…
               </div>
             )}
 
             {originalText && (
               <div className="space-y-1">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Original</span>
+                  <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Transcript</span>
                   {detectedLang && <Badge variant="secondary" className="text-[10px]">{detectedLang}</Badge>}
                   <SpeakersBadge speakers={speakers} />
                 </div>
@@ -716,9 +691,7 @@ export function TranscribeView() {
             {englishText && (
               <div className="space-y-1">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-                    English Translation
-                  </span>
+                  <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Translation</span>
                   {confidence !== null && <ConfidenceBadge confidence={confidence} />}
                 </div>
                 <div className="bg-primary/5 border border-primary/10 rounded-md p-3">
@@ -727,25 +700,40 @@ export function TranscribeView() {
               </div>
             )}
 
+            {processedOutput && (
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                    {processedType.replace("-", " ")}
+                  </span>
+                  <Badge variant="outline" className="text-[9px]">AI</Badge>
+                </div>
+                <div className="bg-accent/30 border border-accent/20 rounded-md p-3">
+                  <div className="text-sm whitespace-pre-wrap">{processedOutput}</div>
+                </div>
+              </div>
+            )}
+
             <div className="flex gap-2 flex-wrap">
-              {englishText && (
+              {(englishText || originalText) && (
                 <>
-                  <Button size="sm" variant="outline" className={`text-xs gap-1.5 ${isSpeaking ? "border-primary text-primary" : ""}`} onClick={() => playVoice(englishText)}>
+                  <Button size="sm" variant="outline" className={`text-xs gap-1.5 ${isSpeaking ? "border-primary text-primary" : ""}`} onClick={() => playVoice(englishText || originalText)}>
                     {isSpeaking ? <Square className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}
                     {isSpeaking ? "Stop" : "Play"}
                   </Button>
-                  <Button size="sm" variant="outline" className="text-xs gap-1.5" onClick={() => copyToClipboard(englishText)}>
+                  <Button size="sm" variant="outline" className="text-xs gap-1.5" onClick={() => copyToClipboard(processedOutput || englishText || originalText)}>
                     <Copy className="w-3 h-3" /> Copy
                   </Button>
                   <Button size="sm" variant="outline" className="text-xs gap-1.5" onClick={downloadTxt}>
-                    <Download className="w-3 h-3" /> Download
+                    <Download className="w-3 h-3" /> TXT
+                  </Button>
+                  <Button size="sm" variant="outline" className="text-xs gap-1.5" onClick={downloadSRT}>
+                    <Download className="w-3 h-3" /> SRT
+                  </Button>
+                  <Button size="sm" variant="outline" className="text-xs gap-1.5" onClick={saveSession} disabled={saving}>
+                    {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />} Save
                   </Button>
                 </>
-              )}
-              {confidence !== null && confidence < 70 && (
-                <Button size="sm" variant="outline" className="text-xs gap-1.5 border-accent/30 text-accent-foreground" onClick={handleRetranslate} disabled={isProcessing}>
-                  <RefreshCw className="w-3 h-3" /> Re-translate
-                </Button>
               )}
               <Button size="sm" variant="ghost" className="text-xs gap-1.5 text-destructive" onClick={clearResults}>
                 <Trash2 className="w-3 h-3" /> Clear
@@ -753,43 +741,6 @@ export function TranscribeView() {
             </div>
           </CardContent>
         </Card>
-      )}
-
-      {/* Session History */}
-      {history.length > 0 && (
-        <div className="space-y-2">
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Recent History</h3>
-          <ScrollArea className="max-h-60">
-            <div className="space-y-2">
-              {history.map(entry => (
-                <Card key={entry.id} className="cursor-pointer hover:bg-muted/30 transition-colors" onClick={() => {
-                  setOriginalText(entry.original);
-                  setEnglishText(entry.english);
-                  setDetectedLang(entry.detectedLang);
-                  setConfidence(entry.confidence ?? null);
-                  setSpeakers(entry.speakers ?? []);
-                }}>
-                  <CardContent className="p-3">
-                    <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <Badge variant="outline" className="text-[9px]">{entry.mode}</Badge>
-                      <Badge variant="secondary" className="text-[9px]">{entry.detectedLang}</Badge>
-                      {entry.confidence !== undefined && <ConfidenceBadge confidence={entry.confidence} />}
-                      {entry.speakers && entry.speakers.length > 1 && (
-                        <Badge variant="outline" className="text-[9px] gap-0.5">
-                          <Users className="w-2.5 h-2.5" /> {entry.speakers.length}
-                        </Badge>
-                      )}
-                      <span className="text-[9px] text-muted-foreground ml-auto">
-                        {entry.timestamp.toLocaleTimeString()}
-                      </span>
-                    </div>
-                    <p className="text-xs text-muted-foreground truncate">{entry.english}</p>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </ScrollArea>
-        </div>
       )}
     </div>
   );

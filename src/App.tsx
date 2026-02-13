@@ -54,6 +54,7 @@ import AccountingWorkspace from "./pages/AccountingWorkspace";
 import CustomerPortal from "./pages/CustomerPortal";
 import CEOPortal from "./pages/CEOPortal";
 import Transcribe from "./pages/Transcribe";
+import TranscribeWatch from "./pages/TranscribeWatch";
 import VizzyPage from "./pages/VizzyPage";
 const queryClient = new QueryClient();
 
@@ -121,6 +122,7 @@ const App = () => (
                     <Route path="/deliveries" element={<P><Deliveries /></P>} />
                     <Route path="/timeclock" element={<P><TimeClock /></P>} />
                     <Route path="/transcribe" element={<P><Transcribe /></P>} />
+                    <Route path="/transcribe/watch" element={<ProtectedRoute><TranscribeWatch /></ProtectedRoute>} />
                     <Route path="/team-hub" element={<P><TeamHub /></P>} />
 
                     {/* Office Portal - standalone layout but wrapped in workspace */}
