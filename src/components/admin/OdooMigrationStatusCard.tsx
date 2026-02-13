@@ -5,10 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Settings, CheckCircle, Clock, AlertTriangle, ChevronDown, Play } from "lucide-react";
+import { Settings, CheckCircle, Clock, AlertTriangle, ChevronDown, Play, HardDriveUpload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
+import { OdooDumpImportDialog } from "./OdooDumpImportDialog";
 
 interface MigrationLog {
   id: string;
@@ -25,6 +26,7 @@ export function OdooMigrationStatusCard() {
   const history = useRef<number[]>([]);
   const [errorsOpen, setErrorsOpen] = useState(false);
   const [isKicking, setIsKicking] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
   const handleKickMigration = async () => {
     setIsKicking(true);
@@ -136,6 +138,18 @@ export function OdooMigrationStatusCard() {
               )}
             </span>
           )}
+          {/* Import from dump button */}
+          {!done && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 ml-1"
+              onClick={() => setImportOpen(true)}
+              title="Import from Odoo dump"
+            >
+              <HardDriveUpload className="h-3.5 w-3.5 text-primary" />
+            </Button>
+          )}
           {/* Play button when stale */}
           {!done && !isAlive && (
             <Button
@@ -220,6 +234,7 @@ export function OdooMigrationStatusCard() {
           </div>
         )}
       </CardContent>
+      <OdooDumpImportDialog open={importOpen} onOpenChange={setImportOpen} />
     </Card>
   );
 }
