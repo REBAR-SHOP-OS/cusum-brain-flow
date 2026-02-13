@@ -3695,29 +3695,30 @@ Respond with ONLY valid JSON (no markdown):
             const post = JSON.parse(rawJson);
             let imageUrl = "";
 
-            // Generate image with DALL-E
-            if (GPT_API_KEY) {
-              const imgResp = await fetch("https://api.openai.com/v1/images/generations", {
+            // Generate image with Lovable AI Gateway (Gemini)
+            try {
+              const imgPrompt = post.image_prompt || `Professional product photo of ${productName}`;
+              const imgResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
                 method: "POST",
                 headers: {
-                  "Authorization": `Bearer ${GPT_API_KEY}`,
+                  "Authorization": `Bearer ${LOVABLE_API_KEY}`,
                   "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                  model: "gpt-image-1",
-                  prompt: post.image_prompt,
-                  size: "1536x1024",
-                  quality: "high",
-                  output_format: "png",
-                  n: 1,
+                  model: "google/gemini-2.5-flash-image",
+                  messages: [
+                    { role: "user", content: imgPrompt }
+                  ],
+                  modalities: ["image", "text"],
                 }),
               });
 
               if (imgResp.ok) {
                 const imgData = await imgResp.json();
-                const rawB64 = imgData.data?.[0]?.b64_json || "";
-                if (rawB64) {
-                  const bytes = Uint8Array.from(atob(rawB64), c => c.charCodeAt(0));
+                const b64DataUri = imgData.choices?.[0]?.message?.images?.[0]?.image_url?.url || "";
+                if (b64DataUri) {
+                  const b64Only = b64DataUri.replace(/^data:image\/[^;]+;base64,/, "");
+                  const bytes = Uint8Array.from(atob(b64Only), c => c.charCodeAt(0));
                   const dateStr = new Date().toISOString().split("T")[0];
                   const filePath = `pixel/${dateStr}/regen-${crypto.randomUUID().slice(0,6)}.png`;
                   const storageClient = createClient(
@@ -3730,9 +3731,15 @@ Respond with ONLY valid JSON (no markdown):
                   if (!upErr) {
                     const { data: pubData } = storageClient.storage.from("social-images").getPublicUrl(filePath);
                     imageUrl = pubData.publicUrl;
+                  } else {
+                    console.error("Regen storage upload error:", upErr);
                   }
                 }
+              } else {
+                console.error("Regen image generation failed:", imgResp.status, await imgResp.text());
               }
+            } catch (imgErr) {
+              console.error("Regen image error:", imgErr);
             }
 
             let reply = `## 🔄 Regenerated Post — ${productName}\n\n`;
