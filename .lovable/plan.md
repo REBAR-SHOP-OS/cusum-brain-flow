@@ -1,22 +1,24 @@
 
-# حذف متن "Send 1" و غیرفعال کردن عملکرد شورتکات "1" در Pixel
+# تنظیم عنوان سشن Pixel بر اساس تاریخ انتخابی
 
-## تغییرات
+## تغییر
+در فایل `src/pages/AgentWorkspace.tsx` (خطوط 137-139)، منطق تعیین عنوان سشن را تغییر می‌دهیم تا برای ایجنت `social` (Pixel) به جای متن پیام، تاریخ انتخاب‌شده (`selectedDate`) استفاده شود.
 
-### 1. فایل `src/pages/AgentWorkspace.tsx` (خط 413)
-- حذف خط `<p className="text-xs ...">Send <strong>1</strong> to generate content for this date</p>`
-
-### 2. فایل `supabase/functions/ai-agent/index.ts` (خطوط 3630-3634)
-- حذف بلوک شرطی که عدد "1" یا "۱" را به تاریخ امروز تبدیل می‌کند:
-
+### قبل:
 ```typescript
-// این بلوک حذف می‌شود:
-if (trimmedMsg === "1" || trimmedMsg === "۱") {
-  const todayStr = new Date().toISOString().split("T")[0];
-  message = todayStr;
-}
+const sessionTitle = agentId === "eisenhower"
+  ? format(new Date(), "yyyy-MM-dd (EEE, MMM d)")
+  : content;
+```
+
+### بعد:
+```typescript
+const sessionTitle = agentId === "eisenhower"
+  ? format(new Date(), "yyyy-MM-dd (EEE, MMM d)")
+  : agentId === "social"
+    ? format(selectedDate, "yyyy-MM-dd")
+    : content;
 ```
 
 ## نتیجه
-- متن راهنما از صفحه اصلی چت Pixel حذف می‌شود
-- ارسال عدد "1" دیگر به‌صورت خودکار به تاریخ تبدیل نمی‌شود و مانند یک پیام عادی رفتار خواهد کرد
+وقتی کاربر در Pixel تاریخی را انتخاب کند و پیامی بفرستد، عنوان سشن در بخش Recents به صورت تاریخ انتخابی (مثلا `2026-02-13`) نمایش داده می‌شود.
