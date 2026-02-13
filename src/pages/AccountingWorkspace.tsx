@@ -23,7 +23,7 @@ import { AccountingAgent } from "@/components/accounting/AccountingAgent";
 import { PayrollAuditView } from "@/components/office/PayrollAuditView";
 import { AccountingOrders } from "@/components/accounting/AccountingOrders";
 import { AccountingActionQueue } from "@/components/accounting/AccountingActionQueue";
-import { AgentSuggestionsPanel } from "@/components/agent/AgentSuggestionsPanel";
+
 import { usePennyQueue } from "@/hooks/usePennyQueue";
 import { useIntegrations } from "@/hooks/useIntegrations";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -190,7 +190,7 @@ export default function AccountingWorkspace() {
       <div className="flex-1 flex overflow-hidden">
         {!(showAgent && agentMode === "fullscreen") && (
           <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-            <AgentSuggestionsPanel agentCode="penny" agentName="Penny" />
+            
             {activeTab === "dashboard" && <AccountingDashboard data={qb} onNavigate={setActiveTab} />}
             {activeTab === "invoices" && <AccountingInvoices data={qb} />}
             {activeTab === "bills" && <AccountingBills data={qb} />}
