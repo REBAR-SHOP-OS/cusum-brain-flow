@@ -1,3 +1,4 @@
+// forwardRef cache bust
 import React, { useState, useRef, useEffect } from "react";
 import { X, Send, Loader2, Wrench, Trash2, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
