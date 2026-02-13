@@ -176,7 +176,9 @@ serve(async (req) => {
         }
 
         const result = await fetchOdooFile(odoo, odooId);
-        const storagePath = `odoo-archive/${file.lead_id}/${file.odoo_id}-${result.fileName}`;
+        // Sanitize filename: remove chars invalid for Supabase storage keys
+        const safeName = result.fileName.replace(/[~#%&{}\\<>*?/$!'":@+`|=]/g, "_");
+        const storagePath = `odoo-archive/${file.lead_id}/${file.odoo_id}-${safeName}`;
 
         const { error: uploadErr } = await supabaseAdmin.storage
           .from(BUCKET)
