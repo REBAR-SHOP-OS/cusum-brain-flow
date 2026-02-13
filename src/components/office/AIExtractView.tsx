@@ -1222,7 +1222,7 @@ export function AIExtractView() {
                   </div>
                 </div>
               )}
-              <ScrollArea className="h-[55vh]">
+              <div className="h-[55vh] overflow-auto">
                 <div className="min-w-[1400px]">
                   <Table>
                     <TableHeader>
@@ -1311,8 +1311,7 @@ export function AIExtractView() {
                     </TableBody>
                   </Table>
                 </div>
-                <ScrollBar orientation="horizontal" />
-              </ScrollArea>
+              </div>
             </CardContent>
           </Card>
         )}

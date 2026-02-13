@@ -145,7 +145,7 @@ export function AppSidebar() {
           return (
             <div key={group.label} className="mb-3">
               <div className="px-2 mb-1">
-                <span className="text-[8px] font-bold tracking-[0.2em] text-sidebar-foreground/40 uppercase whitespace-nowrap">
+                <span className="text-[8px] font-bold tracking-[0.2em] text-sidebar-foreground/40 uppercase whitespace-nowrap opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-200">
                   {group.label}
                 </span>
               </div>

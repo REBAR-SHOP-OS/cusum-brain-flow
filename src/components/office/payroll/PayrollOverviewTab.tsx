@@ -76,7 +76,8 @@ export function PayrollOverviewTab({
 
       {/* Employee Table */}
       <Card>
-        <CardContent className="p-0">
+        <CardContent className="p-0 overflow-x-auto">
+          <div className="min-w-[640px]">
           <div className="grid grid-cols-[24px_1fr_90px_70px_70px_70px_70px_60px_90px] gap-0 px-4 py-3 bg-muted/50 border-b border-border text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
             <span />
             <span>Employee</span>
@@ -161,6 +162,7 @@ export function PayrollOverviewTab({
               </Collapsible>
             );
           })}
+          </div>
         </CardContent>
       </Card>
     </div>

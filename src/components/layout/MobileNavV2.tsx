@@ -28,7 +28,6 @@ const moreItems = [
   { name: "Social", href: "/social", icon: Share2, roles: ["admin", "office"] },
   { name: "Summarizer", href: "/daily-summarizer", icon: FileText, roles: ["admin", "sales", "office"] },
   { name: "Admin", href: "/admin", icon: Shield, roles: ["admin"] },
-  { name: "Admin", href: "/admin", icon: Shield, roles: ["admin"] },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 

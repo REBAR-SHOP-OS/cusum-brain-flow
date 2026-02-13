@@ -149,7 +149,7 @@ export default function Home() {
 
   return (
     <ScrollArea className="h-full">
-      <div className="relative flex flex-col items-center px-3 py-4 sm:px-6 sm:py-8 max-w-6xl mx-auto pb-20 md:pb-0">
+      <div className="relative flex flex-col items-center px-3 py-4 sm:px-6 sm:py-8 max-w-6xl mx-auto">
         {/* Big logo background */}
         <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-0">
           <img src={logoCoin} alt="" className="w-[600px] h-[600px] opacity-[0.04]" />
