@@ -61,9 +61,13 @@ Deno.serve(async (req) => {
     const odooKey = Deno.env.get("ODOO_API_KEY")!;
     const odooDB = Deno.env.get("ODOO_DATABASE")!;
 
-    // Fetch all opportunities from Odoo
+    // Fetch opportunities modified in the last 5 days
+    const fiveDaysAgo = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
+    const cutoff = fiveDaysAgo.toISOString().replace("T", " ").slice(0, 19);
+    console.log("Fetching opportunities with write_date >=", cutoff);
+
     const leads = await odooRpc(odooUrl, odooDB, odooKey, "crm.lead", "search_read", [
-      [[["type", "=", "opportunity"]]],
+      [[["type", "=", "opportunity"], ["write_date", ">=", cutoff]]],
       { fields: FIELDS },
     ]);
 
@@ -125,8 +129,8 @@ Deno.serve(async (req) => {
             .from("leads")
             .update({
               stage: erpStage,
-              probability: ol.probability || 0,
-              expected_value: ol.expected_revenue || 0,
+              probability: Math.round(Number(ol.probability) || 0),
+              expected_value: Number(ol.expected_revenue) || 0,
               metadata,
               updated_at: new Date().toISOString(),
             })
@@ -164,8 +168,8 @@ Deno.serve(async (req) => {
             .insert({
               title: ol.name || "Untitled",
               stage: erpStage,
-              probability: ol.probability || 0,
-              expected_value: ol.expected_revenue || 0,
+              probability: Math.round(Number(ol.probability) || 0),
+              expected_value: Number(ol.expected_revenue) || 0,
               source: "odoo_sync",
               customer_id: customerId,
               company_id: companyId,
