@@ -1,31 +1,22 @@
 
-
-# Fix: Regenerate Image Not Working
+# Update Recents Session Title When Calendar Date Changes (Pixel Agent)
 
 ## Problem
-The "Regenerate" function uses DALL-E (OpenAI) for image generation, while the working slot generation uses the Lovable AI Gateway with `google/gemini-2.5-flash-image`. The DALL-E path fails silently, resulting in text-only output with no image.
+Currently, the session title for the Pixel agent is set only once — when the first message is sent. If the user later changes the calendar date, the session title in "Recents" stays as the old date.
 
 ## Solution
-Replace the DALL-E image generation in the regenerate block with the same Lovable AI Gateway + Gemini approach used by the main slot generation.
+When the user changes the selected date in the Pixel agent **and there's an active session**, update that session's title in the database to reflect the new date.
 
-## Changes
+## Technical Changes
 
-### `supabase/functions/ai-agent/index.ts` (lines ~3698-3736)
-Replace the DALL-E image generation block with:
+### `src/hooks/useChatSessions.ts`
+Add a new `updateSessionTitle` function:
+- Accepts `sessionId` and `newTitle`
+- Runs `supabase.from("chat_sessions").update({ title: newTitle }).eq("id", sessionId)`
+- Calls `fetchSessions()` to refresh the sidebar
+- Return it from the hook
 
-```text
-Before (DALL-E - broken):
-  fetch("https://api.openai.com/v1/images/generations", ...)
-  imgData.data?.[0]?.b64_json
-
-After (Lovable AI Gateway - working):
-  fetch("https://ai.gateway.lovable.dev/v1/chat/completions", ...)
-  model: "google/gemini-2.5-flash-image"
-  modalities: ["image", "text"]
-  imgData.choices?.[0]?.message?.images?.[0]?.image_url?.url
-```
-
-The base64 extraction and storage upload logic will also be updated to match the working pattern (stripping the `data:image/...;base64,` prefix before decoding).
-
-### Deploy
-Redeploy the `ai-agent` edge function after changes.
+### `src/pages/AgentWorkspace.tsx`
+Update the `handleDateChange` callback:
+- Import `updateSessionTitle` from the hook
+- When the agent is `social` and there's an `activeSessionId`, call `updateSessionTitle(activeSessionId, format(newDate, "yyyy-MM-dd"))` so the Recents sidebar immediately reflects the newly selected date
