@@ -5113,6 +5113,7 @@ export type Database = {
         Args: { _action?: string; _count: number }
         Returns: undefined
       }
+      verify_admin_pin: { Args: { _pin: string }; Returns: boolean }
     }
     Enums: {
       app_role:

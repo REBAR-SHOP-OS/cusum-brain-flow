@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -24,7 +25,7 @@ import { useUserRole } from "@/hooks/useUserRole";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CEODashboardView } from "@/components/office/CEODashboardView";
 
-const ADMIN_PIN = "7671";
+
 
 const departments = [
   { value: "admin", label: "Administration" },
@@ -63,19 +64,21 @@ export default function AdminPanel() {
   const [pinValue, setPinValue] = useState("");
   const [pinError, setPinError] = useState(false);
 
-  // Check PIN on complete
+  // Check PIN on complete — validated server-side
   useEffect(() => {
     if (pinValue.length === 4) {
-      if (pinValue === ADMIN_PIN) {
-        setPanelUnlocked(true);
-        setPinError(false);
-      } else {
-        setPinError(true);
-        setTimeout(() => {
-          setPinValue("");
+      supabase.rpc("verify_admin_pin", { _pin: pinValue }).then(({ data }) => {
+        if (data === true) {
+          setPanelUnlocked(true);
           setPinError(false);
-        }, 800);
-      }
+        } else {
+          setPinError(true);
+          setTimeout(() => {
+            setPinValue("");
+            setPinError(false);
+          }, 800);
+        }
+      });
     }
   }, [pinValue]);
 

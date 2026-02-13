@@ -39,9 +39,11 @@ export function useCustomerPortalData() {
     queryKey: ["customer-deliveries", customerId],
     enabled: !!customerId,
     queryFn: async () => {
+      // Filter deliveries to only those with stops for this customer
       const { data, error } = await supabase
         .from("deliveries")
-        .select("*, delivery_stops(*)")
+        .select("*, delivery_stops!inner(*)")
+        .eq("delivery_stops.customer_id", customerId!)
         .order("scheduled_date", { ascending: false });
       if (error) throw error;
       return data;
