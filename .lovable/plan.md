@@ -1,26 +1,49 @@
 
-# Fix: Add Missing Characters to Filename Sanitization
+
+# Fix: Remove 1000-Row Query Limit on Pending Files
 
 ## Problem
-3 out of 407 files failed with "Invalid key" errors. The filenames contain square brackets `[`, `]` and parentheses `(`, `)` which are not included in the current sanitization regex, causing Supabase storage to reject them.
-
-Examples from the screenshot:
-- `S6-0[1].pdf` -- brackets
-- `[F1 to 3].pdf` -- brackets
-- `(3).pdf` -- parentheses
+The database query fetching pending files uses the default Supabase limit of 1,000 rows. With 17,366 pending files, only ~1,000 are returned, so most filestore entries in the ZIP never get matched -- explaining why only 407 out of thousands were uploaded.
 
 ## Fix
 
 ### File: `src/components/admin/OdooDumpImportDialog.tsx`
 
-**Line 145** -- Update the sanitization regex to include `[`, `]`, `(`, `)`:
+**Paginate the pending files query** to fetch ALL 17,366 records instead of just the first 1,000.
 
+Replace the single query (lines 214-218):
 ```typescript
-// Before:
-const safeName = m.name.replace(/[~#%&{}\\<>*?/$!'":@+`|=]/g, "_");
-
-// After:
-const safeName = m.name.replace(/[~#%&{}\[\]()<>\\*?/$!'":@+`|=]/g, "_");
+const { data, error } = await supabase
+  .from("lead_files")
+  .select("odoo_id, lead_id, file_name")
+  .not("odoo_id", "is", null)
+  .is("storage_path", null);
 ```
 
-This is a one-line change. After applying it, re-running the import will process those 3 files successfully.
+With a paginated loop that fetches in batches of 1,000:
+```typescript
+const allPending: PendingFile[] = [];
+let from = 0;
+const PAGE = 1000;
+while (true) {
+  const { data, error } = await supabase
+    .from("lead_files")
+    .select("odoo_id, lead_id, file_name")
+    .not("odoo_id", "is", null)
+    .is("storage_path", null)
+    .range(from, from + PAGE - 1);
+  if (error) {
+    toast.error("Failed to fetch pending files");
+    await reader.close();
+    return;
+  }
+  allPending.push(...(data as unknown as PendingFile[]));
+  if (data.length < PAGE) break;
+  from += PAGE;
+}
+setStatusMsg(`Found ${allPending.length} pending files in database`);
+```
+
+Then use `allPending` instead of `pending` for the matching logic below.
+
+This is the only change needed. Re-running the import with the same ZIP should match and upload all files in the filestore.
