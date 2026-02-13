@@ -30,6 +30,8 @@ const FIELDS = [
 ];
 
 async function odooRpc(url: string, db: string, apiKey: string, model: string, method: string, args: unknown[]) {
+  const rpcArgs = [db, 2, apiKey, model, method, ...args];
+  console.log("RPC args structure:", JSON.stringify(rpcArgs.map((a, i) => i < 3 ? '***' : a)));
   const res = await fetch(`${url}/jsonrpc`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
@@ -37,7 +39,7 @@ async function odooRpc(url: string, db: string, apiKey: string, model: string, m
       jsonrpc: "2.0", id: 1, method: "call",
       params: {
         service: "object", method: "execute_kw",
-        args: [db, 2, apiKey, model, method, ...args],
+        args: rpcArgs,
       },
     }),
   });
