@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { format } from "date-fns";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { ChevronDown, PanelLeftClose, PanelLeft, Brain, CalendarIcon, PhoneOff } from "lucide-react";
@@ -71,6 +71,9 @@ export default function AgentWorkspace() {
   const mapping = getUserAgentMapping(user?.email);
   const isUsersPrimaryAgent = mapping?.agentKey === agentId;
 
+  // Ref to avoid temporal dead zone — keeps latest handleSendInternal accessible
+  const sendRef = useRef<(content: string, slotOverride?: number) => Promise<void>>();
+
   // Auto-briefing for mapped users on their primary agent
   useEffect(() => {
     if (isUsersPrimaryAgent && !autoBriefingSent && messages.length === 0 && !isLoading) {
@@ -87,7 +90,8 @@ export default function AgentWorkspace() {
         briefingPrompt = "Give me my estimating briefing — open takeoffs, QC flags, and drawing revisions needing review.";
       }
       if (briefingPrompt) {
-        handleSend(briefingPrompt);
+        // Use ref to safely call send without temporal dead zone
+        setTimeout(() => sendRef.current?.(briefingPrompt), 0);
       }
     }
   }, [isUsersPrimaryAgent, autoBriefingSent, messages.length, isLoading]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -265,6 +269,9 @@ export default function AgentWorkspace() {
       setIsLoading(false);
     }
   }, [messages, config.agentType, config.name, activeSessionId, createSession, addMessage, mapping, selectedDate]);
+
+  // Keep ref in sync
+  useEffect(() => { sendRef.current = handleSendInternal; }, [handleSendInternal]);
 
   const handleSend = useCallback((content: string) => {
     handleSendInternal(content);

@@ -6,12 +6,15 @@ import { AppTour } from "@/components/tour/AppTour";
 import { RoleGuard } from "@/components/auth/RoleGuard";
 import { LiveChatWidget } from "./LiveChatWidget";
 import { FloatingVizzyButton } from "@/components/vizzy/FloatingVizzyButton";
+import { useFixRequestMonitor } from "@/hooks/useFixRequestMonitor";
 
 interface AppLayoutProps {
   children: React.ReactNode;
 }
 
 export function AppLayout({ children }: AppLayoutProps) {
+  // Background monitor — polls for user-actionable fix requests
+  useFixRequestMonitor();
 
   return (
     <RoleGuard>
