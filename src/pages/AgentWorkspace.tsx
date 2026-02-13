@@ -448,15 +448,6 @@ export default function AgentWorkspace() {
               >
                 <Brain className="w-4 h-4" />
               </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => setBrainOpen(true)}
-                title="Pixel Brain – Knowledge & Instructions"
-              >
-                <Brain className="w-4 h-4" />
-              </Button>
             </>
           )}
           {isLoading && (
