@@ -257,7 +257,7 @@ export function AccountingPayroll({ data }: Props) {
               <Label>Journal Lines</Label>
               <div className="space-y-3">
                 {lines.map((line, i) => (
-                  <div key={i} className="grid grid-cols-[1fr_100px_100px_auto] gap-2 items-end">
+                  <div key={i} className="grid grid-cols-1 sm:grid-cols-[1fr_100px_100px_auto] gap-2 items-end">
                     <div>
                       <Label className="text-xs text-muted-foreground">Account</Label>
                       <Select value={line.accountId} onValueChange={v => updateLine(i, "accountId", v)}>

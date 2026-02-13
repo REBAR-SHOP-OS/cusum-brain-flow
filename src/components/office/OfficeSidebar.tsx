@@ -49,7 +49,7 @@ const bottomItems: { id: OfficeSection; label: string; icon: React.ElementType }
 
 export function OfficeSidebar({ active, onNavigate }: OfficeSidebarProps) {
   return (
-    <aside className="w-[180px] shrink-0 border-r border-border bg-card flex flex-col h-full">
+    <aside className="hidden md:flex w-[180px] shrink-0 border-r border-border bg-card flex-col h-full">
       {/* Header */}
       <div className="px-4 py-4 flex items-center gap-2">
         <img src={brandLogo} alt="Rebar.shop" className="w-7 h-7 rounded-full object-contain" />
