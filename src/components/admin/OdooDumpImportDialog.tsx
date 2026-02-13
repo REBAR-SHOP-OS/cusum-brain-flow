@@ -34,6 +34,18 @@ interface Props {
 
 const BATCH = 5;
 
+async function retryAsync<T>(fn: () => Promise<T>, retries = 3, delayMs = 1000): Promise<T> {
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (attempt === retries - 1) throw err;
+      await new Promise(r => setTimeout(r, delayMs * Math.pow(2, attempt)));
+    }
+  }
+  throw new Error("unreachable");
+}
+
 /**
  * Stream-parse dump.sql for the ir_attachment COPY block.
  * Reads chunk-by-chunk so we never load the full 1GB+ file into memory.
@@ -141,16 +153,18 @@ export function OdooDumpImportDialog({ open, onOpenChange }: Props) {
         await Promise.all(
           batch.map(async ({ pending: p, mapping: m, getBlob }) => {
             try {
-              const blob = await getBlob();
               const safeName = m.name.replace(/[^\w.\-]/g, "_");
               const storagePath = `odoo-archive/${p.lead_id}/${p.odoo_id}-${safeName}`;
-              const { error: upErr } = await supabase.storage
-                .from("estimation-files")
-                .upload(storagePath, blob, {
-                  contentType: m.mimetype || "application/octet-stream",
-                  upsert: true,
-                });
-              if (upErr) throw upErr;
+              await retryAsync(async () => {
+                const blob = await getBlob();
+                const { error: upErr } = await supabase.storage
+                  .from("estimation-files")
+                  .upload(storagePath, blob, {
+                    contentType: m.mimetype || "application/octet-stream",
+                    upsert: true,
+                  });
+                if (upErr) throw upErr;
+              });
 
               const { error: dbErr } = await supabase
                 .from("lead_files")
