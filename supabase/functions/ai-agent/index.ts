@@ -12,7 +12,7 @@ interface ChatMessage {
 }
 
 interface AgentRequest {
-  agent: "sales" | "accounting" | "support" | "collections" | "estimation" | "social" | "eisenhower" | "bizdev" | "webbuilder" | "assistant" | "copywriting" | "talent" | "seo" | "growth" | "legal";
+  agent: "sales" | "accounting" | "support" | "collections" | "estimation" | "social" | "eisenhower" | "bizdev" | "webbuilder" | "assistant" | "copywriting" | "talent" | "seo" | "growth" | "legal" | "shopfloor" | "delivery" | "email" | "data";
   message: string;
   history?: ChatMessage[];
   context?: Record<string, unknown>;
@@ -1604,6 +1604,111 @@ You have **55 years of experience as an Ontario lawyer** specializing in constru
 - Compliance certificate expiring → suggest renewal before expiry
 - New regulatory change affecting operations → suggest a compliance review`,
 
+  shopfloor: `You are **Forge**, the Shop Floor Commander for REBAR SHOP OS by Rebar.shop.
+
+## Your Role:
+You are the shop floor intelligence agent — a veteran shop supervisor with 30 years of experience in rebar fabrication. You know every machine, every cut plan, and every production bottleneck.
+
+## Core Responsibilities:
+1. **Machine Status**: Monitor all machines (cutters, benders, loaders) — track status (idle, running, blocked, down), current operators, and active runs.
+2. **Cut Plan Management**: Track active cut plans, queued items, completion progress. Flag items behind schedule.
+3. **Production Flow**: Monitor the cutting → bending → clearance pipeline. Identify bottlenecks (e.g., cutter queue > 5 vs. bender queue = 0 = "bender starving").
+4. **Cage Fabrication Guidance**: Guide operators through cage builds from drawings — rebar sizes, tie wire patterns, spacer placement.
+5. **Maintenance Scheduling**: Track machine maintenance windows, flag overdue maintenance, suggest optimal scheduling.
+6. **Work Order Tracking**: Monitor active work orders, their status, and scheduled dates.
+7. **Floor Stock**: Track available floor stock (rebar sizes, lengths, quantities) per machine.
+
+## Communication Style:
+- Direct, practical, shop-floor language — no corporate fluff
+- Reference specific machines by name and status
+- Always flag safety concerns first
+- Use tables for machine status summaries
+- Think in terms of "what's the bottleneck right now?"
+
+## 💡 Ideas You Should Create:
+- Machine idle with backlog on another machine → suggest rebalancing work
+- Cut plan items due within 3 days at < 50% progress → flag as at-risk
+- Bender starving (cutter queue > 5, bender queue = 0) → suggest feeding the bender
+- Machine maintenance overdue → create urgent maintenance task`,
+
+  delivery: `You are **Atlas**, the Delivery Navigator for REBAR SHOP OS by Rebar.shop.
+
+## Your Role:
+You are the delivery logistics specialist, helping coordinate all outbound deliveries of rebar products from the shop to construction sites across Ontario.
+
+## Core Responsibilities:
+1. **Delivery Tracking**: Monitor all active deliveries — planned, in-transit, and completed. Show driver, vehicle, scheduled date, and stop details.
+2. **Route Optimization**: Suggest efficient delivery routes based on stop locations and schedules.
+3. **Stop Management**: Track delivery stops — arrival, departure, proof of delivery (photos, signatures), and any exceptions.
+4. **Driver Coordination**: Know which drivers are assigned, their current status, and workload.
+5. **Customer Communication**: Draft delivery notifications, ETA updates, and delay alerts.
+6. **Load Planning**: Help plan truck loads based on order weights and delivery sequences.
+
+## Communication Style:
+- Crisp, logistics-focused language
+- Always include delivery numbers and dates
+- Use tables for delivery summaries
+- Flag delays and exceptions with 🚨
+- Think in terms of "what's the next stop?" and "what's running late?"
+
+## 💡 Ideas You Should Create:
+- Delivery running late → suggest notifying the customer
+- Multiple stops in the same area → suggest combining into one route
+- Driver workload imbalanced → suggest redistribution
+- Delivery without proof of delivery → flag for follow-up`,
+
+  email: `You are **Relay**, the Email & Inbox Agent for REBAR SHOP OS by Rebar.shop.
+
+## Your Role:
+You are the email intelligence specialist. You help users manage their inbox, draft replies, extract action items from emails, and ensure nothing falls through the cracks.
+
+## Core Responsibilities:
+1. **Inbox Summary**: Summarize unread and important emails — grouped by urgency and category (customer, vendor, internal, CRA/government).
+2. **Email Drafting**: Draft professional email replies maintaining the user's voice and Rebar.shop brand standards.
+3. **Action Item Extraction**: Read emails and extract tasks, deadlines, and follow-ups — create notifications/todos automatically.
+4. **Thread Tracking**: Track email threads and flag conversations that need responses.
+5. **Email Classification**: Categorize emails by type (inquiry, complaint, payment, quote request, regulatory).
+6. **Smart Search**: Help users find specific emails by subject, sender, date, or content.
+
+## Communication Style:
+- Organized, inbox-zero focused
+- Present email summaries in scannable tables
+- Always suggest specific reply drafts, not vague advice
+- Flag emails needing urgent response with ⏰
+- Group emails by category for clarity
+
+## 💡 Ideas You Should Create:
+- Email unanswered for > 24 hours → suggest drafting a reply
+- Customer complaint email → flag for immediate attention
+- Email with deadline mentioned → create a todo with the deadline
+- Recurring email pattern (e.g., weekly report) → suggest automating`,
+
+  data: `You are **Prism**, the Data & Insights Agent for REBAR SHOP OS by Rebar.shop.
+
+## Your Role:
+You are the business intelligence analyst. You help leadership understand performance through data — trends, KPIs, anomalies, and actionable insights.
+
+## Core Responsibilities:
+1. **KPI Dashboards**: Present key metrics — revenue, AR, production output, delivery rates, lead conversion.
+2. **Trend Analysis**: Identify trends over time — growing/shrinking segments, seasonal patterns, performance changes.
+3. **Anomaly Detection**: Flag unusual patterns — sudden drops in production, spikes in AR, unusual order patterns.
+4. **Cross-Department Reports**: Compile data across sales, production, accounting, and delivery for executive summaries.
+5. **Benchmarking**: Compare current performance against historical averages and targets.
+6. **Data Quality**: Flag missing data, inconsistencies, or gaps in the data.
+
+## Communication Style:
+- Data-driven, analytical, precise
+- Lead with the insight, then show the supporting data
+- Use tables and formatted numbers extensively
+- Always include "So what?" — what the data means for the business
+- Suggest specific actions based on findings
+
+## 💡 Ideas You Should Create:
+- Revenue trend declining for 2+ weeks → suggest investigating root cause
+- Production output significantly above/below average → flag for review
+- Customer concentration risk (one customer > 30% revenue) → suggest diversification
+- Data gap detected (e.g., orders without invoices) → suggest cleanup`,
+
   eisenhower: `You are the **Eisenhower Matrix** productivity coach for REBAR SHOP OS.
 
 ## Your ONLY Purpose:
@@ -2083,6 +2188,278 @@ async function fetchContext(supabase: ReturnType<typeof createClient>, agent: st
         context.activeCutPlans = cutPlans;
       } catch (e) {
         console.error("Failed to fetch shopfloor context:", e);
+      }
+    }
+
+    // Forge — Shop Floor Commander (dedicated context)
+    if (agent === "shopfloor") {
+      try {
+        const { data: machines } = await supabase
+          .from("machines")
+          .select("id, name, machine_type, status, current_operator_id, notes")
+          .limit(20);
+        context.machineStatus = machines;
+
+        const { data: activeRuns } = await supabase
+          .from("machine_runs")
+          .select("id, machine_id, status, bar_code, started_at, completed_at, total_pieces, completed_pieces, process")
+          .in("status", ["running", "paused", "queued"])
+          .limit(30);
+        context.activeRuns = activeRuns;
+
+        const { data: cutPlans } = await supabase
+          .from("cut_plans")
+          .select("id, name, status, project_name, machine_id")
+          .in("status", ["draft", "queued", "running"])
+          .order("created_at", { ascending: false })
+          .limit(15);
+        context.activeCutPlans = cutPlans;
+
+        const { data: cutPlanItems } = await supabase
+          .from("cut_plan_items")
+          .select("id, cut_plan_id, bar_code, cut_length_mm, total_pieces, completed_pieces, bend_completed_pieces, phase, bend_type, mark_number, needs_fix")
+          .in("phase", ["queued", "cutting", "cut_done", "bending", "clearance"])
+          .limit(50);
+        context.cutPlanItems = cutPlanItems;
+
+        const { data: workOrders } = await supabase
+          .from("work_orders")
+          .select("id, work_order_number, status, scheduled_start, order_id")
+          .in("status", ["queued", "pending", "in-progress"])
+          .limit(15);
+        context.activeWorkOrders = workOrders;
+
+        const { data: floorStock } = await supabase
+          .from("floor_stock")
+          .select("id, bar_code, length_mm, qty_on_hand, qty_reserved, machine_id")
+          .gt("qty_on_hand", 0)
+          .limit(30);
+        context.floorStock = floorStock;
+      } catch (e) {
+        console.error("Failed to fetch shopfloor context:", e);
+      }
+    }
+
+    // Atlas — Delivery Navigator (dedicated context)
+    if (agent === "delivery") {
+      try {
+        const { data: deliveries } = await supabase
+          .from("deliveries")
+          .select("id, delivery_number, driver_name, vehicle, status, scheduled_date, notes")
+          .order("scheduled_date", { ascending: true })
+          .limit(20);
+        context.deliveries = deliveries;
+
+        const { data: stops } = await supabase
+          .from("delivery_stops")
+          .select("id, delivery_id, stop_sequence, address, customer_id, order_id, status, arrival_time, departure_time, pod_photo_url, pod_signature, exception_reason, notes")
+          .order("stop_sequence", { ascending: true })
+          .limit(50);
+        context.deliveryStops = stops;
+
+        const { data: orders } = await supabase
+          .from("orders")
+          .select("id, order_number, customer_id, total_amount, status")
+          .in("status", ["confirmed", "in_production", "invoiced"])
+          .limit(15);
+        context.ordersForDelivery = orders;
+      } catch (e) {
+        console.error("Failed to fetch delivery context:", e);
+      }
+    }
+
+    // Relay — Email & Inbox (dedicated context)
+    if (agent === "email") {
+      try {
+        const emailFilter = userEmail
+          ? `to_address.ilike.%${userEmail}%,from_address.ilike.%${userEmail}%,to_address.ilike.%@rebar.shop%`
+          : "to_address.ilike.%@rebar.shop%";
+        const { data: emails } = await supabase
+          .from("communications")
+          .select("id, subject, from_address, to_address, body_preview, status, source, received_at, direction, ai_urgency, ai_category, ai_action_required")
+          .or(emailFilter)
+          .order("received_at", { ascending: false })
+          .limit(50);
+        context.userEmails = emails;
+
+        const unread = (emails || []).filter((e: Record<string, unknown>) => e.status === "unread" || !e.status);
+        context.unreadEmailCount = unread.length;
+        const actionRequired = (emails || []).filter((e: Record<string, unknown>) => e.ai_action_required === true);
+        context.actionRequiredCount = actionRequired.length;
+
+        // Tasks created from emails
+        const { data: tasks } = await supabase
+          .from("tasks")
+          .select("id, title, status, priority, due_date, source")
+          .eq("source", "email")
+          .neq("status", "done")
+          .limit(15);
+        context.emailTasks = tasks;
+      } catch (e) {
+        console.error("Failed to fetch email context:", e);
+      }
+    }
+
+    // Prism — Data & Insights (dedicated context)
+    if (agent === "data") {
+      try {
+        // Orders summary
+        const { data: orders } = await supabase
+          .from("orders")
+          .select("id, order_number, status, total_amount, order_date, customer_id")
+          .order("created_at", { ascending: false })
+          .limit(30);
+        context.allOrders = orders;
+
+        // Leads summary
+        const { data: leads } = await supabase
+          .from("leads")
+          .select("id, title, stage, expected_value, probability, updated_at, assigned_to")
+          .order("updated_at", { ascending: false })
+          .limit(30);
+        context.allLeads = leads;
+
+        // AR outstanding
+        const { data: arData } = await supabase
+          .from("accounting_mirror")
+          .select("id, entity_type, balance, customer_id, data")
+          .eq("entity_type", "invoice")
+          .gt("balance", 0)
+          .limit(20);
+        context.outstandingAR = arData;
+
+        // Machine status
+        const { data: machines } = await supabase
+          .from("machines")
+          .select("id, name, status, machine_type")
+          .limit(20);
+        context.machinesSummary = machines;
+
+        // Deliveries
+        const { data: deliveries } = await supabase
+          .from("deliveries")
+          .select("id, delivery_number, status, scheduled_date")
+          .order("scheduled_date", { ascending: false })
+          .limit(15);
+        context.deliveriesSummary = deliveries;
+
+        // Tasks
+        const { data: tasks } = await supabase
+          .from("tasks")
+          .select("id, title, status, priority, due_date")
+          .neq("status", "done")
+          .limit(20);
+        context.openTasks = tasks;
+      } catch (e) {
+        console.error("Failed to fetch data/analytics context:", e);
+      }
+    }
+
+    // Tally — Legal (dedicated context)
+    if (agent === "legal") {
+      try {
+        // Orders with lien deadlines and contract info
+        const { data: orders } = await supabase
+          .from("orders")
+          .select("id, order_number, customer_id, total_amount, status, order_date, shop_drawing_status, pending_change_order")
+          .order("order_date", { ascending: false })
+          .limit(20);
+        context.ordersForLegal = orders;
+
+        // Customers (for contract/lien context)
+        const { data: customersFull } = await supabase
+          .from("customers")
+          .select("id, name, company_name, payment_terms, credit_limit, status")
+          .limit(30);
+        context.customersFull = customersFull;
+
+        // Recent communications (for dispute context)
+        const { data: legalComms } = await supabase
+          .from("communications")
+          .select("id, subject, from_address, body_preview, received_at, ai_category")
+          .order("received_at", { ascending: false })
+          .limit(20);
+        context.legalCommunications = legalComms;
+      } catch (e) {
+        console.error("Failed to fetch legal context:", e);
+      }
+    }
+
+    // Eisenhower — Productivity matrix (dedicated context)
+    if (agent === "eisenhower") {
+      try {
+        // User's tasks
+        const { data: tasks } = await supabase
+          .from("tasks")
+          .select("id, title, status, priority, due_date, created_at, source")
+          .neq("status", "done")
+          .order("created_at", { ascending: false })
+          .limit(30);
+        context.userTasks = tasks;
+
+        // Recent Eisenhower sessions
+        if (userId) {
+          const { data: sessions } = await supabase
+            .from("chat_sessions")
+            .select("id, title, updated_at")
+            .eq("user_id", userId)
+            .eq("agent_name", "Eisenhower Matrix")
+            .order("updated_at", { ascending: false })
+            .limit(5);
+          context.eisenhowerSessions = sessions;
+        }
+
+        // Human tasks (suggestions)
+        const { data: humanTasks } = await supabase
+          .from("human_tasks")
+          .select("id, title, status, severity, category, created_at")
+          .in("status", ["open", "snoozed"])
+          .limit(15);
+        context.openHumanTasks = humanTasks;
+      } catch (e) {
+        console.error("Failed to fetch eisenhower context:", e);
+      }
+    }
+
+    // Buddy — Business Development (dedicated context)
+    if (agent === "bizdev") {
+      try {
+        const { data: leads } = await supabase
+          .from("leads")
+          .select("id, title, stage, expected_value, probability, updated_at, notes, assigned_to")
+          .order("updated_at", { ascending: false })
+          .limit(25);
+        context.pipelineLeads = leads;
+
+        const { data: orders } = await supabase
+          .from("orders")
+          .select("id, order_number, customer_id, total_amount, status, order_date")
+          .order("order_date", { ascending: false })
+          .limit(20);
+        context.recentOrders = orders;
+      } catch (e) {
+        console.error("Failed to fetch bizdev context:", e);
+      }
+    }
+
+    // Scouty — Talent & HR (dedicated context)
+    if (agent === "talent") {
+      try {
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("id, full_name, title, department, is_active")
+          .eq("is_active", true)
+          .limit(30);
+        context.teamMembers = profiles;
+
+        const { data: clockEntries } = await supabase
+          .from("time_clock_entries")
+          .select("id, profile_id, clock_in, clock_out")
+          .order("clock_in", { ascending: false })
+          .limit(50);
+        context.recentClockEntries = clockEntries;
+      } catch (e) {
+        console.error("Failed to fetch talent context:", e);
       }
     }
 
@@ -2696,6 +3073,111 @@ function selectModel(agent: string, message: string, hasAttachments: boolean, hi
     };
   }
 
+  // Shop Floor (Forge) — production-focused, practical
+  if (agent === "shopfloor") {
+    const isComplex = /maintenance|bottleneck|cage|capacity|schedule|plan/i.test(message);
+    if (isComplex || historyLength > 6) {
+      return {
+        model: "google/gemini-2.5-flash",
+        maxTokens: 3000,
+        temperature: 0.3,
+        reason: "shopfloor complex analysis → Flash for precision",
+      };
+    }
+    return {
+      model: "google/gemini-2.5-flash-lite",
+      maxTokens: 1500,
+      temperature: 0.4,
+      reason: "shopfloor quick status → Flash-Lite for speed",
+    };
+  }
+
+  // Delivery (Atlas) — logistics-focused
+  if (agent === "delivery") {
+    return {
+      model: "google/gemini-2.5-flash",
+      maxTokens: 2000,
+      temperature: 0.4,
+      reason: "delivery → Flash for logistics precision",
+    };
+  }
+
+  // Email (Relay) — inbox management
+  if (agent === "email") {
+    const isDraft = /draft|reply|compose|write|respond/i.test(message);
+    if (isDraft) {
+      return {
+        model: "google/gemini-3-flash-preview",
+        maxTokens: 2500,
+        temperature: 0.5,
+        reason: "email drafting → Flash-preview for professional writing",
+      };
+    }
+    return {
+      model: "google/gemini-2.5-flash-lite",
+      maxTokens: 1500,
+      temperature: 0.4,
+      reason: "email summary → Flash-Lite for speed",
+    };
+  }
+
+  // Data (Prism) — analytics-focused
+  if (agent === "data") {
+    const isDeep = /trend|analysis|report|forecast|anomaly|benchmark/i.test(message);
+    if (isDeep) {
+      return {
+        model: "google/gemini-2.5-flash",
+        maxTokens: 3000,
+        temperature: 0.3,
+        reason: "data deep analysis → Flash for analytical precision",
+      };
+    }
+    return {
+      model: "google/gemini-2.5-flash-lite",
+      maxTokens: 2000,
+      temperature: 0.4,
+      reason: "data quick query → Flash-Lite for speed",
+    };
+  }
+
+  // Legal (Tally) — precision matters for legal advice
+  if (agent === "legal") {
+    const isContract = /contract|lien|compliance|dispute|litigation|review|clause|indemnit/i.test(message);
+    if (isContract || historyLength > 4) {
+      return {
+        model: "google/gemini-2.5-pro",
+        maxTokens: 4000,
+        temperature: 0.2,
+        reason: "legal contract/compliance analysis → Pro for precision",
+      };
+    }
+    return {
+      model: "google/gemini-2.5-flash",
+      maxTokens: 2500,
+      temperature: 0.3,
+      reason: "legal general question → Flash for balanced precision",
+    };
+  }
+
+  // Eisenhower — prioritization tasks
+  if (agent === "eisenhower") {
+    const isReport = /report|1|summary|boss|final/i.test(message);
+    if (isReport) {
+      return {
+        model: "google/gemini-2.5-flash",
+        maxTokens: 3000,
+        temperature: 0.3,
+        reason: "eisenhower final report → Flash for structured output",
+      };
+    }
+    return {
+      model: "google/gemini-2.5-flash-lite",
+      maxTokens: 2000,
+      temperature: 0.4,
+      reason: "eisenhower task categorization → Flash-Lite for speed",
+    };
+  }
+
   // Copywriting — creative writing needs freedom
   if (agent === "copywriting") {
     return {
@@ -2928,6 +3410,7 @@ serve(async (req) => {
       estimation: "Gauge", social: "Pixel", eisenhower: "Eisenhower", bizdev: "Buddy",
       webbuilder: "Commet", assistant: "Vizzy", copywriting: "Penn", talent: "Scouty",
       seo: "Seomi", growth: "Gigi", legal: "Tally",
+      shopfloor: "Forge", delivery: "Atlas", email: "Relay", data: "Prism",
     };
     const agentKnowledgeName = agentNameMap[agent] || "Blitz";
 
@@ -3666,6 +4149,8 @@ RULES:
                 collections: "bg-red-500", estimation: "bg-purple-500", social: "bg-pink-500",
                 bizdev: "bg-amber-500", webbuilder: "bg-cyan-500", assistant: "bg-indigo-500",
                 copywriting: "bg-violet-500", talent: "bg-teal-500", seo: "bg-lime-500", growth: "bg-sky-500",
+                shopfloor: "bg-yellow-600", delivery: "bg-blue-600", email: "bg-rose-500", data: "bg-emerald-600",
+                legal: "bg-slate-600", eisenhower: "bg-amber-600",
               };
 
               const { error: insertErr } = await svcClient.from("notifications").insert({
