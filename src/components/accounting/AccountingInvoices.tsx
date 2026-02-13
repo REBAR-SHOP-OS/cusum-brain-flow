@@ -10,14 +10,15 @@ import type { useQuickBooksData, QBInvoice } from "@/hooks/useQuickBooksData";
 
 interface Props {
   data: ReturnType<typeof useQuickBooksData>;
+  initialSearch?: string;
 }
 
 const fmt = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
 
-export function AccountingInvoices({ data }: Props) {
+export function AccountingInvoices({ data, initialSearch }: Props) {
   const { invoices, sendInvoice, voidInvoice } = data;
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(initialSearch || "");
   const [sendTarget, setSendTarget] = useState<{ id: string; name: string; doc: string } | null>(null);
   const [voidTarget, setVoidTarget] = useState<{ id: string; doc: string; syncToken: string } | null>(null);
   const [actionLoading, setActionLoading] = useState(false);

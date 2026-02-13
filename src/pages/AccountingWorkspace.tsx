@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -31,7 +32,10 @@ import { useWebPhone } from "@/hooks/useWebPhone";
 import accountingHelper from "@/assets/helpers/accounting-helper.png";
 
 export default function AccountingWorkspace() {
-  const [activeTab, setActiveTab] = useState("dashboard");
+  const [searchParams] = useSearchParams();
+  const urlTab = searchParams.get("tab");
+  const urlSearch = searchParams.get("search") || "";
+  const [activeTab, setActiveTab] = useState(urlTab || "dashboard");
   const [showAgent, setShowAgent] = useState(true);
   const [agentMode, setAgentMode] = useState<"default" | "minimized" | "fullscreen">("default");
   const qb = useQuickBooksData();
@@ -192,7 +196,7 @@ export default function AccountingWorkspace() {
           <div className="flex-1 overflow-y-auto p-4 sm:p-6">
             
             {activeTab === "dashboard" && <AccountingDashboard data={qb} onNavigate={setActiveTab} />}
-            {activeTab === "invoices" && <AccountingInvoices data={qb} />}
+            {activeTab === "invoices" && <AccountingInvoices data={qb} initialSearch={urlSearch} />}
             {activeTab === "bills" && <AccountingBills data={qb} />}
             {activeTab === "payments" && <AccountingPayments data={qb} />}
             {activeTab === "customers" && <AccountingCustomers data={qb} />}
