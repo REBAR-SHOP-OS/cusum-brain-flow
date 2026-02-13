@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { Send, Loader2, Minimize2, Maximize2, Shrink, Mail, DollarSign, ListChecks, PhoneOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -48,7 +48,7 @@ const checkingPhases = [
   { label: "Prioritizing your tasks...", Icon: ListChecks },
 ];
 
-export function AccountingAgent({ onViewModeChange, viewMode: externalMode, qbSummary, autoGreet, webPhoneState, webPhoneActions }: AccountingAgentProps) {
+export const AccountingAgent = React.forwardRef<HTMLDivElement, AccountingAgentProps>(function AccountingAgent({ onViewModeChange, viewMode: externalMode, qbSummary, autoGreet, webPhoneState, webPhoneActions }, ref) {
   const { bridgeState, startBridge, stopBridge } = useCallAiBridge();
   const { activeTask, createCallTask, startCall, onCallConnected, completeCall, failCall, cancelCall, clearTask } = useCallTask();
   const [showOutcome, setShowOutcome] = useState(false);
@@ -255,7 +255,7 @@ RULES:
   // Minimized view
   if (mode === "minimized") {
     return (
-      <div className="flex items-center gap-3 px-4 py-3 border border-border rounded-xl bg-card">
+      <div ref={ref} className="flex items-center gap-3 px-4 py-3 border border-border rounded-xl bg-card">
         <img src={accountingHelper} alt="Penny" className="w-8 h-8 rounded-lg object-cover" />
         <div className="flex-1 min-w-0">
           <h3 className="font-bold text-sm">Penny</h3>
@@ -273,7 +273,7 @@ RULES:
   }
 
   return (
-    <div className={cn("flex flex-col border border-border rounded-xl bg-card overflow-hidden transition-all duration-300 h-full min-h-0")}>
+    <div ref={ref} className={cn("flex flex-col border border-border rounded-xl bg-card overflow-hidden transition-all duration-300 h-full min-h-0")}>
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-gradient-to-r from-primary/10 to-transparent shrink-0">
         <img src={accountingHelper} alt="Penny" className="w-10 h-10 rounded-xl object-cover" />
@@ -532,4 +532,5 @@ RULES:
       })
       .finally(() => setIsTyping(false));
   }
-}
+});
+AccountingAgent.displayName = "AccountingAgent";
