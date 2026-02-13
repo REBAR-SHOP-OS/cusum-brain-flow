@@ -343,10 +343,9 @@ function shouldSkipSender(from: string, to: string): boolean {
 
   if (SKIP_SENDERS.some((pattern) => lowerFrom.includes(pattern))) return true;
 
+  // Block ALL outgoing/internal emails from @rebar.shop — team members are senders, not leads
   if (lowerFrom.includes(INTERNAL_DOMAIN)) {
-    const nameMatch = from.match(/^([^<]+)</);
-    const senderName = (nameMatch?.[1] || "").trim().toLowerCase();
-    if (SKIP_INTERNAL_BOTS.some((bot) => senderName.includes(bot))) return true;
+    return true;
   }
 
   return false;
@@ -1029,7 +1028,29 @@ serve(async (req) => {
         }
       }
 
-      // ── Decision: No match (< 0.4) → AI classification ──
+      // ── Decision: No match (< 0.4) → check reply guard, then AI classification ──
+
+      // Reply guard: Re:/FW: with no match → escalate, don't create new lead
+      const isReplyOrForward = /^(Re|RE|Fwd|FW|FWD)\s*:/i.test(subject.trim());
+      if (isReplyOrForward && (!bestMatch || bestMatch.score < THRESHOLD_ESCALATE)) {
+        console.log(`Reply guard: "${subject}" is a reply/forward with no match (score: ${bestMatch?.score?.toFixed(2) ?? 'none'}) — escalating instead of creating new lead`);
+        try {
+          await escalateUncertainMatch(
+            supabaseAdmin,
+            profile.company_id,
+            { id: email.id, from, subject, snippet: body.substring(0, 500), sourceEmailId },
+            candidates,
+          );
+          escalated++;
+          routedEmailIds.add(sourceEmailId);
+          results.push({ emailId: email.id, from, subject, action: "escalated_reply_guard", matchScore: bestMatch?.score ?? 0 });
+          continue;
+        } catch (rgErr) {
+          console.error("Reply guard escalation failed:", rgErr);
+          // Fall through to normal processing
+        }
+      }
+
       try {
         // === KEYWORD FAST-TRACK ===
         const LEAD_KEYWORDS = /\b(quote|quotation|pricing|price|bid|tender|rfq|estimation|estimate|proposal|budget|cost|shop drawing|rebar.*order)\b/i;
