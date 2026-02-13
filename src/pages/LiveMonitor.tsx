@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
-import { AgentSuggestionsPanel } from "@/components/agent/AgentSuggestionsPanel";
+
 
 export default function LiveMonitor() {
   const { machines, operators, isLoading, error } = useLiveMonitorData();
@@ -117,10 +117,6 @@ export default function LiveMonitor() {
         </Badge>
       </header>
 
-      {/* Forge Suggestions */}
-      <div className="px-4 sm:px-6 py-3">
-        <AgentSuggestionsPanel agentCode="forge" agentName="Forge" />
-      </div>
 
       {/* Stats */}
       <div className="px-4 sm:px-6 py-3 border-b border-border bg-muted/30">

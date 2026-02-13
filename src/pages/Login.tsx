@@ -33,7 +33,7 @@ export default function Login() {
         variant: "destructive",
       });
     } else {
-      navigate("/inbox");
+      navigate("/home");
     }
 
     setLoading(false);
@@ -43,7 +43,7 @@ export default function Login() {
     setGoogleLoading(true);
     
     const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: window.location.origin + "/inbox",
+      redirect_uri: window.location.origin + "/home",
     });
 
     if (result.error) {
@@ -54,7 +54,7 @@ export default function Login() {
       });
       setGoogleLoading(false);
     } else if (!result.redirected) {
-      navigate("/inbox");
+      navigate("/home");
     }
   };
 
@@ -62,7 +62,7 @@ export default function Login() {
     setAppleLoading(true);
     
     const result = await lovable.auth.signInWithOAuth("apple", {
-      redirect_uri: window.location.origin + "/inbox",
+      redirect_uri: window.location.origin + "/home",
     });
 
     if (result.error) {

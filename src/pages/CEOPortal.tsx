@@ -3,7 +3,7 @@ import { CEODashboardView } from "@/components/office/CEODashboardView";
 import { DailyBriefingCard } from "@/components/ceo/DailyBriefingCard";
 import { DailyAssignments } from "@/components/ceo/DailyAssignments";
 import { FixRequestQueue } from "@/components/ceo/FixRequestQueue";
-import { AgentSuggestionsPanel } from "@/components/agent/AgentSuggestionsPanel";
+
 import { OdooMigrationStatusCard } from "@/components/admin/OdooMigrationStatusCard";
 import { SLATrackerCard } from "@/components/ceo/SLATrackerCard";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -32,7 +32,7 @@ export default function CEOPortal() {
       <div className="p-6 space-y-5 max-w-[1440px] mx-auto">
         <DailyBriefingCard />
         <SLATrackerCard />
-        <AgentSuggestionsPanel agentCode="vizzy" agentName="Vizzy" />
+        
         <FixRequestQueue />
         <DailyAssignments />
         <CEODashboardView />
