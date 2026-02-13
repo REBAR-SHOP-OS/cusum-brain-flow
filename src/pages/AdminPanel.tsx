@@ -66,20 +66,25 @@ export default function AdminPanel() {
 
   // Check PIN on complete — validated server-side
   useEffect(() => {
+    let cancelled = false;
     if (pinValue.length === 4) {
-      supabase.rpc("verify_admin_pin", { _pin: pinValue }).then(({ data }) => {
-        if (data === true) {
-          setPanelUnlocked(true);
-          setPinError(false);
-        } else {
+      supabase.rpc("verify_admin_pin", { _pin: pinValue }).then(({ data, error }) => {
+        if (cancelled) return;
+        if (error || data !== true) {
           setPinError(true);
           setTimeout(() => {
-            setPinValue("");
-            setPinError(false);
+            if (!cancelled) {
+              setPinValue("");
+              setPinError(false);
+            }
           }, 800);
+        } else {
+          setPanelUnlocked(true);
+          setPinError(false);
         }
       });
     }
+    return () => { cancelled = true; };
   }, [pinValue]);
 
   if (roleLoading) {

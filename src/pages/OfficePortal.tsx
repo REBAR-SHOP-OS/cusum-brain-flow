@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useLocation } from "react-router-dom";
-import { Menu } from "lucide-react";
+import { Menu, Shield } from "lucide-react";
+import { useUserRole } from "@/hooks/useUserRole";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { OfficeSidebar, OfficeSection } from "@/components/office/OfficeSidebar";
@@ -27,11 +29,33 @@ const sectionComponents: Record<OfficeSection, React.ComponentType> = {
 };
 
 export default function OfficePortal() {
+  const { isAdmin, isOffice, isLoading: roleLoading } = useUserRole();
   const location = useLocation();
   const rawSection = (location.state as any)?.section || "ai-extract";
   const initialSection = rawSection === "ceo-dashboard" ? "ai-extract" : rawSection;
   const [activeSection, setActiveSection] = useState<OfficeSection>(initialSection);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  if (roleLoading) {
+    return (
+      <div className="p-6 space-y-4">
+        <Skeleton className="h-8 w-64" />
+        <Skeleton className="h-96 w-full" />
+      </div>
+    );
+  }
+
+  if (!isAdmin && !isOffice) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center">
+          <Shield className="w-16 h-16 text-muted-foreground/30 mx-auto mb-4" />
+          <h2 className="text-xl font-semibold mb-2">Access Restricted</h2>
+          <p className="text-muted-foreground">Only administrators and office staff can access this portal.</p>
+        </div>
+      </div>
+    );
+  }
 
   const ActiveComponent = sectionComponents[activeSection];
 
