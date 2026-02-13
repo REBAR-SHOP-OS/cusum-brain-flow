@@ -38,12 +38,12 @@ export function AccountingPayments({ data }: Props) {
             className="pl-10 h-12 text-base"
           />
         </div>
-        <Card className="bg-emerald-500/5 border-emerald-500/20">
+        <Card className="bg-success/5 border-success/20">
           <CardContent className="p-4 flex items-center gap-3">
-            <CreditCard className="w-6 h-6 text-emerald-500" />
+            <CreditCard className="w-6 h-6 text-success" />
             <div>
               <p className="text-xs text-muted-foreground">Total Collected</p>
-              <p className="text-xl font-bold text-emerald-500">{fmt(totalCollected)}</p>
+              <p className="text-xl font-bold text-success">{fmt(totalCollected)}</p>
             </div>
           </CardContent>
         </Card>
@@ -74,7 +74,7 @@ export function AccountingPayments({ data }: Props) {
                     <TableCell>{new Date(p.TxnDate).toLocaleDateString()}</TableCell>
                     <TableCell className="font-medium">{p.CustomerRef?.name || "Unknown"}</TableCell>
                     <TableCell className="text-right">
-                      <Badge variant="outline" className="text-base px-3 py-1 text-emerald-500 border-emerald-500/30">
+                      <Badge variant="outline" className="text-base px-3 py-1 text-success border-success/30">
                         +{fmt(p.TotalAmt)}
                       </Badge>
                     </TableCell>
@@ -88,3 +88,5 @@ export function AccountingPayments({ data }: Props) {
     </div>
   );
 }
+
+AccountingPayments.displayName = "AccountingPayments";

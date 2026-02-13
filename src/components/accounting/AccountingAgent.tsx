@@ -100,7 +100,7 @@ export const AccountingAgent = React.forwardRef<HTMLDivElement, AccountingAgentP
   const hasGreeted = useRef(false);
   useEffect(() => {
     if (!autoGreet || hasGreeted.current || messages.length > 0) return;
-    if (!qbSummary || qbSummary.invoices.length === 0 && qbSummary.bills.length === 0 && qbSummary.accounts.length === 0) return;
+    if (!qbSummary || (qbSummary.invoices.length === 0 && qbSummary.bills.length === 0 && qbSummary.accounts.length === 0)) return;
     hasGreeted.current = true;
 
     const context: Record<string, unknown> = {

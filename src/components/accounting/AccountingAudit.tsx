@@ -3,7 +3,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import { ConfirmActionDialog } from "./ConfirmActionDialog";
 import {
   ShieldCheck, AlertTriangle, CheckCircle2, Loader2, Sparkles,
@@ -11,13 +10,14 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { reportToVizzy } from "@/lib/vizzyAutoReport";
 import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
 
 interface Props {
   data: ReturnType<typeof useQuickBooksData>;
 }
 
-interface AuditItem {
+interface AuditFinding {
   id: string;
   type: "error" | "warning" | "info" | "success";
   category: string;
@@ -32,15 +32,14 @@ const fmt = (n: number) =>
 
 export function AccountingAudit({ data }: Props) {
   const { invoices, bills, customers, vendors, payments, accounts, overdueInvoices, overdueBills } = data;
-  const [auditResults, setAuditResults] = useState<AuditItem[]>([]);
+  const [auditResults, setAuditResults] = useState<AuditFinding[]>([]);
   const [auditing, setAuditing] = useState(false);
   const [hasRun, setHasRun] = useState(false);
-  const [confirmAction, setConfirmAction] = useState<AuditItem | null>(null);
+  const [confirmAction, setConfirmAction] = useState<AuditFinding | null>(null);
 
   const runAudit = useCallback(async () => {
     setAuditing(true);
     try {
-      // Pre-detect duplicates client-side
       const seen = new Map<string, number>();
       invoices.forEach(i => {
         const key = `${i.CustomerRef?.value}-${i.TotalAmt}-${i.TxnDate}`;
@@ -50,7 +49,6 @@ export function AccountingAudit({ data }: Props) {
         .filter(([, count]) => count > 1)
         .map(([key]) => key);
 
-      // Customers with no invoices
       const customersWithInvoices = new Set(invoices.map(i => i.CustomerRef?.value));
       const dormantCustomers = customers.filter(c => !customersWithInvoices.has(c.Id));
 
@@ -92,52 +90,73 @@ export function AccountingAudit({ data }: Props) {
         },
       };
 
-      const { data, error } = await supabase.functions.invoke("qb-audit", { body: payload });
+      const { data: resultData, error } = await supabase.functions.invoke("qb-audit", { body: payload });
 
       if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (resultData?.error) throw new Error(resultData.error);
 
-      const findings: AuditItem[] = (data?.findings || []).map((f: any, i: number) => ({
-        id: f.id || `finding-${i}`,
-        type: f.type || "info",
-        category: f.category || "General",
-        title: f.title || "Finding",
-        description: f.description || "",
-        actionLabel: f.actionLabel,
-        action: f.action,
+      const findings: AuditFinding[] = (resultData?.findings || []).map((f: Record<string, unknown>, i: number) => ({
+        id: (f.id as string) || `finding-${i}`,
+        type: (f.type as AuditFinding["type"]) || "info",
+        category: (f.category as string) || "General",
+        title: (f.title as string) || "Finding",
+        description: (f.description as string) || "",
+        actionLabel: f.actionLabel as string | undefined,
+        action: f.action as string | undefined,
       }));
 
       setAuditResults(findings);
       setHasRun(true);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
       console.error("Audit failed:", err);
-      toast.error(err?.message || "Audit failed. Please try again.");
+      toast.error(errMsg || "Audit failed. Please try again.");
+      reportToVizzy(`QB Audit failed: ${errMsg}`, "Accounting — AccountingAudit.runAudit");
     } finally {
       setAuditing(false);
     }
   }, [invoices, bills, customers, vendors, payments, accounts, overdueInvoices, overdueBills]);
 
+  const handleConfirmAction = useCallback(() => {
+    if (!confirmAction?.action) {
+      setConfirmAction(null);
+      return;
+    }
+    // Route action to the appropriate tab or handler
+    const action = confirmAction.action.toLowerCase();
+    if (action.includes("invoice") || action.includes("collection")) {
+      // Navigate to invoices tab — dispatch a custom event the workspace listens to
+      window.dispatchEvent(new CustomEvent("accounting-navigate", { detail: { tab: "invoices" } }));
+    } else if (action.includes("bill") || action.includes("vendor")) {
+      window.dispatchEvent(new CustomEvent("accounting-navigate", { detail: { tab: "bills" } }));
+    } else if (action.includes("customer")) {
+      window.dispatchEvent(new CustomEvent("accounting-navigate", { detail: { tab: "customers" } }));
+    } else if (action.includes("account")) {
+      window.dispatchEvent(new CustomEvent("accounting-navigate", { detail: { tab: "accounts" } }));
+    }
+    setConfirmAction(null);
+  }, [confirmAction]);
+
   const iconForType = (type: string) => {
     switch (type) {
       case "error": return <AlertTriangle className="w-5 h-5 text-destructive" />;
-      case "warning": return <AlertTriangle className="w-5 h-5 text-amber-500" />;
-      case "success": return <CheckCircle2 className="w-5 h-5 text-emerald-500" />;
-      default: return <Sparkles className="w-5 h-5 text-blue-500" />;
+      case "warning": return <AlertTriangle className="w-5 h-5 text-warning" />;
+      case "success": return <CheckCircle2 className="w-5 h-5 text-success" />;
+      default: return <Sparkles className="w-5 h-5 text-primary" />;
     }
   };
 
   const bgForType = (type: string) => {
     switch (type) {
       case "error": return "border-destructive/30 bg-destructive/5";
-      case "warning": return "border-amber-500/30 bg-amber-500/5";
-      case "success": return "border-emerald-500/30 bg-emerald-500/5";
-      default: return "border-blue-500/30 bg-blue-500/5";
+      case "warning": return "border-warning/30 bg-warning/5";
+      case "success": return "border-success/30 bg-success/5";
+      default: return "border-primary/30 bg-primary/5";
     }
   };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <Card className="bg-gradient-to-r from-primary/10 via-background to-background border-primary/20">
         <CardContent className="p-8 flex items-center gap-6">
           <div className="p-4 rounded-2xl bg-primary/10">
@@ -168,7 +187,6 @@ export function AccountingAudit({ data }: Props) {
         </CardContent>
       </Card>
 
-      {/* Quick stats before audit */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <Card>
           <CardContent className="p-4 text-center">
@@ -207,7 +225,6 @@ export function AccountingAudit({ data }: Props) {
         </Card>
       </div>
 
-      {/* Audit results */}
       {hasRun && (
         <div className="space-y-3">
           <div className="flex items-center gap-3">
@@ -259,15 +276,16 @@ export function AccountingAudit({ data }: Props) {
         </Card>
       )}
 
-      {/* Confirm action dialog */}
       <ConfirmActionDialog
         open={!!confirmAction}
         onOpenChange={() => setConfirmAction(null)}
         title={confirmAction?.actionLabel || "Confirm"}
         description={`Are you sure you want to ${confirmAction?.actionLabel?.toLowerCase()}? ${confirmAction?.description}`}
         confirmLabel={`Yes, ${confirmAction?.actionLabel}`}
-        onConfirm={() => setConfirmAction(null)}
+        onConfirm={handleConfirmAction}
       />
     </div>
   );
 }
+
+AccountingAudit.displayName = "AccountingAudit";

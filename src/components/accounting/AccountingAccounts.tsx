@@ -33,7 +33,6 @@ export function AccountingAccounts({ data }: Props) {
       (e.CustomerRef?.name || "").toLowerCase().includes(search.toLowerCase())
   );
 
-  // Group accounts by type, sort alphabetically within each group
   const sorted = [...filteredAccounts].sort((a, b) =>
     a.Name.localeCompare(b.Name, undefined, { sensitivity: "base" })
   );
@@ -97,7 +96,7 @@ export function AccountingAccounts({ data }: Props) {
                         <TableCell className="text-muted-foreground">{a.AccountSubType || "—"}</TableCell>
                         <TableCell className="text-right font-semibold">{fmt(a.CurrentBalance || 0)}</TableCell>
                         <TableCell>
-                          <Badge className={`border-0 text-sm ${a.Active ? "bg-emerald-500/10 text-emerald-500" : "bg-muted text-muted-foreground"}`}>
+                          <Badge className={`border-0 text-sm ${a.Active ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"}`}>
                             {a.Active ? "Active" : "Inactive"}
                           </Badge>
                         </TableCell>
@@ -160,3 +159,5 @@ export function AccountingAccounts({ data }: Props) {
     </div>
   );
 }
+
+AccountingAccounts.displayName = "AccountingAccounts";

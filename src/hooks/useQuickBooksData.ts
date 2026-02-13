@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { reportToVizzy } from "@/lib/vizzyAutoReport";
 
 // ─── QB Interfaces ─────────────────────────────────────────────────
 
@@ -13,6 +14,7 @@ export interface QBInvoice {
   DueDate: string;
   TxnDate: string;
   EmailStatus: string;
+  SyncToken?: string;
 }
 
 export interface QBBill {
@@ -143,7 +145,6 @@ async function loadMirrorTransactions(entityType: string): Promise<unknown[]> {
 }
 
 function mirrorTxnToQBFormat(row: Record<string, unknown>): Record<string, unknown> {
-  // Prefer raw_json if available, fall back to parsed fields
   const raw = row.raw_json as Record<string, unknown> | null;
   if (raw && Object.keys(raw).length > 2) return raw;
   return {
@@ -163,6 +164,7 @@ export function useQuickBooksData() {
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState<string | null>(null);
   const [connected, setConnected] = useState<boolean | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [invoices, setInvoices] = useState<QBInvoice[]>([]);
   const [bills, setBills] = useState<QBBill[]>([]);
   const [payments, setPayments] = useState<QBPayment[]>([]);
@@ -201,16 +203,14 @@ export function useQuickBooksData() {
 
   const loadFromMirror = useCallback(async (): Promise<boolean> => {
     try {
-      // Check if mirror has data
       const { count } = await supabase
         .from("qb_transactions")
         .select("id", { count: "exact", head: true })
         .eq("is_deleted", false)
         .limit(1);
 
-      if (!count || count === 0) return false; // No mirror data, use API
+      if (!count || count === 0) return false;
 
-      // Load from mirror tables in parallel
       const [
         mirrorInvoices, mirrorBills, mirrorPayments,
         mirrorEstimates, mirrorPOs, mirrorCMs,
@@ -283,6 +283,7 @@ export function useQuickBooksData() {
 
   const loadAll = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const isConnected = await checkConnection();
       if (!isConnected) {
@@ -372,7 +373,10 @@ export function useQuickBooksData() {
       }
     } catch (err) {
       console.error("QB load error:", err);
-      toast({ title: "Error loading data", description: String(err), variant: "destructive" });
+      const errMsg = String(err);
+      setError(errMsg);
+      toast({ title: "Error loading data", description: errMsg, variant: "destructive" });
+      reportToVizzy(`QuickBooks data load failed: ${errMsg}`, "Accounting — useQuickBooksData.loadAll");
     } finally {
       setLoading(false);
     }
@@ -410,10 +414,15 @@ export function useQuickBooksData() {
   }, [qbAction, toast, loadAll]);
 
   const createPayrollCorrection = useCallback(async (body: Record<string, unknown>) => {
-    const data = await qbAction("create-payroll-correction", body);
-    toast({ title: "✅ Payroll correction created", description: `Journal Entry #${data.docNumber || "N/A"}` });
-    await loadAll();
-    return data;
+    try {
+      const data = await qbAction("create-payroll-correction", body);
+      toast({ title: "✅ Payroll correction created", description: `Journal Entry #${data.docNumber || "N/A"}` });
+      await loadAll();
+      return data;
+    } catch (err) {
+      reportToVizzy(`Payroll correction failed: ${String(err)}`, "Accounting — createPayrollCorrection");
+      throw err;
+    }
   }, [qbAction, toast, loadAll]);
 
   // Trigger full sync engine
@@ -469,7 +478,7 @@ export function useQuickBooksData() {
   const overdueBills = bills.filter(b => b.Balance > 0 && new Date(b.DueDate) < new Date());
 
   return {
-    loading, syncing, connected,
+    loading, syncing, connected, error,
     invoices, bills, payments, vendors, customers, accounts, estimates, items, purchaseOrders, creditMemos, employees, timeActivities, companyInfo,
     totalReceivable, totalPayable, overdueInvoices, overdueBills,
     checkConnection, loadAll, syncEntity, createEntity, sendInvoice, voidInvoice, createPayrollCorrection, qbAction,
