@@ -127,7 +127,7 @@ serve(async (req) => {
             entity_id: inv.id,
             status: "open",
             actions: [
-              { label: "View AR", action: "navigate", path: "/accounting?tab=invoices" },
+              { label: "View Invoice", action: "navigate", path: `/accounting?tab=invoices&search=${encodeURIComponent(customerName)}` },
             ],
           };
           pushDual(row, `vizzy:overdue_ar:${inv.id}`, agentMap.vizzy);
@@ -159,7 +159,7 @@ serve(async (req) => {
             entity_id: order.id,
             status: "open",
             actions: [
-              { label: "View Order", action: "navigate", path: `/orders` },
+              { label: "View Order", action: "navigate", path: `/accounting?tab=orders&search=${encodeURIComponent(order.order_number)}` },
             ],
           };
           pushDual(row, `vizzy:zero_total:${order.id}`, agentMap.vizzy);
@@ -192,7 +192,7 @@ serve(async (req) => {
             entity_type: "order",
             entity_id: order.id,
             status: "open",
-            actions: [{ label: "View Order", action: "navigate", path: "/orders" }],
+            actions: [{ label: "View Order", action: "navigate", path: `/accounting?tab=orders&search=${encodeURIComponent(order.order_number)}` }],
           };
           pushDual(row, `vizzy:blocked:${order.id}`, agentMap.vizzy);
         }
@@ -224,7 +224,7 @@ serve(async (req) => {
               entity_type: "order",
               entity_id: firstOrder.id,
               status: "open",
-              actions: [{ label: "View Orders", action: "navigate", path: "/orders" }],
+              actions: [{ label: "View Orders", action: "navigate", path: "/accounting?tab=orders" }],
             };
             pushDual(row, `vizzy:revenue_held:batch`, agentMap.vizzy);
           }
@@ -259,7 +259,7 @@ serve(async (req) => {
             entity_id: cust.id,
             status: "open",
             actions: [
-              { label: "View Customer", action: "navigate", path: "/customers" },
+              { label: "View Customer", action: "navigate", path: `/customers?search=${encodeURIComponent(cust.name)}` },
             ],
           };
           pushDual(row, `penny:missing_qb:${cust.id}`, agentMap.penny);
@@ -302,7 +302,7 @@ serve(async (req) => {
             entity_id: inv.id,
             status: "open",
             actions: [
-              { label: "View Invoice", action: "navigate", path: "/accounting?tab=invoices" },
+              { label: "View Invoice", action: "navigate", path: `/accounting?tab=invoices&search=${encodeURIComponent(customerName)}` },
             ],
           };
           pushDual(row, `penny:overdue_ar:${inv.id}:${tier}`, agentMap.penny);
@@ -331,7 +331,7 @@ serve(async (req) => {
             entity_type: "order",
             entity_id: order.id,
             status: "open",
-            actions: [{ label: "View Order", action: "navigate", path: "/orders" }],
+            actions: [{ label: "View Order", action: "navigate", path: `/accounting?tab=orders&search=${encodeURIComponent(order.order_number)}` }],
           };
           pushDual(row, `penny:paid_revision:${order.id}`, agentMap.penny);
         }
