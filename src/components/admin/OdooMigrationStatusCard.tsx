@@ -5,8 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Settings, CheckCircle, Clock, AlertTriangle, ChevronDown } from "lucide-react";
+import { Settings, CheckCircle, Clock, AlertTriangle, ChevronDown, Play } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { formatDistanceToNow } from "date-fns";
+import { toast } from "sonner";
 
 interface MigrationLog {
   id: string;
@@ -22,6 +24,25 @@ interface MigrationLog {
 export function OdooMigrationStatusCard() {
   const history = useRef<number[]>([]);
   const [errorsOpen, setErrorsOpen] = useState(false);
+  const [isKicking, setIsKicking] = useState(false);
+
+  const handleKickMigration = async () => {
+    setIsKicking(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await supabase.functions.invoke("archive-odoo-files", {
+        headers: session?.access_token
+          ? { Authorization: `Bearer ${session.access_token}` }
+          : undefined,
+      });
+      if (res.error) throw res.error;
+      toast.success(`Migration kicked: ${res.data?.migrated ?? 0} files processed`);
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to trigger migration");
+    } finally {
+      setIsKicking(false);
+    }
+  };
 
   const { data } = useQuery({
     queryKey: ["odoo-migration-status"],
@@ -114,6 +135,18 @@ export function OdooMigrationStatusCard() {
                 <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-destructive" />
               )}
             </span>
+          )}
+          {/* Play button when stale */}
+          {!done && !isAlive && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 ml-1"
+              onClick={handleKickMigration}
+              disabled={isKicking}
+            >
+              <Play className={`h-3.5 w-3.5 text-primary ${isKicking ? "animate-pulse" : ""}`} />
+            </Button>
           )}
         </CardTitle>
         {done ? (
