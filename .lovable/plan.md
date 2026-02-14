@@ -1,60 +1,48 @@
 
 
-# Fix Supabase 400 Error — Leads Query Column Mismatch
+# Remove Farsi Mode — Make Vizzy English-Only
 
-## Problem
+## Overview
 
-The `leads` table query in `src/hooks/useVizzyContext.ts` (line 56-58) references **5 columns that don't exist**:
+Strip all Farsi/multilingual voice logic from VizzyPage and the system prompt. Vizzy will be English-only again, using ElevenLabs exclusively (no browser SpeechRecognition/SpeechSynthesis fallback).
 
-| Query uses | Actual column | Fix |
-|-----------|--------------|-----|
-| `contact_name` | Does not exist (name is on `contacts` table via `contact_id` FK) | Join or remove |
-| `company_name` | Does not exist (name is on `customers` table via `customer_id` FK) | Join or remove |
-| `status` | `stage` | Rename |
-| `expected_revenue` | `expected_value` | Rename |
-| `lead_score` | `probability` | Rename |
+## Changes
 
-This causes a **400 Bad Request** on every Vizzy context load, which means Vizzy never gets CRM data.
+### File 1: `src/pages/VizzyPage.tsx`
 
-## Fix
-
-### File 1: `src/hooks/useVizzyContext.ts`
-
-**Line 56-58** — Replace the leads query with correct column names:
-
-```typescript
-const leadsP = (supabase.from("leads").select("id, title, stage, expected_value, probability, customer_id, contact_id") as any)
-  .in("stage", ["new", "contacted", "qualified", "proposal"])
-  .order("probability", { ascending: false }).limit(20);
-```
-
-**Line 177** — Fix the hot leads filter:
-
-```typescript
-hotLeads: leads.filter((l: any) => (l.probability || 0) >= 70).slice(0, 5),
-```
+| What | Detail |
+|------|--------|
+| Remove import | `useVizzyFarsiVoice` import (line 4) and `Languages` icon (line 3) |
+| Remove state | `preferredLang`, `useFarsiMode` (lines 77-78) |
+| Remove hook call | `farsiVoice = useVizzyFarsiVoice(...)` block (lines 81-97) |
+| Remove Farsi branch | The `if (detectedLang === "fa")` block in auto-start (lines 475-492) — just skip straight to ElevenLabs |
+| Simplify `stop` | Remove `useFarsiMode` conditional — always call `conversation.endSession()` (lines 440-444) |
+| Simplify `isSpeakingNow` | Always use `conversation.isSpeaking` (line 581) |
+| Simplify `statusLabel` | Remove all Farsi ternaries — English strings only (lines 583-593) |
+| Remove language badge | The `preferredLang !== "en"` badge (lines 648-652) |
+| Remove Farsi interim text | The `farsiVoice.interimText` block (lines 659-664) |
+| Remove `dir="rtl"` | On status label (line 653) |
+| Simplify mute button | Remove `useFarsiMode` conditional — always use `setMuted` (lines 783-798) |
+| Remove Language toggle button | The entire Languages button (lines 801-818) |
 
 ### File 2: `src/lib/vizzyContext.ts`
 
-**Line 31-33** — Update the hot leads display to use correct field names:
+Replace the multilingual/Farsi instructions (lines 54-57) with a simple English-only directive:
 
-```typescript
-const hotLeadsList = crm.hotLeads
-  .map((l) => `  * ${l.title} — Probability: ${l.probability}%, Expected: ${fmt(l.expected_value || 0)}`)
-  .join("\n");
+```
+YOU ARE VIZZY — the CEO's personal AI assistant (like Jarvis for Iron Man).
+You ALWAYS respond in English.
+You have FULL access to live business data. Use ONLY these numbers. NEVER make up figures.
 ```
 
-(We use `title` instead of `contact_name`/`company_name` since those require a join. The lead title already contains enough context for Vizzy.)
+### File 3: `src/hooks/useVizzyFarsiVoice.ts`
 
-## Impact
+No deletion needed — just removing all imports/usage. The file becomes dead code and can optionally be deleted for cleanup.
 
-- Eliminates the 400 error on every Vizzy page load
-- Vizzy will actually receive CRM pipeline data for context
-- No schema changes needed — purely a frontend query fix
+## What stays unchanged
 
-## Summary
+- ElevenLabs voice pipeline (WebRTC + WebSocket fallback)
+- All business context, tools, RingCentral integration
+- Transcribe view's Farsi option (that's a separate feature for audio transcription, not Vizzy voice)
+- The `autoFallbackAttemptedRef` fix for reconnection loops
 
-| File | Change |
-|------|--------|
-| `src/hooks/useVizzyContext.ts` | Fix column names in leads query and hot leads filter |
-| `src/lib/vizzyContext.ts` | Fix field references in hot leads display string |
