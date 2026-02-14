@@ -121,10 +121,7 @@ export default function Home() {
     navigate("/vizzy");
   };
 
-  // Hero text
-  const heroTitle = mapping
-    ? mapping.heroText.replace(/\*\*(.*?)\*\*/g, '<span class="text-primary">$1</span>')
-    : "How can REBAR SHOP OS help you today?";
+  // heroTitle is now rendered inline in JSX (no dangerouslySetInnerHTML)
 
   return (
     <ScrollArea className="h-full">
@@ -136,10 +133,17 @@ export default function Home() {
 
         {/* Hero Section */}
         <div className="relative z-10 w-full max-w-2xl text-center mb-6 sm:mb-12">
-          <h1
-            className="text-xl sm:text-3xl font-bold mb-1 sm:mb-2"
-            dangerouslySetInnerHTML={{ __html: heroTitle }}
-          />
+          <h1 className="text-xl sm:text-3xl font-bold mb-1 sm:mb-2">
+            {mapping ? (
+              <>
+                {mapping.heroText.split(/\*\*(.*?)\*\*/g).map((part, i) =>
+                  i % 2 === 1 ? <span key={i} className="text-primary">{part}</span> : part
+                )}
+              </>
+            ) : (
+              "How can REBAR SHOP OS help you today?"
+            )}
+          </h1>
           <p className="text-xs sm:text-base text-muted-foreground mb-4 sm:mb-8">
             Your AI-powered operations assistant
           </p>
@@ -170,8 +174,11 @@ export default function Home() {
             ].map((ws) => (
               <div
                 key={ws.label}
+                role="button"
+                tabIndex={0}
                 className={`relative overflow-hidden rounded-xl p-2.5 sm:p-4 text-white cursor-pointer transition-all hover:scale-[1.03] active:scale-[0.98] bg-gradient-to-br ${ws.gradient} flex flex-col items-center gap-1 sm:flex-row sm:gap-3`}
                 onClick={() => navigate(ws.route)}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate(ws.route); } }}
               >
                 <span className="text-lg sm:text-xl">{ws.emoji}</span>
                 <span className="relative z-10 font-bold text-[10px] sm:text-base text-center sm:text-left leading-tight">{ws.label}</span>
@@ -215,7 +222,7 @@ const HelperCard = React.forwardRef<HTMLDivElement, { helper: Helper; isPrimary?
     >
       <div className="relative">
         <div className="aspect-square overflow-hidden bg-muted">
-          <img src={helper.image} alt={helper.name} className="w-full h-full object-cover object-top" />
+          <img src={helper.image} alt={`${helper.name} – ${helper.role}`} className="w-full h-full object-cover object-top" />
         </div>
         <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-1 pt-4 sm:relative sm:bg-transparent sm:p-3 sm:pt-3">
           <h3 className="font-bold text-[10px] sm:text-base leading-tight truncate text-white sm:text-foreground">{helper.name}</h3>
