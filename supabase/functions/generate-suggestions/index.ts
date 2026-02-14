@@ -118,7 +118,7 @@ serve(async (req) => {
       }
       // Fallback to QuickBooks embedded data
       const invData = inv.data as any;
-      return invData?.CustomerRef?.name ?? "Unknown";
+      return invData?.CustomerName ?? invData?.CustomerRef?.name ?? "Unknown";
     };
 
     // ========== VIZZY (CEO) ==========
