@@ -1,49 +1,34 @@
 
-# Fix "Unknown Customer" in AI Actions Queue
+# Add "Assign" Button to AI Actions Queue Cards
 
-## Problem
+## What Changes
 
-The action cards show "Unknown Customer" because the `penny-auto-actions` edge function tries to read the customer name from the QuickBooks invoice JSON (`data->'CustomerRef'->'name'`), but that field is null in your synced data. Meanwhile, the `customer_id` column IS correctly populated and the actual customer names exist in the `customers` table.
+Each action card in the AI Actions Queue will get a new "Assign" button alongside the existing Approve, Edit & Approve, Schedule, and Reject buttons. Clicking it opens a dropdown of team members so you can assign an action item to a specific person.
 
-## Root Cause
+## How It Works
 
-In `supabase/functions/penny-auto-actions/index.ts`, line 67-68:
+1. A new "Assign" button appears on every pending action card
+2. Clicking it shows a popover with a searchable list of team members (loaded from your profiles)
+3. Selecting a person saves the assignment and shows their name on the card
+4. The assigned person is stored in the database so it persists across sessions
 
-```text
-const customerRef = invData?.CustomerRef as ...;
-const customerName = customerRef?.name ?? "Unknown Customer";
-```
+## Technical Details
 
-The `CustomerRef` inside the JSONB `data` column is null, so it always falls back to "Unknown Customer".
+### 1. Database Migration
 
-## Fix (two parts)
+Add two new columns to `penny_collection_queue`:
+- `assigned_to` (UUID, nullable, references profiles.id) -- who is assigned
+- `assigned_at` (timestamptz, nullable) -- when it was assigned
 
-### 1. Update the edge function to look up real customer names
+### 2. Update Hook: `src/hooks/usePennyQueue.ts`
 
-Modify `penny-auto-actions/index.ts` to:
-- Batch-load all relevant customers from the `customers` table using the `customer_id` values already present on `accounting_mirror`
-- Build a `customerNameMap` (customer_id -> name)
-- Use `customerNameMap.get(inv.customer_id) ?? customerRef?.name ?? "Unknown Customer"` as the fallback chain
+- Add `assigned_to` and `assigned_at` to the `PennyQueueItem` interface
+- Add a new `assign(id, profileId)` callback that updates the row
 
-This is a small change -- just add a query after loading `overdueInvoices` and use the map when building the queue entries.
+### 3. Update Component: `src/components/accounting/AccountingActionQueue.tsx`
 
-### 2. Backfill existing queue entries
-
-Run a SQL update to fix the existing "Unknown Customer" rows in `penny_collection_queue` by joining through `accounting_mirror` to `customers`:
-
-```text
-UPDATE penny_collection_queue pq
-SET customer_name = c.name
-FROM accounting_mirror am
-JOIN customers c ON am.customer_id = c.id
-WHERE pq.invoice_id = am.quickbooks_id
-  AND am.entity_type = 'Invoice'
-  AND pq.customer_name = 'Unknown Customer'
-  AND c.name IS NOT NULL;
-```
-
-## Result
-
-- All existing "Unknown Customer" entries get corrected immediately
-- Future scans will populate the correct customer name from the `customers` table
-- No frontend changes needed -- the `AccountingActionQueue` component already displays `item.customer_name`
+- Add a "UserPlus" icon button that opens a Popover
+- Inside the popover: fetch profiles from the database and show a simple list/select
+- On selection: call `assign(item.id, selectedProfileId)`
+- Show the assigned person's name as a small badge on the card when set
+- Pass the new `onAssign` callback through to `ActionCard`
