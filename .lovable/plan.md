@@ -1,45 +1,32 @@
 
-# Proactive QuickBooks Token Warm-Up on Page Open
+# Auto-Match Customers to QuickBooks by Name
 
 ## What Changes
 
-When you open the Accounting page, QuickBooks data will load faster because:
+After syncing customers from QuickBooks, the system will automatically find local customers that have no QuickBooks ID and try to match them to QB customers by name. When a match is found, the local customer gets linked to the QB record, eliminating the "cannot be synced" warnings.
 
-1. **Mirror data loads instantly** -- while that happens, a background call warms up the QB token so it's ready for any follow-up API calls (employees, time activities, etc.)
-2. **`checkConnection` and mirror load run in parallel** instead of sequentially -- the connection check no longer blocks data loading
-3. **Token pre-warm on hook mount** -- a lightweight `check-status` call fires as soon as the hook initializes, ensuring the token is refreshed before any data requests need it
+## How It Works
 
-Currently: `checkConnection` (waits) -> `loadFromMirror` (waits) -> background API calls (may hit expired token)
-
-After: `checkConnection` + `loadFromMirror` fire together -> mirror data appears instantly -> background API calls use the already-warmed token
+1. QB customers sync as normal (upsert by `quickbooks_id`)
+2. After that, load all local customers where `quickbooks_id IS NULL`
+3. Build a lookup map from QB customer `DisplayName` (lowercased, trimmed) to their QB `Id`
+4. For each unlinked local customer, normalize their `name` and check for a match
+5. If matched, update the local customer's `quickbooks_id` to link them
+6. Report how many were auto-matched
 
 ## Technical Details
 
-### File: `src/hooks/useQuickBooksData.ts`
-
-**1. Add eager token warm-up on mount**
-- Add a new `warmUpToken` function that calls `qbAction("check-status")` silently (no state changes, just ensures the edge function refreshes the token if needed)
-- Fire it inside the hook initialization so it runs as soon as the component mounts, before `loadAll` is even called
-
-**2. Parallelize `checkConnection` and `loadFromMirror` in `loadAll`**
-- Currently `loadAll` calls `checkConnection()` first, waits for it, then calls `loadFromMirror()`
-- Change to run both in parallel with `Promise.all`:
-  - Mirror data loads from the local database (no QB token needed)
-  - `checkConnection` ensures the token is fresh in the background
-  - If `checkConnection` returns false, clear the mirror data and show the connect screen
-  - If mirror loaded successfully, set `loading = false` immediately
-
-**3. Pre-fetch connection status on hook init**
-- Add a `useEffect` inside `useQuickBooksData` that fires once on mount
-- Calls `qbAction("check-status")` to trigger proactive token refresh on the edge function
-- Sets `connected` state early so the UI doesn't flash a "not connected" state
-- This runs independently of `loadAll`, so even before the page triggers data loading, the token is already being warmed
-
 ### File: `supabase/functions/quickbooks-oauth/index.ts`
 
-**No changes needed** -- the proactive refresh logic (5-minute buffer) is already implemented in `qbFetch`. The `check-status` handler already refreshes expired tokens. The warm-up call from the client will trigger this existing logic.
+**Modify `handleSyncCustomers`** (lines 643-679):
 
-### Result
-- Mirror data appears instantly on page open (no waiting for token check)
-- QB API calls (employees, time activities) never hit an expired token because the warm-up already refreshed it
-- No extra network calls -- we just reorder the existing ones to run in parallel
+After the existing upsert loop, add a name-matching phase:
+
+- Query all customers from the database where `quickbooks_id IS NULL` and `company_id = companyId`
+- Build a `Map<string, string>` from normalized QB `DisplayName` to QB `Id` (using the already-fetched `customers` array)
+- Also check `CompanyName` as a secondary match key
+- For each unlinked local customer, normalize their `name` and look up in the map
+- If found, update that row's `quickbooks_id`
+- Track and return `matched` count alongside `synced`
+
+Normalization: lowercase, trim whitespace, collapse multiple spaces -- simple but effective for business names.
