@@ -2044,7 +2044,7 @@ async function fetchQuickBooksLiveContext(supabase: ReturnType<typeof createClie
         try {
           const fiveYearsAgo = `${new Date().getFullYear() - 5}-01-01`;
           const today = new Date().toISOString().split("T")[0];
-          const plRes = await qbFetch(`${qbApiBase}/v3/company/${config.realm_id}/reports/ProfitAndLoss?start_date=${fiveYearsAgo}&end_date=${today}&summarize_column_by=Year&accounting_method=Accrual`);
+          const plRes = await qbFetch(`${qbApiBase}/v3/company/${config.realm_id}/reports/ProfitAndLoss?start_date=${fiveYearsAgo}&end_date=${today}&summarize_column_by=Month&accounting_method=Accrual`);
           if (plRes) {
             const plData = await plRes.json();
             context.qbProfitAndLoss = plData;
