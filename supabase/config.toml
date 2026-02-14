@@ -213,3 +213,9 @@ verify_jwt = false
 
 [functions.timeclock-alerts]
 verify_jwt = false
+
+[functions.vizzy-daily-brief]
+verify_jwt = false
+
+[functions.app-help-chat]
+verify_jwt = false
