@@ -217,7 +217,7 @@ export default function AccountingWorkspace() {
         {/* Penny Agent Panel (side panel / fullscreen on desktop) */}
         {showAgent && (
           <div className={cn(
-            "hidden lg:flex shrink-0 border-l border-border",
+            "hidden lg:flex shrink-0 border-l border-border overflow-hidden",
             agentMode === "fullscreen" ? "flex-1" : "w-[400px]",
             "p-3"
           )}>
@@ -241,7 +241,7 @@ export default function AccountingWorkspace() {
           "lg:hidden fixed z-50",
           agentMode === "fullscreen"
             ? "inset-0 bg-background p-3"
-            : "inset-x-3 bottom-3 max-h-[75vh] rounded-xl shadow-2xl overflow-hidden"
+            : "inset-x-3 bottom-3 max-h-[75vh] rounded-xl shadow-2xl overflow-hidden flex flex-col"
         )}>
           {/* Mobile close button */}
           {agentMode !== "fullscreen" && (
