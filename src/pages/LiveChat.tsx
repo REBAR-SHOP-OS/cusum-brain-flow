@@ -287,10 +287,15 @@ export default function LiveChat() {
 
         {/* Voice mode: orb + transcript */}
         {voiceMode && (
-          <div className="px-4 py-4 flex flex-col items-center gap-2 border-t border-border bg-card/50">
+          <div className="px-4 py-6 flex flex-col items-center gap-3 border-t border-border bg-card/50">
             {voiceChat.status === "listening" && voiceChat.interimText && (
               <p className="text-sm text-muted-foreground italic truncate max-w-xs">
                 "{voiceChat.interimText}"
+              </p>
+            )}
+            {voiceChat.status === "listening" && voiceChat.fullTranscript && (
+              <p className="text-xs text-foreground/70 truncate max-w-xs">
+                {voiceChat.fullTranscript}
               </p>
             )}
             <VoiceOrb
@@ -309,103 +314,105 @@ export default function LiveChat() {
           </div>
         )}
 
-        {/* Input */}
-        <div className="border-t border-border bg-card p-4 shrink-0">
-          <div className="max-w-3xl mx-auto">
-            <div className="relative bg-secondary rounded-xl border border-border/50 shadow-sm transition-shadow focus-within:shadow-md focus-within:border-primary/30">
-              <FormattingToolbar onFormat={handleFormat} disabled={isStreaming} visible={showFormatting} />
-              <SlashCommandMenu
-                isOpen={slashOpen}
-                filter={slashFilter}
-                selectedIndex={slashIndex}
-                onSelect={handleSlashSelect}
-                onClose={() => setSlashOpen(false)}
-              />
-              <MentionMenu
-                isOpen={mentionOpen}
-                filter={mentionFilter}
-                selectedIndex={mentionIndex}
-                onSelect={handleMentionSelect}
-                onClose={() => setMentionOpen(false)}
-              />
-
-              <div className="px-3 pt-3 pb-1">
-                <textarea
-                  ref={inputRef}
-                  value={input}
-                  onChange={(e) => handleValueChange(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Type a message..."
-                  className="w-full bg-transparent resize-none text-sm leading-relaxed placeholder:text-muted-foreground focus:outline-none disabled:opacity-50"
-                  rows={1}
-                  disabled={isStreaming}
+        {/* Input -- hidden when voice conversation is active */}
+        {!(voiceMode && voiceChat.isConversationActive) && (
+          <div className="border-t border-border bg-card p-4 shrink-0">
+            <div className="max-w-3xl mx-auto">
+              <div className="relative bg-secondary rounded-xl border border-border/50 shadow-sm transition-shadow focus-within:shadow-md focus-within:border-primary/30">
+                <FormattingToolbar onFormat={handleFormat} disabled={isStreaming} visible={showFormatting} />
+                <SlashCommandMenu
+                  isOpen={slashOpen}
+                  filter={slashFilter}
+                  selectedIndex={slashIndex}
+                  onSelect={handleSlashSelect}
+                  onClose={() => setSlashOpen(false)}
                 />
+                <MentionMenu
+                  isOpen={mentionOpen}
+                  filter={mentionFilter}
+                  selectedIndex={mentionIndex}
+                  onSelect={handleMentionSelect}
+                  onClose={() => setMentionOpen(false)}
+                />
+
+                <div className="px-3 pt-3 pb-1">
+                  <textarea
+                    ref={inputRef}
+                    value={input}
+                    onChange={(e) => handleValueChange(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder="Type a message..."
+                    className="w-full bg-transparent resize-none text-sm leading-relaxed placeholder:text-muted-foreground focus:outline-none disabled:opacity-50"
+                    rows={1}
+                    disabled={isStreaming}
+                  />
+                </div>
+
+                <div className="flex items-center gap-0.5 px-2 pb-2">
+                  <EmojiPicker onSelect={handleEmojiSelect} disabled={isStreaming} />
+                  <VoiceInputButton isListening={speech.isListening} isSupported={speech.isSupported} onToggle={handleVoiceToggle} disabled={isStreaming} />
+                  <QuickTemplates onSelect={handleTemplateSelect} disabled={isStreaming} />
+
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={() => setShowFormatting(!showFormatting)}
+                        className={cn(
+                          "p-2 rounded-md transition-colors",
+                          showFormatting ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                        )}
+                      >
+                        <Type className="w-5 h-5" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top">Formatting</TooltipContent>
+                  </Tooltip>
+
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const textarea = inputRef.current;
+                          if (textarea) {
+                            const start = textarea.selectionStart;
+                            const newVal = input.slice(0, start) + "/" + input.slice(start);
+                            handleValueChange(newVal);
+                            textarea.focus();
+                          }
+                        }}
+                        className="p-2 text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-muted/50"
+                      >
+                        <Hash className="w-5 h-5" />
+                      </button>
+                    </TooltipTrigger>
+                  <TooltipContent side="top">Commands (/)</TooltipContent>
+                  </Tooltip>
+
+
+                  <div className="flex-1" />
+
+                  {isStreaming ? (
+                    <Button size="icon" variant="destructive" className="h-9 w-9 rounded-lg shrink-0" onClick={cancelStream}>
+                      <Square className="w-4 h-4" />
+                    </Button>
+                  ) : (
+                    <Button size="icon" className="h-9 w-9 rounded-lg shrink-0" onClick={handleSend} disabled={!input.trim()}>
+                      <Send className="w-4 h-4" />
+                    </Button>
+                  )}
+                </div>
               </div>
 
-              <div className="flex items-center gap-0.5 px-2 pb-2">
-                <EmojiPicker onSelect={handleEmojiSelect} disabled={isStreaming} />
-                <VoiceInputButton isListening={speech.isListening} isSupported={speech.isSupported} onToggle={handleVoiceToggle} disabled={isStreaming} />
-                <QuickTemplates onSelect={handleTemplateSelect} disabled={isStreaming} />
-
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      onClick={() => setShowFormatting(!showFormatting)}
-                      className={cn(
-                        "p-2 rounded-md transition-colors",
-                        showFormatting ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                      )}
-                    >
-                      <Type className="w-5 h-5" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top">Formatting</TooltipContent>
-                </Tooltip>
-
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const textarea = inputRef.current;
-                        if (textarea) {
-                          const start = textarea.selectionStart;
-                          const newVal = input.slice(0, start) + "/" + input.slice(start);
-                          handleValueChange(newVal);
-                          textarea.focus();
-                        }
-                      }}
-                      className="p-2 text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-muted/50"
-                    >
-                      <Hash className="w-5 h-5" />
-                    </button>
-                  </TooltipTrigger>
-                <TooltipContent side="top">Commands (/)</TooltipContent>
-                </Tooltip>
-
-
-                <div className="flex-1" />
-
-                {isStreaming ? (
-                  <Button size="icon" variant="destructive" className="h-9 w-9 rounded-lg shrink-0" onClick={cancelStream}>
-                    <Square className="w-4 h-4" />
-                  </Button>
-                ) : (
-                  <Button size="icon" className="h-9 w-9 rounded-lg shrink-0" onClick={handleSend} disabled={!input.trim()}>
-                    <Send className="w-4 h-4" />
-                  </Button>
-                )}
+              <div className="flex justify-end mt-2 px-1">
+                <p className="text-xs text-muted-foreground">
+                  Type <kbd className="px-1 py-0.5 rounded bg-muted text-[10px] font-mono">/</kbd> for commands · <kbd className="px-1 py-0.5 rounded bg-muted text-[10px] font-mono">@</kbd> to mention
+                </p>
               </div>
-            </div>
-
-            <div className="flex justify-end mt-2 px-1">
-              <p className="text-xs text-muted-foreground">
-                Type <kbd className="px-1 py-0.5 rounded bg-muted text-[10px] font-mono">/</kbd> for commands · <kbd className="px-1 py-0.5 rounded bg-muted text-[10px] font-mono">@</kbd> to mention
-              </p>
             </div>
           </div>
-        </div>
+        )}
       </div>
     </TooltipProvider>
   );

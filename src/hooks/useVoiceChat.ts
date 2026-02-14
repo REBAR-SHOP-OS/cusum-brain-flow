@@ -15,12 +15,33 @@ export function useVoiceChat(chat: ReturnType<typeof useAdminChat>) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const ttsTriggeredRef = useRef(false);
-  const prevMsgCountRef = useRef(0);
   const prevAssistantTextRef = useRef("");
+  const conversationActiveRef = useRef(false);
+  const statusRef = useRef<VoiceChatStatus>("idle");
+  statusRef.current = status;
+
+  // Handle auto-send when silence is detected
+  const handleSilenceEnd = useCallback(() => {
+    if (statusRef.current !== "listening" || !conversationActiveRef.current) return;
+    // Grab transcript and send
+    const transcript = speechRef.current.fullTranscript + (speechRef.current.interimText ? " " + speechRef.current.interimText : "");
+    if (transcript.trim()) {
+      speechRef.current.stop();
+      setStatus("thinking");
+      ttsTriggeredRef.current = false;
+      chat.sendMessage(transcript.trim());
+    }
+  }, [chat]);
 
   const speech = useSpeechRecognition({
     onError: (err) => toast({ title: "Voice", description: err, variant: "destructive" }),
+    onSilenceEnd: handleSilenceEnd,
+    silenceTimeout: 1500,
   });
+
+  // Keep a ref to speech so callbacks can access latest state
+  const speechRef = useRef(speech);
+  speechRef.current = speech;
 
   // Monitor streaming to detect completion and trigger TTS
   useEffect(() => {
@@ -37,17 +58,10 @@ export function useVoiceChat(chat: ReturnType<typeof useAdminChat>) {
     if (!ttsTriggeredRef.current) {
       if (text.length >= TTS_CHAR_THRESHOLD || (!isStreaming && text.length > 0)) {
         ttsTriggeredRef.current = true;
-        // Use full text when stream is done, otherwise use what we have
-        if (!isStreaming) {
-          triggerTTS(text);
-        } else {
-          triggerTTS(text);
-        }
+        triggerTTS(text);
       }
     }
 
-    // If TTS was already triggered with partial text, and stream just ended,
-    // we already sent what we had — the audio covers the first chunk
     prevAssistantTextRef.current = text;
   }, [chat.messages, chat.isStreaming, status]);
 
@@ -73,6 +87,7 @@ export function useVoiceChat(chat: ReturnType<typeof useAdminChat>) {
       if (!resp.ok) {
         console.error("TTS failed:", resp.status);
         setStatus("idle");
+        conversationActiveRef.current = false;
         return;
       }
 
@@ -84,13 +99,23 @@ export function useVoiceChat(chat: ReturnType<typeof useAdminChat>) {
       audio.onended = () => {
         URL.revokeObjectURL(url);
         audioRef.current = null;
-        setStatus("idle");
+        // Auto-listen: restart the loop if conversation is still active
+        if (conversationActiveRef.current) {
+          speechRef.current.reset();
+          ttsTriggeredRef.current = false;
+          prevAssistantTextRef.current = "";
+          speechRef.current.start();
+          setStatus("listening");
+        } else {
+          setStatus("idle");
+        }
       };
 
       audio.onerror = () => {
         URL.revokeObjectURL(url);
         audioRef.current = null;
         setStatus("idle");
+        conversationActiveRef.current = false;
       };
 
       setStatus("speaking");
@@ -100,6 +125,7 @@ export function useVoiceChat(chat: ReturnType<typeof useAdminChat>) {
         console.error("TTS error:", e);
       }
       setStatus("idle");
+      conversationActiveRef.current = false;
     }
   }, []);
 
@@ -112,10 +138,19 @@ export function useVoiceChat(chat: ReturnType<typeof useAdminChat>) {
     }
   }, []);
 
+  const stopConversation = useCallback(() => {
+    conversationActiveRef.current = false;
+    speech.stop();
+    stopAudio();
+    chat.cancelStream();
+    setStatus("idle");
+  }, [speech, stopAudio, chat]);
+
   const handleOrbTap = useCallback(() => {
     switch (status) {
       case "idle":
-        // Start listening
+        // Start conversation loop
+        conversationActiveRef.current = true;
         speech.reset();
         ttsTriggeredRef.current = false;
         prevAssistantTextRef.current = "";
@@ -124,23 +159,13 @@ export function useVoiceChat(chat: ReturnType<typeof useAdminChat>) {
         break;
 
       case "listening":
-        // Stop listening, send transcript
-        speech.stop();
-        const transcript = speech.fullTranscript + (speech.interimText ? " " + speech.interimText : "");
-        if (transcript.trim()) {
-          setStatus("thinking");
-          ttsTriggeredRef.current = false;
-          chat.sendMessage(transcript.trim());
-        } else {
-          setStatus("idle");
-        }
+        // Stop the entire conversation
+        stopConversation();
         break;
 
       case "thinking":
-        // Cancel and go back to idle
-        chat.cancelStream();
-        stopAudio();
-        setStatus("idle");
+        // Cancel and stop
+        stopConversation();
         break;
 
       case "speaking":
@@ -152,7 +177,7 @@ export function useVoiceChat(chat: ReturnType<typeof useAdminChat>) {
         setStatus("listening");
         break;
     }
-  }, [status, speech, chat, stopAudio]);
+  }, [status, speech, stopAudio, stopConversation]);
 
   return {
     status,
@@ -160,5 +185,6 @@ export function useVoiceChat(chat: ReturnType<typeof useAdminChat>) {
     fullTranscript: speech.fullTranscript,
     isSupported: speech.isSupported,
     handleOrbTap,
+    isConversationActive: status !== "idle",
   };
 }
