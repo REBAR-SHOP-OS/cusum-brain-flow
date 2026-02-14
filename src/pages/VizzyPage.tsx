@@ -361,6 +361,11 @@ export default function VizzyPage() {
   useEffect(() => {
     reconnectRef.current = async () => {
       try {
+        // End any lingering session before reconnecting
+        try { await conversation.endSession(); } catch { /* already ended */ }
+        // Small delay to let WebSocket fully close
+        await new Promise((r) => setTimeout(r, 500));
+
         const { data, error } = await supabase.functions.invoke("elevenlabs-conversation-token");
         if (error || !data?.signed_url) throw new Error(error?.message ?? "No signed URL received");
         await conversation.startSession({ signedUrl: data.signed_url, connectionType: "websocket" });
@@ -371,7 +376,15 @@ export default function VizzyPage() {
         retryCountRef.current = 0;
       } catch (err) {
         console.error("Vizzy reconnect failed:", err);
-        setStatus("error");
+        // If still have retries left, try again
+        if (retryCountRef.current < MAX_RETRIES) {
+          retryCountRef.current += 1;
+          const delay = Math.min(1000 * Math.pow(2, retryCountRef.current - 1), 16000);
+          console.log(`[Vizzy] Retry from reconnect failure in ${delay}ms (attempt ${retryCountRef.current}/${MAX_RETRIES})`);
+          setTimeout(() => reconnectRef.current(), delay);
+        } else {
+          setStatus("error");
+        }
       }
     };
   }, [conversation, buildConversationMemory]);
