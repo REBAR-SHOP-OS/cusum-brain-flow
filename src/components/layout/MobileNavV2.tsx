@@ -41,6 +41,9 @@ export const MobileNavV2 = React.forwardRef<HTMLElement, {}>(function MobileNavV
   const { hasAccess: isLinkedCustomer } = useCustomerPortalData();
   const isExternalEmployee = !isInternal && !!email && !isLinkedCustomer;
 
+  // Hide mobile nav on full-screen chat route
+  if (location.pathname === "/chat") return null;
+
   // Customer role gets portal-only nav
   if (isCustomer && roles.length === 1) {
     const custNav = [
