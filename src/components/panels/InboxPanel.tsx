@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { X, ChevronRight, ChevronDown, Loader2, Check, Bell, CheckSquare, Lightbulb } from "lucide-react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { X, ChevronRight, ChevronDown, Loader2, Check, Bell, CheckSquare, Lightbulb, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
@@ -24,17 +24,27 @@ function AgentAvatar({ name, color }: { name: string | null; color: string }) {
   );
 }
 
+function PriorityIcon({ priority }: { priority: string }) {
+  if (priority === "high") {
+    return <AlertTriangle className="w-3.5 h-3.5 text-destructive flex-shrink-0" />;
+  }
+  return null;
+}
+
 function EmptyState({ tab }: { tab: TabKey }) {
   const config = {
-    notifications: { icon: Bell, label: "No notifications right now" },
-    todos: { icon: CheckSquare, label: "No to-dos right now" },
-    ideas: { icon: Lightbulb, label: "No ideas right now" },
+    notifications: { icon: Bell, label: "You're all caught up!", sub: "No new notifications" },
+    todos: { icon: CheckSquare, label: "Nothing on your plate!", sub: "No to-dos right now" },
+    ideas: { icon: Lightbulb, label: "Idea board is empty", sub: "New ideas will appear here" },
   };
-  const { icon: Icon, label } = config[tab];
+  const { icon: Icon, label, sub } = config[tab];
   return (
-    <div className="flex flex-col items-center justify-center py-10 gap-2 text-muted-foreground">
-      <Icon className="w-8 h-8 opacity-40" />
-      <p className="text-xs">{label}</p>
+    <div className="flex flex-col items-center justify-center py-12 gap-2 text-muted-foreground">
+      <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-1">
+        <Icon className="w-6 h-6 opacity-50" />
+      </div>
+      <p className="text-sm font-medium text-foreground/70">{label}</p>
+      <p className="text-xs">{sub}</p>
     </div>
   );
 }
@@ -72,23 +82,33 @@ function NotificationItem({
         {showCheckmark && (
           <button
             onClick={onAction}
-            className="w-5 h-5 rounded border border-muted-foreground/40 flex items-center justify-center hover:bg-primary hover:text-primary-foreground hover:border-primary transition-colors flex-shrink-0"
-            title="Mark done"
+            aria-label="Mark as done"
+            className="w-5 h-5 rounded border border-muted-foreground/40 flex items-center justify-center hover:bg-primary hover:text-primary-foreground hover:border-primary transition-colors flex-shrink-0 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
           >
             <Check className="w-3 h-3" />
           </button>
         )}
-        {!showCheckmark && <AgentAvatar name={item.agentName} color={item.agentColor} />}
+        {!showCheckmark && (
+          <div className="relative flex-shrink-0">
+            <AgentAvatar name={item.agentName} color={item.agentColor} />
+            <PriorityIcon priority={item.priority} />
+          </div>
+        )}
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium truncate">{item.title}</p>
+          <div className="flex items-center gap-1.5">
+            {item.status === "unread" && (
+              <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0" />
+            )}
+            <p className="text-sm font-medium truncate">{item.title}</p>
+          </div>
           <p className="text-xs text-muted-foreground">
             {item.agentName ?? "System"} · {formatDistanceToNow(new Date(item.createdAt), { addSuffix: true })}
           </p>
         </div>
         <button
           onClick={onDismiss}
-          className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors flex-shrink-0 opacity-0 group-hover:opacity-100"
-          title="Dismiss"
+          aria-label="Dismiss notification"
+          className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors flex-shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
         >
           <X className="w-3.5 h-3.5" />
         </button>
@@ -125,8 +145,10 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
     notifications,
     todos,
     ideas,
+    unreadCount,
     loading,
     dismissAll,
+    dismissAllByType,
     markRead,
     markAllRead,
     markActioned,
@@ -135,16 +157,53 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
   const navigate = useNavigate();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>("notifications");
+  const panelRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
 
-  // Escape key to close
+  // Auto-focus close button on open
   useEffect(() => {
-    if (!isOpen) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [isOpen, onClose]);
+    if (isOpen) {
+      setTimeout(() => closeButtonRef.current?.focus(), 50);
+    }
+  }, [isOpen]);
+
+  // Focus trap
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      if (!isOpen || !panelRef.current) return;
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab") return;
+
+      const focusable = panelRef.current.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      if (focusable.length === 0) return;
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+
+      if (e.shiftKey) {
+        if (document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    },
+    [isOpen, onClose]
+  );
+
+  useEffect(() => {
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleKeyDown]);
 
   const handleToggle = (item: Notification) => {
     if (item.status === "unread") markRead(item.id);
@@ -166,16 +225,26 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
     markActioned(id);
   };
 
-  const counts: Record<TabKey, number> = {
-    notifications: notifications.length,
-    todos: todos.length,
-    ideas: ideas.length,
+  const handleDismissAllForTab = () => {
+    if (activeTab === "notifications") dismissAll();
+    else if (activeTab === "todos") dismissAllByType("todo");
+    else if (activeTab === "ideas") dismissAllByType("idea");
   };
 
-  const activeItems =
-    activeTab === "notifications" ? notifications : activeTab === "todos" ? todos : ideas;
+  const allItems: Record<TabKey, Notification[]> = {
+    notifications,
+    todos,
+    ideas,
+  };
 
-  const unreadInTab = activeItems.filter((n) => n.status === "unread").length;
+  const unreadCounts: Record<TabKey, number> = {
+    notifications: notifications.filter((n) => n.status === "unread").length,
+    todos: todos.filter((n) => n.status === "unread").length,
+    ideas: ideas.filter((n) => n.status === "unread").length,
+  };
+
+  const activeItems = allItems[activeTab];
+  const unreadInTab = unreadCounts[activeTab];
 
   return (
     <AnimatePresence>
@@ -195,6 +264,10 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
           {/* Panel */}
           <motion.div
             key="inbox-panel"
+            ref={panelRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Inbox"
             initial={{ x: "-100%" }}
             animate={{ x: 0 }}
             exit={{ x: "-100%" }}
@@ -203,29 +276,38 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
           >
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-4 border-b border-border">
-              <h2 className="text-lg font-semibold">Inbox</h2>
-              <Button variant="ghost" size="icon" onClick={onClose}>
+              <h2 className="text-lg font-semibold">
+                Inbox
+                {unreadCount > 0 && (
+                  <span className="text-sm font-normal text-muted-foreground ml-2">
+                    ({unreadCount} unread)
+                  </span>
+                )}
+              </h2>
+              <Button ref={closeButtonRef} variant="ghost" size="icon" onClick={onClose} aria-label="Close inbox" className="focus-visible:ring-2 focus-visible:ring-primary">
                 <X className="w-4 h-4" />
               </Button>
             </div>
 
             {/* Tab bar */}
-            <div className="flex border-b border-border px-2 pt-2 gap-1">
+            <div className="flex border-b border-border px-2 pt-2 gap-1" role="tablist" aria-label="Inbox tabs">
               {tabs.map((tab) => (
                 <button
                   key={tab.key}
+                  role="tab"
+                  aria-selected={activeTab === tab.key}
                   onClick={() => setActiveTab(tab.key)}
                   className={cn(
-                    "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-t-md transition-colors -mb-px border-b-2",
+                    "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-t-md transition-colors -mb-px border-b-2 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none",
                     activeTab === tab.key
                       ? "border-primary text-foreground bg-background"
                       : "border-transparent text-muted-foreground hover:text-foreground"
                   )}
                 >
                   {tab.label}
-                  {counts[tab.key] > 0 && (
+                  {unreadCounts[tab.key] > 0 && (
                     <Badge variant="secondary" className="h-4 min-w-[16px] px-1 text-[10px]">
-                      {counts[tab.key]}
+                      {unreadCounts[tab.key]}
                     </Badge>
                   )}
                 </button>
@@ -238,16 +320,16 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
               </div>
             ) : (
               <ScrollArea className="flex-1">
-                <div className="p-4 space-y-2">
-                  {/* Tab header actions */}
-                  {activeTab === "notifications" && notifications.length > 0 && (
+                <div className="p-4 space-y-2" role="tabpanel" aria-label={`${activeTab} list`}>
+                  {/* Tab header actions — shown for all tabs */}
+                  {activeItems.length > 0 && (
                     <div className="flex items-center justify-end gap-2 mb-1">
                       {unreadInTab > 0 && (
-                        <button onClick={markAllRead} className="text-xs text-muted-foreground hover:text-foreground">
+                        <button onClick={markAllRead} className="text-xs text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none rounded px-1">
                           Mark all read
                         </button>
                       )}
-                      <button onClick={dismissAll} className="text-xs text-muted-foreground hover:text-foreground">
+                      <button onClick={handleDismissAllForTab} className="text-xs text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none rounded px-1">
                         Dismiss all
                       </button>
                     </div>
