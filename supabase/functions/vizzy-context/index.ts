@@ -6,7 +6,7 @@ const corsHeaders = {
 };
 
 /**
- * Server-side context endpoint for VizzyPage voice mode.
+ * Server-side context endpoint for the Vizzy AI assistant.
  * Returns the business snapshot so the client doesn't need 13+ DB queries.
  */
 Deno.serve(async (req) => {
