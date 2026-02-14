@@ -35,11 +35,11 @@ serve(async (req) => {
       });
     }
 
-    // Rate limit: 1 per 10 minutes
+    // Rate limit: 5 per 10 minutes
     const { data: allowed } = await supabase.rpc("check_rate_limit", {
       _user_id: user.id,
       _function_name: "vizzy-daily-brief",
-      _max_requests: 1,
+      _max_requests: 5,
       _window_seconds: 600,
     });
     if (allowed === false) {
