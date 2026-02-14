@@ -99,6 +99,9 @@ export function useSpeechRecognition(options?: UseSpeechRecognitionOptions): Use
         optionsRef.current?.onError?.("Microphone access denied. Please allow microphone permissions.");
       } else if (event.error === "no-speech") {
         optionsRef.current?.onError?.("No speech detected. Please try again.");
+      } else if (event.error === "aborted") {
+        // Expected when recognition is stopped programmatically -- ignore
+        return;
       } else if (event.error === "network") {
         optionsRef.current?.onError?.("Network error during speech recognition.");
       } else {
