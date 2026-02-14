@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { reportToVizzy } from "@/lib/vizzyAutoReport";
@@ -200,6 +200,7 @@ export function useQuickBooksData() {
   const [timeActivities, setTimeActivities] = useState<QBTimeActivity[]>([]);
   const [companyInfo, setCompanyInfo] = useState<Record<string, unknown> | null>(null);
   const { toast } = useToast();
+  const warmUpFired = useRef(false);
 
   const qbAction = useCallback(async (action: string, body?: Record<string, unknown>) => {
     const { data, error } = await supabase.functions.invoke("quickbooks-oauth", {
@@ -208,6 +209,17 @@ export function useQuickBooksData() {
     if (error) throw new Error(error.message);
     return data;
   }, []);
+
+  // Eager token warm-up: fire once on mount, before loadAll is called
+  useEffect(() => {
+    if (warmUpFired.current) return;
+    warmUpFired.current = true;
+    qbAction("check-status")
+      .then((data) => {
+        if (data?.status === "connected") setConnected(true);
+      })
+      .catch(() => { /* silent warm-up */ });
+  }, [qbAction]);
 
   const checkConnection = useCallback(async () => {
     try {
@@ -306,14 +318,17 @@ export function useQuickBooksData() {
     setLoading(true);
     setError(null);
     try {
-      const isConnected = await checkConnection();
+      // Run connection check and mirror load in parallel
+      const [isConnected, mirrorLoaded] = await Promise.all([
+        checkConnection(),
+        loadFromMirror(),
+      ]);
+
       if (!isConnected) {
         setLoading(false);
         return;
       }
 
-      // Try ERP mirror first (instant, no QB latency)
-      const mirrorLoaded = await loadFromMirror();
       if (mirrorLoaded) {
         setLoading(false);
         // Background: load employees & time activities from QB API (not mirrored yet)
