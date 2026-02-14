@@ -1,43 +1,86 @@
 
 
-# Add Prominent Voice Chat Button to Input Area
+# Replace ElevenLabs TTS with Browser Speech Synthesis
 
 ## Problem
 
-The voice mode toggle is a small headset icon buried in the header bar. Users don't notice it. There's no voice button in the input area where they naturally interact.
+ElevenLabs quota is exhausted (0 credits remaining). The voice chat loop breaks because TTS always returns 502.
 
 ## Solution
 
-Add a prominent **microphone button** directly in the input toolbar (next to the send button) that immediately starts the voice conversation loop when tapped -- no need to first toggle "voice mode" via the header.
+Replace the ElevenLabs API call in `useVoiceChat.ts` with the browser's built-in `window.speechSynthesis` (Web Speech API). This is completely free, requires no API keys, and works in Chrome, Edge, Safari, and Firefox.
+
+Gemini models available through the Lovable AI gateway only support text chat completions -- they do not have a TTS endpoint. The browser's built-in speech synthesis is the most reliable zero-cost option.
 
 ## Changes
 
-### `src/pages/LiveChat.tsx`
+### `src/hooks/useVoiceChat.ts`
 
-1. Add a **Mic button** in the input toolbar (bottom bar, next to the Send button) that:
-   - When tapped: enables `voiceMode` and calls `voiceChat.handleOrbTap()` to immediately start the conversation loop
-   - Visually: a microphone icon button, same size as the Send button, placed to the left of Send
-   
-2. Keep the header headset icon as a secondary toggle, but the primary entry point is now in the input area
+1. Remove the `TTS_URL` constant and the `fetch` call to `elevenlabs-tts`
+2. Replace `triggerTTS` with a function that uses `window.speechSynthesis.speak(new SpeechSynthesisUtterance(text))`
+3. Hook into `utterance.onend` to auto-restart listening (same as the current `audio.onended` logic)
+4. Hook into `utterance.onerror` to handle failures gracefully
+5. Update `stopAudio` to call `window.speechSynthesis.cancel()` instead of pausing an Audio element
+6. Remove the Supabase auth session fetch (no longer needed for TTS)
 
-3. When voice conversation is active, the input area is already hidden (existing logic) and replaced by the VoiceOrb -- this flow stays the same
+### What stays the same
 
-### Visual layout of input toolbar (after change)
+- The entire conversation loop (silence detection, auto-send, auto-listen)
+- The `useSpeechRecognition` hook -- unchanged
+- The `VoiceOrb` component -- unchanged
+- The `LiveChat` page -- unchanged
+
+## Technical Details
 
 ```text
-[ emoji | mic-input | templates | formatting | commands ]  ...spacer...  [ MIC-BUTTON | SEND ]
+Before (ElevenLabs):
+  triggerTTS(text)
+    -> fetch(elevenlabs-tts edge function)
+    -> receive audio blob
+    -> new Audio(blob).play()
+    -> audio.onended -> restart listening
+
+After (Browser SpeechSynthesis):
+  triggerTTS(text)
+    -> new SpeechSynthesisUtterance(text)
+    -> speechSynthesis.speak(utterance)
+    -> utterance.onend -> restart listening
 ```
 
-The new Mic button will use the `Mic` icon from lucide-react, styled with a distinct color to stand out.
+Key implementation:
 
-### Technical Details
+```typescript
+const triggerTTS = useCallback((text: string) => {
+  if (!window.speechSynthesis) {
+    setStatus("idle");
+    return;
+  }
+  window.speechSynthesis.cancel(); // clear any queue
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.rate = 1.0;
+  utterance.pitch = 1.0;
 
-- Import `Mic` from `lucide-react`
-- Add a new button before the Send button in the input toolbar
-- On click: `setVoiceMode(true)` then on next tick call `voiceChat.handleOrbTap()` to start listening immediately
-- Button is hidden when `isStreaming` is true (same as send button behavior)
+  utterance.onend = () => {
+    if (conversationActiveRef.current) {
+      speechRef.current.reset();
+      ttsTriggeredRef.current = false;
+      speechRef.current.start();
+      setStatus("listening");
+    } else {
+      setStatus("idle");
+    }
+  };
+
+  utterance.onerror = () => {
+    setStatus("idle");
+    conversationActiveRef.current = false;
+  };
+
+  setStatus("speaking");
+  window.speechSynthesis.speak(utterance);
+}, []);
+```
 
 | Action | File |
 |--------|------|
-| Modify | `src/pages/LiveChat.tsx` -- add Mic button in input toolbar next to Send |
-
+| Modify | `src/hooks/useVoiceChat.ts` -- replace ElevenLabs fetch with speechSynthesis |
