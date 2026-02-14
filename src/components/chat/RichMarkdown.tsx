@@ -51,9 +51,18 @@ function statusBadge(text: string) {
   return null;
 }
 
+/** Detect if content is predominantly RTL (Farsi/Arabic) */
+function isRTL(text: string): boolean {
+  const cleaned = text.replace(/[#*_`>\-\s\d]/g, '').slice(0, 100);
+  if (!cleaned.length) return false;
+  const rtlChars = (cleaned.match(/[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]/g) || []).length;
+  return rtlChars > cleaned.length * 0.3;
+}
+
 export function RichMarkdown({ content, className, onRegenerateImage, onActionItem, onTableRowAction, dismissedItems, rescheduledItems }: RichMarkdownProps) {
+  const rtl = isRTL(content);
   return (
-    <div className={cn("text-sm leading-relaxed break-words overflow-hidden", className)}>
+    <div className={cn("text-sm leading-relaxed break-words overflow-hidden", rtl && "text-right", className)} dir={rtl ? "rtl" : undefined}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
