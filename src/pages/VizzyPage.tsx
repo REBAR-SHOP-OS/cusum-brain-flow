@@ -1,47 +1,46 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useConversation } from "@elevenlabs/react";
-import { X, Mic, MicOff, Volume2, WifiOff, Phone, PhoneOff, ChevronUp, ChevronDown } from "lucide-react";
+import { X, Mic, MicOff, Volume2, WifiOff, RefreshCw } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { buildVizzyContext } from "@/lib/vizzyContext";
 import type { VizzyBusinessSnapshot } from "@/types/vizzy";
-import { useWebPhone } from "@/hooks/useWebPhone";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
-import { FileText, Check, XCircle } from "lucide-react";
-import { toast } from "sonner";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
-const MAX_RETRIES = 3;
 const CONTEXT_CACHE_KEY = "vizzy_context_cache";
-const CONTEXT_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const CONTEXT_CACHE_TTL = 5 * 60 * 1000;
 
 interface TranscriptEntry {
   role: "user" | "agent";
   text: string;
   id: string;
-  type?: "text" | "quotation";
-  quotation?: QuotationDraft;
-}
-
-interface QuotationDraft {
-  customerName: string;
-  projectName?: string;
-  items: { description: string; quantity: number; unitPrice: number }[];
-  notes?: string;
-  status: "draft" | "approved" | "dismissed";
 }
 
 export default function VizzyPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [webPhoneState, webPhoneActions] = useWebPhone();
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+  const [status, setStatus] = useState<"idle" | "connecting" | "connected" | "error">("idle");
+  const [errorMsg, setErrorMsg] = useState("");
+  const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
+  const transcriptRef = useRef<TranscriptEntry[]>([]);
+  const [muted, setMuted] = useState(false);
+  const [volume, setVolume] = useState(80);
+  const [showVolume, setShowVolume] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const startedRef = useRef(false);
+  const intentionalStopRef = useRef(false);
+  const snapshotRef = useRef<VizzyBusinessSnapshot | null>(null);
+  const languageRef = useRef("en");
+  const transcriptEndRef = useRef<HTMLDivElement>(null);
 
-  // Role-based admin guard (replaces hardcoded email check)
+  // Admin guard
   useEffect(() => {
     if (!user) return;
     (async () => {
@@ -59,49 +58,22 @@ export default function VizzyPage() {
     })();
   }, [user, navigate]);
 
-  const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
-  const transcriptRef = useRef<TranscriptEntry[]>([]);
-  const [status, setStatus] = useState<"starting" | "connected" | "error" | "reconnecting">("starting");
-  const [muted, setMuted] = useState(false);
-  const [volume, setVolume] = useState(80);
-  const [showVolume, setShowVolume] = useState(false);
-  const [elapsed, setElapsed] = useState(0);
-  const [activeQuotation, setActiveQuotation] = useState<{ id: string; draft: QuotationDraft } | null>(null);
-  const [silentMode, setSilentMode] = useState(false);
-  const [showTranscript, setShowTranscript] = useState(false);
-  const startedRef = useRef(false);
-  const sessionActiveRef = useRef(false);
-  const mediaStreamRef = useRef<MediaStream | null>(null);
-  const intentionalStopRef = useRef(false);
-  const retryCountRef = useRef(0);
-  const snapshotRef = useRef<VizzyBusinessSnapshot | null>(null);
-  const lastConnectTimeRef = useRef(0);
-  const lastReconnectTimeRef = useRef(0);
-  const useWebSocketFallbackRef = useRef(false);
-  const cachedSignedUrlRef = useRef<string | null>(null);
-  const autoFallbackAttemptedRef = useRef(false);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const prevVolumeRef = useRef(80);
-  const silentModeRef = useRef(false);
-  const silentIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const webPhoneInitRef = useRef(false);
-  const transcriptEndRef = useRef<HTMLDivElement>(null);
-
   // Auto-scroll transcript
   useEffect(() => {
-    if (showTranscript) {
-      transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [transcript, showTranscript]);
+    transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [transcript]);
 
   // Session timer
   useEffect(() => {
     if (status === "connected" && !timerRef.current) {
       timerRef.current = setInterval(() => setElapsed((e) => e + 1), 1000);
     }
+    if (status !== "connected" && timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
     return () => {
-      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
-      if (silentIntervalRef.current) { clearInterval(silentIntervalRef.current); silentIntervalRef.current = null; }
+      if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [status]);
 
@@ -119,14 +91,9 @@ export default function VizzyPage() {
         transcript: entries as any,
         session_ended_at: new Date().toISOString(),
       });
-
-      const textEntries = entries.filter((e) => e.type !== "quotation" && e.text.trim());
-      if (textEntries.length === 0) return;
-
-      const firstUserMsg = textEntries.find((e) => e.role === "user")?.text || "Voice Chat";
+      const firstUserMsg = entries.find((e) => e.role === "user")?.text || "Voice Chat";
       const title = firstUserMsg.slice(0, 80) + (firstUserMsg.length > 80 ? "..." : "");
-
-      const { data: session, error: sessionError } = await supabase
+      const { data: session } = await supabase
         .from("chat_sessions")
         .insert({
           user_id: user.id,
@@ -136,687 +103,266 @@ export default function VizzyPage() {
         })
         .select("id")
         .single();
-
-      if (sessionError || !session) return;
-
-      const messagesToInsert = textEntries.map((entry) => ({
-        session_id: session.id,
-        role: entry.role === "user" ? "user" as const : "agent" as const,
-        content: entry.text,
-        agent_type: "assistant",
-      }));
-
-      await supabase.from("chat_messages").insert(messagesToInsert);
+      if (session) {
+        await supabase.from("chat_messages").insert(
+          entries.filter((e) => e.text.trim()).map((e) => ({
+            session_id: session.id,
+            role: e.role,
+            content: e.text,
+            agent_type: "assistant",
+          }))
+        );
+      }
     } catch (err) {
-      console.error("Failed to save Vizzy transcript:", err);
+      console.error("Failed to save transcript:", err);
     }
   }, [user]);
 
-  // Periodic transcript auto-save (every 60 seconds while connected)
-  const autoSaveIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  useEffect(() => {
-    if (status === "connected" && user) {
-      autoSaveIntervalRef.current = setInterval(() => {
-        if (transcriptRef.current.length > 0) {
-          saveTranscript(transcriptRef.current);
-        }
-      }, 60000);
-    }
-    return () => {
-      if (autoSaveIntervalRef.current) {
-        clearInterval(autoSaveIntervalRef.current);
-        autoSaveIntervalRef.current = null;
-      }
-    };
-  }, [status, user, saveTranscript]);
-
-  const buildConversationMemory = useCallback(() => {
-    const entries = transcriptRef.current;
-    if (entries.length === 0) return "";
-    const lines = entries
-      .filter((e) => e.type !== "quotation")
-      .slice(-20)
-      .map((e) => `${e.role === "user" ? "CEO" : "Vizzy"}: ${e.text}`)
-      .join("\n");
-    return `\n═══ CONVERSATION MEMORY (session was interrupted, continuing) ═══\nThe following is what was discussed before the interruption. Continue naturally from where you left off. Do NOT greet the CEO again or repeat yourself.\n\n${lines}\n\n═══ END CONVERSATION MEMORY ═══`;
-  }, []);
-
-  const reconnectRef = useRef<() => void>(() => {});
-
-  const addQuotationCard = useCallback((draft: QuotationDraft) => {
-    const id = crypto.randomUUID();
-    const entry: TranscriptEntry = {
-      role: "agent",
-      text: `Quotation draft for ${draft.customerName}`,
-      id,
-      type: "quotation",
-      quotation: draft,
-    };
-    setTranscript((prev) => { const next = [...prev, entry]; transcriptRef.current = next; return next; });
-    setActiveQuotation({ id, draft });
-  }, []);
-
-  // Load context with 5-minute sessionStorage cache
-  const loadContextCached = useCallback(async (): Promise<VizzyBusinessSnapshot | null> => {
+  const loadContext = useCallback(async (): Promise<VizzyBusinessSnapshot | null> => {
     try {
       const cached = sessionStorage.getItem(CONTEXT_CACHE_KEY);
       if (cached) {
         const { data, ts } = JSON.parse(cached);
-        if (Date.now() - ts < CONTEXT_CACHE_TTL) {
-          return data as VizzyBusinessSnapshot;
-        }
+        if (Date.now() - ts < CONTEXT_CACHE_TTL) return data;
       }
     } catch {}
-
-    // Fetch fresh via server-side context builder
     try {
       const { data, error } = await supabase.functions.invoke("vizzy-context");
-      if (error || !data?.snapshot) {
-        console.warn("Server context failed:", error);
-        return null;
-      }
+      if (error || !data?.snapshot) return null;
       const snap = data.snapshot as VizzyBusinessSnapshot;
-      try {
-        sessionStorage.setItem(CONTEXT_CACHE_KEY, JSON.stringify({ data: snap, ts: Date.now() }));
-      } catch {}
+      try { sessionStorage.setItem(CONTEXT_CACHE_KEY, JSON.stringify({ data: snap, ts: Date.now() })); } catch {}
       return snap;
-    } catch {
-      return null;
-    }
+    } catch { return null; }
   }, []);
 
+  // ElevenLabs conversation hook
   const conversation = useConversation({
     micMuted: muted,
-    clientTools: {
-      draft_quotation: (params: {
-        customer_name: string;
-        project_name?: string;
-        items: { description: string; quantity: number; unit_price: number }[];
-        notes?: string;
-      }) => {
-        const draft: QuotationDraft = {
-          customerName: params.customer_name,
-          projectName: params.project_name,
-          items: params.items.map((i) => ({
-            description: i.description,
-            quantity: i.quantity,
-            unitPrice: i.unit_price,
-          })),
-          notes: params.notes,
-          status: "draft",
-        };
-        addQuotationCard(draft);
-        return "Quotation draft displayed to CEO for review. Wait for their approval before sending.";
-      },
-      make_call: async (params: { phone: string; contact_name?: string }) => {
-        try {
-          const wp = webPhoneInitRef.current;
-          if (!wp) {
-            const ok = await webPhoneActions.initialize();
-            if (!ok) throw new Error("WebPhone not available. Check RingCentral connection.");
-            webPhoneInitRef.current = true;
-          }
-          const success = await webPhoneActions.call(params.phone, params.contact_name);
-          if (!success) throw new Error("Call failed to connect");
-          return "Call initiated via browser WebRTC — audio is live in this browser session";
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : "Unknown error";
-          toast.error(`Call failed: ${msg}`);
-          return `Call failed: ${msg}`;
-        }
-      },
-      send_sms: async (params: { phone: string; message: string; contact_name?: string }) => {
-        try {
-          const { data, error } = await supabase.functions.invoke(
-            "ringcentral-action",
-            { body: { type: "ringcentral_sms", phone: params.phone, message: params.message, contact_name: params.contact_name } }
-          );
-          if (error) throw error;
-          if (data?.error) throw new Error(data.error);
-          toast.success(`SMS sent to ${params.contact_name || params.phone}`);
-          return "SMS sent successfully";
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : "Unknown error";
-          toast.error(`SMS failed: ${msg}`);
-          return `SMS failed: ${msg}`;
-        }
-      },
-    },
     onConnect: () => {
-      sessionActiveRef.current = true;
-      lastConnectTimeRef.current = Date.now();
-      autoFallbackAttemptedRef.current = false;
       setStatus("connected");
-      retryCountRef.current = 0;
     },
     onDisconnect: () => {
-      if (!sessionActiveRef.current) return;
-      const sessionDuration = Date.now() - lastConnectTimeRef.current;
-      sessionActiveRef.current = false;
-
-      // Clear silent mode interval on disconnect (fix memory leak)
-      if (silentIntervalRef.current) {
-        clearInterval(silentIntervalRef.current);
-        silentIntervalRef.current = null;
-      }
-
       if (intentionalStopRef.current) {
         saveTranscript(transcriptRef.current);
         navigate("/home");
         return;
       }
-      if (sessionDuration < 5000) {
-        console.warn(`[Vizzy] Session lasted only ${sessionDuration}ms — agent-initiated disconnect`);
-        // Don't rapid-fire reconnects for short sessions — add longer delay
-        if (retryCountRef.current < MAX_RETRIES) {
-          retryCountRef.current += 1;
-          setStatus("reconnecting");
-          setTimeout(() => reconnectRef.current(), 3000);
-        } else {
-          setStatus("error");
-        }
-        return;
-      }
-      if (retryCountRef.current < MAX_RETRIES) {
-        retryCountRef.current += 1;
-        setStatus("reconnecting");
-        const delay = Math.min(1000 * Math.pow(2, retryCountRef.current - 1), 16000);
-        setTimeout(() => reconnectRef.current(), delay);
-      } else {
-        saveTranscript(transcriptRef.current);
-        navigate("/home");
-      }
+      // Unintentional disconnect — show error with reconnect button
+      saveTranscript(transcriptRef.current);
+      setStatus("error");
+      setErrorMsg("Disconnected from Vizzy");
     },
     onMessage: (message: any) => {
       if (message.type === "user_transcript") {
-        const userText = message.user_transcription_event?.user_transcript ?? "";
-        const entry: TranscriptEntry = {
-          role: "user",
-          text: userText,
-          id: crypto.randomUUID(),
-          type: "text",
-        };
+        const text = message.user_transcription_event?.user_transcript ?? "";
+        const entry: TranscriptEntry = { role: "user", text, id: crypto.randomUUID() };
         setTranscript((prev) => { const next = [...prev, entry]; transcriptRef.current = next; return next; });
-
-        const lower = userText.toLowerCase().trim();
-        const SILENCE_TRIGGERS = ["silent", "be quiet", "shut up", "hush", "shhh", "be silent"];
-        const WAKE_TRIGGERS = ["vizzy", "hey vizzy"];
-
-        const shouldSilence = SILENCE_TRIGGERS.some((t) => lower.includes(t));
-        const shouldWake = WAKE_TRIGGERS.some((t) => lower.includes(t));
-
-        if (shouldSilence && !shouldWake) {
-          setSilentMode(true);
-          silentModeRef.current = true;
-          prevVolumeRef.current = volume;
-          try { conversation.setVolume({ volume: 0 }); } catch {}
-          conversation.sendContextualUpdate(
-            "SYSTEM OVERRIDE: CEO activated silent mode. You MUST NOT speak, respond, or check in. Do NOT ask if they are there. Do NOT say anything at all. Remain completely silent until CEO says your name 'Vizzy'. This is a hard rule — zero exceptions."
-          );
-          if (!silentIntervalRef.current) {
-            silentIntervalRef.current = setInterval(() => {
-              try { conversation.sendUserActivity(); } catch {}
-            }, 15000);
-          }
-        } else if (shouldWake) {
-          setSilentMode(false);
-          silentModeRef.current = false;
-          if (silentIntervalRef.current) { clearInterval(silentIntervalRef.current); silentIntervalRef.current = null; }
-          try { conversation.setVolume({ volume: prevVolumeRef.current / 100 }); } catch {}
-          conversation.sendContextualUpdate(
-            "CEO called your name. You may speak again. Briefly summarize any notes you took during the silent period, then continue normally."
-          );
-        }
       } else if (message.type === "agent_response") {
-        let agentText = message.agent_response_event?.agent_response ?? "";
-
-        const actionMatch = agentText.match(/\[VIZZY-ACTION\]([\s\S]*?)\[\/VIZZY-ACTION\]/);
-        if (actionMatch) {
-          try {
-            const actionData = JSON.parse(actionMatch[1]);
-            (async () => {
-              try {
-                const { data, error } = await supabase.functions.invoke("ringcentral-action", { body: actionData });
-                if (error) throw error;
-                if (data?.error) throw new Error(data.error);
-                toast.success(actionData.type === "ringcentral_call" ? "Call initiated!" : "SMS sent!");
-              } catch (err) {
-                toast.error(`Failed: ${err instanceof Error ? err.message : "Unknown error"}`);
-              }
-            })();
-          } catch (e) {
-            console.warn("Failed to parse vizzy-action:", e);
-          }
-          agentText = agentText.replace(/\[VIZZY-ACTION\][\s\S]*?\[\/VIZZY-ACTION\]/, "").trim();
-        }
-
-        const entry: TranscriptEntry = {
-          role: "agent",
-          text: agentText,
-          id: crypto.randomUUID(),
-          type: "text",
-        };
+        const text = message.agent_response_event?.agent_response ?? "";
+        const entry: TranscriptEntry = { role: "agent", text, id: crypto.randomUUID() };
         setTranscript((prev) => { const next = [...prev, entry]; transcriptRef.current = next; return next; });
-        if (silentModeRef.current) {
-          conversation.sendContextualUpdate(
-            "SYSTEM OVERRIDE: You are STILL in silent mode. Do NOT speak. Do NOT check in. Do NOT respond. Remain completely silent until CEO says 'Vizzy'."
-          );
-        }
       }
     },
     onError: (error: any) => {
-      // ElevenLabs SDK sometimes sends malformed error events (error_type undefined)
-      // Catch and suppress to prevent unhandled promise rejections
-      try {
-        console.warn("Vizzy voice error (non-fatal):", error?.message || error);
-      } catch {}
+      try { console.warn("Vizzy voice error:", error?.message || error); } catch {}
     },
   });
 
-  // Volume control
+  // Volume sync
   useEffect(() => {
-    if (silentMode) return;
     try { conversation.setVolume({ volume: volume / 100 }); } catch {}
-  }, [volume, conversation, silentMode]);
+  }, [volume, conversation]);
 
-  useEffect(() => {
-    reconnectRef.current = async () => {
-      const timeSinceLastReconnect = Date.now() - lastReconnectTimeRef.current;
-      if (timeSinceLastReconnect < 3000) return;
-      lastReconnectTimeRef.current = Date.now();
-      try {
-        try { await conversation.endSession(); } catch {}
-        await new Promise((r) => setTimeout(r, 500));
+  // Connect function
+  const connect = useCallback(async () => {
+    if (status === "connecting") return;
+    setStatus("connecting");
+    setErrorMsg("");
+    setTranscript([]);
+    transcriptRef.current = [];
+    setElapsed(0);
+    intentionalStopRef.current = false;
 
-        const { data, error } = await supabase.functions.invoke("elevenlabs-conversation-token");
-        if (error || !data?.token) throw new Error(error?.message ?? "No conversation token received");
-
-        // Always prefer WebSocket for reconnects (more reliable)
-        if (data.signed_url) {
-          await conversation.startSession({ signedUrl: data.signed_url, connectionType: "websocket" });
-        } else {
-          await conversation.startSession({ conversationToken: data.token, connectionType: "webrtc" });
-        }
-
-        await new Promise((r) => setTimeout(r, 2000));
-        if (!sessionActiveRef.current) return;
-
-        const snap = snapshotRef.current;
-        if (snap) {
-          conversation.sendContextualUpdate(buildVizzyContext(snap) + buildConversationMemory());
-        }
-        retryCountRef.current = 0;
-      } catch (err) {
-        console.error("Vizzy reconnect failed:", err);
-        if (retryCountRef.current < MAX_RETRIES) {
-          retryCountRef.current += 1;
-          const delay = Math.min(1000 * Math.pow(2, retryCountRef.current - 1), 16000);
-          setTimeout(() => reconnectRef.current(), delay);
-        } else {
-          setStatus("error");
-        }
-      }
-    };
-  }, [conversation, buildConversationMemory]);
-
-  const stop = useCallback(async () => {
-    intentionalStopRef.current = true;
-    webPhoneActions.dispose();
     try {
-      await saveTranscript(transcriptRef.current);
-      await conversation.endSession();
-    } catch (err) {
-      console.error("Error ending Vizzy session:", err);
-    }
-    navigate("/home");
-  }, [conversation, navigate, saveTranscript, webPhoneActions]);
+      // Request mic
+      await navigator.mediaDevices.getUserMedia({ audio: true });
 
-  const manualReconnect = useCallback(() => {
-    retryCountRef.current = 0;
-    setStatus("reconnecting");
-    reconnectRef.current();
-  }, []);
+      // Fetch token
+      const { data, error } = await supabase.functions.invoke("elevenlabs-conversation-token");
+      if (error || !data?.signed_url) throw new Error("Failed to get voice session token");
+
+      languageRef.current = data.preferred_language ?? "en";
+
+      // Connect via WebSocket only
+      await conversation.startSession({
+        signedUrl: data.signed_url,
+        connectionType: "websocket",
+      });
+
+      // Wait for stabilization then push context
+      await new Promise((r) => setTimeout(r, 2000));
+
+      const snap = await loadContext();
+      if (snap) {
+        snapshotRef.current = snap;
+        conversation.sendContextualUpdate(buildVizzyContext(snap, languageRef.current));
+      }
+    } catch (err) {
+      console.error("Connection failed:", err);
+      setStatus("error");
+      setErrorMsg(err instanceof Error ? err.message : "Connection failed");
+    }
+  }, [status, conversation, loadContext]);
 
   // Auto-start on mount
   useEffect(() => {
-    if (startedRef.current) return;
-    if (!user || isAdmin === null) return;
-    startedRef.current = true;
-
-    (async () => {
-      try {
-        const [stream, tokenRes] = await Promise.all([
-          navigator.mediaDevices.getUserMedia({ audio: true }),
-          supabase.functions.invoke("elevenlabs-conversation-token"),
-        ]);
-        mediaStreamRef.current = stream;
-
-        if (tokenRes.error || !tokenRes.data?.token) {
-          throw new Error(tokenRes.error?.message ?? "No conversation token received");
-        }
-
-        cachedSignedUrlRef.current = tokenRes.data.signed_url ?? null;
-        
-        // Default to WebSocket via signed URL for reliability (WebRTC has LiveKit version issues)
-        if (tokenRes.data.signed_url) {
-          await conversation.startSession({ signedUrl: tokenRes.data.signed_url, connectionType: "websocket" });
-        } else {
-          await conversation.startSession({ conversationToken: tokenRes.data.token, connectionType: "webrtc" });
-        }
-
-        webPhoneActions.initialize().then((ok) => {
-          webPhoneInitRef.current = ok;
-        });
-
-        loadContextCached().then(async (snap) => {
-          if (!snap) return;
-          snapshotRef.current = snap;
-          const rawContext = buildVizzyContext(snap);
-
-          const waitForConnection = () => new Promise<void>((resolve) => {
-            if (sessionActiveRef.current) return resolve();
-            const check = setInterval(() => {
-              if (sessionActiveRef.current) { clearInterval(check); resolve(); }
-            }, 200);
-            setTimeout(() => { clearInterval(check); resolve(); }, 10000);
-          });
-          await waitForConnection();
-          await new Promise((r) => setTimeout(r, 2000));
-          if (!sessionActiveRef.current) return;
-
-          try {
-            const { data: briefData } = await supabase.functions.invoke("vizzy-briefing", {
-              body: { rawContext },
-            });
-            if (briefData?.briefing && sessionActiveRef.current) {
-              conversation.sendContextualUpdate(briefData.briefing);
-              return;
-            }
-          } catch (e) {
-            console.warn("[Vizzy] Briefing failed, using raw context:", e);
-          }
-
-          if (sessionActiveRef.current) {
-            conversation.sendContextualUpdate(rawContext);
-          }
-        });
-      } catch (err) {
-        console.error("Failed to start Vizzy voice:", err);
-        setStatus("error");
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, isAdmin, loadContextCached]);
-
-  const updateQuotationStatus = useCallback((id: string, newStatus: "approved" | "dismissed") => {
-    setTranscript((prev) => {
-      const next = prev.map((e) =>
-        e.id === id && e.quotation ? { ...e, quotation: { ...e.quotation, status: newStatus } } : e
-      );
-      transcriptRef.current = next;
-      return next;
-    });
-    setActiveQuotation(null);
-    if (newStatus === "approved") {
-      conversation.sendContextualUpdate(`CEO APPROVED the quotation draft. Proceed to finalize and send it.`);
-    } else {
-      conversation.sendContextualUpdate(`CEO DISMISSED the quotation draft. Ask if they want changes.`);
+    if (isAdmin && !startedRef.current) {
+      startedRef.current = true;
+      connect();
     }
-  }, [conversation]);
+  }, [isAdmin, connect]);
 
-  if (!user || isAdmin === null) {
+  // Close handler
+  const handleClose = useCallback(async () => {
+    intentionalStopRef.current = true;
+    try { await conversation.endSession(); } catch {}
+    saveTranscript(transcriptRef.current);
+    navigate("/home");
+  }, [conversation, navigate, saveTranscript]);
+
+  if (isAdmin === null) {
     return (
-      <div className="flex h-screen items-center justify-center bg-background text-foreground">
-        <p>Loading...</p>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95">
+        <div className="text-white/60 text-lg">Loading...</div>
       </div>
     );
   }
 
-  const isSpeakingNow = conversation.isSpeaking;
-
-  const statusLabel =
-    webPhoneState.status === "calling" ? "Dialing..." :
-    webPhoneState.status === "in_call" ? "On call" :
-    status === "starting" ? "Connecting..." :
-    status === "reconnecting" ? "Reconnecting..." :
-    status === "error" ? "Connection lost" :
-    silentMode ? "Silent mode — taking notes..." :
-    isSpeakingNow ? "Vizzy is speaking..." : "Listening...";
-
-  const textTranscript = transcript.filter((t) => t.type !== "quotation" && t.text.trim());
-
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/90 backdrop-blur-md">
-      {/* Close button */}
-      <button
-        onClick={stop}
-        className="absolute top-5 right-5 w-10 h-10 rounded-full bg-destructive flex items-center justify-center hover:bg-destructive/80 transition-colors z-10"
-        aria-label="Close"
-      >
-        <X className="w-5 h-5 text-destructive-foreground" />
-      </button>
-
-      {/* Timer */}
-      {status === "connected" && (
-        <div className="absolute top-5 left-5 z-10">
-          <span className="text-sm tabular-nums text-white/60 font-mono bg-white/10 px-3 py-1.5 rounded-full">
-            {formatTime(elapsed)}
-          </span>
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-between bg-black/95 backdrop-blur-sm">
+      {/* Top bar */}
+      <div className="w-full flex items-center justify-between px-6 pt-6">
+        <div className="text-white/60 font-mono text-sm">
+          {status === "connected" && formatTime(elapsed)}
         </div>
-      )}
+        <Button variant="ghost" size="icon" onClick={handleClose} className="text-white/60 hover:text-white">
+          <X className="w-6 h-6" />
+        </Button>
+      </div>
 
-      {/* Center avatar */}
+      {/* Center: Avatar + Status */}
       <div className="flex flex-col items-center gap-6">
         <motion.div
           className={cn(
-            "w-32 h-32 rounded-full flex items-center justify-center",
-            "bg-gradient-to-br from-primary/30 to-primary/10",
-            "ring-4 transition-all duration-300",
-            silentMode
-              ? "ring-amber-500/50 opacity-60"
-              : isSpeakingNow
-              ? "ring-primary shadow-[0_0_60px_rgba(var(--primary),0.4)]"
-              : status === "error"
-              ? "ring-destructive/50"
-              : "ring-white/20"
+            "w-28 h-28 rounded-full flex items-center justify-center text-5xl",
+            status === "connected"
+              ? "bg-yellow-500/20 shadow-[0_0_40px_rgba(234,179,8,0.3)]"
+              : "bg-white/10"
           )}
           animate={
-            isSpeakingNow
-              ? { scale: [1, 1.08, 1] }
-              : status === "reconnecting"
-              ? { opacity: [0.5, 1, 0.5] }
+            status === "connected" && conversation.isSpeaking
+              ? { scale: [1, 1.08, 1], transition: { repeat: Infinity, duration: 1.5 } }
               : { scale: 1 }
           }
-          transition={{
-            duration: isSpeakingNow ? 1.5 : 2,
-            repeat: isSpeakingNow || status === "reconnecting" ? Infinity : 0,
-            ease: "easeInOut",
-          }}
         >
-          <span className="text-6xl">🧠</span>
+          🧠
         </motion.div>
 
         <div className="text-center">
-          <h1 className="text-xl font-semibold text-white mb-1">Vizzy</h1>
-          <p className="text-sm text-white/50">{statusLabel}</p>
-          {silentMode && (
-            <span className="inline-block mt-2 text-[10px] uppercase tracking-widest px-3 py-1 rounded-full bg-amber-500/20 text-amber-400 font-semibold">
-              Silent
-            </span>
-          )}
+          <h2 className="text-white text-xl font-semibold">Vizzy</h2>
+          <p className={cn("text-sm mt-1", {
+            "text-white/40": status === "idle",
+            "text-yellow-400": status === "connecting",
+            "text-emerald-400": status === "connected",
+            "text-red-400": status === "error",
+          })}>
+            {status === "idle" && "Ready"}
+            {status === "connecting" && "Connecting..."}
+            {status === "connected" && (conversation.isSpeaking ? "Speaking..." : "Listening...")}
+            {status === "error" && (errorMsg || "Connection lost")}
+          </p>
         </div>
 
+        {/* Reconnect button when error */}
         {status === "error" && (
-          <button onClick={manualReconnect} className="text-sm text-primary hover:underline">
-            Tap to reconnect
-          </button>
+          <Button
+            onClick={() => { startedRef.current = false; setStatus("idle"); setTimeout(() => { startedRef.current = true; connect(); }, 100); }}
+            variant="outline"
+            className="gap-2 border-white/20 text-white hover:bg-white/10"
+          >
+            <RefreshCw className="w-4 h-4" /> Reconnect
+          </Button>
         )}
       </div>
 
-      {/* Quotation floating card */}
-      <AnimatePresence>
-        {activeQuotation && activeQuotation.draft.status === "draft" && (
-          <motion.div
-            initial={{ opacity: 0, y: 40, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 40, scale: 0.95 }}
-            className="absolute inset-x-4 bottom-28 max-w-md mx-auto bg-card border border-border rounded-2xl p-5 shadow-2xl z-20"
-          >
-            <div className="flex items-center gap-2 mb-3">
-              <FileText className="w-4 h-4 text-primary" />
-              <span className="text-sm font-semibold text-foreground">Quotation Draft</span>
-              <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full font-medium bg-amber-500/20 text-amber-600">
-                draft
-              </span>
-            </div>
-            <div className="space-y-1 text-sm">
-              <p><span className="text-muted-foreground">Customer:</span> <span className="font-medium text-foreground">{activeQuotation.draft.customerName}</span></p>
-              {activeQuotation.draft.projectName && (
-                <p><span className="text-muted-foreground">Project:</span> <span className="text-foreground">{activeQuotation.draft.projectName}</span></p>
-              )}
-            </div>
-            <div className="mt-3 border-t border-border pt-2">
-              {activeQuotation.draft.items.map((item, idx) => (
-                <div key={idx} className="flex justify-between text-xs py-1">
-                  <span className="text-foreground">{item.description}</span>
-                  <span className="text-muted-foreground tabular-nums">
-                    {item.quantity} × ${item.unitPrice.toFixed(2)} = ${(item.quantity * item.unitPrice).toFixed(2)}
+      {/* Transcript + Controls */}
+      <div className="w-full max-w-lg px-4 pb-6 flex flex-col gap-4">
+        {/* Transcript */}
+        {transcript.length > 0 && (
+          <ScrollArea className="h-48 rounded-xl bg-white/5 border border-white/10 p-4">
+            <div className="space-y-3">
+              {transcript.map((entry) => (
+                <div key={entry.id} className={cn("text-sm", entry.role === "user" ? "text-blue-300" : "text-white/80")}>
+                  <span className="font-medium text-white/40 text-xs mr-2">
+                    {entry.role === "user" ? "You" : "Vizzy"}
                   </span>
+                  {entry.text}
                 </div>
               ))}
-              <div className="flex justify-between text-sm font-semibold pt-2 border-t border-border mt-2">
-                <span className="text-foreground">Total</span>
-                <span className="text-foreground tabular-nums">
-                  ${activeQuotation.draft.items.reduce((s, i) => s + i.quantity * i.unitPrice, 0).toFixed(2)}
-                </span>
-              </div>
+              <div ref={transcriptEndRef} />
             </div>
-            {activeQuotation.draft.notes && (
-              <p className="text-xs text-muted-foreground mt-2 italic">{activeQuotation.draft.notes}</p>
-            )}
-            <div className="flex gap-2 mt-4">
-              <Button size="sm" className="gap-1 h-9 flex-1" onClick={() => updateQuotationStatus(activeQuotation.id, "approved")}>
-                <Check className="w-3.5 h-3.5" /> Approve & Send
-              </Button>
-              <Button size="sm" variant="outline" className="gap-1 h-9 flex-1" onClick={() => updateQuotationStatus(activeQuotation.id, "dismissed")}>
-                <XCircle className="w-3.5 h-3.5" /> Dismiss
-              </Button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Collapsible Transcript Panel */}
-      <AnimatePresence>
-        {showTranscript && textTranscript.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 100 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 100 }}
-            className="absolute bottom-20 inset-x-4 max-w-md mx-auto bg-card/95 backdrop-blur-lg border border-border rounded-2xl shadow-2xl z-10 max-h-[40vh]"
-          >
-            <ScrollArea className="h-full max-h-[40vh] p-4">
-              <div className="space-y-3">
-                {textTranscript.map((entry) => (
-                  <div
-                    key={entry.id}
-                    className={cn(
-                      "text-xs rounded-lg px-3 py-2 max-w-[85%]",
-                      entry.role === "user"
-                        ? "ml-auto bg-primary/20 text-primary-foreground"
-                        : "mr-auto bg-muted text-foreground"
-                    )}
-                  >
-                    <span className="font-semibold text-[10px] uppercase tracking-wide opacity-60 block mb-0.5">
-                      {entry.role === "user" ? "You" : "Vizzy"}
-                    </span>
-                    {entry.text}
-                  </div>
-                ))}
-                <div ref={transcriptEndRef} />
-              </div>
-            </ScrollArea>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Bottom control bar */}
-      <div className="absolute bottom-6 inset-x-0 flex items-center justify-center gap-4 px-6">
-        {/* Transcript toggle */}
-        {textTranscript.length > 0 && (
-          <button
-            onClick={() => setShowTranscript(!showTranscript)}
-            className="p-3 rounded-full bg-white/10 hover:bg-white/20 transition-colors text-white"
-            aria-label="Toggle transcript"
-          >
-            {showTranscript ? <ChevronDown className="w-5 h-5" /> : <ChevronUp className="w-5 h-5" />}
-          </button>
+          </ScrollArea>
         )}
 
-        {/* Volume */}
-        <div className="relative">
-          <button
-            onClick={() => setShowVolume(!showVolume)}
-            className="p-3 rounded-full bg-white/10 hover:bg-white/20 transition-colors text-white"
-            aria-label="Volume"
-          >
-            <Volume2 className="w-5 h-5" />
-          </button>
-          <AnimatePresence>
+        {/* Controls bar */}
+        <div className="flex items-center justify-center gap-4">
+          {/* Volume */}
+          <div className="relative">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setShowVolume(!showVolume)}
+              className="text-white/60 hover:text-white"
+            >
+              <Volume2 className="w-5 h-5" />
+            </Button>
             {showVolume && (
-              <motion.div
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 8 }}
-                className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-popover border border-border rounded-xl p-3 shadow-lg z-10 w-40"
-              >
+              <div className="absolute bottom-14 left-1/2 -translate-x-1/2 bg-black/90 border border-white/10 rounded-lg p-3 w-36">
                 <Slider
                   value={[volume]}
-                  onValueChange={([v]) => setVolume(v)}
-                  min={0} max={100} step={5}
+                  onValueChange={(v) => setVolume(v[0])}
+                  min={0}
+                  max={100}
+                  step={1}
                   className="w-full"
                 />
-                <p className="text-xs text-muted-foreground text-center mt-1">{volume}%</p>
-              </motion.div>
+              </div>
             )}
-          </AnimatePresence>
+          </div>
+
+          {/* Mute */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setMuted(!muted)}
+            className={cn(
+              "w-14 h-14 rounded-full",
+              muted ? "bg-red-500/20 text-red-400" : "bg-white/10 text-white"
+            )}
+          >
+            {muted ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
+          </Button>
+
+          {/* Close */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleClose}
+            className="text-white/60 hover:text-red-400"
+          >
+            <X className="w-5 h-5" />
+          </Button>
         </div>
-
-        {/* Hangup WebRTC call */}
-        {(webPhoneState.status === "calling" || webPhoneState.status === "in_call") && (
-          <button
-            onClick={() => webPhoneActions.hangup()}
-            className="p-3 rounded-full bg-destructive hover:bg-destructive/80 transition-colors text-destructive-foreground"
-            aria-label="Hang up"
-          >
-            <PhoneOff className="w-5 h-5" />
-          </button>
-        )}
-
-        {/* Mute */}
-        <button
-          onClick={() => setMuted((prev) => !prev)}
-          className={cn(
-            "p-3 rounded-full transition-colors",
-            muted 
-              ? "bg-destructive text-destructive-foreground" 
-              : "bg-white/10 hover:bg-white/20 text-white"
-          )}
-          aria-label={muted ? "Unmute" : "Mute"}
-        >
-          {muted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-        </button>
-
-        {/* Reconnect */}
-        {(status === "error" || status === "reconnecting") && (
-          <button
-            onClick={manualReconnect}
-            className="p-3 rounded-full bg-white/10 hover:bg-white/20 transition-colors text-white"
-            aria-label="Reconnect"
-          >
-            <WifiOff className="w-5 h-5" />
-          </button>
-        )}
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 import type { VizzyBusinessSnapshot } from "@/types/vizzy";
 
-export function buildVizzyContext(snap: VizzyBusinessSnapshot): string {
+export function buildVizzyContext(snap: VizzyBusinessSnapshot, language?: string): string {
   const fmt = (n: number) =>
     n.toLocaleString("en-US", { style: "currency", currency: "USD" });
   const { financials: f, production: p, crm, customers: c, deliveries: d, team, recentEvents, brainKnowledge, agentActivity, teamPresence } = snap;
@@ -51,8 +51,20 @@ IMPORTANT: Tell the CEO early in the conversation that QuickBooks needs to be re
 via Settings → Integrations. Urge them to reconnect so you can provide real-time numbers.
 ` : "";
 
+  const lang = language || "en";
+  const langBlock = `
+LANGUAGE RULES:
+- You are fluent in ALL languages, but especially English and Farsi (Persian).
+- Detect the language the CEO speaks in and ALWAYS respond in that SAME language.
+- If the CEO speaks Farsi, respond entirely in Farsi.
+- If the CEO speaks English, respond entirely in English.
+- If the CEO switches language mid-conversation, follow their switch immediately.
+- You can handle mixed-language input (code-switching) naturally.
+- Default language on session start: "${lang}"
+`;
+
   return `YOU ARE VIZZY — the CEO's personal AI assistant (like Jarvis for Iron Man).
-You ALWAYS respond in English.
+${langBlock}
 You have FULL access to live business data. Use ONLY these numbers. NEVER make up figures.
 You have FULL access to business emails listed in the EMAIL INBOX section below. When asked about emails, search by sender, subject, or content. NEVER say you cannot read emails — the data is right here in your context. This is a business system, not personal email.
 Log every question the CEO asks mentally — you are building their daily journey.
