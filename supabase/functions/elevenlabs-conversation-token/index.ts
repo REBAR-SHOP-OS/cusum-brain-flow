@@ -56,21 +56,30 @@ serve(async (req) => {
       return json({ error: "ElevenLabs not configured" }, 500);
     }
 
-    const response = await fetch(
-      `https://api.elevenlabs.io/v1/convai/conversation/token?agent_id=${agentId}`,
-      { headers: { "xi-api-key": apiKey } }
-    );
+    // Fetch both token (WebRTC) and signed URL (WebSocket fallback) in parallel
+    const [tokenRes, signedUrlRes] = await Promise.all([
+      fetch(
+        `https://api.elevenlabs.io/v1/convai/conversation/token?agent_id=${agentId}`,
+        { headers: { "xi-api-key": apiKey } }
+      ),
+      fetch(
+        `https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=${agentId}`,
+        { headers: { "xi-api-key": apiKey } }
+      ),
+    ]);
 
-    if (!response.ok) {
-      const err = await response.text();
+    if (!tokenRes.ok) {
+      const err = await tokenRes.text();
       console.error("ElevenLabs token error:", err);
       return json({ error: "Failed to get conversation token" }, 502);
     }
 
-    const { token } = await response.json();
+    const { token } = await tokenRes.json();
+    const signedUrlData = signedUrlRes.ok ? await signedUrlRes.json() : {};
+
     return json({
       token,
-      signed_url: token, // backward compat
+      signed_url: signedUrlData.signed_url ?? null,
       mode,
       preferred_language: profile.preferred_language ?? "en",
       preferred_voice_id: profile.preferred_voice_id ?? null,

@@ -66,6 +66,8 @@ export default function VizzyPage() {
   const snapshotRef = useRef<VizzyBusinessSnapshot | null>(null);
   const lastConnectTimeRef = useRef(0);
   const lastReconnectTimeRef = useRef(0);
+  const useWebSocketFallbackRef = useRef(false);
+  const cachedSignedUrlRef = useRef<string | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const prevVolumeRef = useRef(80);
   const silentModeRef = useRef(false);
@@ -259,7 +261,9 @@ export default function VizzyPage() {
       }
       // If session lasted < 5 seconds, agent terminated — don't retry (prevents infinite loop)
       if (sessionDuration < 5000) {
-        console.warn(`[Vizzy] Session lasted only ${sessionDuration}ms — agent-initiated disconnect, not retrying`);
+        console.warn(`[Vizzy] Session lasted only ${sessionDuration}ms — agent-initiated disconnect`);
+        // Enable WebSocket fallback for next attempt
+        useWebSocketFallbackRef.current = true;
         setStatus("error");
         return;
       }
@@ -387,7 +391,19 @@ export default function VizzyPage() {
 
         const { data, error } = await supabase.functions.invoke("elevenlabs-conversation-token");
         if (error || !data?.token) throw new Error(error?.message ?? "No conversation token received");
-        await conversation.startSession({ conversationToken: data.token, connectionType: "webrtc" });
+
+        // Use WebSocket + signed URL if WebRTC previously failed quickly
+        if (useWebSocketFallbackRef.current && data.signed_url) {
+          console.log("[Vizzy] Using WebSocket fallback with signed URL");
+          await conversation.startSession({ signedUrl: data.signed_url, connectionType: "websocket" });
+        } else {
+          await conversation.startSession({ conversationToken: data.token, connectionType: "webrtc" });
+        }
+
+        // 2s stabilization delay before sending context
+        await new Promise((r) => setTimeout(r, 2000));
+        if (!sessionActiveRef.current) return;
+
         const snap = snapshotRef.current;
         if (snap) {
           conversation.sendContextualUpdate(buildVizzyContext(snap) + buildConversationMemory());
@@ -471,6 +487,9 @@ export default function VizzyPage() {
         if (tokenRes.error || !tokenRes.data?.token) {
           throw new Error(tokenRes.error?.message ?? "No conversation token received");
         }
+
+        // Store signed URL for WebSocket fallback
+        cachedSignedUrlRef.current = tokenRes.data.signed_url ?? null;
 
         await conversation.startSession({ conversationToken: tokenRes.data.token, connectionType: "webrtc" });
 
