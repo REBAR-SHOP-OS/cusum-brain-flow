@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useConversation } from "@elevenlabs/react";
-import { X, Mic, MicOff, Volume2, WifiOff, Camera, Phone, PhoneOff } from "lucide-react";
+import { X, Mic, MicOff, Volume2, WifiOff, Camera, Phone, PhoneOff, Languages } from "lucide-react";
+import { useVizzyFarsiVoice } from "@/hooks/useVizzyFarsiVoice";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
@@ -69,7 +70,26 @@ export default function VizzyPage() {
   const silentIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const { loadFullContext } = useVizzyContext();
   const [preferredLang, setPreferredLang] = useState("en");
+  const [useFarsiMode, setUseFarsiMode] = useState(false);
   const webPhoneInitRef = useRef(false);
+
+  // Farsi voice pipeline hook
+  const farsiVoice = useVizzyFarsiVoice({
+    onTranscript: (role, text) => {
+      const entry: TranscriptEntry = {
+        role: role === "user" ? "user" : "agent",
+        text,
+        id: crypto.randomUUID(),
+        type: "text",
+      };
+      setTranscript((prev) => { const next = [...prev, entry]; transcriptRef.current = next; return next; });
+    },
+    onStatusChange: (s) => {
+      if (s === "connected") { sessionActiveRef.current = true; setStatus("connected"); }
+      else if (s === "error") setStatus("error");
+    },
+    onSpeakingChange: (speaking) => { /* handled internally */ },
+  });
 
   // Session timer
   useEffect(() => {
@@ -358,12 +378,16 @@ export default function VizzyPage() {
     webPhoneActions.dispose();
     try {
       await saveTranscript(transcriptRef.current);
-      await conversation.endSession();
+      if (useFarsiMode) {
+        farsiVoice.endSession();
+      } else {
+        await conversation.endSession();
+      }
     } catch (err) {
       console.error("Error ending Vizzy session:", err);
     }
     navigate("/home");
-  }, [conversation, navigate, saveTranscript, webPhoneActions]);
+  }, [conversation, navigate, saveTranscript, webPhoneActions, useFarsiMode, farsiVoice]);
 
   const manualReconnect = useCallback(() => {
     retryCountRef.current = 0;
@@ -386,12 +410,33 @@ export default function VizzyPage() {
         ]);
         mediaStreamRef.current = stream;
 
+        const detectedLang = tokenRes.data?.preferred_language || "en";
+        if (detectedLang) setPreferredLang(detectedLang);
+
+        // === FARSI MODE: Use custom browser-based pipeline ===
+        if (detectedLang === "fa") {
+          setUseFarsiMode(true);
+          const ok = await farsiVoice.startSession();
+          if (!ok) {
+            toast.error("Farsi voice not supported on this browser. Falling back to English.");
+            // Fall through to ElevenLabs below
+          } else {
+            // Load context for Farsi mode (admin-chat already speaks Farsi)
+            loadFullContext().then(async (snap) => {
+              if (!snap) return;
+              snapshotRef.current = snap;
+              const rawContext = buildVizzyContext(snap);
+              farsiVoice.sendContextualUpdate(rawContext);
+            });
+            return; // Farsi mode started successfully
+          }
+        }
+
+        // === ENGLISH MODE: ElevenLabs ===
         if (tokenRes.error || !tokenRes.data?.signed_url) {
           throw new Error(tokenRes.error?.message ?? "No signed URL received");
         }
-        if (tokenRes.data.preferred_language) setPreferredLang(tokenRes.data.preferred_language);
 
-        // Phase 2: Connect immediately — Vizzy is live within seconds
         await conversation.startSession({ signedUrl: tokenRes.data.signed_url, connectionType: "websocket" });
 
         // Phase 3: Load context + WebPhone in background (non-blocking)
@@ -401,17 +446,15 @@ export default function VizzyPage() {
           else console.warn("WebPhone init failed — will fallback on demand");
         });
 
-        // Load business context and compress with Gemini 3 Pro
         loadFullContext().then(async (snap) => {
           if (!snap) return;
           snapshotRef.current = snap;
 
           const rawContext = buildVizzyContext(snap);
-          const langCtx = tokenRes.data.preferred_language && tokenRes.data.preferred_language !== "en"
-            ? `\nUser's preferred language: ${tokenRes.data.preferred_language}. Default to speaking in this language unless they switch.`
+          const langCtx = detectedLang !== "en"
+            ? `\nUser's preferred language: ${detectedLang}. Default to speaking in this language unless they switch.`
             : "";
 
-          // Use Gemini 3 Pro to compress context for faster processing
           try {
             const { data: briefData } = await supabase.functions.invoke("vizzy-briefing", {
               body: { rawContext: rawContext + langCtx },
@@ -425,7 +468,6 @@ export default function VizzyPage() {
             console.warn("[Vizzy] Gemini briefing failed, using raw context:", e);
           }
 
-          // Fallback: send raw context
           conversation.sendContextualUpdate(rawContext + langCtx);
         });
       } catch (err) {
@@ -461,14 +503,18 @@ export default function VizzyPage() {
     );
   }
 
+  const isSpeakingNow = useFarsiMode ? farsiVoice.isSpeaking : conversation.isSpeaking;
+
   const statusLabel =
     webPhoneState.status === "calling" ? "Dialing..." :
     webPhoneState.status === "in_call" ? "On call" :
-    status === "starting" ? "Connecting..." :
+    status === "starting" ? (useFarsiMode ? "در حال اتصال..." : "Connecting...") :
     status === "reconnecting" ? "Reconnecting..." :
-    status === "error" ? "Connection lost" :
+    status === "error" ? (useFarsiMode ? "خطا در اتصال" : "Connection lost") :
     silentMode ? "Silent mode — taking notes..." :
-    conversation.isSpeaking ? "Vizzy is speaking..." : "Listening...";
+    useFarsiMode && farsiVoice.interimText ? "در حال گوش دادن..." :
+    isSpeakingNow ? (useFarsiMode ? "ویزی صحبت می‌کنه..." : "Vizzy is speaking...") : 
+    (useFarsiMode ? "گوش می‌دم..." : "Listening...");
 
   return (
     <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/90 backdrop-blur-md">
@@ -499,22 +545,22 @@ export default function VizzyPage() {
             "ring-4 transition-all duration-300",
             silentMode
               ? "ring-amber-500/50 opacity-60"
-              : conversation.isSpeaking
+              : isSpeakingNow
               ? "ring-primary shadow-[0_0_60px_rgba(var(--primary),0.4)]"
               : status === "error"
               ? "ring-destructive/50"
               : "ring-white/20"
           )}
           animate={
-            conversation.isSpeaking
+            isSpeakingNow
               ? { scale: [1, 1.08, 1] }
               : status === "reconnecting"
               ? { opacity: [0.5, 1, 0.5] }
               : { scale: 1 }
           }
           transition={{
-            duration: conversation.isSpeaking ? 1.5 : 2,
-            repeat: conversation.isSpeaking || status === "reconnecting" ? Infinity : 0,
+            duration: isSpeakingNow ? 1.5 : 2,
+            repeat: isSpeakingNow || status === "reconnecting" ? Infinity : 0,
             ease: "easeInOut",
           }}
         >
@@ -533,6 +579,12 @@ export default function VizzyPage() {
             <span className="inline-block mt-2 text-[10px] uppercase tracking-widest px-3 py-1 rounded-full bg-amber-500/20 text-amber-400 font-semibold">
               Silent
             </span>
+          )}
+          {/* Farsi interim text */}
+          {useFarsiMode && farsiVoice.interimText && (
+            <p dir="rtl" className="text-sm text-white/40 italic mt-1 max-w-xs truncate">
+              "{farsiVoice.interimText}"
+            </p>
           )}
         </div>
 
@@ -652,14 +704,41 @@ export default function VizzyPage() {
 
         {/* Mute */}
         <button
-          onClick={() => setMuted((prev) => !prev)}
+          onClick={() => {
+            if (useFarsiMode) {
+              farsiVoice.toggleMute();
+            } else {
+              setMuted((prev) => !prev);
+            }
+          }}
           className={cn(
             "p-3 rounded-full transition-colors",
-            muted ? "bg-destructive text-destructive-foreground" : "bg-white/10 hover:bg-white/20 text-white"
+            (useFarsiMode ? farsiVoice.isMuted : muted) 
+              ? "bg-destructive text-destructive-foreground" 
+              : "bg-white/10 hover:bg-white/20 text-white"
           )}
-          aria-label={muted ? "Unmute" : "Mute"}
+          aria-label={(useFarsiMode ? farsiVoice.isMuted : muted) ? "Unmute" : "Mute"}
         >
-          {muted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+          {(useFarsiMode ? farsiVoice.isMuted : muted) ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+        </button>
+
+        {/* Language toggle */}
+        <button
+          onClick={() => {
+            if (useFarsiMode) {
+              // Switch to English — would need full restart
+              toast.info("Restart the voice session for English mode");
+            } else {
+              toast.info("Restart the voice session for Farsi mode");
+            }
+          }}
+          className={cn(
+            "p-3 rounded-full transition-colors",
+            useFarsiMode ? "bg-primary/30 text-primary" : "bg-white/10 hover:bg-white/20 text-white"
+          )}
+          aria-label="Toggle language"
+        >
+          <Languages className="w-5 h-5" />
         </button>
 
         {/* Reconnect */}
