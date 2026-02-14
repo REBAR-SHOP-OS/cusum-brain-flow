@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { playMockingjayWhistle } from "@/lib/notificationSound";
+import { requestNotificationPermission, showBrowserNotification } from "@/lib/browserNotification";
 
 export interface Notification {
   id: string;
@@ -106,6 +107,7 @@ export function useNotifications() {
 
   useEffect(() => {
     load();
+    requestNotificationPermission();
   }, [load]);
 
   // Realtime subscription
@@ -118,7 +120,9 @@ export function useNotifications() {
         (payload) => {
           if (payload.eventType === "INSERT") {
             playMockingjayWhistle();
-            setNotifications((prev) => [mapRow(payload.new), ...prev]);
+            const newRow = payload.new as any;
+            showBrowserNotification(newRow.title, newRow.description, newRow.link_to);
+            setNotifications((prev) => [mapRow(newRow), ...prev]);
           } else if (payload.eventType === "UPDATE") {
             const updated = mapRow(payload.new);
             if (updated.status === "dismissed") {
