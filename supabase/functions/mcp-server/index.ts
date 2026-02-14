@@ -270,6 +270,34 @@ app.use("*", async (c, next) => {
   await next();
 });
 
+// API key authentication middleware
+app.use("*", async (c, next) => {
+  if (c.req.method === "OPTIONS") return;
+
+  // Validate MCP_API_KEY — reject unauthenticated requests
+  const authHeader = c.req.header("Authorization");
+  const apiKeyHeader = c.req.header("x-api-key");
+  const expectedKey = mcpApiKey;
+
+  if (!expectedKey) {
+    return new Response(
+      JSON.stringify({ error: "MCP_API_KEY not configured" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  const providedKey = apiKeyHeader || (authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null);
+
+  if (providedKey !== expectedKey) {
+    return new Response(
+      JSON.stringify({ error: "Unauthorized: invalid API key" }),
+      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  await next();
+});
+
 app.all("/*", async (c) => {
   const response = await httpHandler(c.req.raw);
   // Add CORS headers to response
