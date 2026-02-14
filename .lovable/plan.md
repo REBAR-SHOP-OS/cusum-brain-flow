@@ -1,148 +1,40 @@
 
 
-# End-to-End Voice Chat (Mic to STT to AI to TTS to Speaker)
+# Add Voice Chat to Floating Vizzy Button
 
-## Overview
+## Summary
 
-Build a ChatGPT-style voice chat mode into the existing `/chat` page. No new routes or pages -- just a voice orb toggle in the existing `LiveChat.tsx` that switches between text mode and voice mode.
+Re-introduce long-press on the floating Vizzy button to launch voice chat mode. Tap still opens text chat (`/chat`), but holding the button activates voice mode directly by navigating to `/chat?voice=1`.
 
-## Architecture
+## How It Works
 
-```text
-[Browser Mic] --> Web Speech API (STT) --> transcript text
-                                              |
-                                              v
-                                    admin-chat edge function (AI, streaming)
-                                              |
-                                              v
-                                    streamed text displayed in chat
-                                              |
-                                              v (after first ~300 chars)
-                                    elevenlabs-tts edge function (TTS)
-                                              |
-                                              v
-                                    [Browser Audio playback]
-```
+1. **Short tap** (no movement, < 500ms hold): Navigate to `/chat` (text mode, same as today)
+2. **Long press** (hold > 500ms without moving): Navigate to `/chat?voice=1` to auto-activate voice mode
+3. **Drag**: Reposition the button (unchanged)
 
-## What Gets Built
+The `/chat` page (`LiveChat.tsx`) reads the `?voice=1` query param on mount and automatically enables voice mode.
 
-### 1. New edge function: `elevenlabs-tts`
+## Changes
 
-A backend function that accepts text and returns ElevenLabs audio bytes (MP3). Keeps the API key server-side.
+### `src/components/vizzy/FloatingVizzyButton.tsx`
+- Add a `LONG_PRESS_MS = 500` constant
+- Add `longPressTimer` ref and `isLongPress` ref
+- On pointer down: start a 500ms timer that sets `isLongPress = true`
+- On pointer move (beyond drag threshold): clear the timer (it's a drag)
+- On pointer up (no drag):
+  - If `isLongPress`: navigate to `/chat?voice=1`
+  - Else: navigate to `/chat` (existing behavior)
+- Update tooltip text: "Tap to chat - Hold for voice"
 
-- Accepts `{ text, voiceId? }` as JSON body
-- Calls ElevenLabs `/v1/text-to-speech/{voiceId}` with `eleven_turbo_v2_5` model (low latency)
-- Returns raw `audio/mpeg` bytes
-- Default voice: Roger (`CwhRBWXzGAHq8TQ4Fs17`) -- can be changed
-- Uses existing `ELEVENLABS_API_KEY` secret (already configured)
+### `src/pages/LiveChat.tsx`
+- On mount, read `URLSearchParams` for `voice` param
+- If `voice=1`, set `voiceMode` to `true` automatically
+- Remove the query param from the URL after reading (clean URL)
 
-### 2. New hook: `useVoiceChat`
-
-Orchestrates the full voice loop: listen, send, stream AI text, speak response.
-
-**State machine:**
-- `idle` -- waiting for user
-- `listening` -- mic active, live transcript showing
-- `thinking` -- AI is generating response
-- `speaking` -- TTS audio playing
-
-**Flow:**
-1. User taps voice orb -- state becomes `listening`
-2. `useSpeechRecognition` captures live transcript
-3. User taps again (or silence detected) -- state becomes `thinking`
-4. Final transcript sent to `admin-chat` via existing `useAdminChat`
-5. As AI text streams in, accumulate it
-6. Once 300+ characters are collected (or stream ends), call `elevenlabs-tts` with the text
-7. State becomes `speaking`, audio plays via `new Audio(blobUrl)`
-8. Audio ends -- state returns to `idle`
-
-**Interrupt:** User can tap orb while speaking to stop audio and start listening again.
-
-### 3. New component: `VoiceOrb`
-
-A circular animated button showing the current voice state:
-- `idle`: teal ring, mic icon
-- `listening`: pulsing red ring, animated sound waves
-- `thinking`: spinning loader
-- `speaking`: pulsing teal ring, sound wave animation
-
-### 4. Modified: `LiveChat.tsx`
-
-Add a voice mode toggle:
-- New "Voice Mode" button in the header (headset/mic icon)
-- When active, shows the `VoiceOrb` centered above the chat input
-- Voice responses are also added to the chat thread as text messages
-- The text input area is still visible but the voice orb is the primary interaction
-- Keyboard input still works in voice mode
-
-### 5. Modified: `supabase/config.toml`
-
-Add the new TTS function entry (auto-managed, but needs `verify_jwt = false`).
-
-## Technical Details
-
-### Edge Function: `elevenlabs-tts`
-
-```text
-File: supabase/functions/elevenlabs-tts/index.ts
-
-- Auth: Validates bearer token (same pattern as admin-chat)
-- Rate limit: 20 requests/minute via check_rate_limit
-- Model: eleven_turbo_v2_5 (optimized for low latency)
-- Output: audio/mpeg binary response
-- Voice settings: stability 0.5, similarity_boost 0.75
-```
-
-### Hook: `useVoiceChat`
-
-```text
-File: src/hooks/useVoiceChat.ts
-
-Dependencies:
-- useSpeechRecognition (existing) -- for STT
-- useAdminChat (existing) -- for AI chat
-- supabase client -- for auth token
-
-Key logic:
-- Monitors useAdminChat messages to detect when streaming completes
-- Collects assistant text chunks, triggers TTS at threshold
-- Manages Audio object lifecycle (play, pause, cleanup)
-- AbortController for canceling TTS fetch on interrupt
-```
-
-### Component: `VoiceOrb`
-
-```text
-File: src/components/chat/VoiceOrb.tsx
-
-Props:
-- status: 'idle' | 'listening' | 'thinking' | 'speaking'
-- onTap: () => void
-- disabled?: boolean
-
-Visual:
-- 64x64px circle with state-dependent animations
-- Uses framer-motion for smooth transitions
-- Tailwind classes for colors/rings
-```
-
-### Simultaneous Text + Voice Strategy
-
-The "easy version" from the spec: collect AI text while streaming, trigger TTS once enough text is available (first sentence or ~300 chars). This creates the perception of simultaneous text and voice without complex audio chunking.
-
-### Files Summary
+## Files
 
 | Action | File |
 |--------|------|
-| Create | `supabase/functions/elevenlabs-tts/index.ts` |
-| Create | `src/hooks/useVoiceChat.ts` |
-| Create | `src/components/chat/VoiceOrb.tsx` |
-| Modify | `src/pages/LiveChat.tsx` -- add voice mode toggle and orb |
+| Modify | `src/components/vizzy/FloatingVizzyButton.tsx` -- add long-press logic |
+| Modify | `src/pages/LiveChat.tsx` -- read `?voice=1` query param on mount |
 
-### What Is NOT Changing
-
-- `useAdminChat` hook -- used as-is
-- `useSpeechRecognition` hook -- used as-is
-- `admin-chat` edge function -- used as-is
-- `FloatingVizzyButton` -- untouched
-- No new API keys needed (ELEVENLABS_API_KEY already exists)
