@@ -1,60 +1,107 @@
 
-# Vizzy Bug Fixes After Audit Implementation
 
-## Issues Found
+# Fresh Vizzy Voice Chat — Complete Rewrite (Multilingual)
 
-### 1. Critical: `vizzy-context` edge function returns unresolved Promise
-In `supabase/functions/vizzy-context/index.ts` line 49, `buildSnapshotFromContext()` is an async function but is NOT awaited. The response JSON will contain `snapshot: {}` (a serialized Promise), so the client will never get valid snapshot data.
+## What's Changing
 
-**Fix**: Add `await` before `buildSnapshotFromContext(supabaseAdmin, user.id)`.
+The entire `VizzyPage.tsx` (823 lines) will be deleted and replaced with a clean ~280-line voice chat page. The new page is built from scratch with:
 
-### 2. Critical: Broken fallback in `loadContextCached`
-In `VizzyPage.tsx` lines 217-221, the fallback tries to dynamically import `useVizzyContext` (a React hook) and use it outside a React component. This will never work -- hooks can't be called outside components. The comment even says "Can't use hooks outside React, just return null for fallback."
+- **Multilingual support**: Farsi and English are mandatory, plus the user's preferred language from their profile
+- **Simple WebSocket-only connection**: No WebRTC, no fallback logic, no auto-reconnection loops
+- **Manual retry only**: If disconnected, user taps "Reconnect" — no exponential backoff machinery
+- **No WebPhone/RingCentral**: Removed from voice page (still available in text chat)
+- **No quotation cards**: Removed from voice page (still available in text chat)
+- **No silent mode**: Removed entirely
+- **No VIZZY-ACTION parsing**: Removed from voice page
 
-**Fix**: Remove the dead dynamic import. If the server context fails, fall back to calling the `vizzy-context` edge function again or return null cleanly.
+## Multilingual Design
 
-### 3. Medium: `vizzy-context` does redundant work
-The edge function builds BOTH `contextString` (full text) via `buildFullVizzyContext` AND `snapshot` (structured object) via `buildSnapshotFromContext` -- which runs 14 additional DB queries on top of the ones already done by `buildFullVizzyContext`. The client only uses the `snapshot` field (to pass to `buildVizzyContext`).
+The system prompt sent to the ElevenLabs agent will include:
 
-**Fix**: Remove the `contextString` field and the `buildFullVizzyContext` call from the endpoint since the client only needs the snapshot. This cuts DB queries in half.
+```
+LANGUAGE RULES:
+- You are fluent in ALL languages, but especially English and Farsi (Persian).
+- Detect the language the CEO speaks in and ALWAYS respond in that SAME language.
+- If the CEO speaks Farsi, respond entirely in Farsi.
+- If the CEO speaks English, respond entirely in English.
+- If the CEO switches language mid-conversation, follow their switch immediately.
+- You can handle mixed-language input (code-switching) naturally.
+- Default language on session start: [from user profile, e.g. "en" or "fa"]
+```
 
-### 4. Minor: CORS headers missing extended Supabase headers
-The `vizzy-context` CORS headers are missing the extended Supabase client headers (`x-supabase-client-platform`, etc.), which could cause preflight failures with newer Supabase JS versions.
+The context prompt and business data labels remain in English (since they're system-internal), but Vizzy's spoken responses will match whatever language the user speaks.
 
-**Fix**: Add the full CORS header set.
+## Files Changed
 
-### 5. Minor: `sendBeacon` to REST API won't work
-In `VizzyPage.tsx` lines 118-121, `navigator.sendBeacon` posts to the Supabase REST API but without the required `apikey` and `Authorization` headers. Supabase REST requires these headers, so the beacon will always fail with 401.
+### 1. `src/pages/VizzyPage.tsx` — Complete Rewrite (~280 lines)
 
-**Fix**: Remove the broken `sendBeacon` call. Instead, save transcript periodically (every 30 seconds) while the session is active, so crash-loss is minimized to 30s of data.
+Delete all 823 lines. New structure:
 
-### 6. Minor: `useVizzyContext.ts` still exists but was supposed to be removed
-The plan said to remove the client-side context hook, but it still exists. It's only imported for its type (`VizzyBusinessSnapshot`). The type export should be moved to a standalone types file.
+- **State**: `status` (idle | connecting | connected | error), `muted`, `volume`, `transcript[]`, `elapsed`
+- **On mount**: Check admin role, request mic, fetch token, connect via WebSocket (`signed_url`)
+- **Context**: Load snapshot from `vizzy-context` edge function, build context string with multilingual instructions, push via `sendContextualUpdate`
+- **Transcript**: Simple list of `{role, text, id}` — no quotation type, no action parsing
+- **On disconnect**: Save transcript, show "Reconnect" button
+- **On error**: Show error + "Reconnect" button
+- **UI**: Full-screen dark overlay, brain avatar with pulse, status label, transcript panel, mute/volume/close controls
 
-**Fix**: Move `VizzyBusinessSnapshot` type to `src/types/vizzy.ts`, update imports, and delete the hook.
+Removed entirely:
+- `useWebPhone` hook usage
+- `QuotationDraft` interface and card UI
+- `silentMode` / `silentModeRef` / `silentIntervalRef`
+- `VIZZY-ACTION` tag parsing
+- `autoFallbackAttemptedRef`, `useWebSocketFallbackRef`, `cachedSignedUrlRef`
+- `buildConversationMemory` (reconnect memory injection)
+- Auto-reconnection with exponential backoff
+- `webPhoneInitRef` and all RingCentral client tools
+- Periodic auto-save interval
 
-## Changes
+### 2. `src/lib/vizzyContext.ts` — Add Multilingual Instructions
 
-### File: `supabase/functions/vizzy-context/index.ts`
-- Remove `buildFullVizzyContext` import and call (saves 18 DB queries)
-- `await` the `buildSnapshotFromContext` call
-- Add full CORS headers
-- Only return `{ snapshot }` in response
+Add a `language` parameter to `buildVizzyContext(snap, language?)` that injects the multilingual language rules into the system prompt. The `language` parameter comes from the user's `preferred_language` profile field (returned by the token endpoint).
 
-### File: `src/pages/VizzyPage.tsx`
-- Remove broken dynamic import fallback in `loadContextCached` -- just return null
-- Remove broken `sendBeacon` on `beforeunload`
-- Add periodic transcript auto-save (every 60 seconds while connected)
-- Clean up unused `Camera` import (dead camera button was already removed)
+Update the opening section of the prompt to include:
+- Detect-and-match language behavior
+- Farsi and English as mandatory languages
+- Default language based on user profile
 
-### File: `src/types/vizzy.ts` (new)
-- Move `VizzyBusinessSnapshot` interface from `useVizzyContext.ts`
+### 3. Edge Functions — No Changes Needed
 
-### File: `src/hooks/useVizzyContext.ts` (delete)
-- No longer needed -- type moved, hook unused
+- `elevenlabs-conversation-token` already returns `preferred_language`
+- `vizzy-context` already returns the snapshot
+- `vizzy-briefing` still works as-is
 
-### File: `src/lib/vizzyContext.ts`
-- Update import of `VizzyBusinessSnapshot` from new types file
+### 4. No Other File Changes
 
-### Edge function deployment
-- Redeploy `vizzy-context`
+- `LiveChat.tsx`, `AgentWorkspace.tsx`, `FloatingVizzyButton.tsx` all just navigate to `/vizzy` — still works
+- `src/types/vizzy.ts` — unchanged
+- Router config — unchanged (`/vizzy` route stays)
+
+## New VizzyPage Component Structure
+
+```text
+VizzyPage
+  |-- Admin role check (redirect if not admin)
+  |-- Mic permission request
+  |-- Token fetch (elevenlabs-conversation-token)
+  |-- WebSocket connection (signed_url only)
+  |-- Context push (vizzy-context -> buildVizzyContext with language)
+  |-- UI:
+  |     |-- Close button (top-right)
+  |     |-- Timer (top-left, when connected)
+  |     |-- Avatar (center, pulse when speaking)
+  |     |-- Status label
+  |     |-- Transcript panel (bottom, scrollable)
+  |     |-- Controls bar: Volume, Mute, Reconnect, Close
+```
+
+## What Users See
+
+- Same full-screen dark overlay as before
+- Same brain emoji avatar with pulse animation
+- Same transcript panel
+- Same mute/volume controls
+- **New**: Vizzy responds in Farsi when spoken to in Farsi, English when spoken to in English
+- **Gone**: Quotation cards, silent mode badge, WebPhone call/hangup buttons
+- **Better**: No more reconnection loops — clean connect or manual retry
+
