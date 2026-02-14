@@ -252,7 +252,7 @@ serve(async (req) => {
 
     // ========== PENNY (Accounting) ==========
     if (agentMap.penny) {
-      // Customers missing QuickBooks ID
+    // Customers missing QuickBooks ID
       const { data: missingQb } = await supabase
         .from("customers")
         .select("id, name, company_id")
@@ -261,18 +261,47 @@ serve(async (req) => {
         .not("company_id", "is", null)
         .limit(10);
 
+      // Also load linked customer names to detect duplicates
+      const { data: linkedCustomers } = await supabase
+        .from("customers")
+        .select("name")
+        .not("quickbooks_id", "is", null)
+        .not("company_id", "is", null);
+      const linkedNameSet = new Set(
+        (linkedCustomers || []).map((c: any) => (c.name || "").toLowerCase().trim().replace(/\s+/g, " "))
+      );
+
       if (missingQb) {
         for (const cust of missingQb) {
           if (isDuplicate("customer", cust.id, "missing_qb")) continue;
+          const normalizedName = (cust.name || "").toLowerCase().trim().replace(/\s+/g, " ");
+
+          // Check if this is a duplicate of an already-linked customer or a contact-variant
+          const isDup = linkedNameSet.has(normalizedName);
+          const isVariant = !isDup && Array.from(linkedNameSet).some(
+            (ln: string) => normalizedName.startsWith(ln) && normalizedName.length > ln.length
+          );
+
+          if (isDup) {
+            // Skip duplicates entirely — they already have a linked counterpart
+            continue;
+          }
+
           const row = {
             company_id: (cust as any).company_id,
             agent_id: agentMap.penny,
-            suggestion_type: "action",
+            suggestion_type: isVariant ? "info" : "action",
             category: "missing_qb",
-            title: `${cust.name} has no QuickBooks ID`,
-            description: "This customer cannot be synced to QuickBooks for invoicing.",
-            severity: "warning",
-            reason: "Without a QuickBooks link, invoices created for this customer won't sync to your accounting system.",
+            title: isVariant
+              ? `${cust.name} — contact variant (auto-links on next sync)`
+              : `${cust.name} — not found in QuickBooks`,
+            description: isVariant
+              ? "This appears to be a contact-specific entry. It will auto-link on the next sync."
+              : "This customer doesn't exist in QuickBooks yet. Create them there to enable invoice sync.",
+            severity: "info",
+            reason: isVariant
+              ? "A matching company already exists in QuickBooks — this variant will be linked automatically."
+              : "Without a QuickBooks record, invoices for this customer can't sync. Create the customer in QuickBooks first.",
             entity_type: "customer",
             entity_id: cust.id,
             status: "open",

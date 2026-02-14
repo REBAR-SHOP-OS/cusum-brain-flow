@@ -679,15 +679,59 @@ async function handleSyncCustomers(supabase: ReturnType<typeof createClient>, us
 
   // Build lookup map from QB DisplayName/CompanyName → QB Id
   const nameToQbId = new Map<string, string>();
+  // Also keep a list of QB names sorted longest-first for prefix matching
+  const qbNames: string[] = [];
   for (const c of customers) {
     const qbId = c.Id as string;
-    if (c.DisplayName) nameToQbId.set(normalize(c.DisplayName as string), qbId);
-    if (c.CompanyName) nameToQbId.set(normalize(c.CompanyName as string), qbId);
+    if (c.DisplayName) {
+      const n = normalize(c.DisplayName as string);
+      nameToQbId.set(n, qbId);
+      qbNames.push(n);
+    }
+    if (c.CompanyName) {
+      const n = normalize(c.CompanyName as string);
+      nameToQbId.set(n, qbId);
+      qbNames.push(n);
+    }
+  }
+  // Sort longest first so we match the most specific prefix
+  qbNames.sort((a, b) => b.length - a.length);
+
+  // Build set of QB IDs already linked to prevent duplicate assignments
+  const linkedQbIds = new Set<string>();
+  let linkedPage = 0;
+  while (true) {
+    const { data: linked } = await supabase
+      .from("customers")
+      .select("quickbooks_id")
+      .not("quickbooks_id", "is", null)
+      .eq("company_id", companyId)
+      .range(linkedPage * PAGE, (linkedPage + 1) * PAGE - 1);
+    const lr = linked || [];
+    for (const r of lr) if (r.quickbooks_id) linkedQbIds.add(r.quickbooks_id);
+    if (lr.length < PAGE) break;
+    linkedPage++;
+  }
+
+  // Also track names of linked customers for duplicate detection
+  const linkedNames = new Set<string>();
+  let lnPage = 0;
+  while (true) {
+    const { data: ln } = await supabase
+      .from("customers")
+      .select("name")
+      .not("quickbooks_id", "is", null)
+      .eq("company_id", companyId)
+      .range(lnPage * PAGE, (lnPage + 1) * PAGE - 1);
+    const lr = ln || [];
+    for (const r of lr) if (r.name) linkedNames.add(normalize(r.name));
+    if (lr.length < PAGE) break;
+    lnPage++;
   }
 
   // Fetch all local customers without a quickbooks_id
   let matched = 0;
-  const PAGE = 1000;
+  let duplicatesSkipped = 0;
   let page = 0;
   while (true) {
     const { data: unlinked } = await supabase
@@ -701,23 +745,54 @@ async function handleSyncCustomers(supabase: ReturnType<typeof createClient>, us
 
     for (const row of rows) {
       const key = normalize(row.name || "");
-      const qbId = nameToQbId.get(key);
+      if (!key) continue;
+
+      // Check if this is a duplicate of an already-linked customer
+      if (linkedNames.has(key)) {
+        duplicatesSkipped++;
+        continue;
+      }
+
+      // 1. Exact match
+      let qbId = nameToQbId.get(key);
+
+      // 2. Prefix match: check if any QB name is a prefix of the local name
+      if (!qbId) {
+        for (const qbName of qbNames) {
+          if (key.startsWith(qbName) && key.length > qbName.length) {
+            qbId = nameToQbId.get(qbName);
+            break;
+          }
+        }
+      }
+
+      // 3. Guard: skip if this QB ID is already linked to another local customer
+      if (qbId && linkedQbIds.has(qbId)) {
+        duplicatesSkipped++;
+        continue;
+      }
+
       if (qbId) {
         const { error: linkErr } = await supabase
           .from("customers")
           .update({ quickbooks_id: qbId })
           .eq("id", row.id);
-        if (!linkErr) matched++;
+        if (!linkErr) {
+          matched++;
+          linkedQbIds.add(qbId); // prevent further duplicates in this run
+        }
       }
     }
     if (rows.length < PAGE) break;
     page++;
   }
 
-  if (matched > 0) console.log(`Auto-matched ${matched} local customers to QuickBooks by name`);
+  if (matched > 0 || duplicatesSkipped > 0) {
+    console.log(`Auto-match: ${matched} linked, ${duplicatesSkipped} duplicates/already-linked skipped`);
+  }
   await updateLastSync(supabase, userId);
 
-  return jsonRes({ success: true, synced, matched, total: customers.length, errors: errors.length });
+  return jsonRes({ success: true, synced, matched, duplicatesSkipped, total: customers.length, errors: errors.length });
 }
 
 // ─── Sync Invoices ─────────────────────────────────────────────────
