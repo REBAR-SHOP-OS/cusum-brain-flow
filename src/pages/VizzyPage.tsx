@@ -444,7 +444,7 @@ export default function VizzyPage() {
             loadFullContext().then(async (snap) => {
               if (!snap) return;
               snapshotRef.current = snap;
-              const rawContext = buildVizzyContext(snap);
+              const rawContext = buildVizzyContext(snap, "fa");
               farsiVoice.sendContextualUpdate(rawContext);
             });
             return; // Farsi mode started successfully
@@ -469,10 +469,7 @@ export default function VizzyPage() {
           if (!snap) return;
           snapshotRef.current = snap;
 
-          const rawContext = buildVizzyContext(snap);
-          const langCtx = detectedLang !== "en"
-            ? `\nUser's preferred language: ${detectedLang}. Default to speaking in this language unless they switch.`
-            : "";
+          const rawContext = buildVizzyContext(snap, detectedLang);
 
           // Wait for session to be fully connected before sending context
           const waitForConnection = () => new Promise<void>((resolve) => {
@@ -487,7 +484,7 @@ export default function VizzyPage() {
 
           try {
             const { data: briefData } = await supabase.functions.invoke("vizzy-briefing", {
-              body: { rawContext: rawContext + langCtx },
+              body: { rawContext: rawContext },
             });
             if (briefData?.briefing && sessionActiveRef.current) {
               conversation.sendContextualUpdate(briefData.briefing);
@@ -499,7 +496,7 @@ export default function VizzyPage() {
           }
 
           if (sessionActiveRef.current) {
-            conversation.sendContextualUpdate(rawContext + langCtx);
+            conversation.sendContextualUpdate(rawContext);
           }
         });
       } catch (err) {
@@ -537,16 +534,17 @@ export default function VizzyPage() {
 
   const isSpeakingNow = useFarsiMode ? farsiVoice.isSpeaking : conversation.isSpeaking;
 
+  const isFarsi = preferredLang === "fa";
   const statusLabel =
     webPhoneState.status === "calling" ? "Dialing..." :
     webPhoneState.status === "in_call" ? "On call" :
-    status === "starting" ? (useFarsiMode ? "در حال اتصال..." : "Connecting...") :
-    status === "reconnecting" ? "Reconnecting..." :
-    status === "error" ? (useFarsiMode ? "خطا در اتصال" : "Connection lost") :
-    silentMode ? "Silent mode — taking notes..." :
-    useFarsiMode && farsiVoice.interimText ? "در حال گوش دادن..." :
-    isSpeakingNow ? (useFarsiMode ? "ویزی صحبت می‌کنه..." : "Vizzy is speaking...") : 
-    (useFarsiMode ? "گوش می‌دم..." : "Listening...");
+    status === "starting" ? (isFarsi ? "در حال اتصال..." : "Connecting...") :
+    status === "reconnecting" ? (isFarsi ? "اتصال مجدد..." : "Reconnecting...") :
+    status === "error" ? (isFarsi ? "خطا در اتصال" : "Connection lost") :
+    silentMode ? (isFarsi ? "حالت سکوت — در حال یادداشت..." : "Silent mode — taking notes...") :
+    (useFarsiMode || isFarsi) && farsiVoice.interimText ? "در حال گوش دادن..." :
+    isSpeakingNow ? (isFarsi ? "ویزی صحبت می‌کنه..." : "Vizzy is speaking...") : 
+    (isFarsi ? "گوش می‌دم..." : "Listening...");
 
   return (
     <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/90 backdrop-blur-md">
@@ -606,15 +604,15 @@ export default function VizzyPage() {
               {preferredLang.toUpperCase()}
             </span>
           )}
-          <p className="text-sm text-white/50">{statusLabel}</p>
+          <p className="text-sm text-white/50" dir={isFarsi ? "rtl" : "ltr"}>{statusLabel}</p>
           {silentMode && (
             <span className="inline-block mt-2 text-[10px] uppercase tracking-widest px-3 py-1 rounded-full bg-amber-500/20 text-amber-400 font-semibold">
               Silent
             </span>
           )}
           {/* Farsi interim text */}
-          {useFarsiMode && farsiVoice.interimText && (
-            <p dir="rtl" className="text-sm text-white/40 italic mt-1 max-w-xs truncate">
+          {(useFarsiMode || isFarsi) && farsiVoice.interimText && (
+            <p dir="rtl" className="text-sm text-white/40 italic mt-1 max-w-xs truncate text-right">
               "{farsiVoice.interimText}"
             </p>
           )}
