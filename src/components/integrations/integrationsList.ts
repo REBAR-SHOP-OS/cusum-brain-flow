@@ -222,4 +222,17 @@ export const defaultIntegrations: Integration[] = [
       { key: "YOUTUBE_REFRESH_TOKEN", label: "Refresh Token", type: "textarea", placeholder: "1//xxx", helpText: "From OAuth Playground" },
     ],
   },
+  {
+    id: "rebar-shop",
+    name: "rebar.shop",
+    description: "Connect to your live WordPress/WooCommerce site.",
+    status: "available",
+    icon: "rebar-shop",
+    docsUrl: "https://rebar.shop/wp-admin/profile.php",
+    fields: [
+      { key: "WP_BASE_URL", label: "API Base URL", type: "text", placeholder: "https://rebar.shop/wp-json/wp/v2", helpText: "WordPress REST API endpoint" },
+      { key: "WP_USERNAME", label: "Username", type: "text", placeholder: "Admin", helpText: "Your WordPress admin username" },
+      { key: "WP_APP_PASSWORD", label: "Application Password", type: "password", placeholder: "xxxx xxxx xxxx xxxx", helpText: "From WordPress → Users → Profile → Application Passwords" },
+    ],
+  },
 ];
