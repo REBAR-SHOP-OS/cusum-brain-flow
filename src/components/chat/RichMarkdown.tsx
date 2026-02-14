@@ -1,3 +1,4 @@
+import React from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
@@ -6,6 +7,7 @@ import {
   Minus, ArrowRight, RefreshCw, Download
 } from "lucide-react";
 import { BriefingActionButtons } from "@/components/accounting/BriefingActionButtons";
+import { TableRowActions, type TableRowActionCallbacks } from "@/components/accounting/TableRowActions";
 import { format } from "date-fns";
 
 export interface ActionItemCallbacks {
@@ -19,6 +21,7 @@ interface RichMarkdownProps {
   className?: string;
   onRegenerateImage?: (imageUrl: string, alt: string) => void;
   onActionItem?: ActionItemCallbacks;
+  onTableRowAction?: TableRowActionCallbacks;
   dismissedItems?: Set<string>;
   rescheduledItems?: Map<string, Date>;
 }
@@ -48,7 +51,7 @@ function statusBadge(text: string) {
   return null;
 }
 
-export function RichMarkdown({ content, className, onRegenerateImage, onActionItem, dismissedItems, rescheduledItems }: RichMarkdownProps) {
+export function RichMarkdown({ content, className, onRegenerateImage, onActionItem, onTableRowAction, dismissedItems, rescheduledItems }: RichMarkdownProps) {
   return (
     <div className={cn("text-sm leading-relaxed break-words overflow-hidden", className)}>
       <ReactMarkdown
@@ -109,15 +112,38 @@ export function RichMarkdown({ content, className, onRegenerateImage, onActionIt
           ),
           thead: ({ children }) => (
             <thead className="bg-primary/10 border-b border-border/50">
-              {children}
+              {onTableRowAction
+                ? React.Children.map(children, (child) => {
+                    if (React.isValidElement(child) && child.props.children) {
+                      return React.cloneElement(child as React.ReactElement<any>, {
+                        children: (
+                          <>
+                            {child.props.children}
+                            <th className="px-2 py-2 text-left font-bold text-primary text-xs uppercase tracking-wider whitespace-nowrap">Actions</th>
+                          </>
+                        ),
+                      });
+                    }
+                    return child;
+                  })
+                : children}
             </thead>
           ),
           tbody: ({ children }) => (
             <tbody className="divide-y divide-border/30">{children}</tbody>
           ),
-          tr: ({ children }) => (
-            <tr className="hover:bg-muted/30 transition-colors">{children}</tr>
-          ),
+          tr: ({ children }) => {
+            // Extract row text from all cells for action context
+            const rowText = extractText(children);
+            return (
+              <tr className="group hover:bg-muted/30 transition-colors">
+                {children}
+                {onTableRowAction && (
+                  <TableRowActions rowText={rowText} callbacks={onTableRowAction} />
+                )}
+              </tr>
+            );
+          },
           th: ({ children }) => (
             <th className="px-3 py-2 text-left font-bold text-primary text-xs uppercase tracking-wider whitespace-nowrap">
               {children}

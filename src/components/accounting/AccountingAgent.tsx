@@ -7,6 +7,7 @@ import { sendAgentMessage, ChatMessage } from "@/lib/agent";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { RichMarkdown, type ActionItemCallbacks } from "@/components/chat/RichMarkdown";
+import type { TableRowActionCallbacks } from "@/components/accounting/TableRowActions";
 import accountingHelper from "@/assets/helpers/accounting-helper.png";
 import { PennyCallCard, parsePennyCalls, type PennyCallData } from "./PennyCallCard";
 import type { WebPhoneState, WebPhoneActions } from "@/hooks/useWebPhone";
@@ -286,6 +287,24 @@ RULES:
     },
   };
 
+  const tableRowCallbacks: TableRowActionCallbacks = {
+    onCall: (rowText: string) => {
+      handleSendDirect(`Call the customer about: ${rowText}`);
+    },
+    onText: (rowText: string) => {
+      handleSendDirect(`Send a text message to the customer about: ${rowText}`);
+    },
+    onEmail: (rowText: string, subject: string, body: string) => {
+      handleSendDirect(`Draft and send an email about: ${rowText}\nSubject: ${subject}\nBody: ${body}`);
+      toast({ title: "Email queued", description: `Subject: ${subject}` });
+    },
+    onReschedule: (rowText: string, date: Date, reason: string) => {
+      rescheduledItems.set(rowText, date);
+      setRescheduledVersion(v => v + 1);
+      toast({ title: "Activity rescheduled", description: `${reason} → ${date.toLocaleDateString()}` });
+    },
+  };
+
   const postBriefingActions = [
     "Drill into overdue AR",
     "Show my queue",
@@ -416,6 +435,7 @@ RULES:
                       <RichMarkdown
                         content={msg.content}
                         onActionItem={actionItemCallbacks}
+                        onTableRowAction={tableRowCallbacks}
                         dismissedItems={dismissedItems}
                         rescheduledItems={rescheduledItems}
                       />
