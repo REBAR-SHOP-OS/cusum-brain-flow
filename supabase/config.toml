@@ -219,3 +219,6 @@ verify_jwt = false
 
 [functions.app-help-chat]
 verify_jwt = false
+
+[functions.email-automation-check]
+verify_jwt = false

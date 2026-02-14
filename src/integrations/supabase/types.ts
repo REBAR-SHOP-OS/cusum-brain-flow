@@ -1399,6 +1399,57 @@ export type Database = {
           },
         ]
       }
+      email_automations: {
+        Row: {
+          automation_key: string
+          campaign_type: string
+          campaigns_generated: number
+          company_id: string
+          config: Json
+          created_at: string
+          description: string
+          enabled: boolean
+          id: string
+          last_triggered_at: string | null
+          name: string
+          priority: string
+          trigger_type: string
+          updated_at: string
+        }
+        Insert: {
+          automation_key: string
+          campaign_type?: string
+          campaigns_generated?: number
+          company_id: string
+          config?: Json
+          created_at?: string
+          description?: string
+          enabled?: boolean
+          id?: string
+          last_triggered_at?: string | null
+          name: string
+          priority?: string
+          trigger_type: string
+          updated_at?: string
+        }
+        Update: {
+          automation_key?: string
+          campaign_type?: string
+          campaigns_generated?: number
+          company_id?: string
+          config?: Json
+          created_at?: string
+          description?: string
+          enabled?: boolean
+          id?: string
+          last_triggered_at?: string | null
+          name?: string
+          priority?: string
+          trigger_type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       email_campaign_sends: {
         Row: {
           campaign_id: string
