@@ -1,107 +1,126 @@
 
+# Replace Josh Anderson with Saurabh + Smart Search Everywhere
 
-# Intelligent Pipeline Search Box
+## Part 1: Replace Josh Anderson with Saurabh Seghal
 
-## Problem
+Josh Anderson no longer works at Rebar. 466 leads in the database currently have `metadata->>'odoo_salesperson' = 'Josh Anderson'` which needs to be updated to `Saurabh Seghal`.
 
-The search box currently does plain text matching against lead titles, descriptions, sources, notes, and customer names. Typing "today" returns 0 results because no lead contains the word "today" in its text fields. Users expect natural language queries like "today", "won", "hot leads", "stale", "Torpave", or "value > 50k" to just work.
-
-## Solution
-
-Add a **client-side smart query parser** that intercepts known natural language patterns and converts them into filter state + text search, before the debounced query fires. No AI API call needed -- this is instant, deterministic parsing.
-
-### Supported Queries (examples)
-
-| User types | Parsed as |
-|---|---|
-| `today` | Filter: creationDateRange = "today" |
-| `this week` / `this month` | Filter: creationDateRange = "this_week" / "this_month" |
-| `won` / `lost` | Filter: won = true / lost = true |
-| `hot` / `hot leads` | Text search for leads in "hot_enquiries" stage |
-| `stale` / `inactive` | Filter: leads not updated in 7+ days |
-| `unassigned` | Filter: unassigned = true |
-| `value > 50000` / `over 100k` | Client filter on expected_revenue |
-| `Torpave` | Falls through to normal text search (no pattern match) |
-| `new today` | Stage = "new" AND creationDateRange = "today" |
-| `won this month` | won = true AND creationDateRange = "this_month" |
-
-### How It Works
-
-```text
-User input --> Smart Parser --> { filters: PipelineFilterState, textQuery: string }
-                                    |                              |
-                            Applied to filter state        Sent to debounced search
+### Data Operation
+Update leads table metadata to replace the salesperson name:
+```sql
+UPDATE leads
+SET metadata = jsonb_set(metadata::jsonb, '{odoo_salesperson}', '"Saurabh Seghal"')
+WHERE metadata->>'odoo_salesperson' = 'Josh Anderson';
 ```
 
-1. Parser runs synchronously on every keystroke (lightweight regex matching)
-2. Recognized tokens are extracted and converted to filter mutations
-3. Remaining unrecognized text becomes the standard text search query
-4. Visual feedback: recognized tokens appear as filter chips in the search bar (already supported)
+This also needs to be reflected in the Odoo sync so future syncs don't revert it. The Odoo-side reassignment should happen in Odoo itself -- this ERP fix handles the mirror.
 
-## Changes
+---
 
-### 1. New utility: `src/lib/smartSearchParser.ts`
+## Part 2: Smart Search on All Pages
 
-A pure function that takes a search string and returns:
-```typescript
-interface SmartSearchResult {
-  filters: Partial<PipelineFilterState>;
-  textQuery: string;           // leftover text for DB search
-  staleThresholdDays?: number; // for client-side "stale" filtering
-  revenueFilter?: { op: "gt" | "lt" | "eq"; value: number };
-  stageFilter?: string;       // direct stage id match
-}
-```
+Currently only the Pipeline page has smart search with natural language parsing and hints. The following pages also have search boxes that should be upgraded:
 
-Pattern matching rules (processed in order, tokens removed after match):
-- **Date patterns**: "today", "this week", "this month", "this quarter", "this year", "last 7 days", "last 30 days"
-- **Status patterns**: "won", "lost", "open", "archived"
-- **Assignment**: "unassigned", "my pipeline", "my leads"
-- **Stage names**: Any exact or fuzzy match to PIPELINE_STAGES labels (e.g., "hot" matches "Hot Enquiries", "proposal" matches "Proposal")
-- **Stale/activity**: "stale", "inactive", "no activity", "stuck" (triggers 7-day threshold)
-- **Revenue**: "value > N", "over Nk", "above N", "under N", "below Nk"
-- **Combinators**: Multiple tokens can coexist ("won this month", "hot unassigned")
+| Page | Current search | Smart hints to add |
+|---|---|---|
+| **Customers** | Text match on name/company | "recent", "today", "this week", company type keywords |
+| **Phone Calls** | Text match | "missed", "today", "this week", "inbound", "outbound", direction/result filters |
+| **Prospecting** | Text match | "today", "this week", "hot", status keywords |
+| **Brain (Knowledge)** | Text match | "today", "this week", category/tag keywords |
+| **Social Media** | Text match | "scheduled", "published", "draft", "today", "this week" |
+| **Packing Slips** | Text match on project/mark | "today", project keywords |
+| **Chat History** | Text match on title/agent | Agent name keywords |
+| **Inbox** | Text match | "unread", "today", sender keywords |
 
-### 2. Update `PipelineFilters.tsx`
+### Approach: Shared `SmartSearchInput` Component
 
-- Show a subtle "sparkle" icon or hint text in the search placeholder indicating smart search capability
-- When smart parser returns filters, display them as removable chips (already works)
-- Add a small tooltip/hint dropdown below the search showing recognized commands as user types (optional autocomplete)
+Rather than duplicating the parser logic into every page, create a reusable component:
 
-### 3. Update `Pipeline.tsx`
+1. **New file: `src/components/ui/SmartSearchInput.tsx`**
+   - Wraps the Input with sparkle icon, focus-based hint dropdown
+   - Accepts a `hints` prop (array of `{ category, suggestions }`) so each page provides context-specific hints
+   - Accepts an `onParsedChange` callback returning `{ tokens: Record<string,string>, textQuery: string }`
+   - Uses a generic parser that extracts date tokens ("today", "this week", etc.) and page-specific keyword tokens
 
-- Import and call `parseSmartSearch(searchQuery)` in the debounce effect
-- Apply returned filters to `pipelineFilters` state
-- Apply `textQuery` to `debouncedSearch` (only the non-filter text goes to the DB)
-- Apply `staleThresholdDays` and `revenueFilter` as additional client-side filters in `filteredLeads` memo
-- Apply `stageFilter` as an additional filter
+2. **New file: `src/lib/genericSearchParser.ts`**
+   - Shared date-parsing rules (today, this week, this month, etc.)
+   - Accepts a `keywords` config map per page (e.g., `{ "missed": { field: "result", value: "Missed" } }`)
+   - Returns parsed tokens + remaining text query
 
-### 4. Search hint dropdown (new component): `src/components/pipeline/SearchHints.tsx`
+3. **Update each page** to:
+   - Replace raw `<Input>` with `<SmartSearchInput>`
+   - Pass page-specific hints and keyword config
+   - Apply parsed tokens as filters (client-side or query-side depending on page)
 
-A small floating dropdown that appears when the search box is focused, showing:
-- Recently used smart queries
-- Quick suggestions based on current input (e.g., typing "t" shows "today", "this week", "this month")
-- This makes discoverability easy without documentation
+### Per-Page Smart Keywords
+
+**Customers**: `"recent"` (sort by last activity), `"no email"` (filter missing email)
+
+**Phone Calls**: `"missed"`, `"inbound"`, `"outbound"`, `"today"`, `"this week"`, `"has recording"`
+
+**Prospecting**: `"contacted"`, `"not contacted"`, `"today"`, `"this week"`
+
+**Brain**: `"today"`, `"this week"`, category tags
+
+**Social Media**: `"draft"`, `"scheduled"`, `"published"`, `"today"`, `"this week"`, platform names (`"instagram"`, `"linkedin"`)
+
+**Packing Slips**: `"today"`, `"pending"`, `"shipped"`
+
+**Chat History**: Agent names (`"vizzy"`, `"blitz"`, `"penny"`), `"today"`, `"this week"`
+
+**Inbox**: `"unread"`, `"today"`, `"this week"`, type filters (`"email"`, `"call"`)
+
+### Files to Create
+- `src/lib/genericSearchParser.ts` -- shared parsing engine
+- `src/components/ui/SmartSearchInput.tsx` -- reusable smart search component with hint dropdown
+
+### Files to Modify
+- `src/pages/Customers.tsx` -- swap Input for SmartSearchInput
+- `src/pages/Phonecalls.tsx` -- swap Input for SmartSearchInput
+- `src/pages/Prospecting.tsx` -- swap Input for SmartSearchInput
+- `src/pages/Brain.tsx` -- swap Input for SmartSearchInput
+- `src/pages/SocialMediaManager.tsx` -- swap Input for SmartSearchInput
+- `src/components/office/PackingSlipsView.tsx` -- swap Input for SmartSearchInput
+- `src/components/panels/HistoryPanel.tsx` -- swap Input for SmartSearchInput
+- `src/components/inbox/UnifiedInboxList.tsx` -- swap Input for SmartSearchInput
+- `src/components/pipeline/PipelineFilters.tsx` -- refactor to use shared SmartSearchInput (keeping existing pipeline-specific parser)
 
 ## Technical Details
 
-### File: `src/lib/smartSearchParser.ts` (new)
+### Generic Parser Design
 
-Pure function, no side effects, fully testable. Uses regex patterns and string matching against PIPELINE_STAGES. Handles case insensitivity and partial matches.
+```typescript
+interface KeywordRule {
+  pattern: RegExp;
+  key: string;
+  value: string;
+}
 
-### File: `src/components/pipeline/SearchHints.tsx` (new)
+interface GenericSearchConfig {
+  keywords?: KeywordRule[];
+  enableDateParsing?: boolean; // default true
+}
 
-Small popover component anchored to the search input. Shows categorized suggestions (Date, Status, Stage, Revenue). Clicking a suggestion fills the search box.
+function parseGenericSearch(input: string, config: GenericSearchConfig): {
+  tokens: Record<string, string>;
+  textQuery: string;
+}
+```
 
-### File: `src/components/pipeline/PipelineFilters.tsx` (modify)
+Date parsing (shared across all pages): "today", "this week", "this month", "this quarter", "last 7 days", "last 30 days" -- extracted as `{ date: "today" }` token.
 
-- Update placeholder to "Search or type: today, won, hot, stale..."
-- Add search hints dropdown trigger on focus
-- Pass parsed smart filters up to parent
+Page-specific keywords are passed via config. Each page interprets the returned tokens to apply its own filtering logic.
 
-### File: `src/pages/Pipeline.tsx` (modify)
+### SmartSearchInput Component
 
-- Import `parseSmartSearch`
-- In the debounce effect, parse the query and split into filters vs text
-- Add stale/revenue client-side filters to `filteredLeads` memo
-- Merge smart-parsed filters with manual filter panel filters (smart search overrides, manual panel can add more)
+```typescript
+interface SmartSearchInputProps {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  hints: Array<{ category: string; suggestions: string[] }>;
+  className?: string;
+}
+```
+
+Renders: sparkle icon + input + floating hint dropdown on focus. Clicking a suggestion appends it to the input. Same UX pattern as the existing pipeline SearchHints but reusable.
