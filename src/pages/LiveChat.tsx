@@ -1,10 +1,9 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Send, Loader2, Square, Trash2, Type, Hash, Brain, Headset, Mic } from "lucide-react";
+import { ArrowLeft, Send, Loader2, Square, Trash2, Type, Hash, Brain } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAdminChat } from "@/hooks/useAdminChat";
-import { useVoiceChat } from "@/hooks/useVoiceChat";
 import { RichMarkdown } from "@/components/chat/RichMarkdown";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAuth } from "@/lib/auth";
@@ -16,7 +15,6 @@ import { VoiceInputButton } from "@/components/chat/VoiceInputButton";
 import { QuickTemplates } from "@/components/chat/QuickTemplates";
 import { SlashCommandMenu, SlashCommand } from "@/components/chat/SlashCommandMenu";
 import { MentionMenu } from "@/components/chat/MentionMenu";
-import { VoiceOrb } from "@/components/chat/VoiceOrb";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { useToast } from "@/hooks/use-toast";
 import { TooltipProvider, Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -33,22 +31,11 @@ export default function LiveChat() {
   const { toast } = useToast();
 
   const [input, setInput] = useState("");
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [voiceMode, setVoiceMode] = useState(() => searchParams.get("voice") === "1");
   const chat = useAdminChat();
   const { messages, isStreaming, sendMessage, clearChat, cancelStream } = chat;
-  const voiceChat = useVoiceChat(chat);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [memoryCount, setMemoryCount] = useState<number | null>(null);
-
-  // Clean voice param from URL
-  useEffect(() => {
-    if (searchParams.has("voice")) {
-      searchParams.delete("voice");
-      setSearchParams(searchParams, { replace: true });
-    }
-  }, []);
 
   // Fetch memory count
   useEffect(() => {
@@ -222,19 +209,6 @@ export default function LiveChat() {
               )}
             </p>
           </div>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant={voiceMode ? "default" : "ghost"}
-                size="icon"
-                className="h-9 w-9"
-                onClick={() => setVoiceMode(!voiceMode)}
-              >
-                <Headset className="w-4 h-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">Voice Mode</TooltipContent>
-          </Tooltip>
           {messages.length > 0 && (
             <Button variant="ghost" size="icon" className="h-9 w-9" onClick={clearChat} title="Clear chat">
               <Trash2 className="w-4 h-4" />
@@ -252,7 +226,7 @@ export default function LiveChat() {
                 </div>
                 <p className="text-lg font-medium">How can I help you?</p>
                 <p className="text-sm text-muted-foreground mt-1">
-                  {voiceMode ? "Tap the orb to start speaking" : "Ask anything about your business"}
+                  Ask anything about your business
                 </p>
               </div>
             )}
@@ -285,164 +259,110 @@ export default function LiveChat() {
           </div>
         </ScrollArea>
 
-        {/* Voice mode: compact orb + transcript overlay at bottom */}
-        {voiceMode && (
-          <div className="px-4 py-3 flex items-center gap-3 border-t border-border bg-card/80 backdrop-blur-sm shrink-0">
-            <div className="flex-1 min-w-0">
-              {voiceChat.status === "listening" && voiceChat.interimText && (
-                <p className="text-sm text-muted-foreground italic truncate">
-                  "{voiceChat.interimText}"
-                </p>
-              )}
-              {voiceChat.status === "listening" && voiceChat.fullTranscript && !voiceChat.interimText && (
-                <p className="text-xs text-foreground/70 truncate">
-                  {voiceChat.fullTranscript}
-                </p>
-              )}
-              {voiceChat.status === "thinking" && (
-                <p className="text-xs text-muted-foreground flex items-center gap-1">
-                  <Loader2 className="w-3 h-3 animate-spin" /> Thinking…
-                </p>
-              )}
-              {voiceChat.status === "speaking" && (
-                <p className="text-xs text-muted-foreground">Speaking… tap to interrupt</p>
-              )}
-              {voiceChat.status === "idle" && (
-                <p className="text-xs text-muted-foreground">Tap orb to start</p>
-              )}
-            </div>
-            <VoiceOrb
-              status={voiceChat.status}
-              onTap={voiceChat.handleOrbTap}
-              disabled={!voiceChat.isSupported}
-              micActive={voiceChat.isListening}
-              isMuted={voiceChat.isMuted}
-              onToggleMute={voiceChat.toggleMute}
-            />
-          </div>
-        )}
-
-        {/* Voice recording indicator (text mode only) */}
-        {!voiceMode && speech.isListening && (
+        {/* Voice recording indicator */}
+        {speech.isListening && (
           <div className="px-4 py-2 flex items-center gap-2 text-sm text-destructive animate-pulse">
             <span className="w-2 h-2 rounded-full bg-destructive" />
             Listening... {speech.interimText && <span className="text-muted-foreground italic truncate">"{speech.interimText}"</span>}
           </div>
         )}
 
-        {/* Input -- hidden only when voice conversation is actively running */}
-        {!(voiceMode && voiceChat.isConversationActive) && (
-          <div className="border-t border-border bg-card p-4 shrink-0">
-            <div className="max-w-3xl mx-auto">
-              <div className="relative bg-secondary rounded-xl border border-border/50 shadow-sm transition-shadow focus-within:shadow-md focus-within:border-primary/30">
-                <FormattingToolbar onFormat={handleFormat} disabled={isStreaming} visible={showFormatting} />
-                <SlashCommandMenu
-                  isOpen={slashOpen}
-                  filter={slashFilter}
-                  selectedIndex={slashIndex}
-                  onSelect={handleSlashSelect}
-                  onClose={() => setSlashOpen(false)}
+        {/* Input */}
+        <div className="border-t border-border bg-card p-4 shrink-0">
+          <div className="max-w-3xl mx-auto">
+            <div className="relative bg-secondary rounded-xl border border-border/50 shadow-sm transition-shadow focus-within:shadow-md focus-within:border-primary/30">
+              <FormattingToolbar onFormat={handleFormat} disabled={isStreaming} visible={showFormatting} />
+              <SlashCommandMenu
+                isOpen={slashOpen}
+                filter={slashFilter}
+                selectedIndex={slashIndex}
+                onSelect={handleSlashSelect}
+                onClose={() => setSlashOpen(false)}
+              />
+              <MentionMenu
+                isOpen={mentionOpen}
+                filter={mentionFilter}
+                selectedIndex={mentionIndex}
+                onSelect={handleMentionSelect}
+                onClose={() => setMentionOpen(false)}
+              />
+
+              <div className="px-3 pt-3 pb-1">
+                <textarea
+                  ref={inputRef}
+                  value={input}
+                  onChange={(e) => handleValueChange(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Type a message..."
+                  className="w-full bg-transparent resize-none text-sm leading-relaxed placeholder:text-muted-foreground focus:outline-none disabled:opacity-50"
+                  rows={1}
+                  disabled={isStreaming}
                 />
-                <MentionMenu
-                  isOpen={mentionOpen}
-                  filter={mentionFilter}
-                  selectedIndex={mentionIndex}
-                  onSelect={handleMentionSelect}
-                  onClose={() => setMentionOpen(false)}
-                />
-
-                <div className="px-3 pt-3 pb-1">
-                  <textarea
-                    ref={inputRef}
-                    value={input}
-                    onChange={(e) => handleValueChange(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder="Type a message..."
-                    className="w-full bg-transparent resize-none text-sm leading-relaxed placeholder:text-muted-foreground focus:outline-none disabled:opacity-50"
-                    rows={1}
-                    disabled={isStreaming}
-                  />
-                </div>
-
-                <div className="flex items-center gap-0.5 px-2 pb-2">
-                  <EmojiPicker onSelect={handleEmojiSelect} disabled={isStreaming} />
-                  <VoiceInputButton isListening={speech.isListening} isSupported={speech.isSupported} onToggle={handleVoiceToggle} disabled={isStreaming} />
-                  <QuickTemplates onSelect={handleTemplateSelect} disabled={isStreaming} />
-
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        onClick={() => setShowFormatting(!showFormatting)}
-                        className={cn(
-                          "p-2 rounded-md transition-colors",
-                          showFormatting ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                        )}
-                      >
-                        <Type className="w-5 h-5" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top">Formatting</TooltipContent>
-                  </Tooltip>
-
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const textarea = inputRef.current;
-                          if (textarea) {
-                            const start = textarea.selectionStart;
-                            const newVal = input.slice(0, start) + "/" + input.slice(start);
-                            handleValueChange(newVal);
-                            textarea.focus();
-                          }
-                        }}
-                        className="p-2 text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-muted/50"
-                      >
-                        <Hash className="w-5 h-5" />
-                      </button>
-                    </TooltipTrigger>
-                  <TooltipContent side="top">Commands (/)</TooltipContent>
-                  </Tooltip>
-
-
-                  <div className="flex-1" />
-
-                  {isStreaming ? (
-                    <Button size="icon" variant="destructive" className="h-9 w-9 rounded-lg shrink-0" onClick={cancelStream}>
-                      <Square className="w-4 h-4" />
-                    </Button>
-                  ) : (
-                    <>
-                      <Button
-                        size="icon"
-                        variant="outline"
-                        className="h-9 w-9 rounded-lg shrink-0 border-primary/30 text-primary hover:bg-primary hover:text-primary-foreground"
-                        onClick={() => {
-                          setVoiceMode(true);
-                          setTimeout(() => voiceChat.handleOrbTap(), 0);
-                        }}
-                        title="Start voice chat"
-                      >
-                        <Mic className="w-4 h-4" />
-                      </Button>
-                      <Button size="icon" className="h-9 w-9 rounded-lg shrink-0" onClick={handleSend} disabled={!input.trim()}>
-                        <Send className="w-4 h-4" />
-                      </Button>
-                    </>
-                  )}
-                </div>
               </div>
 
-              <div className="flex justify-end mt-2 px-1">
-                <p className="text-xs text-muted-foreground">
-                  Type <kbd className="px-1 py-0.5 rounded bg-muted text-[10px] font-mono">/</kbd> for commands · <kbd className="px-1 py-0.5 rounded bg-muted text-[10px] font-mono">@</kbd> to mention
-                </p>
+              <div className="flex items-center gap-0.5 px-2 pb-2">
+                <EmojiPicker onSelect={handleEmojiSelect} disabled={isStreaming} />
+                <VoiceInputButton isListening={speech.isListening} isSupported={speech.isSupported} onToggle={handleVoiceToggle} disabled={isStreaming} />
+                <QuickTemplates onSelect={handleTemplateSelect} disabled={isStreaming} />
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={() => setShowFormatting(!showFormatting)}
+                      className={cn(
+                        "p-2 rounded-md transition-colors",
+                        showFormatting ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                      )}
+                    >
+                      <Type className="w-5 h-5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">Formatting</TooltipContent>
+                </Tooltip>
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const textarea = inputRef.current;
+                        if (textarea) {
+                          const start = textarea.selectionStart;
+                          const newVal = input.slice(0, start) + "/" + input.slice(start);
+                          handleValueChange(newVal);
+                          textarea.focus();
+                        }
+                      }}
+                      className="p-2 text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-muted/50"
+                    >
+                      <Hash className="w-5 h-5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">Commands (/)</TooltipContent>
+                </Tooltip>
+
+                <div className="flex-1" />
+
+                {isStreaming ? (
+                  <Button size="icon" variant="destructive" className="h-9 w-9 rounded-lg shrink-0" onClick={cancelStream}>
+                    <Square className="w-4 h-4" />
+                  </Button>
+                ) : (
+                  <Button size="icon" className="h-9 w-9 rounded-lg shrink-0" onClick={handleSend} disabled={!input.trim()}>
+                    <Send className="w-4 h-4" />
+                  </Button>
+                )}
               </div>
             </div>
+
+            <div className="flex justify-end mt-2 px-1">
+              <p className="text-xs text-muted-foreground">
+                Type <kbd className="px-1 py-0.5 rounded bg-muted text-[10px] font-mono">/</kbd> for commands · <kbd className="px-1 py-0.5 rounded bg-muted text-[10px] font-mono">@</kbd> to mention
+              </p>
+            </div>
           </div>
-        )}
+        </div>
       </div>
     </TooltipProvider>
   );
