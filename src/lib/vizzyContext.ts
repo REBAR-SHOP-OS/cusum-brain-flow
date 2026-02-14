@@ -29,7 +29,7 @@ export function buildVizzyContext(snap: VizzyBusinessSnapshot): string {
     .join("\n");
 
   const hotLeadsList = crm.hotLeads
-    .map((l) => `  • ${l.contact_name} (${l.company_name}) — Score: ${l.lead_score}, Expected: ${fmt(l.expected_revenue || 0)}`)
+    .map((l) => `  • ${l.title} — Probability: ${l.probability}%, Expected: ${fmt(l.expected_value || 0)}`)
     .join("\n");
 
   const eventsList = recentEvents
