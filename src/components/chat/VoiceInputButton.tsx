@@ -10,23 +10,23 @@ interface VoiceInputButtonProps {
 }
 
 export function VoiceInputButton({ isListening, isSupported, onToggle, disabled }: VoiceInputButtonProps) {
-  if (!isSupported) return null;
+  const isDisabled = disabled || !isSupported;
 
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <button
           type="button"
-          onClick={onToggle}
-          disabled={disabled}
+          onClick={isSupported ? onToggle : undefined}
+          disabled={isDisabled}
+          aria-label={isListening ? "Stop voice input" : "Voice input"}
           className={cn(
             "p-2 rounded-md transition-all",
             isListening
               ? "text-destructive bg-destructive/10 animate-pulse"
               : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
-            disabled && "opacity-50 cursor-not-allowed"
+            isDisabled && "opacity-50 cursor-not-allowed"
           )}
-          title={isListening ? "Stop recording" : "Voice input"}
         >
           {isListening ? (
             <MicOff className="w-5 h-5" />
@@ -36,7 +36,7 @@ export function VoiceInputButton({ isListening, isSupported, onToggle, disabled 
         </button>
       </TooltipTrigger>
       <TooltipContent side="top">
-        {isListening ? "Stop voice input" : "Voice input"}
+        {!isSupported ? "Voice not supported in this browser" : isListening ? "Stop voice input" : "Voice input"}
       </TooltipContent>
     </Tooltip>
   );
