@@ -256,6 +256,81 @@ mcpServer.tool("get_dashboard_stats", {
   },
 });
 
+// ── Tool: list_team_channels ────────────────────────────────
+
+mcpServer.tool("list_team_channels", {
+  description:
+    "List team hub channels. Optional filter: channel_type (group, dm). Returns up to 50 channels.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      channel_type: { type: "string", description: "Filter by channel_type (group, dm)" },
+      limit: { type: "number", description: "Max rows (default 50)" },
+    },
+  },
+  handler: async ({ channel_type, limit }: Record<string, unknown>) => {
+    const db = getDb();
+    let q = db
+      .from("team_channels")
+      .select("id, name, description, channel_type, created_at")
+      .order("created_at", { ascending: true })
+      .limit(Math.min(Number(limit) || 50, 50));
+    if (channel_type) q = q.eq("channel_type", channel_type);
+    const { data, error } = await q;
+    if (error) return { content: [{ type: "text", text: `Error: ${error.message}` }] };
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  },
+});
+
+// ── Tool: list_team_messages ────────────────────────────────
+
+mcpServer.tool("list_team_messages", {
+  description:
+    "List messages in a team hub channel. Required: channel_id. Returns up to 50 messages with sender, text, translations.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      channel_id: { type: "string", description: "Channel ID (required)" },
+      limit: { type: "number", description: "Max rows (default 50)" },
+    },
+    required: ["channel_id"],
+  },
+  handler: async ({ channel_id, limit }: Record<string, unknown>) => {
+    const db = getDb();
+    const { data, error } = await db
+      .from("team_messages")
+      .select("id, channel_id, sender_profile_id, original_text, original_language, translations, created_at")
+      .eq("channel_id", channel_id)
+      .order("created_at", { ascending: false })
+      .limit(Math.min(Number(limit) || 50, 50));
+    if (error) return { content: [{ type: "text", text: `Error: ${error.message}` }] };
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  },
+});
+
+// ── Tool: list_team_members ─────────────────────────────────
+
+mcpServer.tool("list_team_members", {
+  description:
+    "List members of a team hub channel. Required: channel_id. Returns profile_id and joined_at.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      channel_id: { type: "string", description: "Channel ID (required)" },
+    },
+    required: ["channel_id"],
+  },
+  handler: async ({ channel_id }: Record<string, unknown>) => {
+    const db = getDb();
+    const { data, error } = await db
+      .from("team_channel_members")
+      .select("profile_id, joined_at")
+      .eq("channel_id", channel_id);
+    if (error) return { content: [{ type: "text", text: `Error: ${error.message}` }] };
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  },
+});
+
 // ── HTTP Transport ──────────────────────────────────────────
 
 const transport = new StreamableHttpTransport();
