@@ -1,79 +1,43 @@
 
+# Fix "Unknown" Customer Names in Vizzy Suggestions
 
-# Fix Vizzy: RingCentral Video + ElevenLabs AI Upgrade
+## Root Cause
 
-## Overview
+The `generate-suggestions` edge function has a `resolveCustomerName` helper with a broken fallback. When the `customer_id` lookup fails (or isn't matched), it falls back to reading `invData?.CustomerRef?.name` -- but the actual QuickBooks data stored in `accounting_mirror` uses `CustomerName` at the top level, not `CustomerRef.name`.
 
-Upgrade Vizzy's meeting experience using **RingCentral Video** (already integrated) as the primary video provider, while upgrading transcription to ElevenLabs Scribe and adding Vizzy AI as a meeting participant.
+The customer IS in the `customers` table and the map IS loaded, so the primary lookup path (`customerNameMap`) should work. However, 34 suggestions already have "Unknown" baked into their titles from previous runs.
 
-## Current State
+## Fix (2 changes)
 
-- **Vizzy Voice Chat** (`VizzyPage.tsx`): ElevenLabs Conversational AI via WebSocket — working, audio-only
-- **Team Meetings** (`MeetingRoom.tsx`): RingCentral Video bridge (opens in external tab) with Jitsi iframe fallback
-- **Meeting Transcription**: Browser SpeechRecognition API (Chrome-only, low accuracy)
-- **Phone Calls**: RingCentral WebRTC via `useWebPhone` + AI bridge via `useCallAiBridge`
-- **Recording**: Browser MediaRecorder capturing local mic only
-- **RingCentral Video Edge Function**: Already creates RC Video bridges with join URLs
+### 1. Fix the fallback in `generate-suggestions` edge function
 
-## What Gets Fixed
+In `supabase/functions/generate-suggestions/index.ts` (line 121), update the `resolveCustomerName` function to check all possible JSON paths:
 
-### 1. Make RingCentral Video the Primary Meeting Provider
+```
+// Before (broken):
+return invData?.CustomerRef?.name ?? "Unknown";
 
-**Current**: RC Video creates bridges but opens externally. Falls back to Jitsi iframe.
+// After (fixed):
+return invData?.CustomerName ?? invData?.CustomerRef?.name ?? "Unknown";
+```
 
-**Fix**: 
-- RC Video stays as primary provider (opens in new tab via existing bridge flow)
-- Remove Jitsi fallback entirely — RC Video is the only provider
-- Improve the "waiting" UI shown while user is in RC Video tab
-- Show meeting status, participant info, and AI tools in the Rebar app while RC Video runs in another tab
+This ensures the function checks `CustomerName` (the actual field in the data) before falling back to `CustomerRef.name` and finally "Unknown".
 
-### 2. Upgrade Meeting Transcription to ElevenLabs Scribe
+### 2. Patch existing "Unknown" suggestions in the database
 
-**Problem**: Browser SpeechRecognition is Chrome-only and low accuracy.
+Run a SQL migration that updates existing suggestion titles by looking up the actual customer name from `accounting_mirror.data`:
 
-**Solution**: Replace `useMeetingTranscription.ts` to use the existing `elevenlabs-scribe-token` edge function.
+- Join `suggestions` to `accounting_mirror` on `entity_id`
+- Extract `CustomerName` from the JSONB `data` column
+- Replace "Unknown" in the title with the actual customer name
+- Only affect suggestions with status `open` or `new` and entity_type `invoice`
 
-- Use local mic capture → send audio to ElevenLabs Scribe API for transcription
-- Higher accuracy, works cross-browser
-- Keep existing realtime transcript sync via Supabase
+This fixes the 34 existing suggestions so users see real customer names immediately without waiting for the next suggestion generation cycle.
 
-### 3. Add Vizzy AI as a Meeting Companion
+## Technical Details
 
-**Problem**: Vizzy only works on the dedicated VizzyPage, not during meetings.
-
-**Solution**: Add a "Summon Vizzy" panel in the meeting UI that:
-- Captures local mic audio (same mic used for RC Video)
-- Bridges to ElevenLabs conversational AI (reuse pattern from `useCallAiBridge.ts`)
-- Plays AI audio locally (not injected into RC Video call)
-- Shows live transcript of Vizzy's responses
-- Vizzy can listen to meeting context and provide real-time assistance
-
-### 4. Improve Vizzy Voice Page
-
-- Keep all existing features: quotation drafts, make_call, send_sms, silent mode
-- No video/screen share changes needed (RC Video handles this separately)
-
-## Technical Plan
-
-### No New Dependencies Required
-
-RingCentral Video is already integrated. ElevenLabs is already integrated.
-
-### No New Secrets Required
-
-All secrets already configured: `RINGCENTRAL_CLIENT_ID`, `RINGCENTRAL_CLIENT_SECRET`, `ELEVENLABS_API_KEY`, `ELEVENLABS_AGENT_ID`
-
-### Files to Modify
-
-| File | Change |
+| Item | Detail |
 |------|--------|
-| `src/components/teamhub/MeetingRoom.tsx` | Remove Jitsi iframe, improve RC Video UI, add Vizzy companion panel |
-| `src/hooks/useMeetingTranscription.ts` | Switch from browser SpeechRecognition to ElevenLabs Scribe |
-| `src/hooks/useTeamMeetings.ts` | Remove Jitsi fallback, RC Video only |
-| `src/hooks/useMeetingAiBridge.ts` (NEW) | Bridge ElevenLabs AI for meeting companion |
-
-### Migration Strategy
-
-- Existing meeting data (transcripts, recordings) remains untouched
-- RingCentral phone calling stays as-is
-- ElevenLabs remains the AI voice provider
+| Edge function file | `supabase/functions/generate-suggestions/index.ts`, line 121 |
+| SQL scope | `suggestions` table, 34 rows with `title LIKE 'Unknown %'` |
+| Risk | Low -- single line code fix + targeted data patch |
