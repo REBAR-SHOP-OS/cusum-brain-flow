@@ -1,45 +1,36 @@
 
 
-# Voice & Control Polish Fixes
+# Fix: Voice Button Hidden Behind Mobile Nav Bar
 
-## Overview
+## Problem
 
-Address the two remaining gaps: voice auto-start from `?voice=1` URL param, and mic button visibility when browser lacks Web Speech API support. Also add ARIA labels, Escape-to-cancel for pending actions, and disable Send during pending confirmation.
+On mobile, when you open the JARVIS chat (`/chat`), the bottom navigation bar (Home, Inbox, Tasks, Floor) overlaps the chat input toolbar area. This hides the mic button, emoji picker, formatting tools, and the send button row.
 
-## Changes
+The LiveChat page uses `h-screen` for its own full-screen layout, but the `MobileNavV2` component sits on top of it at `fixed bottom-0 z-40 h-14`.
 
-### 1. `src/components/chat/VoiceInputButton.tsx`
+## Solution
 
-**Current:** Returns `null` when `isSupported` is false — mic button silently disappears.
+Hide the mobile bottom nav bar when the user is on the `/chat` route. The chat page already has its own back button for navigation, so the bottom nav is redundant there.
 
-**Fix:** Always render the button. When unsupported, show a disabled mic with a tooltip saying "Voice not supported in this browser".
+## Technical Changes
 
-- Remove the `if (!isSupported) return null` guard
-- When `!isSupported`, render a disabled button with opacity and tooltip
-- Add `aria-label` to the button for accessibility
+### File: `src/components/layout/MobileNavV2.tsx`
 
-### 2. `src/pages/LiveChat.tsx`
+- Add a check for `location.pathname === "/chat"`
+- Return `null` (render nothing) when on the chat route
+- This is a 2-line change at the top of the render logic
 
-**A. Voice auto-start from `?voice=1`**
+### File: `src/pages/LiveChat.tsx`
 
-- `useSearchParams` is already imported
-- Add a `useEffect` that checks for `voice=1` param
-- If present and speech is supported, call `speech.start()` after a short delay (100ms to let the page mount)
-- Clear the param with `setSearchParams({}, { replace: true })` to prevent re-triggers
+- Remove the `pb-14` bottom padding that AppLayout's main content area adds (or rather, since LiveChat uses its own `h-screen`, ensure the input area is not clipped)
+- No changes may be needed here if hiding the nav is sufficient
 
-**B. Escape key cancels pending action**
+### File: `src/components/layout/AppLayout.tsx` (optional)
 
-- In the existing `handleKeyDown`, add: if `Escape` is pressed and `pendingAction` exists, call `cancelAction()`
-
-**C. Disable Send while pending action**
-
-- Update the Send button's `disabled` prop to also check `!!pendingAction`
-
-**D. ARIA labels on Send/Stop buttons**
-
-- Add `aria-label="Send message"` to Send button
-- Add `aria-label="Stop generating"` to Stop button
+- The main content area has `pb-14 md:pb-0` for mobile nav spacing
+- On `/chat`, since nav is hidden, this extra padding is unnecessary but harmless
 
 ## No backend changes needed
 
-All fixes are frontend-only — two files, minimal edits.
+Single file edit (MobileNavV2.tsx) to hide the nav on the chat route.
+
