@@ -38,12 +38,13 @@ export function VizzyDailyBriefing() {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session?.access_token || cancelled) return;
 
-        const { data, error: fnError } = await supabase.functions.invoke("vizzy-daily-brief", {});
+        const res = await supabase.functions.invoke("vizzy-daily-brief", {});
         if (cancelled) return;
-        if (fnError || !data?.briefing) {
+        // Treat rate-limit (429) as a soft skip — just hide the widget
+        if (res.error || !res.data?.briefing) {
           setError(true);
         } else {
-          setBriefing(data.briefing);
+          setBriefing(res.data.briefing);
         }
       } catch {
         if (!cancelled) setError(true);
