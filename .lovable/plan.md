@@ -1,84 +1,150 @@
 
-# Notification Center -- Audit, Fixes, and Improvements
 
-## Current Issues Found
+# Upgrade Vizzy to JARVIS-Level AI Assistant
 
-### Accessibility
-- **No focus trap**: Panel opens as a slide-over but does not trap keyboard focus, allowing Tab to reach elements behind the backdrop
-- **Dismiss button hidden until hover**: The X dismiss button uses `opacity-0 group-hover:opacity-100`, making it invisible to keyboard users and screen readers
-- **No ARIA landmark/role**: The panel lacks `role="dialog"` and `aria-modal="true"`
-- **Tab buttons lack ARIA**: Tabs should use `role="tablist"` / `role="tab"` / `aria-selected` pattern
-- **Checkmark button has no aria-label**: The todo checkmark only has a `title` attribute
-- **No focus-visible ring**: Interactive elements inside the panel lack visible focus indicators
+## Vision
+Transform Vizzy from a super-admin-only voice assistant into a full JARVIS-like experience: always available, deeply contextual, with access to ALL business and personal data, proactive intelligence, and seamless voice/text switching.
 
-### UX / Usability
-- **No "Mark all read" / "Dismiss all" for To-do and Ideas tabs**: These actions only appear in the Notifications tab, but users need them in all tabs
-- **Truncated text**: Notification titles are cut off (`truncate` on 280px panel) with no way to see full text without expanding
-- **No priority icon on items**: High-priority items only get a subtle left border -- easy to miss in dark theme
-- **Empty state is too minimal**: Just an icon and text with no call-to-action
-- **No unread dot indicator**: Individual items lack a visual unread dot -- relies only on background shade which is subtle
-- **Panel header lacks unread count**: The "Inbox" title does not show how many unread items exist
-- **Badge counts show total, not unread**: Tab badges show total count (13, 36, 1) rather than unread count, which is more actionable
+---
 
-### Performance / Technical
-- **Stale closure in `dismissAll`**: Uses `notifications` from closure -- if state changes between render and click, wrong items could be dismissed
-- **No error handling UI**: Database operations (`markRead`, `dismiss`, etc.) silently fail with no toast/feedback
-- **No optimistic rollback**: Optimistic UI updates don't roll back on database errors
-- **Realtime channel not filtered by user**: Subscribes to ALL notification changes on the table, not just for the current user (relies on RLS for data, but still receives empty payloads for other users' rows)
+## Current State
+- **Voice Vizzy** (`/vizzy`): ElevenLabs-powered voice agent, locked to `sattar@rebar.shop` only. Loads full business snapshot (financials, production, CRM, emails, team presence, knowledge base). Can make calls, send SMS, draft quotations.
+- **Text Chat** (`/chat`): Uses `admin-chat` edge function, also locked to super admin. Loads limited context (work orders, machines, events, stock) -- much less than voice Vizzy.
+- **Floating Button**: Navigates to `/chat` (text) or `/vizzy` (voice). Only visible to mapped users.
+
+## Key Gaps
+1. **Text chat has far less context than voice Vizzy** -- no financials, no emails, no team presence, no knowledge base
+2. **No personal assistant capabilities** -- no calendar awareness, reminders, personal notes
+3. **No proactive intelligence** -- Vizzy waits to be asked, never surfaces insights on its own
+4. **No persistent memory** -- each session starts fresh with no recall of past conversations
 
 ---
 
 ## Implementation Plan
 
-### 1. Accessibility Fixes (InboxPanel.tsx)
-- Add `role="dialog"`, `aria-modal="true"`, `aria-label="Inbox"` to the panel wrapper
-- Implement focus trap: auto-focus the close button on open, trap Tab within the panel
-- Add `role="tablist"` to tab container, `role="tab"` + `aria-selected` to each tab button, `role="tabpanel"` to content area
-- Make dismiss button always visible to assistive tech (`sr-only` fallback or `aria-label` with permanent visibility for keyboard)
-- Add `aria-label="Mark as done"` to checkmark buttons
-- Add `focus-visible:ring-2` styles to all interactive elements
+### 1. Supercharge the Text Chat Backend (`admin-chat` edge function)
 
-### 2. UX Improvements (InboxPanel.tsx)
-- Change tab badges to show **unread count** instead of total count (show total only if all read)
-- Add a small unread dot indicator next to notification titles for unread items
-- Add a priority indicator icon (AlertTriangle for high, minus for low) next to the agent avatar
-- Show "Mark all read" action in **all tabs** (not just Notifications)
-- Add "Dismiss all" action for To-do and Ideas tabs
-- Show unread count in the panel header: "Inbox (4 unread)"
-- Improve empty state with a subtle illustration-style message
+Give the text-based Vizzy the same full business context that voice Vizzy gets.
 
-### 3. Error Handling (useNotifications.ts)
-- Add toast notifications for failed database operations using `sonner`
-- Implement optimistic rollback: if `supabase.update()` returns an error, revert state
-- Add error boundary around notification actions
+**Changes to `supabase/functions/admin-chat/index.ts`:**
+- Add queries for: financials (accounting_mirror), leads/pipeline, deliveries, team presence (time_clock_entries), inbound emails (communications), knowledge base entries, agent activity (chat_sessions), cut plans, and customer data
+- Build a comprehensive system prompt matching `vizzyContext.ts` format -- financials, production, CRM, team directory, emails, brain knowledge
+- Add personal assistant instructions: "You are JARVIS to your CEO. Handle personal requests (reminders, scheduling ideas, brainstorming) alongside business tasks."
+- Upgrade model from `google/gemini-3-flash-preview` to `google/gemini-3-pro-preview` for deeper reasoning
 
-### 4. Performance (useNotifications.ts)
-- Filter realtime channel subscription by `user_id` using the `filter` parameter to reduce noise
-- Wrap `dismissAll` and `markAllRead` with fresh state references to avoid stale closures
+### 2. Add Personal Notes and Memory System
+
+**Database migration:**
+- Create `vizzy_memory` table: `id`, `user_id`, `category` (enum: business, personal, reminder, insight), `content` (text), `metadata` (jsonb), `created_at`, `expires_at` (nullable), `company_id`
+- RLS: user can only read/write their own entries
+- Enable realtime
+
+**Edge function changes (`admin-chat`):**
+- Query `vizzy_memory` for the current user and inject into context as "PERSISTENT MEMORY"
+- Add tool-calling support: when Vizzy says "I'll remember that" or user says "remember this", the edge function saves to `vizzy_memory`
+- Add structured output via tool calling for memory operations: `save_memory(category, content, expires_at?)`, `list_memories()`, `delete_memory(id)`
+
+### 3. Proactive Daily Briefing
+
+**New component: `src/components/vizzy/VizzyDailyBriefing.tsx`**
+- On Home page load (for mapped users), auto-fetch a condensed briefing
+- Call a new edge function `vizzy-daily-brief` that:
+  - Loads the full business snapshot (reuse same queries)
+  - Asks Gemini 3 Pro to generate a 5-bullet "Good morning" briefing highlighting: urgent items, overdue invoices, hot leads, team absences, production blockers
+- Display as a dismissible card at the top of the Home page with the agent avatar
+- Store dismissal in localStorage so it only shows once per day
+
+### 4. Unified Context Builder (Shared Module)
+
+**New file: `supabase/functions/_shared/vizzyFullContext.ts`**
+- Extract the context-building logic from `admin-chat` into a shared module
+- Both `admin-chat` and `vizzy-daily-brief` import from here
+- Matches the same data as `useVizzyContext.ts` + `vizzyContext.ts` on the client side, but runs server-side for edge functions
+
+### 5. Enhanced System Prompt (JARVIS Personality)
+
+Update the system prompt to include:
+- "You are JARVIS -- the CEO's personal and business AI. You handle EVERYTHING."
+- Personal capabilities: brainstorming, writing emails/messages, personal reminders, tracking habits, journaling thoughts
+- Proactive behavior: "If you notice anomalies in the data, mention them even if not asked"
+- Memory awareness: "You have persistent memory. Reference past conversations when relevant."
+- Cross-domain intelligence: "Connect dots -- if a customer emailed about delays AND production is behind, flag the connection"
+
+### 6. Quick Access Improvements
+
+**Update `src/components/vizzy/FloatingVizzyButton.tsx`:**
+- Add a long-press gesture (500ms hold) to open voice Vizzy directly (`/vizzy`) vs. single tap for text chat (`/chat`)
+- Add a subtle tooltip on first use: "Tap for text, hold for voice"
+
+**Update `src/pages/LiveChat.tsx`:**
+- Add a greeting that shows the daily briefing summary inline as the first message (auto-generated on page load)
+- Show "Vizzy remembers X items from past sessions" indicator in header
 
 ---
 
 ## Technical Details
 
-### File: `src/components/panels/InboxPanel.tsx`
-- Add `role="dialog"` and `aria-modal="true"` to the `motion.div` panel element
-- Add `useRef` + `useEffect` to auto-focus close button and trap focus within panel
-- Refactor tab bar to use proper ARIA tab pattern (`role="tablist"`, `role="tab"`, `role="tabpanel"`)
-- Add `aria-label` to dismiss and checkmark buttons
-- Add `focus-visible:ring-2 focus-visible:ring-primary` to all buttons
-- Change badge logic: `counts[tab.key]` becomes `unreadCounts[tab.key]` computed from `.filter(n => n.status === "unread").length`
-- Add unread dot: small `w-2 h-2 rounded-full bg-primary` next to title when `status === "unread"`
-- Add priority icon: render `AlertTriangle` (lucide) for `priority === "high"` items
-- Move "Mark all read" / "Dismiss all" actions to render for all tabs
-- Update header: `Inbox` becomes `Inbox {unreadCount > 0 && `(${unreadCount} unread)`}`
+### File: `supabase/functions/_shared/vizzyFullContext.ts` (New)
+- Export `async function buildFullVizzyContext(supabase, userId)` 
+- Runs all parallel queries: accounting_mirror, cut_plans, cut_plan_items, machines, leads, customers, deliveries, profiles, activity_events, knowledge, chat_sessions, time_clock_entries, communications, vizzy_memory
+- Returns formatted context string matching `vizzyContext.ts` format
+- Includes personal memory section
 
-### File: `src/hooks/useNotifications.ts`
-- Import `toast` from `sonner`
-- Wrap each `supabase.update()` call with error check; on error, revert optimistic state and show toast
-- Add `filter` to realtime channel: `filter: "user_id=eq." + userId` (requires fetching current user id)
-- Fix stale closure: use functional state updater in `dismissAll` and `markAllRead` instead of reading from `notifications` directly
+### File: `supabase/functions/admin-chat/index.ts` (Major update)
+- Import and use `buildFullVizzyContext` for system prompt
+- Upgrade model to `google/gemini-3-pro-preview`
+- Add tool definitions for memory operations: `save_memory`, `list_memories`
+- Process tool calls in response: if AI calls `save_memory`, insert into `vizzy_memory` table, then continue conversation
+- Keep rate limiting and auth checks
+
+### File: `supabase/functions/vizzy-daily-brief/index.ts` (New)
+- Auth required, rate limited (1 per 30 minutes)
+- Uses `buildFullVizzyContext` to get snapshot
+- Asks Gemini 3 Pro for a 5-bullet briefing
+- Returns `{ briefing: string, generated_at: string }`
+
+### Database Migration
+```text
+CREATE TABLE public.vizzy_memory (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  category TEXT NOT NULL DEFAULT 'general',
+  content TEXT NOT NULL,
+  metadata JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT now(),
+  expires_at TIMESTAMPTZ,
+  company_id UUID NOT NULL REFERENCES public.companies(id)
+);
+
+ALTER TABLE public.vizzy_memory ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users manage own memories"
+  ON public.vizzy_memory FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+```
+
+### File: `src/components/vizzy/VizzyDailyBriefing.tsx` (New)
+- Calls `supabase.functions.invoke("vizzy-daily-brief")`
+- Renders dismissible card with framer-motion animation
+- Shows agent avatar, briefing bullets, timestamp
+- "Ask Vizzy more" button navigates to `/chat`
+
+### File: `src/pages/Home.tsx` (Minor update)
+- Import and render `VizzyDailyBriefing` above the agent cards for mapped users
+
+### File: `src/components/vizzy/FloatingVizzyButton.tsx` (Minor update)
+- Add long-press detection (500ms timer on pointerDown, clear on pointerUp if < 500ms)
+- Long press navigates to `/vizzy`, short tap to `/chat`
+
+### File: `src/pages/LiveChat.tsx` (Minor update)
+- On mount, fetch memory count from `vizzy_memory` table
+- Show "Vizzy has X memories from past sessions" in header subtitle
+- Auto-send a greeting request on first load to get contextual "Good morning" response
 
 ### Files Unchanged
-- `src/lib/notificationSound.ts` -- no changes needed
-- `src/lib/browserNotification.ts` -- no changes needed
-- `src/components/layout/TopBar.tsx` -- already has aria-label (from Sprint 1)
+- `src/hooks/useVizzyContext.ts` -- client-side voice context loader stays the same
+- `src/lib/vizzyContext.ts` -- voice context builder stays the same
+- `supabase/functions/vizzy-briefing/index.ts` -- voice briefing compressor stays the same
+- `supabase/functions/elevenlabs-conversation-token/index.ts` -- no changes
