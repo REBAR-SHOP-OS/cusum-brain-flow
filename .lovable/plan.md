@@ -1,21 +1,33 @@
 
-# Remove Header Penny Button and Make FAB Draggable
 
-## What Changes
+# Add Odoo Activity Assignments to Lead Timelines
 
-1. **Remove the "Ask Penny" button** from the accounting header bar (the one circled in red). The floating button at the bottom-right will be the only way to open/close Penny.
+## Context
 
-2. **Make the floating Penny FAB draggable** -- same drag behavior as the existing Vizzy button (tap to toggle Penny, drag to reposition, position saved to localStorage).
+Five emails from OdooBot and Saurabh Sehgal assigned Odoo activities to leads. Each corresponds to an existing lead in the pipeline. None of these leads currently have any timeline entries.
 
-## Technical Details
+## Activities to Add
 
-### File: `src/pages/AccountingWorkspace.tsx`
+| Email Subject | Lead | Stage | Activity |
+|---|---|---|---|
+| Alexandria Lagoon Expansion Addendum 03: Chk new lead moved to CRM stages | Alexandria Lagoon Expansion Invitation to Bid | qualified | "Check new lead moved to CRM stages" (assigned by OdooBot) |
+| ISIDRO PAYAKET (SHANWELL): Just Chk | ISIDRO PAYAKET (SHANWELL CONTRACTING LTD.)'s opportunity | won | "Just Chk" (assigned by Saurabh Sehgal) |
+| 15 MM straight: Just Chk | 15 MM straight | won | "Just Chk" (assigned by Saurabh Sehgal) |
+| 18" ties and 6'straights: Just Chk | 18" ties and 6'straights | won | "Just Chk" (assigned by Saurabh Sehgal) |
+| Cage Request - Alamos Gold: Chk reason for loss | FW: Cage Request - Alamos Gold - 4' deep x 4' wide x 7' long Cages - VPL Gates | lost | "Check reason for loss" (assigned by Saurabh Sehgal) |
 
-- **Remove lines 169-178** -- the "Ask Penny" / "Close Penny" button from the header
-- **Replace the static FAB** (lines 267-275) with a draggable version using the same pointer-capture drag pattern from `FloatingVizzyButton.tsx`:
-  - `onPointerDown` / `onPointerMove` / `onPointerUp` with a drag threshold to distinguish click vs drag
-  - Position stored in localStorage under a `penny-btn-pos` key
-  - Clamped to viewport on resize
-  - Click toggles `showAgent` on/off
-- **Show the FAB always** (remove the `!showAgent` condition and the `lg:hidden` restriction) so it works as the sole toggle on both desktop and mobile
-- The FAB will also show on desktop (not just mobile) since the header button is being removed
+## Technical Steps
+
+1. **Insert 5 `lead_activities` rows** via a database migration, one for each Odoo assignment:
+   - `activity_type`: `"internal_task"`
+   - `title`: The assignment summary (e.g., "Chk new lead moved to CRM stages")
+   - `description`: Full context from email including who assigned it and deadline
+   - `created_by`: `"OdooBot"` or `"Saurabh Sehgal"` as appropriate
+   - `due_date`: `2026-02-13` (the Odoo deadline from the emails)
+   - `company_id`: `a0000000-0000-0000-0000-000000000001`
+   - `metadata`: `{ "source": "odoo_activity", "odoo_assigned_by": "..." }`
+
+2. **No code changes needed** -- the existing `LeadTimeline` component already renders `lead_activities` entries with the `internal_task` type (shows as a document icon with muted styling).
+
+3. These will immediately appear in each lead's Timeline tab in the Lead Detail Drawer.
+
