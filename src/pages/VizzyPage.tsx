@@ -17,7 +17,7 @@ import { FileText, Check, XCircle } from "lucide-react";
 // VizzyApprovalDialog removed — voice calls auto-execute
 import { toast } from "sonner";
 
-const MAX_RETRIES = 5;
+const MAX_RETRIES = 3;
 
 interface TranscriptEntry {
   role: "user" | "agent";
@@ -367,8 +367,8 @@ export default function VizzyPage() {
         await new Promise((r) => setTimeout(r, 500));
 
         const { data, error } = await supabase.functions.invoke("elevenlabs-conversation-token");
-        if (error || !data?.signed_url) throw new Error(error?.message ?? "No signed URL received");
-        await conversation.startSession({ signedUrl: data.signed_url, connectionType: "websocket" });
+        if (error || !data?.token) throw new Error(error?.message ?? "No conversation token received");
+        await conversation.startSession({ conversationToken: data.token, connectionType: "webrtc" });
         const snap = snapshotRef.current;
         if (snap) {
           conversation.sendContextualUpdate(buildVizzyContext(snap) + buildConversationMemory());
@@ -449,11 +449,11 @@ export default function VizzyPage() {
         }
 
         // === ENGLISH MODE: ElevenLabs ===
-        if (tokenRes.error || !tokenRes.data?.signed_url) {
-          throw new Error(tokenRes.error?.message ?? "No signed URL received");
+        if (tokenRes.error || !tokenRes.data?.token) {
+          throw new Error(tokenRes.error?.message ?? "No conversation token received");
         }
 
-        await conversation.startSession({ signedUrl: tokenRes.data.signed_url, connectionType: "websocket" });
+        await conversation.startSession({ conversationToken: tokenRes.data.token, connectionType: "webrtc" });
 
         // Phase 3: Load context + WebPhone in background (non-blocking)
         webPhoneActions.initialize().then((ok) => {
