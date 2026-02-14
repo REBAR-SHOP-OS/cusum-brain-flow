@@ -1,77 +1,148 @@
 
 
-# Remove All Vizzy Voice Chat Files and References -- Final Cleanup
+# End-to-End Voice Chat (Mic to STT to AI to TTS to Speaker)
 
-## What Was Already Done
-- Deleted `src/pages/VizzyPage.tsx`
-- Deleted `supabase/functions/elevenlabs-conversation-token/` directory
-- Removed `/vizzy` route from `App.tsx`
-- Removed long-press logic from `FloatingVizzyButton.tsx`
-- Removed `/vizzy` from `pageMap.ts`
+## Overview
 
-## What Still Remains (to clean up now)
+Build a ChatGPT-style voice chat mode into the existing `/chat` page. No new routes or pages -- just a voice orb toggle in the existing `LiveChat.tsx` that switches between text mode and voice mode.
 
-### 1. Broken hooks that call the deleted edge function
+## Architecture
 
-Both of these hooks invoke `elevenlabs-conversation-token` which no longer exists:
+```text
+[Browser Mic] --> Web Speech API (STT) --> transcript text
+                                              |
+                                              v
+                                    admin-chat edge function (AI, streaming)
+                                              |
+                                              v
+                                    streamed text displayed in chat
+                                              |
+                                              v (after first ~300 chars)
+                                    elevenlabs-tts edge function (TTS)
+                                              |
+                                              v
+                                    [Browser Audio playback]
+```
 
-- **`src/hooks/useCallAiBridge.ts`** (530 lines) -- Bridges RingCentral calls with ElevenLabs AI. Used by `AccountingAgent.tsx` (Penny phone calls).
-- **`src/hooks/useMeetingAiBridge.ts`** (151 lines) -- Bridges ElevenLabs into meetings. Used by `MeetingRoom.tsx`.
+## What Gets Built
 
-**Action:** Delete both hooks and remove their usage from consumers:
-- `src/components/accounting/AccountingAgent.tsx` -- Remove `useCallAiBridge` import and `bridgeState`/`startBridge`/`stopBridge` usage
-- `src/components/accounting/PennyCallCard.tsx` -- Remove `CallAiBridgeState` type import (replace with inline type or remove props)
-- `src/components/teamhub/MeetingRoom.tsx` -- Remove `useMeetingAiBridge` import and all Vizzy meeting bridge state
-- `src/components/teamhub/VizzyMeetingPanel.tsx` -- Remove `MeetingAiBridgeState` type import
+### 1. New edge function: `elevenlabs-tts`
 
-### 2. ChatInput Headset button labeled "Voice Chat"
+A backend function that accepts text and returns ElevenLabs audio bytes (MP3). Keeps the API key server-side.
 
-**File:** `src/components/chat/ChatInput.tsx` (lines 378-391)
+- Accepts `{ text, voiceId? }` as JSON body
+- Calls ElevenLabs `/v1/text-to-speech/{voiceId}` with `eleven_turbo_v2_5` model (low latency)
+- Returns raw `audio/mpeg` bytes
+- Default voice: Roger (`CwhRBWXzGAHq8TQ4Fs17`) -- can be changed
+- Uses existing `ELEVENLABS_API_KEY` secret (already configured)
 
-The `onLiveChatClick` Headset button with tooltip "Voice Chat" now just navigates to `/chat` (text chat). Two options:
-- **Option A:** Remove the Headset button entirely since it duplicates the FloatingVizzyButton
-- **Option B:** Keep it but rename tooltip to "Live Chat"
+### 2. New hook: `useVoiceChat`
 
-**Action:** Remove the Headset button and `onLiveChatClick` prop entirely, plus remove the `Headset` icon import. Clean up callers in `Home.tsx` and `AgentWorkspace.tsx` that pass this prop.
+Orchestrates the full voice loop: listen, send, stream AI text, speak response.
 
-### 3. `supabase/config.toml` stale entry
+**State machine:**
+- `idle` -- waiting for user
+- `listening` -- mic active, live transcript showing
+- `thinking` -- AI is generating response
+- `speaking` -- TTS audio playing
 
-Line 127-128 still has `[functions.elevenlabs-conversation-token]`. This file is auto-managed and cannot be edited directly -- it will be cleaned up automatically.
+**Flow:**
+1. User taps voice orb -- state becomes `listening`
+2. `useSpeechRecognition` captures live transcript
+3. User taps again (or silence detected) -- state becomes `thinking`
+4. Final transcript sent to `admin-chat` via existing `useAdminChat`
+5. As AI text streams in, accumulate it
+6. Once 300+ characters are collected (or stream ends), call `elevenlabs-tts` with the text
+7. State becomes `speaking`, audio plays via `new Audio(blobUrl)`
+8. Audio ends -- state returns to `idle`
 
-### 4. `vizzy-context` edge function comment
+**Interrupt:** User can tap orb while speaking to stop audio and start listening again.
 
-**File:** `supabase/functions/vizzy-context/index.ts` (line 9)
+### 3. New component: `VoiceOrb`
 
-Comment says "Server-side context endpoint for VizzyPage voice mode" -- update to reflect it serves text chat context.
+A circular animated button showing the current voice state:
+- `idle`: teal ring, mic icon
+- `listening`: pulsing red ring, animated sound waves
+- `thinking`: spinning loader
+- `speaking`: pulsing teal ring, sound wave animation
 
-### 5. `vizzy-briefing` edge function comment
+### 4. Modified: `LiveChat.tsx`
 
-**File:** `supabase/functions/vizzy-briefing/index.ts` (line 7)
+Add a voice mode toggle:
+- New "Voice Mode" button in the header (headset/mic icon)
+- When active, shows the `VoiceOrb` centered above the chat input
+- Voice responses are also added to the chat thread as text messages
+- The text input area is still visible but the voice orb is the primary interaction
+- Keyboard input still works in voice mode
 
-Comment references "faster for ElevenLabs to process" -- update to remove ElevenLabs reference.
+### 5. Modified: `supabase/config.toml`
 
-## Files NOT Touched (intentionally kept)
+Add the new TTS function entry (auto-managed, but needs `verify_jwt = false`).
 
-These use ElevenLabs for **transcription** (not voice chat) and remain valid:
-- `src/hooks/useRealtimeTranscribe.ts` -- Uses `elevenlabs-scribe-token` for live transcription
-- `supabase/functions/elevenlabs-scribe-token/` -- Scribe token endpoint (transcription)
-- `supabase/functions/elevenlabs-transcribe/` -- Batch transcription endpoint
-- `src/components/office/TranscribeView.tsx` -- Transcription UI
-- `src/components/chat/VoiceInputButton.tsx` -- Speech-to-text input (browser API, not ElevenLabs voice chat)
+## Technical Details
 
-## Summary of Changes
+### Edge Function: `elevenlabs-tts`
+
+```text
+File: supabase/functions/elevenlabs-tts/index.ts
+
+- Auth: Validates bearer token (same pattern as admin-chat)
+- Rate limit: 20 requests/minute via check_rate_limit
+- Model: eleven_turbo_v2_5 (optimized for low latency)
+- Output: audio/mpeg binary response
+- Voice settings: stability 0.5, similarity_boost 0.75
+```
+
+### Hook: `useVoiceChat`
+
+```text
+File: src/hooks/useVoiceChat.ts
+
+Dependencies:
+- useSpeechRecognition (existing) -- for STT
+- useAdminChat (existing) -- for AI chat
+- supabase client -- for auth token
+
+Key logic:
+- Monitors useAdminChat messages to detect when streaming completes
+- Collects assistant text chunks, triggers TTS at threshold
+- Manages Audio object lifecycle (play, pause, cleanup)
+- AbortController for canceling TTS fetch on interrupt
+```
+
+### Component: `VoiceOrb`
+
+```text
+File: src/components/chat/VoiceOrb.tsx
+
+Props:
+- status: 'idle' | 'listening' | 'thinking' | 'speaking'
+- onTap: () => void
+- disabled?: boolean
+
+Visual:
+- 64x64px circle with state-dependent animations
+- Uses framer-motion for smooth transitions
+- Tailwind classes for colors/rings
+```
+
+### Simultaneous Text + Voice Strategy
+
+The "easy version" from the spec: collect AI text while streaming, trigger TTS once enough text is available (first sentence or ~300 chars). This creates the perception of simultaneous text and voice without complex audio chunking.
+
+### Files Summary
 
 | Action | File |
 |--------|------|
-| Delete | `src/hooks/useCallAiBridge.ts` |
-| Delete | `src/hooks/useMeetingAiBridge.ts` |
-| Modify | `src/components/accounting/AccountingAgent.tsx` -- remove bridge usage |
-| Modify | `src/components/accounting/PennyCallCard.tsx` -- remove bridge type |
-| Modify | `src/components/teamhub/MeetingRoom.tsx` -- remove bridge usage |
-| Modify | `src/components/teamhub/VizzyMeetingPanel.tsx` -- remove bridge type |
-| Modify | `src/components/chat/ChatInput.tsx` -- remove Headset button and `onLiveChatClick` prop |
-| Modify | `src/pages/Home.tsx` -- remove `onLiveChatClick` prop |
-| Modify | `src/pages/AgentWorkspace.tsx` -- remove `onLiveChatClick` prop |
-| Modify | `supabase/functions/vizzy-context/index.ts` -- fix comment |
-| Modify | `supabase/functions/vizzy-briefing/index.ts` -- fix comment |
+| Create | `supabase/functions/elevenlabs-tts/index.ts` |
+| Create | `src/hooks/useVoiceChat.ts` |
+| Create | `src/components/chat/VoiceOrb.tsx` |
+| Modify | `src/pages/LiveChat.tsx` -- add voice mode toggle and orb |
 
+### What Is NOT Changing
+
+- `useAdminChat` hook -- used as-is
+- `useSpeechRecognition` hook -- used as-is
+- `admin-chat` edge function -- used as-is
+- `FloatingVizzyButton` -- untouched
+- No new API keys needed (ELEVENLABS_API_KEY already exists)
