@@ -16,6 +16,40 @@ function getDb() {
   return createClient(supabaseUrl, serviceRoleKey);
 }
 
+// ── OAuth helpers ───────────────────────────────────────────
+
+// In-memory auth code store (short-lived, edge function lifetime)
+const authCodes = new Map<string, { redirectUri: string; expiresAt: number }>();
+
+async function hmacSign(data: string, secret: string): Promise<string> {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+  );
+  const sig = await crypto.subtle.sign("HMAC", enc.encode(data), key);
+  return btoa(String.fromCharCode(...new Uint8Array(sig)))
+    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+async function createAccessToken(secret: string): Promise<string> {
+  const payload = { sub: "chatgpt", iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 3600 };
+  const payloadB64 = btoa(JSON.stringify(payload)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  const sig = await hmacSign(payloadB64, secret);
+  return `${payloadB64}.${sig}`;
+}
+
+async function verifyAccessToken(token: string, secret: string): Promise<boolean> {
+  const parts = token.split(".");
+  if (parts.length !== 2) return false;
+  const [payloadB64, sig] = parts;
+  const expectedSig = await hmacSign(payloadB64, secret);
+  if (sig !== expectedSig) return false;
+  try {
+    const payload = JSON.parse(atob(payloadB64.replace(/-/g, "+").replace(/_/g, "/")));
+    return payload.exp > Math.floor(Date.now() / 1000);
+  } catch { return false; }
+}
+
 // ── MCP Server ──────────────────────────────────────────────
 
 const mcpServer = new McpServer({
@@ -270,37 +304,118 @@ app.use("*", async (c, next) => {
   await next();
 });
 
-// API key authentication middleware
+// ── Auth middleware (skip OAuth routes) ─────────────────────
+
 app.use("*", async (c, next) => {
+  const url = new URL(c.req.url);
+  // Skip auth for OAuth endpoints
+  if (url.pathname.includes("/oauth/authorize") || url.pathname.includes("/oauth/token")) {
+    await next();
+    return;
+  }
   if (c.req.method === "OPTIONS") return;
 
-  // Validate MCP_API_KEY — reject unauthenticated requests
-  const authHeader = c.req.header("Authorization");
-  const apiKeyHeader = c.req.header("x-api-key");
-  const expectedKey = mcpApiKey;
-
-  if (!expectedKey) {
+  if (!mcpApiKey) {
     return new Response(
       JSON.stringify({ error: "MCP_API_KEY not configured" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 
+  const authHeader = c.req.header("Authorization");
+  const apiKeyHeader = c.req.header("x-api-key");
   const providedKey = apiKeyHeader || (authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null);
 
-  if (providedKey !== expectedKey) {
-    return new Response(
-      JSON.stringify({ error: "Unauthorized: invalid API key" }),
-      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+  if (providedKey === mcpApiKey) {
+    await next();
+    return;
   }
 
-  await next();
+  if (providedKey && await verifyAccessToken(providedKey, mcpApiKey)) {
+    await next();
+    return;
+  }
+
+  return new Response(
+    JSON.stringify({ error: "Unauthorized: invalid API key or token" }),
+    { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+  );
 });
 
+// ── Catch-all: OAuth + MCP ──────────────────────────────────
+
 app.all("/*", async (c) => {
+  const url = new URL(c.req.url);
+
+  // OAuth authorize
+  if (url.pathname.includes("/oauth/authorize") && c.req.method === "GET") {
+    const redirectUri = c.req.query("redirect_uri");
+    const state = c.req.query("state") || "";
+
+    if (!redirectUri) {
+      return new Response(JSON.stringify({ error: "redirect_uri required" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const code = crypto.randomUUID();
+    authCodes.set(code, { redirectUri, expiresAt: Date.now() + 5 * 60 * 1000 });
+
+    const target = new URL(redirectUri);
+    target.searchParams.set("code", code);
+    if (state) target.searchParams.set("state", state);
+
+    return Response.redirect(target.toString(), 302);
+  }
+
+  // OAuth token
+  if (url.pathname.includes("/oauth/token") && c.req.method === "POST") {
+    const body = await c.req.parseBody();
+    const grantType = body.grant_type as string;
+    const clientSecret = body.client_secret as string;
+
+    if (!mcpApiKey) {
+      return new Response(JSON.stringify({ error: "MCP_API_KEY not configured" }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (clientSecret !== mcpApiKey) {
+      return new Response(JSON.stringify({ error: "invalid_client" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (grantType === "authorization_code") {
+      const code = body.code as string;
+      const stored = authCodes.get(code);
+      if (!stored || stored.expiresAt < Date.now()) {
+        authCodes.delete(code);
+        return new Response(JSON.stringify({ error: "invalid_grant" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      authCodes.delete(code);
+    } else if (grantType !== "client_credentials") {
+      return new Response(JSON.stringify({ error: "unsupported_grant_type" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const accessToken = await createAccessToken(mcpApiKey);
+
+    return new Response(JSON.stringify({
+      access_token: accessToken,
+      token_type: "Bearer",
+      expires_in: 3600,
+      scope: "mcp",
+    }), {
+      status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  // MCP handler
   const response = await httpHandler(c.req.raw);
-  // Add CORS headers to response
   const headers = new Headers(response.headers);
   Object.entries(corsHeaders).forEach(([k, v]) => headers.set(k, v));
   return new Response(response.body, {
