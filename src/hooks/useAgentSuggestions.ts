@@ -54,7 +54,6 @@ export function useAgentSuggestions(agentCode: string) {
 
   const actOnSuggestion = useMutation({
     mutationFn: async ({ id, actionType }: { id: string; actionType: string }) => {
-      // Log action only — don't change suggestion status so it stays visible
       const { data: agent } = await supabase
         .from("agents" as any)
         .select("id")
@@ -71,7 +70,14 @@ export function useAgentSuggestions(agentCode: string) {
           entity_id: id,
         });
       }
+
+      // Mark suggestion as acted so it disappears from all lists
+      await supabase
+        .from("suggestions" as any)
+        .update({ status: "acted", resolved_at: new Date().toISOString() })
+        .eq("id", id);
     },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["agent-suggestions", agentCode] }),
   });
 
   const dismissSuggestion = useMutation({
