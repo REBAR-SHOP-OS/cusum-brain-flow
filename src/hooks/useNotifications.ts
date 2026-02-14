@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { playMockingjayWhistle } from "@/lib/notificationSound";
-import { requestNotificationPermission, showBrowserNotification } from "@/lib/browserNotification";
+import { requestNotificationPermission, showBrowserNotification, registerPushSubscription } from "@/lib/browserNotification";
 
 export interface Notification {
   id: string;
@@ -108,6 +108,7 @@ export function useNotifications() {
   useEffect(() => {
     load();
     requestNotificationPermission();
+    registerPushSubscription();
   }, [load]);
 
   // Realtime subscription
