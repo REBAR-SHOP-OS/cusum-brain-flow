@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useLocation } from "react-router-dom";
 import { X, Send, HelpCircle, BookOpen, RotateCcw, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -32,6 +33,7 @@ export function HelpPanel({ isOpen, onClose }: HelpPanelProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const { restartTour } = useTour();
+  const location = useLocation();
 
   // Auto-focus input on open
   useEffect(() => {
@@ -73,7 +75,7 @@ export function HelpPanel({ isOpen, onClose }: HelpPanelProps) {
           "Content-Type": "application/json",
           Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
-        body: JSON.stringify({ messages: allMessages }),
+        body: JSON.stringify({ messages: allMessages, currentPage: location.pathname }),
       });
 
       if (!resp.ok) {
