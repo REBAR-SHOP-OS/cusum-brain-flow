@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { playMockingjayWhistle } from "@/lib/notificationSound";
 
 export interface Notification {
   id: string;
@@ -116,6 +117,7 @@ export function useNotifications() {
         { event: "*", schema: "public", table: "notifications" },
         (payload) => {
           if (payload.eventType === "INSERT") {
+            playMockingjayWhistle();
             setNotifications((prev) => [mapRow(payload.new), ...prev]);
           } else if (payload.eventType === "UPDATE") {
             const updated = mapRow(payload.new);
