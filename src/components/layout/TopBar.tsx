@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { LayoutGrid, Search, Bell, ChevronRight } from "lucide-react";
+import { LayoutGrid, Search, Bell, ChevronRight, MessageSquare } from "lucide-react";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useActiveModule } from "@/hooks/useActiveModule";
 import { InboxPanel } from "@/components/panels/InboxPanel";
+import { GlobalChatPanel } from "./GlobalChatPanel";
 import { UserMenu } from "./UserMenu";
 import { CommandBar } from "./CommandBar";
 
@@ -12,6 +13,7 @@ export function TopBar() {
   const { module, breadcrumb } = useActiveModule();
   const [commandOpen, setCommandOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   const { unreadCount } = useNotifications();
 
   // Keep Cmd+K shortcut
@@ -69,6 +71,15 @@ export function TopBar() {
           <span className="truncate">Search…</span>
         </button>
 
+        {/* Chat */}
+        <button
+          className="relative w-8 h-8 flex items-center justify-center rounded hover:bg-white/10 transition-colors mr-1"
+          onClick={() => setChatOpen((o) => !o)}
+          title="Team Chat"
+        >
+          <MessageSquare className="w-5 h-5" />
+        </button>
+
         {/* Notifications */}
         <button
           className="relative w-8 h-8 flex items-center justify-center rounded hover:bg-white/10 transition-colors mr-1"
@@ -91,6 +102,7 @@ export function TopBar() {
 
       <CommandBar open={commandOpen} onOpenChange={setCommandOpen} />
       <InboxPanel isOpen={notifOpen} onClose={() => setNotifOpen(false)} />
+      <GlobalChatPanel open={chatOpen} onClose={() => setChatOpen(false)} />
     </>
   );
 }
