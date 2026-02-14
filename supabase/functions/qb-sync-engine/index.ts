@@ -65,6 +65,19 @@ async function qbFetch(
   options?: RequestInit,
   retries = 0,
 ): Promise<unknown> {
+  // Proactive token refresh: if token expires within 5 minutes, refresh before making the call
+  if (config.expires_at && config.refresh_token && config.expires_at < Date.now() + 300_000) {
+    console.log(`[QB-sync] Proactive token refresh — expires in ${Math.round((config.expires_at - Date.now()) / 1000)}s`);
+    try {
+      if (!_refreshPromise) _refreshPromise = refreshQBToken(ctx, config);
+      await _refreshPromise;
+      _refreshPromise = null;
+    } catch (err) {
+      _refreshPromise = null;
+      console.warn("[QB-sync] Proactive refresh failed, proceeding with current token:", err);
+    }
+  }
+
   const url = `${QUICKBOOKS_API_BASE}/v3/company/${config.realm_id}/${path}`;
   const res = await fetch(url, {
     ...options,

@@ -123,6 +123,27 @@ export interface QBTimeActivity {
   Description?: string;
 }
 
+// ─── Retry helper ──────────────────────────────────────────────────
+
+async function retryQBAction(
+  qbActionFn: (action: string, body?: Record<string, unknown>) => Promise<unknown>,
+  action: string,
+  body?: Record<string, unknown>,
+  maxRetries = 2,
+): Promise<unknown> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await qbActionFn(action, body);
+    } catch (err) {
+      if (attempt === maxRetries) throw err;
+      const delay = attempt === 0 ? 1000 : 3000;
+      console.warn(`[QB] retryQBAction: ${action} failed (attempt ${attempt + 1}), retrying in ${delay}ms`, err);
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+  throw new Error("unreachable");
+}
+
 // ─── ERP Mirror helpers ────────────────────────────────────────────
 
 async function loadMirrorTransactions(entityType: string): Promise<unknown[]> {
@@ -296,11 +317,23 @@ export function useQuickBooksData() {
       if (mirrorLoaded) {
         setLoading(false);
         // Background: load employees & time activities from QB API (not mirrored yet)
-        Promise.allSettled([
-          qbAction("list-employees").then(d => setEmployees(d.employees || [])),
-          qbAction("list-time-activities").then(d => setTimeActivities(d.timeActivities || [])),
-          qbAction("get-company-info").then(d => setCompanyInfo(d)),
-        ]).catch(() => {});
+        // Stagger calls to avoid rate limiting, with retry wrapper
+        (async () => {
+          try {
+            const empData = await retryQBAction(qbAction, "list-employees");
+            setEmployees((empData as Record<string, unknown>).employees as QBEmployee[] || []);
+          } catch {}
+          await new Promise(r => setTimeout(r, 500));
+          try {
+            const taData = await retryQBAction(qbAction, "list-time-activities");
+            setTimeActivities((taData as Record<string, unknown>).timeActivities as QBTimeActivity[] || []);
+          } catch {}
+          await new Promise(r => setTimeout(r, 500));
+          try {
+            const ciData = await retryQBAction(qbAction, "get-company-info");
+            setCompanyInfo(ciData as Record<string, unknown>);
+          } catch {}
+        })();
         return;
       }
 
@@ -319,31 +352,37 @@ export function useQuickBooksData() {
 
       setLoading(false);
 
-      const [
-        vendorsResult, estimatesResult, companyInfoResult, itemsResult,
-        poResult, cmResult, empResult, taResult,
-        syncCustResult, syncInvResult,
-      ] = await Promise.allSettled([
-        qbAction("list-vendors"),
-        qbAction("list-estimates"),
-        qbAction("get-company-info"),
-        qbAction("list-items"),
-        qbAction("list-purchase-orders"),
-        qbAction("list-credit-memos"),
-        qbAction("list-employees"),
-        qbAction("list-time-activities"),
-        qbAction("sync-customers"),
-        qbAction("sync-invoices"),
+      // Batch 1: vendors, estimates, company-info, items
+      const [vendorsResult, estimatesResult, companyInfoResult, itemsResult] = await Promise.allSettled([
+        retryQBAction(qbAction, "list-vendors"),
+        retryQBAction(qbAction, "list-estimates"),
+        retryQBAction(qbAction, "get-company-info"),
+        retryQBAction(qbAction, "list-items"),
       ]);
 
-      if (vendorsResult.status === "fulfilled") setVendors(vendorsResult.value.vendors || []);
-      if (estimatesResult.status === "fulfilled") setEstimates(estimatesResult.value.estimates || []);
-      if (companyInfoResult.status === "fulfilled") setCompanyInfo(companyInfoResult.value);
-      if (itemsResult.status === "fulfilled") setItems(itemsResult.value.items || []);
-      if (poResult.status === "fulfilled") setPurchaseOrders(poResult.value.purchaseOrders || []);
-      if (cmResult.status === "fulfilled") setCreditMemos(cmResult.value.creditMemos || []);
-      if (empResult.status === "fulfilled") setEmployees(empResult.value.employees || []);
-      if (taResult.status === "fulfilled") setTimeActivities(taResult.value.timeActivities || []);
+      if (vendorsResult.status === "fulfilled") setVendors((vendorsResult.value as Record<string, unknown>).vendors as QBVendor[] || []);
+      if (estimatesResult.status === "fulfilled") setEstimates((estimatesResult.value as Record<string, unknown>).estimates as QBEstimate[] || []);
+      if (companyInfoResult.status === "fulfilled") setCompanyInfo(companyInfoResult.value as Record<string, unknown>);
+      if (itemsResult.status === "fulfilled") setItems((itemsResult.value as Record<string, unknown>).items as QBItem[] || []);
+
+      // Batch 2: POs, credit-memos, employees, time-activities
+      const [poResult, cmResult, empResult, taResult] = await Promise.allSettled([
+        retryQBAction(qbAction, "list-purchase-orders"),
+        retryQBAction(qbAction, "list-credit-memos"),
+        retryQBAction(qbAction, "list-employees"),
+        retryQBAction(qbAction, "list-time-activities"),
+      ]);
+
+      if (poResult.status === "fulfilled") setPurchaseOrders((poResult.value as Record<string, unknown>).purchaseOrders as QBPurchaseOrder[] || []);
+      if (cmResult.status === "fulfilled") setCreditMemos((cmResult.value as Record<string, unknown>).creditMemos as QBCreditMemo[] || []);
+      if (empResult.status === "fulfilled") setEmployees((empResult.value as Record<string, unknown>).employees as QBEmployee[] || []);
+      if (taResult.status === "fulfilled") setTimeActivities((taResult.value as Record<string, unknown>).timeActivities as QBTimeActivity[] || []);
+
+      // Batch 3: sync-customers, sync-invoices
+      const [syncCustResult] = await Promise.allSettled([
+        retryQBAction(qbAction, "sync-customers"),
+        retryQBAction(qbAction, "sync-invoices"),
+      ]);
 
       // Load synced customers from DB
       const allDbCustomers: typeof dbCustomersPage = [];
