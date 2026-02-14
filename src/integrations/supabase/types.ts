@@ -4071,6 +4071,8 @@ export type Database = {
           amount: number | null
           approved_at: string | null
           approved_by: string | null
+          assigned_at: string | null
+          assigned_to: string | null
           company_id: string
           created_at: string | null
           customer_email: string | null
@@ -4093,6 +4095,8 @@ export type Database = {
           amount?: number | null
           approved_at?: string | null
           approved_by?: string | null
+          assigned_at?: string | null
+          assigned_to?: string | null
           company_id: string
           created_at?: string | null
           customer_email?: string | null
@@ -4115,6 +4119,8 @@ export type Database = {
           amount?: number | null
           approved_at?: string | null
           approved_by?: string | null
+          assigned_at?: string | null
+          assigned_to?: string | null
           company_id?: string
           created_at?: string | null
           customer_email?: string | null
@@ -4130,7 +4136,22 @@ export type Database = {
           priority?: string
           status?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "penny_collection_queue_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "penny_collection_queue_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "profiles_safe"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       pickup_order_items: {
         Row: {

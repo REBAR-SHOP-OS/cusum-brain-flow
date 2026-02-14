@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePennyQueue, type PennyQueueItem } from "@/hooks/usePennyQueue";
+import { AssignPopover } from "./AssignPopover";
+import { useProfiles } from "@/hooks/useProfiles";
 
 const ACTION_LABELS: Record<string, { label: string; icon: typeof Mail }> = {
   email_reminder: { label: "Email Reminder", icon: Mail },
@@ -33,11 +35,12 @@ const STATUS_BADGES: Record<string, { label: string; variant: "default" | "secon
   failed: { label: "Failed", variant: "destructive" },
 };
 
-function ActionCard({ item, onApprove, onReject, onSchedule }: {
+function ActionCard({ item, onApprove, onReject, onSchedule, onAssign }: {
   item: PennyQueueItem;
   onApprove: (id: string, payload?: Record<string, unknown>) => void;
   onReject: (id: string, reason?: string) => void;
   onSchedule: (id: string, date: string) => void;
+  onAssign: (id: string, profileId: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -132,6 +135,10 @@ function ActionCard({ item, onApprove, onReject, onSchedule }: {
                 <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => setShowSchedule(!showSchedule)}>
                   <Calendar className="w-3 h-3" /> Schedule
                 </Button>
+                <AssignPopover
+                  assignedTo={(item as any).assigned_to}
+                  onAssign={(profileId) => onAssign(item.id, profileId)}
+                />
                 <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 text-destructive" onClick={() => setShowReject(!showReject)}>
                   <X className="w-3 h-3" /> Reject
                 </Button>
@@ -189,7 +196,7 @@ function ActionCard({ item, onApprove, onReject, onSchedule }: {
 ActionCard.displayName = "ActionCard";
 
 export function AccountingActionQueue() {
-  const { pendingItems, items, loading, approve, reject, schedule, triggerAutoActions } = usePennyQueue();
+  const { pendingItems, items, loading, approve, reject, schedule, assign, triggerAutoActions } = usePennyQueue();
   const [filter, setFilter] = useState<"pending" | "all">("pending");
 
   const displayItems = filter === "pending" ? pendingItems : items;
@@ -256,6 +263,7 @@ export function AccountingActionQueue() {
             onApprove={approve}
             onReject={reject}
             onSchedule={schedule}
+            onAssign={assign}
           />
         ))}
       </div>
