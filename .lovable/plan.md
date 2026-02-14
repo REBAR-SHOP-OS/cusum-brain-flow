@@ -1,67 +1,42 @@
 
 
-# Full Duplex Voice Chat (Barge-In + Continuous Listening)
+# Add Mute Button + Keep Text Responses Visible in Voice Mode
 
 ## What Changes
 
-Upgrade the voice chat from sequential half-duplex (Listen -> Think -> Speak -> Listen) to a **full duplex** experience where the microphone stays active even while the AI is speaking, enabling natural "barge-in" interruption -- just like ChatGPT's voice mode.
+Two improvements to the voice chat experience:
 
-## Current Behavior
+1. **Mute Button**: Add a mic mute/unmute toggle next to the VoiceOrb so the user can temporarily mute their mic without ending the conversation.
+2. **Text responses always visible**: Currently voice mode hides the message area when the conversation is active. Change this so AI responses still appear as text bubbles in the chat scroll area, even during voice mode -- the orb and controls overlay at the bottom while messages scroll above.
 
-1. User taps orb -> mic starts
-2. Silence detected -> mic stops, message sent
-3. AI responds -> TTS plays
-4. TTS finishes -> mic restarts
+## Changes
 
-The user **cannot** interrupt by speaking -- they must tap the orb to interrupt.
+### 1. `src/hooks/useVoiceChat.ts` -- Add mute support
 
-## New Behavior
+- Add `isMuted` state and `toggleMute` function.
+- When muted: pause speech recognition (stop listening) but keep the conversation active (TTS continues, status transitions continue).
+- When unmuted: restart speech recognition.
+- Expose `isMuted` and `toggleMute` in the return object.
+- When muted, silence detection should be disabled (no accidental sends).
 
-1. User taps orb -> mic starts
-2. Silence detected -> message sent, **mic stays active**
-3. AI responds -> TTS plays **while mic listens**
-4. User speaks during TTS -> audio stops immediately, new transcript captured (barge-in)
-5. TTS finishes naturally -> mic continues listening seamlessly
+### 2. `src/components/chat/VoiceOrb.tsx` -- Add mute button next to orb
 
-The conversation flows naturally without manual interruption.
+- Add a smaller circular mute/unmute button beside the orb (using `MicOff` / `Mic` icons).
+- When muted, show a crossed-out mic icon with a subtle red tint.
+- The mute button only appears when the conversation is active (not idle).
 
-## Technical Changes
+### 3. `src/pages/LiveChat.tsx` -- Always show messages in voice mode
 
-### 1. `src/hooks/useVoiceChat.ts` -- Enable concurrent STT + TTS
-
-- **Keep mic running during "speaking" state**: Instead of stopping speech recognition before TTS and restarting after, keep it running throughout. The browser's echo cancellation handles feedback prevention.
-- **Barge-in detection**: When a final speech result arrives during the "speaking" state, immediately stop TTS audio, cancel any pending AI stream, and send the new user message.
-- **Remove hard state gates**: The `handleSilenceEnd` callback currently requires `status === "listening"` -- relax this to also allow sending during "speaking" (which triggers barge-in) and "thinking" (which cancels the current response).
-- **Simplify state transitions**: The status still cycles through idle/listening/thinking/speaking, but "listening" now overlaps with "speaking" internally (mic is always hot when conversation is active).
-
-### 2. `src/hooks/useSpeechRecognition.ts` -- Minor adjustment
-
-- No major changes needed. The hook already supports continuous recognition with auto-restart. Just ensure the `stop()` and `start()` calls from the voice chat hook don't conflict when mic is kept running.
-
-### 3. `src/components/chat/VoiceOrb.tsx` -- Visual barge-in indicator
-
-- When status is "speaking", show a subtle mic indicator to signal the user can speak to interrupt.
-- Tapping during "speaking" still stops the conversation entirely (existing behavior preserved as a "hang up" action).
-
-### 4. No backend changes needed
-
-The edge function (`elevenlabs-tts`) and chat function (`admin-chat`) remain unchanged -- the full duplex behavior is purely a frontend orchestration change.
-
-## How Barge-In Works
-
-```text
-User speaks    |====|          |==interruption==|
-AI TTS plays          |===========X (stopped)
-Mic active     |================================================|
-               ^      ^        ^                ^
-               Start  Silence  Barge-in         New silence
-                      detected detected         -> send new msg
-```
+- Remove the condition that hides the message scroll area during voice mode. The `ScrollArea` with message bubbles will always be visible.
+- The voice orb section renders as a fixed bottom panel overlaying beneath the messages, so the user sees both the text conversation and the voice controls.
+- Pass `isMuted` and `toggleMute` from `voiceChat` to `VoiceOrb`.
+- Remove the condition `!(voiceMode && voiceChat.isConversationActive)` that hides the text input -- instead just hide the text input bar when voice conversation is active, but keep messages visible above.
 
 ## Files to Modify
 
 | Action | File |
 |--------|------|
-| Modify | `src/hooks/useVoiceChat.ts` -- keep mic active during TTS, add barge-in logic |
-| Modify | `src/components/chat/VoiceOrb.tsx` -- add mic-active indicator during speaking |
+| Modify | `src/hooks/useVoiceChat.ts` -- add `isMuted` state, `toggleMute`, pause/resume mic |
+| Modify | `src/components/chat/VoiceOrb.tsx` -- render mute button next to orb |
+| Modify | `src/pages/LiveChat.tsx` -- always show messages, pass mute props |
 
