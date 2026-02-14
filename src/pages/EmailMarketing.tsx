@@ -2,18 +2,19 @@ import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Plus, Settings, Sparkles, Loader2, Mail,
-  ThumbsUp, Users, ShieldOff, TrendingUp, Send,
+  ThumbsUp, Users, ShieldOff, TrendingUp, Send, Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { SmartSearchInput } from "@/components/ui/SmartSearchInput";
 import { CampaignCard } from "@/components/email-marketing/CampaignCard";
 import { CampaignReviewPanel } from "@/components/email-marketing/CampaignReviewPanel";
 import { CreateCampaignDialog } from "@/components/email-marketing/CreateCampaignDialog";
 import { SuppressionManager } from "@/components/email-marketing/SuppressionManager";
+import { AutomationsPanel } from "@/components/email-marketing/AutomationsPanel";
 import { useEmailCampaigns, useSuppressions, type EmailCampaign } from "@/hooks/useEmailCampaigns";
 import { cn } from "@/lib/utils";
-
 const statusFilters = [
   { id: "all", label: "All" },
   { id: "draft", label: "Drafts" },
@@ -128,63 +129,80 @@ export default function EmailMarketing() {
           </div>
         </div>
 
-        {/* Filters */}
-        <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 scrollbar-thin mb-4">
-          <div className="shrink-0 w-40 sm:w-52">
-            <SmartSearchInput
-              value={searchQuery}
-              onChange={setSearchQuery}
-              placeholder="Search campaigns..."
-              hints={searchHints}
-            />
-          </div>
-          {statusFilters.map((f) => (
-            <Button
-              key={f.id}
-              variant={statusFilter === f.id ? "default" : "outline"}
-              size="sm"
-              className={cn(
-                "shrink-0",
-                statusFilter === f.id ? "bg-primary text-primary-foreground" : "bg-card"
-              )}
-              onClick={() => setStatusFilter(f.id)}
-            >
-              {f.label}
-            </Button>
-          ))}
-        </div>
+        <Tabs defaultValue="campaigns">
+          <TabsList className="mb-4">
+            <TabsTrigger value="campaigns" className="gap-1.5">
+              <Mail className="w-3.5 h-3.5" /> Campaigns
+            </TabsTrigger>
+            <TabsTrigger value="automations" className="gap-1.5">
+              <Zap className="w-3.5 h-3.5" /> Automations
+            </TabsTrigger>
+          </TabsList>
 
-        {/* Campaign List */}
-        {isLoading ? (
-          <div className="space-y-3">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-24 w-full rounded-xl" />
-            ))}
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
-              <Mail className="w-8 h-8 text-muted-foreground" />
+          <TabsContent value="campaigns">
+            {/* Filters */}
+            <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 scrollbar-thin mb-4">
+              <div className="shrink-0 w-40 sm:w-52">
+                <SmartSearchInput
+                  value={searchQuery}
+                  onChange={setSearchQuery}
+                  placeholder="Search campaigns..."
+                  hints={searchHints}
+                />
+              </div>
+              {statusFilters.map((f) => (
+                <Button
+                  key={f.id}
+                  variant={statusFilter === f.id ? "default" : "outline"}
+                  size="sm"
+                  className={cn(
+                    "shrink-0",
+                    statusFilter === f.id ? "bg-primary text-primary-foreground" : "bg-card"
+                  )}
+                  onClick={() => setStatusFilter(f.id)}
+                >
+                  {f.label}
+                </Button>
+              ))}
             </div>
-            <h3 className="text-lg font-medium mb-2">No campaigns yet</h3>
-            <p className="text-muted-foreground text-sm max-w-md mb-4">
-              Create your first AI-powered email campaign. Describe your goals and the AI will draft everything — you just approve.
-            </p>
-            <Button onClick={() => setShowCreate(true)} className="gap-2">
-              <Sparkles className="w-4 h-4" /> Create campaign
-            </Button>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {filtered.map((c) => (
-              <CampaignCard
-                key={c.id}
-                campaign={c}
-                onClick={() => setSelectedCampaign(c)}
-              />
-            ))}
-          </div>
-        )}
+
+            {/* Campaign List */}
+            {isLoading ? (
+              <div className="space-y-3">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <Skeleton key={i} className="h-24 w-full rounded-xl" />
+                ))}
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
+                  <Mail className="w-8 h-8 text-muted-foreground" />
+                </div>
+                <h3 className="text-lg font-medium mb-2">No campaigns yet</h3>
+                <p className="text-muted-foreground text-sm max-w-md mb-4">
+                  Create your first AI-powered email campaign. Describe your goals and the AI will draft everything — you just approve.
+                </p>
+                <Button onClick={() => setShowCreate(true)} className="gap-2">
+                  <Sparkles className="w-4 h-4" /> Create campaign
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {filtered.map((c) => (
+                  <CampaignCard
+                    key={c.id}
+                    campaign={c}
+                    onClick={() => setSelectedCampaign(c)}
+                  />
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="automations">
+            <AutomationsPanel />
+          </TabsContent>
+        </Tabs>
       </div>
 
       {/* Review Panel */}
