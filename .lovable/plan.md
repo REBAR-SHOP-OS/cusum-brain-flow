@@ -1,225 +1,189 @@
 
 
-# AI-Driven Email Marketing Manager -- MVP Build Plan
+# End-to-End Odoo Parity, UX Refinements, and Marketing/Prospecting Hardening
 
-## Overview
+## What Already Exists (No Rebuild Needed)
 
-Build an email marketing module inside the Rebar ERP that mirrors the Social Media Manager pattern: AI plans and drafts everything, humans approve before anything sends. The system leverages the existing Gmail send infrastructure, contact database (1,060 unique emails), and Lovable AI gateway.
+The system already has substantial coverage for most phases requested:
 
-## Architecture
+- **Odoo CRM Sync**: `odoo-crm-sync` edge function syncs last 5 days, maps stages, normalizes probability (won=100, lost=0), deduplicates by `odoo_id`, creates customers from `partner_name`
+- **RFQ Email Routing**: `process-rfq-emails` implements multi-signal scoring (thread_id 0.95, In-Reply-To 0.90, RFQ ref 0.50, subject similarity 0.30), strict "New" gate with Neel escalation for uncertain matches (0.4-0.79)
+- **Email Marketing Manager**: Full AI-driven campaign system with `email_campaigns`, `email_campaign_sends`, `email_suppressions`, `email_consent_events` tables, approval workflow, suppression gates, unsubscribe flow
+- **Prospecting**: AI prospect generation at `/prospecting` with Ontario targeting, auto-follow-up scheduling
+- **Odoo-Style UI**: 46px `bg-primary` header, Kanban pipeline, avatar dropdown via Radix DropdownMenu (already handles toggle/ESC/outside-click per memory)
+- **Pipeline Smart Search**: Natural language parsing with stage, revenue, stale filters
 
-The design follows the same proven pattern as the Social Media Manager (Pixel): AI generates draft campaigns, they land in a review queue, and only human-approved campaigns execute via the existing `gmail-send` edge function.
+## What Needs Building (The Gaps)
 
-```text
-Contact DB + Leads + Orders
-        |
-        v
-AI Campaign Planner (edge function)
-  - Segments audience
-  - Generates subject lines + body variants
-  - Proposes schedule
-        |
-        v
-  email_campaigns table (status: draft)
-        |
-        v
-  Human Review UI (approve / edit / decline)
-        |
-        v
-  Campaign Send Engine (edge function)
-  - Checks suppression list
-  - Checks consent
-  - Sends via gmail-send
-  - Logs results
-        |
-        v
-  Monitoring + Engagement Tracking
-```
+### Phase 1: Odoo Sync Hardening (P0)
 
-## Phase 1: Database Foundation (Migration)
+**1a. Reconciliation Comparison Report**
 
-### New Tables
+Add a `/admin` panel that runs the sync and outputs the comparison table:
 
-**email_campaigns** -- Core campaign object
-- `id` uuid PK
-- `title` text
-- `campaign_type` text (nurture, follow_up, newsletter, winback, announcement)
-- `status` text (draft, pending_approval, approved, sending, sent, paused, canceled)
-- `subject_line` text
-- `preview_text` text
-- `body_html` text
-- `body_text` text (plain text fallback)
-- `segment_rules` jsonb (audience definition)
-- `estimated_recipients` integer
-- `scheduled_at` timestamptz
-- `sent_at` timestamptz
-- `approved_by` uuid (FK profiles)
-- `approved_at` timestamptz
-- `created_by` uuid (FK profiles)
-- `metadata` jsonb (variants, AI generation context, experiment config)
-- `company_id` uuid
-- `created_at`, `updated_at` timestamptz
+| Odoo_id | ERP_id | Status | Diffs | Action |
+|---------|--------|--------|-------|--------|
 
-**email_campaign_sends** -- Per-recipient send log
-- `id` uuid PK
-- `campaign_id` uuid FK email_campaigns
-- `contact_id` uuid FK contacts
-- `email` text
-- `status` text (queued, sent, delivered, opened, clicked, bounced, complained, unsubscribed)
-- `sent_at` timestamptz
-- `opened_at` timestamptz
-- `clicked_at` timestamptz
-- `error_message` text
-- `metadata` jsonb
+- New edge function `odoo-reconciliation-report` that:
+  - Fetches Odoo leads (last 5 days) and ERP leads
+  - Classifies each as MATCH, MISSING_IN_ERP, OUT_OF_SYNC, DUPLICATE
+  - Returns structured JSON with diffs (stage, probability, value, contact linkage)
+  - Stores results in a `reconciliation_runs` table for audit
+- New admin UI component `OdooReconciliationReport.tsx` showing the table with action buttons
 
-**email_suppressions** -- Central suppression ledger
-- `id` uuid PK
-- `email` text UNIQUE
-- `reason` text (unsubscribe, bounce, complaint, manual)
-- `source` text (campaign_id or "manual")
-- `suppressed_at` timestamptz
-- `company_id` uuid
+**1b. Contact Linkage Enforcement**
 
-**email_consent_events** -- Append-only consent audit trail
-- `id` uuid PK
-- `contact_id` uuid FK contacts
-- `email` text
-- `consent_type` text (marketing_email, transactional)
-- `status` text (granted, revoked)
-- `source` text (web_form, import, manual)
-- `evidence` jsonb (IP, form URL, timestamp)
-- `recorded_at` timestamptz
-- `company_id` uuid
+The current sync creates customers but some older leads may have null `customer_id`. Add:
 
-### RLS Policies
-- All tables: authenticated users with office/admin/sales roles via `has_any_role()`
-- email_suppressions: admin-only for delete; office+ for insert/select
-- email_consent_events: insert-only for non-admins (append-only pattern)
+- A migration check: flag active leads (stage not lost/won) with null `customer_id`
+- Enhance `odoo-crm-sync` to always resolve `partner_name` to a customer and never leave `customer_id` null for active stages
+- Add validation: if `customer_id` is null and stage is active, block the upsert and log an error
 
-### Validation Triggers
-- `validate_campaign_status()`: enforce allowed status transitions
-- `validate_suppression_reason()`: enforce enum values
+**1c. Activity/Timeline Parity**
 
-## Phase 2: AI Campaign Generator (Edge Function)
+Currently, `odoo-crm-sync` syncs field values but not stage change history. Add:
 
-### New: `supabase/functions/email-campaign-generate/index.ts`
+- New table `lead_events` (append-only): `id, lead_id, event_type, payload, source_system, created_at`
+- Event types: `stage_changed`, `value_changed`, `contact_linked`, `note_added`
+- Enhance `odoo-crm-sync` to detect stage changes (compare current ERP stage vs incoming Odoo stage) and insert `lead_events` entries
+- Display timeline events in `LeadTimeline.tsx` (already exists, would need to pull from new table)
 
-Actions:
-- **plan-campaign**: Given a campaign type + brief, AI returns segment rules, subject line variants, body draft, and schedule recommendation
-- **generate-content**: Given segment + goal, generates HTML email body using brand kit + RAG from knowledge base
-- **generate-variants**: Creates A/B subject line and body variants for experimentation
+### Phase 2: Email Deliverability Hardening (P0)
 
-Uses `google/gemini-2.5-flash` via Lovable AI gateway (no API key needed). System prompt includes:
-- Rebar.Shop brand context (from `brand_kit` table)
-- Approved facts only (from `knowledge` table)
-- Claims firewall: price/lead-time/certification statements must reference source or flag `[NEEDS HUMAN INPUT]`
-- CAN-SPAM compliance footer requirement
-- Unsubscribe link placeholder
+**2a. RFC 8058 List-Unsubscribe Headers**
 
-### New: `supabase/functions/email-campaign-send/index.ts`
+The `email-campaign-send` function currently sends via `gmail-send` but does not inject List-Unsubscribe headers. Add:
 
-Execution engine (only runs for `status = 'approved'` campaigns):
-1. Load campaign + segment rules
-2. Query contacts matching segment, excluding suppressions
-3. For each recipient: call existing `gmail-send` function internally
-4. Log each send to `email_campaign_sends`
-5. Rate limit: max 50 emails/minute to protect deliverability
-6. Update campaign status to `sent` when complete
-7. Respects `comms_config.no_act_global` safety switch
+- Pass `List-Unsubscribe` and `List-Unsubscribe-Post` headers to `gmail-send`
+- Format: `List-Unsubscribe: <mailto:unsubscribe@rebar.shop>, <https://...unsubscribe?token=...>`
+- Format: `List-Unsubscribe-Post: List-Unsubscribe=One-Click`
+- Update `gmail-send` to accept and pass custom headers
 
-Safety gates before any send:
-- Campaign must have `approved_by` set
-- All recipients checked against `email_suppressions`
-- Physical address footer present in body
-- Unsubscribe link present
-- `List-Unsubscribe` header injected
+**2b. Unsubscribe SLA Monitoring**
 
-## Phase 3: Email Marketing Manager Page
+- Add `processed_at` column to `email_suppressions` to track when unsubscribe was actioned
+- Dashboard widget showing unsubscribe processing time (target: under 48 hours)
+- Automated alert if any unsubscribe pending longer than 24 hours
 
-### New: `src/pages/EmailMarketing.tsx`
+### Phase 3: Reconciliation Admin Panel (P1)
 
-UI layout following the Social Media Manager pattern:
+**3a. Full Reconciliation Dashboard**
 
-**Header**: Back button, title "Email Marketing", "Generate Campaign" button (sparkle icon), Settings
+New admin section with:
 
-**Dashboard Cards**:
-- Campaigns to review (pending_approval count)
-- Sent this month
-- Open rate (aggregate)
-- Suppression count
+- Mapping fix table (Odoo field to ERP field with transform rules)
+- Duplicate merge/delete log with rollback map
+- Stage mapping/probability table (editable)
+- Event parity report (missing timeline items)
 
-**Campaign List** (filterable by status):
-- Each row: title, status badge, recipient count, scheduled date, open/click rates
-- Click to open review panel
+**3b. Safe Dedupe with Rollback**
 
-**Campaign Review Panel** (Sheet, same pattern as PostReviewPanel):
-- Subject line preview with edit
-- Body preview (rendered HTML)
-- Audience preview (segment rules + estimated count + domain breakdown)
-- Schedule selector
-- Approve / Edit / Decline buttons
-- Variant selector for A/B tests
+The current `odoo-crm-sync` already deduplicates by `odoo_id` and deletes victims. Harden:
 
-**Create Campaign Dialog** (same pattern as CreateContentDialog):
-- Campaign type selector (nurture, newsletter, follow-up, winback, announcement)
-- Brief/prompt input for AI generation
-- Manual creation option
-- Segment builder (customer type, last order date, lead stage, etc.)
+- New table `dedup_rollback_log`: `id, deleted_id, survivor_id, pre_merge_snapshot, post_merge_snapshot, created_at`
+- Before deleting duplicate leads, snapshot their full record into the rollback log
+- Admin UI to view rollback history and restore if needed
 
-### New: `src/components/email-marketing/` directory
-- `CampaignReviewPanel.tsx` -- Side panel for reviewing/approving campaigns
-- `CampaignCard.tsx` -- List item component
-- `CreateCampaignDialog.tsx` -- Campaign creation dialog
-- `SegmentBuilder.tsx` -- Visual audience segment builder
-- `SuppressionManager.tsx` -- View/manage suppression list
+### Phase 4: UX Parity Refinements (P1)
 
-### Route Addition
-Add `/email-marketing` to router, accessible to admin/office/sales roles.
+**4a. Global Dropdown Controller**
 
-## Phase 4: Suppression and Consent Management
+The current `UserMenu` uses Radix `DropdownMenu` which already implements:
+- Click to open, click trigger again to close
+- Outside click to close
+- ESC to close
+- Only one Radix dropdown open at a time (Radix handles this natively)
 
-### Unsubscribe Flow
-- Every marketing email includes a unique unsubscribe link: `/unsubscribe?token=<signed_jwt>`
-- New edge function `email-unsubscribe` validates token, inserts into `email_suppressions`, updates `email_consent_events`
-- New minimal public page `src/pages/Unsubscribe.tsx` confirming removal
+The memory confirms this is the established pattern. No custom `GlobalDropdownController` is needed because Radix already enforces these behaviors. Verify and document that all dropdown instances use Radix consistently.
 
-### Bounce/Complaint Handling
-- `email-campaign-send` checks Gmail API response for bounces
-- Bounced emails auto-added to `email_suppressions` with reason `bounce`
-- Future: Gmail webhook integration for complaint signals
+**4b. Sidebar/Drawer Grouping Alignment**
 
-## Phase 5: Analytics and Learning (Future)
+Current sidebar is icon-only (w-16). To match Odoo's drawer grouping:
+- Group nav items with subtle separators matching Odoo categories (CRM, Operations, Admin)
+- Add tooltip labels matching Odoo terminology
+- Pipeline always opens to Kanban (already the case)
 
-- Track opens via pixel (requires proxy setup -- defer)
-- Track clicks via redirect links (defer)
-- Campaign performance dashboard
-- AI learning from engagement data to improve future campaigns
-- A/B test result analysis and auto-winner selection
+### Phase 5: Prospect Digger Enhancements (P2)
+
+**5a. Multi-Source Ingestion**
+
+The current `prospect-leads` generates AI prospects. Extend to ingest from:
+- Website contact forms (already handled by `process-rfq-emails`)
+- CRM/ERP existing customers for upsell targeting
+- Ad lead imports (CSV upload for LinkedIn Lead Gen Forms data)
+
+**5b. LinkedIn Compliance Guard**
+
+- Add explicit UI warning: "AI drafts messages for you to copy and send manually"
+- No automated LinkedIn actions
+- Draft connection notes/InMails that humans copy-paste
+
+### Phase 6: Neel Approval Hardening (P2)
+
+**6a. Approval-Required Gate for All Outbound**
+
+Currently the email marketing system requires `approved_by` before sending. Extend:
+- Add Neel-specific approval requirement (configurable approver email)
+- Approval notification via existing email/notification system
+- Approval packet includes: recipient count, sample preview, compliance checklist status, suppression counts
 
 ## Technical Details
 
+### New Database Tables
+
+**lead_events** (append-only activity ledger)
+```
+id uuid PK, lead_id uuid FK leads, event_type text, 
+payload jsonb, source_system text, dedupe_key text UNIQUE,
+created_at timestamptz
+```
+
+**reconciliation_runs** (sync audit)
+```
+id uuid PK, run_at timestamptz, window_days int,
+results jsonb, created_count int, updated_count int,
+missing_count int, out_of_sync_count int, duplicate_count int
+```
+
+**dedup_rollback_log** (safe delete history)
+```
+id uuid PK, deleted_id uuid, survivor_id uuid,
+pre_merge_snapshot jsonb, post_merge_snapshot jsonb,
+created_at timestamptz
+```
+
 ### Files to Create
-- `src/pages/EmailMarketing.tsx`
-- `src/components/email-marketing/CampaignReviewPanel.tsx`
-- `src/components/email-marketing/CampaignCard.tsx`
-- `src/components/email-marketing/CreateCampaignDialog.tsx`
-- `src/components/email-marketing/SegmentBuilder.tsx`
-- `src/components/email-marketing/SuppressionManager.tsx`
-- `src/pages/Unsubscribe.tsx`
-- `src/hooks/useEmailCampaigns.ts`
-- `supabase/functions/email-campaign-generate/index.ts`
-- `supabase/functions/email-campaign-send/index.ts`
-- `supabase/functions/email-unsubscribe/index.ts`
+- `src/components/admin/OdooReconciliationReport.tsx`
+- `supabase/functions/odoo-reconciliation-report/index.ts`
 
 ### Files to Modify
-- `src/App.tsx` -- Add route for `/email-marketing` and `/unsubscribe`
-- `src/components/office/OfficeNavItems.tsx` (or equivalent nav) -- Add Email Marketing nav item
-- `supabase/config.toml` -- Add new edge function configs with `verify_jwt = false`
+- `supabase/functions/odoo-crm-sync/index.ts` -- Add timeline events, contact enforcement, rollback logging
+- `supabase/functions/email-campaign-send/index.ts` -- Add RFC 8058 headers
+- `supabase/functions/gmail-send/index.ts` -- Accept custom headers parameter
+- `src/components/pipeline/LeadTimeline.tsx` -- Display lead_events
+- `src/components/layout/Sidebar.tsx` -- Add nav grouping separators
+- `src/pages/Admin.tsx` -- Add reconciliation report tab
 
-### Key Design Decisions
-1. **Gmail as ESP**: Using existing `gmail-send` infrastructure rather than a dedicated ESP. Limits scale (~500/day per Google account) but avoids new vendor costs. Upgrade path: swap send engine to dedicated ESP later.
-2. **Suppression is a hard gate**: Campaign send engine refuses to execute if suppression check fails.
-3. **Consent-first**: No contact receives marketing email without an explicit consent record.
-4. **AI generates, humans approve**: Campaign status must pass through `pending_approval` -> human sets `approved_by` -> only then can send engine execute.
-5. **Follows existing patterns**: Uses same auth middleware, rate limiting, Lovable AI gateway, and UI patterns as Social Media Manager.
+### Execution Priority
+
+| Priority | Work Item | Effort |
+|----------|-----------|--------|
+| P0 | RFC 8058 List-Unsubscribe headers in email sends | S |
+| P0 | Contact linkage enforcement in odoo-crm-sync | S |
+| P0 | Reconciliation comparison report (edge function + admin UI) | M |
+| P1 | lead_events table + timeline parity | M |
+| P1 | Dedup rollback logging | S |
+| P1 | Sidebar nav grouping alignment | S |
+| P2 | Multi-source prospect ingestion | M |
+| P2 | LinkedIn compliance guard UI | S |
+| P2 | Neel-specific approval hardening | S |
+
+### Validation Checks
+- After sync: 100% of Odoo records have exactly one ERP mirror with matching odoo_id
+- 0 active leads with null customer_id
+- "New" stage contains only truly new RFQs (existing behavior via process-rfq-emails)
+- All marketing emails include List-Unsubscribe and List-Unsubscribe-Post headers
+- Unsubscribes processed within 48 hours
+- Zero outbound sends without approval
+- No LinkedIn automation in codebase
 
