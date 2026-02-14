@@ -101,7 +101,7 @@ async function getAccessTokenForUser(userId: string, clientIp: string): Promise<
   return data.access_token;
 }
 
-function createRawEmail(to: string, subject: string, body: string, fromEmail: string, replyTo?: { messageId: string; references: string }): string {
+function createRawEmail(to: string, subject: string, body: string, fromEmail: string, replyTo?: { messageId: string; references: string }, customHeaders?: Record<string, string>): string {
   const emailLines = [
     `From: ${fromEmail}`,
     `To: ${to}`,
@@ -113,6 +113,13 @@ function createRawEmail(to: string, subject: string, body: string, fromEmail: st
   if (replyTo) {
     emailLines.push(`In-Reply-To: ${replyTo.messageId}`);
     emailLines.push(`References: ${replyTo.references || replyTo.messageId}`);
+  }
+
+  // Inject custom headers (e.g. List-Unsubscribe for RFC 8058)
+  if (customHeaders) {
+    for (const [key, value] of Object.entries(customHeaders)) {
+      emailLines.push(`${key}: ${value}`);
+    }
   }
 
   emailLines.push("", body);
@@ -130,6 +137,7 @@ interface SendEmailRequest {
   replyToMessageId?: string;
   references?: string;
   sent_by_agent?: boolean;
+  custom_headers?: Record<string, string>;
 }
 
 serve(async (req) => {
@@ -156,6 +164,7 @@ serve(async (req) => {
       replyToMessageId: z.string().max(500).optional(),
       references: z.string().max(2000).optional(),
       sent_by_agent: z.boolean().optional(),
+      custom_headers: z.record(z.string()).optional(),
     });
     const parsed = sendSchema.safeParse(await clonedReq.json());
     if (!parsed.success) {
@@ -164,7 +173,7 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    const { to, subject, body, threadId, replyToMessageId, references, sent_by_agent }: SendEmailRequest = parsed.data;
+    const { to, subject, body, threadId, replyToMessageId, references, sent_by_agent, custom_headers }: SendEmailRequest = parsed.data;
 
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -237,7 +246,8 @@ serve(async (req) => {
       subject,
       bodyWithSig,
       fromEmail,
-      replyToMessageId ? { messageId: replyToMessageId, references: references || "" } : undefined
+      replyToMessageId ? { messageId: replyToMessageId, references: references || "" } : undefined,
+      custom_headers
     );
 
     let sendResponse = await fetch(

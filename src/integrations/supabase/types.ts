@@ -1254,6 +1254,33 @@ export type Database = {
           },
         ]
       }
+      dedup_rollback_log: {
+        Row: {
+          created_at: string
+          deleted_id: string
+          id: string
+          post_merge_snapshot: Json | null
+          pre_merge_snapshot: Json
+          survivor_id: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_id: string
+          id?: string
+          post_merge_snapshot?: Json | null
+          pre_merge_snapshot?: Json
+          survivor_id: string
+        }
+        Update: {
+          created_at?: string
+          deleted_id?: string
+          id?: string
+          post_merge_snapshot?: Json | null
+          pre_merge_snapshot?: Json
+          survivor_id?: string
+        }
+        Relationships: []
+      }
       deliveries: {
         Row: {
           company_id: string
@@ -1611,6 +1638,7 @@ export type Database = {
           company_id: string
           email: string
           id: string
+          processed_at: string | null
           reason: string
           source: string | null
           suppressed_at: string
@@ -1619,6 +1647,7 @@ export type Database = {
           company_id: string
           email: string
           id?: string
+          processed_at?: string | null
           reason?: string
           source?: string | null
           suppressed_at?: string
@@ -1627,6 +1656,7 @@ export type Database = {
           company_id?: string
           email?: string
           id?: string
+          processed_at?: string | null
           reason?: string
           source?: string | null
           suppressed_at?: string
@@ -2715,6 +2745,44 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "lead_activities_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lead_events: {
+        Row: {
+          created_at: string
+          dedupe_key: string | null
+          event_type: string
+          id: string
+          lead_id: string
+          payload: Json | null
+          source_system: string
+        }
+        Insert: {
+          created_at?: string
+          dedupe_key?: string | null
+          event_type: string
+          id?: string
+          lead_id: string
+          payload?: Json | null
+          source_system?: string
+        }
+        Update: {
+          created_at?: string
+          dedupe_key?: string | null
+          event_type?: string
+          id?: string
+          lead_id?: string
+          payload?: Json | null
+          source_system?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_events_lead_id_fkey"
             columns: ["lead_id"]
             isOneToOne: false
             referencedRelation: "leads"
@@ -5129,6 +5197,42 @@ export type Database = {
           standard_code?: string
           updated_at?: string
           weight_per_meter?: number
+        }
+        Relationships: []
+      }
+      reconciliation_runs: {
+        Row: {
+          created_count: number
+          duplicate_count: number
+          id: string
+          missing_count: number
+          out_of_sync_count: number
+          results: Json
+          run_at: string
+          updated_count: number
+          window_days: number
+        }
+        Insert: {
+          created_count?: number
+          duplicate_count?: number
+          id?: string
+          missing_count?: number
+          out_of_sync_count?: number
+          results?: Json
+          run_at?: string
+          updated_count?: number
+          window_days?: number
+        }
+        Update: {
+          created_count?: number
+          duplicate_count?: number
+          id?: string
+          missing_count?: number
+          out_of_sync_count?: number
+          results?: Json
+          run_at?: string
+          updated_count?: number
+          window_days?: number
         }
         Relationships: []
       }

@@ -131,7 +131,13 @@ serve(async (req) => {
           status: "queued",
         });
 
-        // Send via gmail-send
+        // Build RFC 8058 List-Unsubscribe headers
+        const listUnsubscribeHeaders: Record<string, string> = {
+          "List-Unsubscribe": `<${unsubscribeUrl}>`,
+          "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+        };
+
+        // Send via gmail-send with RFC 8058 headers
         const sendResp = await fetch(`${supabaseUrl}/functions/v1/gmail-send`, {
           method: "POST",
           headers: {
@@ -142,6 +148,7 @@ serve(async (req) => {
             to: contact.email,
             subject: campaign.subject_line || "No Subject",
             body: personalizedHtml,
+            custom_headers: listUnsubscribeHeaders,
           }),
         });
 

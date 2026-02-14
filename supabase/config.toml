@@ -204,3 +204,6 @@ verify_jwt = false
 
 [functions.email-unsubscribe]
 verify_jwt = false
+
+[functions.odoo-reconciliation-report]
+verify_jwt = false

@@ -9,15 +9,22 @@ import { HistoryPanel } from "@/components/panels/HistoryPanel";
 import { useNotifications } from "@/hooks/useNotifications";
 import brandLogo from "@/assets/brand-logo.png";
 
-const navigation = [
+// Odoo-style nav grouping: CRM, Operations, Admin
+const crmNav = [
   { name: "Home", href: "/home", icon: Home },
   { name: "Inbox", href: "/inbox", icon: Inbox },
   { name: "Phonecalls", href: "/phonecalls", icon: Phone },
-  { name: "Tasks", href: "/tasks", icon: CheckSquare },
   { name: "Pipeline", href: "/pipeline", icon: Kanban },
   { name: "Customers", href: "/customers", icon: Users },
+];
+
+const operationsNav = [
+  { name: "Tasks", href: "/tasks", icon: CheckSquare },
   { name: "Shop Floor", href: "/shop-floor", icon: Factory },
   { name: "Deliveries", href: "/deliveries", icon: Truck },
+];
+
+const systemNav = [
   { name: "Brain", href: "/brain", icon: Brain },
   { name: "Integrations", href: "/integrations", icon: Plug },
 ];
@@ -92,23 +99,51 @@ export function Sidebar() {
           </button>
         </div>
 
-        {/* Main Nav */}
-        <nav className="flex-1 flex flex-col items-center py-4 gap-2">
-          {navigation.map((item) => {
+        {/* Main Nav — Odoo-style grouped */}
+        <nav className="flex-1 flex flex-col items-center py-4 gap-1 overflow-y-auto">
+          {/* CRM Group */}
+          {crmNav.map((item) => {
             const isActive = location.pathname === item.href;
             return (
-              <Link
-                key={item.name}
-                to={item.href}
-                className={cn(
-                  "w-10 h-10 rounded-lg flex items-center justify-center transition-colors",
-                  "hover:bg-sidebar-accent",
-                  isActive
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                    : "text-sidebar-foreground"
-                )}
-                title={item.name}
-              >
+              <Link key={item.name} to={item.href} className={cn(
+                "w-10 h-10 rounded-lg flex items-center justify-center transition-colors",
+                "hover:bg-sidebar-accent",
+                isActive ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-sidebar-foreground"
+              )} title={item.name}>
+                <item.icon className="w-5 h-5" />
+              </Link>
+            );
+          })}
+
+          {/* Separator */}
+          <div className="w-6 h-px bg-sidebar-border my-1" />
+
+          {/* Operations Group */}
+          {operationsNav.map((item) => {
+            const isActive = location.pathname === item.href;
+            return (
+              <Link key={item.name} to={item.href} className={cn(
+                "w-10 h-10 rounded-lg flex items-center justify-center transition-colors",
+                "hover:bg-sidebar-accent",
+                isActive ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-sidebar-foreground"
+              )} title={item.name}>
+                <item.icon className="w-5 h-5" />
+              </Link>
+            );
+          })}
+
+          {/* Separator */}
+          <div className="w-6 h-px bg-sidebar-border my-1" />
+
+          {/* System Group */}
+          {systemNav.map((item) => {
+            const isActive = location.pathname === item.href;
+            return (
+              <Link key={item.name} to={item.href} className={cn(
+                "w-10 h-10 rounded-lg flex items-center justify-center transition-colors",
+                "hover:bg-sidebar-accent",
+                isActive ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-sidebar-foreground"
+              )} title={item.name}>
                 <item.icon className="w-5 h-5" />
               </Link>
             );

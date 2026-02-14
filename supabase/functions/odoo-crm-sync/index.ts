@@ -23,6 +23,8 @@ const STAGE_MAP: Record<string, string> = {
   "No rebars(Our of Scope)": "lost",
 };
 
+const ACTIVE_STAGES = new Set(Object.values(STAGE_MAP).filter(s => s !== "won" && s !== "lost"));
+
 const FIELDS = [
   "id", "name", "stage_id", "email_from", "phone", "contact_name",
   "user_id", "probability", "expected_revenue", "type", "partner_name",
@@ -49,6 +51,38 @@ async function odooRpc(url: string, db: string, apiKey: string, model: string, m
     throw new Error(data.error.data?.message || data.error.message || JSON.stringify(data.error));
   }
   return data.result;
+}
+
+/** Insert a lead_event if dedupe_key doesn't already exist */
+async function insertLeadEvent(
+  serviceClient: ReturnType<typeof import("https://esm.sh/@supabase/supabase-js@2").createClient>,
+  leadId: string,
+  eventType: string,
+  payload: Record<string, unknown>,
+  sourceSystem = "odoo_sync"
+) {
+  const dedupeKey = `${leadId}:${eventType}:${JSON.stringify(payload)}`;
+  await serviceClient.from("lead_events").upsert({
+    lead_id: leadId,
+    event_type: eventType,
+    payload,
+    source_system: sourceSystem,
+    dedupe_key: dedupeKey.slice(0, 500),
+  }, { onConflict: "dedupe_key" });
+}
+
+/** Snapshot a lead record before deletion for rollback */
+async function logDedupRollback(
+  serviceClient: ReturnType<typeof import("https://esm.sh/@supabase/supabase-js@2").createClient>,
+  deletedId: string,
+  survivorId: string,
+  snapshot: Record<string, unknown>
+) {
+  await serviceClient.from("dedup_rollback_log").insert({
+    deleted_id: deletedId,
+    survivor_id: survivorId,
+    pre_merge_snapshot: snapshot,
+  });
 }
 
 Deno.serve(async (req) => {
@@ -84,13 +118,13 @@ Deno.serve(async (req) => {
     const companyId = sampleLead?.company_id || "a0000000-0000-0000-0000-000000000001";
 
     // Load ALL existing odoo_sync leads with pagination (Supabase caps at 1000/query)
-    const allExisting: Array<{ id: string; metadata: unknown }> = [];
+    const allExisting: Array<{ id: string; metadata: unknown; stage: string; customer_id: string | null }> = [];
     let from = 0;
     const PAGE = 1000;
     while (true) {
       const { data, error } = await serviceClient
         .from("leads")
-        .select("id, metadata")
+        .select("id, metadata, stage, customer_id")
         .eq("source", "odoo_sync")
         .range(from, from + PAGE - 1);
       if (error) throw new Error("Failed to load existing leads: " + error.message);
@@ -102,8 +136,9 @@ Deno.serve(async (req) => {
     console.log(`Loaded ${allExisting.length} existing odoo_sync leads for dedup`);
 
     // Build map keeping only the most-recently-synced record per odoo_id
-    const odooIdMap = new Map<string, { id: string; syncedAt: string }>();
+    const odooIdMap = new Map<string, { id: string; syncedAt: string; stage: string; customer_id: string | null }>();
     const victimIds: string[] = [];
+    const victimSnapshots: Array<{ id: string; survivorId: string; snapshot: Record<string, unknown> }> = [];
 
     for (const l of allExisting) {
       const meta = l.metadata as Record<string, unknown> | null;
@@ -114,20 +149,25 @@ Deno.serve(async (req) => {
       const existing = odooIdMap.get(oid);
 
       if (!existing) {
-        odooIdMap.set(oid, { id: l.id, syncedAt });
+        odooIdMap.set(oid, { id: l.id, syncedAt, stage: l.stage, customer_id: l.customer_id });
       } else if (syncedAt > existing.syncedAt) {
-        // Current record is newer → it's the survivor, old one is victim
         victimIds.push(existing.id);
-        odooIdMap.set(oid, { id: l.id, syncedAt });
+        victimSnapshots.push({ id: existing.id, survivorId: l.id, snapshot: l as unknown as Record<string, unknown> });
+        odooIdMap.set(oid, { id: l.id, syncedAt, stage: l.stage, customer_id: l.customer_id });
       } else {
-        // Current record is older → it's the victim
         victimIds.push(l.id);
+        victimSnapshots.push({ id: l.id, survivorId: existing.id, snapshot: l as unknown as Record<string, unknown> });
       }
+    }
+
+    // Log rollback snapshots before deleting duplicates
+    for (const v of victimSnapshots) {
+      await logDedupRollback(serviceClient, v.id, v.survivorId, v.snapshot);
     }
 
     // Clean up any duplicates found during map loading
     if (victimIds.length > 0) {
-      console.log(`Dedup: deleting ${victimIds.length} duplicate leads`);
+      console.log(`Dedup: deleting ${victimIds.length} duplicate leads (rollback logged)`);
       for (let i = 0; i < victimIds.length; i += 50) {
         const batch = victimIds.slice(i, i + 50);
         await serviceClient.from("leads").delete().in("id", batch);
@@ -165,28 +205,12 @@ Deno.serve(async (req) => {
         // Normalize probability: won=100, lost=0, others=Odoo ML value
         const normalizedProb = erpStage === "won" ? 100 : erpStage === "lost" ? 0 : Math.round(Number(ol.probability) || 0);
 
-        if (existingId) {
-          // Update existing lead (including title to fix S-prefix legacy titles)
-          const { error } = await serviceClient
-            .from("leads")
-            .update({
-              title: ol.name || "Untitled",
-              stage: erpStage,
-              probability: normalizedProb,
-              expected_value: Number(ol.expected_revenue) || 0,
-              metadata,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", existingId);
+        // Resolve customer for contact linkage enforcement
+        const customerName = ol.partner_name || ol.contact_name || "Unknown";
+        let customerId: string | null = null;
 
-          if (error) { console.error(`Update error for odoo_id ${odooId}:`, error); errors++; }
-          else updated++;
-        } else {
-          // Create new lead
-          const customerName = ol.partner_name || ol.contact_name || "Unknown";
-
-          // Find or create customer
-          let customerId: string | null = null;
+        // Always resolve customer for active stages
+        if (ACTIVE_STAGES.has(erpStage)) {
           const { data: existingCust } = await serviceClient
             .from("customers")
             .select("id")
@@ -206,7 +230,81 @@ Deno.serve(async (req) => {
             customerId = newCust?.id || null;
           }
 
+          if (!customerId) {
+            console.error(`Contact linkage failed for odoo_id ${odooId}: could not resolve customer "${customerName}"`);
+            errors++;
+            continue;
+          }
+        }
+
+        if (existingId) {
+          // Detect stage change for timeline parity
+          const previousStage = existingEntry?.stage;
+          if (previousStage && previousStage !== erpStage) {
+            await insertLeadEvent(serviceClient, existingId, "stage_changed", {
+              from: previousStage,
+              to: erpStage,
+              odoo_stage: stageName,
+            });
+          }
+
+          // Detect value change
+          const prevMeta = (allExisting.find(l => l.id === existingId)?.metadata as Record<string, unknown>) || {};
+          const prevRevenue = Number(prevMeta.odoo_revenue) || 0;
+          const newRevenue = Number(ol.expected_revenue) || 0;
+          if (prevRevenue !== newRevenue) {
+            await insertLeadEvent(serviceClient, existingId, "value_changed", {
+              from: prevRevenue,
+              to: newRevenue,
+            });
+          }
+
+          // Update existing lead
+          const updatePayload: Record<string, unknown> = {
+            title: ol.name || "Untitled",
+            stage: erpStage,
+            probability: normalizedProb,
+            expected_value: Number(ol.expected_revenue) || 0,
+            metadata,
+            updated_at: new Date().toISOString(),
+          };
+
+          // Enforce contact linkage on update too
+          if (customerId && ACTIVE_STAGES.has(erpStage)) {
+            updatePayload.customer_id = customerId;
+          }
+
           const { error } = await serviceClient
+            .from("leads")
+            .update(updatePayload)
+            .eq("id", existingId);
+
+          if (error) { console.error(`Update error for odoo_id ${odooId}:`, error); errors++; }
+          else updated++;
+        } else {
+          // For won/lost stages, still try to resolve customer but don't block
+          if (!customerId) {
+            const { data: existingCust } = await serviceClient
+              .from("customers")
+              .select("id")
+              .eq("name", customerName)
+              .eq("company_id", companyId)
+              .limit(1)
+              .single();
+
+            if (existingCust) {
+              customerId = existingCust.id;
+            } else {
+              const { data: newCust } = await serviceClient
+                .from("customers")
+                .insert({ name: customerName, company_id: companyId, company_name: ol.partner_name || null })
+                .select("id")
+                .single();
+              customerId = newCust?.id || null;
+            }
+          }
+
+          const { data: newLead, error } = await serviceClient
             .from("leads")
             .insert({
               title: ol.name || "Untitled",
@@ -218,10 +316,28 @@ Deno.serve(async (req) => {
               company_id: companyId,
               metadata,
               priority: ol.priority === "3" ? "high" : ol.priority === "2" ? "medium" : "low",
-            });
+            })
+            .select("id")
+            .single();
 
           if (error) { console.error(`Insert error for odoo_id ${odooId}:`, error); errors++; }
-          else created++;
+          else {
+            created++;
+            // Log creation event
+            if (newLead) {
+              await insertLeadEvent(serviceClient, newLead.id, "stage_changed", {
+                from: null,
+                to: erpStage,
+                odoo_stage: stageName,
+              });
+              if (customerId) {
+                await insertLeadEvent(serviceClient, newLead.id, "contact_linked", {
+                  customer_name: customerName,
+                  customer_id: customerId,
+                });
+              }
+            }
+          }
         }
       } catch (e) {
         console.error("Lead processing error:", e);
@@ -229,7 +345,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    return json({ created, updated, skipped, errors, total: leads.length });
+    return json({ created, updated, skipped, errors, total: leads.length, dedup_deleted: victimIds.length });
   } catch (err) {
     if (err instanceof Response) return err;
     console.error("Sync error:", err);
