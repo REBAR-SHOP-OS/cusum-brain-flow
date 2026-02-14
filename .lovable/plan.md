@@ -1,60 +1,82 @@
 
+# Vizzy Comprehensive Audit and Improvement Plan
 
-# Role-Based External Employee Access
+## Audit Findings
 
-## Overview
+### 1. Dead Code and Unused Components
+- **VizzyApprovalDialog.tsx** is imported nowhere (line 16 of VizzyPage.tsx says "removed -- voice calls auto-execute"). The file still exists with 70 lines of unused code.
+- **Camera button** in VizzyPage.tsx (line 673-678) renders a non-functional camera button -- it has no `onClick` handler that triggers photo analysis. The `VizzyPhotoButton` component exists but is not used on VizzyPage.
+- **`vizzy-photo-analyze`** edge function uses raw Gemini API with `GEMINI_API_KEY` instead of Lovable AI gateway (inconsistent with all other Vizzy functions).
+- **Duplicate context builders**: `useVizzyContext.ts` (client-side, ~200 lines) and `vizzyFullContext.ts` (server-side, ~356 lines) do almost the same thing but diverge in fields (server has memories, suggestions, stock; client has QB live data, bank accounts, payments). This causes data inconsistency between voice and text chat.
 
-Replace the current blanket external-employee lockdown (Time Clock + Team Hub + HR Agent only) with role-aware routing. External users will get access based on their assigned role, with tighter restrictions than internal users.
+### 2. Bugs and Issues
+- **`vizzy-erp-action`** uses deprecated `supabaseUser.auth.getClaims()` which may not exist on all Supabase JS versions -- potential runtime crash.
+- **`vizzy-erp-action`** lists tools in the context prompt (update_cut_plan_status, update_lead_status, etc.) but these are NOT registered as `clientTools` in the ElevenLabs conversation -- they only work via the `[VIZZY-ACTION]` tag hack, which is fragile.
+- **Memory leak**: `silentIntervalRef` interval (line 297) is only cleared on wake or component unmount, but if the session disconnects during silent mode, the interval persists.
+- **`vizzy-erp-action`** calls `update_lead_status` but the leads table uses `status` column while the context prompt says it uses `stage` -- potential mismatch.
+- **RTL detection** still exists in LiveChat.tsx (line 24-29) despite the language policy saying Vizzy is English-only. Harmless but contradicts the policy.
 
-## Access Matrix
+### 3. Performance Issues
+- **Context is loaded twice on voice page**: `loadFullContext()` fetches 13+ parallel DB queries client-side, then sends the result to `vizzy-briefing` edge function which calls Gemini to compress it. Meanwhile, the daily brief also calls `buildFullVizzyContext` server-side. This is redundant -- the voice page should use the server-side builder directly.
+- **Knowledge base limit**: Client fetches up to 1000 knowledge entries and serializes ALL content into the context string. This can produce a 10,000+ word context, causing slow ElevenLabs processing and high token costs.
+- **No caching**: Every voice session fetches fresh context from scratch (13+ queries). A 5-minute cache would reduce DB load significantly for rapid reconnects.
 
-| External User Type | Allowed Routes |
-|---|---|
-| Workshop employee | `/timeclock`, `/team-hub` only |
-| Shop Supervisor | `/timeclock`, `/team-hub`, `/shop-floor`, `/shopfloor`, `/home`, `/inbox`, `/tasks`, `/deliveries`, `/settings` |
-| Karthick (office) | `/timeclock`, `/team-hub`, `/pipeline` (his kanban column only) |
-| Customer (role) | `/portal` only |
-| Customer (linked) | `/portal` only (existing behavior) |
+### 4. Security Concerns
+- **Super admin email hardcoded** in 2 places: VizzyPage.tsx (line 37) and admin-chat/index.ts (line 11). Should use role-based check (`has_role(uid, 'admin')`) instead.
+- **vizzy-erp-action** properly checks admin role but uses deprecated auth method.
 
-## Changes
+### 5. UX Issues
+- **No transcript visibility on VizzyPage**: The voice page shows avatar and controls but no scrollable transcript -- users can't review what was said.
+- **Camera button is decorative**: The camera icon exists but does nothing.
+- **No session persistence**: Closing VizzyPage loses all transcript. The `saveTranscript` only fires on intentional stop, not on page close/crash.
 
-### 1. `src/components/auth/RoleGuard.tsx`
+---
 
-Replace the current hardcoded external employee block (lines 62-79) with role-aware routing:
+## Improvement Plan
 
-- Check if user has roles loaded
-- **Customer role or linked customer**: redirect to `/portal` (unchanged)
-- **Workshop role (external)**: allow only `/timeclock` and `/team-hub`
-- **Shop Supervisor role (external)**: allow workshop routes + `/deliveries`, `/shop-floor`, etc.
-- **Office role (external, i.e. Karthick)**: allow `/timeclock`, `/team-hub`, `/pipeline`
-- **No role assigned**: default to `/timeclock` only (safe fallback)
+### Phase 1: Clean Up Dead Code
+| File | Action |
+|------|--------|
+| `src/components/vizzy/VizzyApprovalDialog.tsx` | Delete file entirely |
+| `src/pages/VizzyPage.tsx` | Remove the dead camera button (lines 672-678), wire up `VizzyPhotoButton` properly |
+| `src/pages/LiveChat.tsx` | Remove `isRTLText` function (lines 24-29) and RTL `dir` logic per English-only policy |
 
-### 2. `src/components/layout/AppSidebar.tsx`
+### Phase 2: Fix Bugs
+| File | Fix |
+|------|-----|
+| `src/pages/VizzyPage.tsx` | Clear `silentIntervalRef` in `onDisconnect` handler to prevent memory leak |
+| `supabase/functions/vizzy-erp-action/index.ts` | Replace deprecated `getClaims()` with `getUser()` for auth verification |
+| `supabase/functions/vizzy-photo-analyze/index.ts` | Switch from raw Gemini API to Lovable AI gateway (`google/gemini-2.5-flash`) for consistency and no separate API key dependency |
 
-Update the external employee sidebar (lines 42-81) to be role-aware:
+### Phase 3: Unify Context Engine
+- Remove client-side `useVizzyContext.ts` hook
+- Have VizzyPage call a new lightweight edge function that runs `buildFullVizzyContext` server-side and returns the result
+- This eliminates the duplicate context builder and ensures voice + text chat see identical data
+- Add the missing fields from client context (QB live data, bank accounts) to the server-side builder
 
-- **External workshop**: show Time Clock, Team Hub (2 items)
-- **External shop supervisor**: show Home, Shop Floor, Deliveries, Time Clock, Team Hub, Tasks
-- **External office (Karthick)**: show Pipeline, Time Clock, Team Hub
+### Phase 4: Performance
+- Add a 5-minute context cache in VizzyPage using `sessionStorage` -- skip re-fetch on rapid reconnects
+- Limit knowledge base entries to 50 most recent in the context string (with a note about total count)
+- Truncate email body previews to 50 chars instead of 80
 
-### 3. `src/components/layout/MobileNavV2.tsx`
+### Phase 5: Security
+- Replace hardcoded `SUPER_ADMIN_EMAIL` checks with `has_role(uid, 'admin')` in both VizzyPage.tsx and admin-chat edge function
+- This allows any admin to use Vizzy voice and text chat
 
-Update the external employee nav (lines 74-101) with the same role-aware logic as the sidebar.
+### Phase 6: UX Improvements
+- Add a collapsible transcript panel to VizzyPage (slide-up from bottom) so users can review conversation history during the session
+- Wire the camera button to `VizzyPhotoButton` component so photo analysis actually works
+- Add `beforeunload` listener to save transcript on accidental page close
 
-### 4. Pipeline page restriction for Karthick
+---
 
-No code change needed on the Pipeline page itself -- the existing kanban already filters by stage. Karthick will see all visible stages but can only interact (download, upload, notes, comments) based on existing RLS policies. If you want to restrict his Pipeline view to only the "estimation_karthick" column, that would require a separate UI filter, which I can add.
+## Summary of Changes
 
-## What stays unchanged
-
-- Internal user routing (all existing role checks)
-- Customer portal page and data hooks
-- RLS policies on database tables
-- All other pages and components
-
-## Technical Notes
-
-- External user detection remains: `!email.endsWith("@rebar.shop")`
-- The `useUserRole` hook already loads roles for all authenticated users regardless of domain, so no backend changes needed
-- The roles (`workshop`, `shop_supervisor`, `office`) must be assigned to external users via the Settings People page
-
+| Area | Files Modified | Impact |
+|------|---------------|--------|
+| Dead code cleanup | 3 files (delete 1, edit 2) | Cleaner codebase |
+| Bug fixes | 3 files | Prevent crashes and memory leaks |
+| Context unification | 3 files (delete 1, edit 2) | Consistent data across voice/text |
+| Performance | 2 files | Faster reconnects, lower token costs |
+| Security | 2 files | Role-based access instead of email hardcoding |
+| UX | 1 file (VizzyPage.tsx) | Transcript visibility, working camera, crash safety |
