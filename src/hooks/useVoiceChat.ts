@@ -2,10 +2,12 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { useSpeechRecognition } from "./useSpeechRecognition";
 import { useAdminChat } from "./useAdminChat";
 import { useToast } from "./use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 export type VoiceChatStatus = "idle" | "listening" | "thinking" | "speaking";
 
 const TTS_CHAR_THRESHOLD = 300;
+const TTS_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`;
 
 export function useVoiceChat(chat: ReturnType<typeof useAdminChat>) {
   const [status, setStatus] = useState<VoiceChatStatus>("idle");
@@ -14,12 +16,13 @@ export function useVoiceChat(chat: ReturnType<typeof useAdminChat>) {
   const prevAssistantTextRef = useRef("");
   const conversationActiveRef = useRef(false);
   const statusRef = useRef<VoiceChatStatus>("idle");
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
   statusRef.current = status;
 
   // Handle auto-send when silence is detected
   const handleSilenceEnd = useCallback(() => {
     if (statusRef.current !== "listening" || !conversationActiveRef.current) return;
-    // Grab transcript and send
     const transcript = speechRef.current.fullTranscript + (speechRef.current.interimText ? " " + speechRef.current.interimText : "");
     if (transcript.trim()) {
       speechRef.current.stop();
@@ -35,7 +38,6 @@ export function useVoiceChat(chat: ReturnType<typeof useAdminChat>) {
     silenceTimeout: 1500,
   });
 
-  // Keep a ref to speech so callbacks can access latest state
   const speechRef = useRef(speech);
   speechRef.current = speech;
 
@@ -50,7 +52,6 @@ export function useVoiceChat(chat: ReturnType<typeof useAdminChat>) {
     const text = lastMsg.content;
     const isStreaming = chat.isStreaming;
 
-    // Trigger TTS when threshold reached or stream ends
     if (!ttsTriggeredRef.current) {
       if (text.length >= TTS_CHAR_THRESHOLD || (!isStreaming && text.length > 0)) {
         ttsTriggeredRef.current = true;
@@ -61,40 +62,78 @@ export function useVoiceChat(chat: ReturnType<typeof useAdminChat>) {
     prevAssistantTextRef.current = text;
   }, [chat.messages, chat.isStreaming, status]);
 
-  const triggerTTS = useCallback((text: string) => {
-    if (!window.speechSynthesis) {
-      setStatus("idle");
-      conversationActiveRef.current = false;
-      return;
-    }
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 1.0;
-    utterance.pitch = 1.0;
-
-    utterance.onend = () => {
-      if (conversationActiveRef.current) {
-        speechRef.current.reset();
-        ttsTriggeredRef.current = false;
-        prevAssistantTextRef.current = "";
-        speechRef.current.start();
-        setStatus("listening");
-      } else {
+  const triggerTTS = useCallback(async (text: string) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
         setStatus("idle");
+        conversationActiveRef.current = false;
+        return;
       }
-    };
 
-    utterance.onerror = () => {
+      abortRef.current = new AbortController();
+
+      const resp = await fetch(TTS_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+        },
+        body: JSON.stringify({ text }),
+        signal: abortRef.current.signal,
+      });
+
+      if (!resp.ok) {
+        console.error("TTS failed:", resp.status);
+        setStatus("idle");
+        conversationActiveRef.current = false;
+        return;
+      }
+
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audioRef.current = audio;
+
+      audio.onended = () => {
+        URL.revokeObjectURL(url);
+        audioRef.current = null;
+        if (conversationActiveRef.current) {
+          speechRef.current.reset();
+          ttsTriggeredRef.current = false;
+          prevAssistantTextRef.current = "";
+          speechRef.current.start();
+          setStatus("listening");
+        } else {
+          setStatus("idle");
+        }
+      };
+
+      audio.onerror = () => {
+        URL.revokeObjectURL(url);
+        audioRef.current = null;
+        setStatus("idle");
+        conversationActiveRef.current = false;
+      };
+
+      setStatus("speaking");
+      await audio.play();
+    } catch (err: any) {
+      if (err?.name === "AbortError") return;
+      console.error("TTS error:", err);
       setStatus("idle");
       conversationActiveRef.current = false;
-    };
-
-    setStatus("speaking");
-    window.speechSynthesis.speak(utterance);
+    }
   }, []);
 
   const stopAudio = useCallback(() => {
-    window.speechSynthesis?.cancel();
+    abortRef.current?.abort();
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = "";
+      audioRef.current = null;
+    }
   }, []);
 
   const stopConversation = useCallback(() => {
@@ -108,7 +147,6 @@ export function useVoiceChat(chat: ReturnType<typeof useAdminChat>) {
   const handleOrbTap = useCallback(() => {
     switch (status) {
       case "idle":
-        // Start conversation loop
         conversationActiveRef.current = true;
         speech.reset();
         ttsTriggeredRef.current = false;
@@ -118,17 +156,14 @@ export function useVoiceChat(chat: ReturnType<typeof useAdminChat>) {
         break;
 
       case "listening":
-        // Stop the entire conversation
         stopConversation();
         break;
 
       case "thinking":
-        // Cancel and stop
         stopConversation();
         break;
 
       case "speaking":
-        // Interrupt: stop audio, start listening again
         stopAudio();
         speech.reset();
         ttsTriggeredRef.current = false;
