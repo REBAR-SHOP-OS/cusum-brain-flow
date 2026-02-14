@@ -1,13 +1,13 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useConversation } from "@elevenlabs/react";
-import { X, Mic, MicOff, Volume2, WifiOff, Camera, Phone, PhoneOff, ChevronUp, ChevronDown } from "lucide-react";
+import { X, Mic, MicOff, Volume2, WifiOff, Phone, PhoneOff, ChevronUp, ChevronDown } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { buildVizzyContext } from "@/lib/vizzyContext";
-import type { VizzyBusinessSnapshot } from "@/hooks/useVizzyContext";
+import type { VizzyBusinessSnapshot } from "@/types/vizzy";
 import { useWebPhone } from "@/hooks/useWebPhone";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
@@ -105,26 +105,6 @@ export default function VizzyPage() {
     };
   }, [status]);
 
-  // Save transcript on page close/crash
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      if (transcriptRef.current.length > 0 && user) {
-        // Use sendBeacon for reliability during page unload
-        const payload = JSON.stringify({
-          user_id: user.id,
-          transcript: transcriptRef.current,
-          session_ended_at: new Date().toISOString(),
-        });
-        navigator.sendBeacon(
-          `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/vizzy_interactions`,
-          new Blob([payload], { type: "application/json" })
-        );
-      }
-    };
-    window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [user]);
-
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60);
     const sec = s % 60;
@@ -172,6 +152,24 @@ export default function VizzyPage() {
     }
   }, [user]);
 
+  // Periodic transcript auto-save (every 60 seconds while connected)
+  const autoSaveIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  useEffect(() => {
+    if (status === "connected" && user) {
+      autoSaveIntervalRef.current = setInterval(() => {
+        if (transcriptRef.current.length > 0) {
+          saveTranscript(transcriptRef.current);
+        }
+      }, 60000);
+    }
+    return () => {
+      if (autoSaveIntervalRef.current) {
+        clearInterval(autoSaveIntervalRef.current);
+        autoSaveIntervalRef.current = null;
+      }
+    };
+  }, [status, user, saveTranscript]);
+
   const buildConversationMemory = useCallback(() => {
     const entries = transcriptRef.current;
     if (entries.length === 0) return "";
@@ -214,10 +212,7 @@ export default function VizzyPage() {
     try {
       const { data, error } = await supabase.functions.invoke("vizzy-context");
       if (error || !data?.snapshot) {
-        console.warn("Server context failed, falling back to client:", error);
-        // Fallback: import dynamically to avoid always loading the client hook
-        const { useVizzyContext } = await import("@/hooks/useVizzyContext");
-        // Can't use hooks outside React, just return null for fallback
+        console.warn("Server context failed:", error);
         return null;
       }
       const snap = data.snapshot as VizzyBusinessSnapshot;

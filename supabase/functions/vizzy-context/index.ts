@@ -1,9 +1,8 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { buildFullVizzyContext } from "../_shared/vizzyFullContext.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 /**
@@ -41,12 +40,10 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "Admin access required" }), { status: 403, headers: corsHeaders });
     }
 
-    // Build context server-side using the shared builder
-    const contextString = await buildFullVizzyContext(supabaseAdmin, user.id);
+    // Build snapshot server-side (single set of DB queries)
+    const snapshot = await buildSnapshotFromContext(supabaseAdmin, user.id);
 
-    // Return a lightweight snapshot object that buildVizzyContext (client formatter) expects
-    // For voice mode, we return the raw context string directly
-    return new Response(JSON.stringify({ context: contextString, snapshot: buildSnapshotFromContext(supabaseAdmin, user.id) }), {
+    return new Response(JSON.stringify({ snapshot }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {

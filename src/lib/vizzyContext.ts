@@ -1,4 +1,4 @@
-import type { VizzyBusinessSnapshot } from "@/hooks/useVizzyContext";
+import type { VizzyBusinessSnapshot } from "@/types/vizzy";
 
 export function buildVizzyContext(snap: VizzyBusinessSnapshot): string {
   const fmt = (n: number) =>
