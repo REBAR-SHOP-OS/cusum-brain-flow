@@ -147,6 +147,26 @@ async function qbFetch(
 ): Promise<unknown> {
   const _refreshContext = _refreshContextOverride || (config as QBConfigWithContext)._refreshContext;
   const MAX_RETRIES = 4;
+
+  // Proactive token refresh: if token expires within 5 minutes, refresh before making the call
+  if (config.expires_at && config.refresh_token && _refreshContext && config.expires_at < Date.now() + 300_000) {
+    console.log(`[QB] Proactive token refresh — expires in ${Math.round((config.expires_at - Date.now()) / 1000)}s`);
+    try {
+      if (!_refreshPromise) {
+        _refreshPromise = refreshQBToken(
+          _refreshContext.supabase,
+          _refreshContext.connectionId,
+          config as { realm_id: string; access_token: string; refresh_token: string; expires_at: number; company_id?: string },
+        );
+      }
+      await _refreshPromise;
+      _refreshPromise = null;
+    } catch (err) {
+      _refreshPromise = null;
+      console.warn("[QB] Proactive refresh failed, proceeding with current token:", err);
+    }
+  }
+
   const url = `${QUICKBOOKS_API_BASE}/v3/company/${config.realm_id}/${path}`;
   const res = await fetch(url, {
     ...options,
@@ -169,10 +189,8 @@ async function qbFetch(
   // Auto-refresh on 401 (expired token) — only retry once
   if (res.status === 401 && _retries === 0 && _refreshContext && config.refresh_token) {
     console.warn(`QB 401 on [${path}], refreshing token...`);
-    // Consume the error body to avoid resource leak
     await res.text();
     try {
-      // Deduplicate concurrent refresh attempts
       if (!_refreshPromise) {
         _refreshPromise = refreshQBToken(
           _refreshContext.supabase,
@@ -182,7 +200,6 @@ async function qbFetch(
       }
       await _refreshPromise;
       _refreshPromise = null;
-      // Retry with refreshed token
       return qbFetch(config, path, options, 1, _refreshContext);
     } catch (refreshErr) {
       _refreshPromise = null;
@@ -578,12 +595,23 @@ async function handleCheckStatus(
       }
     } catch (err) {
       console.error("Token refresh failed:", err);
-      await supabase
-        .from("integration_connections")
-        .update({ status: "error", error_message: "Token expired, please reconnect" })
-        .eq("id", connection.id);
+      // Check if this is a transient failure — don't immediately mark as error
+      // QB refresh tokens last 100 days; only mark error if truly unrecoverable
+      const config2 = connection.config as Record<string, unknown>;
+      const refreshTokenExpiresAt = config2.refresh_token_expires_at as number | undefined;
+      const isRefreshTokenExpired = refreshTokenExpiresAt && refreshTokenExpiresAt < Date.now();
 
-      return jsonRes({ status: "error", error: "Token expired, please reconnect" });
+      if (isRefreshTokenExpired) {
+        await supabase
+          .from("integration_connections")
+          .update({ status: "error", error_message: "Refresh token expired, please reconnect" })
+          .eq("id", connection.id);
+        return jsonRes({ status: "error", error: "Token expired, please reconnect" });
+      }
+
+      // Transient failure — keep connected status, return retry hint
+      console.warn("[QB] Transient refresh failure, keeping connected status");
+      return jsonRes({ status: "connected", warning: "token_refresh_retry", realmId: config.realm_id });
     }
   }
 
