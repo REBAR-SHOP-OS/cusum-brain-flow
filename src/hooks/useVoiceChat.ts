@@ -11,6 +11,7 @@ const TTS_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tt
 
 export function useVoiceChat(chat: ReturnType<typeof useAdminChat>) {
   const [status, setStatus] = useState<VoiceChatStatus>("idle");
+  const [isMuted, setIsMuted] = useState(false);
   const { toast } = useToast();
   const ttsTriggeredRef = useRef(false);
   const prevAssistantTextRef = useRef("");
@@ -18,7 +19,9 @@ export function useVoiceChat(chat: ReturnType<typeof useAdminChat>) {
   const statusRef = useRef<VoiceChatStatus>("idle");
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const isMutedRef = useRef(false);
   statusRef.current = status;
+  isMutedRef.current = isMuted;
 
   // Handle barge-in: user speaks during speaking/thinking states
   const handleBargeIn = useCallback((transcript: string) => {
@@ -40,6 +43,7 @@ export function useVoiceChat(chat: ReturnType<typeof useAdminChat>) {
   // Handle auto-send when silence is detected -- now works during listening AND speaking (barge-in)
   const handleSilenceEnd = useCallback(() => {
     if (!conversationActiveRef.current) return;
+    if (isMutedRef.current) return; // Don't auto-send when muted
     const currentStatus = statusRef.current;
     
     const transcript = speechRef.current.fullTranscript + (speechRef.current.interimText ? " " + speechRef.current.interimText : "");
@@ -181,10 +185,26 @@ export function useVoiceChat(chat: ReturnType<typeof useAdminChat>) {
     setStatus("idle");
   }, [speech, stopAudio, chat]);
 
+  const toggleMute = useCallback(() => {
+    setIsMuted((prev) => {
+      const next = !prev;
+      if (next) {
+        // Muting: stop mic
+        speech.stop();
+      } else if (conversationActiveRef.current && statusRef.current !== "idle") {
+        // Unmuting: restart mic
+        speech.reset();
+        speech.start();
+      }
+      return next;
+    });
+  }, [speech]);
+
   const handleOrbTap = useCallback(() => {
     switch (status) {
       case "idle":
         conversationActiveRef.current = true;
+        setIsMuted(false);
         speech.reset();
         ttsTriggeredRef.current = false;
         prevAssistantTextRef.current = "";
@@ -197,6 +217,7 @@ export function useVoiceChat(chat: ReturnType<typeof useAdminChat>) {
       case "speaking":
         // All active states: tap = stop conversation entirely
         stopConversation();
+        setIsMuted(false);
         break;
     }
   }, [status, speech, stopConversation]);
@@ -207,6 +228,8 @@ export function useVoiceChat(chat: ReturnType<typeof useAdminChat>) {
     fullTranscript: speech.fullTranscript,
     isSupported: speech.isSupported,
     isListening: speech.isListening,
+    isMuted,
+    toggleMute,
     handleOrbTap,
     isConversationActive: status !== "idle",
   };
