@@ -113,40 +113,42 @@ serve(async (req) => {
         ? `${alert.name} has not signed in for ${todayStr}. Please follow up.`
         : `${alert.name} clocked in but hasn't clocked out yet for ${todayStr}.`;
 
-      // Insert notification for the employee
-      await supabase.from("notifications").insert({
-        user_id: alert.userId,
-        type: "notification",
-        title,
-        description,
-        agent_name: "Forge",
-        agent_color: "bg-orange-500",
-        status: "unread",
-        priority: "high",
-        link_to: "/timeclock",
-        assigned_to: alert.userId,
-        metadata: { date: todayStr, profile_id: alert.profileId, alert_type: alert.alertType, dedupe_key: dedupeKey },
-      });
-      notifCount++;
+      // Insert notification for the employee (only if they have a linked auth user)
+      if (alert.userId) {
+        await supabase.from("notifications").insert({
+          user_id: alert.userId,
+          type: "notification",
+          title,
+          description,
+          agent_name: "Forge",
+          agent_color: "bg-orange-500",
+          status: "unread",
+          priority: "high",
+          link_to: "/timeclock",
+          assigned_to: alert.userId,
+          metadata: { date: todayStr, profile_id: alert.profileId, alert_type: alert.alertType, dedupe_key: dedupeKey },
+        });
+        notifCount++;
+      }
 
-      // Also notify admins
-      const { data: admins } = await supabase
-        .from("profiles")
-        .select("user_id, email")
-        .eq("company_id", alert.companyId)
-        .eq("is_active", true);
+      // Notify admins in the same company (single query instead of N+1)
+      const { data: adminUsers } = await supabase
+        .from("user_roles")
+        .select("user_id")
+        .eq("role", "admin");
 
-      // Check which are admins via user_roles
-      if (admins) {
-        for (const admin of admins) {
-          const { data: roles } = await supabase
-            .from("user_roles")
-            .select("role")
-            .eq("user_id", admin.user_id)
-            .eq("role", "admin")
-            .maybeSingle();
+      if (adminUsers) {
+        // Filter to admins in the same company
+        const { data: companyAdmins } = await supabase
+          .from("profiles")
+          .select("user_id")
+          .eq("company_id", alert.companyId)
+          .eq("is_active", true)
+          .in("user_id", adminUsers.map((a) => a.user_id));
 
-          if (roles) {
+        for (const admin of companyAdmins || []) {
+          const adminDedupeKey = `${dedupeKey}:admin:${admin.user_id}`;
+          if (!dedupSet.has(adminDedupeKey)) {
             await supabase.from("notifications").insert({
               user_id: admin.user_id,
               type: "notification",
@@ -157,8 +159,9 @@ serve(async (req) => {
               status: "unread",
               priority: "high",
               link_to: "/timeclock",
-              metadata: { date: todayStr, profile_id: alert.profileId, alert_type: alert.alertType, dedupe_key: `${dedupeKey}:admin:${admin.user_id}` },
+              metadata: { date: todayStr, profile_id: alert.profileId, alert_type: alert.alertType, dedupe_key: adminDedupeKey },
             });
+            notifCount++;
           }
         }
       }
