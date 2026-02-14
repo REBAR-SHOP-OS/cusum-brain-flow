@@ -1,35 +1,33 @@
 
-# Fix Attendance Alerts for Friday-Only Working Hours
+# Remove Voice Chat and Related Dead Code
 
-## Problem
-The attendance alert system currently fires every weekday (Monday-Friday) at 9:30 AM and 6:30 PM. Since your working hours are **Friday only, 8 AM - 5 PM**, you're getting false "nobody signed in" alerts Monday through Thursday when no one is expected to work.
+## What Gets Removed
 
-## What Will Change
-
-### 1. Update Cron Schedules (Database)
-Change both cron jobs to run **only on Fridays**:
-- Missed clock-in alert: Friday at 8:30 AM (30 minutes after your 8 AM start)
-- Missed clock-out alert: Friday at 5:30 PM (30 minutes after your 5 PM end)
-
-### 2. Add Day-of-Week Safety Check (Edge Function)
-Add a guard inside the `timeclock-alerts` function so that even if the cron fires on the wrong day, it exits early without creating alerts. This acts as a safety net.
-
-## Technical Details
-
-### Database Migration
-Update cron jobs 11 and 12:
-- Job 11: Change schedule from `30 9 * * 1-5` to `30 8 * * 5` (Friday 8:30 AM UTC)
-- Job 12: Change schedule from `30 18 * * 1-5` to `30 17 * * 5` (Friday 5:30 PM UTC)
-
-### Edge Function Change (`supabase/functions/timeclock-alerts/index.ts`)
-Add a working-day check near the top of the function:
-- Get the current day of the week
-- If it is not Friday (day 5), return early with a message "Not a working day"
-- This prevents false alerts even if the cron schedule is accidentally changed
+### Files to Delete
+| File | Reason |
+|------|--------|
+| `src/hooks/useVoiceChat.ts` | Core voice chat hook (listen/think/speak loop) |
+| `src/components/chat/VoiceOrb.tsx` | Voice orb UI component |
+| `supabase/functions/elevenlabs-tts/index.ts` | Gemini TTS edge function used only by voice chat |
 
 ### Files to Modify
 
-| Action | Target |
-|--------|--------|
-| Database migration | Update cron job schedules (jobs 11, 12) |
-| Modify | `supabase/functions/timeclock-alerts/index.ts` -- add Friday-only guard |
+**`src/pages/LiveChat.tsx`** -- Remove all voice chat references:
+- Remove imports: `useVoiceChat`, `VoiceOrb`, `Headset`, `Mic` (icon)
+- Remove `voiceMode` state and `voiceChat` hook
+- Remove the Voice Mode toggle button in the header (Headset icon)
+- Remove the entire voice mode orb/transcript overlay section (lines 288-323)
+- Remove the `voiceMode` condition wrapping the input area (line 334) -- input should always show
+- Remove the Mic button that launches voice chat (lines 418-429)
+- Keep: `speech` (useSpeechRecognition for text voice input), `VoiceInputButton`, all other chat functionality
+
+## What Stays (Not Affected)
+- `src/hooks/useSpeechRecognition.ts` -- still used by ChatInput, ComposeEmailDialog, VoiceRecorderWidget, LiveCallPanel
+- `src/components/chat/VoiceInputButton.tsx` -- still used for voice-to-text input in chat
+- `src/components/shopfloor/VoiceRecorderWidget.tsx` -- shopfloor translation widget
+- `src/components/phonecalls/LiveCallPanel.tsx` -- call transcription
+- `supabase/functions/transcribe-translate/` -- used by VoiceRecorderWidget
+- `src/hooks/useMeetingTranscription.ts` -- meeting transcription
+
+## Summary
+3 files deleted, 1 file modified. All voice-to-text input features remain intact -- only the conversational voice chat (orb, TTS playback, listen/think/speak loop) is removed.
