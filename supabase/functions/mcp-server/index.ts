@@ -16,58 +16,6 @@ function getDb() {
   return createClient(supabaseUrl, serviceRoleKey);
 }
 
-// ── OAuth helpers ───────────────────────────────────────────
-
-// In-memory auth code store (short-lived, edge function lifetime)
-const authCodes = new Map<string, { redirectUri: string; codeChallenge?: string; expiresAt: number }>();
-
-async function hmacSign(data: string, secret: string): Promise<string> {
-  const enc = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    "raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
-  );
-  const sig = await crypto.subtle.sign("HMAC", enc.encode(data), key);
-  return btoa(String.fromCharCode(...new Uint8Array(sig)))
-    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-
-async function createAccessToken(secret: string): Promise<string> {
-  const payload = { sub: "chatgpt", iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 3600 };
-  const payloadB64 = btoa(JSON.stringify(payload)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-  const sig = await hmacSign(payloadB64, secret);
-  return `${payloadB64}.${sig}`;
-}
-
-async function verifyAccessToken(token: string, secret: string): Promise<boolean> {
-  const parts = token.split(".");
-  if (parts.length !== 2) return false;
-  const [payloadB64, sig] = parts;
-  const expectedSig = await hmacSign(payloadB64, secret);
-  if (sig !== expectedSig) return false;
-  try {
-    const payload = JSON.parse(atob(payloadB64.replace(/-/g, "+").replace(/_/g, "/")));
-    return payload.exp > Math.floor(Date.now() / 1000);
-  } catch { return false; }
-}
-
-async function sha256Base64Url(plain: string): Promise<string> {
-  const encoded = new TextEncoder().encode(plain);
-  const hash = await crypto.subtle.digest("SHA-256", encoded);
-  return btoa(String.fromCharCode(...new Uint8Array(hash)))
-    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-
-function parseFormOrJson(contentType: string | null, bodyText: string): Record<string, string> {
-  if (contentType?.includes("application/json")) {
-    try { return JSON.parse(bodyText); } catch { return {}; }
-  }
-  // application/x-www-form-urlencoded
-  const params = new URLSearchParams(bodyText);
-  const result: Record<string, string> = {};
-  params.forEach((v, k) => { result[k] = v; });
-  return result;
-}
-
 // ── MCP Server ──────────────────────────────────────────────
 
 const mcpServer = new McpServer({
@@ -311,7 +259,6 @@ mcpServer.tool("get_dashboard_stats", {
 // ── HTTP Transport ──────────────────────────────────────────
 
 const transport = new StreamableHttpTransport();
-const httpHandler = transport.bind(mcpServer);
 const app = new Hono();
 
 // CORS middleware
@@ -322,159 +269,42 @@ app.use("*", async (c, next) => {
   await next();
 });
 
-// ── Auth middleware (skip OAuth routes) ─────────────────────
+// ── Auth middleware ─────────────────────────────────────────
 
 app.use("*", async (c, next) => {
-  const url = new URL(c.req.url);
-  // Skip auth for OAuth and well-known endpoints
-  if (url.pathname.includes("/oauth/") || url.pathname.includes("/.well-known/")) {
-    await next();
-    return;
-  }
   if (c.req.method === "OPTIONS") return;
 
   if (!mcpApiKey) {
     return new Response(
-      JSON.stringify({ error: "MCP_API_KEY not configured" }),
+      JSON.stringify({ error: "MCP_API_KEYV1 not configured" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 
-  const authHeader = c.req.header("Authorization");
+  // Check API key from: header, bearer token, or query parameter
   const apiKeyHeader = c.req.header("x-api-key");
-  const providedKey = apiKeyHeader || (authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null);
+  const authHeader = c.req.header("Authorization");
+  const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  const url = new URL(c.req.url);
+  const queryKey = url.searchParams.get("api_key");
+
+  const providedKey = apiKeyHeader || bearerToken || queryKey;
 
   if (providedKey === mcpApiKey) {
     await next();
     return;
   }
 
-  if (providedKey && await verifyAccessToken(providedKey, mcpApiKey)) {
-    await next();
-    return;
-  }
-
   return new Response(
-    JSON.stringify({ error: "Unauthorized: invalid API key or token" }),
+    JSON.stringify({ error: "Unauthorized: invalid API key" }),
     { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
   );
 });
 
-// ── Catch-all: OAuth + MCP ──────────────────────────────────
+// ── MCP handler ─────────────────────────────────────────────
 
 app.all("/*", async (c) => {
-  const url = new URL(c.req.url);
-  const baseUrl = `https://${url.host}/functions/v1/mcp-server`;
-
-  // OAuth Protected Resource Metadata
-  if (url.pathname.includes("/.well-known/oauth-protected-resource")) {
-    return new Response(JSON.stringify({
-      resource: baseUrl,
-      authorization_servers: [baseUrl],
-      scopes_supported: ["mcp"],
-    }), {
-      status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
-  // OAuth Authorization Server Metadata
-  if (url.pathname.includes("/.well-known/oauth-authorization-server") || url.pathname.includes("/.well-known/openid-configuration")) {
-    return new Response(JSON.stringify({
-      issuer: baseUrl,
-      authorization_endpoint: `${baseUrl}/oauth/authorize`,
-      token_endpoint: `${baseUrl}/oauth/token`,
-      response_types_supported: ["code"],
-      grant_types_supported: ["authorization_code", "client_credentials"],
-      token_endpoint_auth_methods_supported: ["client_secret_post"],
-      scopes_supported: ["mcp"],
-      code_challenge_methods_supported: ["S256"],
-    }), {
-      status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
-  // OAuth authorize
-  if (url.pathname.includes("/oauth/authorize") && c.req.method === "GET") {
-    const redirectUri = c.req.query("redirect_uri");
-    const state = c.req.query("state") || "";
-    const codeChallenge = c.req.query("code_challenge") || undefined;
-
-    if (!redirectUri) {
-      return new Response(JSON.stringify({ error: "redirect_uri required" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const code = crypto.randomUUID();
-    authCodes.set(code, { redirectUri, codeChallenge, expiresAt: Date.now() + 5 * 60 * 1000 });
-
-    const target = new URL(redirectUri);
-    target.searchParams.set("code", code);
-    if (state) target.searchParams.set("state", state);
-
-    return Response.redirect(target.toString(), 302);
-  }
-
-  // OAuth token
-  if (url.pathname.includes("/oauth/token") && c.req.method === "POST") {
-    const contentType = c.req.header("content-type") || "";
-    const rawBody = await c.req.text();
-    const body = parseFormOrJson(contentType, rawBody);
-    const grantType = body.grant_type;
-    const clientSecret = body.client_secret;
-
-    if (!mcpApiKey) {
-      return new Response(JSON.stringify({ error: "MCP_API_KEY not configured" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    if (clientSecret !== mcpApiKey) {
-      return new Response(JSON.stringify({ error: "invalid_client" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    if (grantType === "authorization_code") {
-      const code = body.code;
-      const stored = authCodes.get(code);
-      if (!stored || stored.expiresAt < Date.now()) {
-        authCodes.delete(code);
-        return new Response(JSON.stringify({ error: "invalid_grant" }), {
-          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      // PKCE verification
-      if (stored.codeChallenge && body.code_verifier) {
-        const computed = await sha256Base64Url(body.code_verifier);
-        if (computed !== stored.codeChallenge) {
-          authCodes.delete(code);
-          return new Response(JSON.stringify({ error: "invalid_grant", error_description: "PKCE verification failed" }), {
-            status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-      }
-      authCodes.delete(code);
-    } else if (grantType !== "client_credentials") {
-      return new Response(JSON.stringify({ error: "unsupported_grant_type" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const accessToken = await createAccessToken(mcpApiKey);
-
-    return new Response(JSON.stringify({
-      access_token: accessToken,
-      token_type: "Bearer",
-      expires_in: 3600,
-      scope: "mcp",
-    }), {
-      status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
-  // MCP handler
-  const response = await httpHandler(c.req.raw);
+  const response = await transport.handleRequest(c.req.raw, mcpServer);
   const headers = new Headers(response.headers);
   Object.entries(corsHeaders).forEach(([k, v]) => headers.set(k, v));
   return new Response(response.body, {
