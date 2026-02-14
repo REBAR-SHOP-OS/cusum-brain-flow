@@ -371,7 +371,7 @@ export default function VizzyPage() {
     reconnectRef.current();
   }, []);
 
-  // Auto-start on mount
+  // Auto-start on mount — FAST: connect first, load context in background
   useEffect(() => {
     if (startedRef.current) return;
     if (!user) return;
@@ -379,30 +379,55 @@ export default function VizzyPage() {
 
     (async () => {
       try {
-        const [snap, stream] = await Promise.all([
-          loadFullContext(),
+        // Phase 1: Get mic + token in parallel (fast — no DB queries)
+        const [stream, tokenRes] = await Promise.all([
           navigator.mediaDevices.getUserMedia({ audio: true }),
+          supabase.functions.invoke("elevenlabs-conversation-token"),
         ]);
-        snapshotRef.current = snap;
         mediaStreamRef.current = stream;
 
-        // Initialize WebPhone in background (don't block voice session)
+        if (tokenRes.error || !tokenRes.data?.signed_url) {
+          throw new Error(tokenRes.error?.message ?? "No signed URL received");
+        }
+        if (tokenRes.data.preferred_language) setPreferredLang(tokenRes.data.preferred_language);
+
+        // Phase 2: Connect immediately — Vizzy is live within seconds
+        await conversation.startSession({ signedUrl: tokenRes.data.signed_url, connectionType: "websocket" });
+
+        // Phase 3: Load context + WebPhone in background (non-blocking)
         webPhoneActions.initialize().then((ok) => {
           webPhoneInitRef.current = ok;
           if (ok) console.log("WebPhone ready for browser calls");
           else console.warn("WebPhone init failed — will fallback on demand");
         });
 
-        const { data, error } = await supabase.functions.invoke("elevenlabs-conversation-token");
-        if (error || !data?.signed_url) throw new Error(error?.message ?? "No signed URL received");
-        if (data.preferred_language) setPreferredLang(data.preferred_language);
-        await conversation.startSession({ signedUrl: data.signed_url, connectionType: "websocket" });
-        if (snap) {
-          const langCtx = data.preferred_language && data.preferred_language !== "en"
-            ? `\nUser's preferred language: ${data.preferred_language}. Default to speaking in this language unless they switch.`
+        // Load business context and compress with Gemini 3 Pro
+        loadFullContext().then(async (snap) => {
+          if (!snap) return;
+          snapshotRef.current = snap;
+
+          const rawContext = buildVizzyContext(snap);
+          const langCtx = tokenRes.data.preferred_language && tokenRes.data.preferred_language !== "en"
+            ? `\nUser's preferred language: ${tokenRes.data.preferred_language}. Default to speaking in this language unless they switch.`
             : "";
-          conversation.sendContextualUpdate(buildVizzyContext(snap) + langCtx);
-        }
+
+          // Use Gemini 3 Pro to compress context for faster processing
+          try {
+            const { data: briefData } = await supabase.functions.invoke("vizzy-briefing", {
+              body: { rawContext: rawContext + langCtx },
+            });
+            if (briefData?.briefing) {
+              conversation.sendContextualUpdate(briefData.briefing);
+              console.log("[Vizzy] Gemini 3 Pro briefing sent");
+              return;
+            }
+          } catch (e) {
+            console.warn("[Vizzy] Gemini briefing failed, using raw context:", e);
+          }
+
+          // Fallback: send raw context
+          conversation.sendContextualUpdate(rawContext + langCtx);
+        });
       } catch (err) {
         console.error("Failed to start Vizzy voice:", err);
         setStatus("error");
