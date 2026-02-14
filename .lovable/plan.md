@@ -1,35 +1,36 @@
 
 
-# Browser Push Notifications for All Users
+# Fix: Penny Can't Show Monthly P&L Data
 
-## What This Does
+## Problem
 
-When any real-time notification arrives (attendance alerts, agent messages, etc.), the browser will show a native OS-level push notification popup (like the screenshot you shared) even if the tab is in the background. The Mockingjay whistle plays alongside it.
+Penny fetches the Profit & Loss report from QuickBooks with `summarize_column_by=Year`, which returns only yearly totals. When you ask for "December 2025", Penny has no monthly breakdown to extract from, so it returns all zeros.
 
-## Implementation
+The system prompt even tells Penny to "extract the relevant month's column" -- but that column doesn't exist in the data it receives.
 
-### 1. New file: `src/lib/browserNotification.ts`
+## Fix
 
-A small utility with two functions:
+**Single change in `supabase/functions/ai-agent/index.ts` (line 2047)**
 
-- **`requestNotificationPermission()`** -- calls `Notification.requestPermission()` once on app load
-- **`showBrowserNotification(title, body, linkTo?)`** -- creates a native `new Notification(...)` with:
-  - App icon (`/lovable-uploads/...` or favicon)
-  - Click handler that focuses the tab and navigates to `linkTo` (e.g., `/timeclock`)
+Change the P&L API call from:
 
-### 2. Modified file: `src/hooks/useNotifications.ts`
+```
+summarize_column_by=Year
+```
 
-- On mount (`useEffect`), call `requestNotificationPermission()` so the browser prompts the user to allow notifications
-- In the realtime `INSERT` handler (where `playMockingjayWhistle()` already fires), also call `showBrowserNotification(payload.new.title, payload.new.description, payload.new.link_to)`
+to:
 
-### Technical Details
+```
+summarize_column_by=Month
+```
 
-| Item | Detail |
+This gives Penny monthly columns so it can correctly extract any specific month's revenue, expenses, and net income.
+
+## What Changes
+
+| File | Change |
 |------|--------|
-| New file | `src/lib/browserNotification.ts` |
-| Modified file | `src/hooks/useNotifications.ts` |
-| API used | Native Web Notification API (no dependencies) |
-| Permission | Requested once on mount; browser remembers the choice |
-| Click behavior | Focuses app tab, navigates to notification's `link_to` path |
-| Fallback | If permission denied or API unavailable, silently skips |
+| `supabase/functions/ai-agent/index.ts` | Line 2047: `Year` to `Month` in the P&L API query parameter |
+
+One word changed. No database or frontend changes needed.
 
