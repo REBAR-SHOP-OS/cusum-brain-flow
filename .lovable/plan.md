@@ -1,40 +1,36 @@
 
-
-# Fix Stale "No QuickBooks ID" Warning Suggestions
+# Fix Penny Chat Scroll Issue
 
 ## Problem
+The Penny agent panel's message area cannot be scrolled. The chat content grows beyond the visible area but scrolling up/down doesn't work.
 
-The old suggestions (created before the code fix) are still sitting in the database with `severity: warning` and the old title format ("X has no QuickBooks ID"). The updated generate-suggestions code now produces `severity: info` with better titles, but:
+## Root Cause
+In `AccountingWorkspace.tsx` (line ~193), the inner wrapper around `AccountingAgent` has `overflow-hidden` set, which clips the scrollable content inside the agent panel. The agent's message container (`overflow-y-auto`) needs its parent chain to properly constrain height without cutting off scroll behavior.
 
-1. The dedup logic sees the old records and skips creating new ones
-2. Old records are never cleaned up or updated
-3. So the dashboard keeps showing the stale warnings
+## Fix
 
-## Solution
+### File: `src/pages/AccountingWorkspace.tsx`
 
-Two changes:
+Change the inner wrapper div for the desktop Penny panel from:
+```
+<div className="w-full h-full min-h-0 overflow-hidden">
+```
+to:
+```
+<div className="w-full h-full min-h-0 overflow-y-auto">
+```
 
-### 1. Clean up stale `missing_qb` suggestions before regenerating
+Wait -- actually, the `AccountingAgent` component itself handles scrolling internally (line 328 has `overflow-y-auto`). The problem is that the parent `overflow-hidden` is preventing the internal scroll from working properly in some browsers.
 
-At the start of the `generate-suggestions` function (after auth), delete all existing `missing_qb` suggestions so they get recreated fresh with the correct severity and titles.
+The better fix is to remove `overflow-hidden` from the wrapper entirely since the agent component manages its own overflow:
 
-### 2. Immediate data fix
+**Desktop panel wrapper** (~line 193): Change `overflow-hidden` to just remove it, keeping `min-h-0` which is needed for flex children to shrink.
 
-Delete the 9 stale suggestion rows right now so the dashboard clears immediately, without waiting for a regeneration cycle.
+**Mobile panel**: Same issue exists in the mobile overlay version (~line 213).
 
-## Technical Details
+### File: `src/components/accounting/AccountingAgent.tsx`
 
-### File: `supabase/functions/generate-suggestions/index.ts`
+No changes needed -- the component's internal scroll setup (`flex-1 overflow-y-auto min-h-0` on line 328) is correct.
 
-Add a cleanup step after line 59 (after loading existing dedup sets):
-
-- Delete all suggestions where `category = 'missing_qb'` and `status IN ('open', 'new')` -- this ensures they get recreated fresh each run with the current logic
-- Also delete corresponding `human_tasks` with `category = 'missing_qb'` and `status IN ('open', 'snoozed')`
-- Remove `missing_qb` entries from the `existingSuggestions` set so the dedup check doesn't block new inserts
-
-### Database: One-time cleanup
-
-Run a delete to remove the 9 stale suggestion rows immediately:
-- `DELETE FROM suggestions WHERE category = 'missing_qb' AND status IN ('open', 'new')`
-
-This way, the next time suggestions regenerate, the new code creates them correctly as `info` severity with proper titles, and duplicates/variants are handled as designed.
+## Summary
+One-line CSS fix in `AccountingWorkspace.tsx`: remove `overflow-hidden` from the Penny panel wrapper divs (desktop and mobile) so the internal `overflow-y-auto` on the messages container can work properly.
