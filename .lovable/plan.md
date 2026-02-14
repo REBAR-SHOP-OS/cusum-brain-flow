@@ -1,69 +1,47 @@
 
 
-# ویزی رو فارسی کن وقتی زبان کاربر فارسیه
+# اصلاح زبان ویزی — بریفینگ انگلیسی، صحبت فارسی فقط وقتی بخوای
 
-## خلاصه تغییرات
+## مشکل فعلی
 
-وقتی `preferred_language` کاربر `fa` هست، ویزی باید:
-1. **پیش‌فرض فارسی صحبت کنه** — نه فقط وقتی CEO فارسی حرف بزنه
-2. **متن‌های نمایشی RTL باشن** — interim text و status label
-3. **Context قوی‌تر بفرسته** — به جای یه hint ساده، دستور صریح بده
+الان `preferred_language: "fa"` باعث میشه **همه چیز** فارسی بشه — بریفینگ روزانه، voice chat، و context. ولی تو میخوای:
 
-## تغییرات فایل‌ها
+- **Daily Briefing**: همیشه انگلیسی
+- **Voice Chat**: پیش‌فرض انگلیسی، ولی وقتی بگی "فارسی صحبت کن" ویزی فارسی بشه
 
-### 1. `src/lib/vizzyContext.ts` — پارامتر زبان اضافه شه
+## تغییرات
 
-تابع `buildVizzyContext` یه پارامتر اختیاری `preferredLanguage` بگیره. وقتی `fa` هست، بالای system prompt یه بلاک قوی اضافه بشه:
+### 1. `supabase/functions/vizzy-daily-brief/index.ts` — همیشه انگلیسی
 
+سیستم پرامپت الان میگه "اگه تعاملات اخیر فارسی بود، فارسی جواب بده". این باید عوض بشه به: **همیشه انگلیسی** برای بریفینگ.
+
+خطوط 85-90 (بلاک LANGUAGE) حذف بشن و جایگزین بشن با:
 ```
-MANDATORY LANGUAGE: Your preferred language is FARSI (Persian).
-You MUST respond in Farsi by default. Use colloquial Iranian Farsi.
-Only switch to English if the CEO explicitly speaks English.
-All numbers can stay in Western digits but text MUST be in Farsi.
+Always respond in English for the daily briefing.
 ```
 
-### 2. `src/pages/VizzyPage.tsx` — زبان رو به context پاس بده
+### 2. `src/lib/vizzyContext.ts` — حذف MANDATORY LANGUAGE DIRECTIVE
 
-- `buildVizzyContext(snap)` رو به `buildVizzyContext(snap, detectedLang)` تغییر بده
-- خط `langCtx` دیگه لازم نیست چون داخل context اصلی هندل میشه
-- Status labels که الان فقط توی Farsi mode فارسی هستن، وقتی `preferredLang === "fa"` هم فارسی بشن (حتی توی ElevenLabs mode)
-- `dir="rtl"` روی status label و interim text وقتی زبان فارسیه
+بلاک `langDirective` که وقتی `preferredLanguage === "fa"` فارسی رو اجبار میکنه، حذف بشه. به جاش فقط دستور بمونه که "به هر زبانی که CEO صحبت میکنه جواب بده" — که الان هست (خط 65-67).
 
-### 3. Farsi mode context — همون تغییر
+این یعنی:
+- پیش‌فرض: انگلیسی
+- اگه CEO فارسی حرف بزنه یا بگه "فارسی صحبت کن": فارسی بشه
 
-توی بلاک Farsi mode هم `buildVizzyContext(snap, "fa")` فرستاده بشه تا context یکپارچه باشه.
+### 3. `src/pages/VizzyPage.tsx` — حذف ارسال `preferredLang` به context
 
-## جزئیات فنی
+چون دیگه `buildVizzyContext` نباید زبان رو force کنه، فراخوانی‌ها بدون پارامتر زبان باشن. ولی RTL و status labels فارسی باقی بمونن برای وقتی که Farsi mode فعاله.
 
-### تغییرات `vizzyContext.ts`
-
-```typescript
-export function buildVizzyContext(snap: VizzyBusinessSnapshot, preferredLanguage?: string): string {
-  // ... existing code ...
-  
-  const langDirective = preferredLanguage === "fa" 
-    ? `\n═══ MANDATORY LANGUAGE DIRECTIVE ═══
-YOUR DEFAULT LANGUAGE IS FARSI (PERSIAN). 
-You MUST respond in Farsi unless the CEO explicitly speaks English.
-Use natural, colloquial Iranian Farsi (like a native Tehran speaker).
-Keep technical terms and proper nouns in English when natural.
-═══ END LANGUAGE DIRECTIVE ═══\n`
-    : "";
-
-  return `YOU ARE VIZZY — ...
-${langDirective}
-...rest of context`;
-}
-```
-
-### تغییرات `VizzyPage.tsx`
-
-- خط ۴۴۸: `buildVizzyContext(snap)` به `buildVizzyContext(snap, "fa")`
-- خط ۴۷۲: `buildVizzyContext(snap)` به `buildVizzyContext(snap, detectedLang)`
-- خط ۵۴۰-۵۴۹: Status labels با شرط `preferredLang === "fa"` به جای فقط `useFarsiMode`
-- خط ۶۰۲-۶۲۱: اضافه کردن `dir="rtl"` به بلاک‌های متنی وقتی `preferredLang === "fa"`
+## خلاصه فنی
 
 ### فایل‌های تغییر یافته
-1. `src/lib/vizzyContext.ts`
-2. `src/pages/VizzyPage.tsx`
+1. `supabase/functions/vizzy-daily-brief/index.ts` — سیستم پرامپت: همیشه انگلیسی
+2. `src/lib/vizzyContext.ts` — حذف `langDirective` و پارامتر `preferredLanguage`
+3. `src/pages/VizzyPage.tsx` — حذف ارسال زبان به `buildVizzyContext`، نگه داشتن RTL برای Farsi mode
 
+### منطق جدید
+```text
+Daily Briefing → Always English
+Voice Chat (ElevenLabs mode) → English by default, switch to Farsi when user asks
+Voice Chat (Farsi mode) → Always Farsi (this is the explicit Farsi toggle)
+```
