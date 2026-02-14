@@ -1,27 +1,21 @@
 
-# Fix Penny Scroll -- Correct Container
+# Remove Header Penny Button and Make FAB Draggable
 
-## Problem
-The previous fix removed `overflow-hidden` from the wrong element. The scroll still doesn't work because the outer panel div (line 219) has no height constraint, so the content expands infinitely instead of being contained.
+## What Changes
 
-## Fix
+1. **Remove the "Ask Penny" button** from the accounting header bar (the one circled in red). The floating button at the bottom-right will be the only way to open/close Penny.
+
+2. **Make the floating Penny FAB draggable** -- same drag behavior as the existing Vizzy button (tap to toggle Penny, drag to reposition, position saved to localStorage).
+
+## Technical Details
 
 ### File: `src/pages/AccountingWorkspace.tsx`
 
-**Desktop panel (line 219-222):** Add `overflow-hidden` to the outer panel div so it constrains to the flex-allocated height:
-
-```
-// Before:
-"hidden lg:flex shrink-0 border-l border-border",
-agentMode === "fullscreen" ? "flex-1" : "w-[400px]",
-"p-3"
-
-// After:
-"hidden lg:flex shrink-0 border-l border-border overflow-hidden",
-agentMode === "fullscreen" ? "flex-1" : "w-[400px]",
-"p-3"
-```
-
-**Mobile overlay (line 240):** Same issue -- the mobile container for non-fullscreen mode needs `overflow-hidden` added so the internal scroll works within `max-h-[75vh]`.
-
-This keeps the inner wrapper (line 224) without `overflow-hidden` (as fixed last time) so the AccountingAgent's own `overflow-y-auto` on the messages div (line 328) can handle scrolling properly.
+- **Remove lines 169-178** -- the "Ask Penny" / "Close Penny" button from the header
+- **Replace the static FAB** (lines 267-275) with a draggable version using the same pointer-capture drag pattern from `FloatingVizzyButton.tsx`:
+  - `onPointerDown` / `onPointerMove` / `onPointerUp` with a drag threshold to distinguish click vs drag
+  - Position stored in localStorage under a `penny-btn-pos` key
+  - Clamped to viewport on resize
+  - Click toggles `showAgent` on/off
+- **Show the FAB always** (remove the `!showAgent` condition and the `lg:hidden` restriction) so it works as the sole toggle on both desktop and mobile
+- The FAB will also show on desktop (not just mobile) since the header button is being removed
