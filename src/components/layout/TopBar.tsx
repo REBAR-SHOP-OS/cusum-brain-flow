@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { LayoutGrid, Search, Bell, ChevronRight, MessageSquare } from "lucide-react";
+import { LayoutGrid, Search, Bell, ChevronRight, MessageSquare, HelpCircle } from "lucide-react";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useActiveModule } from "@/hooks/useActiveModule";
 import { InboxPanel } from "@/components/panels/InboxPanel";
 import { GlobalChatPanel } from "./GlobalChatPanel";
+import { HelpPanel } from "@/components/help/HelpPanel";
 import { UserMenu } from "./UserMenu";
 import { CommandBar } from "./CommandBar";
 
@@ -14,6 +15,7 @@ export function TopBar() {
   const [commandOpen, setCommandOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const { unreadCount } = useNotifications();
 
   // Keep Cmd+K shortcut
@@ -71,6 +73,17 @@ export function TopBar() {
           <span className="truncate">Search…</span>
         </button>
 
+        {/* Help */}
+        <button
+          className="relative w-8 h-8 flex items-center justify-center rounded hover:bg-white/10 transition-colors mr-1"
+          onClick={() => setHelpOpen((o) => !o)}
+          title="Help & Training"
+          aria-label="Help and training"
+          data-tour="topbar-help"
+        >
+          <HelpCircle className="w-5 h-5" />
+        </button>
+
         {/* Chat */}
         <button
           className="relative w-8 h-8 flex items-center justify-center rounded hover:bg-white/10 transition-colors mr-1"
@@ -105,6 +118,7 @@ export function TopBar() {
       <CommandBar open={commandOpen} onOpenChange={setCommandOpen} />
       <InboxPanel isOpen={notifOpen} onClose={() => setNotifOpen(false)} />
       <GlobalChatPanel open={chatOpen} onClose={() => setChatOpen(false)} />
+      <HelpPanel isOpen={helpOpen} onClose={() => setHelpOpen(false)} />
     </>
   );
 }
