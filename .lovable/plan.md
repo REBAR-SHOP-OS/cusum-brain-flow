@@ -1,37 +1,36 @@
 
 
-# Add rebar.shop (WordPress) Integration
+# Add Visible Voice Chat Button to Floating Vizzy
 
-## Overview
-Add a dedicated **rebar.shop** WordPress integration card to the Integrations page, allowing easy access to configure and modify the WordPress REST API connection for your live site.
+## Problem
+The voice chat feature is hidden behind a long-press gesture on the Vizzy button. There's no visible microphone icon, so users don't know it exists.
 
-## What Will Be Done
+## Solution
+Add a small **microphone icon button** that appears next to the Vizzy avatar when the user hovers or taps it. This gives users a clear, discoverable way to start voice chat.
 
-### 1. Store Credentials Securely
-Your WordPress credentials will be stored as encrypted backend secrets (not in code):
-- `WP_BASE_URL` -- the API endpoint (`https://rebar.shop/wp-json/wp/v2`)
-- `WP_USERNAME` -- your WordPress admin username
-- `WP_APP_PASSWORD` -- the Application Password
+## Design
+- A small mic icon (using Lucide's `Mic` icon) will appear as a secondary button positioned just above or beside the main Vizzy avatar
+- On **desktop**: the mic button appears on hover over the Vizzy area
+- On **mobile**: the mic button is always visible (since hover doesn't work on touch)
+- Tapping the mic button navigates to `/chat?voice=1`
+- Tapping the main avatar still navigates to `/chat` (text mode)
+- This eliminates the need for the long-press gesture entirely
 
-### 2. Add Integration Card
-A new "rebar.shop" entry will appear in the integrations list alongside Gmail, Slack, etc., with three configurable fields:
-- **API Base URL** (text) -- defaults to `https://rebar.shop/wp-json/wp/v2`
-- **Username** (text)
-- **Application Password** (password)
+## Technical Changes
 
-### 3. Add WordPress Icon
-A custom WordPress "W" icon will be added to the `IntegrationIcons.tsx` component.
+### File: `src/components/vizzy/FloatingVizzyButton.tsx`
+1. Import `Mic` icon from `lucide-react`
+2. Add a `showActions` state that toggles on hover (desktop) or is always true (mobile)
+3. Render a small mic button above the main avatar circle
+4. Simplify the pointer-up handler: remove long-press logic, tap always goes to `/chat`
+5. Mic button click navigates to `/chat?voice=1`
+6. Update tooltip text to just "Tap to chat" since voice now has its own button
 
-## Technical Details
+### Visual Layout
+```text
+       [Mic]       <-- small circular mic button (28px)
+   [Vizzy Avatar]  <-- main button (56px)
+```
 
-### Files to modify:
-1. **`src/components/integrations/integrationsList.ts`** -- Add the `rebar-shop` integration entry with three fields (WP_BASE_URL, WP_USERNAME, WP_APP_PASSWORD)
-2. **`src/components/integrations/IntegrationIcons.tsx`** -- Add a `rebar-shop` case with the WordPress logo SVG
-
-### Secrets to create:
-- `WP_BASE_URL` = `https://rebar.shop/wp-json/wp/v2`
-- `WP_USERNAME` = `Admin`
-- `WP_APP_PASSWORD` = (your application password, entered securely)
-
-These secrets will be available in backend functions for any future WordPress API calls (products, orders, posts, etc.).
+The mic button will have matching styling (teal ring, slight shadow) to look cohesive with the main avatar.
 
