@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -30,6 +30,84 @@ import { useIntegrations } from "@/hooks/useIntegrations";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useWebPhone } from "@/hooks/useWebPhone";
 import accountingHelper from "@/assets/helpers/accounting-helper.png";
+
+/* ── Draggable Penny FAB ── */
+const PENNY_STORAGE_KEY = "penny-btn-pos";
+const FAB_SIZE = 56;
+const DRAG_THRESHOLD = 5;
+
+function clampPos(x: number, y: number) {
+  const maxX = window.innerWidth - FAB_SIZE;
+  const maxY = window.innerHeight - FAB_SIZE;
+  return { x: Math.max(0, Math.min(x, maxX)), y: Math.max(0, Math.min(y, maxY)) };
+}
+
+function PennyFab({ showAgent, onToggle }: { showAgent: boolean; onToggle: () => void }) {
+  const [pos, setPos] = useState(() => {
+    try {
+      const raw = localStorage.getItem(PENNY_STORAGE_KEY);
+      if (raw) { const p = JSON.parse(raw); if (typeof p.x === "number") return p; }
+    } catch {}
+    return { x: window.innerWidth - FAB_SIZE - 24, y: window.innerHeight - FAB_SIZE - 24 };
+  });
+  const dragging = useRef(false);
+  const startPtr = useRef({ x: 0, y: 0 });
+  const startPos = useRef({ x: 0, y: 0 });
+  const moved = useRef(false);
+
+  useEffect(() => {
+    const onResize = () => setPos((p: { x: number; y: number }) => clampPos(p.x, p.y));
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  const onPointerDown = useCallback((e: React.PointerEvent) => {
+    dragging.current = true; moved.current = false;
+    startPtr.current = { x: e.clientX, y: e.clientY };
+    startPos.current = { ...pos };
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  }, [pos]);
+
+  const onPointerMove = useCallback((e: React.PointerEvent) => {
+    if (!dragging.current) return;
+    const dx = e.clientX - startPtr.current.x;
+    const dy = e.clientY - startPtr.current.y;
+    if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) moved.current = true;
+    setPos(clampPos(startPos.current.x + dx, startPos.current.y + dy));
+  }, []);
+
+  const onPointerUp = useCallback((e: React.PointerEvent) => {
+    if (!dragging.current) return;
+    dragging.current = false;
+    if (moved.current) {
+      const final = clampPos(startPos.current.x + e.clientX - startPtr.current.x, startPos.current.y + e.clientY - startPtr.current.y);
+      setPos(final);
+      localStorage.setItem(PENNY_STORAGE_KEY, JSON.stringify(final));
+    } else {
+      onToggle();
+    }
+  }, [onToggle]);
+
+  return (
+    <button
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      className="fixed z-50 cursor-grab active:cursor-grabbing select-none group"
+      style={{ left: pos.x, top: pos.y, touchAction: "none" }}
+      aria-label="Toggle Penny"
+    >
+      <span className="absolute inset-0 rounded-full animate-ping bg-primary/20" />
+      <div className={cn(
+        "relative w-14 h-14 rounded-full overflow-hidden ring-2 shadow-lg transition-transform group-hover:scale-110",
+        showAgent ? "ring-primary shadow-primary/25" : "ring-muted-foreground/40 shadow-muted-foreground/15"
+      )}>
+        <img src={accountingHelper} alt="Penny" className="w-full h-full object-cover pointer-events-none" draggable={false} />
+      </div>
+      <span className={cn("absolute bottom-0 right-0 w-3.5 h-3.5 border-2 border-background rounded-full", showAgent ? "bg-emerald-500" : "bg-muted-foreground/50")} />
+    </button>
+  );
+}
 
 export default function AccountingWorkspace() {
   const [searchParams] = useSearchParams();
@@ -167,16 +245,6 @@ export default function AccountingWorkspace() {
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <Button
-              variant={showAgent ? "default" : "outline"}
-              size="sm"
-              className="gap-2"
-              onClick={() => setShowAgent(!showAgent)}
-            >
-              {showAgent ? <X className="w-4 h-4" /> : <img src={accountingHelper} alt="Penny" className="w-5 h-5 rounded-md object-cover" />}
-              <span className="hidden sm:inline">{showAgent ? "Close Penny" : "Ask Penny"}</span>
-              <span className="sm:hidden">{showAgent ? "Close" : "Penny"}</span>
-            </Button>
-            <Button
               variant="outline"
               size="sm"
               className="gap-2"
@@ -264,15 +332,8 @@ export default function AccountingWorkspace() {
         </div>
       )}
 
-      {/* Penny FAB (mobile, when agent is hidden) */}
-      {!showAgent && (
-        <button
-          onClick={() => setShowAgent(true)}
-          className="lg:hidden fixed bottom-4 right-4 z-50 w-14 h-14 rounded-full bg-primary shadow-lg flex items-center justify-center hover:scale-105 transition-transform"
-        >
-          <img src={accountingHelper} alt="Penny" className="w-10 h-10 rounded-full object-cover" />
-        </button>
-      )}
+      {/* Draggable Penny FAB */}
+      <PennyFab showAgent={showAgent} onToggle={() => setShowAgent(s => !s)} />
     </div>
   );
 }
