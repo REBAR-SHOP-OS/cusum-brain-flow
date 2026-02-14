@@ -1,62 +1,77 @@
 
 
-# Remove Voice Chat and All Related Files
+# Remove All Vizzy Voice Chat Files and References -- Final Cleanup
 
-## Summary
+## What Was Already Done
+- Deleted `src/pages/VizzyPage.tsx`
+- Deleted `supabase/functions/elevenlabs-conversation-token/` directory
+- Removed `/vizzy` route from `App.tsx`
+- Removed long-press logic from `FloatingVizzyButton.tsx`
+- Removed `/vizzy` from `pageMap.ts`
 
-Remove the Vizzy voice chat feature entirely, including the page, the ElevenLabs connection token edge function, and all navigation references to `/vizzy`. The floating button and text chat remain intact but will no longer offer voice chat.
+## What Still Remains (to clean up now)
 
-## Files to Delete
+### 1. Broken hooks that call the deleted edge function
 
-1. **`src/pages/VizzyPage.tsx`** -- The entire voice chat page
-2. **`supabase/functions/elevenlabs-conversation-token/index.ts`** -- Edge function for voice tokens (no longer needed)
+Both of these hooks invoke `elevenlabs-conversation-token` which no longer exists:
 
-## Files to Modify
+- **`src/hooks/useCallAiBridge.ts`** (530 lines) -- Bridges RingCentral calls with ElevenLabs AI. Used by `AccountingAgent.tsx` (Penny phone calls).
+- **`src/hooks/useMeetingAiBridge.ts`** (151 lines) -- Bridges ElevenLabs into meetings. Used by `MeetingRoom.tsx`.
 
-### `src/App.tsx`
-- Remove the `VizzyPage` import
-- Remove the `/vizzy` route
+**Action:** Delete both hooks and remove their usage from consumers:
+- `src/components/accounting/AccountingAgent.tsx` -- Remove `useCallAiBridge` import and `bridgeState`/`startBridge`/`stopBridge` usage
+- `src/components/accounting/PennyCallCard.tsx` -- Remove `CallAiBridgeState` type import (replace with inline type or remove props)
+- `src/components/teamhub/MeetingRoom.tsx` -- Remove `useMeetingAiBridge` import and all Vizzy meeting bridge state
+- `src/components/teamhub/VizzyMeetingPanel.tsx` -- Remove `MeetingAiBridgeState` type import
 
-### `src/components/vizzy/FloatingVizzyButton.tsx`
-- Remove the long-press-to-voice logic
-- Long press now does the same as short tap (opens `/chat`)
-- Remove `LONG_PRESS_MS`, `longPressTimer`, `isLongPress` refs
-- Update tooltip text from "Tap for text - Hold for voice" to just the agent name or remove tooltip
+### 2. ChatInput Headset button labeled "Voice Chat"
 
-### `src/components/layout/AppLayout.tsx`
-- No changes needed (FloatingVizzyButton stays, just no longer navigates to `/vizzy`)
+**File:** `src/components/chat/ChatInput.tsx` (lines 378-391)
 
-### `src/pages/Home.tsx`
-- Change `handleLiveChatClick` to navigate to `/chat` instead of `/vizzy`
+The `onLiveChatClick` Headset button with tooltip "Voice Chat" now just navigates to `/chat` (text chat). Two options:
+- **Option A:** Remove the Headset button entirely since it duplicates the FloatingVizzyButton
+- **Option B:** Keep it but rename tooltip to "Live Chat"
 
-### `src/pages/LiveChat.tsx`
-- Remove the button/icon that navigates to `/vizzy` (the mic button in the toolbar)
+**Action:** Remove the Headset button and `onLiveChatClick` prop entirely, plus remove the `Headset` icon import. Clean up callers in `Home.tsx` and `AgentWorkspace.tsx` that pass this prop.
 
-### `src/pages/AgentWorkspace.tsx`
-- Change `onLiveChatClick` from navigating to `/vizzy` to `/chat`
+### 3. `supabase/config.toml` stale entry
 
-### `supabase/functions/_shared/pageMap.ts`
-- Remove the `/vizzy` entry from the page map
+Line 127-128 still has `[functions.elevenlabs-conversation-token]`. This file is auto-managed and cannot be edited directly -- it will be cleaned up automatically.
 
-## Files NOT Changed (kept as-is)
+### 4. `vizzy-context` edge function comment
 
-These files reference "Vizzy" as a brand name for the AI assistant (text chat), not voice chat specifically. They stay untouched:
+**File:** `supabase/functions/vizzy-context/index.ts` (line 9)
 
-- `src/lib/vizzyContext.ts` -- Used by text chat (`admin-chat` edge function)
-- `src/lib/vizzyAutoReport.ts` -- Error reporting utility
-- `src/types/vizzy.ts` -- Type definitions used by context
-- `src/components/vizzy/VizzyDailyBriefing.tsx` -- Daily briefing widget
-- `src/components/vizzy/VizzyPhotoButton.tsx` -- Photo analysis in chat
-- `src/components/teamhub/VizzyMeetingPanel.tsx` -- Meeting AI panel
-- `src/hooks/useMeetingAiBridge.ts` -- Meeting bridge hook
-- `src/hooks/useGlobalErrorHandler.ts` -- Uses reportToVizzy
-- `src/components/error/SmartErrorBoundary.tsx` -- Uses reportToVizzy
-- `src/components/accounting/AccountingAudit.tsx` -- Uses reportToVizzy
-- `src/hooks/useQuickBooksData.ts` -- Uses reportToVizzy
-- `src/hooks/useFixRequestMonitor.ts` -- Fix request polling
-- `src/components/ceo/FixRequestQueue.tsx` -- Fix request UI
-- Edge functions: `vizzy-context`, `vizzy-briefing`, `vizzy-daily-brief`, `vizzy-erp-action`, `vizzy-photo-analyze` -- All used by text chat
+Comment says "Server-side context endpoint for VizzyPage voice mode" -- update to reflect it serves text chat context.
 
-## Edge Function Cleanup
+### 5. `vizzy-briefing` edge function comment
 
-The `elevenlabs-conversation-token` edge function will be deleted from deployment after the code files are removed.
+**File:** `supabase/functions/vizzy-briefing/index.ts` (line 7)
+
+Comment references "faster for ElevenLabs to process" -- update to remove ElevenLabs reference.
+
+## Files NOT Touched (intentionally kept)
+
+These use ElevenLabs for **transcription** (not voice chat) and remain valid:
+- `src/hooks/useRealtimeTranscribe.ts` -- Uses `elevenlabs-scribe-token` for live transcription
+- `supabase/functions/elevenlabs-scribe-token/` -- Scribe token endpoint (transcription)
+- `supabase/functions/elevenlabs-transcribe/` -- Batch transcription endpoint
+- `src/components/office/TranscribeView.tsx` -- Transcription UI
+- `src/components/chat/VoiceInputButton.tsx` -- Speech-to-text input (browser API, not ElevenLabs voice chat)
+
+## Summary of Changes
+
+| Action | File |
+|--------|------|
+| Delete | `src/hooks/useCallAiBridge.ts` |
+| Delete | `src/hooks/useMeetingAiBridge.ts` |
+| Modify | `src/components/accounting/AccountingAgent.tsx` -- remove bridge usage |
+| Modify | `src/components/accounting/PennyCallCard.tsx` -- remove bridge type |
+| Modify | `src/components/teamhub/MeetingRoom.tsx` -- remove bridge usage |
+| Modify | `src/components/teamhub/VizzyMeetingPanel.tsx` -- remove bridge type |
+| Modify | `src/components/chat/ChatInput.tsx` -- remove Headset button and `onLiveChatClick` prop |
+| Modify | `src/pages/Home.tsx` -- remove `onLiveChatClick` prop |
+| Modify | `src/pages/AgentWorkspace.tsx` -- remove `onLiveChatClick` prop |
+| Modify | `supabase/functions/vizzy-context/index.ts` -- fix comment |
+| Modify | `supabase/functions/vizzy-briefing/index.ts` -- fix comment |
+
