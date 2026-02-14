@@ -8,8 +8,6 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const SUPER_ADMIN_EMAIL = "sattar@rebar.shop";
-
 const MEMORY_TOOLS = [
   {
     type: "function",
@@ -84,9 +82,27 @@ serve(async (req) => {
       data: { user },
     } = await anonClient.auth.getUser(token);
 
-    if (!user || user.email !== SUPER_ADMIN_EMAIL) {
+    if (!user) {
       return new Response(
-        JSON.stringify({ error: "Access denied. Super admin only." }),
+        JSON.stringify({ error: "Unauthorized" }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    // Role-based admin check (replaces hardcoded email)
+    const { data: adminRole } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", user.id)
+      .eq("role", "admin")
+      .maybeSingle();
+
+    if (!adminRole) {
+      return new Response(
+        JSON.stringify({ error: "Access denied. Admin role required." }),
         {
           status: 403,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -211,19 +227,13 @@ PROACTIVE INTELLIGENCE:
       if (aiResponse.status === 429) {
         return new Response(
           JSON.stringify({ error: "Rate limited. Try again in a moment." }),
-          {
-            status: 429,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          }
+          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
       if (aiResponse.status === 402) {
         return new Response(
           JSON.stringify({ error: "AI credits exhausted." }),
-          {
-            status: 402,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          }
+          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
       const errText = await aiResponse.text();
@@ -234,9 +244,6 @@ PROACTIVE INTELLIGENCE:
       });
     }
 
-    // We need to intercept the stream to handle tool calls
-    // For streaming with tools, we'll collect tool calls and execute them,
-    // then make a follow-up call if needed
     const responseBody = aiResponse.body;
     if (!responseBody) {
       return new Response(JSON.stringify({ error: "No response body" }), {
@@ -338,7 +345,6 @@ PROACTIVE INTELLIGENCE:
         });
       }
 
-      // Follow-up call with tool results (non-streaming for simplicity, then stream the response)
       const followUpMessages = [
         { role: "system", content: systemPrompt },
         ...messages,
@@ -371,7 +377,6 @@ PROACTIVE INTELLIGENCE:
       );
 
       if (!followUpResp.ok) {
-        // Return what we have
         const errorText = `\n\n_Memory operation completed. ${fullText}_`;
         const encoder = new TextEncoder();
         const sseData = `data: ${JSON.stringify({ choices: [{ delta: { content: errorText } }] })}\n\ndata: [DONE]\n\n`;
@@ -385,7 +390,7 @@ PROACTIVE INTELLIGENCE:
       });
     }
 
-    // No tool calls — reconstruct the SSE stream from collected chunks
+    // No tool calls — reconstruct the SSE stream
     const encoder = new TextEncoder();
     const ssePayload = streamChunks.join("") + "data: [DONE]\n\n";
     return new Response(encoder.encode(ssePayload), {

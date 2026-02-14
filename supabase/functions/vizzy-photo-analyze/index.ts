@@ -20,8 +20,8 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } }
     );
 
-    const { data: claims, error: claimsErr } = await supabase.auth.getClaims(authHeader.replace("Bearer ", ""));
-    if (claimsErr || !claims?.claims?.sub) {
+    const { data: { user }, error: userErr } = await supabase.auth.getUser();
+    if (userErr || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: corsHeaders });
     }
 
@@ -30,9 +30,9 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "imageUrl required" }), { status: 400, headers: corsHeaders });
     }
 
-    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
-    if (!GEMINI_API_KEY) {
-      return new Response(JSON.stringify({ error: "GEMINI_API_KEY not configured" }), { status: 500, headers: corsHeaders });
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) {
+      return new Response(JSON.stringify({ error: "AI not configured" }), { status: 500, headers: corsHeaders });
     }
 
     // Download the image and convert to base64
@@ -53,32 +53,47 @@ If the user included a specific question, answer it directly.`;
 
     const userPrompt = prompt || "What do you see in this photo? Any issues or things I should know about?";
 
-    const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+    // Use Lovable AI gateway instead of raw Gemini API
+    const aiRes = await fetch(
+      "https://ai.gateway.lovable.dev/v1/chat/completions",
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
-          contents: [{
-            role: "user",
-            parts: [
-              { text: `${systemPrompt}\n\nUser question: ${userPrompt}` },
-              { inlineData: { mimeType, data: base64 } },
-            ],
-          }],
-          generationConfig: { maxOutputTokens: 1024, temperature: 0.3 },
+          model: "google/gemini-2.5-flash",
+          messages: [
+            { role: "system", content: systemPrompt },
+            {
+              role: "user",
+              content: [
+                { type: "text", text: userPrompt },
+                { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64}` } },
+              ],
+            },
+          ],
+          max_tokens: 1024,
+          temperature: 0.3,
         }),
       }
     );
 
-    if (!geminiRes.ok) {
-      const errText = await geminiRes.text();
-      console.error("Gemini error:", errText);
-      throw new Error(`Gemini API error: ${geminiRes.status}`);
+    if (!aiRes.ok) {
+      if (aiRes.status === 429) {
+        return new Response(JSON.stringify({ error: "Rate limited. Try again shortly." }), { status: 429, headers: corsHeaders });
+      }
+      if (aiRes.status === 402) {
+        return new Response(JSON.stringify({ error: "AI credits exhausted." }), { status: 402, headers: corsHeaders });
+      }
+      const errText = await aiRes.text();
+      console.error("AI gateway error:", errText);
+      throw new Error(`AI gateway error: ${aiRes.status}`);
     }
 
-    const geminiData = await geminiRes.json();
-    const analysis = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "Could not analyze image.";
+    const aiData = await aiRes.json();
+    const analysis = aiData.choices?.[0]?.message?.content || "Could not analyze image.";
 
     return new Response(JSON.stringify({ analysis }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

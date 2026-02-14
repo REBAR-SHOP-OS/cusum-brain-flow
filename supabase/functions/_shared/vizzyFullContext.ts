@@ -1,6 +1,7 @@
 /**
  * Shared server-side context builder for Vizzy JARVIS mode.
- * Used by admin-chat and vizzy-daily-brief edge functions.
+ * Used by admin-chat, vizzy-daily-brief, and vizzy-context edge functions.
+ * Limited to 50 knowledge entries and 50-char email previews for performance.
  */
 export async function buildFullVizzyContext(
   supabase: any,
@@ -57,7 +58,6 @@ export async function buildFullVizzyContext(
       .select("bar_code, qty_on_hand, location")
       .gt("qty_on_hand", 0)
       .limit(15),
-    // Production
     supabase
       .from("cut_plans")
       .select("id, name, status")
@@ -67,28 +67,22 @@ export async function buildFullVizzyContext(
       .select("id, phase, completed_pieces, total_pieces, bend_type, bar_code")
       .in("phase", ["queued", "cutting", "bending"])
       .limit(500),
-    // CRM
     supabase
       .from("leads")
-      .select(
-        "id, contact_name, company_name, status, expected_revenue, lead_score, stage"
-      )
+      .select("id, contact_name, company_name, status, expected_revenue, lead_score, stage")
       .in("status", ["new", "contacted", "qualified", "proposal"])
       .order("lead_score", { ascending: false })
       .limit(20),
-    // Deliveries
     supabase
       .from("deliveries")
       .select("id, delivery_number, status, scheduled_date")
       .gte("scheduled_date", today)
       .lte("scheduled_date", today)
       .limit(50),
-    // Team
     supabase
       .from("profiles")
       .select("id, full_name, user_id, email, role")
       .not("full_name", "is", null),
-    // Financials from accounting mirror
     supabase
       .from("accounting_mirror")
       .select("balance, entity_type, data")
@@ -101,34 +95,30 @@ export async function buildFullVizzyContext(
       .eq("entity_type", "Vendor")
       .gt("balance", 0)
       .limit(50),
-    // Emails
     supabase
       .from("communications")
       .select("subject, from_address, to_address, body_preview, received_at, ai_urgency")
       .eq("direction", "inbound")
       .order("received_at", { ascending: false })
       .limit(30),
-    // Knowledge base
+    // Limit knowledge to 50 entries for performance
     supabase
       .from("knowledge")
       .select("title, category, content")
       .order("created_at", { ascending: false })
-      .limit(500),
-    // Agent sessions today
+      .limit(50),
     supabase
       .from("chat_sessions")
       .select("id, title, agent_name, user_id, created_at")
       .gte("created_at", today + "T00:00:00")
       .order("created_at", { ascending: false })
       .limit(100),
-    // Time clock
     supabase
       .from("time_clock_entries")
       .select("id, profile_id, clock_in, clock_out")
       .gte("clock_in", today + "T00:00:00")
       .order("clock_in", { ascending: false })
       .limit(100),
-    // Vizzy memories
     supabase
       .from("vizzy_memory")
       .select("id, category, content, metadata, created_at, expires_at")
@@ -248,12 +238,12 @@ export async function buildFullVizzyContext(
     )
     .join("\n");
 
-  // Emails
+  // Emails — truncated to 50 chars for performance
   const emailsList = (communications || [])
     .slice(0, 20)
     .map((e: any) => {
       const preview = e.body_preview
-        ? e.body_preview.slice(0, 80).replace(/\n/g, " ")
+        ? e.body_preview.slice(0, 50).replace(/\n/g, " ")
         : "";
       const date = e.received_at
         ? new Date(e.received_at).toLocaleDateString("en-US", {
@@ -265,12 +255,12 @@ export async function buildFullVizzyContext(
     })
     .join("\n");
 
-  // Knowledge base
+  // Knowledge base — limited to 50 entries with truncated content
+  const totalKnowledge = (knowledge || []).length;
   const brainList = (knowledge || [])
-    .slice(0, 100)
     .map((k: any) => {
       const content = k.content
-        ? k.content.replace(/\n/g, " ").slice(0, 200)
+        ? k.content.replace(/\n/g, " ").slice(0, 150)
         : "(no content)";
       return `  • [${k.category}] ${k.title}: ${content}`;
     })
@@ -348,7 +338,7 @@ ${suggestionsList || "  None"}
 📦 STOCK SUMMARY
 ${(stockSummary || []).map((s: any) => `  • ${s.bar_code}: ${s.qty_on_hand} @ ${s.location || "unknown"}`).join("\n") || "  No stock data"}
 
-🧠 KNOWLEDGE BASE (${(knowledge || []).length} entries)
+🧠 KNOWLEDGE BASE (${totalKnowledge} entries, showing latest 50)
 ${brainList || "  No entries"}
 
 🧠 PERSISTENT MEMORY (${activeMemories.length} items)

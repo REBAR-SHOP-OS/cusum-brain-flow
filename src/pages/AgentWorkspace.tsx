@@ -19,7 +19,7 @@ import { useAuth } from "@/lib/auth";
 import { getUserAgentMapping } from "@/lib/userAgentMap";
 import { PixelBrainDialog } from "@/components/social/PixelBrainDialog";
 import { useSuperAdmin } from "@/hooks/useSuperAdmin";
-import { VizzyApprovalDialog, PendingAction } from "@/components/vizzy/VizzyApprovalDialog";
+// VizzyApprovalDialog removed — actions auto-execute
 import { useWebPhone } from "@/hooks/useWebPhone";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -55,7 +55,7 @@ export default function AgentWorkspace() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [autoBriefingSent, setAutoBriefingSent] = useState(false);
-  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  const [pendingAction, setPendingAction] = useState<any | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [pendingPixelSlot, setPendingPixelSlot] = useState<number | null>(null);
   const [pixelDateMessage, setPixelDateMessage] = useState<string>("");
@@ -545,9 +545,7 @@ export default function AgentWorkspace() {
 
       <PixelBrainDialog open={brainOpen} onOpenChange={setBrainOpen} />
       
-      {agentId === "assistant" && isSuperAdmin && (
-        <VizzyApprovalDialog pendingAction={pendingAction} />
-      )}
+      {/* VizzyApprovalDialog removed — actions auto-execute */}
     </div>
   );
 }
