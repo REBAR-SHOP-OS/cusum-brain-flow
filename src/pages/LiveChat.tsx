@@ -20,6 +20,14 @@ import { useToast } from "@/hooks/use-toast";
 import { TooltipProvider, Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { supabase } from "@/integrations/supabase/client";
 
+/** Detect if text is predominantly RTL (Farsi/Arabic) */
+function isRTLText(text: string): boolean {
+  const cleaned = text.replace(/[#*_`>\-\s\d]/g, '').slice(0, 100);
+  if (!cleaned.length) return false;
+  const rtlChars = (cleaned.match(/[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]/g) || []).length;
+  return rtlChars > cleaned.length * 0.3;
+}
+
 export default function LiveChat() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -228,23 +236,28 @@ export default function LiveChat() {
               </div>
             )}
 
-            {messages.map((msg) => (
-              <div
-                key={msg.id}
-                className={cn(
-                  "rounded-2xl px-4 py-3 text-sm max-w-[85%]",
-                  msg.role === "user"
-                    ? "ml-auto bg-primary text-primary-foreground"
-                    : "mr-auto bg-muted text-foreground"
-                )}
-              >
-                {msg.role === "assistant" ? (
-                  <RichMarkdown content={msg.content} className="text-sm [&_p]:text-sm" />
-                ) : (
-                  <p className="whitespace-pre-wrap">{msg.content}</p>
-                )}
-              </div>
-            ))}
+            {messages.map((msg) => {
+              const isRtl = isRTLText(msg.content);
+              return (
+                <div
+                  key={msg.id}
+                  dir={isRtl ? "rtl" : undefined}
+                  className={cn(
+                    "rounded-2xl px-4 py-3 text-sm max-w-[85%]",
+                    msg.role === "user"
+                      ? "ml-auto bg-primary text-primary-foreground"
+                      : "mr-auto bg-muted text-foreground",
+                    isRtl && "text-right"
+                  )}
+                >
+                  {msg.role === "assistant" ? (
+                    <RichMarkdown content={msg.content} className="text-sm [&_p]:text-sm" />
+                  ) : (
+                    <p className="whitespace-pre-wrap">{msg.content}</p>
+                  )}
+                </div>
+              );
+            })}
 
             {isStreaming && messages[messages.length - 1]?.role !== "assistant" && (
               <div className="mr-auto bg-muted rounded-2xl px-4 py-3 text-sm flex items-center gap-2">

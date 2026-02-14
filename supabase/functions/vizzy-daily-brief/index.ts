@@ -80,7 +80,14 @@ Use the live data below. Return exactly 5 bullet points covering:
 4. Hot leads or CRM updates
 5. Team presence / notable events
 
-Format: Start with "${greeting}, boss." then 5 bullet points using markdown. Keep each bullet to 1-2 sentences max. Be direct and actionable. If there are saved memories/reminders, mention the most relevant one.`,
+Format: Start with "${greeting}, boss." then 5 bullet points using markdown. Keep each bullet to 1-2 sentences max. Be direct and actionable. If there are saved memories/reminders, mention the most relevant one.
+
+═══ LANGUAGE ═══
+You are MULTILINGUAL. Detect the language context from the data and user's last messages.
+If the user's recent interactions were in Farsi, respond in natural Tehrani Farsi (colloquial, not formal).
+Use informal Farsi (e.g. "چطوری" not "حالتان چطور است", "الان" not "اکنون").
+Keep business terms, company names, and proper nouns in English even in Farsi mode.
+If unsure of the user's language, default to English.`,
           },
           {
             role: "user",
