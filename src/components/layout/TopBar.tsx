@@ -76,6 +76,7 @@ export function TopBar() {
           className="relative w-8 h-8 flex items-center justify-center rounded hover:bg-white/10 transition-colors mr-1"
           onClick={() => setChatOpen((o) => !o)}
           title="Team Chat"
+          aria-label="Team chat"
         >
           <MessageSquare className="w-5 h-5" />
         </button>
@@ -85,6 +86,7 @@ export function TopBar() {
           className="relative w-8 h-8 flex items-center justify-center rounded hover:bg-white/10 transition-colors mr-1"
           onClick={() => setNotifOpen(true)}
           data-tour="topbar-notifications"
+          aria-label="Notifications"
         >
           <Bell className="w-5 h-5" />
           {unreadCount > 0 && (
