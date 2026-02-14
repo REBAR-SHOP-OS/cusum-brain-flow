@@ -1,7 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useConversation } from "@elevenlabs/react";
-import { X, Mic, MicOff, Volume2, WifiOff, Camera, Phone, PhoneOff, Languages } from "lucide-react";
-import { useVizzyFarsiVoice } from "@/hooks/useVizzyFarsiVoice";
+import { X, Mic, MicOff, Volume2, WifiOff, Camera, Phone, PhoneOff } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
@@ -74,27 +73,7 @@ export default function VizzyPage() {
   const silentModeRef = useRef(false);
   const silentIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const { loadFullContext } = useVizzyContext();
-  const [preferredLang, setPreferredLang] = useState("en");
-  const [useFarsiMode, setUseFarsiMode] = useState(false);
   const webPhoneInitRef = useRef(false);
-
-  // Farsi voice pipeline hook
-  const farsiVoice = useVizzyFarsiVoice({
-    onTranscript: (role, text) => {
-      const entry: TranscriptEntry = {
-        role: role === "user" ? "user" : "agent",
-        text,
-        id: crypto.randomUUID(),
-        type: "text",
-      };
-      setTranscript((prev) => { const next = [...prev, entry]; transcriptRef.current = next; return next; });
-    },
-    onStatusChange: (s) => {
-      if (s === "connected") { sessionActiveRef.current = true; setStatus("connected"); }
-      else if (s === "error") setStatus("error");
-    },
-    onSpeakingChange: (speaking) => { /* handled internally */ },
-  });
 
   // Session timer
   useEffect(() => {
@@ -437,16 +416,12 @@ export default function VizzyPage() {
     webPhoneActions.dispose();
     try {
       await saveTranscript(transcriptRef.current);
-      if (useFarsiMode) {
-        farsiVoice.endSession();
-      } else {
-        await conversation.endSession();
-      }
+      await conversation.endSession();
     } catch (err) {
       console.error("Error ending Vizzy session:", err);
     }
     navigate("/home");
-  }, [conversation, navigate, saveTranscript, webPhoneActions, useFarsiMode, farsiVoice]);
+  }, [conversation, navigate, saveTranscript, webPhoneActions]);
 
   const manualReconnect = useCallback(() => {
     retryCountRef.current = 0;
@@ -469,29 +444,7 @@ export default function VizzyPage() {
         ]);
         mediaStreamRef.current = stream;
 
-        const detectedLang = tokenRes.data?.preferred_language || "en";
-        if (detectedLang) setPreferredLang(detectedLang);
-
-        // === FARSI MODE: Use custom browser-based pipeline ===
-        if (detectedLang === "fa") {
-          setUseFarsiMode(true);
-          const ok = await farsiVoice.startSession();
-          if (!ok) {
-            toast.error("Farsi voice not supported on this browser. Falling back to English.");
-            // Fall through to ElevenLabs below
-          } else {
-            // Load context for Farsi mode (admin-chat already speaks Farsi)
-            loadFullContext().then(async (snap) => {
-              if (!snap) return;
-              snapshotRef.current = snap;
-              const rawContext = buildVizzyContext(snap);
-              farsiVoice.sendContextualUpdate(rawContext);
-            });
-            return; // Farsi mode started successfully
-          }
-        }
-
-        // === ENGLISH MODE: ElevenLabs ===
+        // === ElevenLabs English Mode ===
         if (tokenRes.error || !tokenRes.data?.token) {
           throw new Error(tokenRes.error?.message ?? "No conversation token received");
         }
@@ -578,19 +531,16 @@ export default function VizzyPage() {
     );
   }
 
-  const isSpeakingNow = useFarsiMode ? farsiVoice.isSpeaking : conversation.isSpeaking;
+  const isSpeakingNow = conversation.isSpeaking;
 
-  const isFarsi = preferredLang === "fa";
   const statusLabel =
     webPhoneState.status === "calling" ? "Dialing..." :
     webPhoneState.status === "in_call" ? "On call" :
-    status === "starting" ? (isFarsi ? "در حال اتصال..." : "Connecting...") :
-    status === "reconnecting" ? (isFarsi ? "اتصال مجدد..." : "Reconnecting...") :
-    status === "error" ? (isFarsi ? "خطا در اتصال" : "Connection lost") :
-    silentMode ? (isFarsi ? "حالت سکوت — در حال یادداشت..." : "Silent mode — taking notes...") :
-    (useFarsiMode || isFarsi) && farsiVoice.interimText ? "در حال گوش دادن..." :
-    isSpeakingNow ? (isFarsi ? "ویزی صحبت می‌کنه..." : "Vizzy is speaking...") : 
-    (isFarsi ? "گوش می‌دم..." : "Listening...");
+    status === "starting" ? "Connecting..." :
+    status === "reconnecting" ? "Reconnecting..." :
+    status === "error" ? "Connection lost" :
+    silentMode ? "Silent mode — taking notes..." :
+    isSpeakingNow ? "Vizzy is speaking..." : "Listening...";
 
   return (
     <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/90 backdrop-blur-md">
@@ -645,22 +595,11 @@ export default function VizzyPage() {
 
         <div className="text-center">
           <h1 className="text-xl font-semibold text-white mb-1">Vizzy</h1>
-          {preferredLang !== "en" && (
-            <span className="inline-block mb-1 text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-full bg-primary/20 text-primary font-semibold">
-              {preferredLang.toUpperCase()}
-            </span>
-          )}
-          <p className="text-sm text-white/50" dir={isFarsi ? "rtl" : "ltr"}>{statusLabel}</p>
+          <p className="text-sm text-white/50">{statusLabel}</p>
           {silentMode && (
             <span className="inline-block mt-2 text-[10px] uppercase tracking-widest px-3 py-1 rounded-full bg-amber-500/20 text-amber-400 font-semibold">
               Silent
             </span>
-          )}
-          {/* Farsi interim text */}
-          {(useFarsiMode || isFarsi) && farsiVoice.interimText && (
-            <p dir="rtl" className="text-sm text-white/40 italic mt-1 max-w-xs truncate text-right">
-              "{farsiVoice.interimText}"
-            </p>
           )}
         </div>
 
@@ -780,41 +719,16 @@ export default function VizzyPage() {
 
         {/* Mute */}
         <button
-          onClick={() => {
-            if (useFarsiMode) {
-              farsiVoice.toggleMute();
-            } else {
-              setMuted((prev) => !prev);
-            }
-          }}
+          onClick={() => setMuted((prev) => !prev)}
           className={cn(
             "p-3 rounded-full transition-colors",
-            (useFarsiMode ? farsiVoice.isMuted : muted) 
+            muted 
               ? "bg-destructive text-destructive-foreground" 
               : "bg-white/10 hover:bg-white/20 text-white"
           )}
-          aria-label={(useFarsiMode ? farsiVoice.isMuted : muted) ? "Unmute" : "Mute"}
+          aria-label={muted ? "Unmute" : "Mute"}
         >
-          {(useFarsiMode ? farsiVoice.isMuted : muted) ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-        </button>
-
-        {/* Language toggle */}
-        <button
-          onClick={() => {
-            if (useFarsiMode) {
-              // Switch to English — would need full restart
-              toast.info("Restart the voice session for English mode");
-            } else {
-              toast.info("Restart the voice session for Farsi mode");
-            }
-          }}
-          className={cn(
-            "p-3 rounded-full transition-colors",
-            useFarsiMode ? "bg-primary/30 text-primary" : "bg-white/10 hover:bg-white/20 text-white"
-          )}
-          aria-label="Toggle language"
-        >
-          <Languages className="w-5 h-5" />
+          {muted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
         </button>
 
         {/* Reconnect */}
