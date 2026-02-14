@@ -6196,6 +6196,39 @@ export type Database = {
         }
         Relationships: []
       }
+      vizzy_memory: {
+        Row: {
+          category: string
+          company_id: string
+          content: string
+          created_at: string
+          expires_at: string | null
+          id: string
+          metadata: Json | null
+          user_id: string
+        }
+        Insert: {
+          category?: string
+          company_id: string
+          content: string
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          metadata?: Json | null
+          user_id: string
+        }
+        Update: {
+          category?: string
+          company_id?: string
+          content?: string
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          metadata?: Json | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       work_orders: {
         Row: {
           actual_end: string | null

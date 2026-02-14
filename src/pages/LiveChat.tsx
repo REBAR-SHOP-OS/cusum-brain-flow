@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Send, Loader2, Square, Trash2, Type, Hash, Headset } from "lucide-react";
+import { ArrowLeft, Send, Loader2, Square, Trash2, Type, Hash, Headset, Brain } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAdminChat } from "@/hooks/useAdminChat";
@@ -18,6 +18,7 @@ import { MentionMenu } from "@/components/chat/MentionMenu";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { useToast } from "@/hooks/use-toast";
 import { TooltipProvider, Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function LiveChat() {
   const navigate = useNavigate();
@@ -33,6 +34,17 @@ export default function LiveChat() {
   const { messages, isStreaming, sendMessage, clearChat, cancelStream } = useAdminChat();
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [memoryCount, setMemoryCount] = useState<number | null>(null);
+
+  // Fetch memory count
+  useEffect(() => {
+    (async () => {
+      const { count } = await supabase
+        .from("vizzy_memory")
+        .select("*", { count: "exact", head: true });
+      if (typeof count === "number") setMemoryCount(count);
+    })();
+  }, []);
 
   // Toolbar state
   const [showFormatting, setShowFormatting] = useState(false);
@@ -186,7 +198,15 @@ export default function LiveChat() {
           </div>
           <div className="flex-1 min-w-0">
             <h1 className="text-sm font-semibold truncate">{agentName}</h1>
-            <p className="text-xs text-muted-foreground">AI Assistant</p>
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              JARVIS Mode
+              {memoryCount !== null && memoryCount > 0 && (
+                <span className="inline-flex items-center gap-0.5 ml-1 text-primary">
+                  <Brain className="w-3 h-3" />
+                  {memoryCount}
+                </span>
+              )}
+            </p>
           </div>
           {messages.length > 0 && (
             <Button variant="ghost" size="icon" className="h-9 w-9" onClick={clearChat} title="Clear chat">

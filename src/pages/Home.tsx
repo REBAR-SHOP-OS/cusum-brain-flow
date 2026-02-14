@@ -19,6 +19,7 @@ import logoCoin from "@/assets/logo-coin.png";
 import { useAuth } from "@/lib/auth";
 import { getUserAgentMapping } from "@/lib/userAgentMap";
 import { useSuperAdmin } from "@/hooks/useSuperAdmin";
+import { VizzyDailyBriefing } from "@/components/vizzy/VizzyDailyBriefing";
 
 // Helper character images
 import salesHelper from "@/assets/helpers/sales-helper.png";
@@ -156,6 +157,13 @@ export default function Home() {
             />
           </div>
         </div>
+
+        {/* Daily Briefing (super admin only) */}
+        {isSuperAdmin && (
+          <div className="relative z-10 w-full">
+            <VizzyDailyBriefing />
+          </div>
+        )}
 
         {/* Agent Suggestions (replaces Quick Actions) */}
         <div className="relative z-10 w-full mb-6 sm:mb-12">
