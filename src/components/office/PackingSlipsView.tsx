@@ -5,7 +5,7 @@ import { useAuth } from "@/lib/auth";
 import { useCompanyId } from "@/hooks/useCompanyId";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { SmartSearchInput } from "@/components/ui/SmartSearchInput";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -156,15 +156,16 @@ export function PackingSlipsView() {
             <p className="text-[10px] tracking-[0.2em] text-primary/70 uppercase">Evidence, Loading Photos & Signed Packing Slips</p>
           </div>
         </div>
-        <div className="relative w-64">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Search project or mark..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 h-9 text-sm"
-          />
-        </div>
+        <SmartSearchInput
+          value={searchQuery}
+          onChange={setSearchQuery}
+          placeholder="Search: today, pending, shipped..."
+          hints={[
+            { category: "Date", suggestions: ["today", "this week"] },
+            { category: "Status", suggestions: ["pending", "shipped", "cleared"] },
+          ]}
+          className="w-64"
+        />
       </div>
 
       <ScrollArea className="flex-1">

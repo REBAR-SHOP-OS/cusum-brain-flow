@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCompanyId } from "@/hooks/useCompanyId";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { SmartSearchInput } from "@/components/ui/SmartSearchInput";
 import { Loader2, Pickaxe, Search } from "lucide-react";
 import { ProspectTable } from "@/components/prospecting/ProspectTable";
 import { ProspectIntroDialog } from "@/components/prospecting/ProspectIntroDialog";
@@ -277,15 +277,16 @@ export default function Prospecting() {
             </p>
           </div>
 
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-            <Input
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Search prospects…"
-              className="pl-8 w-44 lg:w-56 h-8 text-sm"
-            />
-          </div>
+          <SmartSearchInput
+            value={searchInput}
+            onChange={setSearchInput}
+            placeholder="Search: today, approved, pending..."
+            hints={[
+              { category: "Date", suggestions: ["today", "this week"] },
+              { category: "Status", suggestions: ["pending", "approved", "rejected"] },
+            ]}
+            className="w-44 lg:w-56"
+          />
 
           <Button
             onClick={() => digMutation.mutate()}

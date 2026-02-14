@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { X, Search, Trash2 } from "lucide-react";
+import { X, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { SmartSearchInput } from "@/components/ui/SmartSearchInput";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { useChatSessions, type ChatSession } from "@/hooks/useChatSessions";
@@ -73,15 +73,15 @@ export function HistoryPanel({ isOpen, onClose, onSelectSession }: HistoryPanelP
 
       {/* Search */}
       <div className="px-4 py-3 border-b border-border">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Search chats..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 h-9 bg-secondary border-0"
-          />
-        </div>
+        <SmartSearchInput
+          value={searchQuery}
+          onChange={setSearchQuery}
+          placeholder="Search: vizzy, blitz, penny, today..."
+          hints={[
+            { category: "Date", suggestions: ["today", "this week"] },
+            { category: "Agent", suggestions: ["vizzy", "blitz", "penny", "forge"] },
+          ]}
+        />
       </div>
 
       <ScrollArea className="flex-1">

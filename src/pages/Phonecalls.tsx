@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef } from "react";
 import { Phone, RefreshCw, Search, PhoneIncoming, PhoneOutgoing, PhoneMissed, Play, Pause, Clock, PhoneCall, Loader2, Brain } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { SmartSearchInput } from "@/components/ui/SmartSearchInput";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -238,13 +238,15 @@ export default function Phonecalls() {
               </TabsTrigger>
             </TabsList>
           </Tabs>
-          <form onSubmit={handleSearch} className="relative flex-1 max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Search calls..."
+          <form onSubmit={handleSearch} className="flex-1 max-w-sm">
+            <SmartSearchInput
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 h-9 bg-secondary border-0"
+              onChange={setSearch}
+              placeholder="Search: missed, inbound, today..."
+              hints={[
+                { category: "Date", suggestions: ["today", "this week", "this month"] },
+                { category: "Status", suggestions: ["missed", "inbound", "outbound", "has recording"] },
+              ]}
             />
           </form>
         </div>

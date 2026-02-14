@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { Mail, Phone, MessageSquare, RefreshCw, Search, Circle, PhoneIncoming, PhoneOutgoing } from "lucide-react";
+import { Mail, Phone, MessageSquare, RefreshCw, Circle, PhoneIncoming, PhoneOutgoing } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { SmartSearchInput } from "@/components/ui/SmartSearchInput";
 import { cn } from "@/lib/utils";
 import { Communication } from "@/hooks/useCommunications";
 
@@ -91,13 +91,16 @@ export function UnifiedInboxList({
           </Button>
         </div>
 
-        <form onSubmit={handleSearch} className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Search emails, calls, SMS..."
+        <form onSubmit={handleSearch}>
+          <SmartSearchInput
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 h-9 bg-secondary border-0"
+            onChange={setSearch}
+            placeholder="Search: unread, today, email, call..."
+            hints={[
+              { category: "Date", suggestions: ["today", "this week", "this month"] },
+              { category: "Status", suggestions: ["unread"] },
+              { category: "Type", suggestions: ["email", "call", "sms"] },
+            ]}
           />
         </form>
       </div>

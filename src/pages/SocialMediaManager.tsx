@@ -6,7 +6,7 @@ import {
   Sparkles, Loader2, BookOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { SmartSearchInput } from "@/components/ui/SmartSearchInput";
 import { Skeleton } from "@/components/ui/skeleton";
 import { format, addDays, startOfWeek } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -203,21 +203,20 @@ export default function SocialMediaManager() {
         {/* Search & Filters */}
         <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 scrollbar-thin mb-4">
           {searchOpen ? (
-            <div className="flex items-center gap-1 bg-card border border-border rounded-lg px-3 py-1.5 shrink-0">
-              <Search className="w-4 h-4 text-muted-foreground" />
-              <Input
-                autoFocus
+            <div className="shrink-0 w-40 sm:w-52">
+              <SmartSearchInput
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search posts..."
-                className="border-0 h-7 bg-transparent p-0 text-sm focus-visible:ring-0 w-28 sm:w-40"
+                onChange={(v) => {
+                  setSearchQuery(v);
+                  if (!v) { setSearchOpen(false); }
+                }}
+                placeholder="Search: draft, scheduled, today..."
+                hints={[
+                  { category: "Date", suggestions: ["today", "this week", "this month"] },
+                  { category: "Status", suggestions: ["draft", "scheduled", "published"] },
+                  { category: "Platform", suggestions: ["facebook", "instagram", "linkedin", "tiktok"] },
+                ]}
               />
-              <button
-                onClick={() => { setSearchOpen(false); setSearchQuery(""); }}
-                className="p-0.5 rounded hover:bg-muted"
-              >
-                <X className="w-3.5 h-3.5 text-muted-foreground" />
-              </button>
             </div>
           ) : (
             <Button variant="outline" size="sm" className="gap-2 shrink-0" onClick={() => setSearchOpen(true)}>

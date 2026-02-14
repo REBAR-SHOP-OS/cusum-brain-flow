@@ -5,7 +5,7 @@ import {
   Image, Video, Globe, FileText, Filter, Play, X, Database
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { SmartSearchInput } from "@/components/ui/SmartSearchInput";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -274,24 +274,19 @@ export default function Brain() {
         <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
           {/* Search toggle */}
           {searchOpen ? (
-            <div className="flex items-center gap-1 bg-card border border-border rounded-lg px-3 py-1.5 shrink-0">
-              <Search className="w-4 h-4 text-muted-foreground" />
-              <Input
-                autoFocus
+            <div className="shrink-0 w-48 sm:w-56">
+              <SmartSearchInput
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search brain..."
-                className="border-0 h-7 bg-transparent p-0 text-sm focus-visible:ring-0 w-32 sm:w-40"
-              />
-              <button
-                onClick={() => {
-                  setSearchOpen(false);
-                  setSearchQuery("");
+                onChange={(v) => {
+                  setSearchQuery(v);
+                  if (!v) { setSearchOpen(false); }
                 }}
-                className="p-0.5 rounded hover:bg-muted"
-              >
-                <X className="w-3.5 h-3.5 text-muted-foreground" />
-              </button>
+                placeholder="Search: today, this week..."
+                hints={[
+                  { category: "Date", suggestions: ["today", "this week", "this month"] },
+                  { category: "Category", suggestions: ["memory", "image", "video", "document", "webpage"] },
+                ]}
+              />
             </div>
           ) : (
             <Button variant="outline" size="sm" className="gap-2 shrink-0" onClick={() => setSearchOpen(true)}>
