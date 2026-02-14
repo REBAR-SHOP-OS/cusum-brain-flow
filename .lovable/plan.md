@@ -1,37 +1,49 @@
 
-# Add Action Buttons to Penny's Briefing List Items
+# Fix "Unknown Customer" in AI Actions Queue
 
-## What Changes
+## Problem
 
-Each bullet point in Penny's briefing response (Action Items for Today, Upcoming This Week, etc.) will get three small action buttons that appear on hover:
+The action cards show "Unknown Customer" because the `penny-auto-actions` edge function tries to read the customer name from the QuickBooks invoice JSON (`data->'CustomerRef'->'name'`), but that field is null in your synced data. Meanwhile, the `customer_id` column IS correctly populated and the actual customer names exist in the `customers` table.
 
-- **Ignore** -- Opens a small popover to enter a reason, then strikes through the item
-- **Reschedule** -- Opens a date picker popover to pick a new date, then logs it
-- **Summarize** -- Sends the item text to Penny as a follow-up question for a detailed summary
+## Root Cause
 
-## How It Works
+In `supabase/functions/penny-auto-actions/index.ts`, line 67-68:
 
-When Penny's AI response contains list items (bullet points), each one will show a row of tiny icon buttons on hover. Tapping one triggers the corresponding action. The state of dismissed/rescheduled items is kept in component state for the session.
+```text
+const customerRef = invData?.CustomerRef as ...;
+const customerName = customerRef?.name ?? "Unknown Customer";
+```
 
-## Technical Details
+The `CustomerRef` inside the JSONB `data` column is null, so it always falls back to "Unknown Customer".
 
-### 1. New Component: `src/components/accounting/BriefingActionButtons.tsx`
+## Fix (two parts)
 
-A small component that renders three icon buttons (X/Clock/Sparkles) inline next to a list item. It manages:
-- **Ignore**: A `Popover` with a text input for the reason. On submit, calls a callback with the item text + reason, and the parent marks the item as dismissed (strikethrough + muted).
-- **Reschedule**: A `Popover` with a `Calendar` (react-day-picker) date selector. On date pick, calls a callback with the item text + new date.
-- **Summarize**: A simple click handler that calls the parent's `onSummarize(itemText)` callback.
+### 1. Update the edge function to look up real customer names
 
-### 2. Modify: `src/components/chat/RichMarkdown.tsx`
+Modify `penny-auto-actions/index.ts` to:
+- Batch-load all relevant customers from the `customers` table using the `customer_id` values already present on `accounting_mirror`
+- Build a `customerNameMap` (customer_id -> name)
+- Use `customerNameMap.get(inv.customer_id) ?? customerRef?.name ?? "Unknown Customer"` as the fallback chain
 
-- Add an optional `onActionItem` prop with callbacks: `{ onIgnore, onReschedule, onSummarize }`.
-- In the `li` component override, wrap the existing content and append `<BriefingActionButtons>` when the `onActionItem` prop is provided.
-- The buttons appear on hover of the list item row (using `group` / `group-hover` Tailwind classes).
+This is a small change -- just add a query after loading `overdueInvoices` and use the map when building the queue entries.
 
-### 3. Modify: `src/components/accounting/AccountingAgent.tsx`
+### 2. Backfill existing queue entries
 
-- Pass the `onActionItem` callbacks to `RichMarkdown` when rendering agent messages.
-- `onIgnore(text, reason)`: Adds the item to a `dismissedItems` state set, optionally logs to `lead_events` or agent suggestions.
-- `onReschedule(text, date)`: Logs as a future task/reminder (insert into `lead_activities` or display a toast confirmation).
-- `onSummarize(text)`: Calls `handleSendDirect("Summarize this item in detail: " + text)` to ask Penny for more info.
-- Track `dismissedItems` and `rescheduledItems` in component state to visually update the rendered list items (strikethrough for ignored, date badge for rescheduled).
+Run a SQL update to fix the existing "Unknown Customer" rows in `penny_collection_queue` by joining through `accounting_mirror` to `customers`:
+
+```text
+UPDATE penny_collection_queue pq
+SET customer_name = c.name
+FROM accounting_mirror am
+JOIN customers c ON am.customer_id = c.id
+WHERE pq.invoice_id = am.quickbooks_id
+  AND am.entity_type = 'Invoice'
+  AND pq.customer_name = 'Unknown Customer'
+  AND c.name IS NOT NULL;
+```
+
+## Result
+
+- All existing "Unknown Customer" entries get corrected immediately
+- Future scans will populate the correct customer name from the `customers` table
+- No frontend changes needed -- the `AccountingActionQueue` component already displays `item.customer_name`
