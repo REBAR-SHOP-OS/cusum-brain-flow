@@ -5,11 +5,33 @@ import {
   CheckCircle2, AlertTriangle, Info, TrendingUp, TrendingDown,
   Minus, ArrowRight, RefreshCw, Download
 } from "lucide-react";
+import { BriefingActionButtons } from "@/components/accounting/BriefingActionButtons";
+import { format } from "date-fns";
+
+export interface ActionItemCallbacks {
+  onIgnore: (text: string, reason: string) => void;
+  onReschedule: (text: string, date: Date) => void;
+  onSummarize: (text: string) => void;
+}
 
 interface RichMarkdownProps {
   content: string;
   className?: string;
   onRegenerateImage?: (imageUrl: string, alt: string) => void;
+  onActionItem?: ActionItemCallbacks;
+  dismissedItems?: Set<string>;
+  rescheduledItems?: Map<string, Date>;
+}
+
+/** Recursively extract plain text from React children */
+function extractText(node: React.ReactNode): string {
+  if (typeof node === "string") return node;
+  if (typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(extractText).join("");
+  if (node && typeof node === "object" && "props" in node) {
+    return extractText((node as React.ReactElement).props.children);
+  }
+  return "";
 }
 
 /** Detects status keywords and returns icon + color */
@@ -26,7 +48,7 @@ function statusBadge(text: string) {
   return null;
 }
 
-export function RichMarkdown({ content, className, onRegenerateImage }: RichMarkdownProps) {
+export function RichMarkdown({ content, className, onRegenerateImage, onActionItem, dismissedItems, rescheduledItems }: RichMarkdownProps) {
   return (
     <div className={cn("text-sm leading-relaxed break-words overflow-hidden", className)}>
       <ReactMarkdown
@@ -127,12 +149,30 @@ export function RichMarkdown({ content, className, onRegenerateImage }: RichMark
           ol: ({ children }) => (
             <ol className="space-y-1 my-2 ml-1 list-decimal list-inside">{children}</ol>
           ),
-          li: ({ children }) => (
-            <li className="flex items-start gap-2 text-sm text-foreground/90 min-w-0">
-              <span className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 flex-shrink-0" />
-              <span className="flex-1">{children}</span>
-            </li>
-          ),
+          li: ({ children }) => {
+            const text = extractText(children);
+            const isDismissed = dismissedItems?.has(text);
+            const rescheduledDate = rescheduledItems?.get(text);
+            return (
+              <li className={cn("group flex items-start gap-2 text-sm text-foreground/90 min-w-0", isDismissed && "line-through opacity-50")}>
+                <span className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 flex-shrink-0" />
+                <span className="flex-1">{children}</span>
+                {rescheduledDate && (
+                  <span className="text-[10px] bg-accent text-accent-foreground px-1.5 py-0.5 rounded shrink-0 self-center">
+                    → {format(rescheduledDate, "MMM d")}
+                  </span>
+                )}
+                {onActionItem && !isDismissed && (
+                  <BriefingActionButtons
+                    itemText={text}
+                    onIgnore={onActionItem.onIgnore}
+                    onReschedule={onActionItem.onReschedule}
+                    onSummarize={onActionItem.onSummarize}
+                  />
+                )}
+              </li>
+            );
+          },
 
           // ── Code blocks ──
           code: ({ className: codeClassName, children, ...props }) => {
