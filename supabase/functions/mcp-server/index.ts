@@ -10,7 +10,7 @@ const corsHeaders = {
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const mcpApiKey = Deno.env.get("MCP_API_KEY");
+const mcpApiKey = Deno.env.get("MCP_API_KEYV1");
 
 function getDb() {
   return createClient(supabaseUrl, serviceRoleKey);
