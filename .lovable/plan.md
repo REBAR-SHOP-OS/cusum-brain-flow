@@ -1,36 +1,43 @@
 
 
-# Fix: Penny Can't Show Monthly P&L Data
+# GitHub-Ready Preparation
 
-## Problem
+## 1. Add `.env` to `.gitignore`
 
-Penny fetches the Profit & Loss report from QuickBooks with `summarize_column_by=Year`, which returns only yearly totals. When you ask for "December 2025", Penny has no monthly breakdown to extract from, so it returns all zeros.
-
-The system prompt even tells Penny to "extract the relevant month's column" -- but that column doesn't exist in the data it receives.
-
-## Fix
-
-**Single change in `supabase/functions/ai-agent/index.ts` (line 2047)**
-
-Change the P&L API call from:
+Currently `.env` is **not** listed in `.gitignore`. Add these lines at the end:
 
 ```
-summarize_column_by=Year
+.env
+**/.env
 ```
 
-to:
+## 2. Create `.env.example`
+
+A new file at the project root with the same keys but empty values:
 
 ```
-summarize_column_by=Month
+VITE_SUPABASE_PROJECT_ID=""
+VITE_SUPABASE_PUBLISHABLE_KEY=""
+VITE_SUPABASE_URL=""
 ```
 
-This gives Penny monthly columns so it can correctly extract any specific month's revenue, expenses, and net income.
+## 3. Update `README.md`
 
-## What Changes
+Replace the current boilerplate README with project-specific setup instructions covering:
 
-| File | Change |
+- Project name and description
+- Prerequisites (Node.js, npm)
+- Setup steps: clone, `npm install`, copy `.env.example` to `.env` and fill in values, `npm run dev`
+- Available scripts (`dev`, `build`, `preview`)
+- Tech stack summary (React, Vite, TypeScript, Tailwind, Lovable Cloud)
+
+## Summary
+
+| File | Action |
 |------|--------|
-| `supabase/functions/ai-agent/index.ts` | Line 2047: `Year` to `Month` in the P&L API query parameter |
+| `.gitignore` | Append `.env` and `**/.env` |
+| `.env.example` | Create with blank-value keys |
+| `README.md` | Rewrite with setup instructions |
 
-One word changed. No database or frontend changes needed.
+No structural changes. No code modifications. Three files touched.
 
