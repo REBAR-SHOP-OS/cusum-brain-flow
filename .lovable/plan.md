@@ -1,47 +1,58 @@
 
 
-# اصلاح زبان ویزی — بریفینگ انگلیسی، صحبت فارسی فقط وقتی بخوای
+# Fix Vizzy Voice Reconnection Loop
 
-## مشکل فعلی
+## Problem Analysis
 
-الان `preferred_language: "fa"` باعث میشه **همه چیز** فارسی بشه — بریفینگ روزانه، voice chat، و context. ولی تو میخوای:
+The logs show a clear pattern causing an infinite reconnect loop:
 
-- **Daily Briefing**: همیشه انگلیسی
-- **Voice Chat**: پیش‌فرض انگلیسی، ولی وقتی بگی "فارسی صحبت کن" ویزی فارسی بشه
+1. WebRTC room connects successfully
+2. ElevenLabs agent participant disconnects almost immediately (server-side)
+3. `onDisconnect` fires and triggers a reconnect with a new token
+4. New session connects, agent disconnects again -- loop repeats 3 times
 
-## تغییرات
+The root cause: Each reconnect attempt creates a brand new ElevenLabs conversation. The agent connects briefly, then the server-side agent disconnects (likely because of the large context being sent before the agent is fully ready, or because rapid successive connections trigger ElevenLabs rate limiting). The current code treats EVERY disconnect as a recoverable network issue, but agent-initiated disconnects should not trigger reconnection.
 
-### 1. `supabase/functions/vizzy-daily-brief/index.ts` — همیشه انگلیسی
+## Solution
 
-سیستم پرامپت الان میگه "اگه تعاملات اخیر فارسی بود، فارسی جواب بده". این باید عوض بشه به: **همیشه انگلیسی** برای بریفینگ.
+### 1. Add connection stability guard (`src/pages/VizzyPage.tsx`)
 
-خطوط 85-90 (بلاک LANGUAGE) حذف بشن و جایگزین بشن با:
-```
-Always respond in English for the daily briefing.
-```
+Only attempt reconnection if the session was stable for at least 5 seconds. If the agent disconnects within seconds of connecting, it means the agent itself ended the session -- reconnecting will just repeat the same failure.
 
-### 2. `src/lib/vizzyContext.ts` — حذف MANDATORY LANGUAGE DIRECTIVE
+### 2. Add cooldown between reconnection attempts
 
-بلاک `langDirective` که وقتی `preferredLanguage === "fa"` فارسی رو اجبار میکنه، حذف بشه. به جاش فقط دستور بمونه که "به هر زبانی که CEO صحبت میکنه جواب بده" — که الان هست (خط 65-67).
+Prevent rapid token requests by enforcing a minimum 3-second gap between reconnection attempts. This prevents burning through ElevenLabs quota with rapid-fire token requests.
 
-این یعنی:
-- پیش‌فرض: انگلیسی
-- اگه CEO فارسی حرف بزنه یا بگه "فارسی صحبت کن": فارسی بشه
+### 3. Don't send context until agent speaks or 3 seconds pass
 
-### 3. `src/pages/VizzyPage.tsx` — حذف ارسال `preferredLang` به context
+Delay `sendContextualUpdate` slightly after connection to let the WebRTC session fully stabilize before pushing large payloads.
 
-چون دیگه `buildVizzyContext` نباید زبان رو force کنه، فراخوانی‌ها بدون پارامتر زبان باشن. ولی RTL و status labels فارسی باقی بمونن برای وقتی که Farsi mode فعاله.
+## Technical Details
 
-## خلاصه فنی
+### Changes to `src/pages/VizzyPage.tsx`
 
-### فایل‌های تغییر یافته
-1. `supabase/functions/vizzy-daily-brief/index.ts` — سیستم پرامپت: همیشه انگلیسی
-2. `src/lib/vizzyContext.ts` — حذف `langDirective` و پارامتر `preferredLanguage`
-3. `src/pages/VizzyPage.tsx` — حذف ارسال زبان به `buildVizzyContext`، نگه داشتن RTL برای Farsi mode
+**onConnect handler (line ~243)**:
+- Record `lastConnectTime` timestamp when connection succeeds
 
-### منطق جدید
+**onDisconnect handler (line ~248)**:
+- Check if session lasted less than 5 seconds -- if so, treat as agent-initiated disconnect and do NOT reconnect
+- Show a "Connection failed" message instead of endlessly retrying
+- Only reconnect for sessions that were stable (lasted > 5 seconds), indicating a real network drop
+
+**reconnectRef (line ~365)**:
+- Add a cooldown check: if last reconnect attempt was less than 3 seconds ago, skip
+- Increase the delay between retries to prevent hammering ElevenLabs
+
+**Context sending (line ~475)**:
+- Add a 2-second delay after `waitForConnection` before sending context, giving the WebRTC session time to stabilize
+
+### Summary of changes
+
 ```text
-Daily Briefing → Always English
-Voice Chat (ElevenLabs mode) → English by default, switch to Farsi when user asks
-Voice Chat (Farsi mode) → Always Farsi (this is the explicit Farsi toggle)
+File: src/pages/VizzyPage.tsx
+- Add lastConnectTimeRef to track when connection was established
+- Add lastReconnectTimeRef to enforce cooldown
+- onDisconnect: skip reconnect if session lasted < 5 seconds
+- reconnectRef: enforce 3s cooldown between attempts  
+- Context sending: add 2s stabilization delay after connection confirmed
 ```
