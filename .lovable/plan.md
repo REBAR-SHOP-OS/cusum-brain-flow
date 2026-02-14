@@ -1,55 +1,29 @@
 
 
-# Add OAuth Authentication to MCP Server for ChatGPT
+# Fix MCP Server OAuth: Secret Name Mismatch
 
-## Why This Is Needed
-ChatGPT custom apps only support **OAuth** or **No Auth** -- not plain API keys. Your MCP server currently uses API key auth, so we need to add OAuth endpoints that ChatGPT can use.
+## Problem
+Two issues are preventing ChatGPT from connecting:
 
-## Approach: Simple OAuth 2.0 Client Credentials Flow
-We will add two OAuth endpoints to the existing MCP server function. The `MCP_API_KEY` secret will be reused as the OAuth client secret -- no new secrets needed.
+1. **Secret name mismatch** -- The code reads `MCP_API_KEY` but the stored secret is named `MCP_API_KEYV1`. This causes all OAuth endpoints to fail with errors because the key is `undefined`.
+2. **OAuth error** -- ChatGPT reports "does not implement OAuth" because the authorize and token endpoints return 500 errors (due to the missing key) instead of proper OAuth responses.
 
-## Changes
+## Fix
 
-### 1. Update `supabase/functions/mcp-server/index.ts`
+### Update `supabase/functions/mcp-server/index.ts`
 
-Add two new routes **before** the MCP catch-all handler:
+Change line 13 from:
+```
+const mcpApiKey = Deno.env.get("MCP_API_KEY");
+```
+to:
+```
+const mcpApiKey = Deno.env.get("MCP_API_KEYV1");
+```
 
-- **GET `/oauth/authorize`** -- ChatGPT redirects here; we immediately redirect back with an authorization code (since this is machine-to-machine, no user login needed)
-- **POST `/oauth/token`** -- ChatGPT exchanges the code (or client credentials) for a Bearer token; validates `client_secret` against `MCP_API_KEY`
+This single-line change will fix both issues since all the OAuth logic already works correctly -- it just needs to read the right secret name.
 
-Update the auth middleware to also accept Bearer tokens issued by the `/oauth/token` endpoint.
+## After Deployment
 
-### 2. No New Secrets or Database Tables
-- Reuses existing `MCP_API_KEY` as the OAuth `client_secret`
-- Authorization codes are short-lived, generated in-memory
-- Access tokens are signed with `MCP_API_KEY` using a simple HMAC approach
+Once deployed, click **Create** again in the ChatGPT MCP setup dialog. The OAuth flow should now complete successfully with the same configuration values you already entered.
 
-### 3. No Config Changes
-- `supabase/config.toml` already has `verify_jwt = false` for mcp-server
-- No new edge functions needed
-
-## ChatGPT Configuration (after implementation)
-
-When setting up the ChatGPT custom app:
-
-| Field | Value |
-|-------|-------|
-| Authentication | OAuth |
-| Client ID | `rebar-erp` |
-| Client Secret | Your `MCP_API_KEY` value |
-| Authorization URL | `https://uavzziigfnqpfdkczbdo.supabase.co/functions/v1/mcp-server/oauth/authorize` |
-| Token URL | `https://uavzziigfnqpfdkczbdo.supabase.co/functions/v1/mcp-server/oauth/token` |
-| Scope | `mcp` |
-
-## Technical Details
-
-The OAuth flow works as follows:
-
-1. ChatGPT calls `/oauth/authorize?client_id=rebar-erp&redirect_uri=...&state=...`
-2. Server generates a one-time code and redirects back to ChatGPT's `redirect_uri`
-3. ChatGPT calls `/oauth/token` with the code and `client_secret`
-4. Server validates `client_secret` matches `MCP_API_KEY`, returns an access token
-5. ChatGPT uses the access token as `Bearer` token on all MCP requests
-6. The existing auth middleware already accepts `Bearer` tokens -- it just needs to also accept the OAuth-issued tokens
-
-No files are moved, deleted, or restructured. Only `mcp-server/index.ts` is modified.
