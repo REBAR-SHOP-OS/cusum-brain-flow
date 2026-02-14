@@ -122,9 +122,16 @@ export function useVoiceChat(chat: ReturnType<typeof useAdminChat>) {
       });
 
       if (!resp.ok) {
-        console.error("TTS failed:", resp.status);
-        setStatus("idle");
-        conversationActiveRef.current = false;
+        const errBody = await resp.text().catch(() => "");
+        console.error("TTS failed:", resp.status, errBody);
+        // Don't kill conversation — fall back to listening
+        if (conversationActiveRef.current) {
+          ttsTriggeredRef.current = false;
+          prevAssistantTextRef.current = "";
+          setStatus("listening");
+        } else {
+          setStatus("idle");
+        }
         return;
       }
 
@@ -146,11 +153,18 @@ export function useVoiceChat(chat: ReturnType<typeof useAdminChat>) {
         }
       };
 
-      audio.onerror = () => {
+      audio.onerror = (e) => {
+        console.error("Audio playback error:", e);
         URL.revokeObjectURL(url);
         audioRef.current = null;
-        setStatus("idle");
-        conversationActiveRef.current = false;
+        // Fall back to listening instead of killing conversation
+        if (conversationActiveRef.current) {
+          ttsTriggeredRef.current = false;
+          prevAssistantTextRef.current = "";
+          setStatus("listening");
+        } else {
+          setStatus("idle");
+        }
       };
 
       setStatus("speaking");
