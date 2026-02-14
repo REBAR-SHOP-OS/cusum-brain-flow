@@ -210,3 +210,6 @@ verify_jwt = false
 
 [functions.vizzy-briefing]
 verify_jwt = false
+
+[functions.timeclock-alerts]
+verify_jwt = false
