@@ -221,7 +221,7 @@ export default function AccountingWorkspace() {
             agentMode === "fullscreen" ? "flex-1" : "w-[400px]",
             "p-3"
           )}>
-            <div className="w-full h-full min-h-0 overflow-hidden">
+            <div className="w-full h-full min-h-0">
               <AccountingAgent
                 viewMode={agentMode}
                 onViewModeChange={(m) => setAgentMode(m)}
