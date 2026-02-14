@@ -100,10 +100,57 @@ export function LeadTimeline({ lead }: LeadTimelineProps) {
     },
   });
 
-  // Merge activities and files into a unified timeline
+  // Fetch lead_events (Odoo sync timeline parity)
+  const { data: leadEvents = [] } = useQuery({
+    queryKey: ["lead-events", lead.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("lead_events")
+        .select("*")
+        .eq("lead_id", lead.id)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Convert lead_events into activity-like items for the timeline
+  const eventActivities = leadEvents.map((evt: any) => {
+    const payload = evt.payload as Record<string, unknown> || {};
+    let title = evt.event_type;
+    let description = "";
+    if (evt.event_type === "stage_changed") {
+      title = "Stage changed";
+      description = `${payload.from || "—"} → ${payload.to || "—"}`;
+      if (payload.odoo_stage) description += ` (Odoo: ${payload.odoo_stage})`;
+    } else if (evt.event_type === "value_changed") {
+      title = "Value changed";
+      description = `$${Number(payload.from || 0).toLocaleString()} → $${Number(payload.to || 0).toLocaleString()}`;
+    } else if (evt.event_type === "contact_linked") {
+      title = "Contact linked";
+      description = `${payload.customer_name || ""}`;
+    } else if (evt.event_type === "note_added") {
+      title = "Note from Odoo";
+      description = String(payload.content || "");
+    }
+    return {
+      id: evt.id,
+      lead_id: evt.lead_id,
+      activity_type: evt.event_type === "stage_changed" ? "stage_change" : "system",
+      title,
+      description,
+      created_by: evt.source_system === "odoo_sync" ? "Odoo Sync" : "System",
+      created_at: evt.created_at,
+      completed_at: null,
+      company_id: lead.company_id,
+    };
+  });
+
+  // Merge activities, files, and lead_events into a unified timeline
   type TimelineItem = { type: "activity"; data: LeadActivity; date: Date } | { type: "file"; data: typeof files[0]; date: Date };
   const timeline: TimelineItem[] = [
     ...activities.map((a) => ({ type: "activity" as const, data: a, date: new Date(a.created_at) })),
+    ...eventActivities.map((a: any) => ({ type: "activity" as const, data: a as LeadActivity, date: new Date(a.created_at) })),
     ...files.map((f) => ({ type: "file" as const, data: f, date: new Date(f.created_at) })),
   ].sort((a, b) => b.date.getTime() - a.date.getTime());
 
