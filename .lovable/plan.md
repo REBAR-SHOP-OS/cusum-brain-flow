@@ -1,102 +1,74 @@
 
-# Email Marketing Automations — 8 Trigger-Based Workflows
 
-## Overview
+# Fix Frontend Issues: Workbox Precache, LiveKit/Vizzy Connection, and Supabase Errors
 
-Add an **Automations** tab/section to the Email Marketing page with 8 pre-built automation templates. Each automation is a database-driven workflow that can be toggled on/off by Neel, with AI-generated email drafts that still require human approval before sending.
+## 1. Workbox Precache Conflict (Low Effort, High Confidence)
 
-## New Database Table: `email_automations`
+The `includeAssets` array in `vite.config.ts` lists `favicon.png`, `pwa-icon-192.png`, and `pwa-icon-512.png`. These same files are also matched by the `globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"]` pattern, causing duplicate precache entries.
 
-Stores each automation configuration and its on/off state:
+**Fix:** Add `globIgnores` to the workbox config to exclude the files already listed in `includeAssets`:
 
-| Column | Type | Description |
-|--------|------|-------------|
-| id | uuid PK | |
-| automation_key | text UNIQUE | e.g. `abandoned_cart`, `welcome_series` |
-| name | text | Display name |
-| description | text | What it does |
-| trigger_type | text | `quote_stale`, `new_contact`, `order_complete`, etc. |
-| campaign_type | text | Maps to existing campaign types |
-| enabled | boolean (default false) | Toggle on/off |
-| config | jsonb | Delay hours, conditions, template hints |
-| priority | text | `high`, `medium`, `low` |
-| company_id | uuid | |
-| created_at / updated_at | timestamps | |
-
-RLS: Same company-based policy as email_campaigns.
-
-## Seed Data (8 Automations)
-
-| Key | Name | Trigger | Priority |
-|-----|------|---------|----------|
-| `abandoned_cart` | Abandoned Quote Follow-up | Quote status = `sent`, no order after 48h | High |
-| `welcome_series` | Welcome Series | New contact created | High |
-| `upsell_email` | Upsell / Cross-sell | Order completed, suggest related services | High |
-| `review_request` | Review Request | Order delivered + 7 days | Medium |
-| `birthday_promo` | Birthday / Anniversary | Contact anniversary (yearly) | Medium |
-| `price_stock_alert` | Price/Stock Alert | Manual trigger or inventory change | Medium |
-| `vip_email` | VIP Recognition | Customer total orders > threshold | Low |
-| `winback` | Win-Back | No orders in 90+ days | Low |
-
-## New Edge Function: `email-automation-check`
-
-A schedulable function (cron every hour) that:
-1. Reads all enabled automations
-2. For each, queries the relevant trigger conditions (e.g. stale quotes, new contacts without welcome email)
-3. For qualifying contacts, calls the existing `email-campaign-generate` logic to create a draft campaign with status `pending_approval`
-4. Neel reviews and approves as usual -- no auto-sending
-
-## Frontend Changes
-
-### 1. `src/components/email-marketing/AutomationsPanel.tsx` (new)
-- Grid of 8 automation cards with toggle switches
-- Each card shows: name, description, trigger description, priority badge, enabled/disabled toggle
-- Click card to expand config (delay hours, conditions)
-- Stats: how many campaigns each automation has generated
-
-### 2. `src/pages/EmailMarketing.tsx` (updated)
-- Add "Automations" tab alongside existing campaign list
-- Tab bar: **Campaigns** | **Automations**
-- Automations tab renders the new `AutomationsPanel`
-
-### 3. `src/hooks/useEmailAutomations.ts` (new)
-- CRUD hook for `email_automations` table
-- Toggle enabled/disabled mutation
-- Query for automation stats
-
-## Technical Details
-
-### Database Migration
-```sql
--- email_automations table
--- Seed 8 rows with default configs
--- RLS policies matching email_campaigns pattern
+```typescript
+workbox: {
+  maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+  globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
+  globIgnores: ["**/pwa-icon-*.png", "**/favicon.png"],
+  navigateFallbackDenylist: [/^\/~oauth/, /^\/~lovable/],
+  // ...rest unchanged
+}
 ```
 
-### Edge Function: `email-automation-check/index.ts`
-- Auth: service_role (cron-triggered)
-- For each enabled automation, run trigger query:
-  - `abandoned_cart`: quotes with status='sent', created_at < now()-48h, no matching order
-  - `welcome_series`: contacts created in last 24h without a welcome campaign send
-  - `upsell_email`: orders with status='closed' or 'paid', completed in last 7 days, no upsell campaign
-  - `review_request`: orders delivered 7+ days ago, no review request sent
-  - `winback`: customers with last order > 90 days ago
-  - Others: config-driven thresholds
-- Creates campaign via DB insert (status: `pending_approval`) -- NOT via AI initially (to keep it fast). AI generation happens when Neel clicks "Generate Draft" on the pending automation campaign.
+**File:** `vite.config.ts` (line ~65, add `globIgnores` after `globPatterns`)
 
-### Automation Card Component
-- Toggle switch calls `useEmailAutomations.toggle(id, enabled)`
-- Priority badge with color coding (High=red, Medium=amber, Low=gray)
-- Shows last triggered date and count of generated campaigns
+---
 
-### Files to Create
-1. `src/components/email-marketing/AutomationsPanel.tsx`
-2. `src/hooks/useEmailAutomations.ts`
-3. `supabase/functions/email-automation-check/index.ts`
+## 2. Vizzy WebRTC-First Strategy with Immediate WebSocket Fallback (Medium Effort, Medium Confidence)
 
-### Files to Modify
-1. `src/pages/EmailMarketing.tsx` — add Automations tab
-2. Database migration — create table + seed data + RLS
+Currently, the initial connection always tries WebRTC. If it fails within 5 seconds, the user sees "Connection lost" and must manually tap to reconnect (which then uses WebSocket). This is a poor UX.
 
-### Validation trigger
-- Reuse existing pattern: validate `automation_key` and `priority` values
+**Fix:** On initial connection, try WebRTC first. If disconnected within 5 seconds, automatically retry once with WebSocket using the cached signed URL -- no manual tap required.
+
+Changes in `src/pages/VizzyPage.tsx`:
+
+- In `onDisconnect` (line ~263): When session < 5s and `useWebSocketFallbackRef` flips to true, instead of just setting `status: "error"`, trigger an automatic reconnect immediately (since we already have the signed URL cached from the initial token fetch).
+- Change from:
+  ```typescript
+  useWebSocketFallbackRef.current = true;
+  setStatus("error");
+  ```
+  To:
+  ```typescript
+  useWebSocketFallbackRef.current = true;
+  if (cachedSignedUrlRef.current) {
+    setStatus("reconnecting");
+    setTimeout(() => reconnectRef.current(), 1000);
+  } else {
+    setStatus("error");
+  }
+  ```
+
+This gives users a seamless experience: WebRTC attempt fails silently, WebSocket kicks in automatically within 1-2 seconds.
+
+**File:** `src/pages/VizzyPage.tsx` (lines 263-268)
+
+---
+
+## 3. Supabase REST 400 Errors (Low Effort, High Confidence)
+
+These are typically caused by queries against tables/columns not yet reflected in the TypeScript types, or by malformed PostgREST syntax. Since the Supabase client is auto-configured with correct headers, the fix is to audit any recent queries that may reference columns or tables that don't exist yet (e.g., after a migration that hasn't propagated to types).
+
+**Fix:** No config change needed. This is a code-by-code fix. The most common cause in this project is querying the `email_automations` table before the types file updates. The types file regenerates automatically after migration, so this should self-resolve. If specific 400 errors persist, we trace the exact endpoint from console logs.
+
+**No file changes for this item** -- it's a monitoring/verification step.
+
+---
+
+## Summary of File Changes
+
+| File | Change | Effort |
+|------|--------|--------|
+| `vite.config.ts` | Add `globIgnores` to prevent duplicate precache entries | Low |
+| `src/pages/VizzyPage.tsx` | Auto-retry with WebSocket when WebRTC fails < 5s (instead of showing error) | Low |
+
+Two small, targeted edits that address the highest-impact issues from the diagnostic summary.
+
