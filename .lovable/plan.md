@@ -1,57 +1,62 @@
 
 
-# Vizzy Voice Chat — Complete Fresh Build
+# Remove Voice Chat and All Related Files
 
-## Root Cause
+## Summary
 
-Console logs show: session connects, then ElevenLabs server drops it after exactly ~500ms. Two technical issues:
+Remove the Vizzy voice chat feature entirely, including the page, the ElevenLabs connection token edge function, and all navigation references to `/vizzy`. The floating button and text chat remain intact but will no longer offer voice chat.
 
-1. **Duplicate microphone stream**: Code manually calls `getUserMedia` creating an unused stream, then the ElevenLabs SDK opens its own. This can cause conflicts.
-2. **Wrong connection type**: Currently using WebSocket (`signedUrl`). ElevenLabs recommends WebRTC (`conversationToken`) for lower latency and better stability.
-3. **Delayed context push**: The 3-second stabilization wait is longer than the session lifetime (500ms).
+## Files to Delete
 
-## Plan
+1. **`src/pages/VizzyPage.tsx`** -- The entire voice chat page
+2. **`supabase/functions/elevenlabs-conversation-token/index.ts`** -- Edge function for voice tokens (no longer needed)
 
-### 1. `src/pages/VizzyPage.tsx` — Complete Rewrite (~250 lines)
+## Files to Modify
 
-Build from scratch with these fixes:
+### `src/App.tsx`
+- Remove the `VizzyPage` import
+- Remove the `/vizzy` route
 
-- **Remove manual `getUserMedia` call** — let the ElevenLabs SDK handle microphone access internally
-- **Use WebRTC first** (`conversationToken: data.token`), fallback to WebSocket (`signedUrl`) only if WebRTC fails
-- **Push context immediately in `onConnect` callback** instead of waiting 3 seconds
-- **No auto-reconnection** — manual "Reconnect" button only
-- **Multilingual support** — Farsi and English mandatory
+### `src/components/vizzy/FloatingVizzyButton.tsx`
+- Remove the long-press-to-voice logic
+- Long press now does the same as short tap (opens `/chat`)
+- Remove `LONG_PRESS_MS`, `longPressTimer`, `isLongPress` refs
+- Update tooltip text from "Tap for text - Hold for voice" to just the agent name or remove tooltip
 
-Connection flow:
-```text
-1. Check admin role
-2. Fetch token from edge function (returns both token + signed_url)
-3. Try WebRTC connection (conversationToken)
-4. If WebRTC fails -> try WebSocket (signedUrl)
-5. On connect -> immediately load and push context
-6. On disconnect -> show error + manual retry
-```
+### `src/components/layout/AppLayout.tsx`
+- No changes needed (FloatingVizzyButton stays, just no longer navigates to `/vizzy`)
 
-### 2. `src/lib/vizzyContext.ts` — Update multilingual prompt
+### `src/pages/Home.tsx`
+- Change `handleLiveChatClick` to navigate to `/chat` instead of `/vizzy`
 
-Add language detection rules to `buildVizzyContext`:
-- Detect user's spoken language and respond in same language
-- Farsi and English are mandatory languages
-- Default language from user profile
+### `src/pages/LiveChat.tsx`
+- Remove the button/icon that navigates to `/vizzy` (the mic button in the toolbar)
 
-### 3. Edge function — No changes needed
+### `src/pages/AgentWorkspace.tsx`
+- Change `onLiveChatClick` from navigating to `/vizzy` to `/chat`
 
-`elevenlabs-conversation-token` already returns both `token` and `signed_url`.
+### `supabase/functions/_shared/pageMap.ts`
+- Remove the `/vizzy` entry from the page map
 
-## Technical Details
+## Files NOT Changed (kept as-is)
 
-Key differences from current code:
+These files reference "Vizzy" as a brand name for the AI assistant (text chat), not voice chat specifically. They stay untouched:
 
-| Current | New |
-|---------|-----|
-| Manual `getUserMedia` + SDK mic (duplicate) | SDK handles mic only |
-| WebSocket only (`signedUrl`) | WebRTC first (`conversationToken`), WebSocket fallback |
-| 3s stabilization delay before context | Context pushed immediately in `onConnect` |
-| Context push in `connect()` function | Context push in `onConnect` callback |
-| `connectingRef` guard logic | Simpler state machine |
+- `src/lib/vizzyContext.ts` -- Used by text chat (`admin-chat` edge function)
+- `src/lib/vizzyAutoReport.ts` -- Error reporting utility
+- `src/types/vizzy.ts` -- Type definitions used by context
+- `src/components/vizzy/VizzyDailyBriefing.tsx` -- Daily briefing widget
+- `src/components/vizzy/VizzyPhotoButton.tsx` -- Photo analysis in chat
+- `src/components/teamhub/VizzyMeetingPanel.tsx` -- Meeting AI panel
+- `src/hooks/useMeetingAiBridge.ts` -- Meeting bridge hook
+- `src/hooks/useGlobalErrorHandler.ts` -- Uses reportToVizzy
+- `src/components/error/SmartErrorBoundary.tsx` -- Uses reportToVizzy
+- `src/components/accounting/AccountingAudit.tsx` -- Uses reportToVizzy
+- `src/hooks/useQuickBooksData.ts` -- Uses reportToVizzy
+- `src/hooks/useFixRequestMonitor.ts` -- Fix request polling
+- `src/components/ceo/FixRequestQueue.tsx` -- Fix request UI
+- Edge functions: `vizzy-context`, `vizzy-briefing`, `vizzy-daily-brief`, `vizzy-erp-action`, `vizzy-photo-analyze` -- All used by text chat
 
+## Edge Function Cleanup
+
+The `elevenlabs-conversation-token` edge function will be deleted from deployment after the code files are removed.
