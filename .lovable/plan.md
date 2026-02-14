@@ -1,69 +1,83 @@
 
-# Make Vizzy Multi-Language with Native Tehrani Farsi
 
-## What This Does
-Vizzy will automatically detect when you speak Farsi and respond in natural, colloquial Tehrani Farsi -- like talking to a sharp, savvy assistant from Tehran. The chat UI will also properly handle right-to-left (RTL) text so Farsi messages display correctly.
+# Best Farsi Voice for Vizzy -- Custom Voice Pipeline
 
----
+## The Problem
+ElevenLabs doesn't have native Persian/Farsi voices. Their multilingual model can attempt Farsi but with a non-native accent.
+
+## The Solution: Hybrid Voice Mode
+Build a dedicated **Farsi voice mode** that bypasses ElevenLabs entirely and uses:
+
+1. **Browser Speech Recognition** (Web Speech API) -- Free, built-in, works great for Farsi on Chrome
+2. **Gemini 3 Pro** (via Lovable AI) -- Already powering Vizzy's text brain, excellent at Farsi
+3. **Browser Speech Synthesis** (Web Speech API) -- Chrome ships with Google's high-quality Farsi voice ("Google fارسی")
+
+This gives you a fully native Farsi voice experience with zero extra API costs.
+
+## How It Works
+
+When user's `preferred_language` is `fa` (or they select Farsi mode), Vizzy switches from ElevenLabs to the custom pipeline:
+
+```text
+User speaks Farsi
+    --> Browser SpeechRecognition (fa-IR) transcribes
+    --> Send text to admin-chat edge function (Gemini)
+    --> Gemini responds in Tehrani Farsi
+    --> Browser SpeechSynthesis reads response in Farsi voice
+    --> Transcript shown in RTL in the UI
+```
 
 ## Changes
 
-### 1. Upgrade System Prompts (Both Edge Functions)
+### 1. New Hook: `src/hooks/useVizzyFarsiVoice.ts`
+A custom voice pipeline hook that:
+- Uses `webkitSpeechRecognition` with `lang: "fa-IR"` for continuous listening
+- Sends transcribed text to `admin-chat` edge function (already has full Tehrani Farsi instructions)
+- Uses `SpeechSynthesis` with a Persian voice to speak responses
+- Exposes the same interface as the ElevenLabs `useConversation` hook (status, transcript, start/stop, mute)
+- Falls back to English ElevenLabs if browser doesn't support Farsi speech
 
-**`supabase/functions/admin-chat/index.ts`** -- Replace the minimal multilingual line with rich Farsi instructions (matching what voice Vizzy already has):
+### 2. Update `src/pages/VizzyPage.tsx`
+- Detect `preferredLang === "fa"` from the token response
+- If Farsi, use `useVizzyFarsiVoice` instead of `useConversation`
+- Same UI, same transcript display, same client tools -- just different audio engine
+- Add a language toggle button so user can switch mid-session
 
-- Detect user language and respond in the same language
-- When user speaks Farsi, use colloquial Tehrani dialect (e.g. "چطوری" not "حالتان چطور است")
-- Support seamless code-switching between English and Farsi mid-conversation
-- If user mixes Farsi and English (Finglish), match their style
-- Never translate business terms unnecessarily -- keep proper nouns, company names, and technical terms in English
-- Use Persian numerals optionally when fully in Farsi context
-
-**`supabase/functions/vizzy-daily-brief/index.ts`** -- Add language awareness to the briefing prompt so if the user's last interaction was in Farsi, the briefing responds in Farsi too.
-
-### 2. RTL Support in Chat UI
-
-**`src/components/chat/RichMarkdown.tsx`** -- Add automatic RTL detection:
-- Detect if the message content starts with Farsi/Arabic Unicode characters
-- If so, apply `dir="rtl"` and appropriate text alignment to the container
-- This ensures Farsi text flows naturally right-to-left
-
-**`src/pages/LiveChat.tsx`** (or message bubble component) -- Add per-message RTL detection so each bubble aligns correctly based on its language.
-
-### 3. Voice Vizzy (Already Done)
-The voice context in `src/lib/vizzyContext.ts` already has excellent Tehrani Farsi instructions -- no changes needed there.
-
----
+### 3. No Edge Function Changes Needed
+- `admin-chat` already has full Tehrani Farsi instructions
+- `elevenlabs-conversation-token` still used for English mode
+- Business context loading stays the same
 
 ## Technical Details
 
-### System Prompt Addition (admin-chat)
-Add this block to the system prompt in `admin-chat/index.ts`:
-
+### Browser Speech Recognition (STT)
 ```text
-═══ LANGUAGE ═══
-You are MULTILINGUAL. You MUST respond in whatever language the CEO speaks to you.
-If the CEO speaks Farsi (Persian), respond in Farsi with a natural Tehrani accent and conversational tone -- like a native Tehran speaker.
-Use informal/colloquial Farsi when appropriate (e.g. "چطوری" not "حالتان چطور است", "الان" not "اکنون", "میخوای" not "می‌خواهید").
-You can seamlessly switch between English and Farsi mid-conversation. If the CEO code-switches (mixes Farsi and English), match their style.
-Keep business terms, company names, and proper nouns in English even when responding in Farsi.
-When fully in Farsi mode, you may use Persian numerals (۱۲۳) but always keep currency in USD format.
+const recognition = new webkitSpeechRecognition();
+recognition.lang = "fa-IR";
+recognition.continuous = true;
+recognition.interimResults = true;
 ```
+- Works on Chrome, Edge, Safari (most browsers)
+- Free, no API key needed
+- Good accuracy for conversational Farsi
 
-### RTL Detection Utility
-A simple helper function to detect RTL content:
-
+### Browser Speech Synthesis (TTS)
 ```text
-function isRTL(text: string): boolean {
-  // Check first 100 meaningful characters for Farsi/Arabic script
-  const cleaned = text.replace(/[#*_`>\-\s\d]/g, '').slice(0, 100);
-  const rtlChars = (cleaned.match(/[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]/g) || []).length;
-  return rtlChars > cleaned.length * 0.3;
-}
+const utterance = new SpeechSynthesisUtterance(text);
+utterance.lang = "fa-IR";
+// Chrome provides "Google fارسی" voice automatically
 ```
+- Uses Google's neural Farsi voice on Chrome
+- Natural-sounding, native accent
+- Free, no API key needed
 
-### Files to Modify
-1. **`supabase/functions/admin-chat/index.ts`** -- Add detailed Farsi language instructions to system prompt
-2. **`supabase/functions/vizzy-daily-brief/index.ts`** -- Add multilingual awareness to briefing prompt
-3. **`src/components/chat/RichMarkdown.tsx`** -- Add RTL detection and `dir="rtl"` attribute
-4. **`src/lib/vizzyContext.ts`** -- Already has Farsi instructions (no changes)
+### Fallback Strategy
+If the browser doesn't have Farsi speech capabilities:
+- Show a toast: "Farsi voice not available on this browser, using text-only mode"
+- Fall back to text chat with Farsi responses displayed in RTL
+
+### Files to Create/Modify
+1. **Create** `src/hooks/useVizzyFarsiVoice.ts` -- New Farsi voice pipeline hook
+2. **Modify** `src/pages/VizzyPage.tsx` -- Add language detection and hook switching
+3. **Modify** `src/pages/LiveChat.tsx` -- Add Farsi voice option for text chat voice button
+
