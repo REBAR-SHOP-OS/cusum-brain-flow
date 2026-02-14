@@ -3,8 +3,9 @@ import { useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Plus, Search, Users, ArrowLeft } from "lucide-react";
+import { SmartSearchInput, type SmartSearchHint } from "@/components/ui/SmartSearchInput";
+import { type KeywordRule } from "@/lib/genericSearchParser";
+import { Plus, Users, ArrowLeft } from "lucide-react";
 import { CustomerList } from "@/components/customers/CustomerList";
 import { CustomerDetail } from "@/components/customers/CustomerDetail";
 import { CustomerFormModal } from "@/components/customers/CustomerFormModal";
@@ -107,15 +108,15 @@ export default function Customers() {
         <div className={`${selectedCustomerId ? 'hidden md:flex' : 'flex'} w-full md:w-96 flex-shrink-0 border-r border-border flex-col`}>
           {/* Search */}
           <div className="p-4 border-b border-border">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Search customers..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
-              />
-            </div>
+          <SmartSearchInput
+              value={searchQuery}
+              onChange={setSearchQuery}
+              placeholder="Search: today, this week, no email..."
+              hints={[
+                { category: "Date", suggestions: ["today", "this week", "this month"] },
+                { category: "Status", suggestions: ["recent", "no email"] },
+              ]}
+            />
           </div>
 
           {/* Customer List */}
