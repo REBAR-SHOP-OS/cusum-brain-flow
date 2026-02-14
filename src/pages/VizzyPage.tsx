@@ -12,9 +12,6 @@ import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
-const CONTEXT_CACHE_KEY = "vizzy_context_cache";
-const CONTEXT_CACHE_TTL = 5 * 60 * 1000;
-
 interface TranscriptEntry {
   role: "user" | "agent";
   text: string;
@@ -26,7 +23,6 @@ export default function VizzyPage() {
   const navigate = useNavigate();
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [status, setStatus] = useState<"idle" | "connecting" | "connected" | "error">("idle");
-  const statusRef = useRef<"idle" | "connecting" | "connected" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
   const transcriptRef = useRef<TranscriptEntry[]>([]);
@@ -35,17 +31,10 @@ export default function VizzyPage() {
   const [showVolume, setShowVolume] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const connectingRef = useRef(false);
   const intentionalStopRef = useRef(false);
-  const snapshotRef = useRef<VizzyBusinessSnapshot | null>(null);
-  const languageRef = useRef("en");
+  const tokenDataRef = useRef<{ token: string; signed_url: string; preferred_language: string } | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
-  const connectedAtRef = useRef(0);
-
-  const setStatusBoth = useCallback((s: typeof status) => {
-    statusRef.current = s;
-    setStatus(s);
-  }, []);
+  const connectAttemptRef = useRef(0);
 
   // Admin guard
   useEffect(() => {
@@ -79,9 +68,7 @@ export default function VizzyPage() {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [status]);
 
   const formatTime = (s: number) => {
@@ -102,21 +89,13 @@ export default function VizzyPage() {
       const title = firstUserMsg.slice(0, 80) + (firstUserMsg.length > 80 ? "..." : "");
       const { data: session } = await supabase
         .from("chat_sessions")
-        .insert({
-          user_id: user.id,
-          title: `🎙️ ${title}`,
-          agent_name: "Vizzy",
-          agent_color: "bg-yellow-400",
-        })
+        .insert({ user_id: user.id, title: `🎙️ ${title}`, agent_name: "Vizzy", agent_color: "bg-yellow-400" })
         .select("id")
         .single();
       if (session) {
         await supabase.from("chat_messages").insert(
           entries.filter((e) => e.text.trim()).map((e) => ({
-            session_id: session.id,
-            role: e.role,
-            content: e.text,
-            agent_type: "assistant",
+            session_id: session.id, role: e.role, content: e.text, agent_type: "assistant",
           }))
         );
       }
@@ -125,48 +104,48 @@ export default function VizzyPage() {
     }
   }, [user]);
 
-  const loadContext = useCallback(async (): Promise<VizzyBusinessSnapshot | null> => {
-    try {
-      const cached = sessionStorage.getItem(CONTEXT_CACHE_KEY);
-      if (cached) {
-        const { data, ts } = JSON.parse(cached);
-        if (Date.now() - ts < CONTEXT_CACHE_TTL) return data;
-      }
-    } catch {}
+  // Ref to hold conversation object (avoids circular dep)
+  const convRef = useRef<any>(null);
+
+  // Load context and push immediately
+  const pushContext = useCallback(async () => {
     try {
       const { data, error } = await supabase.functions.invoke("vizzy-context");
-      if (error || !data?.snapshot) return null;
+      if (error || !data?.snapshot) {
+        console.warn("[Vizzy] No context available");
+        return;
+      }
       const snap = data.snapshot as VizzyBusinessSnapshot;
-      try { sessionStorage.setItem(CONTEXT_CACHE_KEY, JSON.stringify({ data: snap, ts: Date.now() })); } catch {}
-      return snap;
-    } catch { return null; }
+      const lang = tokenDataRef.current?.preferred_language ?? "en";
+      const ctx = buildVizzyContext(snap, lang);
+      console.log("[Vizzy] Pushing context:", ctx.length, "chars");
+      convRef.current?.sendContextualUpdate(ctx);
+      console.log("[Vizzy] Context pushed");
+    } catch (err) {
+      console.error("[Vizzy] Context push failed:", err);
+    }
   }, []);
 
   // ElevenLabs conversation hook
   const conversation = useConversation({
     micMuted: muted,
     onConnect: () => {
-      console.log("[Vizzy] onConnect fired — session established");
-      connectedAtRef.current = Date.now();
-      setStatusBoth("connected");
+      console.log("[Vizzy] Connected — pushing context immediately");
+      setStatus("connected");
+      pushContext();
     },
     onDisconnect: () => {
-      const duration = Date.now() - connectedAtRef.current;
-      console.log(`[Vizzy] onDisconnect fired — session lasted ${duration}ms, intentional=${intentionalStopRef.current}`);
-      
+      console.log("[Vizzy] Disconnected, intentional:", intentionalStopRef.current);
       if (intentionalStopRef.current) {
         saveTranscript(transcriptRef.current);
         navigate("/home");
         return;
       }
-      // Unintentional disconnect — show error with reconnect button
       saveTranscript(transcriptRef.current);
-      connectingRef.current = false;
-      setStatusBoth("error");
-      setErrorMsg(`Disconnected after ${Math.round(duration / 1000)}s`);
+      setStatus("error");
+      setErrorMsg("Connection lost");
     },
     onMessage: (message: any) => {
-      console.log("[Vizzy] onMessage:", message.type);
       if (message.type === "user_transcript") {
         const text = message.user_transcription_event?.user_transcript ?? "";
         const entry: TranscriptEntry = { role: "user", text, id: crypto.randomUUID() };
@@ -178,23 +157,22 @@ export default function VizzyPage() {
       }
     },
     onError: (error: any) => {
-      console.error("[Vizzy] onError:", error);
+      console.error("[Vizzy] SDK error:", error);
     },
   });
+
+  // Keep ref in sync
+  convRef.current = conversation;
 
   // Volume sync
   useEffect(() => {
     try { conversation.setVolume({ volume: volume / 100 }); } catch {}
   }, [volume, conversation]);
 
-  // Connect function — no status in deps, uses ref to prevent double-call
+  // Connect — try WebRTC first, fallback to WebSocket
   const connect = useCallback(async () => {
-    if (connectingRef.current) {
-      console.log("[Vizzy] connect() blocked — already connecting");
-      return;
-    }
-    connectingRef.current = true;
-    setStatusBoth("connecting");
+    const attempt = ++connectAttemptRef.current;
+    setStatus("connecting");
     setErrorMsg("");
     setTranscript([]);
     transcriptRef.current = [];
@@ -202,59 +180,45 @@ export default function VizzyPage() {
     intentionalStopRef.current = false;
 
     try {
-      // Step 1: Request mic
-      console.log("[Vizzy] Step 1: Requesting microphone...");
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const tracks = stream.getTracks();
-      console.log(`[Vizzy] Mic granted — ${tracks.length} track(s), active=${tracks[0]?.enabled}`);
-
-      // Step 2: Fetch token
-      console.log("[Vizzy] Step 2: Fetching conversation token...");
+      // Fetch token (returns both token + signed_url)
+      console.log("[Vizzy] Fetching token...");
       const { data, error } = await supabase.functions.invoke("elevenlabs-conversation-token");
-      if (error || !data?.signed_url) {
-        console.error("[Vizzy] Token fetch failed:", error, data);
-        throw new Error("Failed to get voice session token");
-      }
-      console.log("[Vizzy] Token received, signed_url length:", data.signed_url.length);
+      if (error || !data?.token) throw new Error("Failed to get voice token");
+      tokenDataRef.current = data;
+      console.log("[Vizzy] Token received");
 
-      languageRef.current = data.preferred_language ?? "en";
+      if (attempt !== connectAttemptRef.current) return; // stale
 
-      // Step 3: Start session via WebSocket
-      console.log("[Vizzy] Step 3: Starting WebSocket session...");
-      const convId = await conversation.startSession({
-        signedUrl: data.signed_url,
-      });
-      console.log("[Vizzy] startSession resolved, conversationId:", convId);
-
-      // Step 4: Wait for stabilization then push context
-      console.log("[Vizzy] Step 4: Waiting 3s for stabilization...");
-      await new Promise((r) => setTimeout(r, 3000));
-      
-      if (statusRef.current !== "connected") {
-        console.warn("[Vizzy] Not connected after stabilization wait — skipping context push");
+      // Try WebRTC first
+      try {
+        console.log("[Vizzy] Trying WebRTC...");
+        await conversation.startSession({ conversationToken: data.token });
+        console.log("[Vizzy] WebRTC session started");
         return;
+      } catch (webrtcErr) {
+        console.warn("[Vizzy] WebRTC failed, trying WebSocket...", webrtcErr);
       }
 
-      console.log("[Vizzy] Step 5: Loading & pushing context...");
-      const snap = await loadContext();
-      if (snap) {
-        snapshotRef.current = snap;
-        const ctx = buildVizzyContext(snap, languageRef.current);
-        console.log("[Vizzy] Context length:", ctx.length, "chars");
-        conversation.sendContextualUpdate(ctx);
-        console.log("[Vizzy] Context pushed successfully");
+      if (attempt !== connectAttemptRef.current) return; // stale
+
+      // Fallback to WebSocket
+      if (data.signed_url) {
+        console.log("[Vizzy] Trying WebSocket...");
+        await conversation.startSession({ signedUrl: data.signed_url });
+        console.log("[Vizzy] WebSocket session started");
       } else {
-        console.warn("[Vizzy] No context snapshot available");
+        throw new Error("No connection method available");
       }
     } catch (err) {
       console.error("[Vizzy] Connection failed:", err);
-      connectingRef.current = false;
-      setStatusBoth("error");
-      setErrorMsg(err instanceof Error ? err.message : "Connection failed");
+      if (attempt === connectAttemptRef.current) {
+        setStatus("error");
+        setErrorMsg(err instanceof Error ? err.message : "Connection failed");
+      }
     }
-  }, [conversation, loadContext, setStatusBoth]);
+  }, [conversation]);
 
-  // Auto-start on mount (once)
+  // Auto-start on mount
   const mountedRef = useRef(false);
   useEffect(() => {
     if (isAdmin && !mountedRef.current) {
@@ -263,19 +227,12 @@ export default function VizzyPage() {
     }
   }, [isAdmin]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Close handler
   const handleClose = useCallback(async () => {
     intentionalStopRef.current = true;
     try { await conversation.endSession(); } catch {}
     saveTranscript(transcriptRef.current);
     navigate("/home");
   }, [conversation, navigate, saveTranscript]);
-
-  // Reconnect handler
-  const handleReconnect = useCallback(() => {
-    connectingRef.current = false;
-    connect();
-  }, [connect]);
 
   if (isAdmin === null) {
     return (
@@ -330,13 +287,8 @@ export default function VizzyPage() {
           </p>
         </div>
 
-        {/* Reconnect button when error */}
         {status === "error" && (
-          <Button
-            onClick={handleReconnect}
-            variant="outline"
-            className="gap-2 border-white/20 text-white hover:bg-white/10"
-          >
+          <Button onClick={connect} variant="outline" className="gap-2 border-white/20 text-white hover:bg-white/10">
             <RefreshCw className="w-4 h-4" /> Reconnect
           </Button>
         )}
@@ -344,7 +296,6 @@ export default function VizzyPage() {
 
       {/* Transcript + Controls */}
       <div className="w-full max-w-lg px-4 pb-6 flex flex-col gap-4">
-        {/* Transcript */}
         {transcript.length > 0 && (
           <ScrollArea className="h-48 rounded-xl bg-white/5 border border-white/10 p-4">
             <div className="space-y-3">
@@ -361,52 +312,28 @@ export default function VizzyPage() {
           </ScrollArea>
         )}
 
-        {/* Controls bar */}
         <div className="flex items-center justify-center gap-4">
-          {/* Volume */}
           <div className="relative">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setShowVolume(!showVolume)}
-              className="text-white/60 hover:text-white"
-            >
+            <Button variant="ghost" size="icon" onClick={() => setShowVolume(!showVolume)} className="text-white/60 hover:text-white">
               <Volume2 className="w-5 h-5" />
             </Button>
             {showVolume && (
               <div className="absolute bottom-14 left-1/2 -translate-x-1/2 bg-black/90 border border-white/10 rounded-lg p-3 w-36">
-                <Slider
-                  value={[volume]}
-                  onValueChange={(v) => setVolume(v[0])}
-                  min={0}
-                  max={100}
-                  step={1}
-                  className="w-full"
-                />
+                <Slider value={[volume]} onValueChange={(v) => setVolume(v[0])} min={0} max={100} step={1} className="w-full" />
               </div>
             )}
           </div>
 
-          {/* Mute */}
           <Button
             variant="ghost"
             size="icon"
             onClick={() => setMuted(!muted)}
-            className={cn(
-              "w-14 h-14 rounded-full",
-              muted ? "bg-red-500/20 text-red-400" : "bg-white/10 text-white"
-            )}
+            className={cn("w-14 h-14 rounded-full", muted ? "bg-red-500/20 text-red-400" : "bg-white/10 text-white")}
           >
             {muted ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
           </Button>
 
-          {/* Close */}
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleClose}
-            className="text-white/60 hover:text-red-400"
-          >
+          <Button variant="ghost" size="icon" onClick={handleClose} className="text-white/60 hover:text-red-400">
             <X className="w-5 h-5" />
           </Button>
         </div>
