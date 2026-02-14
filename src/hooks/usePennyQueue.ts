@@ -22,6 +22,8 @@ export interface PennyQueueItem {
   execution_result: Record<string, unknown> | null;
   followup_date: string | null;
   followup_count: number;
+  assigned_to: string | null;
+  assigned_at: string | null;
   created_at: string;
 }
 
@@ -116,6 +118,19 @@ export function usePennyQueue() {
     }
   }, [toast]);
 
+  const assign = useCallback(async (id: string, profileId: string) => {
+    try {
+      const { error } = await supabase
+        .from("penny_collection_queue")
+        .update({ assigned_to: profileId, assigned_at: new Date().toISOString() } as any)
+        .eq("id", id);
+      if (error) throw error;
+      toast({ title: "👤 Action assigned" });
+    } catch (err) {
+      toast({ title: "Assign failed", description: String(err), variant: "destructive" });
+    }
+  }, [toast]);
+
   const triggerAutoActions = useCallback(async () => {
     try {
       const { data, error } = await supabase.functions.invoke("penny-auto-actions");
@@ -133,7 +148,7 @@ export function usePennyQueue() {
 
   return {
     items, pendingItems, pendingCount, totalAtRisk, nextFollowup,
-    loading, load, approve, reject, schedule, triggerAutoActions,
+    loading, load, approve, reject, schedule, assign, triggerAutoActions,
   };
 }
 
