@@ -3,7 +3,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Bot, Mail, FileText, MessageCircle, Sparkles } from "lucide-react";
+import { Bot, Mail, FileText, MessageCircle, Sparkles, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface Automation {
@@ -12,7 +12,7 @@ export interface Automation {
   description: string;
   enabled: boolean;
   color: "purple" | "blue" | "gold" | "teal";
-  icon: "social" | "inbox" | "summary" | "comment";
+  icon: "social" | "inbox" | "summary" | "comment" | "email";
   beta?: boolean;
   route?: string;
 }
@@ -54,6 +54,15 @@ const defaultAutomations: Automation[] = [
     icon: "comment",
     route: "/facebook-commenter",
   },
+  {
+    id: "email-marketing",
+    name: "Email Marketing",
+    description: "AI-driven campaigns with human approval",
+    enabled: true,
+    color: "teal",
+    icon: "email",
+    route: "/email-marketing",
+  },
 ];
 
 const colorGradients = {
@@ -68,6 +77,7 @@ const iconComponents = {
   inbox: Mail,
   summary: FileText,
   comment: MessageCircle,
+  email: Send,
 };
 
 interface AutomationCardProps {
