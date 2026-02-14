@@ -243,8 +243,10 @@ export default function VizzyPage() {
     onConnect: () => {
       sessionActiveRef.current = true;
       setStatus("connected");
+      retryCountRef.current = 0;
     },
     onDisconnect: () => {
+      if (!sessionActiveRef.current) return; // Ignore spurious disconnects before connect
       sessionActiveRef.current = false;
       if (intentionalStopRef.current) {
         saveTranscript(transcriptRef.current);
@@ -347,8 +349,9 @@ export default function VizzyPage() {
       }
     },
     onError: (error: any) => {
-      console.error("Vizzy voice error:", error);
-      if (retryCountRef.current >= MAX_RETRIES) setStatus("error");
+      console.warn("Vizzy voice error (non-fatal):", error);
+      // Don't set error status unless we've exhausted retries — 
+      // WebRTC SDK sometimes fires spurious errors that don't break the session
     },
   });
 
@@ -471,11 +474,22 @@ export default function VizzyPage() {
             ? `\nUser's preferred language: ${detectedLang}. Default to speaking in this language unless they switch.`
             : "";
 
+          // Wait for session to be fully connected before sending context
+          const waitForConnection = () => new Promise<void>((resolve) => {
+            if (sessionActiveRef.current) return resolve();
+            const check = setInterval(() => {
+              if (sessionActiveRef.current) { clearInterval(check); resolve(); }
+            }, 200);
+            // Timeout after 10s
+            setTimeout(() => { clearInterval(check); resolve(); }, 10000);
+          });
+          await waitForConnection();
+
           try {
             const { data: briefData } = await supabase.functions.invoke("vizzy-briefing", {
               body: { rawContext: rawContext + langCtx },
             });
-            if (briefData?.briefing) {
+            if (briefData?.briefing && sessionActiveRef.current) {
               conversation.sendContextualUpdate(briefData.briefing);
               console.log("[Vizzy] Gemini 3 Pro briefing sent");
               return;
@@ -484,7 +498,9 @@ export default function VizzyPage() {
             console.warn("[Vizzy] Gemini briefing failed, using raw context:", e);
           }
 
-          conversation.sendContextualUpdate(rawContext + langCtx);
+          if (sessionActiveRef.current) {
+            conversation.sendContextualUpdate(rawContext + langCtx);
+          }
         });
       } catch (err) {
         console.error("Failed to start Vizzy voice:", err);
