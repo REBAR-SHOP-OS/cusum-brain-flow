@@ -1,19 +1,15 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useSpeechRecognition } from "./useSpeechRecognition";
 import { useAdminChat } from "./useAdminChat";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "./use-toast";
 
 export type VoiceChatStatus = "idle" | "listening" | "thinking" | "speaking";
 
-const TTS_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`;
 const TTS_CHAR_THRESHOLD = 300;
 
 export function useVoiceChat(chat: ReturnType<typeof useAdminChat>) {
   const [status, setStatus] = useState<VoiceChatStatus>("idle");
   const { toast } = useToast();
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
   const ttsTriggeredRef = useRef(false);
   const prevAssistantTextRef = useRef("");
   const conversationActiveRef = useRef(false);
@@ -65,77 +61,40 @@ export function useVoiceChat(chat: ReturnType<typeof useAdminChat>) {
     prevAssistantTextRef.current = text;
   }, [chat.messages, chat.isStreaming, status]);
 
-  const triggerTTS = useCallback(async (text: string) => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) return;
-
-      const controller = new AbortController();
-      abortRef.current = controller;
-
-      const resp = await fetch(TTS_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-        },
-        body: JSON.stringify({ text }),
-        signal: controller.signal,
-      });
-
-      if (!resp.ok) {
-        console.error("TTS failed:", resp.status);
-        setStatus("idle");
-        conversationActiveRef.current = false;
-        return;
-      }
-
-      const blob = await resp.blob();
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      audioRef.current = audio;
-
-      audio.onended = () => {
-        URL.revokeObjectURL(url);
-        audioRef.current = null;
-        // Auto-listen: restart the loop if conversation is still active
-        if (conversationActiveRef.current) {
-          speechRef.current.reset();
-          ttsTriggeredRef.current = false;
-          prevAssistantTextRef.current = "";
-          speechRef.current.start();
-          setStatus("listening");
-        } else {
-          setStatus("idle");
-        }
-      };
-
-      audio.onerror = () => {
-        URL.revokeObjectURL(url);
-        audioRef.current = null;
-        setStatus("idle");
-        conversationActiveRef.current = false;
-      };
-
-      setStatus("speaking");
-      await audio.play();
-    } catch (e: any) {
-      if (e.name !== "AbortError") {
-        console.error("TTS error:", e);
-      }
+  const triggerTTS = useCallback((text: string) => {
+    if (!window.speechSynthesis) {
       setStatus("idle");
       conversationActiveRef.current = false;
+      return;
     }
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+
+    utterance.onend = () => {
+      if (conversationActiveRef.current) {
+        speechRef.current.reset();
+        ttsTriggeredRef.current = false;
+        prevAssistantTextRef.current = "";
+        speechRef.current.start();
+        setStatus("listening");
+      } else {
+        setStatus("idle");
+      }
+    };
+
+    utterance.onerror = () => {
+      setStatus("idle");
+      conversationActiveRef.current = false;
+    };
+
+    setStatus("speaking");
+    window.speechSynthesis.speak(utterance);
   }, []);
 
   const stopAudio = useCallback(() => {
-    abortRef.current?.abort();
-    abortRef.current = null;
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current = null;
-    }
+    window.speechSynthesis?.cancel();
   }, []);
 
   const stopConversation = useCallback(() => {
