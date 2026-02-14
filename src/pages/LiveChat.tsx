@@ -35,10 +35,9 @@ export default function LiveChat() {
   const [input, setInput] = useState("");
   const [searchParams, setSearchParams] = useSearchParams();
   const [voiceMode, setVoiceMode] = useState(() => searchParams.get("voice") === "1");
-  const { messages, isStreaming, sendMessage, clearChat, cancelStream } = useAdminChat();
-  const voiceChat = useVoiceChat();
-  const activeMessages = voiceMode ? voiceChat.messages : messages;
-  const activeIsStreaming = voiceMode ? voiceChat.isStreaming : isStreaming;
+  const chat = useAdminChat();
+  const { messages, isStreaming, sendMessage, clearChat, cancelStream } = chat;
+  const voiceChat = useVoiceChat(chat);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [memoryCount, setMemoryCount] = useState<number | null>(null);
@@ -236,11 +235,8 @@ export default function LiveChat() {
             </TooltipTrigger>
             <TooltipContent side="bottom">Voice Mode</TooltipContent>
           </Tooltip>
-          {(messages.length > 0 || voiceChat.messages.length > 0) && (
-            <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => {
-              clearChat();
-              voiceChat.clearChat();
-            }} title="Clear chat">
+          {messages.length > 0 && (
+            <Button variant="ghost" size="icon" className="h-9 w-9" onClick={clearChat} title="Clear chat">
               <Trash2 className="w-4 h-4" />
             </Button>
           )}
@@ -249,9 +245,9 @@ export default function LiveChat() {
         {/* Messages */}
         <ScrollArea className="flex-1">
           <div className="max-w-3xl mx-auto p-4 space-y-4">
-            {activeMessages.length === 0 && (
+            {messages.length === 0 && (
               <div className="text-center py-20">
-                <div className="w-16 h-16 rounded-full overflow-hidden ring-2 ring-teal-400 mx-auto mb-4">
+                <div className="w-16 h-16 rounded-full overflow-hidden ring-2 ring-primary mx-auto mb-4">
                   <img src={avatarImg} alt={agentName} className="w-full h-full object-cover" />
                 </div>
                 <p className="text-lg font-medium">How can I help you?</p>
@@ -261,7 +257,7 @@ export default function LiveChat() {
               </div>
             )}
 
-            {activeMessages.map((msg) => (
+            {messages.map((msg) => (
               <div
                 key={msg.id}
                 className={cn(
@@ -279,7 +275,7 @@ export default function LiveChat() {
               </div>
             ))}
 
-            {activeIsStreaming && activeMessages[activeMessages.length - 1]?.role !== "assistant" && (
+            {isStreaming && messages[messages.length - 1]?.role !== "assistant" && (
               <div className="mr-auto bg-muted rounded-2xl px-4 py-3 text-sm flex items-center gap-2">
                 <Loader2 className="w-4 h-4 animate-spin" />
                 <span className="text-muted-foreground">Thinking...</span>
