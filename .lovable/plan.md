@@ -1,43 +1,55 @@
 
 
-# Security Fix: Add .env to .gitignore
+# Add OAuth Authentication to MCP Server for ChatGPT
 
-## Current State
-- `.gitignore` exists but has **no `.env` rules** -- this is the only gap
-- `README.md` already contains the security note (line 28)
-- `.env.example` is correct with empty-value keys
+## Why This Is Needed
+ChatGPT custom apps only support **OAuth** or **No Auth** -- not plain API keys. Your MCP server currently uses API key auth, so we need to add OAuth endpoints that ChatGPT can use.
 
-## Change
+## Approach: Simple OAuth 2.0 Client Credentials Flow
+We will add two OAuth endpoints to the existing MCP server function. The `MCP_API_KEY` secret will be reused as the OAuth client secret -- no new secrets needed.
 
-### Update `.gitignore`
-Append these lines to the **end** of the existing file (after line 22):
+## Changes
 
-```
-# Environment files
-.env
-**/.env
-.env.*
-!.env.example
-```
+### 1. Update `supabase/functions/mcp-server/index.ts`
 
-No other files are touched.
+Add two new routes **before** the MCP catch-all handler:
 
-## Files NOT Modified
-| File | Reason |
-|------|--------|
-| `.env` | Kept as-is in workspace |
-| `.env.example` | Already correct and tracked |
-| `README.md` | Already has security note |
-| `index.html`, `src/`, `package.json`, `vite.config.ts` | No structural changes |
-| Supabase / Vite config | Not modified |
+- **GET `/oauth/authorize`** -- ChatGPT redirects here; we immediately redirect back with an authorization code (since this is machine-to-machine, no user login needed)
+- **POST `/oauth/token`** -- ChatGPT exchanges the code (or client credentials) for a Bearer token; validates `client_secret` against `MCP_API_KEY`
 
-## Post-Implementation (Manual)
-After this change syncs to GitHub, run locally:
+Update the auth middleware to also accept Bearer tokens issued by the `/oauth/token` endpoint.
 
-```sh
-git rm --cached .env
-git commit -m "Remove .env from repo and ignore env files"
-git push
-```
+### 2. No New Secrets or Database Tables
+- Reuses existing `MCP_API_KEY` as the OAuth `client_secret`
+- Authorization codes are short-lived, generated in-memory
+- Access tokens are signed with `MCP_API_KEY` using a simple HMAC approach
 
-Then rotate your backend credentials since they are exposed in Git history.
+### 3. No Config Changes
+- `supabase/config.toml` already has `verify_jwt = false` for mcp-server
+- No new edge functions needed
+
+## ChatGPT Configuration (after implementation)
+
+When setting up the ChatGPT custom app:
+
+| Field | Value |
+|-------|-------|
+| Authentication | OAuth |
+| Client ID | `rebar-erp` |
+| Client Secret | Your `MCP_API_KEY` value |
+| Authorization URL | `https://uavzziigfnqpfdkczbdo.supabase.co/functions/v1/mcp-server/oauth/authorize` |
+| Token URL | `https://uavzziigfnqpfdkczbdo.supabase.co/functions/v1/mcp-server/oauth/token` |
+| Scope | `mcp` |
+
+## Technical Details
+
+The OAuth flow works as follows:
+
+1. ChatGPT calls `/oauth/authorize?client_id=rebar-erp&redirect_uri=...&state=...`
+2. Server generates a one-time code and redirects back to ChatGPT's `redirect_uri`
+3. ChatGPT calls `/oauth/token` with the code and `client_secret`
+4. Server validates `client_secret` matches `MCP_API_KEY`, returns an access token
+5. ChatGPT uses the access token as `Bearer` token on all MCP requests
+6. The existing auth middleware already accepts `Bearer` tokens -- it just needs to also accept the OAuth-issued tokens
+
+No files are moved, deleted, or restructured. Only `mcp-server/index.ts` is modified.
