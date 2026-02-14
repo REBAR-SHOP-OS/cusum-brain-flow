@@ -9,7 +9,7 @@ export type VoiceChatStatus = "idle" | "listening" | "thinking" | "speaking";
 const TTS_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`;
 const TTS_CHAR_THRESHOLD = 300;
 
-export function useVoiceChat() {
+export function useVoiceChat(chat: ReturnType<typeof useAdminChat>) {
   const [status, setStatus] = useState<VoiceChatStatus>("idle");
   const { toast } = useToast();
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -21,8 +21,6 @@ export function useVoiceChat() {
   const speech = useSpeechRecognition({
     onError: (err) => toast({ title: "Voice", description: err, variant: "destructive" }),
   });
-
-  const chat = useAdminChat();
 
   // Monitor streaming to detect completion and trigger TTS
   useEffect(() => {
@@ -158,14 +156,9 @@ export function useVoiceChat() {
 
   return {
     status,
-    messages: chat.messages,
-    isStreaming: chat.isStreaming,
     interimText: speech.interimText,
     fullTranscript: speech.fullTranscript,
     isSupported: speech.isSupported,
     handleOrbTap,
-    sendMessage: chat.sendMessage,
-    clearChat: chat.clearChat,
-    cancelStream: chat.cancelStream,
   };
 }
