@@ -12,6 +12,15 @@ serve(async (req) => {
   }
 
   try {
+    // Safety guard: only run on Fridays (day 5 in UTC)
+    const now = new Date();
+    if (now.getUTCDay() !== 5) {
+      return new Response(
+        JSON.stringify({ ok: true, message: "Not a working day, skipping alerts" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
