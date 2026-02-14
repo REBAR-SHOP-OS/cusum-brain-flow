@@ -259,6 +259,7 @@ mcpServer.tool("get_dashboard_stats", {
 // ── HTTP Transport ──────────────────────────────────────────
 
 const transport = new StreamableHttpTransport();
+const httpHandler = transport.bind(mcpServer);
 const app = new Hono();
 
 // CORS middleware
@@ -304,7 +305,7 @@ app.use("*", async (c, next) => {
 // ── MCP handler ─────────────────────────────────────────────
 
 app.all("/*", async (c) => {
-  const response = await transport.handleRequest(c.req.raw, mcpServer);
+  const response = await httpHandler(c.req.raw);
   const headers = new Headers(response.headers);
   Object.entries(corsHeaders).forEach(([k, v]) => headers.set(k, v));
   return new Response(response.body, {
