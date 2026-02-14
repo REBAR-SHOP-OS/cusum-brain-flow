@@ -1,77 +1,69 @@
 
 
-# Fix Vizzy Connection Stability -- Switch to WebRTC
+# ویزی رو فارسی کن وقتی زبان کاربر فارسیه
 
-## Root Cause
+## خلاصه تغییرات
 
-The ElevenLabs connection keeps dropping because:
+وقتی `preferred_language` کاربر `fa` هست، ویزی باید:
+1. **پیش‌فرض فارسی صحبت کنه** — نه فقط وقتی CEO فارسی حرف بزنه
+2. **متن‌های نمایشی RTL باشن** — interim text و status label
+3. **Context قوی‌تر بفرسته** — به جای یه hint ساده، دستور صریح بده
 
-1. **WebSocket mode is being used** -- The current code uses `connectionType: "websocket"` with a `signed_url`. WebSocket connections are inherently less stable and more prone to disconnections.
-2. **ElevenLabs recommends WebRTC** -- Their docs explicitly state WebRTC has "lower latency, better audio quality" and is the recommended connection type.
-3. **Wrong API endpoint** -- The edge function calls `get-signed-url` (for WebSocket) instead of the `token` endpoint (for WebRTC).
+## تغییرات فایل‌ها
 
-## The Fix
+### 1. `src/lib/vizzyContext.ts` — پارامتر زبان اضافه شه
 
-Switch the entire pipeline from WebSocket to WebRTC. This is a straightforward swap.
+تابع `buildVizzyContext` یه پارامتر اختیاری `preferredLanguage` بگیره. وقتی `fa` هست، بالای system prompt یه بلاک قوی اضافه بشه:
 
-### 1. Update Edge Function: `supabase/functions/elevenlabs-conversation-token/index.ts`
-
-Change the ElevenLabs API call from:
 ```
-GET /v1/convai/conversation/get-signed-url?agent_id=...
-```
-to:
-```
-GET /v1/convai/conversation/token?agent_id=...
+MANDATORY LANGUAGE: Your preferred language is FARSI (Persian).
+You MUST respond in Farsi by default. Use colloquial Iranian Farsi.
+Only switch to English if the CEO explicitly speaks English.
+All numbers can stay in Western digits but text MUST be in Farsi.
 ```
 
-Return `token` instead of `signed_url` in the response (also keep `signed_url` for backward compatibility).
+### 2. `src/pages/VizzyPage.tsx` — زبان رو به context پاس بده
 
-### 2. Update Client: `src/pages/VizzyPage.tsx`
+- `buildVizzyContext(snap)` رو به `buildVizzyContext(snap, detectedLang)` تغییر بده
+- خط `langCtx` دیگه لازم نیست چون داخل context اصلی هندل میشه
+- Status labels که الان فقط توی Farsi mode فارسی هستن، وقتی `preferredLang === "fa"` هم فارسی بشن (حتی توی ElevenLabs mode)
+- `dir="rtl"` روی status label و interim text وقتی زبان فارسیه
 
-- Change `conversation.startSession({ signedUrl: ..., connectionType: "websocket" })` to `conversation.startSession({ conversationToken: ..., connectionType: "webrtc" })`
-- Update the reconnect logic to use the same WebRTC approach
-- Reduce `MAX_RETRIES` back to 3 since WebRTC is much more stable -- fewer retries needed
+### 3. Farsi mode context — همون تغییر
 
-### 3. No Other Changes Needed
+توی بلاک Farsi mode هم `buildVizzyContext(snap, "fa")` فرستاده بشه تا context یکپارچه باشه.
 
-- Same auth flow, same context loading, same client tools
-- Farsi mode is unaffected (uses browser APIs, not ElevenLabs)
+## جزئیات فنی
 
-## Technical Details
+### تغییرات `vizzyContext.ts`
 
-### Edge Function Change
+```typescript
+export function buildVizzyContext(snap: VizzyBusinessSnapshot, preferredLanguage?: string): string {
+  // ... existing code ...
+  
+  const langDirective = preferredLanguage === "fa" 
+    ? `\n═══ MANDATORY LANGUAGE DIRECTIVE ═══
+YOUR DEFAULT LANGUAGE IS FARSI (PERSIAN). 
+You MUST respond in Farsi unless the CEO explicitly speaks English.
+Use natural, colloquial Iranian Farsi (like a native Tehran speaker).
+Keep technical terms and proper nouns in English when natural.
+═══ END LANGUAGE DIRECTIVE ═══\n`
+    : "";
 
-```text
-// Before
-fetch(`https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=${agentId}`)
-// Returns: { signed_url: "wss://..." }
-
-// After  
-fetch(`https://api.elevenlabs.io/v1/convai/conversation/token?agent_id=${agentId}`)
-// Returns: { token: "eyJ..." }
+  return `YOU ARE VIZZY — ...
+${langDirective}
+...rest of context`;
+}
 ```
 
-### Client Change
+### تغییرات `VizzyPage.tsx`
 
-```text
-// Before
-await conversation.startSession({ signedUrl: data.signed_url, connectionType: "websocket" });
+- خط ۴۴۸: `buildVizzyContext(snap)` به `buildVizzyContext(snap, "fa")`
+- خط ۴۷۲: `buildVizzyContext(snap)` به `buildVizzyContext(snap, detectedLang)`
+- خط ۵۴۰-۵۴۹: Status labels با شرط `preferredLang === "fa"` به جای فقط `useFarsiMode`
+- خط ۶۰۲-۶۲۱: اضافه کردن `dir="rtl"` به بلاک‌های متنی وقتی `preferredLang === "fa"`
 
-// After
-await conversation.startSession({ conversationToken: data.token, connectionType: "webrtc" });
-```
-
-### Why WebRTC is More Stable
-
-- WebRTC uses UDP-based media transport with automatic quality adaptation
-- Built-in ICE (connectivity establishment) handles network changes gracefully
-- Automatic echo cancellation and noise suppression at the transport level
-- No TCP head-of-line blocking that causes WebSocket audio stuttering
-- Browser-native reconnection handling
-
-### Files to Modify
-
-1. `supabase/functions/elevenlabs-conversation-token/index.ts` -- Switch API endpoint from signed-url to token
-2. `src/pages/VizzyPage.tsx` -- Switch from WebSocket to WebRTC connection type
+### فایل‌های تغییر یافته
+1. `src/lib/vizzyContext.ts`
+2. `src/pages/VizzyPage.tsx`
 
