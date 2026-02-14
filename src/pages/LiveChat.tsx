@@ -303,6 +303,8 @@ export default function LiveChat() {
               onTap={voiceChat.handleOrbTap}
               disabled={!voiceChat.isSupported}
               micActive={voiceChat.isListening}
+              isMuted={voiceChat.isMuted}
+              onToggleMute={voiceChat.toggleMute}
             />
           </div>
         )}
@@ -315,7 +317,7 @@ export default function LiveChat() {
           </div>
         )}
 
-        {/* Input -- hidden when voice conversation is active */}
+        {/* Input -- hidden only when voice conversation is actively running */}
         {!(voiceMode && voiceChat.isConversationActive) && (
           <div className="border-t border-border bg-card p-4 shrink-0">
             <div className="max-w-3xl mx-auto">
