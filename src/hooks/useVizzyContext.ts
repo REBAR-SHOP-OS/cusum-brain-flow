@@ -53,9 +53,9 @@ export function useVizzyContext() {
       const cutItemsP = supabase.from("cut_plan_items").select("id, phase, completed_pieces, total_pieces")
         .in("phase", ["queued", "cutting", "bending"]).limit(500) as any;
       const machinesP = supabase.from("machines").select("id, name, status, type").eq("status", "running") as any;
-      const leadsP = (supabase.from("leads").select("id, contact_name, company_name, status, expected_revenue, lead_score") as any)
-        .in("status", ["new", "contacted", "qualified", "proposal"])
-        .order("lead_score", { ascending: false }).limit(20);
+      const leadsP = (supabase.from("leads").select("id, title, stage, expected_value, probability, customer_id, contact_id") as any)
+        .in("stage", ["new", "contacted", "qualified", "proposal"])
+        .order("probability", { ascending: false }).limit(20);
       const customersP = supabase.from("customers").select("id, name, status").eq("status", "active").limit(100) as any;
       const deliveriesP = supabase.from("deliveries").select("id, delivery_number, status, scheduled_date")
         .gte("scheduled_date", today).lte("scheduled_date", today).limit(50) as any;
@@ -174,7 +174,7 @@ export function useVizzyContext() {
         },
         crm: {
           openLeads: leads.length,
-          hotLeads: leads.filter((l: any) => (l.lead_score || 0) >= 70).slice(0, 5),
+          hotLeads: leads.filter((l: any) => (l.probability || 0) >= 70).slice(0, 5),
         },
         customers: { totalActive: customers.length },
         deliveries: {
