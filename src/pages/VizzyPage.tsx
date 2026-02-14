@@ -68,6 +68,7 @@ export default function VizzyPage() {
   const lastReconnectTimeRef = useRef(0);
   const useWebSocketFallbackRef = useRef(false);
   const cachedSignedUrlRef = useRef<string | null>(null);
+  const autoFallbackAttemptedRef = useRef(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const prevVolumeRef = useRef(80);
   const silentModeRef = useRef(false);
@@ -247,6 +248,7 @@ export default function VizzyPage() {
     onConnect: () => {
       sessionActiveRef.current = true;
       lastConnectTimeRef.current = Date.now();
+      autoFallbackAttemptedRef.current = false;
       setStatus("connected");
       retryCountRef.current = 0;
     },
@@ -264,7 +266,8 @@ export default function VizzyPage() {
         console.warn(`[Vizzy] Session lasted only ${sessionDuration}ms — agent-initiated disconnect`);
         // Enable WebSocket fallback for next attempt
         useWebSocketFallbackRef.current = true;
-        if (cachedSignedUrlRef.current) {
+        if (!autoFallbackAttemptedRef.current && cachedSignedUrlRef.current) {
+          autoFallbackAttemptedRef.current = true;
           setStatus("reconnecting");
           setTimeout(() => reconnectRef.current(), 1000);
         } else {
