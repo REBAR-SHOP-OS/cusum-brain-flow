@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Send, Loader2, Square, Trash2, Type, Hash, Brain, Headset } from "lucide-react";
+import { ArrowLeft, Send, Loader2, Square, Trash2, Type, Hash, Brain, Headset, Mic } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAdminChat } from "@/hooks/useAdminChat";
@@ -398,9 +398,23 @@ export default function LiveChat() {
                       <Square className="w-4 h-4" />
                     </Button>
                   ) : (
-                    <Button size="icon" className="h-9 w-9 rounded-lg shrink-0" onClick={handleSend} disabled={!input.trim()}>
-                      <Send className="w-4 h-4" />
-                    </Button>
+                    <>
+                      <Button
+                        size="icon"
+                        variant="outline"
+                        className="h-9 w-9 rounded-lg shrink-0 border-primary/30 text-primary hover:bg-primary hover:text-primary-foreground"
+                        onClick={() => {
+                          setVoiceMode(true);
+                          setTimeout(() => voiceChat.handleOrbTap(), 0);
+                        }}
+                        title="Start voice chat"
+                      >
+                        <Mic className="w-4 h-4" />
+                      </Button>
+                      <Button size="icon" className="h-9 w-9 rounded-lg shrink-0" onClick={handleSend} disabled={!input.trim()}>
+                        <Send className="w-4 h-4" />
+                      </Button>
+                    </>
                   )}
                 </div>
               </div>
