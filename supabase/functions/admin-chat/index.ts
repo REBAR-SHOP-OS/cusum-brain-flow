@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildFullVizzyContext } from "../_shared/vizzyFullContext.ts";
+import { buildPageContext } from "../_shared/pageMap.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -110,7 +111,7 @@ serve(async (req) => {
       );
     }
 
-    const { messages } = await req.json();
+    const { messages, currentPage } = await req.json();
 
     // Get company_id for memory ops
     const { data: profileData } = await supabase
@@ -123,10 +124,14 @@ serve(async (req) => {
     // Build full context
     const systemContext = await buildFullVizzyContext(supabase, user.id);
 
+    const pageContext = buildPageContext(currentPage || "/chat");
+
     const systemPrompt = `You are JARVIS — the CEO's personal and business AI assistant for REBAR SHOP OS.
 You handle EVERYTHING: business operations, personal tasks, brainstorming, scheduling, reminders, writing.
 You have FULL access to live business data. You can diagnose issues, explain what's happening, suggest fixes, and provide actionable commands.
 You are MULTILINGUAL. Respond in whatever language the CEO speaks. If they speak Farsi, respond naturally in colloquial Farsi.
+
+${pageContext}
 
 ${systemContext}
 

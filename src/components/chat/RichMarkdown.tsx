@@ -235,17 +235,35 @@ export function RichMarkdown({ content, className, onRegenerateImage, onActionIt
             <hr className="my-3 border-border/30" />
           ),
 
-          // ── Links ──
-          a: ({ children, href }) => (
-            <a
-              href={href}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary underline underline-offset-2 hover:text-primary/80 transition-colors"
-            >
-              {children}
-            </a>
-          ),
+          // ── Links (internal app links use client-side navigation) ──
+          a: ({ children, href }) => {
+            const isInternal = href?.startsWith("/") && !href?.startsWith("//");
+            if (isInternal) {
+              return (
+                <a
+                  href={href}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    window.history.pushState({}, "", href!);
+                    window.dispatchEvent(new PopStateEvent("popstate"));
+                  }}
+                  className="text-primary underline underline-offset-2 hover:text-primary/80 transition-colors inline-flex items-center gap-1"
+                >
+                  {children} →
+                </a>
+              );
+            }
+            return (
+              <a
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary underline underline-offset-2 hover:text-primary/80 transition-colors"
+              >
+                {children}
+              </a>
+            );
+          },
 
           // ── Images (base64 + URL) ──
           img: ({ src, alt }) => {

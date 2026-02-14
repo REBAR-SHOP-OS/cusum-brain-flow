@@ -15,7 +15,7 @@ export interface AdminChatEntry {
   timestamp: Date;
 }
 
-export function useAdminChat() {
+export function useAdminChat(currentPage?: string) {
   const [messages, setMessages] = useState<AdminChatEntry[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
@@ -76,7 +76,7 @@ export function useAdminChat() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({ messages: history }),
+        body: JSON.stringify({ messages: history, currentPage: currentPage || window.location.pathname }),
         signal: controller.signal,
       });
 
