@@ -308,8 +308,8 @@ app.use("*", async (c, next) => {
 
 app.use("*", async (c, next) => {
   const url = new URL(c.req.url);
-  // Skip auth for OAuth endpoints
-  if (url.pathname.includes("/oauth/authorize") || url.pathname.includes("/oauth/token")) {
+  // Skip auth for OAuth and well-known endpoints
+  if (url.pathname.includes("/oauth/") || url.pathname.includes("/.well-known/")) {
     await next();
     return;
   }
@@ -346,6 +346,34 @@ app.use("*", async (c, next) => {
 
 app.all("/*", async (c) => {
   const url = new URL(c.req.url);
+  const baseUrl = `https://${url.host}/functions/v1/mcp-server`;
+
+  // OAuth Protected Resource Metadata
+  if (url.pathname.includes("/.well-known/oauth-protected-resource")) {
+    return new Response(JSON.stringify({
+      resource: baseUrl,
+      authorization_servers: [baseUrl],
+      scopes_supported: ["mcp"],
+    }), {
+      status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  // OAuth Authorization Server Metadata
+  if (url.pathname.includes("/.well-known/oauth-authorization-server") || url.pathname.includes("/.well-known/openid-configuration")) {
+    return new Response(JSON.stringify({
+      issuer: baseUrl,
+      authorization_endpoint: `${baseUrl}/oauth/authorize`,
+      token_endpoint: `${baseUrl}/oauth/token`,
+      response_types_supported: ["code"],
+      grant_types_supported: ["authorization_code", "client_credentials"],
+      token_endpoint_auth_methods_supported: ["client_secret_post"],
+      scopes_supported: ["mcp"],
+      code_challenge_methods_supported: ["S256"],
+    }), {
+      status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
 
   // OAuth authorize
   if (url.pathname.includes("/oauth/authorize") && c.req.method === "GET") {
