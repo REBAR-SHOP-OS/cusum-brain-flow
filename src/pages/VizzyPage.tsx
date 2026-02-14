@@ -64,6 +64,8 @@ export default function VizzyPage() {
   const intentionalStopRef = useRef(false);
   const retryCountRef = useRef(0);
   const snapshotRef = useRef<VizzyBusinessSnapshot | null>(null);
+  const lastConnectTimeRef = useRef(0);
+  const lastReconnectTimeRef = useRef(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const prevVolumeRef = useRef(80);
   const silentModeRef = useRef(false);
@@ -242,21 +244,28 @@ export default function VizzyPage() {
     },
     onConnect: () => {
       sessionActiveRef.current = true;
+      lastConnectTimeRef.current = Date.now();
       setStatus("connected");
       retryCountRef.current = 0;
     },
     onDisconnect: () => {
       if (!sessionActiveRef.current) return; // Ignore spurious disconnects before connect
+      const sessionDuration = Date.now() - lastConnectTimeRef.current;
       sessionActiveRef.current = false;
       if (intentionalStopRef.current) {
         saveTranscript(transcriptRef.current);
         navigate("/home");
         return;
       }
+      // If session lasted < 5 seconds, agent terminated — don't retry (prevents infinite loop)
+      if (sessionDuration < 5000) {
+        console.warn(`[Vizzy] Session lasted only ${sessionDuration}ms — agent-initiated disconnect, not retrying`);
+        setStatus("error");
+        return;
+      }
       if (retryCountRef.current < MAX_RETRIES) {
         retryCountRef.current += 1;
         setStatus("reconnecting");
-        // Exponential backoff: 1s, 2s, 4s, 8s, 16s
         const delay = Math.min(1000 * Math.pow(2, retryCountRef.current - 1), 16000);
         console.log(`[Vizzy] Reconnecting in ${delay}ms (attempt ${retryCountRef.current}/${MAX_RETRIES})`);
         setTimeout(() => reconnectRef.current(), delay);
@@ -363,6 +372,13 @@ export default function VizzyPage() {
 
   useEffect(() => {
     reconnectRef.current = async () => {
+      // Enforce 3s cooldown between reconnect attempts
+      const timeSinceLastReconnect = Date.now() - lastReconnectTimeRef.current;
+      if (timeSinceLastReconnect < 3000) {
+        console.log(`[Vizzy] Reconnect cooldown — skipping (${timeSinceLastReconnect}ms since last attempt)`);
+        return;
+      }
+      lastReconnectTimeRef.current = Date.now();
       try {
         // End any lingering session before reconnecting
         try { await conversation.endSession(); } catch { /* already ended */ }
@@ -481,6 +497,9 @@ export default function VizzyPage() {
             setTimeout(() => { clearInterval(check); resolve(); }, 10000);
           });
           await waitForConnection();
+          // 2s stabilization delay — let WebRTC session fully establish before pushing context
+          await new Promise((r) => setTimeout(r, 2000));
+          if (!sessionActiveRef.current) return; // Session ended during delay
 
           try {
             const { data: briefData } = await supabase.functions.invoke("vizzy-briefing", {
