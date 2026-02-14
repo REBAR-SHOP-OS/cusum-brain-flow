@@ -16,7 +16,7 @@ const primaryNav = [
 ];
 
 const moreItems = [
-  { name: "Pipeline", href: "/pipeline", icon: Kanban, roles: ["admin", "sales", "office"] },
+  { name: "Pipeline", href: "/pipeline", icon: Kanban, roles: ["admin", "sales", "office", "shop_supervisor"] },
   { name: "Customers", href: "/customers", icon: Users },
   { name: "Office", href: "/office", icon: LayoutGrid, roles: ["admin", "office"] },
   { name: "Accounting", href: "/accounting", icon: DollarSign, roles: ["admin", "accounting", "office"] },
@@ -34,12 +34,41 @@ const moreItems = [
 export const MobileNavV2 = React.forwardRef<HTMLElement, {}>(function MobileNavV2(_props, ref) {
   const location = useLocation();
   const [showMore, setShowMore] = useState(false);
-  const { roles, isAdmin } = useUserRole();
+  const { roles, isAdmin, isCustomer } = useUserRole();
   const { user } = useAuth();
   const email = user?.email || "";
   const isInternal = email.endsWith("@rebar.shop");
   const { hasAccess: isLinkedCustomer } = useCustomerPortalData();
   const isExternalEmployee = !isInternal && !!email && !isLinkedCustomer;
+
+  // Customer role gets portal-only nav
+  if (isCustomer && roles.length === 1) {
+    const custNav = [
+      { name: "Portal", href: "/portal", icon: Users },
+    ];
+    return (
+      <nav ref={ref} className="fixed bottom-0 left-0 right-0 z-40 bg-card border-t border-border md:hidden safe-area-bottom">
+        <div className="flex items-center justify-around h-14">
+          {custNav.map((item) => {
+            const isActive = location.pathname.startsWith(item.href);
+            return (
+              <Link
+                key={item.name}
+                to={item.href}
+                className={cn(
+                  "flex flex-col items-center gap-0.5 py-1 px-3 transition-colors",
+                  isActive ? "text-primary" : "text-muted-foreground"
+                )}
+              >
+                <item.icon className="w-5 h-5" />
+                <span className="text-[10px] font-medium">{item.name}</span>
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
+    );
+  }
 
   // External employees get a simple 3-item nav
   if (isExternalEmployee) {

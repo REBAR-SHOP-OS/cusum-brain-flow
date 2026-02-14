@@ -17,6 +17,12 @@ const WORKSHOP_ALLOWED = [
   "/tasks",
 ];
 
+/** Routes accessible to shop supervisors (workshop + extras) */
+const SHOP_SUPERVISOR_ALLOWED = [
+  ...WORKSHOP_ALLOWED,
+  "/deliveries",
+];
+
 /** Routes accessible to sales-only users */
 const SALES_ALLOWED = [
   "/pipeline",
@@ -42,7 +48,7 @@ interface RoleGuardProps {
  * Admin / office / sales / accounting users pass through freely.
  */
 export function RoleGuard({ children }: RoleGuardProps) {
-  const { roles, isLoading, isAdmin } = useUserRole();
+  const { roles, isLoading, isAdmin, isShopSupervisor, isCustomer } = useUserRole();
   const { user } = useAuth();
   const location = useLocation();
 
@@ -83,6 +89,14 @@ export function RoleGuard({ children }: RoleGuardProps) {
   );
   if (hasOfficeAccess) return <>{children}</>;
 
+  // Customer role → portal only
+  if (isCustomer && roles.length === 1) {
+    if (!location.pathname.startsWith("/portal")) {
+      return <Navigate to="/portal" replace />;
+    }
+    return <>{children}</>;
+  }
+
   // Sales-only: restrict to CRM + estimating routes
   const isSalesOnly = roles.length === 1 && roles.includes("sales" as any);
   if (isSalesOnly) {
@@ -91,6 +105,17 @@ export function RoleGuard({ children }: RoleGuardProps) {
     );
     if (!isAllowed) {
       return <Navigate to="/pipeline" replace />;
+    }
+    return <>{children}</>;
+  }
+
+  // Shop Supervisor: workshop routes + extras
+  if (isShopSupervisor && !roles.some((r) => ["admin", "office", "accounting", "sales"].includes(r))) {
+    const isAllowed = SHOP_SUPERVISOR_ALLOWED.some((prefix) =>
+      location.pathname.startsWith(prefix)
+    );
+    if (!isAllowed) {
+      return <Navigate to="/shop-floor" replace />;
     }
     return <>{children}</>;
   }
