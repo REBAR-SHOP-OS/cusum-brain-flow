@@ -1,48 +1,67 @@
 
 
-# Remove Farsi Mode — Make Vizzy English-Only
+# Add "Shop Supervisor" and "Customer" Roles
 
 ## Overview
 
-Strip all Farsi/multilingual voice logic from VizzyPage and the system prompt. Vizzy will be English-only again, using ElevenLabs exclusively (no browser SpeechRecognition/SpeechSynthesis fallback).
+Add two new roles to the RBAC system: **shop_supervisor** (elevated workshop access) and **customer** (external customer portal access via role instead of just `customer_user_links`).
 
-## Changes
+## Database Migration
 
-### File 1: `src/pages/VizzyPage.tsx`
+Add the two new values to the `app_role` enum:
 
-| What | Detail |
+```sql
+ALTER TYPE public.app_role ADD VALUE IF NOT EXISTS 'shop_supervisor';
+ALTER TYPE public.app_role ADD VALUE IF NOT EXISTS 'customer';
+```
+
+No new tables needed — both roles use the existing `user_roles` table.
+
+## Frontend Changes
+
+### 1. `src/hooks/useUserRole.ts`
+
+- Add `"shop_supervisor"` and `"customer"` to the `AppRole` type union
+- Add convenience booleans: `isShopSupervisor` and `isCustomer`
+- `isShopSupervisor` grants workshop access plus additional capabilities
+- `isWorkshop` will also be true if user has `shop_supervisor` role (supervisor is a superset)
+
+### 2. `src/components/auth/RoleGuard.tsx`
+
+- Shop Supervisor gets all workshop routes plus access to settings, deliveries, and team management
+- Customer role redirects to `/portal` (same as current linked-customer behavior, but now role-based too)
+
+Route access for **shop_supervisor**:
+```
+/home, /shop-floor, /shopfloor, /timeclock, /team-hub, /settings,
+/inbox, /phonecalls, /agent, /tasks, /deliveries
+```
+
+Route access for **customer**:
+```
+/portal (only)
+```
+
+### 3. `src/components/layout/MobileNavV2.tsx`
+
+- Add `shop_supervisor` to visibility checks where `workshop` appears
+- Customer role users get a minimal nav (just Portal)
+
+### 4. `src/components/settings/SettingsPeople.tsx`
+
+- Add "Shop Supervisor" and "Customer" to the department selector dropdown
+- Add icon and color config for both roles:
+  - Shop Supervisor: `Shield` icon, purple badge
+  - Customer: `Users` icon, cyan badge
+- Add "Set as Shop Supervisor" and "Set as Customer" to the role-change dropdown menu
+
+## Summary
+
+| File | Change |
 |------|--------|
-| Remove import | `useVizzyFarsiVoice` import (line 4) and `Languages` icon (line 3) |
-| Remove state | `preferredLang`, `useFarsiMode` (lines 77-78) |
-| Remove hook call | `farsiVoice = useVizzyFarsiVoice(...)` block (lines 81-97) |
-| Remove Farsi branch | The `if (detectedLang === "fa")` block in auto-start (lines 475-492) — just skip straight to ElevenLabs |
-| Simplify `stop` | Remove `useFarsiMode` conditional — always call `conversation.endSession()` (lines 440-444) |
-| Simplify `isSpeakingNow` | Always use `conversation.isSpeaking` (line 581) |
-| Simplify `statusLabel` | Remove all Farsi ternaries — English strings only (lines 583-593) |
-| Remove language badge | The `preferredLang !== "en"` badge (lines 648-652) |
-| Remove Farsi interim text | The `farsiVoice.interimText` block (lines 659-664) |
-| Remove `dir="rtl"` | On status label (line 653) |
-| Simplify mute button | Remove `useFarsiMode` conditional — always use `setMuted` (lines 783-798) |
-| Remove Language toggle button | The entire Languages button (lines 801-818) |
-
-### File 2: `src/lib/vizzyContext.ts`
-
-Replace the multilingual/Farsi instructions (lines 54-57) with a simple English-only directive:
-
-```
-YOU ARE VIZZY — the CEO's personal AI assistant (like Jarvis for Iron Man).
-You ALWAYS respond in English.
-You have FULL access to live business data. Use ONLY these numbers. NEVER make up figures.
-```
-
-### File 3: `src/hooks/useVizzyFarsiVoice.ts`
-
-No deletion needed — just removing all imports/usage. The file becomes dead code and can optionally be deleted for cleanup.
-
-## What stays unchanged
-
-- ElevenLabs voice pipeline (WebRTC + WebSocket fallback)
-- All business context, tools, RingCentral integration
-- Transcribe view's Farsi option (that's a separate feature for audio transcription, not Vizzy voice)
-- The `autoFallbackAttemptedRef` fix for reconnection loops
+| Migration SQL | Add `shop_supervisor` and `customer` to `app_role` enum |
+| `useUserRole.ts` | Expand type, add `isShopSupervisor`, `isCustomer` |
+| `RoleGuard.tsx` | Add route gating for both new roles |
+| `MobileNavV2.tsx` | Add role visibility for supervisor, minimal nav for customer |
+| `SettingsPeople.tsx` | Add both roles to department picker and action menu |
 
