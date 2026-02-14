@@ -264,7 +264,12 @@ export default function VizzyPage() {
         console.warn(`[Vizzy] Session lasted only ${sessionDuration}ms — agent-initiated disconnect`);
         // Enable WebSocket fallback for next attempt
         useWebSocketFallbackRef.current = true;
-        setStatus("error");
+        if (cachedSignedUrlRef.current) {
+          setStatus("reconnecting");
+          setTimeout(() => reconnectRef.current(), 1000);
+        } else {
+          setStatus("error");
+        }
         return;
       }
       if (retryCountRef.current < MAX_RETRIES) {
