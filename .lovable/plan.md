@@ -1,64 +1,40 @@
 
 
-# Fix Remaining "No QuickBooks ID" Warnings
+# Fix Stale "No QuickBooks ID" Warning Suggestions
 
-## Root Cause
+## Problem
 
-Three different issues are causing these warnings:
+The old suggestions (created before the code fix) are still sitting in the database with `severity: warning` and the old title format ("X has no QuickBooks ID"). The updated generate-suggestions code now produces `severity: info` with better titles, but:
 
-1. **Duplicate local records**: "Clearway Construction Inc." and "VALARD CONSTRUCTION LP" each have TWO rows in the database -- one already linked to QuickBooks, one not. The auto-match skips these because assigning the same QB ID to a second row would create duplicates.
-
-2. **Name variations**: Several unlinked rows are contact-specific entries like "Valard Construction LP, Mitchell Lewis" or "Valard Construction LP (Mitch Miller)" which don't match the QB name exactly.
-
-3. **No QB record**: "Rigarus Construction inc" simply doesn't exist in QuickBooks at all, so no auto-match is possible.
+1. The dedup logic sees the old records and skips creating new ones
+2. Old records are never cleaned up or updated
+3. So the dashboard keeps showing the stale warnings
 
 ## Solution
 
-### 1. Improve auto-match with fuzzy/partial matching
+Two changes:
 
-Enhance the name-matching logic in `handleSyncCustomers` to also check if a local customer name **starts with** or **contains** a QB customer name. This handles the "Valard Construction LP, Nick Dong" pattern where the base company name is a prefix.
+### 1. Clean up stale `missing_qb` suggestions before regenerating
 
-### 2. Skip already-linked QB IDs
+At the start of the `generate-suggestions` function (after auth), delete all existing `missing_qb` suggestions so they get recreated fresh with the correct severity and titles.
 
-Before assigning a QB ID to an unlinked row, check if that QB ID is already used by another local customer. If it is, skip (don't create duplicate links). This prevents the duplicate Clearway/Valard rows from both getting the same QB ID.
+### 2. Immediate data fix
 
-### 3. Merge duplicate customer records (data cleanup)
-
-The real fix for Clearway and Valard is that the duplicate unlinked rows should be merged into the linked ones. We'll add logic: if an unlinked customer has the exact same normalized name as a linked customer, skip it and log it as a "duplicate detected" rather than a warning.
-
-### 4. Handle Rigarus -- no QB match
-
-For customers like Rigarus that genuinely don't exist in QB, suppress the warning in the suggestions generator since the customer simply hasn't been created in QuickBooks yet. Change the suggestion severity from "warning" to "info" for customers that have no plausible QB match.
+Delete the 9 stale suggestion rows right now so the dashboard clears immediately, without waiting for a regeneration cycle.
 
 ## Technical Details
 
-### File: `supabase/functions/quickbooks-oauth/index.ts`
+### File: `supabase/functions/generate-suggestions/index.ts`
 
-**Enhance name-matching in `handleSyncCustomers`** (lines 677-715):
+Add a cleanup step after line 59 (after loading existing dedup sets):
 
-- Build a set of QB IDs that are already linked to a local customer (query `customers` where `quickbooks_id IS NOT NULL`)
-- When matching, skip any QB ID already in that set
-- Add prefix/contains matching: if exact match fails, check if any QB name is a prefix of the local name (handles "Valard Construction LP, Nick Dong" matching to "Valard Construction LP")
-- Log duplicates separately for visibility
+- Delete all suggestions where `category = 'missing_qb'` and `status IN ('open', 'new')` -- this ensures they get recreated fresh each run with the current logic
+- Also delete corresponding `human_tasks` with `category = 'missing_qb'` and `status IN ('open', 'snoozed')`
+- Remove `missing_qb` entries from the `existingSuggestions` set so the dedup check doesn't block new inserts
 
-```text
-Matching priority:
-1. Exact normalized match (current behavior)
-2. QB name is a prefix of local name (new)
-3. Skip if QB ID already assigned to another row (new guard)
-```
+### Database: One-time cleanup
 
-### File: `supabase/functions/quickbooks-oauth/index.ts` (suggestions generator, if applicable)
+Run a delete to remove the 9 stale suggestion rows immediately:
+- `DELETE FROM suggestions WHERE category = 'missing_qb' AND status IN ('open', 'new')`
 
-**Or the file that generates suggestions** -- adjust the severity:
-
-- If a customer has no QB ID but there's a linked customer with a similar name, mark as "info" (duplicate) instead of "warning"
-- If a customer has no QB ID and no similar QB customer exists, keep as "info" with action "Create in QuickBooks" instead of the current alarming warning
-
-### Result
-
-- Valard contact-specific entries (Mitchell Lewis, Nick Dong, Mitch Miller) get auto-linked to QB ID 1821 via prefix matching
-- Clearway duplicate is detected and skipped (won't create a duplicate QB link)
-- Rigarus warning is softened since it genuinely needs to be created in QB first
-- Fewer false-alarm warnings on the dashboard
-
+This way, the next time suggestions regenerate, the new code creates them correctly as `info` severity with proper titles, and duplicates/variants are handled as designed.
