@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Send, Loader2, Square, Trash2, Type, Hash, Brain } from "lucide-react";
+import { ArrowLeft, Send, Loader2, Square, Trash2, Type, Hash, Brain, Headset } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAdminChat } from "@/hooks/useAdminChat";
+import { useVoiceChat } from "@/hooks/useVoiceChat";
 import { RichMarkdown } from "@/components/chat/RichMarkdown";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAuth } from "@/lib/auth";
@@ -15,6 +16,7 @@ import { VoiceInputButton } from "@/components/chat/VoiceInputButton";
 import { QuickTemplates } from "@/components/chat/QuickTemplates";
 import { SlashCommandMenu, SlashCommand } from "@/components/chat/SlashCommandMenu";
 import { MentionMenu } from "@/components/chat/MentionMenu";
+import { VoiceOrb } from "@/components/chat/VoiceOrb";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { useToast } from "@/hooks/use-toast";
 import { TooltipProvider, Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -31,7 +33,11 @@ export default function LiveChat() {
   const { toast } = useToast();
 
   const [input, setInput] = useState("");
+  const [voiceMode, setVoiceMode] = useState(false);
   const { messages, isStreaming, sendMessage, clearChat, cancelStream } = useAdminChat();
+  const voiceChat = useVoiceChat();
+  const activeMessages = voiceMode ? voiceChat.messages : messages;
+  const activeIsStreaming = voiceMode ? voiceChat.isStreaming : isStreaming;
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [memoryCount, setMemoryCount] = useState<number | null>(null);
@@ -208,8 +214,24 @@ export default function LiveChat() {
               )}
             </p>
           </div>
-          {messages.length > 0 && (
-            <Button variant="ghost" size="icon" className="h-9 w-9" onClick={clearChat} title="Clear chat">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={voiceMode ? "default" : "ghost"}
+                size="icon"
+                className="h-9 w-9"
+                onClick={() => setVoiceMode(!voiceMode)}
+              >
+                <Headset className="w-4 h-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">Voice Mode</TooltipContent>
+          </Tooltip>
+          {(messages.length > 0 || voiceChat.messages.length > 0) && (
+            <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => {
+              clearChat();
+              voiceChat.clearChat();
+            }} title="Clear chat">
               <Trash2 className="w-4 h-4" />
             </Button>
           )}
@@ -218,17 +240,19 @@ export default function LiveChat() {
         {/* Messages */}
         <ScrollArea className="flex-1">
           <div className="max-w-3xl mx-auto p-4 space-y-4">
-            {messages.length === 0 && (
+            {activeMessages.length === 0 && (
               <div className="text-center py-20">
                 <div className="w-16 h-16 rounded-full overflow-hidden ring-2 ring-teal-400 mx-auto mb-4">
                   <img src={avatarImg} alt={agentName} className="w-full h-full object-cover" />
                 </div>
                 <p className="text-lg font-medium">How can I help you?</p>
-                <p className="text-sm text-muted-foreground mt-1">Ask anything about your business</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {voiceMode ? "Tap the orb to start speaking" : "Ask anything about your business"}
+                </p>
               </div>
             )}
 
-            {messages.map((msg) => (
+            {activeMessages.map((msg) => (
               <div
                 key={msg.id}
                 className={cn(
@@ -246,7 +270,7 @@ export default function LiveChat() {
               </div>
             ))}
 
-            {isStreaming && messages[messages.length - 1]?.role !== "assistant" && (
+            {activeIsStreaming && activeMessages[activeMessages.length - 1]?.role !== "assistant" && (
               <div className="mr-auto bg-muted rounded-2xl px-4 py-3 text-sm flex items-center gap-2">
                 <Loader2 className="w-4 h-4 animate-spin" />
                 <span className="text-muted-foreground">Thinking...</span>
@@ -256,8 +280,24 @@ export default function LiveChat() {
           </div>
         </ScrollArea>
 
-        {/* Voice recording indicator */}
-        {speech.isListening && (
+        {/* Voice mode: orb + transcript */}
+        {voiceMode && (
+          <div className="px-4 py-4 flex flex-col items-center gap-2 border-t border-border bg-card/50">
+            {voiceChat.status === "listening" && voiceChat.interimText && (
+              <p className="text-sm text-muted-foreground italic truncate max-w-xs">
+                "{voiceChat.interimText}"
+              </p>
+            )}
+            <VoiceOrb
+              status={voiceChat.status}
+              onTap={voiceChat.handleOrbTap}
+              disabled={!voiceChat.isSupported}
+            />
+          </div>
+        )}
+
+        {/* Voice recording indicator (text mode only) */}
+        {!voiceMode && speech.isListening && (
           <div className="px-4 py-2 flex items-center gap-2 text-sm text-destructive animate-pulse">
             <span className="w-2 h-2 rounded-full bg-destructive" />
             Listening... {speech.interimText && <span className="text-muted-foreground italic truncate">"{speech.interimText}"</span>}
