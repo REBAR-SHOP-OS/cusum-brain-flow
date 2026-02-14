@@ -444,7 +444,7 @@ export default function VizzyPage() {
             loadFullContext().then(async (snap) => {
               if (!snap) return;
               snapshotRef.current = snap;
-              const rawContext = buildVizzyContext(snap, "fa");
+              const rawContext = buildVizzyContext(snap);
               farsiVoice.sendContextualUpdate(rawContext);
             });
             return; // Farsi mode started successfully
@@ -469,7 +469,7 @@ export default function VizzyPage() {
           if (!snap) return;
           snapshotRef.current = snap;
 
-          const rawContext = buildVizzyContext(snap, detectedLang);
+          const rawContext = buildVizzyContext(snap);
 
           // Wait for session to be fully connected before sending context
           const waitForConnection = () => new Promise<void>((resolve) => {

@@ -1,6 +1,6 @@
 import type { VizzyBusinessSnapshot } from "@/hooks/useVizzyContext";
 
-export function buildVizzyContext(snap: VizzyBusinessSnapshot, preferredLanguage?: string): string {
+export function buildVizzyContext(snap: VizzyBusinessSnapshot): string {
   const fmt = (n: number) =>
     n.toLocaleString("en-US", { style: "currency", currency: "USD" });
   const { financials: f, production: p, crm, customers: c, deliveries: d, team, recentEvents, brainKnowledge, agentActivity, teamPresence } = snap;
@@ -51,16 +51,6 @@ IMPORTANT: Tell the CEO early in the conversation that QuickBooks needs to be re
 via Settings → Integrations. Urge them to reconnect so you can provide real-time numbers.
 ` : "";
 
-  const langDirective = preferredLanguage === "fa"
-    ? `\n═══ MANDATORY LANGUAGE DIRECTIVE ═══
-YOUR DEFAULT LANGUAGE IS FARSI (PERSIAN).
-You MUST respond in Farsi by default unless the CEO explicitly speaks English.
-Use natural, colloquial Iranian Farsi (like a native Tehran speaker).
-Keep technical terms, proper nouns, and numbers in English when natural.
-All your text responses MUST be in Farsi. This is non-negotiable.
-═══ END LANGUAGE DIRECTIVE ═══\n`
-    : "";
-
   return `YOU ARE VIZZY — the CEO's personal AI assistant (like Jarvis for Iron Man).
 You are MULTILINGUAL. You MUST respond in whatever language the CEO speaks to you.
 If the CEO speaks Farsi (Persian), respond in Farsi with an Iranian accent and natural conversational tone — like a native Tehran speaker. Use informal/colloquial Farsi when appropriate (e.g. "چطوری" not just "حالتان چطور است").
@@ -71,7 +61,7 @@ Log every question the CEO asks mentally — you are building their daily journe
 Be proactive: flag risks, suggest actions, connect dots across departments.
 Speak like a trusted advisor — concise, direct, confident.
 
-${langDirective}${qbWarning}═══ LIVE BUSINESS SNAPSHOT (${new Date().toLocaleString()}) ═══
+${qbWarning}═══ LIVE BUSINESS SNAPSHOT (${new Date().toLocaleString()}) ═══
 
 📊 FINANCIALS
   Accounts Receivable: ${fmt(f.totalReceivable)}
