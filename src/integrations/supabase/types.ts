@@ -1372,6 +1372,216 @@ export type Database = {
           },
         ]
       }
+      email_campaign_sends: {
+        Row: {
+          campaign_id: string
+          clicked_at: string | null
+          contact_id: string | null
+          created_at: string
+          email: string
+          error_message: string | null
+          id: string
+          metadata: Json | null
+          opened_at: string | null
+          sent_at: string | null
+          status: string
+        }
+        Insert: {
+          campaign_id: string
+          clicked_at?: string | null
+          contact_id?: string | null
+          created_at?: string
+          email: string
+          error_message?: string | null
+          id?: string
+          metadata?: Json | null
+          opened_at?: string | null
+          sent_at?: string | null
+          status?: string
+        }
+        Update: {
+          campaign_id?: string
+          clicked_at?: string | null
+          contact_id?: string | null
+          created_at?: string
+          email?: string
+          error_message?: string | null
+          id?: string
+          metadata?: Json | null
+          opened_at?: string | null
+          sent_at?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_campaign_sends_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "email_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_campaign_sends_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_campaign_sends_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_campaigns: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          body_html: string | null
+          body_text: string | null
+          campaign_type: string
+          company_id: string
+          created_at: string
+          created_by: string | null
+          estimated_recipients: number | null
+          id: string
+          metadata: Json | null
+          preview_text: string | null
+          scheduled_at: string | null
+          segment_rules: Json | null
+          sent_at: string | null
+          status: string
+          subject_line: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          body_html?: string | null
+          body_text?: string | null
+          campaign_type?: string
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          estimated_recipients?: number | null
+          id?: string
+          metadata?: Json | null
+          preview_text?: string | null
+          scheduled_at?: string | null
+          segment_rules?: Json | null
+          sent_at?: string | null
+          status?: string
+          subject_line?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          body_html?: string | null
+          body_text?: string | null
+          campaign_type?: string
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          estimated_recipients?: number | null
+          id?: string
+          metadata?: Json | null
+          preview_text?: string | null
+          scheduled_at?: string | null
+          segment_rules?: Json | null
+          sent_at?: string | null
+          status?: string
+          subject_line?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_campaigns_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_campaigns_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_campaigns_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_campaigns_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_consent_events: {
+        Row: {
+          company_id: string
+          consent_type: string
+          contact_id: string | null
+          email: string
+          evidence: Json | null
+          id: string
+          recorded_at: string
+          source: string
+          status: string
+        }
+        Insert: {
+          company_id: string
+          consent_type?: string
+          contact_id?: string | null
+          email: string
+          evidence?: Json | null
+          id?: string
+          recorded_at?: string
+          source?: string
+          status?: string
+        }
+        Update: {
+          company_id?: string
+          consent_type?: string
+          contact_id?: string | null
+          email?: string
+          evidence?: Json | null
+          id?: string
+          recorded_at?: string
+          source?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_consent_events_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_consent_events_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       email_signatures: {
         Row: {
           created_at: string
@@ -1393,6 +1603,33 @@ export type Database = {
           signature_html?: string
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      email_suppressions: {
+        Row: {
+          company_id: string
+          email: string
+          id: string
+          reason: string
+          source: string | null
+          suppressed_at: string
+        }
+        Insert: {
+          company_id: string
+          email: string
+          id?: string
+          reason?: string
+          source?: string | null
+          suppressed_at?: string
+        }
+        Update: {
+          company_id?: string
+          email?: string
+          id?: string
+          reason?: string
+          source?: string | null
+          suppressed_at?: string
         }
         Relationships: []
       }

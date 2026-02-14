@@ -60,6 +60,8 @@ import Transcribe from "./pages/Transcribe";
 import TranscribeWatch from "./pages/TranscribeWatch";
 import VizzyPage from "./pages/VizzyPage";
 import LiveChat from "./pages/LiveChat";
+import EmailMarketing from "./pages/EmailMarketing";
+import Unsubscribe from "./pages/Unsubscribe";
 const queryClient = new QueryClient();
 
 /** Helper to wrap protected routes with layout + page-level error boundary */
@@ -143,6 +145,7 @@ const App = () => (
 
                     {/* Social / Comms */}
                     <Route path="/social-media-manager" element={<P><SocialMediaManager /></P>} />
+                    <Route path="/email-marketing" element={<P><EmailMarketing /></P>} />
                     <Route path="/daily-summarizer" element={<P><DailySummarizer /></P>} />
                     <Route path="/facebook-commenter" element={<P><FacebookCommenter /></P>} />
 
@@ -170,6 +173,7 @@ const App = () => (
                     <Route path="/terms-of-service" element={<TermsOfService />} />
                     <Route path="/portal" element={<CustomerPortal />} />
                     <Route path="/install" element={<Install />} />
+                    <Route path="/unsubscribe" element={<Unsubscribe />} />
 
                     <Route path="*" element={<NotFound />} />
                   </Routes>
