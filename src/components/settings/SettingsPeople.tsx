@@ -27,14 +27,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, UserPlus, Crown, Shield, Briefcase, HardHat, Truck as TruckIcon } from "lucide-react";
+import { MoreHorizontal, UserPlus, Crown, Shield, Briefcase, HardHat, Truck as TruckIcon, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const departmentConfig: Record<string, { label: string; icon: React.ElementType; color: string }> = {
   admin: { label: "Owner", icon: Crown, color: "bg-amber-500" },
   office: { label: "Office", icon: Briefcase, color: "bg-blue-500" },
   workshop: { label: "Workshop", icon: HardHat, color: "bg-orange-500" },
+  shop_supervisor: { label: "Shop Supervisor", icon: Shield, color: "bg-violet-500" },
   field: { label: "Field", icon: TruckIcon, color: "bg-green-500" },
+  customer: { label: "Customer", icon: Users, color: "bg-cyan-500" },
 };
 
 function getInitials(name: string) {
@@ -168,7 +170,9 @@ export function SettingsPeople() {
                       <SelectItem value="admin">Admin</SelectItem>
                       <SelectItem value="office">Office</SelectItem>
                       <SelectItem value="workshop">Workshop</SelectItem>
+                      <SelectItem value="shop_supervisor">Shop Supervisor</SelectItem>
                       <SelectItem value="field">Field</SelectItem>
+                      <SelectItem value="customer">Customer</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -252,8 +256,14 @@ export function SettingsPeople() {
                         <DropdownMenuItem onClick={() => handleRoleChange(profile.id, "workshop")}>
                           Set as Workshop
                         </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleRoleChange(profile.id, "shop_supervisor")}>
+                          Set as Shop Supervisor
+                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => handleRoleChange(profile.id, "field")}>
                           Set as Field
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleRoleChange(profile.id, "customer")}>
+                          Set as Customer
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           className="text-destructive"
