@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useConversation } from "@elevenlabs/react";
-import { X, Mic, MicOff, Volume2, WifiOff, RefreshCw } from "lucide-react";
+import { X, Mic, MicOff, Volume2, RefreshCw } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
@@ -26,6 +26,7 @@ export default function VizzyPage() {
   const navigate = useNavigate();
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [status, setStatus] = useState<"idle" | "connecting" | "connected" | "error">("idle");
+  const statusRef = useRef<"idle" | "connecting" | "connected" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
   const transcriptRef = useRef<TranscriptEntry[]>([]);
@@ -34,11 +35,17 @@ export default function VizzyPage() {
   const [showVolume, setShowVolume] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const startedRef = useRef(false);
+  const connectingRef = useRef(false);
   const intentionalStopRef = useRef(false);
   const snapshotRef = useRef<VizzyBusinessSnapshot | null>(null);
   const languageRef = useRef("en");
   const transcriptEndRef = useRef<HTMLDivElement>(null);
+  const connectedAtRef = useRef(0);
+
+  const setStatusBoth = useCallback((s: typeof status) => {
+    statusRef.current = s;
+    setStatus(s);
+  }, []);
 
   // Admin guard
   useEffect(() => {
@@ -114,7 +121,7 @@ export default function VizzyPage() {
         );
       }
     } catch (err) {
-      console.error("Failed to save transcript:", err);
+      console.error("[Vizzy] Failed to save transcript:", err);
     }
   }, [user]);
 
@@ -139,9 +146,14 @@ export default function VizzyPage() {
   const conversation = useConversation({
     micMuted: muted,
     onConnect: () => {
-      setStatus("connected");
+      console.log("[Vizzy] onConnect fired — session established");
+      connectedAtRef.current = Date.now();
+      setStatusBoth("connected");
     },
     onDisconnect: () => {
+      const duration = Date.now() - connectedAtRef.current;
+      console.log(`[Vizzy] onDisconnect fired — session lasted ${duration}ms, intentional=${intentionalStopRef.current}`);
+      
       if (intentionalStopRef.current) {
         saveTranscript(transcriptRef.current);
         navigate("/home");
@@ -149,10 +161,12 @@ export default function VizzyPage() {
       }
       // Unintentional disconnect — show error with reconnect button
       saveTranscript(transcriptRef.current);
-      setStatus("error");
-      setErrorMsg("Disconnected from Vizzy");
+      connectingRef.current = false;
+      setStatusBoth("error");
+      setErrorMsg(`Disconnected after ${Math.round(duration / 1000)}s`);
     },
     onMessage: (message: any) => {
+      console.log("[Vizzy] onMessage:", message.type);
       if (message.type === "user_transcript") {
         const text = message.user_transcription_event?.user_transcript ?? "";
         const entry: TranscriptEntry = { role: "user", text, id: crypto.randomUUID() };
@@ -164,7 +178,7 @@ export default function VizzyPage() {
       }
     },
     onError: (error: any) => {
-      try { console.warn("Vizzy voice error:", error?.message || error); } catch {}
+      console.error("[Vizzy] onError:", error);
     },
   });
 
@@ -173,10 +187,14 @@ export default function VizzyPage() {
     try { conversation.setVolume({ volume: volume / 100 }); } catch {}
   }, [volume, conversation]);
 
-  // Connect function
+  // Connect function — no status in deps, uses ref to prevent double-call
   const connect = useCallback(async () => {
-    if (status === "connecting") return;
-    setStatus("connecting");
+    if (connectingRef.current) {
+      console.log("[Vizzy] connect() blocked — already connecting");
+      return;
+    }
+    connectingRef.current = true;
+    setStatusBoth("connecting");
     setErrorMsg("");
     setTranscript([]);
     transcriptRef.current = [];
@@ -184,43 +202,66 @@ export default function VizzyPage() {
     intentionalStopRef.current = false;
 
     try {
-      // Request mic
-      await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Step 1: Request mic
+      console.log("[Vizzy] Step 1: Requesting microphone...");
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const tracks = stream.getTracks();
+      console.log(`[Vizzy] Mic granted — ${tracks.length} track(s), active=${tracks[0]?.enabled}`);
 
-      // Fetch token
+      // Step 2: Fetch token
+      console.log("[Vizzy] Step 2: Fetching conversation token...");
       const { data, error } = await supabase.functions.invoke("elevenlabs-conversation-token");
-      if (error || !data?.signed_url) throw new Error("Failed to get voice session token");
+      if (error || !data?.signed_url) {
+        console.error("[Vizzy] Token fetch failed:", error, data);
+        throw new Error("Failed to get voice session token");
+      }
+      console.log("[Vizzy] Token received, signed_url length:", data.signed_url.length);
 
       languageRef.current = data.preferred_language ?? "en";
 
-      // Connect via WebSocket only
-      await conversation.startSession({
+      // Step 3: Start session via WebSocket
+      console.log("[Vizzy] Step 3: Starting WebSocket session...");
+      const convId = await conversation.startSession({
         signedUrl: data.signed_url,
-        connectionType: "websocket",
       });
+      console.log("[Vizzy] startSession resolved, conversationId:", convId);
 
-      // Wait for stabilization then push context
-      await new Promise((r) => setTimeout(r, 2000));
+      // Step 4: Wait for stabilization then push context
+      console.log("[Vizzy] Step 4: Waiting 3s for stabilization...");
+      await new Promise((r) => setTimeout(r, 3000));
+      
+      if (statusRef.current !== "connected") {
+        console.warn("[Vizzy] Not connected after stabilization wait — skipping context push");
+        return;
+      }
 
+      console.log("[Vizzy] Step 5: Loading & pushing context...");
       const snap = await loadContext();
       if (snap) {
         snapshotRef.current = snap;
-        conversation.sendContextualUpdate(buildVizzyContext(snap, languageRef.current));
+        const ctx = buildVizzyContext(snap, languageRef.current);
+        console.log("[Vizzy] Context length:", ctx.length, "chars");
+        conversation.sendContextualUpdate(ctx);
+        console.log("[Vizzy] Context pushed successfully");
+      } else {
+        console.warn("[Vizzy] No context snapshot available");
       }
     } catch (err) {
-      console.error("Connection failed:", err);
-      setStatus("error");
+      console.error("[Vizzy] Connection failed:", err);
+      connectingRef.current = false;
+      setStatusBoth("error");
       setErrorMsg(err instanceof Error ? err.message : "Connection failed");
     }
-  }, [status, conversation, loadContext]);
+  }, [conversation, loadContext, setStatusBoth]);
 
-  // Auto-start on mount
+  // Auto-start on mount (once)
+  const mountedRef = useRef(false);
   useEffect(() => {
-    if (isAdmin && !startedRef.current) {
-      startedRef.current = true;
+    if (isAdmin && !mountedRef.current) {
+      mountedRef.current = true;
       connect();
     }
-  }, [isAdmin, connect]);
+  }, [isAdmin]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Close handler
   const handleClose = useCallback(async () => {
@@ -229,6 +270,12 @@ export default function VizzyPage() {
     saveTranscript(transcriptRef.current);
     navigate("/home");
   }, [conversation, navigate, saveTranscript]);
+
+  // Reconnect handler
+  const handleReconnect = useCallback(() => {
+    connectingRef.current = false;
+    connect();
+  }, [connect]);
 
   if (isAdmin === null) {
     return (
@@ -286,7 +333,7 @@ export default function VizzyPage() {
         {/* Reconnect button when error */}
         {status === "error" && (
           <Button
-            onClick={() => { startedRef.current = false; setStatus("idle"); setTimeout(() => { startedRef.current = true; connect(); }, 100); }}
+            onClick={handleReconnect}
             variant="outline"
             className="gap-2 border-white/20 text-white hover:bg-white/10"
           >
