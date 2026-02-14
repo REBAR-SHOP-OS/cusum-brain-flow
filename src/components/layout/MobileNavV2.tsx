@@ -70,13 +70,31 @@ export const MobileNavV2 = React.forwardRef<HTMLElement, {}>(function MobileNavV
     );
   }
 
-  // External employees get a simple 3-item nav
+  // External employees get role-aware nav
   if (isExternalEmployee) {
-    const extNav = [
-      { name: "Clock", href: "/timeclock", icon: Clock },
-      { name: "Team", href: "/team-hub", icon: MessageSquare },
-      { name: "HR", href: "/agent/talent", icon: Bot },
-    ];
+    const hasOfficeRole = roles.includes("office" as any);
+    const hasSupRole = roles.includes("shop_supervisor" as any);
+
+    let extNav: { name: string; href: string; icon: React.ElementType }[];
+    if (hasOfficeRole) {
+      extNav = [
+        { name: "Pipeline", href: "/pipeline", icon: Kanban },
+        { name: "Clock", href: "/timeclock", icon: Clock },
+        { name: "Team", href: "/team-hub", icon: MessageSquare },
+      ];
+    } else if (hasSupRole) {
+      extNav = [
+        { name: "Home", href: "/home", icon: Home },
+        { name: "Floor", href: "/shop-floor", icon: Factory },
+        { name: "Clock", href: "/timeclock", icon: Clock },
+        { name: "Team", href: "/team-hub", icon: MessageSquare },
+      ];
+    } else {
+      extNav = [
+        { name: "Clock", href: "/timeclock", icon: Clock },
+        { name: "Team", href: "/team-hub", icon: MessageSquare },
+      ];
+    }
     return (
       <nav ref={ref} className="fixed bottom-0 left-0 right-0 z-40 bg-card border-t border-border md:hidden safe-area-bottom">
         <div className="flex items-center justify-around h-14">

@@ -58,24 +58,45 @@ export function RoleGuard({ children }: RoleGuardProps) {
   // For external users, check if they're a linked customer
   const { hasAccess: isLinkedCustomer, isLoading: customerLoading } = useCustomerPortalData();
 
-  // External user routing — must run BEFORE role-based checks
+  // External user routing — must run BEFORE internal role-based checks
   if (!isInternal && email) {
-    // Still loading customer link — don't flash wrong page
-    if (customerLoading) return <>{children}</>;
+    // Still loading customer link or roles — don't flash wrong page
+    if (customerLoading || isLoading) return <>{children}</>;
 
     // Linked customer → always go to portal
     if (isLinkedCustomer) {
       return <Navigate to="/portal" replace />;
     }
 
-    // External employee (not a customer) → lock to Time Clock, Team Hub, HR Agent only
-    const EXTERNAL_EMPLOYEE_ALLOWED = ["/timeclock", "/team-hub", "/agent/talent"];
-    const isAllowedExternal = EXTERNAL_EMPLOYEE_ALLOWED.some((p) =>
-      location.pathname.startsWith(p)
-    );
-    if (!isAllowedExternal) {
-      return <Navigate to="/timeclock" replace />;
+    // Customer role → portal only
+    if (isCustomer) {
+      if (!location.pathname.startsWith("/portal")) {
+        return <Navigate to="/portal" replace />;
+      }
+      return <>{children}</>;
     }
+
+    // External office role (e.g. Karthick) → Pipeline, Time Clock, Team Hub
+    const EXTERNAL_OFFICE_ALLOWED = ["/pipeline", "/timeclock", "/team-hub"];
+    const hasOfficeRole = roles.includes("office" as any);
+    if (hasOfficeRole) {
+      const isAllowed = EXTERNAL_OFFICE_ALLOWED.some((p) => location.pathname.startsWith(p));
+      if (!isAllowed) return <Navigate to="/pipeline" replace />;
+      return <>{children}</>;
+    }
+
+    // External shop supervisor → extended workshop routes
+    const EXTERNAL_SUPERVISOR_ALLOWED = ["/timeclock", "/team-hub", "/shop-floor", "/shopfloor", "/home", "/inbox", "/tasks", "/deliveries", "/settings"];
+    if (isShopSupervisor) {
+      const isAllowed = EXTERNAL_SUPERVISOR_ALLOWED.some((p) => location.pathname.startsWith(p));
+      if (!isAllowed) return <Navigate to="/shop-floor" replace />;
+      return <>{children}</>;
+    }
+
+    // External workshop employee → Time Clock & Team Hub only
+    const EXTERNAL_WORKSHOP_ALLOWED = ["/timeclock", "/team-hub"];
+    const isAllowedExt = EXTERNAL_WORKSHOP_ALLOWED.some((p) => location.pathname.startsWith(p));
+    if (!isAllowedExt) return <Navigate to="/timeclock" replace />;
     return <>{children}</>;
   }
 

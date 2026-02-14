@@ -38,13 +38,36 @@ export function AppSidebar() {
   const { hasAccess: isLinkedCustomer } = useCustomerPortalData();
   const isExternalEmployee = !isInternal && !!email && !isLinkedCustomer;
 
-  // External employees see only these 3 items
+  // External employees get role-aware nav
   if (isExternalEmployee) {
-    const externalNav: NavItem[] = [
-      { name: "Time Clock", href: "/timeclock", icon: Clock },
-      { name: "Team Hub", href: "/team-hub", icon: MessageSquare },
-      { name: "HR Agent", href: "/agent/talent", icon: Bot },
-    ];
+    const hasOfficeRole = roles.includes("office" as any);
+    const hasSupRole = roles.includes("shop_supervisor" as any);
+
+    let externalNav: NavItem[];
+    if (hasOfficeRole) {
+      // External office (e.g. Karthick): Pipeline, Time Clock, Team Hub
+      externalNav = [
+        { name: "Pipeline", href: "/pipeline", icon: Kanban },
+        { name: "Time Clock", href: "/timeclock", icon: Clock },
+        { name: "Team Hub", href: "/team-hub", icon: MessageSquare },
+      ];
+    } else if (hasSupRole) {
+      // External shop supervisor: expanded access
+      externalNav = [
+        { name: "Dashboard", href: "/home", icon: Home },
+        { name: "Shop Floor", href: "/shop-floor", icon: Factory },
+        { name: "Deliveries", href: "/deliveries", icon: Truck },
+        { name: "Time Clock", href: "/timeclock", icon: Clock },
+        { name: "Team Hub", href: "/team-hub", icon: MessageSquare },
+        { name: "Tasks", href: "/tasks", icon: CheckSquare },
+      ];
+    } else {
+      // External workshop: minimal access
+      externalNav = [
+        { name: "Time Clock", href: "/timeclock", icon: Clock },
+        { name: "Team Hub", href: "/team-hub", icon: MessageSquare },
+      ];
+    }
     return (
       <aside data-tour="sidebar" className="group/sidebar w-14 hover:w-48 shrink-0 bg-sidebar border-r border-sidebar-border flex flex-col h-full transition-all duration-200 ease-in-out overflow-hidden">
         <ScrollArea className="flex-1 py-2">
