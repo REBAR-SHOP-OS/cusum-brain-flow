@@ -1,29 +1,37 @@
 
 
-# Fix: Chat Input Toolbar Cut Off on Desktop
+# Add rebar.shop (WordPress) Integration
 
-## Problem
+## Overview
+Add a dedicated **rebar.shop** WordPress integration card to the Integrations page, allowing easy access to configure and modify the WordPress REST API connection for your live site.
 
-The LiveChat page uses `h-screen` (100vh) for its container, but it renders inside `AppLayout` which already includes a TopBar at the top. This means the total height exceeds the viewport by the height of the TopBar, pushing the input toolbar and its buttons (mic, emoji, send, etc.) below the visible area.
+## What Will Be Done
 
-## Solution
+### 1. Store Credentials Securely
+Your WordPress credentials will be stored as encrypted backend secrets (not in code):
+- `WP_BASE_URL` -- the API endpoint (`https://rebar.shop/wp-json/wp/v2`)
+- `WP_USERNAME` -- your WordPress admin username
+- `WP_APP_PASSWORD` -- the Application Password
 
-Change `h-screen` to `h-full` in `LiveChat.tsx` so it fills only the available space within the AppLayout's main content area, rather than the full viewport.
+### 2. Add Integration Card
+A new "rebar.shop" entry will appear in the integrations list alongside Gmail, Slack, etc., with three configurable fields:
+- **API Base URL** (text) -- defaults to `https://rebar.shop/wp-json/wp/v2`
+- **Username** (text)
+- **Application Password** (password)
 
-## Technical Change
+### 3. Add WordPress Icon
+A custom WordPress "W" icon will be added to the `IntegrationIcons.tsx` component.
 
-### File: `src/pages/LiveChat.tsx`
+## Technical Details
 
-Line 182 (the root `div`):
+### Files to modify:
+1. **`src/components/integrations/integrationsList.ts`** -- Add the `rebar-shop` integration entry with three fields (WP_BASE_URL, WP_USERNAME, WP_APP_PASSWORD)
+2. **`src/components/integrations/IntegrationIcons.tsx`** -- Add a `rebar-shop` case with the WordPress logo SVG
 
-```diff
-- <div className="flex flex-col h-screen bg-background">
-+ <div className="flex flex-col h-full bg-background">
-```
+### Secrets to create:
+- `WP_BASE_URL` = `https://rebar.shop/wp-json/wp/v2`
+- `WP_USERNAME` = `Admin`
+- `WP_APP_PASSWORD` = (your application password, entered securely)
 
-This single change ensures the chat layout respects its parent container height instead of overflowing the viewport. The `<main>` wrapper in AppLayout already has `flex-1 overflow-hidden`, so `h-full` will correctly fill the remaining vertical space.
-
-## No backend changes needed
-
-One-line CSS class change.
+These secrets will be available in backend functions for any future WordPress API calls (products, orders, posts, etc.).
 
