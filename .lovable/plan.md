@@ -1,61 +1,60 @@
 
 
-# Behnam Rajabifar — Role Alignment Between Odoo and Rebar App
+# Fix Supabase 400 Error — Leads Query Column Mismatch
 
-## Current State
+## Problem
 
-| System | Roles |
-|--------|-------|
-| **Odoo** | Administrator in Sales, HR, Manufacturing, Project, Quality, Field Service, and more (37 groups, 999 access rights) |
-| **Rebar App** | `sales` only |
+The `leads` table query in `src/hooks/useVizzyContext.ts` (line 56-58) references **5 columns that don't exist**:
 
-## Analysis
+| Query uses | Actual column | Fix |
+|-----------|--------------|-----|
+| `contact_name` | Does not exist (name is on `contacts` table via `contact_id` FK) | Join or remove |
+| `company_name` | Does not exist (name is on `customers` table via `customer_id` FK) | Join or remove |
+| `status` | `stage` | Rename |
+| `expected_revenue` | `expected_value` | Rename |
+| `lead_score` | `probability` | Rename |
 
-Behnam (`ben@rebar.shop`) is a CEO-level user. His Rebar app access is currently **too restrictive** — he can only see Pipeline, Customers, Office, Inbox, and Settings (the `SALES_ALLOWED` routes). He cannot access Shop Floor, Deliveries, Accounting, CEO Portal, Admin Panel, or Diagnostics.
+This causes a **400 Bad Request** on every Vizzy context load, which means Vizzy never gets CRM data.
 
-However, following the audit's own recommendation of least privilege, he should **not** get full `admin` rights either. Instead, he needs read-level visibility across the business without the ability to manage system settings or user roles.
+## Fix
 
-## Recommended Rebar App Roles for Behnam
+### File 1: `src/hooks/useVizzyContext.ts`
 
-| Role | Reason |
-|------|--------|
-| `sales` (keep) | Pipeline, Customers, CRM — core to his Sales Administrator Odoo role |
-| `office` (add) | Dashboard, Office Tools, Inventory, Live Monitor — gives operational visibility without admin-level system control |
+**Line 56-58** — Replace the leads query with correct column names:
 
-This combination unlocks all operational routes (Dashboard, Pipeline, Customers, Shop Floor, Office Tools, Deliveries, Inventory, Accounting, Live Monitor) while keeping him **out of**:
-- Admin Panel (user/role management)
-- CEO Portal (reserved for `admin` role)
-- Diagnostics / Data Audit (reserved for `admin` role)
-
-If CEO Portal access is needed, that's an `admin`-only route today. A separate decision would be needed to either grant `admin` or create a dedicated `ceo` role.
-
-## Implementation
-
-Single database operation — add the `office` role for `ben@rebar.shop`:
-
-```sql
-INSERT INTO user_roles (user_id, role)
-SELECT id, 'office'
-FROM auth.users
-WHERE email = 'ben@rebar.shop'
-ON CONFLICT (user_id, role) DO NOTHING;
+```typescript
+const leadsP = (supabase.from("leads").select("id, title, stage, expected_value, probability, customer_id, contact_id") as any)
+  .in("stage", ["new", "contacted", "qualified", "proposal"])
+  .order("probability", { ascending: false }).limit(20);
 ```
 
-No frontend code changes needed — the existing `RoleGuard`, `AppSidebar`, and `CommandBar` already handle multi-role users correctly.
+**Line 177** — Fix the hot leads filter:
 
-## What This Unlocks vs. Restricts
+```typescript
+hotLeads: leads.filter((l: any) => (l.probability || 0) >= 70).slice(0, 5),
+```
 
-**Unlocked routes (with sales + office):**
-- Dashboard, Pipeline, Customers, Shop Floor, Office Tools, Deliveries, Inventory, Accounting, Inbox, Tasks, Settings, Live Monitor, Brain, Time Clock, Phone Calls, Agent
+### File 2: `src/lib/vizzyContext.ts`
 
-**Still restricted:**
-- Admin Panel, CEO Portal, Diagnostics — require `admin` role
+**Line 31-33** — Update the hot leads display to use correct field names:
 
-## Open Question
+```typescript
+const hotLeadsList = crm.hotLeads
+  .map((l) => `  * ${l.title} — Probability: ${l.probability}%, Expected: ${fmt(l.expected_value || 0)}`)
+  .join("\n");
+```
 
-If Behnam needs CEO Portal access, two options:
-1. Grant `admin` role (gives full access including user management)
-2. Create a new `ceo` role and update the route guard (more work, better separation)
+(We use `title` instead of `contact_name`/`company_name` since those require a join. The lead title already contains enough context for Vizzy.)
 
-This can be decided separately. The `office` role addition covers 90% of operational needs immediately.
+## Impact
 
+- Eliminates the 400 error on every Vizzy page load
+- Vizzy will actually receive CRM pipeline data for context
+- No schema changes needed — purely a frontend query fix
+
+## Summary
+
+| File | Change |
+|------|--------|
+| `src/hooks/useVizzyContext.ts` | Fix column names in leads query and hot leads filter |
+| `src/lib/vizzyContext.ts` | Fix field references in hot leads display string |
