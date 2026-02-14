@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { sendAgentMessage, ChatMessage } from "@/lib/agent";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
-import { RichMarkdown } from "@/components/chat/RichMarkdown";
+import { RichMarkdown, type ActionItemCallbacks } from "@/components/chat/RichMarkdown";
 import accountingHelper from "@/assets/helpers/accounting-helper.png";
 import { PennyCallCard, parsePennyCalls, type PennyCallData } from "./PennyCallCard";
 import type { WebPhoneState, WebPhoneActions } from "@/hooks/useWebPhone";
@@ -54,6 +54,10 @@ export const AccountingAgent = React.forwardRef<HTMLDivElement, AccountingAgentP
   const { bridgeState, startBridge, stopBridge } = useCallAiBridge();
   const { activeTask, createCallTask, startCall, onCallConnected, completeCall, failCall, cancelCall, clearTask } = useCallTask();
   const [showOutcome, setShowOutcome] = useState(false);
+  const [dismissedItems] = useState(() => new Set<string>());
+  const [dismissedVersion, setDismissedVersion] = useState(0);
+  const [rescheduledItems] = useState(() => new Map<string, Date>());
+  const [rescheduledVersion, setRescheduledVersion] = useState(0);
   const prevCallStatusRef = useRef<string | undefined>();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
@@ -266,6 +270,22 @@ RULES:
     }
   };
 
+  const actionItemCallbacks: ActionItemCallbacks = {
+    onIgnore: (text: string, reason: string) => {
+      dismissedItems.add(text);
+      setDismissedVersion(v => v + 1);
+      toast({ title: "Item dismissed", description: reason });
+    },
+    onReschedule: (text: string, date: Date) => {
+      rescheduledItems.set(text, date);
+      setRescheduledVersion(v => v + 1);
+      toast({ title: "Rescheduled", description: `Moved to ${date.toLocaleDateString()}` });
+    },
+    onSummarize: (text: string) => {
+      handleSendDirect(`Summarize this item in detail: ${text}`);
+    },
+  };
+
   const postBriefingActions = [
     "Drill into overdue AR",
     "Show my queue",
@@ -393,7 +413,12 @@ RULES:
                       : mode === "fullscreen" ? "max-w-[90%] bg-muted" : "max-w-[85%] bg-muted"
                   )}>
                     {msg.role === "agent" ? (
-                      <RichMarkdown content={msg.content} />
+                      <RichMarkdown
+                        content={msg.content}
+                        onActionItem={actionItemCallbacks}
+                        dismissedItems={dismissedItems}
+                        rescheduledItems={rescheduledItems}
+                      />
                     ) : (
                       msg.content
                     )}
