@@ -19,7 +19,7 @@ function getDb() {
 // ── OAuth helpers ───────────────────────────────────────────
 
 // In-memory auth code store (short-lived, edge function lifetime)
-const authCodes = new Map<string, { redirectUri: string; expiresAt: number }>();
+const authCodes = new Map<string, { redirectUri: string; codeChallenge?: string; expiresAt: number }>();
 
 async function hmacSign(data: string, secret: string): Promise<string> {
   const enc = new TextEncoder();
@@ -48,6 +48,24 @@ async function verifyAccessToken(token: string, secret: string): Promise<boolean
     const payload = JSON.parse(atob(payloadB64.replace(/-/g, "+").replace(/_/g, "/")));
     return payload.exp > Math.floor(Date.now() / 1000);
   } catch { return false; }
+}
+
+async function sha256Base64Url(plain: string): Promise<string> {
+  const encoded = new TextEncoder().encode(plain);
+  const hash = await crypto.subtle.digest("SHA-256", encoded);
+  return btoa(String.fromCharCode(...new Uint8Array(hash)))
+    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function parseFormOrJson(contentType: string | null, bodyText: string): Record<string, string> {
+  if (contentType?.includes("application/json")) {
+    try { return JSON.parse(bodyText); } catch { return {}; }
+  }
+  // application/x-www-form-urlencoded
+  const params = new URLSearchParams(bodyText);
+  const result: Record<string, string> = {};
+  params.forEach((v, k) => { result[k] = v; });
+  return result;
 }
 
 // ── MCP Server ──────────────────────────────────────────────
@@ -379,6 +397,7 @@ app.all("/*", async (c) => {
   if (url.pathname.includes("/oauth/authorize") && c.req.method === "GET") {
     const redirectUri = c.req.query("redirect_uri");
     const state = c.req.query("state") || "";
+    const codeChallenge = c.req.query("code_challenge") || undefined;
 
     if (!redirectUri) {
       return new Response(JSON.stringify({ error: "redirect_uri required" }), {
@@ -387,7 +406,7 @@ app.all("/*", async (c) => {
     }
 
     const code = crypto.randomUUID();
-    authCodes.set(code, { redirectUri, expiresAt: Date.now() + 5 * 60 * 1000 });
+    authCodes.set(code, { redirectUri, codeChallenge, expiresAt: Date.now() + 5 * 60 * 1000 });
 
     const target = new URL(redirectUri);
     target.searchParams.set("code", code);
@@ -398,9 +417,11 @@ app.all("/*", async (c) => {
 
   // OAuth token
   if (url.pathname.includes("/oauth/token") && c.req.method === "POST") {
-    const body = await c.req.parseBody();
-    const grantType = body.grant_type as string;
-    const clientSecret = body.client_secret as string;
+    const contentType = c.req.header("content-type") || "";
+    const rawBody = await c.req.text();
+    const body = parseFormOrJson(contentType, rawBody);
+    const grantType = body.grant_type;
+    const clientSecret = body.client_secret;
 
     if (!mcpApiKey) {
       return new Response(JSON.stringify({ error: "MCP_API_KEY not configured" }), {
@@ -415,13 +436,23 @@ app.all("/*", async (c) => {
     }
 
     if (grantType === "authorization_code") {
-      const code = body.code as string;
+      const code = body.code;
       const stored = authCodes.get(code);
       if (!stored || stored.expiresAt < Date.now()) {
         authCodes.delete(code);
         return new Response(JSON.stringify({ error: "invalid_grant" }), {
           status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
+      }
+      // PKCE verification
+      if (stored.codeChallenge && body.code_verifier) {
+        const computed = await sha256Base64Url(body.code_verifier);
+        if (computed !== stored.codeChallenge) {
+          authCodes.delete(code);
+          return new Response(JSON.stringify({ error: "invalid_grant", error_description: "PKCE verification failed" }), {
+            status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
       }
       authCodes.delete(code);
     } else if (grantType !== "client_credentials") {
