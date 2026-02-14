@@ -307,11 +307,11 @@ export default function VizzyPage() {
       }
       if (sessionDuration < 5000) {
         console.warn(`[Vizzy] Session lasted only ${sessionDuration}ms — agent-initiated disconnect`);
-        useWebSocketFallbackRef.current = true;
-        if (!autoFallbackAttemptedRef.current && cachedSignedUrlRef.current) {
-          autoFallbackAttemptedRef.current = true;
+        // Don't rapid-fire reconnects for short sessions — add longer delay
+        if (retryCountRef.current < MAX_RETRIES) {
+          retryCountRef.current += 1;
           setStatus("reconnecting");
-          setTimeout(() => reconnectRef.current(), 1000);
+          setTimeout(() => reconnectRef.current(), 3000);
         } else {
           setStatus("error");
         }
@@ -405,7 +405,11 @@ export default function VizzyPage() {
       }
     },
     onError: (error: any) => {
-      console.warn("Vizzy voice error (non-fatal):", error);
+      // ElevenLabs SDK sometimes sends malformed error events (error_type undefined)
+      // Catch and suppress to prevent unhandled promise rejections
+      try {
+        console.warn("Vizzy voice error (non-fatal):", error?.message || error);
+      } catch {}
     },
   });
 
@@ -427,7 +431,8 @@ export default function VizzyPage() {
         const { data, error } = await supabase.functions.invoke("elevenlabs-conversation-token");
         if (error || !data?.token) throw new Error(error?.message ?? "No conversation token received");
 
-        if (useWebSocketFallbackRef.current && data.signed_url) {
+        // Always prefer WebSocket for reconnects (more reliable)
+        if (data.signed_url) {
           await conversation.startSession({ signedUrl: data.signed_url, connectionType: "websocket" });
         } else {
           await conversation.startSession({ conversationToken: data.token, connectionType: "webrtc" });
@@ -491,7 +496,13 @@ export default function VizzyPage() {
         }
 
         cachedSignedUrlRef.current = tokenRes.data.signed_url ?? null;
-        await conversation.startSession({ conversationToken: tokenRes.data.token, connectionType: "webrtc" });
+        
+        // Default to WebSocket via signed URL for reliability (WebRTC has LiveKit version issues)
+        if (tokenRes.data.signed_url) {
+          await conversation.startSession({ signedUrl: tokenRes.data.signed_url, connectionType: "websocket" });
+        } else {
+          await conversation.startSession({ conversationToken: tokenRes.data.token, connectionType: "webrtc" });
+        }
 
         webPhoneActions.initialize().then((ok) => {
           webPhoneInitRef.current = ok;
