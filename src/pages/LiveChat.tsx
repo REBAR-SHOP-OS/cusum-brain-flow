@@ -38,6 +38,7 @@ export default function LiveChat() {
   const agentName = agent?.name || "Vizzy";
   
   const { toast } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [input, setInput] = useState("");
   const chat = useAdminChat();
@@ -76,6 +77,15 @@ export default function LiveChat() {
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  // Auto-start voice from ?voice=1
+  useEffect(() => {
+    if (searchParams.get("voice") === "1" && speech.isSupported && !speech.isListening) {
+      const timer = setTimeout(() => speech.start(), 100);
+      setSearchParams({}, { replace: true });
+      return () => clearTimeout(timer);
+    }
+  }, [searchParams, speech.isSupported]);
 
   // Append speech transcripts
   useEffect(() => {
@@ -188,6 +198,11 @@ export default function LiveChat() {
       if (e.key === "ArrowDown") { e.preventDefault(); setMentionIndex((i) => i + 1); return; }
       if (e.key === "ArrowUp") { e.preventDefault(); setMentionIndex((i) => Math.max(0, i - 1)); return; }
       if (e.key === "Escape") { e.preventDefault(); setMentionOpen(false); return; }
+    }
+    if (e.key === "Escape" && pendingAction) {
+      e.preventDefault();
+      cancelAction();
+      return;
     }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -414,11 +429,11 @@ export default function LiveChat() {
                 <div className="flex-1" />
 
                 {isStreaming ? (
-                  <Button size="icon" variant="destructive" className="h-9 w-9 rounded-lg shrink-0" onClick={cancelStream}>
+                  <Button size="icon" variant="destructive" className="h-9 w-9 rounded-lg shrink-0" onClick={cancelStream} aria-label="Stop generating">
                     <Square className="w-4 h-4" />
                   </Button>
                 ) : (
-                  <Button size="icon" className="h-9 w-9 rounded-lg shrink-0" onClick={handleSend} disabled={!input.trim()}>
+                  <Button size="icon" className="h-9 w-9 rounded-lg shrink-0" onClick={handleSend} disabled={!input.trim() || !!pendingAction} aria-label="Send message">
                     <Send className="w-4 h-4" />
                   </Button>
                 )}
