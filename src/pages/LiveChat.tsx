@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Send, Loader2, Square, Trash2, Type, Hash, Brain, Headset } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -33,7 +33,8 @@ export default function LiveChat() {
   const { toast } = useToast();
 
   const [input, setInput] = useState("");
-  const [voiceMode, setVoiceMode] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [voiceMode, setVoiceMode] = useState(() => searchParams.get("voice") === "1");
   const { messages, isStreaming, sendMessage, clearChat, cancelStream } = useAdminChat();
   const voiceChat = useVoiceChat();
   const activeMessages = voiceMode ? voiceChat.messages : messages;
@@ -41,6 +42,14 @@ export default function LiveChat() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [memoryCount, setMemoryCount] = useState<number | null>(null);
+
+  // Clean voice param from URL
+  useEffect(() => {
+    if (searchParams.has("voice")) {
+      searchParams.delete("voice");
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, []);
 
   // Fetch memory count
   useEffect(() => {

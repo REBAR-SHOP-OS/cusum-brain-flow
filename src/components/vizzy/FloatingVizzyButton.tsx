@@ -8,6 +8,7 @@ import assistantHelper from "@/assets/helpers/assistant-helper.png";
 const STORAGE_KEY = "vizzy-btn-pos";
 const BTN_SIZE = 56;
 const DRAG_THRESHOLD = 5;
+const LONG_PRESS_MS = 500;
 
 const TOOLTIP_KEY = "vizzy-btn-tooltip-shown";
 
@@ -52,6 +53,8 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
     const startPointer = useRef({ x: 0, y: 0 });
     const startPos = useRef({ x: 0, y: 0 });
     const moved = useRef(false);
+    const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const isLongPress = useRef(false);
 
     // Show tooltip on first use
     useEffect(() => {
@@ -75,9 +78,13 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
     const onPointerDown = useCallback((e: React.PointerEvent) => {
       dragging.current = true;
       moved.current = false;
+      isLongPress.current = false;
       startPointer.current = { x: e.clientX, y: e.clientY };
       startPos.current = { ...pos };
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
+      longPressTimer.current = setTimeout(() => {
+        isLongPress.current = true;
+      }, LONG_PRESS_MS);
     }, [pos]);
 
     const onPointerMove = useCallback((e: React.PointerEvent) => {
@@ -86,6 +93,10 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
       const dy = e.clientY - startPointer.current.y;
       if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
         moved.current = true;
+        if (longPressTimer.current) {
+          clearTimeout(longPressTimer.current);
+          longPressTimer.current = null;
+        }
       }
       const newPos = clamp(startPos.current.x + dx, startPos.current.y + dy);
       setPos(newPos);
@@ -95,6 +106,11 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
       if (!dragging.current) return;
       dragging.current = false;
 
+      if (longPressTimer.current) {
+        clearTimeout(longPressTimer.current);
+        longPressTimer.current = null;
+      }
+
       if (moved.current) {
         const final = clamp(
           startPos.current.x + e.clientX - startPointer.current.x,
@@ -103,9 +119,11 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
         setPos(final);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(final));
       } else {
-        // Tap → text chat
+        // Tap or long press → navigate
         if (location.pathname === "/chat") {
           navigate(-1);
+        } else if (isLongPress.current) {
+          navigate("/chat?voice=1");
         } else {
           navigate("/chat");
         }
@@ -131,7 +149,7 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
         {/* Tooltip */}
         {showTooltip && (
           <span className="absolute -top-10 left-1/2 -translate-x-1/2 whitespace-nowrap bg-card text-foreground text-[10px] px-2 py-1 rounded-lg shadow-lg border border-border animate-fade-in">
-            Tap to chat with {agentName}
+            Tap to chat · Hold for voice
           </span>
         )}
 
