@@ -33,7 +33,7 @@ export const PAGE_MAP: Record<string, { name: string; description: string }> = {
   "/transcribe": { name: "Transcribe", description: "Audio/video transcription with AI summaries" },
   "/office": { name: "Office Portal", description: "Production tags, packing slips, inventory management, shipping labels" },
   "/chat": { name: "Vizzy Chat", description: "Full-screen AI chat with JARVIS (text mode)" },
-  "/vizzy": { name: "Vizzy Voice", description: "Voice-powered AI assistant (voice mode)" },
+  
 };
 
 export function buildPageContext(currentPage: string): string {

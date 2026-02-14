@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Send, Loader2, Square, Trash2, Type, Hash, Headset, Brain } from "lucide-react";
+import { ArrowLeft, Send, Loader2, Square, Trash2, Type, Hash, Brain } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAdminChat } from "@/hooks/useAdminChat";
@@ -27,7 +27,7 @@ export default function LiveChat() {
   const agentKey = getUserPrimaryAgentKey(user?.email);
   const avatarImg = agent?.image || assistantHelper;
   const agentName = agent?.name || "Vizzy";
-  const showVoiceChat = agentKey === "assistant" || agentKey === "accounting";
+  
   const { toast } = useToast();
 
   const [input, setInput] = useState("");
@@ -339,20 +339,6 @@ export default function LiveChat() {
                 <TooltipContent side="top">Commands (/)</TooltipContent>
                 </Tooltip>
 
-                {showVoiceChat && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        onClick={() => navigate("/vizzy")}
-                        className="p-2 text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-muted/50"
-                      >
-                        <Headset className="w-5 h-5" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top">Voice Chat</TooltipContent>
-                  </Tooltip>
-                )}
 
                 <div className="flex-1" />
 

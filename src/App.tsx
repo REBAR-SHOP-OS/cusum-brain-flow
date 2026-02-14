@@ -58,7 +58,7 @@ import CustomerPortal from "./pages/CustomerPortal";
 import CEOPortal from "./pages/CEOPortal";
 import Transcribe from "./pages/Transcribe";
 import TranscribeWatch from "./pages/TranscribeWatch";
-import VizzyPage from "./pages/VizzyPage";
+
 import LiveChat from "./pages/LiveChat";
 import EmailMarketing from "./pages/EmailMarketing";
 import Unsubscribe from "./pages/Unsubscribe";
@@ -157,8 +157,6 @@ const App = () => (
                     <Route path="/admin/connections-audit" element={<P><ConnectionsAudit /></P>} />
                     <Route path="/admin/data-audit" element={<P><DataStoresAudit /></P>} />
 
-                    {/* Vizzy – standalone voice page for Siri Shortcut */}
-                    <Route path="/vizzy" element={<ProtectedRoute><VizzyPage /></ProtectedRoute>} />
                     {/* Full-screen live chat */}
                     <Route path="/chat" element={<P><LiveChat /></P>} />
 
