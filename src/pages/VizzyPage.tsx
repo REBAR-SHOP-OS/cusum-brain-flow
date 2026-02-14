@@ -1,22 +1,23 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useConversation } from "@elevenlabs/react";
-import { X, Mic, MicOff, Volume2, WifiOff, Camera, Phone, PhoneOff } from "lucide-react";
+import { X, Mic, MicOff, Volume2, WifiOff, Camera, Phone, PhoneOff, ChevronUp, ChevronDown } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { useVizzyContext } from "@/hooks/useVizzyContext";
 import { buildVizzyContext } from "@/lib/vizzyContext";
 import type { VizzyBusinessSnapshot } from "@/hooks/useVizzyContext";
 import { useWebPhone } from "@/hooks/useWebPhone";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import { FileText, Check, XCircle } from "lucide-react";
-// VizzyApprovalDialog removed — voice calls auto-execute
 import { toast } from "sonner";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 const MAX_RETRIES = 3;
+const CONTEXT_CACHE_KEY = "vizzy_context_cache";
+const CONTEXT_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 interface TranscriptEntry {
   role: "user" | "agent";
@@ -34,19 +35,30 @@ interface QuotationDraft {
   status: "draft" | "approved" | "dismissed";
 }
 
-const SUPER_ADMIN_EMAIL = "sattar@rebar.shop";
-
 export default function VizzyPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [webPhoneState, webPhoneActions] = useWebPhone();
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
 
-  // Super admin guard
+  // Role-based admin guard (replaces hardcoded email check)
   useEffect(() => {
-    if (user && user.email !== SUPER_ADMIN_EMAIL) {
-      navigate("/home", { replace: true });
-    }
+    if (!user) return;
+    (async () => {
+      const { data } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", user.id)
+        .eq("role", "admin")
+        .maybeSingle();
+      if (!data) {
+        navigate("/home", { replace: true });
+      } else {
+        setIsAdmin(true);
+      }
+    })();
   }, [user, navigate]);
+
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
   const transcriptRef = useRef<TranscriptEntry[]>([]);
   const [status, setStatus] = useState<"starting" | "connected" | "error" | "reconnecting">("starting");
@@ -55,8 +67,8 @@ export default function VizzyPage() {
   const [showVolume, setShowVolume] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [activeQuotation, setActiveQuotation] = useState<{ id: string; draft: QuotationDraft } | null>(null);
-  // pendingAction state removed — voice calls auto-execute without approval
   const [silentMode, setSilentMode] = useState(false);
+  const [showTranscript, setShowTranscript] = useState(false);
   const startedRef = useRef(false);
   const sessionActiveRef = useRef(false);
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -72,8 +84,15 @@ export default function VizzyPage() {
   const prevVolumeRef = useRef(80);
   const silentModeRef = useRef(false);
   const silentIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const { loadFullContext } = useVizzyContext();
   const webPhoneInitRef = useRef(false);
+  const transcriptEndRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll transcript
+  useEffect(() => {
+    if (showTranscript) {
+      transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [transcript, showTranscript]);
 
   // Session timer
   useEffect(() => {
@@ -86,6 +105,26 @@ export default function VizzyPage() {
     };
   }, [status]);
 
+  // Save transcript on page close/crash
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (transcriptRef.current.length > 0 && user) {
+        // Use sendBeacon for reliability during page unload
+        const payload = JSON.stringify({
+          user_id: user.id,
+          transcript: transcriptRef.current,
+          session_ended_at: new Date().toISOString(),
+        });
+        navigator.sendBeacon(
+          `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/vizzy_interactions`,
+          new Blob([payload], { type: "application/json" })
+        );
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [user]);
+
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60);
     const sec = s % 60;
@@ -95,14 +134,12 @@ export default function VizzyPage() {
   const saveTranscript = useCallback(async (entries: TranscriptEntry[]) => {
     if (!user || entries.length === 0) return;
     try {
-      // Save to vizzy_interactions (existing)
       await supabase.from("vizzy_interactions").insert({
         user_id: user.id,
         transcript: entries as any,
         session_ended_at: new Date().toISOString(),
       });
 
-      // Also save as a chat_session + chat_messages so it appears in Agent Workspace sidebar
       const textEntries = entries.filter((e) => e.type !== "quotation" && e.text.trim());
       if (textEntries.length === 0) return;
 
@@ -120,10 +157,7 @@ export default function VizzyPage() {
         .select("id")
         .single();
 
-      if (sessionError || !session) {
-        console.error("Failed to create chat session for voice transcript:", sessionError);
-        return;
-      }
+      if (sessionError || !session) return;
 
       const messagesToInsert = textEntries.map((entry) => ({
         session_id: session.id,
@@ -132,8 +166,7 @@ export default function VizzyPage() {
         agent_type: "assistant",
       }));
 
-      const { error: msgError } = await supabase.from("chat_messages").insert(messagesToInsert);
-      if (msgError) console.error("Failed to save voice transcript messages:", msgError);
+      await supabase.from("chat_messages").insert(messagesToInsert);
     } catch (err) {
       console.error("Failed to save Vizzy transcript:", err);
     }
@@ -165,6 +198,38 @@ export default function VizzyPage() {
     setActiveQuotation({ id, draft });
   }, []);
 
+  // Load context with 5-minute sessionStorage cache
+  const loadContextCached = useCallback(async (): Promise<VizzyBusinessSnapshot | null> => {
+    try {
+      const cached = sessionStorage.getItem(CONTEXT_CACHE_KEY);
+      if (cached) {
+        const { data, ts } = JSON.parse(cached);
+        if (Date.now() - ts < CONTEXT_CACHE_TTL) {
+          return data as VizzyBusinessSnapshot;
+        }
+      }
+    } catch {}
+
+    // Fetch fresh via server-side context builder
+    try {
+      const { data, error } = await supabase.functions.invoke("vizzy-context");
+      if (error || !data?.snapshot) {
+        console.warn("Server context failed, falling back to client:", error);
+        // Fallback: import dynamically to avoid always loading the client hook
+        const { useVizzyContext } = await import("@/hooks/useVizzyContext");
+        // Can't use hooks outside React, just return null for fallback
+        return null;
+      }
+      const snap = data.snapshot as VizzyBusinessSnapshot;
+      try {
+        sessionStorage.setItem(CONTEXT_CACHE_KEY, JSON.stringify({ data: snap, ts: Date.now() }));
+      } catch {}
+      return snap;
+    } catch {
+      return null;
+    }
+  }, []);
+
   const conversation = useConversation({
     micMuted: muted,
     clientTools: {
@@ -190,10 +255,8 @@ export default function VizzyPage() {
       },
       make_call: async (params: { phone: string; contact_name?: string }) => {
         try {
-          // Use WebRTC browser calling
           const wp = webPhoneInitRef.current;
           if (!wp) {
-            // Try initializing on-the-fly
             const ok = await webPhoneActions.initialize();
             if (!ok) throw new Error("WebPhone not available. Check RingCentral connection.");
             webPhoneInitRef.current = true;
@@ -232,18 +295,23 @@ export default function VizzyPage() {
       retryCountRef.current = 0;
     },
     onDisconnect: () => {
-      if (!sessionActiveRef.current) return; // Ignore spurious disconnects before connect
+      if (!sessionActiveRef.current) return;
       const sessionDuration = Date.now() - lastConnectTimeRef.current;
       sessionActiveRef.current = false;
+
+      // Clear silent mode interval on disconnect (fix memory leak)
+      if (silentIntervalRef.current) {
+        clearInterval(silentIntervalRef.current);
+        silentIntervalRef.current = null;
+      }
+
       if (intentionalStopRef.current) {
         saveTranscript(transcriptRef.current);
         navigate("/home");
         return;
       }
-      // If session lasted < 5 seconds, agent terminated — don't retry (prevents infinite loop)
       if (sessionDuration < 5000) {
         console.warn(`[Vizzy] Session lasted only ${sessionDuration}ms — agent-initiated disconnect`);
-        // Enable WebSocket fallback for next attempt
         useWebSocketFallbackRef.current = true;
         if (!autoFallbackAttemptedRef.current && cachedSignedUrlRef.current) {
           autoFallbackAttemptedRef.current = true;
@@ -258,7 +326,6 @@ export default function VizzyPage() {
         retryCountRef.current += 1;
         setStatus("reconnecting");
         const delay = Math.min(1000 * Math.pow(2, retryCountRef.current - 1), 16000);
-        console.log(`[Vizzy] Reconnecting in ${delay}ms (attempt ${retryCountRef.current}/${MAX_RETRIES})`);
         setTimeout(() => reconnectRef.current(), delay);
       } else {
         saveTranscript(transcriptRef.current);
@@ -276,7 +343,6 @@ export default function VizzyPage() {
         };
         setTranscript((prev) => { const next = [...prev, entry]; transcriptRef.current = next; return next; });
 
-        // Silent mode detection
         const lower = userText.toLowerCase().trim();
         const SILENCE_TRIGGERS = ["silent", "be quiet", "shut up", "hush", "shhh", "be silent"];
         const WAKE_TRIGGERS = ["vizzy", "hey vizzy"];
@@ -292,7 +358,6 @@ export default function VizzyPage() {
           conversation.sendContextualUpdate(
             "SYSTEM OVERRIDE: CEO activated silent mode. You MUST NOT speak, respond, or check in. Do NOT ask if they are there. Do NOT say anything at all. Remain completely silent until CEO says your name 'Vizzy'. This is a hard rule — zero exceptions."
           );
-          // Start activity pings to prevent idle "are you there?" prompts
           if (!silentIntervalRef.current) {
             silentIntervalRef.current = setInterval(() => {
               try { conversation.sendUserActivity(); } catch {}
@@ -301,7 +366,6 @@ export default function VizzyPage() {
         } else if (shouldWake) {
           setSilentMode(false);
           silentModeRef.current = false;
-          // Clear activity pings
           if (silentIntervalRef.current) { clearInterval(silentIntervalRef.current); silentIntervalRef.current = null; }
           try { conversation.setVolume({ volume: prevVolumeRef.current / 100 }); } catch {}
           conversation.sendContextualUpdate(
@@ -311,12 +375,10 @@ export default function VizzyPage() {
       } else if (message.type === "agent_response") {
         let agentText = message.agent_response_event?.agent_response ?? "";
 
-        // Parse [VIZZY-ACTION] tags for RingCentral actions
         const actionMatch = agentText.match(/\[VIZZY-ACTION\]([\s\S]*?)\[\/VIZZY-ACTION\]/);
         if (actionMatch) {
           try {
             const actionData = JSON.parse(actionMatch[1]);
-            // Auto-execute during voice sessions — no approval needed
             (async () => {
               try {
                 const { data, error } = await supabase.functions.invoke("ringcentral-action", { body: actionData });
@@ -340,7 +402,6 @@ export default function VizzyPage() {
           type: "text",
         };
         setTranscript((prev) => { const next = [...prev, entry]; transcriptRef.current = next; return next; });
-        // Reinforce silence if agent speaks during silent mode
         if (silentModeRef.current) {
           conversation.sendContextualUpdate(
             "SYSTEM OVERRIDE: You are STILL in silent mode. Do NOT speak. Do NOT check in. Do NOT respond. Remain completely silent until CEO says 'Vizzy'."
@@ -350,44 +411,33 @@ export default function VizzyPage() {
     },
     onError: (error: any) => {
       console.warn("Vizzy voice error (non-fatal):", error);
-      // Don't set error status unless we've exhausted retries — 
-      // WebRTC SDK sometimes fires spurious errors that don't break the session
     },
   });
 
   // Volume control
   useEffect(() => {
-    if (silentMode) return; // Don't override silent mode mute
+    if (silentMode) return;
     try { conversation.setVolume({ volume: volume / 100 }); } catch {}
   }, [volume, conversation, silentMode]);
 
   useEffect(() => {
     reconnectRef.current = async () => {
-      // Enforce 3s cooldown between reconnect attempts
       const timeSinceLastReconnect = Date.now() - lastReconnectTimeRef.current;
-      if (timeSinceLastReconnect < 3000) {
-        console.log(`[Vizzy] Reconnect cooldown — skipping (${timeSinceLastReconnect}ms since last attempt)`);
-        return;
-      }
+      if (timeSinceLastReconnect < 3000) return;
       lastReconnectTimeRef.current = Date.now();
       try {
-        // End any lingering session before reconnecting
-        try { await conversation.endSession(); } catch { /* already ended */ }
-        // Small delay to let WebSocket fully close
+        try { await conversation.endSession(); } catch {}
         await new Promise((r) => setTimeout(r, 500));
 
         const { data, error } = await supabase.functions.invoke("elevenlabs-conversation-token");
         if (error || !data?.token) throw new Error(error?.message ?? "No conversation token received");
 
-        // Use WebSocket + signed URL if WebRTC previously failed quickly
         if (useWebSocketFallbackRef.current && data.signed_url) {
-          console.log("[Vizzy] Using WebSocket fallback with signed URL");
           await conversation.startSession({ signedUrl: data.signed_url, connectionType: "websocket" });
         } else {
           await conversation.startSession({ conversationToken: data.token, connectionType: "webrtc" });
         }
 
-        // 2s stabilization delay before sending context
         await new Promise((r) => setTimeout(r, 2000));
         if (!sessionActiveRef.current) return;
 
@@ -398,11 +448,9 @@ export default function VizzyPage() {
         retryCountRef.current = 0;
       } catch (err) {
         console.error("Vizzy reconnect failed:", err);
-        // If still have retries left, try again
         if (retryCountRef.current < MAX_RETRIES) {
           retryCountRef.current += 1;
           const delay = Math.min(1000 * Math.pow(2, retryCountRef.current - 1), 16000);
-          console.log(`[Vizzy] Retry from reconnect failure in ${delay}ms (attempt ${retryCountRef.current}/${MAX_RETRIES})`);
           setTimeout(() => reconnectRef.current(), delay);
         } else {
           setStatus("error");
@@ -429,69 +477,57 @@ export default function VizzyPage() {
     reconnectRef.current();
   }, []);
 
-  // Auto-start on mount — FAST: connect first, load context in background
+  // Auto-start on mount
   useEffect(() => {
     if (startedRef.current) return;
-    if (!user) return;
+    if (!user || isAdmin === null) return;
     startedRef.current = true;
 
     (async () => {
       try {
-        // Phase 1: Get mic + token in parallel (fast — no DB queries)
         const [stream, tokenRes] = await Promise.all([
           navigator.mediaDevices.getUserMedia({ audio: true }),
           supabase.functions.invoke("elevenlabs-conversation-token"),
         ]);
         mediaStreamRef.current = stream;
 
-        // === ElevenLabs English Mode ===
         if (tokenRes.error || !tokenRes.data?.token) {
           throw new Error(tokenRes.error?.message ?? "No conversation token received");
         }
 
-        // Store signed URL for WebSocket fallback
         cachedSignedUrlRef.current = tokenRes.data.signed_url ?? null;
-
         await conversation.startSession({ conversationToken: tokenRes.data.token, connectionType: "webrtc" });
 
-        // Phase 3: Load context + WebPhone in background (non-blocking)
         webPhoneActions.initialize().then((ok) => {
           webPhoneInitRef.current = ok;
-          if (ok) console.log("WebPhone ready for browser calls");
-          else console.warn("WebPhone init failed — will fallback on demand");
         });
 
-        loadFullContext().then(async (snap) => {
+        loadContextCached().then(async (snap) => {
           if (!snap) return;
           snapshotRef.current = snap;
-
           const rawContext = buildVizzyContext(snap);
 
-          // Wait for session to be fully connected before sending context
           const waitForConnection = () => new Promise<void>((resolve) => {
             if (sessionActiveRef.current) return resolve();
             const check = setInterval(() => {
               if (sessionActiveRef.current) { clearInterval(check); resolve(); }
             }, 200);
-            // Timeout after 10s
             setTimeout(() => { clearInterval(check); resolve(); }, 10000);
           });
           await waitForConnection();
-          // 2s stabilization delay — let WebRTC session fully establish before pushing context
           await new Promise((r) => setTimeout(r, 2000));
-          if (!sessionActiveRef.current) return; // Session ended during delay
+          if (!sessionActiveRef.current) return;
 
           try {
             const { data: briefData } = await supabase.functions.invoke("vizzy-briefing", {
-              body: { rawContext: rawContext },
+              body: { rawContext },
             });
             if (briefData?.briefing && sessionActiveRef.current) {
               conversation.sendContextualUpdate(briefData.briefing);
-              console.log("[Vizzy] Gemini 3 Pro briefing sent");
               return;
             }
           } catch (e) {
-            console.warn("[Vizzy] Gemini briefing failed, using raw context:", e);
+            console.warn("[Vizzy] Briefing failed, using raw context:", e);
           }
 
           if (sessionActiveRef.current) {
@@ -504,9 +540,8 @@ export default function VizzyPage() {
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, loadFullContext]);
+  }, [user, isAdmin, loadContextCached]);
 
-  // Update quotation status
   const updateQuotationStatus = useCallback((id: string, newStatus: "approved" | "dismissed") => {
     setTranscript((prev) => {
       const next = prev.map((e) =>
@@ -523,10 +558,10 @@ export default function VizzyPage() {
     }
   }, [conversation]);
 
-  if (!user) {
+  if (!user || isAdmin === null) {
     return (
       <div className="flex h-screen items-center justify-center bg-background text-foreground">
-        <p>Please log in to use Vizzy voice.</p>
+        <p>Loading...</p>
       </div>
     );
   }
@@ -542,9 +577,11 @@ export default function VizzyPage() {
     silentMode ? "Silent mode — taking notes..." :
     isSpeakingNow ? "Vizzy is speaking..." : "Listening...";
 
+  const textTranscript = transcript.filter((t) => t.type !== "quotation" && t.text.trim());
+
   return (
     <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/90 backdrop-blur-md">
-      {/* Close button — top right */}
+      {/* Close button */}
       <button
         onClick={stop}
         className="absolute top-5 right-5 w-10 h-10 rounded-full bg-destructive flex items-center justify-center hover:bg-destructive/80 transition-colors z-10"
@@ -553,7 +590,7 @@ export default function VizzyPage() {
         <X className="w-5 h-5 text-destructive-foreground" />
       </button>
 
-      {/* Timer — top left */}
+      {/* Timer */}
       {status === "connected" && (
         <div className="absolute top-5 left-5 z-10">
           <span className="text-sm tabular-nums text-white/60 font-mono bg-white/10 px-3 py-1.5 rounded-full">
@@ -603,12 +640,8 @@ export default function VizzyPage() {
           )}
         </div>
 
-        {/* Error retry */}
         {status === "error" && (
-          <button
-            onClick={manualReconnect}
-            className="text-sm text-primary hover:underline"
-          >
+          <button onClick={manualReconnect} className="text-sm text-primary hover:underline">
             Tap to reconnect
           </button>
         )}
@@ -667,15 +700,52 @@ export default function VizzyPage() {
         )}
       </AnimatePresence>
 
+      {/* Collapsible Transcript Panel */}
+      <AnimatePresence>
+        {showTranscript && textTranscript.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 100 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 100 }}
+            className="absolute bottom-20 inset-x-4 max-w-md mx-auto bg-card/95 backdrop-blur-lg border border-border rounded-2xl shadow-2xl z-10 max-h-[40vh]"
+          >
+            <ScrollArea className="h-full max-h-[40vh] p-4">
+              <div className="space-y-3">
+                {textTranscript.map((entry) => (
+                  <div
+                    key={entry.id}
+                    className={cn(
+                      "text-xs rounded-lg px-3 py-2 max-w-[85%]",
+                      entry.role === "user"
+                        ? "ml-auto bg-primary/20 text-primary-foreground"
+                        : "mr-auto bg-muted text-foreground"
+                    )}
+                  >
+                    <span className="font-semibold text-[10px] uppercase tracking-wide opacity-60 block mb-0.5">
+                      {entry.role === "user" ? "You" : "Vizzy"}
+                    </span>
+                    {entry.text}
+                  </div>
+                ))}
+                <div ref={transcriptEndRef} />
+              </div>
+            </ScrollArea>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Bottom control bar */}
       <div className="absolute bottom-6 inset-x-0 flex items-center justify-center gap-4 px-6">
-        {/* Camera */}
-        <button
-          className="p-3 rounded-full bg-white/10 hover:bg-white/20 transition-colors text-white"
-          aria-label="Camera"
-        >
-          <Camera className="w-5 h-5" />
-        </button>
+        {/* Transcript toggle */}
+        {textTranscript.length > 0 && (
+          <button
+            onClick={() => setShowTranscript(!showTranscript)}
+            className="p-3 rounded-full bg-white/10 hover:bg-white/20 transition-colors text-white"
+            aria-label="Toggle transcript"
+          >
+            {showTranscript ? <ChevronDown className="w-5 h-5" /> : <ChevronUp className="w-5 h-5" />}
+          </button>
+        )}
 
         {/* Volume */}
         <div className="relative">
@@ -742,8 +812,6 @@ export default function VizzyPage() {
           </button>
         )}
       </div>
-
-      {/* Voice calls auto-execute — no approval dialog needed */}
     </div>
   );
 }

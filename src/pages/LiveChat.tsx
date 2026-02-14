@@ -20,14 +20,6 @@ import { useToast } from "@/hooks/use-toast";
 import { TooltipProvider, Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { supabase } from "@/integrations/supabase/client";
 
-/** Detect if text is predominantly RTL (Farsi/Arabic) */
-function isRTLText(text: string): boolean {
-  const cleaned = text.replace(/[#*_`>\-\s\d]/g, '').slice(0, 100);
-  if (!cleaned.length) return false;
-  const rtlChars = (cleaned.match(/[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]/g) || []).length;
-  return rtlChars > cleaned.length * 0.3;
-}
-
 export default function LiveChat() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -236,28 +228,23 @@ export default function LiveChat() {
               </div>
             )}
 
-            {messages.map((msg) => {
-              const isRtl = isRTLText(msg.content);
-              return (
-                <div
-                  key={msg.id}
-                  dir={isRtl ? "rtl" : undefined}
-                  className={cn(
-                    "rounded-2xl px-4 py-3 text-sm max-w-[85%]",
-                    msg.role === "user"
-                      ? "ml-auto bg-primary text-primary-foreground"
-                      : "mr-auto bg-muted text-foreground",
-                    isRtl && "text-right"
-                  )}
-                >
-                  {msg.role === "assistant" ? (
-                    <RichMarkdown content={msg.content} className="text-sm [&_p]:text-sm" />
-                  ) : (
-                    <p className="whitespace-pre-wrap">{msg.content}</p>
-                  )}
-                </div>
-              );
-            })}
+            {messages.map((msg) => (
+              <div
+                key={msg.id}
+                className={cn(
+                  "rounded-2xl px-4 py-3 text-sm max-w-[85%]",
+                  msg.role === "user"
+                    ? "ml-auto bg-primary text-primary-foreground"
+                    : "mr-auto bg-muted text-foreground"
+                )}
+              >
+                {msg.role === "assistant" ? (
+                  <RichMarkdown content={msg.content} className="text-sm [&_p]:text-sm" />
+                ) : (
+                  <p className="whitespace-pre-wrap">{msg.content}</p>
+                )}
+              </div>
+            ))}
 
             {isStreaming && messages[messages.length - 1]?.role !== "assistant" && (
               <div className="mr-auto bg-muted rounded-2xl px-4 py-3 text-sm flex items-center gap-2">
@@ -281,10 +268,7 @@ export default function LiveChat() {
         <div className="border-t border-border bg-card p-4 shrink-0">
           <div className="max-w-3xl mx-auto">
             <div className="relative bg-secondary rounded-xl border border-border/50 shadow-sm transition-shadow focus-within:shadow-md focus-within:border-primary/30">
-              {/* Formatting toolbar */}
               <FormattingToolbar onFormat={handleFormat} disabled={isStreaming} visible={showFormatting} />
-
-              {/* Slash command menu */}
               <SlashCommandMenu
                 isOpen={slashOpen}
                 filter={slashFilter}
@@ -292,8 +276,6 @@ export default function LiveChat() {
                 onSelect={handleSlashSelect}
                 onClose={() => setSlashOpen(false)}
               />
-
-              {/* Mention menu */}
               <MentionMenu
                 isOpen={mentionOpen}
                 filter={mentionFilter}
@@ -302,7 +284,6 @@ export default function LiveChat() {
                 onClose={() => setMentionOpen(false)}
               />
 
-              {/* Textarea */}
               <div className="px-3 pt-3 pb-1">
                 <textarea
                   ref={inputRef}
@@ -316,7 +297,6 @@ export default function LiveChat() {
                 />
               </div>
 
-              {/* Bottom toolbar */}
               <div className="flex items-center gap-0.5 px-2 pb-2">
                 <EmojiPicker onSelect={handleEmojiSelect} disabled={isStreaming} />
                 <VoiceInputButton isListening={speech.isListening} isSupported={speech.isSupported} onToggle={handleVoiceToggle} disabled={isStreaming} />
@@ -374,10 +354,8 @@ export default function LiveChat() {
                   </Tooltip>
                 )}
 
-                {/* Spacer */}
                 <div className="flex-1" />
 
-                {/* Send / Stop */}
                 {isStreaming ? (
                   <Button size="icon" variant="destructive" className="h-9 w-9 rounded-lg shrink-0" onClick={cancelStream}>
                     <Square className="w-4 h-4" />
@@ -390,7 +368,6 @@ export default function LiveChat() {
               </div>
             </div>
 
-            {/* Hint footer */}
             <div className="flex justify-end mt-2 px-1">
               <p className="text-xs text-muted-foreground">
                 Type <kbd className="px-1 py-0.5 rounded bg-muted text-[10px] font-mono">/</kbd> for commands · <kbd className="px-1 py-0.5 rounded bg-muted text-[10px] font-mono">@</kbd> to mention
