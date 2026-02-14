@@ -302,6 +302,7 @@ export default function LiveChat() {
               status={voiceChat.status}
               onTap={voiceChat.handleOrbTap}
               disabled={!voiceChat.isSupported}
+              micActive={voiceChat.isListening}
             />
           </div>
         )}

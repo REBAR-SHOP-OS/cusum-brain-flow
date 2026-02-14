@@ -1,11 +1,12 @@
 import { motion } from "framer-motion";
-import { Square } from "lucide-react";
+import { Mic, Square } from "lucide-react";
 import type { VoiceChatStatus } from "@/hooks/useVoiceChat";
 
 interface VoiceOrbProps {
   status: VoiceChatStatus;
   onTap: () => void;
   disabled?: boolean;
+  micActive?: boolean; // whether mic is actively listening (for barge-in indicator)
 }
 
 const barHeights = {
@@ -19,13 +20,12 @@ const statusLabels: Record<VoiceChatStatus, string> = {
   idle: "Tap to start conversation",
   listening: "Listening…",
   thinking: "Thinking…",
-  speaking: "Speaking… tap to interrupt",
+  speaking: "Speaking… speak to interrupt",
 };
 
-export function VoiceOrb({ status, onTap, disabled }: VoiceOrbProps) {
+export function VoiceOrb({ status, onTap, disabled, micActive }: VoiceOrbProps) {
   const isActive = status === "listening" || status === "speaking";
   const isThinking = status === "thinking";
-  const isConversationActive = status !== "idle";
 
   return (
     <div className="flex flex-col items-center gap-3">
@@ -45,6 +45,17 @@ export function VoiceOrb({ status, onTap, disabled }: VoiceOrbProps) {
             animate={{ scale: [1, 1.5], opacity: [0.5, 0] }}
             transition={{ repeat: Infinity, duration: 1.5, ease: "easeOut" }}
           />
+        )}
+
+        {/* Mic-active indicator during speaking (barge-in ready) */}
+        {status === "speaking" && micActive && (
+          <motion.span
+            className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-destructive flex items-center justify-center"
+            animate={{ scale: [1, 1.15, 1] }}
+            transition={{ repeat: Infinity, duration: 1, ease: "easeInOut" }}
+          >
+            <Mic className="w-3 h-3 text-destructive-foreground" />
+          </motion.span>
         )}
 
         {/* Show stop icon when listening (tap to end), sound bars otherwise */}

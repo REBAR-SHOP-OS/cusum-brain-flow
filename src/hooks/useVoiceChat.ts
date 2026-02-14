@@ -20,17 +20,50 @@ export function useVoiceChat(chat: ReturnType<typeof useAdminChat>) {
   const abortRef = useRef<AbortController | null>(null);
   statusRef.current = status;
 
-  // Handle auto-send when silence is detected
+  // Handle barge-in: user speaks during speaking/thinking states
+  const handleBargeIn = useCallback((transcript: string) => {
+    // Stop current TTS audio
+    abortRef.current?.abort();
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = "";
+      audioRef.current = null;
+    }
+    // Cancel any in-flight AI stream
+    chat.cancelStream();
+    // Send the new message
+    ttsTriggeredRef.current = false;
+    setStatus("thinking");
+    chat.sendMessage(transcript);
+  }, [chat]);
+
+  // Handle auto-send when silence is detected -- now works during listening AND speaking (barge-in)
   const handleSilenceEnd = useCallback(() => {
-    if (statusRef.current !== "listening" || !conversationActiveRef.current) return;
+    if (!conversationActiveRef.current) return;
+    const currentStatus = statusRef.current;
+    
     const transcript = speechRef.current.fullTranscript + (speechRef.current.interimText ? " " + speechRef.current.interimText : "");
-    if (transcript.trim()) {
-      speechRef.current.stop();
+    if (!transcript.trim()) return;
+
+    if (currentStatus === "speaking" || currentStatus === "thinking") {
+      // Barge-in: user spoke while AI was speaking/thinking
+      speechRef.current.reset();
+      // Restart mic immediately after reset
+      setTimeout(() => {
+        if (conversationActiveRef.current) speechRef.current.start();
+      }, 50);
+      handleBargeIn(transcript.trim());
+    } else if (currentStatus === "listening") {
+      // Normal send
+      speechRef.current.reset();
+      setTimeout(() => {
+        if (conversationActiveRef.current) speechRef.current.start();
+      }, 50);
       setStatus("thinking");
       ttsTriggeredRef.current = false;
       chat.sendMessage(transcript.trim());
     }
-  }, [chat]);
+  }, [chat, handleBargeIn]);
 
   const speech = useSpeechRecognition({
     onError: (err) => toast({ title: "Voice", description: err, variant: "destructive" }),
@@ -100,10 +133,9 @@ export function useVoiceChat(chat: ReturnType<typeof useAdminChat>) {
         URL.revokeObjectURL(url);
         audioRef.current = null;
         if (conversationActiveRef.current) {
-          speechRef.current.reset();
+          // Mic is already running (full duplex) -- just transition to listening
           ttsTriggeredRef.current = false;
           prevAssistantTextRef.current = "";
-          speechRef.current.start();
           setStatus("listening");
         } else {
           setStatus("idle");
@@ -118,6 +150,11 @@ export function useVoiceChat(chat: ReturnType<typeof useAdminChat>) {
       };
 
       setStatus("speaking");
+      // Ensure mic is running during speaking for barge-in detection
+      if (conversationActiveRef.current && !speechRef.current.isListening) {
+        speechRef.current.reset();
+        speechRef.current.start();
+      }
       await audio.play();
     } catch (err: any) {
       if (err?.name === "AbortError") return;
@@ -156,28 +193,20 @@ export function useVoiceChat(chat: ReturnType<typeof useAdminChat>) {
         break;
 
       case "listening":
-        stopConversation();
-        break;
-
       case "thinking":
-        stopConversation();
-        break;
-
       case "speaking":
-        stopAudio();
-        speech.reset();
-        ttsTriggeredRef.current = false;
-        speech.start();
-        setStatus("listening");
+        // All active states: tap = stop conversation entirely
+        stopConversation();
         break;
     }
-  }, [status, speech, stopAudio, stopConversation]);
+  }, [status, speech, stopConversation]);
 
   return {
     status,
     interimText: speech.interimText,
     fullTranscript: speech.fullTranscript,
     isSupported: speech.isSupported,
+    isListening: speech.isListening,
     handleOrbTap,
     isConversationActive: status !== "idle",
   };
