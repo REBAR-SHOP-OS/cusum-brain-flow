@@ -1,58 +1,50 @@
 
 
-# Fix Vizzy Voice Reconnection Loop
+# Fix Vizzy Voice "Connection Lost" — Use Signed URL Fallback
 
-## Problem Analysis
+## Problem
 
-The logs show a clear pattern causing an infinite reconnect loop:
+The ElevenLabs conversation token works (200 OK), but the WebRTC agent connects and disconnects within 1-2 seconds. The 404 on `/rtc/v1/validate` indicates a LiveKit protocol version mismatch between the SDK and the ElevenLabs server. The agent participant joins the room but leaves almost immediately.
 
-1. WebRTC room connects successfully
-2. ElevenLabs agent participant disconnects almost immediately (server-side)
-3. `onDisconnect` fires and triggers a reconnect with a new token
-4. New session connects, agent disconnects again -- loop repeats 3 times
+## Root Cause
 
-The root cause: Each reconnect attempt creates a brand new ElevenLabs conversation. The agent connects briefly, then the server-side agent disconnects (likely because of the large context being sent before the agent is fully ready, or because rapid successive connections trigger ElevenLabs rate limiting). The current code treats EVERY disconnect as a recoverable network issue, but agent-initiated disconnects should not trigger reconnection.
+The `@elevenlabs/react` SDK v0.14.0 uses a newer LiveKit protocol version that ElevenLabs' server doesn't fully support yet (the `/rtc/v1/validate` 404 error). While the initial WebSocket fallback connects, the agent-side participant terminates the session quickly.
 
 ## Solution
 
-### 1. Add connection stability guard (`src/pages/VizzyPage.tsx`)
+### 1. Switch to Signed URL connection (`src/pages/VizzyPage.tsx`)
 
-Only attempt reconnection if the session was stable for at least 5 seconds. If the agent disconnects within seconds of connecting, it means the agent itself ended the session -- reconnecting will just repeat the same failure.
+Instead of `conversationToken` (which routes through LiveKit WebRTC), use `signedUrl` with `connectionType: "websocket"`. This avoids the LiveKit `/rtc/v1` path entirely and uses a direct WebSocket connection which is more stable.
 
-### 2. Add cooldown between reconnection attempts
+### 2. Update Edge Function to provide signed URL (`supabase/functions/elevenlabs-conversation-token/index.ts`)
 
-Prevent rapid token requests by enforcing a minimum 3-second gap between reconnection attempts. This prevents burning through ElevenLabs quota with rapid-fire token requests.
+Fetch a signed URL from ElevenLabs' `/get-signed-url` endpoint instead of (or in addition to) the conversation token. The signed URL uses a different connection path that bypasses the LiveKit version issue.
 
-### 3. Don't send context until agent speaks or 3 seconds pass
+### 3. Fallback chain in VizzyPage
 
-Delay `sendContextualUpdate` slightly after connection to let the WebRTC session fully stabilize before pushing large payloads.
+Try WebRTC with conversation token first. If the session fails within 5 seconds (our existing guard catches this), the "Tap to reconnect" button will use WebSocket + signed URL as fallback.
 
 ## Technical Details
 
-### Changes to `src/pages/VizzyPage.tsx`
+### Edge Function Changes (`elevenlabs-conversation-token/index.ts`)
 
-**onConnect handler (line ~243)**:
-- Record `lastConnectTime` timestamp when connection succeeds
-
-**onDisconnect handler (line ~248)**:
-- Check if session lasted less than 5 seconds -- if so, treat as agent-initiated disconnect and do NOT reconnect
-- Show a "Connection failed" message instead of endlessly retrying
-- Only reconnect for sessions that were stable (lasted > 5 seconds), indicating a real network drop
-
-**reconnectRef (line ~365)**:
-- Add a cooldown check: if last reconnect attempt was less than 3 seconds ago, skip
-- Increase the delay between retries to prevent hammering ElevenLabs
-
-**Context sending (line ~475)**:
-- Add a 2-second delay after `waitForConnection` before sending context, giving the WebRTC session time to stabilize
-
-### Summary of changes
+Add a second fetch to get the signed URL:
 
 ```text
-File: src/pages/VizzyPage.tsx
-- Add lastConnectTimeRef to track when connection was established
-- Add lastReconnectTimeRef to enforce cooldown
-- onDisconnect: skip reconnect if session lasted < 5 seconds
-- reconnectRef: enforce 3s cooldown between attempts  
-- Context sending: add 2s stabilization delay after connection confirmed
+GET https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id={agentId}
 ```
+
+Return both `token` (for WebRTC) and `signed_url` (for WebSocket fallback).
+
+### VizzyPage Changes (`src/pages/VizzyPage.tsx`)
+
+- Store both token and signed_url from the edge function response
+- Initial connection: try `conversationToken` + `webrtc` first
+- If session fails < 5 seconds (existing guard): set a `useWebSocketFallback` flag
+- "Tap to reconnect" / `manualReconnect`: if fallback flag is set, use `signedUrl` + `websocket`
+- Reconnect function: use WebSocket mode when fallback is active
+
+### Files Changed
+1. `supabase/functions/elevenlabs-conversation-token/index.ts` — add signed URL fetch
+2. `src/pages/VizzyPage.tsx` — WebSocket fallback logic
+
