@@ -1,76 +1,61 @@
 
-# Fix Vizzy Infinite Reconnection Loop
 
-## Problem
+# Behnam Rajabifar — Role Alignment Between Odoo and Rebar App
 
-The automatic WebSocket fallback introduced in the last edit created an **infinite reconnection loop**. The logs show:
+## Current State
 
-1. WebRTC connects, agent disconnects after ~1986ms
-2. Auto-fallback triggers WebSocket reconnect
-3. WebSocket connects, agent disconnects after ~825ms
-4. Auto-fallback triggers another WebSocket reconnect (loop continues indefinitely)
+| System | Roles |
+|--------|-------|
+| **Odoo** | Administrator in Sales, HR, Manufacturing, Project, Quality, Field Service, and more (37 groups, 999 access rights) |
+| **Rebar App** | `sales` only |
 
-The `onDisconnect` handler always enters the `< 5000ms` branch and always finds `cachedSignedUrlRef.current`, so it retries forever.
+## Analysis
 
-## Root Cause
+Behnam (`ben@rebar.shop`) is a CEO-level user. His Rebar app access is currently **too restrictive** — he can only see Pipeline, Customers, Office, Inbox, and Settings (the `SALES_ALLOWED` routes). He cannot access Shop Floor, Deliveries, Accounting, CEO Portal, Admin Panel, or Diagnostics.
 
-The auto-reconnect logic has no counter or guard to limit how many times the automatic fallback fires. The `retryCountRef` is only used in the `> 5s` branch, not in the `< 5s` branch.
+However, following the audit's own recommendation of least privilege, he should **not** get full `admin` rights either. Instead, he needs read-level visibility across the business without the ability to manage system settings or user roles.
 
-## Fix (`src/pages/VizzyPage.tsx`)
+## Recommended Rebar App Roles for Behnam
 
-Add a dedicated `autoFallbackAttemptedRef` flag that allows **exactly one** automatic WebSocket fallback. After that single attempt, if it still fails under 5 seconds, show the error state (manual "Tap to reconnect" or navigate home).
+| Role | Reason |
+|------|--------|
+| `sales` (keep) | Pipeline, Customers, CRM — core to his Sales Administrator Odoo role |
+| `office` (add) | Dashboard, Office Tools, Inventory, Live Monitor — gives operational visibility without admin-level system control |
 
-### Changes
+This combination unlocks all operational routes (Dashboard, Pipeline, Customers, Shop Floor, Office Tools, Deliveries, Inventory, Accounting, Live Monitor) while keeping him **out of**:
+- Admin Panel (user/role management)
+- CEO Portal (reserved for `admin` role)
+- Diagnostics / Data Audit (reserved for `admin` role)
 
-In the `< 5000ms` branch (lines 262-273), replace:
+If CEO Portal access is needed, that's an `admin`-only route today. A separate decision would be needed to either grant `admin` or create a dedicated `ceo` role.
 
-```typescript
-useWebSocketFallbackRef.current = true;
-if (cachedSignedUrlRef.current) {
-  setStatus("reconnecting");
-  setTimeout(() => reconnectRef.current(), 1000);
-} else {
-  setStatus("error");
-}
+## Implementation
+
+Single database operation — add the `office` role for `ben@rebar.shop`:
+
+```sql
+INSERT INTO user_roles (user_id, role)
+SELECT id, 'office'
+FROM auth.users
+WHERE email = 'ben@rebar.shop'
+ON CONFLICT (user_id, role) DO NOTHING;
 ```
 
-With:
+No frontend code changes needed — the existing `RoleGuard`, `AppSidebar`, and `CommandBar` already handle multi-role users correctly.
 
-```typescript
-useWebSocketFallbackRef.current = true;
-if (!autoFallbackAttemptedRef.current && cachedSignedUrlRef.current) {
-  autoFallbackAttemptedRef.current = true;
-  setStatus("reconnecting");
-  setTimeout(() => reconnectRef.current(), 1000);
-} else {
-  setStatus("error");
-}
-```
+## What This Unlocks vs. Restricts
 
-Also add the ref declaration near the other refs (~line 20-60 area):
+**Unlocked routes (with sales + office):**
+- Dashboard, Pipeline, Customers, Shop Floor, Office Tools, Deliveries, Inventory, Accounting, Inbox, Tasks, Settings, Live Monitor, Brain, Time Clock, Phone Calls, Agent
 
-```typescript
-const autoFallbackAttemptedRef = useRef(false);
-```
+**Still restricted:**
+- Admin Panel, CEO Portal, Diagnostics — require `admin` role
 
-And reset it in `onConnect` so a successful connection allows future fallback attempts:
+## Open Question
 
-```typescript
-onConnect: () => {
-  sessionActiveRef.current = true;
-  lastConnectTimeRef.current = Date.now();
-  autoFallbackAttemptedRef.current = false; // reset on successful connect
-  setStatus("connected");
-  retryCountRef.current = 0;
-},
-```
+If Behnam needs CEO Portal access, two options:
+1. Grant `admin` role (gives full access including user management)
+2. Create a new `ceo` role and update the route guard (more work, better separation)
 
-## Summary
+This can be decided separately. The `office` role addition covers 90% of operational needs immediately.
 
-| File | Change | Lines |
-|------|--------|-------|
-| `src/pages/VizzyPage.tsx` | Add `autoFallbackAttemptedRef` declaration | Near existing refs |
-| `src/pages/VizzyPage.tsx` | Guard auto-reconnect with the flag | Lines 267-270 |
-| `src/pages/VizzyPage.tsx` | Reset flag on successful connect | Line 251 |
-
-One ref, three single-line changes. Stops the infinite loop while preserving the seamless single-attempt fallback behavior.
