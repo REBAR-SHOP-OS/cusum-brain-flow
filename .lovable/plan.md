@@ -1,83 +1,77 @@
 
 
-# Best Farsi Voice for Vizzy -- Custom Voice Pipeline
+# Fix Vizzy Connection Stability -- Switch to WebRTC
 
-## The Problem
-ElevenLabs doesn't have native Persian/Farsi voices. Their multilingual model can attempt Farsi but with a non-native accent.
+## Root Cause
 
-## The Solution: Hybrid Voice Mode
-Build a dedicated **Farsi voice mode** that bypasses ElevenLabs entirely and uses:
+The ElevenLabs connection keeps dropping because:
 
-1. **Browser Speech Recognition** (Web Speech API) -- Free, built-in, works great for Farsi on Chrome
-2. **Gemini 3 Pro** (via Lovable AI) -- Already powering Vizzy's text brain, excellent at Farsi
-3. **Browser Speech Synthesis** (Web Speech API) -- Chrome ships with Google's high-quality Farsi voice ("Google fارسی")
+1. **WebSocket mode is being used** -- The current code uses `connectionType: "websocket"` with a `signed_url`. WebSocket connections are inherently less stable and more prone to disconnections.
+2. **ElevenLabs recommends WebRTC** -- Their docs explicitly state WebRTC has "lower latency, better audio quality" and is the recommended connection type.
+3. **Wrong API endpoint** -- The edge function calls `get-signed-url` (for WebSocket) instead of the `token` endpoint (for WebRTC).
 
-This gives you a fully native Farsi voice experience with zero extra API costs.
+## The Fix
 
-## How It Works
+Switch the entire pipeline from WebSocket to WebRTC. This is a straightforward swap.
 
-When user's `preferred_language` is `fa` (or they select Farsi mode), Vizzy switches from ElevenLabs to the custom pipeline:
+### 1. Update Edge Function: `supabase/functions/elevenlabs-conversation-token/index.ts`
 
-```text
-User speaks Farsi
-    --> Browser SpeechRecognition (fa-IR) transcribes
-    --> Send text to admin-chat edge function (Gemini)
-    --> Gemini responds in Tehrani Farsi
-    --> Browser SpeechSynthesis reads response in Farsi voice
-    --> Transcript shown in RTL in the UI
+Change the ElevenLabs API call from:
+```
+GET /v1/convai/conversation/get-signed-url?agent_id=...
+```
+to:
+```
+GET /v1/convai/conversation/token?agent_id=...
 ```
 
-## Changes
+Return `token` instead of `signed_url` in the response (also keep `signed_url` for backward compatibility).
 
-### 1. New Hook: `src/hooks/useVizzyFarsiVoice.ts`
-A custom voice pipeline hook that:
-- Uses `webkitSpeechRecognition` with `lang: "fa-IR"` for continuous listening
-- Sends transcribed text to `admin-chat` edge function (already has full Tehrani Farsi instructions)
-- Uses `SpeechSynthesis` with a Persian voice to speak responses
-- Exposes the same interface as the ElevenLabs `useConversation` hook (status, transcript, start/stop, mute)
-- Falls back to English ElevenLabs if browser doesn't support Farsi speech
+### 2. Update Client: `src/pages/VizzyPage.tsx`
 
-### 2. Update `src/pages/VizzyPage.tsx`
-- Detect `preferredLang === "fa"` from the token response
-- If Farsi, use `useVizzyFarsiVoice` instead of `useConversation`
-- Same UI, same transcript display, same client tools -- just different audio engine
-- Add a language toggle button so user can switch mid-session
+- Change `conversation.startSession({ signedUrl: ..., connectionType: "websocket" })` to `conversation.startSession({ conversationToken: ..., connectionType: "webrtc" })`
+- Update the reconnect logic to use the same WebRTC approach
+- Reduce `MAX_RETRIES` back to 3 since WebRTC is much more stable -- fewer retries needed
 
-### 3. No Edge Function Changes Needed
-- `admin-chat` already has full Tehrani Farsi instructions
-- `elevenlabs-conversation-token` still used for English mode
-- Business context loading stays the same
+### 3. No Other Changes Needed
+
+- Same auth flow, same context loading, same client tools
+- Farsi mode is unaffected (uses browser APIs, not ElevenLabs)
 
 ## Technical Details
 
-### Browser Speech Recognition (STT)
+### Edge Function Change
+
 ```text
-const recognition = new webkitSpeechRecognition();
-recognition.lang = "fa-IR";
-recognition.continuous = true;
-recognition.interimResults = true;
-```
-- Works on Chrome, Edge, Safari (most browsers)
-- Free, no API key needed
-- Good accuracy for conversational Farsi
+// Before
+fetch(`https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=${agentId}`)
+// Returns: { signed_url: "wss://..." }
 
-### Browser Speech Synthesis (TTS)
+// After  
+fetch(`https://api.elevenlabs.io/v1/convai/conversation/token?agent_id=${agentId}`)
+// Returns: { token: "eyJ..." }
+```
+
+### Client Change
+
 ```text
-const utterance = new SpeechSynthesisUtterance(text);
-utterance.lang = "fa-IR";
-// Chrome provides "Google fارسی" voice automatically
+// Before
+await conversation.startSession({ signedUrl: data.signed_url, connectionType: "websocket" });
+
+// After
+await conversation.startSession({ conversationToken: data.token, connectionType: "webrtc" });
 ```
-- Uses Google's neural Farsi voice on Chrome
-- Natural-sounding, native accent
-- Free, no API key needed
 
-### Fallback Strategy
-If the browser doesn't have Farsi speech capabilities:
-- Show a toast: "Farsi voice not available on this browser, using text-only mode"
-- Fall back to text chat with Farsi responses displayed in RTL
+### Why WebRTC is More Stable
 
-### Files to Create/Modify
-1. **Create** `src/hooks/useVizzyFarsiVoice.ts` -- New Farsi voice pipeline hook
-2. **Modify** `src/pages/VizzyPage.tsx` -- Add language detection and hook switching
-3. **Modify** `src/pages/LiveChat.tsx` -- Add Farsi voice option for text chat voice button
+- WebRTC uses UDP-based media transport with automatic quality adaptation
+- Built-in ICE (connectivity establishment) handles network changes gracefully
+- Automatic echo cancellation and noise suppression at the transport level
+- No TCP head-of-line blocking that causes WebSocket audio stuttering
+- Browser-native reconnection handling
+
+### Files to Modify
+
+1. `supabase/functions/elevenlabs-conversation-token/index.ts` -- Switch API endpoint from signed-url to token
+2. `src/pages/VizzyPage.tsx` -- Switch from WebSocket to WebRTC connection type
 
