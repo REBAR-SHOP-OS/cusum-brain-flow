@@ -223,7 +223,7 @@ export default function LiveChat() {
 
   return (
     <TooltipProvider delayDuration={300}>
-      <div className="flex flex-col h-full bg-background">
+      <div className="flex flex-col h-[calc(100vh-3.5rem)] md:h-[calc(100vh-3.5rem)] bg-background">
         {/* Header */}
         <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-card shrink-0">
           <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => navigate(-1)}>
