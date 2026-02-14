@@ -1,61 +1,27 @@
 
 
-# Security Hardening Plan -- Addressing Passive Audit Findings
+# Drag-and-Drop Floating Agent Button
 
-## Status: Phase 1-2 Complete, Phase 3-5 Partially Complete
+Make the floating agent button (Vizzy/assistant) draggable so users can reposition it anywhere on screen.
 
-## What Was Done
+## What Changes
 
-### Phase 1: Fix Overly Permissive RLS Policies ✅ COMPLETE
+The floating agent button in the bottom-right corner will become draggable. You can click and drag it to any position on the screen. A simple click (without dragging) still navigates to the chat page. The button's position persists in localStorage so it stays where you left it between page loads.
 
-Migration applied:
-- `dedup_rollback_log`: INSERT restricted to admin role
-- `lead_events`: INSERT restricted to admin/office/sales roles
-- `reconciliation_runs`: INSERT restricted to admin role
+## Technical Details
 
-Remaining 4 linter warnings are all service_role policies (intentional, acceptable):
-- `dedup_rollback_log` (service_role INSERT)
-- `lead_events` (service_role INSERT)
-- `reconciliation_runs` (service_role INSERT)
-- `penny_collection_queue` (service_role ALL)
+### File Modified
 
-### Phase 2: Edge Function Auth Hardening ✅ COMPLETE
+**`src/components/vizzy/FloatingVizzyButton.tsx`**
+- Add `useState` for button position (x, y) initialized from localStorage or default bottom-right
+- Add mouse/touch event handlers for drag behavior:
+  - `onPointerDown`: record start position, set dragging flag
+  - `onPointerMove` (on window): update position while dragging
+  - `onPointerUp` (on window): end drag, save position to localStorage
+- Distinguish click vs drag: only navigate to `/chat` if the pointer moved less than 5px (not a drag)
+- Replace the `fixed bottom-X right-X` classes with inline `style={{ left, top }}` positioning
+- Clamp position to viewport bounds so the button can't be dragged off-screen
+- Add `touch-action: none` CSS for smooth mobile dragging
 
-Full audit of all 52 edge functions:
+### No database or other file changes needed
 
-| Category | Functions | Status |
-|----------|-----------|--------|
-| Webhooks/Cron | gmail-webhook, ringcentral-webhook, social-cron-publish, check-sla-breaches, comms-alerts, daily-summary, penny-auto-actions, facebook-data-deletion, email-unsubscribe | ✅ Unauthenticated by design |
-| OAuth callbacks | google-oauth, quickbooks-oauth, facebook-oauth, linkedin-oauth, tiktok-oauth, ringcentral-oauth | ✅ Unauthenticated by design |
-| User-facing | All 40+ user-facing functions | ✅ All verified to have requireAuth/verifyAuth/getClaims at entry |
-| Service-to-service | summarize-call, ringcentral-recording, ringcentral-ai, ringcentral-video, ringcentral-sync, process-rfq-emails, google-vision-ocr, import-crm-data, diagnostic-logs | ✅ All verified to have auth |
-| **mcp-server** | mcp-server | ✅ **FIXED** — Added MCP_API_KEY validation middleware |
-
-### Phase 4: Upload Security Controls ✅ COMPLETE
-
-Created `supabase/functions/_shared/upload-validation.ts` with:
-- File extension allowlist (documents, drawings, images, archives)
-- Size limit enforcement (50MB max)
-- Content-type vs extension consistency check
-- Magic byte signature validation for common file types
-
-### Phase 5: Security Headers ✅ COMPLETE
-
-Created `public/_headers` file with:
-- `X-Content-Type-Options: nosniff`
-- `X-Frame-Options: DENY`
-- `Referrer-Policy: strict-origin-when-cross-origin`
-- `Permissions-Policy: camera=(), microphone=(self), geolocation=(), payment=()`
-
-### Phase 3: Tighten Data Access Policies — DEFERRED
-
-Requires careful analysis of existing RLS policies and may break functionality. Recommended for next sprint:
-- communications: restrict to office/admin/sales roles
-- payroll tables: restrict to admin + accounting roles
-
-## Out of Scope (External Systems)
-
-- WordPress/WooCommerce security (www.rebar.shop)
-- Odoo RBAC/record rules (www.crm.rebar.shop)
-- DNS/TLS configuration
-- Payment/PCI scope
