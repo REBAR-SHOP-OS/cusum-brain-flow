@@ -189,26 +189,11 @@ export default function VizzyPage() {
 
       if (attempt !== connectAttemptRef.current) return; // stale
 
-      // Try WebRTC first
-      try {
-        console.log("[Vizzy] Trying WebRTC...");
-        await conversation.startSession({ conversationToken: data.token });
-        console.log("[Vizzy] WebRTC session started");
-        return;
-      } catch (webrtcErr) {
-        console.warn("[Vizzy] WebRTC failed, trying WebSocket...", webrtcErr);
-      }
-
-      if (attempt !== connectAttemptRef.current) return; // stale
-
-      // Fallback to WebSocket
-      if (data.signed_url) {
-        console.log("[Vizzy] Trying WebSocket...");
-        await conversation.startSession({ signedUrl: data.signed_url });
-        console.log("[Vizzy] WebSocket session started");
-      } else {
-        throw new Error("No connection method available");
-      }
+      // Connect via WebSocket (signed_url) — WebRTC returns 404 for this agent
+      if (!data.signed_url) throw new Error("No signed_url available");
+      console.log("[Vizzy] Connecting via WebSocket...");
+      await conversation.startSession({ signedUrl: data.signed_url });
+      console.log("[Vizzy] WebSocket session started");
     } catch (err) {
       console.error("[Vizzy] Connection failed:", err);
       if (attempt === connectAttemptRef.current) {
