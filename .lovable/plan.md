@@ -1,36 +1,69 @@
 
 
-# Add Visible Voice Chat Button to Floating Vizzy
+# Safe Landing Page Improvements -- Zero SEO Damage
 
-## Problem
-The voice chat feature is hidden behind a long-press gesture on the Vizzy button. There's no visible microphone icon, so users don't know it exists.
+## Guiding Principle
+**Additive only.** No existing HTML element, meta tag, heading structure, URL, or content will be removed or renamed. All changes are new components inserted between existing sections or appended to the footer.
 
-## Solution
-Add a small **microphone icon button** that appears next to the Vizzy avatar when the user hovers or taps it. This gives users a clear, discoverable way to start voice chat.
+## What Will NOT Be Touched
+- `index.html` -- all meta tags, JSON-LD, Open Graph, canonical URL, robots directives stay exactly as-is
+- `public/robots.txt` -- no changes
+- `public/sitemap.xml` -- no changes
+- `public/_headers` -- no changes
+- Existing heading hierarchy (h1, h2, h3) in `Landing.tsx` -- preserved in order
+- All existing section `aria-label` attributes -- preserved
+- All existing internal links (`/login`, `/signup`, `/privacy`, `/terms`) -- preserved
+- The `InteractiveBrainBg` hero background -- preserved
 
-## Design
-- A small mic icon (using Lucide's `Mic` icon) will appear as a secondary button positioned just above or beside the main Vizzy avatar
-- On **desktop**: the mic button appears on hover over the Vizzy area
-- On **mobile**: the mic button is always visible (since hover doesn't work on touch)
-- Tapping the mic button navigates to `/chat?voice=1`
-- Tapping the main avatar still navigates to `/chat` (text mode)
-- This eliminates the need for the long-press gesture entirely
+## Changes (All Additive)
 
-## Technical Changes
+### 1. New Component: `src/components/landing/TestimonialSection.tsx`
+- A new section with 2-3 placeholder testimonial cards
+- Will be inserted **between** the existing Feature Grid and Mid-page CTA sections
+- Uses semantic `<section>` with `aria-label="Testimonials"` and an `<h2>` to maintain heading hierarchy
+- No new routes, no URL changes
 
-### File: `src/components/vizzy/FloatingVizzyButton.tsx`
-1. Import `Mic` icon from `lucide-react`
-2. Add a `showActions` state that toggles on hover (desktop) or is always true (mobile)
-3. Render a small mic button above the main avatar circle
-4. Simplify the pointer-up handler: remove long-press logic, tap always goes to `/chat`
-5. Mic button click navigates to `/chat?voice=1`
-6. Update tooltip text to just "Tap to chat" since voice now has its own button
+### 2. New Component: `src/components/landing/LandingFooter.tsx`
+- Enhanced footer with business address, phone, email, service area, and social links
+- **Replaces only the existing `<footer>` block** at the bottom of `Landing.tsx` (lines 202-218)
+- Preserves all existing footer content (logo, Privacy/Terms links, copyright) and adds new rows below
+- Adds `<address>` semantic tag for local SEO benefit (additive structured data)
 
-### Visual Layout
-```text
-       [Mic]       <-- small circular mic button (28px)
-   [Vizzy Avatar]  <-- main button (56px)
-```
+### 3. New Component: `src/components/landing/PublicChatWidget.tsx`
+- A floating chat bubble (bottom-right) for unauthenticated visitors
+- Renders as a `<div>` with `position: fixed` -- zero impact on page DOM flow or crawlability
+- Chat content is dynamically loaded (invisible to crawlers), so no SEO interference
 
-The mic button will have matching styling (teal ring, slight shadow) to look cohesive with the main avatar.
+### 4. Modify: `src/pages/Landing.tsx`
+- Import and render the 3 new components in their designated slots
+- **No existing JSX is deleted or reordered**
+- Testimonials inserted after line 108 (after Feature Grid closing `</section>`)
+- `LandingFooter` replaces lines 202-218 (same content + additions)
+- `PublicChatWidget` added as a sibling at the end of the root `<div>`
+
+### 5. Hero: Add a Small Badge (Additive)
+- A `<span>` badge ("Ontario's #1 AI Rebar Platform") inserted **above** the existing `<h1>` on line 57
+- The `<h1>` text remains identical -- this is purely a visual flourish with no SEO weight change
+
+### 6. Secondary CTA Text Update
+- Change "Visit Rebar.shop" button text to "Watch Demo" (line 69)
+- The `href` stays as `https://rebar.shop` or can be updated to a demo video link
+- This is cosmetic button text, not an SEO heading
+
+## SEO Safety Checklist
+- Canonical URL unchanged
+- All `<h1>` through `<h3>` text unchanged
+- No URL routes added or removed
+- `robots.txt` and `sitemap.xml` untouched
+- JSON-LD structured data untouched
+- Open Graph / Twitter Card meta untouched
+- No `noindex` or `nofollow` added anywhere
+- All existing internal links preserved
+- New content is additive (more text = more indexable content = positive signal)
+
+## Technical Notes
+- No new dependencies required
+- New components use only existing UI primitives (`Button`, `lucide-react` icons)
+- `PublicChatWidget` reuses the existing `admin-chat` edge function pattern from `LiveChatWidget`
+- All text remains in English per project rules
 
