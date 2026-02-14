@@ -25,6 +25,8 @@ cp .env.example .env
 npm run dev
 ```
 
+> **Security:** Never commit `.env` to version control. Copy `.env.example` to `.env` and fill in your credentials locally.
+
 ## Available Scripts
 
 | Script | Description |
