@@ -30,6 +30,17 @@ serve(async (req) => {
       return json({ queued: 0, message: "No overdue invoices found" });
     }
 
+    // Batch-load customer names from customers table
+    const custIds = [...new Set(overdueInvoices.map(i => i.customer_id).filter(Boolean))];
+    const customerNameMap = new Map<string, string>();
+    if (custIds.length > 0) {
+      const { data: customers } = await supabase
+        .from("customers")
+        .select("id, name")
+        .in("id", custIds);
+      (customers || []).forEach(c => { if (c.name) customerNameMap.set(c.id, c.name); });
+    }
+
     // Load existing pending actions to deduplicate
     const { data: existingActions } = await supabase
       .from("penny_collection_queue")
@@ -65,7 +76,7 @@ serve(async (req) => {
 
       const daysOverdue = Math.floor((now.getTime() - dueDate.getTime()) / 86400000);
       const customerRef = invData?.CustomerRef as { name?: string; value?: string } | undefined;
-      const customerName = customerRef?.name ?? "Unknown Customer";
+      const customerName = (inv.customer_id ? customerNameMap.get(inv.customer_id) : undefined) ?? customerRef?.name ?? "Unknown Customer";
       const contact = inv.customer_id ? contactMap.get(inv.customer_id) : undefined;
 
       let actionType: string;
