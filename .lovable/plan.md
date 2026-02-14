@@ -1,50 +1,102 @@
 
+# Email Marketing Automations — 8 Trigger-Based Workflows
 
-# Fix Vizzy Voice "Connection Lost" — Use Signed URL Fallback
+## Overview
 
-## Problem
+Add an **Automations** tab/section to the Email Marketing page with 8 pre-built automation templates. Each automation is a database-driven workflow that can be toggled on/off by Neel, with AI-generated email drafts that still require human approval before sending.
 
-The ElevenLabs conversation token works (200 OK), but the WebRTC agent connects and disconnects within 1-2 seconds. The 404 on `/rtc/v1/validate` indicates a LiveKit protocol version mismatch between the SDK and the ElevenLabs server. The agent participant joins the room but leaves almost immediately.
+## New Database Table: `email_automations`
 
-## Root Cause
+Stores each automation configuration and its on/off state:
 
-The `@elevenlabs/react` SDK v0.14.0 uses a newer LiveKit protocol version that ElevenLabs' server doesn't fully support yet (the `/rtc/v1/validate` 404 error). While the initial WebSocket fallback connects, the agent-side participant terminates the session quickly.
+| Column | Type | Description |
+|--------|------|-------------|
+| id | uuid PK | |
+| automation_key | text UNIQUE | e.g. `abandoned_cart`, `welcome_series` |
+| name | text | Display name |
+| description | text | What it does |
+| trigger_type | text | `quote_stale`, `new_contact`, `order_complete`, etc. |
+| campaign_type | text | Maps to existing campaign types |
+| enabled | boolean (default false) | Toggle on/off |
+| config | jsonb | Delay hours, conditions, template hints |
+| priority | text | `high`, `medium`, `low` |
+| company_id | uuid | |
+| created_at / updated_at | timestamps | |
 
-## Solution
+RLS: Same company-based policy as email_campaigns.
 
-### 1. Switch to Signed URL connection (`src/pages/VizzyPage.tsx`)
+## Seed Data (8 Automations)
 
-Instead of `conversationToken` (which routes through LiveKit WebRTC), use `signedUrl` with `connectionType: "websocket"`. This avoids the LiveKit `/rtc/v1` path entirely and uses a direct WebSocket connection which is more stable.
+| Key | Name | Trigger | Priority |
+|-----|------|---------|----------|
+| `abandoned_cart` | Abandoned Quote Follow-up | Quote status = `sent`, no order after 48h | High |
+| `welcome_series` | Welcome Series | New contact created | High |
+| `upsell_email` | Upsell / Cross-sell | Order completed, suggest related services | High |
+| `review_request` | Review Request | Order delivered + 7 days | Medium |
+| `birthday_promo` | Birthday / Anniversary | Contact anniversary (yearly) | Medium |
+| `price_stock_alert` | Price/Stock Alert | Manual trigger or inventory change | Medium |
+| `vip_email` | VIP Recognition | Customer total orders > threshold | Low |
+| `winback` | Win-Back | No orders in 90+ days | Low |
 
-### 2. Update Edge Function to provide signed URL (`supabase/functions/elevenlabs-conversation-token/index.ts`)
+## New Edge Function: `email-automation-check`
 
-Fetch a signed URL from ElevenLabs' `/get-signed-url` endpoint instead of (or in addition to) the conversation token. The signed URL uses a different connection path that bypasses the LiveKit version issue.
+A schedulable function (cron every hour) that:
+1. Reads all enabled automations
+2. For each, queries the relevant trigger conditions (e.g. stale quotes, new contacts without welcome email)
+3. For qualifying contacts, calls the existing `email-campaign-generate` logic to create a draft campaign with status `pending_approval`
+4. Neel reviews and approves as usual -- no auto-sending
 
-### 3. Fallback chain in VizzyPage
+## Frontend Changes
 
-Try WebRTC with conversation token first. If the session fails within 5 seconds (our existing guard catches this), the "Tap to reconnect" button will use WebSocket + signed URL as fallback.
+### 1. `src/components/email-marketing/AutomationsPanel.tsx` (new)
+- Grid of 8 automation cards with toggle switches
+- Each card shows: name, description, trigger description, priority badge, enabled/disabled toggle
+- Click card to expand config (delay hours, conditions)
+- Stats: how many campaigns each automation has generated
+
+### 2. `src/pages/EmailMarketing.tsx` (updated)
+- Add "Automations" tab alongside existing campaign list
+- Tab bar: **Campaigns** | **Automations**
+- Automations tab renders the new `AutomationsPanel`
+
+### 3. `src/hooks/useEmailAutomations.ts` (new)
+- CRUD hook for `email_automations` table
+- Toggle enabled/disabled mutation
+- Query for automation stats
 
 ## Technical Details
 
-### Edge Function Changes (`elevenlabs-conversation-token/index.ts`)
-
-Add a second fetch to get the signed URL:
-
-```text
-GET https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id={agentId}
+### Database Migration
+```sql
+-- email_automations table
+-- Seed 8 rows with default configs
+-- RLS policies matching email_campaigns pattern
 ```
 
-Return both `token` (for WebRTC) and `signed_url` (for WebSocket fallback).
+### Edge Function: `email-automation-check/index.ts`
+- Auth: service_role (cron-triggered)
+- For each enabled automation, run trigger query:
+  - `abandoned_cart`: quotes with status='sent', created_at < now()-48h, no matching order
+  - `welcome_series`: contacts created in last 24h without a welcome campaign send
+  - `upsell_email`: orders with status='closed' or 'paid', completed in last 7 days, no upsell campaign
+  - `review_request`: orders delivered 7+ days ago, no review request sent
+  - `winback`: customers with last order > 90 days ago
+  - Others: config-driven thresholds
+- Creates campaign via DB insert (status: `pending_approval`) -- NOT via AI initially (to keep it fast). AI generation happens when Neel clicks "Generate Draft" on the pending automation campaign.
 
-### VizzyPage Changes (`src/pages/VizzyPage.tsx`)
+### Automation Card Component
+- Toggle switch calls `useEmailAutomations.toggle(id, enabled)`
+- Priority badge with color coding (High=red, Medium=amber, Low=gray)
+- Shows last triggered date and count of generated campaigns
 
-- Store both token and signed_url from the edge function response
-- Initial connection: try `conversationToken` + `webrtc` first
-- If session fails < 5 seconds (existing guard): set a `useWebSocketFallback` flag
-- "Tap to reconnect" / `manualReconnect`: if fallback flag is set, use `signedUrl` + `websocket`
-- Reconnect function: use WebSocket mode when fallback is active
+### Files to Create
+1. `src/components/email-marketing/AutomationsPanel.tsx`
+2. `src/hooks/useEmailAutomations.ts`
+3. `supabase/functions/email-automation-check/index.ts`
 
-### Files Changed
-1. `supabase/functions/elevenlabs-conversation-token/index.ts` — add signed URL fetch
-2. `src/pages/VizzyPage.tsx` — WebSocket fallback logic
+### Files to Modify
+1. `src/pages/EmailMarketing.tsx` — add Automations tab
+2. Database migration — create table + seed data + RLS
 
+### Validation trigger
+- Reuse existing pattern: validate `automation_key` and `priority` values
