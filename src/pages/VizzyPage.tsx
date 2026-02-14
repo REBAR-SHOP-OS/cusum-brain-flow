@@ -17,7 +17,7 @@ import { FileText, Check, XCircle } from "lucide-react";
 // VizzyApprovalDialog removed — voice calls auto-execute
 import { toast } from "sonner";
 
-const MAX_RETRIES = 2;
+const MAX_RETRIES = 5;
 
 interface TranscriptEntry {
   role: "user" | "agent";
@@ -254,7 +254,10 @@ export default function VizzyPage() {
       if (retryCountRef.current < MAX_RETRIES) {
         retryCountRef.current += 1;
         setStatus("reconnecting");
-        setTimeout(() => reconnectRef.current(), 1500);
+        // Exponential backoff: 1s, 2s, 4s, 8s, 16s
+        const delay = Math.min(1000 * Math.pow(2, retryCountRef.current - 1), 16000);
+        console.log(`[Vizzy] Reconnecting in ${delay}ms (attempt ${retryCountRef.current}/${MAX_RETRIES})`);
+        setTimeout(() => reconnectRef.current(), delay);
       } else {
         saveTranscript(transcriptRef.current);
         navigate("/home");
