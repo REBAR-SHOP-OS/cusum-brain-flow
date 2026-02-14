@@ -1,14 +1,16 @@
 
 
-# Security Fix: Remove .env from Git Tracking
+# Security Fix: Add .env to .gitignore
 
-## Problem
-`.env` containing real credentials is currently tracked by Git and was committed to the repository. The `.gitignore` file has no `.env` entries.
+## Current State
+- `.gitignore` exists but has **no `.env` rules** -- this is the only gap
+- `README.md` already contains the security note (line 28)
+- `.env.example` is correct with empty-value keys
 
-## Changes
+## Change
 
-### 1. Update `.gitignore`
-Append these lines at the end of the existing `.gitignore`:
+### Update `.gitignore`
+Append these lines to the **end** of the existing file (after line 22):
 
 ```
 # Environment files
@@ -18,8 +20,19 @@ Append these lines at the end of the existing `.gitignore`:
 !.env.example
 ```
 
-### 2. Git Cache Removal
-**Important**: Lovable cannot run `git rm --cached .env` directly. After the `.gitignore` update is pushed to GitHub, you will need to run this command locally or via GitHub Codespaces:
+No other files are touched.
+
+## Files NOT Modified
+| File | Reason |
+|------|--------|
+| `.env` | Kept as-is in workspace |
+| `.env.example` | Already correct and tracked |
+| `README.md` | Already has security note |
+| `index.html`, `src/`, `package.json`, `vite.config.ts` | No structural changes |
+| Supabase / Vite config | Not modified |
+
+## Post-Implementation (Manual)
+After this change syncs to GitHub, run locally:
 
 ```sh
 git rm --cached .env
@@ -27,32 +40,4 @@ git commit -m "Remove .env from repo and ignore env files"
 git push
 ```
 
-This removes `.env` from tracking without deleting it locally.
-
-### 3. Rotate Credentials
-Since `.env` was already committed, the credentials in it are exposed in Git history. You should rotate your backend keys after this fix.
-
-### 4. `.env.example` -- No Changes Needed
-Already contains the correct keys with empty values. It will remain tracked thanks to `!.env.example`.
-
-### 5. Update `README.md`
-Add a security note after the setup section:
-
-```markdown
-> **Security:** Never commit `.env` to version control. Copy `.env.example` to `.env` and fill in your credentials locally.
-```
-
-## Summary
-
-| File | Action |
-|------|--------|
-| `.gitignore` | Append env ignore rules |
-| `README.md` | Add security note |
-| `.env` | No file changes; must be un-tracked via `git rm --cached` locally |
-| `.env.example` | No changes needed |
-
-No structural changes. No moves. No config modifications.
-
-## Post-Implementation Step (Manual)
-After these changes sync to GitHub, run `git rm --cached .env` locally to fully remove it from tracking.
-
+Then rotate your backend credentials since they are exposed in Git history.
