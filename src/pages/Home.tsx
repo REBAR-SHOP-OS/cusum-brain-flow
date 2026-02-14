@@ -119,7 +119,7 @@ export default function Home() {
   };
 
   const handleLiveChatClick = () => {
-    navigate("/vizzy");
+    navigate("/chat");
   };
 
   // heroTitle is now rendered inline in JSX (no dangerouslySetInnerHTML)

@@ -495,7 +495,7 @@ export default function AgentWorkspace() {
                 disabled={isLoading}
                 showFileUpload={true}
                 showSmartMode={agentId !== "social"}
-                onLiveChatClick={agentId !== "social" && isSuperAdmin ? () => navigate("/vizzy") : undefined}
+onLiveChatClick={agentId !== "social" && isSuperAdmin ? () => navigate("/chat") : undefined}
                 minimalToolbar={agentId === "social"}
                 selectedModel={aiModel}
                 onModelChange={setAiModel}
@@ -533,7 +533,7 @@ export default function AgentWorkspace() {
               disabled={isLoading}
               showFileUpload={true}
               showSmartMode={agentId !== "social"}
-              onLiveChatClick={agentId !== "social" && isSuperAdmin ? () => navigate("/vizzy") : undefined}
+              onLiveChatClick={agentId !== "social" && isSuperAdmin ? () => navigate("/chat") : undefined}
               minimalToolbar={agentId === "social"}
               selectedModel={aiModel}
               onModelChange={setAiModel}
