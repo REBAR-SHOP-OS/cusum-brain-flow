@@ -285,19 +285,32 @@ export default function LiveChat() {
           </div>
         </ScrollArea>
 
-        {/* Voice mode: orb + transcript */}
+        {/* Voice mode: compact orb + transcript overlay at bottom */}
         {voiceMode && (
-          <div className="px-4 py-6 flex flex-col items-center gap-3 border-t border-border bg-card/50">
-            {voiceChat.status === "listening" && voiceChat.interimText && (
-              <p className="text-sm text-muted-foreground italic truncate max-w-xs">
-                "{voiceChat.interimText}"
-              </p>
-            )}
-            {voiceChat.status === "listening" && voiceChat.fullTranscript && (
-              <p className="text-xs text-foreground/70 truncate max-w-xs">
-                {voiceChat.fullTranscript}
-              </p>
-            )}
+          <div className="px-4 py-3 flex items-center gap-3 border-t border-border bg-card/80 backdrop-blur-sm shrink-0">
+            <div className="flex-1 min-w-0">
+              {voiceChat.status === "listening" && voiceChat.interimText && (
+                <p className="text-sm text-muted-foreground italic truncate">
+                  "{voiceChat.interimText}"
+                </p>
+              )}
+              {voiceChat.status === "listening" && voiceChat.fullTranscript && !voiceChat.interimText && (
+                <p className="text-xs text-foreground/70 truncate">
+                  {voiceChat.fullTranscript}
+                </p>
+              )}
+              {voiceChat.status === "thinking" && (
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Loader2 className="w-3 h-3 animate-spin" /> Thinking…
+                </p>
+              )}
+              {voiceChat.status === "speaking" && (
+                <p className="text-xs text-muted-foreground">Speaking… tap to interrupt</p>
+              )}
+              {voiceChat.status === "idle" && (
+                <p className="text-xs text-muted-foreground">Tap orb to start</p>
+              )}
+            </div>
             <VoiceOrb
               status={voiceChat.status}
               onTap={voiceChat.handleOrbTap}
