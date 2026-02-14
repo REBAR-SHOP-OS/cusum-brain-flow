@@ -58,6 +58,17 @@ serve(async (req) => {
       });
     }
 
+    // Clean up stale missing_qb suggestions & tasks so they get recreated fresh
+    await supabase.from("suggestions").delete().eq("category", "missing_qb").in("status", ["open", "new"]);
+    await supabase.from("human_tasks").delete().eq("category", "missing_qb").in("status", ["open", "snoozed"]);
+    // Remove missing_qb entries from dedup sets
+    for (const key of existingSuggestions) {
+      if (key.endsWith(":missing_qb")) existingSuggestions.delete(key);
+    }
+    for (const key of existingTaskKeys) {
+      if (key.includes(":missing_qb:")) existingTaskKeys.delete(key);
+    }
+
     const isDuplicate = (entityType: string, entityId: string, category: string) =>
       existingSuggestions.has(`${entityType}:${entityId}:${category}`);
 
