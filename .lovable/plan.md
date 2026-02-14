@@ -1,36 +1,29 @@
 
 
-# Fix: Voice Button Hidden Behind Mobile Nav Bar
+# Fix: Chat Input Toolbar Cut Off on Desktop
 
 ## Problem
 
-On mobile, when you open the JARVIS chat (`/chat`), the bottom navigation bar (Home, Inbox, Tasks, Floor) overlaps the chat input toolbar area. This hides the mic button, emoji picker, formatting tools, and the send button row.
-
-The LiveChat page uses `h-screen` for its own full-screen layout, but the `MobileNavV2` component sits on top of it at `fixed bottom-0 z-40 h-14`.
+The LiveChat page uses `h-screen` (100vh) for its container, but it renders inside `AppLayout` which already includes a TopBar at the top. This means the total height exceeds the viewport by the height of the TopBar, pushing the input toolbar and its buttons (mic, emoji, send, etc.) below the visible area.
 
 ## Solution
 
-Hide the mobile bottom nav bar when the user is on the `/chat` route. The chat page already has its own back button for navigation, so the bottom nav is redundant there.
+Change `h-screen` to `h-full` in `LiveChat.tsx` so it fills only the available space within the AppLayout's main content area, rather than the full viewport.
 
-## Technical Changes
-
-### File: `src/components/layout/MobileNavV2.tsx`
-
-- Add a check for `location.pathname === "/chat"`
-- Return `null` (render nothing) when on the chat route
-- This is a 2-line change at the top of the render logic
+## Technical Change
 
 ### File: `src/pages/LiveChat.tsx`
 
-- Remove the `pb-14` bottom padding that AppLayout's main content area adds (or rather, since LiveChat uses its own `h-screen`, ensure the input area is not clipped)
-- No changes may be needed here if hiding the nav is sufficient
+Line 182 (the root `div`):
 
-### File: `src/components/layout/AppLayout.tsx` (optional)
+```diff
+- <div className="flex flex-col h-screen bg-background">
++ <div className="flex flex-col h-full bg-background">
+```
 
-- The main content area has `pb-14 md:pb-0` for mobile nav spacing
-- On `/chat`, since nav is hidden, this extra padding is unnecessary but harmless
+This single change ensures the chat layout respects its parent container height instead of overflowing the viewport. The `<main>` wrapper in AppLayout already has `flex-1 overflow-hidden`, so `h-full` will correctly fill the remaining vertical space.
 
 ## No backend changes needed
 
-Single file edit (MobileNavV2.tsx) to hide the nav on the chat route.
+One-line CSS class change.
 
