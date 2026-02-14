@@ -1,56 +1,31 @@
 
+# Add Team Hub Tools to MCP Server
 
-# Fix MCP Server: "Transport not bound to a server" Error
+Add three new MCP tools so ChatGPT (and other MCP clients) can read Team Hub data: channels, messages, and channel members.
 
-## Problem
+## New Tools
 
-The edge function logs show repeated errors:
-```
-Error: Transport not bound to a server
-```
+### 1. `list_team_channels`
+- Returns all team channels (id, name, description, channel_type, created_at)
+- Optional filter by `channel_type` (group, dm)
+- Limit up to 50
 
-The current code calls `transport.handleRequest(c.req.raw, mcpServer)` directly, but mcp-lite v0.10.0 requires you to first **bind** the transport to the server using `transport.bind(server)`, which returns a request handler function.
+### 2. `list_team_messages`
+- Returns messages for a given channel
+- Required: `channel_id`
+- Optional: `limit` (default 50)
+- Includes sender_profile_id, original_text, original_language, translations, created_at
+- Ordered by most recent first
 
-## Fix
+### 3. `list_team_members`
+- Returns members of a given channel
+- Required: `channel_id`
+- Returns profile_id and joined_at
 
-### File: `supabase/functions/mcp-server/index.ts`
+## File Modified
 
-Replace the current transport + handler setup:
+- `supabase/functions/mcp-server/index.ts` -- Add three new `mcpServer.tool()` registrations before the HTTP Transport section (around line 258), following the same pattern as existing tools.
 
-```typescript
-// CURRENT (broken)
-const transport = new StreamableHttpTransport();
-// ...
-app.all("/*", async (c) => {
-  const response = await transport.handleRequest(c.req.raw, mcpServer);
-  // ...
-});
-```
+## No Database Changes Needed
 
-With the correct bind pattern:
-
-```typescript
-// FIXED
-const transport = new StreamableHttpTransport();
-const httpHandler = transport.bind(mcpServer);
-// ...
-app.all("/*", async (c) => {
-  const response = await httpHandler(c.req.raw);
-  // ...
-});
-```
-
-The key change:
-1. Call `transport.bind(mcpServer)` to get a bound handler function
-2. Call that handler with just the raw request (no second argument)
-
-This is a 2-line change that fixes the Internal Server Error ChatGPT is receiving.
-
-### Technical Details
-
-| Item | Detail |
-|------|--------|
-| File modified | `supabase/functions/mcp-server/index.ts` |
-| Lines changed | ~3 lines near the transport/handler section |
-| Root cause | mcp-lite API requires `transport.bind(server)` before handling requests |
-
+The tables `team_channels`, `team_messages`, and `team_channel_members` already exist. The MCP server uses the service role key, so RLS is bypassed.
