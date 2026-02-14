@@ -39,7 +39,7 @@ serve(async (req) => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: text.trim() }] }],
+          contents: [{ parts: [{ text: `TTS the following text verbatim, do not add any commentary:\n\n${text.trim()}` }] }],
           generationConfig: {
             response_modalities: ["AUDIO"],
             speech_config: {
