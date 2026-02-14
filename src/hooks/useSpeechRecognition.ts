@@ -9,6 +9,8 @@ interface TranscriptEntry {
 
 interface UseSpeechRecognitionOptions {
   onError?: (error: string) => void;
+  onSilenceEnd?: () => void;
+  silenceTimeout?: number; // ms after last final result before firing onSilenceEnd (default 1500)
 }
 
 interface UseSpeechRecognitionReturn {
@@ -28,6 +30,9 @@ export function useSpeechRecognition(options?: UseSpeechRecognitionOptions): Use
   const [interimText, setInterimText] = useState("");
   const recognitionRef = useRef<any>(null);
   const idCounter = useRef(0);
+  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const optionsRef = useRef(options);
+  optionsRef.current = options;
 
   const SpeechRecognitionAPI =
     typeof window !== "undefined"
@@ -35,6 +40,13 @@ export function useSpeechRecognition(options?: UseSpeechRecognitionOptions): Use
       : null;
 
   const isSupported = !!SpeechRecognitionAPI;
+
+  const clearSilenceTimer = useCallback(() => {
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+  }, []);
 
   const start = useCallback(() => {
     if (!SpeechRecognitionAPI || isListening) return;
@@ -48,9 +60,11 @@ export function useSpeechRecognition(options?: UseSpeechRecognitionOptions): Use
 
     recognition.onresult = (event: any) => {
       let interim = "";
+      let hadFinal = false;
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
         if (result.isFinal) {
+          hadFinal = true;
           const entry: TranscriptEntry = {
             id: `t-${++idCounter.current}`,
             text: result[0].transcript.trim(),
@@ -63,20 +77,32 @@ export function useSpeechRecognition(options?: UseSpeechRecognitionOptions): Use
           interim += result[0].transcript;
         }
       }
-      if (interim) setInterimText(interim);
+      if (interim) {
+        setInterimText(interim);
+        // User is still speaking — clear any pending silence timer
+        clearSilenceTimer();
+      }
+      if (hadFinal) {
+        // Start silence detection timer after a final result
+        clearSilenceTimer();
+        const timeout = optionsRef.current?.silenceTimeout ?? 1500;
+        silenceTimerRef.current = setTimeout(() => {
+          optionsRef.current?.onSilenceEnd?.();
+        }, timeout);
+      }
     };
 
     recognition.onerror = (event: any) => {
       console.error("Speech recognition error:", event.error);
       if (event.error === "not-allowed") {
         setIsListening(false);
-        options?.onError?.("Microphone access denied. Please allow microphone permissions.");
+        optionsRef.current?.onError?.("Microphone access denied. Please allow microphone permissions.");
       } else if (event.error === "no-speech") {
-        options?.onError?.("No speech detected. Please try again.");
+        optionsRef.current?.onError?.("No speech detected. Please try again.");
       } else if (event.error === "network") {
-        options?.onError?.("Network error during speech recognition.");
+        optionsRef.current?.onError?.("Network error during speech recognition.");
       } else {
-        options?.onError?.(`Speech recognition error: ${event.error}`);
+        optionsRef.current?.onError?.(`Speech recognition error: ${event.error}`);
       }
     };
 
@@ -93,9 +119,10 @@ export function useSpeechRecognition(options?: UseSpeechRecognitionOptions): Use
 
     recognitionRef.current = recognition;
     recognition.start();
-  }, [SpeechRecognitionAPI, isListening]);
+  }, [SpeechRecognitionAPI, isListening, clearSilenceTimer]);
 
   const stop = useCallback(() => {
+    clearSilenceTimer();
     if (recognitionRef.current) {
       const ref = recognitionRef.current;
       recognitionRef.current = null;
@@ -103,7 +130,7 @@ export function useSpeechRecognition(options?: UseSpeechRecognitionOptions): Use
       setIsListening(false);
       setInterimText("");
     }
-  }, []);
+  }, [clearSilenceTimer]);
 
   const reset = useCallback(() => {
     stop();

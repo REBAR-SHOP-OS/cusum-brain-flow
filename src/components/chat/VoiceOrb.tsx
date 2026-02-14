@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import { Square } from "lucide-react";
 import type { VoiceChatStatus } from "@/hooks/useVoiceChat";
 
 interface VoiceOrbProps {
@@ -15,8 +16,8 @@ const barHeights = {
 };
 
 const statusLabels: Record<VoiceChatStatus, string> = {
-  idle: "Tap to speak",
-  listening: "Listening… tap to send",
+  idle: "Tap to start conversation",
+  listening: "Listening…",
   thinking: "Thinking…",
   speaking: "Speaking… tap to interrupt",
 };
@@ -24,6 +25,7 @@ const statusLabels: Record<VoiceChatStatus, string> = {
 export function VoiceOrb({ status, onTap, disabled }: VoiceOrbProps) {
   const isActive = status === "listening" || status === "speaking";
   const isThinking = status === "thinking";
+  const isConversationActive = status !== "idle";
 
   return (
     <div className="flex flex-col items-center gap-3">
@@ -45,28 +47,32 @@ export function VoiceOrb({ status, onTap, disabled }: VoiceOrbProps) {
           />
         )}
 
-        {/* Sound wave bars */}
-        {barHeights[status].map((h, i) => (
-          <motion.span
-            key={i}
-            className="w-[3px] rounded-full bg-background"
-            initial={{ height: 12 }}
-            animate={
-              isActive
-                ? { height: [h * 0.4, h, h * 0.5, h * 0.9, h * 0.4] }
-                : isThinking
-                  ? { height: [10, 18, 10], opacity: [0.5, 1, 0.5] }
-                  : { height: h }
-            }
-            transition={
-              isActive
-                ? { repeat: Infinity, duration: 0.8 + i * 0.1, ease: "easeInOut" }
-                : isThinking
-                  ? { repeat: Infinity, duration: 1.2, ease: "easeInOut", delay: i * 0.15 }
-                  : { duration: 0.3 }
-            }
-          />
-        ))}
+        {/* Show stop icon when listening (tap to end), sound bars otherwise */}
+        {status === "listening" ? (
+          <Square className="w-5 h-5 text-background" />
+        ) : (
+          barHeights[status].map((h, i) => (
+            <motion.span
+              key={i}
+              className="w-[3px] rounded-full bg-background"
+              initial={{ height: 12 }}
+              animate={
+                isActive
+                  ? { height: [h * 0.4, h, h * 0.5, h * 0.9, h * 0.4] }
+                  : isThinking
+                    ? { height: [10, 18, 10], opacity: [0.5, 1, 0.5] }
+                    : { height: h }
+              }
+              transition={
+                isActive
+                  ? { repeat: Infinity, duration: 0.8 + i * 0.1, ease: "easeInOut" }
+                  : isThinking
+                    ? { repeat: Infinity, duration: 1.2, ease: "easeInOut", delay: i * 0.15 }
+                    : { duration: 0.3 }
+              }
+            />
+          ))
+        )}
       </motion.button>
       <span className="text-xs text-muted-foreground">{statusLabels[status]}</span>
     </div>
