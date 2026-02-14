@@ -4,15 +4,13 @@ import { Badge } from "@/components/ui/badge";
 import {
   Video, VideoOff, Mic, MicOff, MonitorUp, PhoneOff,
   Maximize2, Minimize2, X, ExternalLink, Copy, Check,
-  Brain, Circle, Bot,
+  Brain, Circle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { TeamMeeting } from "@/hooks/useTeamMeetings";
 import { useMeetingTranscription } from "@/hooks/useMeetingTranscription";
 import { useMeetingRecorder } from "@/hooks/useMeetingRecorder";
 import { MeetingNotesPanel } from "@/components/teamhub/MeetingNotesPanel";
-import { VizzyMeetingPanel } from "@/components/teamhub/VizzyMeetingPanel";
-import { useMeetingAiBridge } from "@/hooks/useMeetingAiBridge";
 
 interface MeetingRoomProps {
   meeting: TeamMeeting;
@@ -41,15 +39,6 @@ export function MeetingRoom({
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showNotes, setShowNotes] = useState(true);
-  const [showVizzy, setShowVizzy] = useState(false);
-
-  // Vizzy AI companion
-  const {
-    state: vizzyState,
-    summonVizzy,
-    dismissVizzy,
-    sendMessage: sendVizzyMessage,
-  } = useMeetingAiBridge(meeting.id);
 
   const { provider, joinUrl } = useMemo(() => parseMeetingMeta(meeting), [meeting]);
   const isRingCentral = provider === "ringcentral" && !!joinUrl;
@@ -104,13 +93,11 @@ export function MeetingRoom({
   const handleEnd = async () => {
     stopTranscription();
     if (isRecording) await stopRecording();
-    dismissVizzy();
     onEnd();
   };
 
   const handleLeave = () => {
     stopTranscription();
-    dismissVizzy();
     onLeave();
   };
 
@@ -167,19 +154,10 @@ export function MeetingRoom({
 
           <div className="flex items-center gap-1 shrink-0">
             <Button
-              variant={showVizzy ? "default" : "ghost"}
-              size="icon"
-              className="h-7 w-7"
-              onClick={() => { setShowVizzy(!showVizzy); if (!showVizzy) setShowNotes(false); }}
-              title="Vizzy AI Companion"
-            >
-              <Bot className="w-3.5 h-3.5" />
-            </Button>
-            <Button
               variant={showNotes ? "secondary" : "ghost"}
               size="icon"
               className="h-7 w-7"
-              onClick={() => { setShowNotes(!showNotes); if (!showNotes) setShowVizzy(false); }}
+              onClick={() => setShowNotes(!showNotes)}
               title="AI Notes Panel"
             >
               <Brain className="w-3.5 h-3.5" />
@@ -294,21 +272,6 @@ export function MeetingRoom({
             entries={entries}
             interimText={interimText}
             isTranscribing={isTranscribing}
-          />
-        </div>
-      )}
-
-      {/* Vizzy AI Companion Panel */}
-      {showVizzy && (
-        <div className="hidden lg:flex">
-          <VizzyMeetingPanel
-            state={vizzyState}
-            onSummon={summonVizzy}
-            onDismiss={() => {
-              dismissVizzy();
-              setShowVizzy(false);
-            }}
-            onSendMessage={sendVizzyMessage}
           />
         </div>
       )}

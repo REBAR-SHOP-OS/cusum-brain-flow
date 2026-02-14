@@ -11,7 +11,6 @@ import type { TableRowActionCallbacks } from "@/components/accounting/TableRowAc
 import accountingHelper from "@/assets/helpers/accounting-helper.png";
 import { PennyCallCard, parsePennyCalls, type PennyCallData } from "./PennyCallCard";
 import type { WebPhoneState, WebPhoneActions } from "@/hooks/useWebPhone";
-import { useCallAiBridge } from "@/hooks/useCallAiBridge";
 import { useCallTask, type CallTaskOutcome } from "@/hooks/useCallTask";
 
 interface Message {
@@ -52,7 +51,6 @@ const checkingPhases = [
 
 export const AccountingAgent = React.forwardRef<HTMLDivElement, AccountingAgentProps>(function AccountingAgent({ onViewModeChange, viewMode: externalMode, qbSummary, autoGreet, webPhoneState, webPhoneActions }, ref) {
   const { suggestions: pennySuggestions } = useAgentSuggestions("penny");
-  const { bridgeState, startBridge, stopBridge } = useCallAiBridge();
   const { activeTask, createCallTask, startCall, onCallConnected, completeCall, failCall, cancelCall, clearTask } = useCallTask();
   const [showOutcome, setShowOutcome] = useState(false);
   const [dismissedItems] = useState(() => new Set<string>());
@@ -473,30 +471,12 @@ RULES:
                             setShowOutcome(true);
                           }
                         }}
-                        bridgeState={bridgeState}
-                        onStartAiBridge={(callData) => {
-                          // Update task to in_call when AI bridge starts
-                          if (activeTask) {
-                            onCallConnected(activeTask.id);
-                          }
-                          const session = webPhoneActions.getCallSession();
-                          if (session) {
-                          startBridge(session, {
-                              agentName: "Penny",
-                              contactName: callData.contact_name,
-                              reason: callData.reason,
-                              phone: callData.phone,
-                              details: callData.details,
-                            });
-                          }
-                        }}
-                        onStopAiBridge={stopBridge}
                         taskStatus={activeTask?.status}
                         attemptCount={activeTask?.attempt_count}
                         showOutcome={showOutcome && activeTask?.status !== "done"}
                         onOutcome={async (outcome: CallTaskOutcome) => {
                           if (activeTask) {
-                            await completeCall(activeTask.id, outcome, bridgeState.transcript);
+                            await completeCall(activeTask.id, outcome, []);
                             setShowOutcome(false);
                           }
                         }}

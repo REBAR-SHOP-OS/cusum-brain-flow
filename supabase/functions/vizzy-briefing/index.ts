@@ -3,7 +3,7 @@ import { requireAuth, corsHeaders, json } from "../_shared/auth.ts";
 
 /**
  * Uses Gemini 3 Pro to compress the massive Vizzy business context
- * into a concise, intelligent briefing — faster for ElevenLabs to process.
+ * into a concise, intelligent briefing for the AI assistant.
  */
 serve(async (req) => {
   if (req.method === "OPTIONS") {

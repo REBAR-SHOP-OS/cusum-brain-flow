@@ -1,6 +1,6 @@
 // forwardRef cache bust
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Paperclip, X, Loader2, Sparkles, Hash, Type, Headset, Brain, ChevronDown, Check } from "lucide-react";
+import { Send, Paperclip, X, Loader2, Sparkles, Hash, Type, Brain, ChevronDown, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -29,7 +29,6 @@ interface ChatInputProps {
   disabled?: boolean;
   showFileUpload?: boolean;
   showSmartMode?: boolean;
-  onLiveChatClick?: () => void;
   minimalToolbar?: boolean;
   selectedModel?: string;
   onModelChange?: (model: string) => void;
@@ -41,7 +40,6 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
   disabled,
   showFileUpload = false,
   showSmartMode = false,
-  onLiveChatClick,
   minimalToolbar = false,
   selectedModel = "gemini",
   onModelChange,
@@ -375,20 +373,6 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
                   <TooltipContent side="top">Commands (/)</TooltipContent>
                 </Tooltip>
 
-                {onLiveChatClick && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        onClick={onLiveChatClick}
-                        className="p-2 text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-muted/50"
-                      >
-                        <Headset className="w-5 h-5" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top">Voice Chat</TooltipContent>
-                  </Tooltip>
-                )}
               </>
             )}
 

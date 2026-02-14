@@ -118,10 +118,6 @@ export default function Home() {
     navigate(helper.route);
   };
 
-  const handleLiveChatClick = () => {
-    navigate("/chat");
-  };
-
   // heroTitle is now rendered inline in JSX (no dangerouslySetInnerHTML)
 
   return (
@@ -153,7 +149,7 @@ export default function Home() {
               onSend={handleSend}
               placeholder={mapping ? `Ask ${mapping.agentKey === "assistant" ? "Vizzy" : mapping.agentKey === "shopfloor" ? "Forge" : "Gauge"} anything...` : "Ask anything about your business..."}
               showFileUpload
-              onLiveChatClick={isSuperAdmin ? handleLiveChatClick : undefined}
+              
             />
           </div>
         </div>
