@@ -673,9 +673,51 @@ async function handleSyncCustomers(supabase: ReturnType<typeof createClient>, us
   }
 
   if (errors.length > 0) console.error("Customer sync errors:", errors.slice(0, 5));
+
+  // ── Name-matching phase: link unlinked local customers to QB by name ──
+  const normalize = (s: string) => s.toLowerCase().trim().replace(/\s+/g, " ");
+
+  // Build lookup map from QB DisplayName/CompanyName → QB Id
+  const nameToQbId = new Map<string, string>();
+  for (const c of customers) {
+    const qbId = c.Id as string;
+    if (c.DisplayName) nameToQbId.set(normalize(c.DisplayName as string), qbId);
+    if (c.CompanyName) nameToQbId.set(normalize(c.CompanyName as string), qbId);
+  }
+
+  // Fetch all local customers without a quickbooks_id
+  let matched = 0;
+  const PAGE = 1000;
+  let page = 0;
+  while (true) {
+    const { data: unlinked } = await supabase
+      .from("customers")
+      .select("id, name")
+      .is("quickbooks_id", null)
+      .eq("company_id", companyId)
+      .range(page * PAGE, (page + 1) * PAGE - 1);
+    const rows = unlinked || [];
+    if (rows.length === 0) break;
+
+    for (const row of rows) {
+      const key = normalize(row.name || "");
+      const qbId = nameToQbId.get(key);
+      if (qbId) {
+        const { error: linkErr } = await supabase
+          .from("customers")
+          .update({ quickbooks_id: qbId })
+          .eq("id", row.id);
+        if (!linkErr) matched++;
+      }
+    }
+    if (rows.length < PAGE) break;
+    page++;
+  }
+
+  if (matched > 0) console.log(`Auto-matched ${matched} local customers to QuickBooks by name`);
   await updateLastSync(supabase, userId);
 
-  return jsonRes({ success: true, synced, total: customers.length, errors: errors.length });
+  return jsonRes({ success: true, synced, matched, total: customers.length, errors: errors.length });
 }
 
 // ─── Sync Invoices ─────────────────────────────────────────────────
