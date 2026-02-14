@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Send, Loader2, Square, Trash2, Type, Hash, Brain } from "lucide-react";
+import { ArrowLeft, Send, Loader2, Square, Trash2, Type, Hash, Brain, ShieldAlert, CheckCircle2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAdminChat } from "@/hooks/useAdminChat";
@@ -19,6 +19,15 @@ import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { useToast } from "@/hooks/use-toast";
 import { TooltipProvider, Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { supabase } from "@/integrations/supabase/client";
+import { Card } from "@/components/ui/card";
+
+const TOOL_LABELS: Record<string, string> = {
+  update_machine_status: "Update Machine Status",
+  update_delivery_status: "Update Delivery Status",
+  update_lead_status: "Update Lead Status",
+  update_cut_plan_status: "Update Cut Plan Status",
+  create_event: "Log Activity Event",
+};
 
 export default function LiveChat() {
   const navigate = useNavigate();
@@ -32,7 +41,7 @@ export default function LiveChat() {
 
   const [input, setInput] = useState("");
   const chat = useAdminChat();
-  const { messages, isStreaming, sendMessage, clearChat, cancelStream } = chat;
+  const { messages, isStreaming, pendingAction, sendMessage, confirmAction, cancelAction, clearChat, cancelStream } = chat;
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [memoryCount, setMemoryCount] = useState<number | null>(null);
@@ -186,6 +195,17 @@ export default function LiveChat() {
     }
   };
 
+  // Format args for display
+  const formatActionArgs = (tool: string, args: Record<string, any>) => {
+    const entries = Object.entries(args).filter(([k]) => k !== "tool_call_id");
+    return entries.map(([key, value]) => (
+      <div key={key} className="flex justify-between text-xs">
+        <span className="text-muted-foreground">{key.replace(/_/g, " ")}</span>
+        <span className="font-mono text-foreground">{String(value)}</span>
+      </div>
+    ));
+  };
+
   return (
     <TooltipProvider delayDuration={300}>
       <div className="flex flex-col h-screen bg-background">
@@ -264,6 +284,55 @@ export default function LiveChat() {
           <div className="px-4 py-2 flex items-center gap-2 text-sm text-destructive animate-pulse">
             <span className="w-2 h-2 rounded-full bg-destructive" />
             Listening... {speech.interimText && <span className="text-muted-foreground italic truncate">"{speech.interimText}"</span>}
+          </div>
+        )}
+
+        {/* Confirmation Card */}
+        {pendingAction && (
+          <div className="px-4 pb-2 shrink-0">
+            <div className="max-w-3xl mx-auto">
+              <Card className="border-l-4 border-l-yellow-500 bg-card p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <ShieldAlert className="w-5 h-5 text-yellow-500 shrink-0" />
+                  <p className="text-sm font-semibold">JARVIS wants to take an action</p>
+                </div>
+
+                <div className="space-y-1.5 bg-muted/50 rounded-lg p-3">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">Action</span>
+                    <span className="font-semibold text-foreground">{TOOL_LABELS[pendingAction.tool] || pendingAction.tool}</span>
+                  </div>
+                  {formatActionArgs(pendingAction.tool, pendingAction.args)}
+                  {pendingAction.description && (
+                    <div className="pt-1 border-t border-border/50">
+                      <p className="text-xs text-muted-foreground italic">{pendingAction.description}</p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={cancelAction}
+                    disabled={isStreaming}
+                    className="gap-1.5"
+                  >
+                    <XCircle className="w-4 h-4" />
+                    Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={confirmAction}
+                    disabled={isStreaming}
+                    className="gap-1.5 bg-yellow-600 hover:bg-yellow-700 text-white"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    Confirm Action
+                  </Button>
+                </div>
+              </Card>
+            </div>
           </div>
         )}
 
