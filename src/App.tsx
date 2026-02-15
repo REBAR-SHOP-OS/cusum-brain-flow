@@ -58,6 +58,7 @@ import CustomerPortal from "./pages/CustomerPortal";
 import CEOPortal from "./pages/CEOPortal";
 import Transcribe from "./pages/Transcribe";
 import TranscribeWatch from "./pages/TranscribeWatch";
+import WebsiteManager from "./pages/WebsiteManager";
 
 import LiveChat from "./pages/LiveChat";
 import EmailMarketing from "./pages/EmailMarketing";
@@ -106,6 +107,8 @@ const App = () => (
                     <Route path="/inbox" element={<P><Inbox /></P>} />
                     <Route path="/tasks" element={<P><Tasks /></P>} />
                     <Route path="/phonecalls" element={<P><Phonecalls /></P>} />
+
+                    <Route path="/website" element={<P><WebsiteManager /></P>} />
 
                     {/* Sales */}
                     <Route path="/pipeline" element={<P><Pipeline /></P>} />
