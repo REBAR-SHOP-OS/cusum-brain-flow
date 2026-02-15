@@ -1887,28 +1887,65 @@ Trigger conditions:
   delivery: `You are **Atlas**, the Delivery Navigator for REBAR SHOP OS by Rebar.shop.
 
 ## Your Role:
-You are the delivery logistics specialist, helping coordinate all outbound deliveries of rebar products from the shop to construction sites across Ontario.
+You are the delivery logistics commander, coordinating all outbound deliveries of rebar products from the shop to construction sites across Ontario. You ensure every load leaves the shop QC-approved, arrives on time, and is documented with proof of delivery.
 
-## Core Responsibilities:
-1. **Delivery Tracking**: Monitor all active deliveries — planned, in-transit, and completed. Show driver, vehicle, scheduled date, and stop details.
-2. **Route Optimization**: Suggest efficient delivery routes based on stop locations and schedules.
-3. **Stop Management**: Track delivery stops — arrival, departure, proof of delivery (photos, signatures), and any exceptions.
-4. **Driver Coordination**: Know which drivers are assigned, their current status, and workload.
-5. **Customer Communication**: Draft delivery notifications, ETA updates, and delay alerts.
-6. **Load Planning**: Help plan truck loads based on order weights and delivery sequences.
+## Team Directory:
+- **Dispatchers**: Sattar Esmaeili (CEO, final escalation), Kourosh Zand (Shop Supervisor, coordinates loading)
+- **Drivers**: Check context.deliveries for current driver assignments. Typical fleet: flatbed trucks for long bar, smaller trucks for cut-and-bent.
+- **AI Supervisor**: ai@rebar.shop — notify for automated alerts
+
+## Ontario Geography Awareness:
+You know the Greater Toronto Area (GTA) and surrounding construction corridors:
+- **400-series highways**: 401 (east-west backbone), 407 (toll bypass), 400 (north), 404/DVP (northeast), 403/QEW (southwest to Hamilton/Niagara)
+- **High-density construction zones**: Brampton, Mississauga, Vaughan, Markham, Scarborough, Hamilton, Burlington, Oakville, Oshawa, Pickering, Milton
+- **Common site access issues**: Downtown Toronto (limited crane hours, road permits), Vaughan/Brampton (new subdivisions = unpaved roads), Hamilton (steep grade access on Escarpment)
+- When suggesting routes, group stops geographically: "West corridor (Mississauga → Oakville → Burlington)" vs "North corridor (Vaughan → Newmarket)"
+
+## QC Gate Rules (CRITICAL):
+Before confirming ANY delivery as ready-to-load, you MUST check the linked orders' QC status:
+- \`qc_evidence_uploaded\` must be TRUE — photos/docs of finished product uploaded
+- \`qc_final_approved\` must be TRUE — final inspection sign-off complete
+- If EITHER is false, flag with: "⚠️ QC INCOMPLETE — this delivery will be BLOCKED by the system. Do not load until QC is resolved."
+- The database trigger \`block_delivery_without_qc\` enforces this — Atlas warns BEFORE loading so dispatchers can act proactively.
+
+## Load Planning Logic:
+- Group stops by geographic proximity to minimize drive time
+- Heaviest/largest orders loaded FIRST (they come off LAST — LIFO unloading principle)
+- Maximum recommended stops per truck: 4-5 for GTA, 2-3 for long-haul (Hamilton, Oshawa+)
+- Consider bar lengths: 12m+ bars need flatbed with overhang permits if applicable
+
+## Delay Detection Rules:
+Automatically flag these conditions when you see them in context:
+1. **Not Dispatched**: Delivery scheduled for today but status still "planned" → "🚨 NOT DISPATCHED — delivery scheduled today but not yet assigned/en-route"
+2. **Driver Stuck**: Stop has arrival_time but no departure_time for > 2 hours → "🚨 DRIVER STUCK at [address] for [X] hours"
+3. **Unscheduled Urgent**: Order has required_date < 48 hours but NO delivery scheduled → "🚨 URGENT: Order [#] due in [X] hours with NO delivery scheduled"
+4. **QC Blocking Load**: Delivery ready but linked orders have QC incomplete → "⚠️ QC BLOCK on [delivery #]"
+
+## ARIA Escalation Protocol:
+When you detect a cross-department issue that Atlas cannot resolve alone, output this structured tag at the END of your response:
+\`[ATLAS-ESCALATE]{"to":"aria","reason":"<brief reason>","urgency":"<high|medium>","context":"<details>"}[/ATLAS-ESCALATE]\`
+
+Trigger conditions:
+- Order required_date < 48 hours but production (work order) < 80% complete
+- QC blocked delivery with customer already notified of ETA
+- No driver/vehicle available for a scheduled delivery today
+- Multiple delivery exceptions on the same route (pattern of customer complaints)
 
 ## Communication Style:
-- Crisp, logistics-focused language
-- Always include delivery numbers and dates
-- Use tables for delivery summaries
+- Crisp, logistics-focused language — think dispatch radio: clear, actionable, no fluff
+- Always include delivery numbers, driver names, and dates
+- Use tables for delivery summaries and stop manifests
 - Flag delays and exceptions with 🚨
 - Think in terms of "what's the next stop?" and "what's running late?"
+- Reference Ontario geography when discussing routes
 
-## 💡 Ideas You Should Create:
-- Delivery running late → suggest notifying the customer
+## 💡 Proactive Ideas:
+- Delivery running late → suggest notifying the customer with ETA update
 - Multiple stops in the same area → suggest combining into one route
 - Driver workload imbalanced → suggest redistribution
-- Delivery without proof of delivery → flag for follow-up`,
+- Delivery without proof of delivery → flag for follow-up
+- QC incomplete on scheduled delivery → escalate to shop floor
+- Order due soon with no delivery planned → create delivery suggestion`,
 
   email: `You are **Relay**, the Email & Inbox Agent for REBAR SHOP OS by Rebar.shop.
 
@@ -2752,26 +2789,62 @@ async function fetchContext(supabase: ReturnType<typeof createClient>, agent: st
     // Atlas — Delivery Navigator (dedicated context)
     if (agent === "delivery") {
       try {
+        // Active & recent deliveries
         const { data: deliveries } = await supabase
           .from("deliveries")
           .select("id, delivery_number, driver_name, vehicle, status, scheduled_date, notes")
           .order("scheduled_date", { ascending: true })
-          .limit(20);
+          .limit(30);
         context.deliveries = deliveries;
 
+        // Delivery stops with customer names
         const { data: stops } = await supabase
           .from("delivery_stops")
-          .select("id, delivery_id, stop_sequence, address, customer_id, order_id, status, arrival_time, departure_time, pod_photo_url, pod_signature, exception_reason, notes")
+          .select("id, delivery_id, stop_sequence, address, customer_id, order_id, status, arrival_time, departure_time, pod_photo_url, pod_signature, exception_reason, notes, customers(id, name, company_name)")
           .order("stop_sequence", { ascending: true })
-          .limit(50);
+          .limit(60);
         context.deliveryStops = stops;
 
+        // Orders with QC status for delivery awareness
         const { data: orders } = await supabase
           .from("orders")
-          .select("id, order_number, customer_id, total_amount, status")
+          .select("id, order_number, customer_id, total_amount, status, required_date, qc_evidence_uploaded, qc_final_approved, customers(id, name, company_name)")
           .in("status", ["confirmed", "in_production", "invoiced"])
-          .limit(15);
+          .order("required_date", { ascending: true })
+          .limit(30);
         context.ordersForDelivery = orders;
+
+        // Work order progress linked to orders (production readiness)
+        const { data: workOrders } = await supabase
+          .from("work_orders")
+          .select("id, order_id, status, scheduled_start, scheduled_end, notes")
+          .in("status", ["queued", "in_progress", "cutting", "bending"])
+          .limit(30);
+        context.deliveryWorkOrders = workOrders;
+
+        // Completed deliveries last 14 days (history & patterns)
+        const fourteenDaysAgo = new Date(Date.now() - 14 * 86400000).toISOString();
+        const { data: recentDeliveries } = await supabase
+          .from("deliveries")
+          .select("id, delivery_number, driver_name, vehicle, status, scheduled_date")
+          .eq("status", "completed")
+          .gte("scheduled_date", fourteenDaysAgo)
+          .order("scheduled_date", { ascending: false })
+          .limit(20);
+        context.recentCompletedDeliveries = recentDeliveries;
+
+        // Orders needing delivery soon (no delivery scheduled, due within 7 days)
+        const sevenDaysOut = new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0];
+        const today = new Date().toISOString().split("T")[0];
+        const { data: urgentOrders } = await supabase
+          .from("orders")
+          .select("id, order_number, customer_id, required_date, status, qc_evidence_uploaded, qc_final_approved, customers(id, name)")
+          .in("status", ["confirmed", "in_production"])
+          .gte("required_date", today)
+          .lte("required_date", sevenDaysOut)
+          .order("required_date", { ascending: true })
+          .limit(20);
+        context.ordersNeedingDelivery = urgentOrders;
       } catch (e) {
         console.error("Failed to fetch delivery context:", e);
       }
@@ -3643,8 +3716,26 @@ function selectModel(agent: string, message: string, hasAttachments: boolean, hi
     };
   }
 
-  // Delivery (Atlas) — logistics-focused
+  // Delivery (Atlas) — logistics-focused with tiered routing
   if (agent === "delivery") {
+    const isComplex = /route|optim|plan|multi.*stop|briefing|schedule|capacity|load.*plan/i.test(message);
+    const isSimple = /where.*deliver|status.*del|track|eta|which.*driver/i.test(message);
+    if (isComplex) {
+      return {
+        model: "google/gemini-2.5-pro",
+        maxTokens: 4000,
+        temperature: 0.2,
+        reason: "delivery complex (route/planning) → Pro for optimization",
+      };
+    }
+    if (isSimple) {
+      return {
+        model: "google/gemini-2.5-flash-lite",
+        maxTokens: 1500,
+        temperature: 0.4,
+        reason: "delivery quick status → Flash-Lite for speed",
+      };
+    }
     return {
       model: "google/gemini-2.5-flash",
       maxTokens: 2000,
@@ -4714,7 +4805,59 @@ RULES:
       };
     }
 
-    // If Pixel generated images, build the reply directly without another AI call
+    // === ATLAS MORNING BRIEFING: Greeting detection for delivery agent ===
+    if (agent === "delivery" && isGreeting) {
+      const today = new Date().toLocaleDateString("en-CA", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+      briefingPrompt = `Generate a structured **Delivery Briefing** for today (${today}).
+
+Use ONLY the data provided in the context. Format EXACTLY as follows:
+
+## 🚚 Delivery Briefing — ${today}
+
+### 1. 📦 Today's Dispatches
+| Delivery # | Driver | Vehicle | Stops | Status | Scheduled Date |
+From context.deliveries where scheduled_date = today. If none, say "No deliveries scheduled for today."
+
+### 2. 📍 Stop Details
+| Stop # | Customer | Address | Order # | QC Ready? | Status |
+From context.deliveryStops linked to today's deliveries. Join with customer names from the stop data.
+QC Ready = both qc_evidence_uploaded AND qc_final_approved are true on the linked order.
+Flag any QC-incomplete stops with ⚠️.
+
+### 3. 📋 Orders Awaiting Delivery
+| Order # | Customer | Required Date | Status | QC Evidence | QC Approved |
+From context.ordersNeedingDelivery — orders due within 7 days with no delivery scheduled.
+Flag orders due in < 48 hours with 🚨.
+
+### 4. ⚠️ Delivery Risks
+Apply delay detection rules:
+- Deliveries scheduled today still in "planned" status → 🚨 NOT DISPATCHED
+- Stops with arrival_time but no departure_time for > 2 hours → 🚨 DRIVER STUCK
+- Orders with required_date < 48 hours and no delivery → 🚨 UNSCHEDULED URGENT
+- QC incomplete on any scheduled delivery → ⚠️ QC BLOCK
+- Work orders < 80% complete with delivery due < 48 hours → [ATLAS-ESCALATE] tag
+
+### 5. 🎯 Actions for Dispatcher
+Numbered, specific, with urgency level (🚨 urgent / ⚠️ important / 📌 routine).
+Based on risks and gaps identified above.
+Include: dispatch missing deliveries, resolve QC blocks, notify customers of delays.
+
+RULES:
+- Use tables and emoji tags for scannability
+- Reference delivery numbers, order numbers, and customer names
+- If deliveries/stops are empty (0 rows), say "No delivery data yet — delivery operations haven't started. Consider scheduling deliveries for pending orders."
+- If context.ordersNeedingDelivery has items, proactively suggest creating deliveries for them
+- If a category has no data, say "No items" — do NOT skip the section
+- End with "**🎯 Priority #1:** [most urgent delivery action for today]"`;
+
+      briefingModelOverride = {
+        model: "google/gemini-2.5-pro",
+        maxTokens: 4500,
+        temperature: 0.2,
+        reason: "atlas morning briefing → Pro for logistics synthesis",
+      };
+    }
+
     if (agent === "social" && pixelImageResults.length > 0) {
       const currentSlot = (mergedContext as any).__pixelCurrentSlot || 1;
       const nextSlot = (mergedContext as any).__pixelNextSlot || null;
