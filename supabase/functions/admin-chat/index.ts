@@ -508,6 +508,22 @@ const JARVIS_TOOLS = [
       },
     },
   },
+  // ─── Page Inspection Tool ───
+  {
+    type: "function",
+    function: {
+      name: "wp_inspect_page",
+      description: "Fetch and analyze the live HTML content of a page on rebar.shop. Use this when the user asks about what's on the current page, what a page looks like, or wants to inspect page content.",
+      parameters: {
+        type: "object",
+        properties: {
+          url: { type: "string", description: "The full URL or path on rebar.shop to inspect (e.g. /products or https://rebar.shop/about)" },
+        },
+        required: ["url"],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 // ═══ READ TOOL EXECUTION ═══
@@ -669,6 +685,93 @@ async function executeReadTool(supabase: any, toolName: string, args: any): Prom
         });
         const data = await res.json();
         return JSON.stringify(data);
+      } catch (e: any) { return JSON.stringify({ error: e.message }); }
+    }
+    case "wp_inspect_page": {
+      try {
+        let url = args.url || "/";
+        // Normalize to full URL
+        if (url.startsWith("/")) url = `https://rebar.shop${url}`;
+        else if (!url.startsWith("http")) url = `https://rebar.shop/${url}`;
+
+        const res = await fetch(url, {
+          headers: { "User-Agent": "RebarShopOS-Inspector/1.0" },
+          redirect: "follow",
+        });
+        if (!res.ok) return JSON.stringify({ error: `Page returned ${res.status}`, url });
+
+        const html = await res.text();
+
+        // Extract meta tags
+        const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+        const metaDescMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([\s\S]*?)["']/i);
+        const ogTitleMatch = html.match(/<meta[^>]*property=["']og:title["'][^>]*content=["']([\s\S]*?)["']/i);
+        const ogDescMatch = html.match(/<meta[^>]*property=["']og:description["'][^>]*content=["']([\s\S]*?)["']/i);
+        const ogImageMatch = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([\s\S]*?)["']/i);
+        const canonicalMatch = html.match(/<link[^>]*rel=["']canonical["'][^>]*href=["']([\s\S]*?)["']/i);
+
+        // Extract headings
+        const headings: { level: string; text: string }[] = [];
+        const headingRegex = /<(h[1-6])[^>]*>([\s\S]*?)<\/\1>/gi;
+        let hMatch;
+        while ((hMatch = headingRegex.exec(html)) !== null && headings.length < 30) {
+          headings.push({ level: hMatch[1], text: hMatch[2].replace(/<[^>]*>/g, "").trim() });
+        }
+
+        // Extract links
+        const links: { href: string; text: string }[] = [];
+        const linkRegex = /<a[^>]*href=["']([\s\S]*?)["'][^>]*>([\s\S]*?)<\/a>/gi;
+        let lMatch;
+        while ((lMatch = linkRegex.exec(html)) !== null && links.length < 50) {
+          const href = lMatch[1].trim();
+          const text = lMatch[2].replace(/<[^>]*>/g, "").trim();
+          if (href && !href.startsWith("#") && !href.startsWith("javascript:")) {
+            links.push({ href, text: text.slice(0, 80) });
+          }
+        }
+
+        // Extract images
+        const images: { src: string; alt: string }[] = [];
+        const imgRegex = /<img[^>]*src=["']([\s\S]*?)["'][^>]*/gi;
+        let iMatch;
+        while ((iMatch = imgRegex.exec(html)) !== null && images.length < 30) {
+          const altMatch = iMatch[0].match(/alt=["']([\s\S]*?)["']/i);
+          images.push({ src: iMatch[1].trim(), alt: altMatch?.[1]?.trim() || "" });
+        }
+
+        // Extract text content (strip scripts, styles, nav, footer, then tags)
+        let textContent = html
+          .replace(/<script[\s\S]*?<\/script>/gi, "")
+          .replace(/<style[\s\S]*?<\/style>/gi, "")
+          .replace(/<nav[\s\S]*?<\/nav>/gi, "")
+          .replace(/<footer[\s\S]*?<\/footer>/gi, "")
+          .replace(/<header[\s\S]*?<\/header>/gi, "")
+          .replace(/<[^>]*>/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+        textContent = textContent.slice(0, 4000);
+
+        // Check for forms
+        const formCount = (html.match(/<form/gi) || []).length;
+
+        return JSON.stringify({
+          url,
+          title: titleMatch?.[1]?.trim() || null,
+          meta_description: metaDescMatch?.[1]?.trim() || null,
+          og: {
+            title: ogTitleMatch?.[1]?.trim() || null,
+            description: ogDescMatch?.[1]?.trim() || null,
+            image: ogImageMatch?.[1]?.trim() || null,
+          },
+          canonical: canonicalMatch?.[1]?.trim() || null,
+          headings,
+          links_count: links.length,
+          links: links.slice(0, 20),
+          images_count: images.length,
+          images: images.slice(0, 15),
+          forms_count: formCount,
+          text_content: textContent,
+        });
       } catch (e: any) { return JSON.stringify({ error: e.message }); }
     }
     default:
@@ -1125,7 +1228,7 @@ PROACTIVE INTELLIGENCE:
 
 ═══ WORDPRESS & WOOCOMMERCE MANAGEMENT (rebar.shop) ═══
 - You have FULL read and write access to rebar.shop via WordPress REST API and WooCommerce REST API
-- READ tools: wp_list_posts, wp_list_pages, wp_list_products, wp_list_orders, wp_get_site_health, wp_get_product, wp_get_page, wp_get_post — execute immediately
+- READ tools: wp_list_posts, wp_list_pages, wp_list_products, wp_list_orders, wp_get_site_health, wp_get_product, wp_get_page, wp_get_post, wp_inspect_page — execute immediately
 - WRITE tools: wp_update_post, wp_update_page, wp_update_product, wp_update_order_status, wp_create_redirect, wp_create_product, wp_delete_product, wp_create_post — require user confirmation
 - Use wp_get_product / wp_get_post / wp_get_page to get full details of a single item by ID
 - Use wp_create_product to create new WooCommerce products (name, price, description, stock, status)
@@ -1136,6 +1239,12 @@ PROACTIVE INTELLIGENCE:
 - Never delete published content without explicit confirmation
 - Changes are logged to wp_change_log for audit and rollback
 - If a user says "undo last WordPress change", query wp_change_log and use previous_state to restore
+
+═══ PAGE INSPECTION ═══
+- Use wp_inspect_page to fetch and analyze the live HTML content of any page on rebar.shop
+- The user's message includes "[Currently viewing: rebar.shop/path]" — use that path with wp_inspect_page when they ask about the current page
+- This tool returns: title, meta tags, headings, links, images, forms count, and text content (truncated to ~4000 chars)
+- Use it to answer questions like "what's on this page?", "check the SEO of this page", "what products are listed here?"
 
 ═══ WEBSITE SPEED OPTIMIZATION ═══
 - Use wp_run_speed_audit to check current TTFB, page weight, and identify performance issues
@@ -1303,6 +1412,7 @@ PROACTIVE INTELLIGENCE:
             list_machines: "machines", list_deliveries: "deliveries", list_orders: "work orders",
             list_leads: "leads", get_stock_levels: "inventory",
             wp_get_product: "product details", wp_get_page: "page details", wp_get_post: "post details",
+            wp_inspect_page: "page content",
           };
           const checking = toolNames.map((n: string) => progressLabels[n]).filter(Boolean);
           if (checking.length > 0) {
