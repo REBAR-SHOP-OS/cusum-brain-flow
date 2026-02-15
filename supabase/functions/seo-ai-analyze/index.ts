@@ -39,7 +39,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Get Google OAuth tokens
+    // Get Google OAuth tokens (optional — GSC/GA features degrade gracefully)
     const { data: tokenRow } = await supabase
       .from("integration_tokens")
       .select("*")
@@ -47,81 +47,78 @@ Deno.serve(async (req) => {
       .eq("company_id", domain.company_id)
       .maybeSingle();
 
-    if (!tokenRow?.access_token) {
-      return new Response(
-        JSON.stringify({ error: "Google OAuth not connected" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    const hasGoogleOAuth = !!tokenRow?.access_token;
 
-    // ---- STEP 1: Pull GSC data (28 days) ----
+    // ---- STEP 1: Pull GSC data (28 days) — only if Google OAuth connected ----
     const endDate = new Date();
     endDate.setDate(endDate.getDate() - 3);
     const startDate = new Date(endDate);
     startDate.setDate(startDate.getDate() - 28);
     const fmt = (d: Date) => d.toISOString().split("T")[0];
 
-    const siteUrl = `sc-domain:${domain.domain}`;
-
-    // GSC queries
-    const gscQueriesRes = await fetch(
-      `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${tokenRow.access_token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          startDate: fmt(startDate),
-          endDate: fmt(endDate),
-          dimensions: ["query"],
-          rowLimit: 1000,
-        }),
-      }
-    );
-
-    // GSC pages
-    const gscPagesRes = await fetch(
-      `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${tokenRow.access_token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          startDate: fmt(startDate),
-          endDate: fmt(endDate),
-          dimensions: ["page"],
-          rowLimit: 500,
-        }),
-      }
-    );
-
     let gscKeywords: any[] = [];
     let gscPages: any[] = [];
 
-    if (gscQueriesRes.ok) {
-      const d = await gscQueriesRes.json();
-      gscKeywords = (d.rows || []).map((r: any) => ({
-        keyword: r.keys[0],
-        impressions: r.impressions,
-        clicks: r.clicks,
-        ctr: r.ctr,
-        position: r.position,
-      }));
-    }
+    if (hasGoogleOAuth) {
+      const siteUrl = `sc-domain:${domain.domain}`;
 
-    if (gscPagesRes.ok) {
-      const d = await gscPagesRes.json();
-      gscPages = (d.rows || []).map((r: any) => ({
-        url: r.keys[0],
-        impressions: r.impressions,
-        clicks: r.clicks,
-        ctr: r.ctr,
-        position: r.position,
-      }));
+      const gscQueriesRes = await fetch(
+        `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${tokenRow.access_token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            startDate: fmt(startDate),
+            endDate: fmt(endDate),
+            dimensions: ["query"],
+            rowLimit: 1000,
+          }),
+        }
+      );
+
+      const gscPagesRes = await fetch(
+        `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${tokenRow.access_token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            startDate: fmt(startDate),
+            endDate: fmt(endDate),
+            dimensions: ["page"],
+            rowLimit: 500,
+          }),
+        }
+      );
+
+      if (gscQueriesRes.ok) {
+        const d = await gscQueriesRes.json();
+        gscKeywords = (d.rows || []).map((r: any) => ({
+          keyword: r.keys[0],
+          impressions: r.impressions,
+          clicks: r.clicks,
+          ctr: r.ctr,
+          position: r.position,
+        }));
+      }
+
+      if (gscPagesRes.ok) {
+        const d = await gscPagesRes.json();
+        gscPages = (d.rows || []).map((r: any) => ({
+          url: r.keys[0],
+          impressions: r.impressions,
+          clicks: r.clicks,
+          ctr: r.ctr,
+          position: r.position,
+        }));
+      }
+    } else {
+      console.log("Google OAuth not connected — skipping GSC/GA, running ERP harvest only");
     }
 
     console.log(`GSC: ${gscKeywords.length} keywords, ${gscPages.length} pages`);
@@ -150,8 +147,7 @@ Deno.serve(async (req) => {
     }
 
     // ---- STEP 2: Pull GA4 data (if configured) ----
-    let gaPages: any[] = [];
-    if (domain.verified_ga && domain.ga_property_id) {
+    if (hasGoogleOAuth && domain.verified_ga && domain.ga_property_id) {
       try {
         const gaRes = await fetch(
           `https://analyticsdata.googleapis.com/v1beta/properties/${domain.ga_property_id}:runReport`,
