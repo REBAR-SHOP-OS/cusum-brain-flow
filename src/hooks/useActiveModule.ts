@@ -21,6 +21,7 @@ const ROUTE_MAP: Record<string, { module: string; moduleRoute: string; page?: st
   "/tasks": { module: "Messaging", moduleRoute: "/inbox", page: "Tasks" },
   "/brain": { module: "Knowledge", moduleRoute: "/brain" },
   "/phonecalls": { module: "Communications", moduleRoute: "/phonecalls", page: "Phone Calls" },
+  "/seo": { module: "SEO", moduleRoute: "/seo" },
 };
 
 export function useActiveModule(): ActiveModule {

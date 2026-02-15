@@ -59,6 +59,7 @@ import CEOPortal from "./pages/CEOPortal";
 import Transcribe from "./pages/Transcribe";
 import TranscribeWatch from "./pages/TranscribeWatch";
 import WebsiteManager from "./pages/WebsiteManager";
+import SeoModule from "./pages/SeoModule";
 
 import LiveChat from "./pages/LiveChat";
 import EmailMarketing from "./pages/EmailMarketing";
@@ -109,6 +110,7 @@ const App = () => (
                     <Route path="/phonecalls" element={<P><Phonecalls /></P>} />
 
                     <Route path="/website" element={<P><WebsiteManager /></P>} />
+                    <Route path="/seo" element={<P><SeoModule /></P>} />
 
                     {/* Sales */}
                     <Route path="/pipeline" element={<P><Pipeline /></P>} />
