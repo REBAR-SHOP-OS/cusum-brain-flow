@@ -44,12 +44,12 @@ export default function Landing() {
             <img src={logoCoin} alt="REBAR SHOP OS logo" className="w-8 h-8 rounded-lg" width={32} height={32} />
             <span className="text-xl font-bold text-foreground">REBAR SHOP OS</span>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
             <Link to="/login">
-              <Button variant="ghost">Sign In</Button>
+              <Button variant="ghost" size="sm" className="sm:text-sm">Sign In</Button>
             </Link>
             <Link to="/signup">
-              <Button>Get Started <ArrowRight className="w-4 h-4 ml-2" /></Button>
+              <Button size="sm" className="sm:text-sm">Get Started <ArrowRight className="w-4 h-4 ml-1 sm:ml-2" /></Button>
             </Link>
           </div>
         </nav>
@@ -71,7 +71,7 @@ export default function Landing() {
               From takeoff to delivery — streamline estimating, production, sales, and accounting
               with AI agents built for reinforcing steel contractors.
             </p>
-            <div className="flex items-center justify-center gap-4 mb-16">
+            <div className="flex flex-wrap items-center justify-center gap-4 mb-16">
               <Link to="/signup">
                 <Button size="lg" className="text-base px-8">Start Free <ArrowRight className="w-4 h-4 ml-2" /></Button>
               </Link>
