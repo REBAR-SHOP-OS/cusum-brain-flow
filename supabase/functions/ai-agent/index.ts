@@ -12,7 +12,7 @@ interface ChatMessage {
 }
 
 interface AgentRequest {
-  agent: "sales" | "accounting" | "support" | "collections" | "estimation" | "social" | "eisenhower" | "bizdev" | "webbuilder" | "assistant" | "copywriting" | "talent" | "seo" | "growth" | "legal" | "shopfloor" | "delivery" | "email" | "data";
+  agent: "sales" | "accounting" | "support" | "collections" | "estimation" | "social" | "eisenhower" | "bizdev" | "webbuilder" | "assistant" | "copywriting" | "talent" | "seo" | "growth" | "legal" | "shopfloor" | "delivery" | "email" | "data" | "commander";
   message: string;
   history?: ChatMessage[];
   context?: Record<string, unknown>;
@@ -732,6 +732,104 @@ The lead salesperson is **Swapnil (Neel)**. You are Neel's AI accountability par
 - High-margin product not yet offered to an active customer → suggest an upsell
 - Lead stagnant in same pipeline stage for 5+ days → suggest moving it or taking action
 - Customer ordering frequently but not on contract pricing → suggest a pricing agreement`,
+
+  commander: `You are **Commander**, the AI Sales Department Manager for REBAR SHOP OS.
+You have **22 years of B2B industrial sales management experience**, specializing in rebar/steel/construction sales cycles, territory management, and team coaching. You sit ABOVE Blitz (the sales rep agent) and manage the entire sales department.
+
+## Your Team:
+- **Swapnil "Neel" Mahajan** — Lead salesperson (neel@rebar.shop, ext:209). Your primary sales rep. Blitz is his AI assistant.
+- **Saurabh Sehgal** — Sales rep (saurabh@rebar.shop, ext:206). Handles his own territory.
+- **Blitz** — AI sales agent that supports Neel with pipeline tracking and follow-ups. You have access to the same data Blitz sees, plus more.
+
+## Your Key Responsibilities:
+
+### 1. Team Performance Review
+Analyze each salesperson's pipeline velocity, conversion rate, response time, and deal aging from context data. Compare Neel vs Saurabh metrics side by side.
+
+### 2. Pipeline Strategy
+Review the full pipeline and recommend:
+- Stage transitions for stale deals
+- Deal prioritization by value × probability
+- Resource allocation between reps
+
+### 3. Coaching Neel and Saurabh
+When asked, provide specific deal-level coaching:
+- What to say in follow-ups
+- When to follow up (timing strategy)
+- Pricing strategy and negotiation tactics
+- Objection handling based on deal context
+
+### 4. Weekly Sales Meeting Prep
+Generate structured agendas with KPIs, deal reviews, and action items.
+
+### 5. Escalation to ARIA
+When you identify needs outside sales, flag for ARIA routing:
+- Estimation taking too long on a hot deal → "I recommend escalating to ARIA to check with Gauge on estimation timeline"
+- Customer has unpaid invoices but wants a new quote → "Flag for ARIA: accounts receivable issue before new quote"
+- Production capacity concern affecting delivery promise → "Route to ARIA: need Forge to confirm capacity"
+
+Output structured escalation tags:
+[COMMANDER-ESCALATE]{"to":"aria","reason":"description","urgency":"high|medium","context":"relevant details"}[/COMMANDER-ESCALATE]
+
+### 6. Target Setting
+Track monthly/quarterly targets vs actuals. Flag gaps early with specific remediation actions.
+
+### 7. Ask Neel Questions
+When you need clarification on a deal, draft specific questions for Neel. Don't guess — ask.
+
+### 8. Competitive Intelligence
+Track win/loss patterns, common objections, and pricing trends from closed deals in context data.
+
+## Communication Style:
+- Strategic, experienced, direct but mentoring
+- Speak like a VP of Sales who has seen it all
+- Use data to back every recommendation — reference actual numbers from context
+- Never micromanage — focus on outcomes and strategy
+- When reviewing performance, be constructive: acknowledge wins before addressing gaps
+- Use tables and structured formats for KPI reviews
+
+## Context Data Available:
+- **allActiveLeads**: Full pipeline (up to 200 leads) — analyze by assigned rep, stage, value, last activity
+- **leadActivities**: Last 30 days of activities — track response times, follow-up frequency
+- **allQuotes**: Quotes sent/accepted/declined — compute conversion rates per rep
+- **salesCommsLog**: Last 14 days of calls/emails — analyze communication patterns
+- **salesTeamProfiles**: Team roster with roles and departments
+- **recentOrders90d**: Orders from last 90 days — revenue tracking per rep
+- **recentEmails**: Recent email communications
+- **customers**: Customer database
+
+## When User Says "Good Morning" or Greets:
+Generate a **Sales Department Briefing** covering all 5 sections (KPIs, Team Performance, Deals Needing Attention, Recommended Actions, Questions for Neel). This is your most important daily deliverable.
+
+## 📧 Email Sending:
+Use the \`send_email\` tool to email Neel or Saurabh with action items or questions. ALWAYS draft and show for approval before sending.
+
+## 📞 Calling:
+You can initiate calls to team members. Use the [COMMANDER-CALL] tag:
+[COMMANDER-CALL]{"phone":"ext:209","contact_name":"Neel","reason":"Discuss deal strategy for [customer]","details":"Key facts and data"}[/COMMANDER-CALL]
+
+### Internal Team Directory:
+| Name | Extension | Email |
+|------|-----------|-------|
+| Sattar Esmaeili (CEO) | ext:101 | sattar@rebar.shop |
+| Vicky Anderson (Accountant) | ext:201 | vicky@rebar.shop |
+| Behnam (Ben) Rajabifar (Estimator) | ext:203 | rfq@rebar.shop |
+| Saurabh Sehgal (Sales) | ext:206 | saurabh@rebar.shop |
+| Swapnil Mahajan (Neel) | ext:209 | neel@rebar.shop |
+| Radin Lachini (AI Manager) | ext:222 | radin@rebar.shop |
+| Kourosh Zand (Shop Supervisor) | — | ai@rebar.shop |
+
+## CRITICAL BOUNDARY:
+- You handle ONLY sales department management
+- For accounting/AR issues, redirect to **Penny** or escalate via ARIA
+- For estimation delays, escalate via ARIA to **Gauge**
+- For production/shop floor issues, escalate via ARIA to **Forge**
+
+## Formatting:
+- Amounts: $ with 2 decimal places, bold large amounts
+- 🔴 critical (stale >7 days, high value at risk), 🟡 warning (needs attention), 🟢 healthy
+- Use tables for KPI comparisons
+- Number your recommended actions with deadlines and assignees`,
 
   accounting: `You are **Penny**, the Accounting Agent for REBAR SHOP OS.
 You have **50 years of experience as a Canadian CPA** — you are well-versed in GAAP, CRA compliance, HST/GST, payroll deductions, and accounting best practices.
@@ -2266,6 +2364,68 @@ async function fetchContext(supabase: ReturnType<typeof createClient>, agent: st
       context.recentOrders = orders;
     }
 
+    // === Commander: Full pipeline visibility for sales department management ===
+    if (agent === "commander") {
+      try {
+        // All active leads (up to 200) for full pipeline visibility
+        const { data: allLeads } = await supabase
+          .from("leads")
+          .select("id, name, company, status, stage, expected_value, assigned_to, source, created_at, updated_at, notes")
+          .not("status", "eq", "lost")
+          .order("expected_value", { ascending: false })
+          .limit(200);
+        context.allActiveLeads = allLeads;
+
+        // Lead activities (last 30 days) for tracking who is active vs dormant
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString();
+        const { data: leadActs } = await supabase
+          .from("lead_activities")
+          .select("id, lead_id, type, description, created_at, created_by")
+          .gte("created_at", thirtyDaysAgo)
+          .order("created_at", { ascending: false })
+          .limit(500);
+        context.leadActivities = leadActs;
+
+        // All quotes for conversion tracking
+        const { data: allQuotes } = await supabase
+          .from("quotes")
+          .select("id, quote_number, customer_id, total_amount, status, margin_percent, created_at, updated_at")
+          .order("created_at", { ascending: false })
+          .limit(100);
+        context.allQuotes = allQuotes;
+
+        // Communications log (last 14 days) for response time analysis
+        const fourteenDaysAgo = new Date(Date.now() - 14 * 86400000).toISOString();
+        const { data: salesComms } = await supabase
+          .from("communications")
+          .select("id, subject, from_address, to_address, body_preview, source, direction, received_at")
+          .gte("received_at", fourteenDaysAgo)
+          .order("received_at", { ascending: false })
+          .limit(200);
+        context.salesCommsLog = salesComms;
+
+        // Sales team profiles
+        const { data: salesProfiles } = await supabase
+          .from("profiles")
+          .select("id, full_name, email, title, department")
+          .eq("department", "Sales")
+          .eq("is_active", true);
+        context.salesTeamProfiles = salesProfiles;
+
+        // Orders (last 90 days) for revenue tracking
+        const ninetyDaysAgo = new Date(Date.now() - 90 * 86400000).toISOString();
+        const { data: orders90 } = await supabase
+          .from("orders")
+          .select("id, order_number, customer_id, total_amount, status, order_date, created_at")
+          .gte("created_at", ninetyDaysAgo)
+          .order("created_at", { ascending: false })
+          .limit(200);
+        context.recentOrders90d = orders90;
+      } catch (e) {
+        console.error("Commander context enrichment failed:", e);
+      }
+    }
+
     if (agent === "accounting" || agent === "collections") {
       const { data: arData } = await supabase
         .from("accounting_mirror")
@@ -3541,7 +3701,34 @@ function selectModel(agent: string, message: string, hasAttachments: boolean, hi
     };
   }
 
-  // Assistant (Vizzy) → Pro for reliable instruction following (calls, SMS, complex identity)
+  // Commander — Sales Department Manager, always Pro-level for nuanced multi-factor analysis
+  if (agent === "commander") {
+    const isBriefing = /briefing|review|performance|team|weekly|meeting|report|summary|kpi|target/i.test(message);
+    const isCoaching = /coach|deal|strategy|pricing|objection|close|negotiate|approach/i.test(message);
+    if (isBriefing) {
+      return {
+        model: "google/gemini-2.5-pro",
+        maxTokens: 5000,
+        temperature: 0.3,
+        reason: "commander briefing/review → Pro for multi-factor synthesis",
+      };
+    }
+    if (isCoaching) {
+      return {
+        model: "google/gemini-2.5-pro",
+        maxTokens: 3000,
+        temperature: 0.4,
+        reason: "commander deal coaching → Pro for strategic nuance",
+      };
+    }
+    return {
+      model: "google/gemini-2.5-flash",
+      maxTokens: 2000,
+      temperature: 0.5,
+      reason: "commander quick question → Flash for speed",
+    };
+  }
+
   if (agent === "assistant") {
     return {
       model: "google/gemini-2.5-pro",
@@ -3724,6 +3911,7 @@ serve(async (req) => {
       webbuilder: "Commet", assistant: "Vizzy", copywriting: "Penn", talent: "Scouty",
       seo: "Seomi", growth: "Gigi", legal: "Tally",
       shopfloor: "Forge", delivery: "Atlas", email: "Relay", data: "Prism",
+      commander: "Commander",
     };
     const agentKnowledgeName = agentNameMap[agent] || "Blitz";
 
@@ -4328,6 +4516,62 @@ RULES:
       };
     }
 
+    // === COMMANDER MORNING BRIEFING: Greeting detection for sales manager agent ===
+    if (agent === "commander" && isGreeting) {
+      const today = new Date().toLocaleDateString("en-CA", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+
+      finalMessage = `[SYSTEM BRIEFING REQUEST] The user said "${message}". Today is ${today}.
+
+You MUST respond with a structured **Sales Department Briefing** covering ALL 5 sections below using the context data provided. Reference ACTUAL data — do not fabricate.
+
+FORMAT — follow exactly:
+
+**🎖️ Good morning ${userFullName.split(" ")[0]}! Here's your Sales Department Briefing for ${today}:**
+
+### 1. 📊 Department KPIs
+From context data, compute and show:
+| Metric | This Week | Last Week | Trend |
+|--------|-----------|-----------|-------|
+| Pipeline Value | Sum of allActiveLeads expected_value | Compare to 7 days ago | ↑/↓ |
+| New Leads | Count leads created in last 7 days | Count 8-14 days ago | ↑/↓ |
+| Quotes Sent | Count from allQuotes status=sent in last 7 days | Previous 7 days | ↑/↓ |
+| Deals Won | Count from allQuotes status=accepted in last 7 days | Previous 7 days | ↑/↓ |
+| Conversion Rate | accepted / (sent+accepted+declined) | Previous period | ↑/↓ |
+
+### 2. 👥 Team Performance
+| Rep | Active Leads | Stale (>5 days) | Quotes Pending | Revenue MTD |
+|-----|-------------|-----------------|----------------|-------------|
+| Neel | Count by assigned_to | Stale count | Pending quotes | From orders |
+| Saurabh | Count by assigned_to | Stale count | Pending quotes | From orders |
+
+### 3. 🚨 Deals Needing Attention
+Top 5 deals by risk — stale (no activity >5 days), high value, or close to deadline. For each:
+- Customer name, deal value, days since last activity, current stage
+- Why it needs attention
+- Recommended action
+
+### 4. 🎯 Recommended Actions
+Numbered, each assigned to Neel or Saurabh, with specific deadlines. Prioritize by urgency × deal value.
+
+### 5. ❓ Questions for Neel
+Specific questions about deals that need clarification — reference deal names and amounts.
+
+RULES:
+- Use tables and emoji tags for scannability
+- Bold dollar amounts and key metrics
+- SHORT sentences — max 15 words each
+- Flag urgent items with 🚨
+- End with "**🎯 Priority #1:** [most urgent item for today]"
+- If a category has no data, say "No items" — do NOT skip the section`;
+
+      briefingModelOverride = {
+        model: "google/gemini-2.5-pro",
+        maxTokens: 6000,
+        temperature: 0.3,
+        reason: "commander morning briefing → Pro for multi-department synthesis",
+      };
+    }
+
     // If Pixel generated images, build the reply directly without another AI call
     if (agent === "social" && pixelImageResults.length > 0) {
       const currentSlot = (mergedContext as any).__pixelCurrentSlot || 1;
@@ -4421,7 +4665,7 @@ RULES:
           },
         },
       },
-      ...(!stripSendCapabilities && agent === "accounting" ? [{
+      ...(!stripSendCapabilities && (agent === "accounting" || agent === "commander") ? [{
         type: "function" as const,
         function: {
           name: "send_email",

@@ -7,10 +7,11 @@ import {
   Ruler,
   Share2,
   Scale,
-  LayoutGrid
+  LayoutGrid,
+  Crown
 } from "lucide-react";
 
-export type AgentType = "sales" | "accounting" | "support" | "collections" | "estimation" | "social" | "eisenhower" | "legal";
+export type AgentType = "sales" | "accounting" | "support" | "collections" | "estimation" | "social" | "eisenhower" | "legal" | "commander";
 
 interface Agent {
   id: AgentType;
@@ -28,6 +29,7 @@ const agents: Agent[] = [
   { id: "estimation", name: "Cal", icon: Ruler, description: "Job Costing" },
   { id: "social", name: "Pixel", icon: Share2, description: "Social Media" },
   { id: "eisenhower", name: "Eisenhower Matrix", icon: LayoutGrid, description: "Priority Matrix" },
+  { id: "commander", name: "Commander", icon: Crown, description: "Sales Manager" },
 ];
 
 interface AgentSelectorProps {
