@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -14,13 +14,23 @@ import {
   Video,
   Phone,
   MonitorUp,
+  Paperclip,
+  Volume2,
+  FileText,
+  Image as ImageIcon,
+  X,
 } from "lucide-react";
+import { EmojiPicker } from "@/components/chat/EmojiPicker";
+import { VoiceInputButton } from "@/components/chat/VoiceInputButton";
+import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { ContentActions } from "@/components/shared/ContentActions";
 import { format, isToday, isYesterday, isSameDay } from "date-fns";
-import type { TeamMessage } from "@/hooks/useTeamChat";
+import type { TeamMessage, ChatAttachment } from "@/hooks/useTeamChat";
 import type { Profile } from "@/hooks/useProfiles";
 import type { TeamMeeting } from "@/hooks/useTeamMeetings";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 const LANG_LABELS: Record<string, { name: string; flag: string }> = {
   en: { name: "English", flag: "🇬🇧" },
@@ -52,7 +62,7 @@ interface MessageThreadProps {
   myLang: string;
   isLoading: boolean;
   isSending: boolean;
-  onSend: (text: string) => void;
+  onSend: (text: string, attachments?: ChatAttachment[]) => void;
   activeMeetings?: TeamMeeting[];
   onStartMeeting?: () => void;
   onJoinMeeting?: (meeting: TeamMeeting) => void;
@@ -83,6 +93,10 @@ function formatDateSeparator(date: Date): string {
   return format(date, "EEEE, MMMM d");
 }
 
+function isImageFile(type: string) {
+  return type.startsWith("image/");
+}
+
 export function MessageThread({
   channelName,
   channelDescription,
@@ -99,8 +113,30 @@ export function MessageThread({
 }: MessageThreadProps) {
   const [input, setInput] = useState("");
   const [showOriginal, setShowOriginal] = useState<Set<string>>(new Set());
+  const [pendingFiles, setPendingFiles] = useState<ChatAttachment[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [playingMsgId, setPlayingMsgId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Voice input
+  const speech = useSpeechRecognition({
+    onError: (err) => toast.error(err),
+  });
+
+  // Append voice transcripts to input
+  useEffect(() => {
+    if (speech.fullTranscript) {
+      setInput((prev) => {
+        const space = prev && !prev.endsWith(" ") ? " " : "";
+        return prev + space + speech.fullTranscript;
+      });
+      speech.reset();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [speech.fullTranscript]);
 
   // Auto-scroll on new messages
   useEffect(() => {
@@ -111,11 +147,104 @@ export function MessageThread({
 
   const handleSubmit = () => {
     const trimmed = input.trim();
-    if (!trimmed) return;
-    onSend(trimmed);
+    if (!trimmed && pendingFiles.length === 0) return;
+    onSend(trimmed || "📎", pendingFiles.length > 0 ? pendingFiles : undefined);
     setInput("");
+    setPendingFiles([]);
     textareaRef.current?.focus();
   };
+
+  const handleEmojiSelect = (emoji: string) => {
+    setInput((prev) => prev + emoji);
+    textareaRef.current?.focus();
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsUploading(true);
+    const newAttachments: ChatAttachment[] = [];
+
+    for (const file of Array.from(files)) {
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error(`${file.name} is too large (max 10MB)`);
+        continue;
+      }
+
+      const path = `${Date.now()}-${file.name}`;
+      const { error } = await supabase.storage
+        .from("team-chat-files")
+        .upload(path, file);
+
+      if (error) {
+        toast.error(`Failed to upload ${file.name}`);
+        continue;
+      }
+
+      const { data: urlData } = supabase.storage
+        .from("team-chat-files")
+        .getPublicUrl(path);
+
+      newAttachments.push({
+        name: file.name,
+        url: urlData.publicUrl,
+        type: file.type,
+        size: file.size,
+      });
+    }
+
+    setPendingFiles((prev) => [...prev, ...newAttachments]);
+    setIsUploading(false);
+    e.target.value = "";
+  };
+
+  const removePendingFile = (index: number) => {
+    setPendingFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleTTS = useCallback(async (text: string, msgId: string) => {
+    if (playingMsgId === msgId && audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+      setPlayingMsgId(null);
+      return;
+    }
+
+    setPlayingMsgId(msgId);
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({ text }),
+        }
+      );
+
+      if (!response.ok) throw new Error("TTS failed");
+
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+      const audio = new Audio(audioUrl);
+      audioRef.current = audio;
+
+      audio.onended = () => {
+        setPlayingMsgId(null);
+        audioRef.current = null;
+        URL.revokeObjectURL(audioUrl);
+      };
+
+      await audio.play();
+    } catch {
+      toast.error("Failed to play audio");
+      setPlayingMsgId(null);
+    }
+  }, [playingMsgId]);
 
   const getDisplayText = (msg: TeamMessage) => {
     if (msg.sender_profile_id === myProfile?.id) return msg.original_text;
@@ -142,14 +271,10 @@ export function MessageThread({
 
     for (const msg of messages) {
       const msgDate = new Date(msg.created_at);
-
-      // Date separator
       if (!lastDate || !isSameDay(lastDate, msgDate)) {
         groups.push({ type: "date", date: msgDate });
         lastSenderId = null;
       }
-
-      // Group consecutive messages from same sender within 5 minutes
       const isGrouped =
         lastSenderId === msg.sender_profile_id &&
         lastTime &&
@@ -168,7 +293,7 @@ export function MessageThread({
 
   return (
     <div className="flex flex-col h-full">
-      {/* Channel Header - hidden on mobile (parent handles mobile top bar) */}
+      {/* Channel Header - hidden on mobile */}
       <div className="hidden md:flex border-b border-border px-4 lg:px-5 py-3 items-center justify-between bg-card/50 backdrop-blur-sm">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -182,12 +307,7 @@ export function MessageThread({
           </div>
         </div>
         <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 hover:text-primary"
-            onClick={onStartMeeting}
-          >
+          <Button variant="ghost" size="icon" className="h-8 w-8 hover:text-primary" onClick={onStartMeeting}>
             <Video className="w-4 h-4 text-muted-foreground" />
           </Button>
         </div>
@@ -277,6 +397,7 @@ export function MessageThread({
                   const isTranslated = !isMine && !showOriginal.has(msg.id) && msg.translations[myLang] && msg.original_language !== myLang;
                   const displayLang = isMine ? msg.original_language : (showOriginal.has(msg.id) ? msg.original_language : (msg.translations[myLang] ? myLang : msg.original_language));
                   const senderLangInfo = getLang(msg.original_language);
+                  const attachments = msg.attachments || [];
 
                   return (
                     <div
@@ -286,7 +407,7 @@ export function MessageThread({
                         item.isGrouped ? "mt-0" : "mt-3"
                       )}
                     >
-                      {/* Avatar - only show for first in group */}
+                      {/* Avatar */}
                       <div className="w-9 shrink-0">
                         {!item.isGrouped && (
                           <Avatar className="w-9 h-9">
@@ -301,7 +422,7 @@ export function MessageThread({
                       </div>
 
                       <div className="flex-1 min-w-0">
-                        {/* Header - only for first in group */}
+                        {/* Header */}
                         {!item.isGrouped && (
                           <div className="flex items-center gap-2 mb-0.5">
                             <span className="font-semibold text-sm text-foreground">
@@ -330,6 +451,28 @@ export function MessageThread({
                             {displayText}
                           </p>
 
+                          {/* Attachments */}
+                          {attachments.length > 0 && (
+                            <div className="flex flex-wrap gap-2 mt-2">
+                              {attachments.map((att, i) => (
+                                <a
+                                  key={i}
+                                  href={att.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border bg-muted/30 hover:bg-muted/60 transition-colors text-xs text-foreground/80"
+                                >
+                                  {isImageFile(att.type) ? (
+                                    <ImageIcon className="w-3.5 h-3.5 text-primary" />
+                                  ) : (
+                                    <FileText className="w-3.5 h-3.5 text-primary" />
+                                  )}
+                                  <span className="truncate max-w-[120px]">{att.name}</span>
+                                </a>
+                              ))}
+                            </div>
+                          )}
+
                           {/* Translation indicator */}
                           {!isMine && msg.original_language !== myLang && msg.translations[myLang] && (
                             <button
@@ -349,6 +492,18 @@ export function MessageThread({
 
                       {/* Message actions (on hover) */}
                       <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-start gap-0.5 pt-1">
+                        <button
+                          onClick={() => handleTTS(displayText, msg.id)}
+                          className={cn(
+                            "p-1 rounded-md transition-colors",
+                            playingMsgId === msg.id
+                              ? "text-primary bg-primary/10"
+                              : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                          )}
+                          title={playingMsgId === msg.id ? "Stop" : "Listen"}
+                        >
+                          <Volume2 className="w-3.5 h-3.5" />
+                        </button>
                         <ContentActions content={msg.original_text} size="xs" source="teamhub" sourceRef={msg.id} />
                       </div>
                     </div>
@@ -364,6 +519,21 @@ export function MessageThread({
 
       {/* Composer */}
       <div className="border-t border-border p-2 md:p-4 bg-card/50 backdrop-blur-sm safe-area-bottom">
+        {/* Pending file previews */}
+        {pendingFiles.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-2 px-1">
+            {pendingFiles.map((f, i) => (
+              <div key={i} className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg border border-border bg-muted/30 text-xs">
+                {isImageFile(f.type) ? <ImageIcon className="w-3 h-3 text-primary" /> : <FileText className="w-3 h-3 text-primary" />}
+                <span className="truncate max-w-[100px]">{f.name}</span>
+                <button onClick={() => removePendingFile(i)} className="text-muted-foreground hover:text-destructive">
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Input area */}
         <div className="relative rounded-xl border border-border bg-background focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20 transition-all">
           <Textarea
@@ -385,7 +555,33 @@ export function MessageThread({
           {/* Bottom bar */}
           <div className="flex items-center justify-between px-2 pb-1.5 md:pb-2">
             <div className="flex items-center gap-0.5">
-              <Badge variant="outline" className="text-[9px] px-1.5 py-0 gap-1 hidden sm:inline-flex">
+              <EmojiPicker onSelect={handleEmojiSelect} disabled={isSending} />
+              <VoiceInputButton
+                isListening={speech.isListening}
+                isSupported={speech.isSupported}
+                onToggle={speech.isListening ? speech.stop : speech.start}
+                disabled={isSending}
+              />
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={handleFileUpload}
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isSending || isUploading}
+                className={cn(
+                  "p-2 rounded-md transition-colors text-muted-foreground hover:text-foreground hover:bg-muted/50",
+                  (isSending || isUploading) && "opacity-50 cursor-not-allowed"
+                )}
+                title="Attach file"
+              >
+                {isUploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Paperclip className="w-5 h-5" />}
+              </button>
+              <Badge variant="outline" className="text-[9px] px-1.5 py-0 gap-1 hidden sm:inline-flex ml-1">
                 {myLangInfo.flag} {myLangInfo.name}
               </Badge>
             </div>
@@ -394,7 +590,7 @@ export function MessageThread({
               size="sm"
               className="h-8 w-8 md:w-auto md:px-3 gap-1.5 rounded-lg p-0 md:p-2"
               onClick={handleSubmit}
-              disabled={!input.trim() || isSending}
+              disabled={(!input.trim() && pendingFiles.length === 0) || isSending}
             >
               {isSending ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -406,10 +602,12 @@ export function MessageThread({
           </div>
         </div>
 
-        {/* Typing indicator area */}
+        {/* Status area */}
         <div className="h-3 md:h-4 mt-0.5 md:mt-1">
           <p className="text-[10px] text-muted-foreground/60">
             {isSending && "Translating & sending..."}
+            {speech.isListening && !isSending && "🎙️ Listening..."}
+            {speech.interimText && !isSending && ` ${speech.interimText}`}
           </p>
         </div>
       </div>

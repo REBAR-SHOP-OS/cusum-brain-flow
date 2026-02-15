@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useTeamChannels, useTeamMessages, useSendMessage, useMyProfile } from "@/hooks/useTeamChat";
+import { useTeamChannels, useTeamMessages, useSendMessage, useMyProfile, type ChatAttachment } from "@/hooks/useTeamChat";
 import { useProfiles } from "@/hooks/useProfiles";
 import { useCreateChannel, useOpenDM } from "@/hooks/useChannelManagement";
 import { useActiveMeetings, useStartMeeting, useEndMeeting } from "@/hooks/useTeamMeetings";
@@ -52,7 +52,7 @@ export default function TeamHub() {
 
   const onlineCount = profiles.filter((p) => p.is_active).length;
 
-  const handleSend = async (text: string) => {
+  const handleSend = async (text: string, attachments?: ChatAttachment[]) => {
     if (!activeChannelId || !myProfile) {
       toast.error("Cannot send — profile not found");
       return;
@@ -64,6 +64,7 @@ export default function TeamHub() {
         text,
         senderLang: myLang,
         targetLangs,
+        attachments,
       });
     } catch (err: any) {
       toast.error("Failed to send message", { description: err.message });
