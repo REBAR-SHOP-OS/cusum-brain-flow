@@ -1,24 +1,40 @@
 
+# Fix "No Response from AI" in Website Chat
 
-# Update WordPress Application Password
+## Problem
+The AI Website Editor chat on `/website` shows "No response from AI" when sending messages like "fix" or "whats happen". Three root causes identified:
 
-## What Needs to Happen
+## Root Causes
 
-1. **You generate a new Application Password** in WordPress admin:
-   - Go to `rebar.shop/wp-admin` > Users > Your Profile > Application Passwords
-   - Revoke the old one (if still listed)
-   - Create a new one (name it "Lovable AI" or similar)
-   - Copy the password immediately (WordPress only shows it once)
+1. **`admin-chat` not registered in `config.toml`** -- Supabase gateway enforces JWT verification at the infrastructure level before the function code runs. Since the function does its own auth, it needs `verify_jwt = false` in config.toml (like every other function in the project).
 
-2. **Provide the new password to Lovable** -- I will use the secure secret update tool to replace the current `WP_APP_PASSWORD` value
+2. **Tool-call timeout** -- When the AI decides to use tools (e.g., for "fix slugs"), the function buffers the entire first AI response, executes tools, then makes a second AI call. With the massive context (18 parallel DB queries), this double-call pattern can exceed the edge function timeout.
 
-3. **Verify connectivity** -- I will call the `wp-test` edge function to confirm the new credential works
+3. **Missing `/website` in page map** -- The `pageMap.ts` file has no entry for `/website`, so the AI gets no page-aware context.
 
-## No Code Changes Required
+## Changes
 
-The existing `wpClient.ts` and all edge functions already read `WP_APP_PASSWORD` from the environment. Only the secret value needs replacing -- no file edits needed.
+### 1. Add `admin-chat` to `supabase/config.toml`
+Add `verify_jwt = false` entry so the function handles its own auth (which it already does in code).
 
-## After Update
+### 2. Add `/website` to `supabase/functions/_shared/pageMap.ts`
+Add entry:
+```
+"/website": { name: "Website Manager", description: "AI-powered WordPress/WooCommerce editor for rebar.shop — edit posts, pages, products, SEO, redirects" }
+```
 
-Seomi and all other WordPress/WooCommerce integrations (JARVIS, wp-test, etc.) will immediately use the new credential on their next request.
+### 3. Add error logging to `admin-chat/index.ts`
+Add `console.error` before the "No response" fallback path so future issues are visible in logs. Also add a timeout guard on the AI gateway fetch calls to prevent silent hangs.
 
+### 4. Improve SSE error handling in `useAdminChat.ts`
+When the fetch response is not OK or the stream produces no content, show a more descriptive error instead of "No response from AI" -- e.g., surface the HTTP status or error body so we can debug faster.
+
+## Technical Details
+
+- **File: `supabase/config.toml`** -- Add `[functions.admin-chat]` section with `verify_jwt = false`
+- **File: `supabase/functions/_shared/pageMap.ts`** -- Add `/website` entry to PAGE_MAP
+- **File: `supabase/functions/admin-chat/index.ts`** -- Add AbortController with 55-second timeout on AI gateway calls to fail gracefully instead of hanging
+- **File: `src/hooks/useAdminChat.ts`** -- Change the fallback "No response from AI." message to include more diagnostic info (e.g., "No response from AI. The request may have timed out.")
+
+## Expected Outcome
+After these changes, the Website Editor chat will properly authenticate, respond to all messages including tool-based ones like "fix", and provide better error messages if something does go wrong.
