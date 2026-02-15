@@ -183,6 +183,78 @@ serve(async (req) => {
       }
     }
 
+    // 8. Performance: Measure TTFB for homepage
+    const baseUrl = Deno.env.get("WP_BASE_URL")?.replace(/\/wp-json\/wp\/v2\/?$/, "") || "https://rebar.shop";
+    try {
+      const ttfbStart = performance.now();
+      const homeRes = await fetch(baseUrl, {
+        headers: { "User-Agent": "RebarShop-HealthCheck/1.0" },
+        redirect: "follow",
+      });
+      const ttfb = Math.round(performance.now() - ttfbStart);
+      const homeHtml = await homeRes.text();
+      const homeSizeKB = Math.round(homeHtml.length / 1024);
+
+      if (ttfb > 2500) {
+        issues.push({
+          issue_type: "slow_ttfb",
+          severity: "critical",
+          assigned_agent: "webbuilder",
+          title: `Critical TTFB: homepage takes ${(ttfb / 1000).toFixed(1)}s`,
+          description: `Time to First Byte is ${ttfb}ms — target is under 800ms. Install a caching plugin.`,
+          entity_type: "wp_speed",
+          entity_id: "homepage_ttfb",
+          reason: "TTFB accounts for 80% of page load time. Without caching, every visitor waits 3+ seconds.",
+          impact: "Failed Core Web Vitals",
+        });
+      } else if (ttfb > 1500) {
+        issues.push({
+          issue_type: "slow_ttfb",
+          severity: "warning",
+          assigned_agent: "webbuilder",
+          title: `Slow TTFB: homepage takes ${(ttfb / 1000).toFixed(1)}s`,
+          description: `TTFB is ${ttfb}ms — should be under 800ms.`,
+          entity_type: "wp_speed",
+          entity_id: "homepage_ttfb",
+          reason: "Slow server response hurts all Core Web Vitals metrics.",
+          impact: "Poor PageSpeed score",
+        });
+      }
+
+      if (homeSizeKB > 200) {
+        issues.push({
+          issue_type: "heavy_page",
+          severity: "warning",
+          assigned_agent: "copywriting",
+          title: `Homepage HTML is ${homeSizeKB}KB`,
+          description: `Page HTML is ${homeSizeKB}KB — target is under 200KB. Trim unnecessary markup or page builder bloat.`,
+          entity_type: "wp_speed",
+          entity_id: "homepage_weight",
+          reason: "Large HTML payloads increase download time and parsing delay.",
+          impact: "Slower FCP and LCP",
+        });
+      }
+
+      // Check for images missing lazy loading
+      const imgTags = homeHtml.match(/<img[^>]*>/gi) || [];
+      const imgsWithoutLazy = imgTags.filter((t: string) => !t.includes('loading="lazy"') && !t.includes("loading='lazy'")).length;
+      if (imgsWithoutLazy > 5) {
+        issues.push({
+          issue_type: "missing_lazy_load",
+          severity: "warning",
+          assigned_agent: "webbuilder",
+          title: `${imgsWithoutLazy} images without lazy loading on homepage`,
+          description: `${imgsWithoutLazy} of ${imgTags.length} images load eagerly, slowing initial page render.`,
+          entity_type: "wp_speed",
+          entity_id: "homepage_lazy",
+          reason: "Without lazy loading, all images download immediately even if below the fold.",
+          impact: "Slower LCP and higher bandwidth",
+        });
+      }
+    } catch (perfErr) {
+      console.error("Performance check failed (non-fatal):", perfErr);
+    }
+
     console.log(`🏥 Website health check: ${issues.length} issues found`);
 
     return new Response(

@@ -580,17 +580,10 @@ serve(async (req) => {
       );
       if (healthRes.ok) {
         const healthData = await healthRes.json();
-        const agentCodeMap: Record<string, string> = {
-          seo: "seo", copywriting: "copywriting", webbuilder: "webbuilder",
-          social: "social", data: "data", bizdev: "bizdev",
-        };
         if (healthData.issues && Array.isArray(healthData.issues)) {
           for (const issue of healthData.issues) {
-            const assignedAgentCode = issue.assigned_agent;
-            const agentId = agentMap[assignedAgentCode];
+            const agentId = agentMap[issue.assigned_agent];
             if (!agentId) continue;
-
-            // Get company_id from first available source
             const companyId = suggestions[0]?.company_id || "a0000000-0000-0000-0000-000000000001";
             const dedupeKey = `wp:${issue.issue_type}:${issue.entity_id}`;
             if (isDuplicate(issue.entity_type, issue.entity_id, issue.issue_type)) continue;
@@ -617,6 +610,70 @@ serve(async (req) => {
       }
     } catch (wpErr) {
       console.error("Website health check failed (non-fatal):", wpErr);
+    }
+
+    // ========== WEBSITE SPEED AUDIT ==========
+    try {
+      const speedRes = await fetch(
+        `${Deno.env.get("SUPABASE_URL")}/functions/v1/website-speed-audit`,
+        { method: "POST", headers: { "Content-Type": "application/json" } }
+      );
+      if (speedRes.ok) {
+        const speedData = await speedRes.json();
+        if (speedData.issues && Array.isArray(speedData.issues)) {
+          for (const issue of speedData.issues) {
+            const agentId = agentMap[issue.assigned_agent];
+            if (!agentId) continue;
+            const companyId = suggestions[0]?.company_id || "a0000000-0000-0000-0000-000000000001";
+            const dedupeKey = `speed:${issue.type}:${issue.title.slice(0, 40)}`;
+            if (isDuplicate("wp_speed", issue.type, issue.type)) continue;
+
+            const row = {
+              company_id: companyId,
+              agent_id: agentId,
+              suggestion_type: "action",
+              category: issue.type,
+              title: issue.title,
+              description: issue.description,
+              severity: issue.severity,
+              reason: `Metric: ${issue.metric ?? "N/A"}, Threshold: ${issue.threshold ?? "N/A"}`,
+              impact: "Core Web Vitals failure",
+              entity_type: "wp_speed",
+              entity_id: issue.type,
+              status: "open",
+              actions: [{ label: "View Website", action: "navigate", path: "/website" }],
+            };
+            pushDual(row, dedupeKey, agentId);
+          }
+        }
+        // Add server-side recommendations as info suggestions for Commet
+        if (speedData.recommendations && Array.isArray(speedData.recommendations) && agentMap.webbuilder) {
+          for (const rec of speedData.recommendations) {
+            const dedupeKey = `speed:rec:${rec.action}`;
+            if (isDuplicate("wp_speed", rec.action, "speed_recommendation")) continue;
+            const companyId = suggestions[0]?.company_id || "a0000000-0000-0000-0000-000000000001";
+            const row = {
+              company_id: companyId,
+              agent_id: agentMap.webbuilder,
+              suggestion_type: "info",
+              category: "speed_recommendation",
+              title: `🚀 ${rec.title}`,
+              description: rec.description,
+              severity: rec.priority <= 2 ? "warning" : "info",
+              reason: `Priority ${rec.priority}. Requires server-side action.`,
+              impact: "Improved Core Web Vitals",
+              entity_type: "wp_speed",
+              entity_id: rec.action,
+              status: "open",
+              actions: [{ label: "View Website", action: "navigate", path: "/website" }],
+            };
+            pushDual(row, dedupeKey, agentMap.webbuilder);
+          }
+        }
+        console.log(`🚀 Speed audit: ${speedData.issues_found || 0} issues, ${speedData.recommendations_count || 0} recommendations added`);
+      }
+    } catch (speedErr) {
+      console.error("Speed audit failed (non-fatal):", speedErr);
     }
 
     // Batch insert suggestions (backward compat)
