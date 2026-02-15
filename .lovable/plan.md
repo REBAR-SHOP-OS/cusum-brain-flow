@@ -1,65 +1,122 @@
 
 
-## Knowledge Book: Production Lessons Learned
+## Clone Odoo 17 CRM Chatter/Timeline -- Pixel-Perfect Rebuild
 
-Create a comprehensive internal reference document at `docs/KNOWLEDGE_BOOK.md` capturing every hard-won lesson from building Vizzy Web. This will serve as a quick-reference for future development.
+### What We Have Now
 
-### Document Structure
+The current `LeadTimeline.tsx` (531 lines) is a functional timeline but diverges from Odoo 17's chatter in several key ways:
 
-**1. Mobile Audio Playback (iOS Safari + Chrome)**
-- Problem: iOS kills `.play()` if any `await` sits between the user tap and the play call
-- Solution: "Prime and Replay" -- synchronously call `.play()` with a silent WAV data URI during the gesture, then swap `src` after async work
-- AudioContext gets suspended on tab switch / screen lock -- must listen for `statechange` and re-arm unlock listeners
-- Never use `{ once: true }` on unlock listeners; keep retrying until `audioCtx.state === "running"` is confirmed
-- Pre-cache decoded AudioBuffers at unlock time so notification sounds play instantly
+- Composer is hidden behind a "Log Activity" button instead of always visible at top
+- No "Log note" / "Send message" / "Schedule activity" tab row (Odoo's signature 3-button bar)
+- Activities and messages are mixed without Odoo's visual distinction (yellow background for internal notes)
+- No avatar-left layout with name + timestamp on same line
+- No "Mark as done" inline button on scheduled activities
+- AI suggestion panel has no Odoo equivalent and sits above the composer
 
-**2. Auth Session Resilience**
-- Stale/corrupt tokens in localStorage cause infinite `bad_jwt` polling loops
-- Fix: catch `getSession()` errors and call `signOut({ scope: 'local' })` to clear storage
-- Handle `TOKEN_REFRESHED` event with null session the same way
-- Always set up `onAuthStateChange` listener before calling `getSession()` to avoid race conditions
+### Target: Odoo 17 Chatter Layout (Top to Bottom)
 
-**3. Realtime Subscriptions**
-- Always filter by `user_id` in the subscription filter to avoid processing other users' events
-- Clean up channels in `useEffect` return to prevent memory leaks
-- Handle INSERT/UPDATE/DELETE separately; dismissed items should be filtered out of state on UPDATE
+```text
++--------------------------------------------------+
+| [Log note]  [Send message]  [Schedule activity]  |  <-- Tab bar (always visible)
++--------------------------------------------------+
+| Composer textarea (contextual to selected tab)   |
+| [Attach] [Emoji]                    [Send/Log]   |
++--------------------------------------------------+
+| Planned Activities Section                        |
+|   Due date badge (color: red/orange/green)        |
+|   Activity type icon + assigned user              |
+|   [Mark Done] [Schedule Next]                     |
++--------------------------------------------------+
+| Message/Note Thread (newest first)                |
+|   +-- Date Separator ("February 15, 2026") ---+  |
+|   | Avatar | Name        Timestamp (right)     |  |
+|   |        | Message body                      |  |
+|   |        | (yellow bg if internal note)      |  |
+|   +--------------------------------------------+  |
++--------------------------------------------------+
+| Followers bar (collapsed)                         |
++--------------------------------------------------+
+```
 
-**4. Notification System Architecture**
-- Permission prompt: only ask once per device (use localStorage flag), never re-prompt if denied
-- Push registration: skip if permission not granted; set `pushRegistered = false` on failure to allow retry
-- Sound: thin wrapper (`notificationSound.ts`) calls into the shared `audioPlayer.ts`; keeps notification logic decoupled from audio mechanics
+### Implementation Plan
 
-**5. Error Handling and Auto-Reporting**
-- `useGlobalErrorHandler`: catches unhandled rejections and uncaught errors globally
-- Ignore noise: ResizeObserver loops, chunk loading failures, AbortErrors, permission denials
-- Auto-escalation: if the same error fires 3+ times in a session, report it to a fix-request queue
-- Deduplication: use `sessionStorage` with a 5-minute cooldown key to avoid spamming reports
-- Error log: persist last 50 errors in `localStorage` for on-device diagnostics
+**Step 1: Create `OdooChatter.tsx` -- the new Odoo-clone component**
 
-**6. Knowledge Base / RAG Import**
-- Bulk paste: split on `\n---\n`, first line becomes title, rest becomes content
-- URL scrape: use `firecrawl-scrape` edge function to convert pages to markdown
-- Always generate slugs from titles; set `is_published: true` by default for imported content
+New file: `src/components/pipeline/OdooChatter.tsx`
 
-**7. Edge Function Patterns**
-- Over 100 edge functions in production -- keep each focused on a single responsibility
-- Shared utilities go in `supabase/functions/_shared/`
-- Secrets are managed via Lovable Cloud; never hardcode API keys
+This replaces `LeadTimeline` inside the "Timeline" tab of `LeadDetailDrawer`.
 
-**8. Storage and Signed URLs**
-- Use `createSignedUrl()` with a 1-hour expiry for file access
-- Always handle the error case gracefully (return empty string, let caller decide)
+Structure:
+- **Composer bar** (always visible at top)
+  - 3 tab buttons: "Log note" / "Send message" / "Schedule activity"
+  - Textarea appears when any tab is active
+  - "Log note" tab: yellow-tinted composer, posts internal note
+  - "Send message" tab: white composer (future: email send)
+  - "Schedule activity" tab: shows activity type dropdown + date picker + assigned user
+  - Attach button (links to existing file upload)
+  - Send/Log button (right-aligned)
 
-**9. General React Patterns**
-- Use `useCallback` for all functions passed to child components or used in dependency arrays
-- Optimistic UI updates: apply state change immediately, revert on API error
-- `useCompanyId` hook centralizes workspace context; always check for null before writes
+- **Planned Activities section**
+  - Query `lead_activities` where `completed_at IS NULL` and `activity_type` in (follow_up, call, meeting, email)
+  - Each shows: colored due-date badge (overdue = red, today = orange, future = green), activity type icon, assigned user, description
+  - "Mark Done" button (sets `completed_at = now()`)
+  - "Schedule Next" button (opens schedule form pre-filled)
 
-**10. Common Gotchas**
-- Supabase default query limit is 1000 rows -- paginate or increase limit when debugging "missing data"
-- Never edit auto-generated files: `client.ts`, `types.ts`, `config.toml`, `.env`
-- `as any` casts on table names indicate the table exists but isn't in the generated types yet -- acceptable during rapid iteration but should be cleaned up
+- **Message Thread**
+  - Merge `lead_activities` (completed) + `lead_events` + `lead_files` into unified chronological list (newest first)
+  - Each entry:
+    - Left: 32px avatar circle with initials
+    - Right: **Name** on left, **timestamp** right-aligned on same line
+    - Body below name
+    - Internal notes get `bg-amber-50 dark:bg-amber-950/20` background
+    - Stage changes show arrow icon with "from -> to" text
+    - Files show download chip
 
-### File to Create
-- `docs/KNOWLEDGE_BOOK.md` -- single markdown file with all sections above, code snippets for each pattern, and a table of contents for quick navigation
+- **Spacing and sizing (Odoo 17 parity)**
+  - Avatar: 32px (w-8 h-8)
+  - Font: 13px body (text-[13px]), 12px metadata
+  - Message padding: 12px (p-3)
+  - Gap between avatar and content: 12px (gap-3)
+  - Date separator: centered text with horizontal rules
+  - Composer textarea: min-height 60px
+  - Tab buttons: 13px font, 8px horizontal padding, bottom-border active indicator (not pill/badge)
+
+**Step 2: Update `LeadDetailDrawer.tsx`**
+
+- Import `OdooChatter` instead of `LeadTimeline`
+- Replace `<LeadTimeline lead={lead} />` with `<OdooChatter lead={lead} />`
+- Keep `LeadTimeline.tsx` file intact (no deletion, just unused for now)
+
+**Step 3: Odoo-specific micro-interactions**
+
+Inside `OdooChatter.tsx`:
+- Clicking "Log note" toggles composer open/closed (click again to close)
+- Internal notes render with yellow/amber left border + light yellow background
+- Emails show envelope icon badge
+- Hover on any message row: subtle `bg-accent/50` highlight
+- "Mark as Done" on activity: optimistic UI update, then DB write
+- Date separators match Odoo style: "-- February 15, 2026 --"
+
+### Files Changed
+
+| File | Action |
+|---|---|
+| `src/components/pipeline/OdooChatter.tsx` | **Create** -- full Odoo 17 chatter clone |
+| `src/components/pipeline/LeadDetailDrawer.tsx` | **Edit** -- swap `LeadTimeline` for `OdooChatter` in Timeline tab |
+
+### What Stays the Same
+
+- All data sources (`lead_activities`, `lead_events`, `lead_files`) remain unchanged
+- AI suggestion panel moves to the dedicated "AI" tab (already there via `LeadAIPanel`)
+- Email thread stays in its own "Email" tab
+- No database changes needed
+- No new dependencies
+
+### Technical Notes
+
+- The component reuses existing queries from `LeadTimeline.tsx` (copy the query hooks)
+- Activity mutation logic (insert into `lead_activities`) is carried over
+- `ScheduleActivityDialog` pattern is reused for the "Schedule activity" tab inline form
+- Dark mode support maintained via Tailwind dark: variants on the yellow note backgrounds
+- The 3-button tab bar uses underline active indicator (`border-b-2 border-primary`) matching Odoo's visual pattern, not Radix tabs
 
