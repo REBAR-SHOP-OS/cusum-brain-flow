@@ -1,50 +1,88 @@
 
 
-# Auto-Configure Domain "rebar.shop" + Domain Setup UI
+# Mine SEO Reports from Gmail (SEMrush, Wincher, Yoast)
 
-The SEO dashboard shows "No domain configured" because the `seo_domains` table is empty and there's no UI to add one. This plan adds a domain setup form and auto-inserts `rebar.shop`.
+Your Gmail already has rich SEO reports from SEMrush (Position Tracking, Site Audit), Wincher (ranking notifications), and Yoast landing in your inbox. The current keyword harvest function treats all emails equally and only reads the short `body_preview`. This plan adds a dedicated SEO email mining source that extracts structured ranking data from these tool reports.
+
+---
+
+## What We Have
+
+| Source | Emails Found | Body Size | Data Available |
+|--------|-------------|-----------|----------------|
+| Semrush Position Tracking | 2 emails | ~1KB (HTML rendering issue) | Ranking changes, position updates |
+| Semrush Site Audit | 2 emails | 44-54KB rich HTML | Page issues, redirects, crawl errors |
+| Wincher | 1 email | 7KB structured text | Top positions reached, ranking drops, competitor data |
+| Yoast | 2 emails | Brand analysis, SEO priorities | |
 
 ---
 
 ## Changes
 
-### 1. SeoOverview.tsx -- Add Domain Setup Form
+### 1. New Edge Function: `seo-email-harvest`
 
-Replace the empty "No domain configured" card with a proper setup form:
+A dedicated function that:
 
-- Input field for domain name (pre-filled with `rebar.shop`)
-- Optional GA4 property ID input
-- "Set Up Domain" button that inserts into `seo_domains`
-- On success, invalidate the `seo-domain` query so the dashboard loads immediately
-- Uses the user's `company_id` from the existing `useCompanyId` hook
+- Queries `communications` table for emails from SEMrush, Wincher, Yoast, Ahrefs, Moz (filtering by `from_address`)
+- Extracts the full HTML body from `metadata->>'body'`
+- Strips HTML tags to get clean text
+- Sends the cleaned content to AI (Gemini Flash) with a specialized prompt to extract:
+  - **Keywords with ranking positions** (from Position Tracking / Wincher)
+  - **SEO issues** (from Site Audit emails)
+  - **Ranking changes** (up/down movements with dates)
+  - **Competitor mentions**
+- Upserts extracted keywords into `seo_keyword_ai` with source tag `seo_tools`
+- Upserts SEO issues into `seo_insight` table
+- Returns a summary of what was extracted
 
-### 2. Insert Logic
+### 2. Update `seo-keyword-harvest` -- Add SEO Tools Source
 
-When the user clicks "Set Up Domain":
-- Insert a row into `seo_domains` with `domain = "rebar.shop"`, `company_id` from profile, `gsc_verified = false`, `verified_ga = false`
-- Invalidate all SEO queries to refresh the UI
-- Show success toast
+Add a new **SOURCE 10: SEO Tool Reports** block that specifically queries communications from known SEO tool senders and includes the full `metadata->>'body'` content (not just `body_preview`). This gives the existing harvest pipeline access to the rich report data.
 
-### 3. Domain Management
+### 3. Update `SeoOverview.tsx` -- Add "Mine SEO Reports" Button
 
-- Add a small settings area (visible when domain IS configured) showing the current domain with an option to update GA property ID
-- Keep it minimal -- just domain name display + edit capability
+Add a button next to "Run AI Analysis" that triggers the `seo-email-harvest` function. Show results with a toast indicating how many keywords/issues were extracted from email reports.
+
+### 4. Add `seo_tools` Source Color
+
+Add `seo_tools` to the `SOURCE_COLORS` map so it shows distinctly in the keyword source distribution card.
 
 ---
 
 ## Technical Details
 
+### Files Created
+
+| File | Purpose |
+|------|---------|
+| `supabase/functions/seo-email-harvest/index.ts` | Dedicated function to parse SEO tool emails and extract structured data |
+
 ### Files Modified
 
 | File | Change |
 |------|--------|
-| `src/components/seo/SeoOverview.tsx` | Replace "No domain configured" card with a setup form using Input + Button. Import `useCompanyId` hook and `Input` component. Add mutation to insert into `seo_domains`. |
+| `supabase/functions/seo-keyword-harvest/index.ts` | Add SOURCE 10 block for SEO tool report emails with full body content |
+| `src/components/seo/SeoOverview.tsx` | Add "Mine SEO Reports" button, add `seo_tools` source color |
 
-### Setup Form Fields
+### AI Prompt Strategy
 
-- **Domain**: text input, default "rebar.shop"
-- **GA4 Property ID**: optional text input, placeholder "properties/123456789"
-- **Submit button**: "Set Up Domain"
+The AI prompt will be specialized for SEO tool report parsing:
+- Recognize Semrush Position Tracking format (keyword + position + change)
+- Recognize Wincher ranking notification format (top positions, drops, competitor data)
+- Recognize Semrush Site Audit format (issue types, severity, page URLs)
+- Extract concrete keyword-position pairs rather than general themes
+- Tag each extraction with the tool source (semrush, wincher, yoast)
 
-No database changes needed -- `seo_domains` table already has all required columns with sensible defaults.
+### Email Query Filter
+
+```sql
+from_address ILIKE '%semrush%'
+OR from_address ILIKE '%wincher%'
+OR from_address ILIKE '%yoast%'
+OR from_address ILIKE '%ahrefs%'
+OR from_address ILIKE '%moz.com%'
+OR from_address ILIKE '%searchconsole%'
+```
+
+Limited to last 90 days, pulling full `metadata->>'body'` for rich content extraction.
 
