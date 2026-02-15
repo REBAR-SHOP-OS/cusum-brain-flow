@@ -1106,146 +1106,199 @@ PROACTIVE INTELLIGENCE:
 
     // If tool calls were made, execute them and make a follow-up
     if (hasToolCalls && toolCalls.length > 0) {
-      const toolResults: any[] = [];
-      const pendingActions: any[] = [];
+      // Use a ReadableStream so we can send progress SSE events immediately
+      const { readable, writable } = new TransformStream();
+      const writer = writable.getWriter();
+      const enc = new TextEncoder();
 
-      for (const tc of toolCalls) {
-        let result = "";
+      const sendSSE = (content: string) => {
+        writer.write(enc.encode(`data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`));
+      };
+
+      // Process tools and stream results in background
+      (async () => {
         try {
-          const args = JSON.parse(tc.function.arguments);
-          const toolName = tc.function.name;
+          const pendingActions: any[] = [];
 
-          if (toolName === "save_memory") {
-            const { error } = await supabase.from("vizzy_memory").insert({
-              user_id: user.id,
-              category: args.category || "general",
-              content: args.content,
-              expires_at: args.expires_at || null,
-              company_id: companyId,
-            });
-            result = error
-              ? `Error saving: ${error.message}`
-              : `✅ Saved to memory [${args.category}]: "${args.content}"`;
-          } else if (toolName === "delete_memory") {
-            const { error } = await supabase
-              .from("vizzy_memory")
-              .delete()
-              .eq("id", args.memory_id)
-              .eq("user_id", user.id);
-            result = error ? `Error deleting: ${error.message}` : "✅ Memory deleted";
-          } else if (WRITE_TOOLS.has(toolName)) {
-            // Write tool → queue for confirmation, do NOT execute
-            pendingActions.push({ tool: toolName, args, tool_call_id: tc.id });
-            result = `⏳ Action "${toolName}" queued for user confirmation. The system will show a confirmation card to the user.`;
-          } else {
-            // Read tool → execute immediately
-            result = await executeReadTool(supabase, toolName, args);
+          // ── Categorize tool calls ──
+          const memoryTools: any[] = [];
+          const writeTools: any[] = [];
+          const readTools: any[] = [];
+          for (const tc of toolCalls) {
+            const toolName = tc.function.name;
+            if (toolName === "save_memory" || toolName === "delete_memory") memoryTools.push(tc);
+            else if (WRITE_TOOLS.has(toolName)) writeTools.push(tc);
+            else readTools.push(tc);
           }
-        } catch (e) {
-          result = `Tool error: ${e instanceof Error ? e.message : "Unknown"}`;
-        }
-        toolResults.push({ role: "tool", tool_call_id: tc.id, content: result });
-      }
 
-      // Follow-up AI call with tool results
-      const followUpMessages = [
-        { role: "system", content: systemPrompt },
-        ...messages,
-        {
-          role: "assistant",
-          content: fullText || null,
-          tool_calls: toolCalls.map((tc: any) => ({
-            id: tc.id,
-            type: "function",
-            function: { name: tc.function.name, arguments: tc.function.arguments },
-          })),
-        },
-        ...toolResults,
-      ];
-
-      const followController = new AbortController();
-      const followTimeout = setTimeout(() => followController.abort(), 45000);
-      let followUpResp: Response;
-      try {
-        followUpResp = await fetch(
-          "https://ai.gateway.lovable.dev/v1/chat/completions",
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${LOVABLE_API_KEY}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              model: "google/gemini-3-pro-preview",
-              messages: followUpMessages,
-              stream: true,
-            }),
-            signal: followController.signal,
+          // ── Send progress indicator ──
+          const toolNames = toolCalls.map((tc: any) => tc.function.name);
+          const progressLabels: Record<string, string> = {
+            wp_list_products: "products", wp_list_posts: "posts", wp_list_pages: "pages",
+            wp_list_orders: "orders", wp_get_site_health: "site health",
+            list_machines: "machines", list_deliveries: "deliveries", list_orders: "work orders",
+            list_leads: "leads", get_stock_levels: "inventory",
+            wp_get_product: "product details", wp_get_page: "page details", wp_get_post: "post details",
+          };
+          const checking = toolNames.map((n: string) => progressLabels[n]).filter(Boolean);
+          if (checking.length > 0) {
+            sendSSE(`🔍 Checking ${checking.join(", ")}...\n\n`);
           }
-        );
-      } catch (followErr: any) {
-        clearTimeout(followTimeout);
-        console.error("Follow-up AI fetch failed:", followErr.name, followErr.message);
-        const encoder = new TextEncoder();
-        const errorText = `⚠️ Tool results were processed but the AI summary timed out. ${fullText || ""}`;
-        const sseData = `data: ${JSON.stringify({ choices: [{ delta: { content: errorText } }] })}\n\ndata: [DONE]\n\n`;
-        return new Response(encoder.encode(sseData), {
-          headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
-        });
-      }
-      clearTimeout(followTimeout);
 
-      if (!followUpResp.ok) {
-        const encoder = new TextEncoder();
-        const errorText = `\n\n_Tool operation completed. ${fullText}_`;
-        const sseData = `data: ${JSON.stringify({ choices: [{ delta: { content: errorText } }] })}\n\ndata: [DONE]\n\n`;
-        return new Response(encoder.encode(sseData), {
-          headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
-        });
-      }
+          // ── Execute memory tools sequentially (fast) ──
+          const toolResults: any[] = [];
+          for (const tc of memoryTools) {
+            let result = "";
+            try {
+              const args = JSON.parse(tc.function.arguments);
+              if (tc.function.name === "save_memory") {
+                const { error } = await supabase.from("vizzy_memory").insert({
+                  user_id: user.id, category: args.category || "general",
+                  content: args.content, expires_at: args.expires_at || null, company_id: companyId,
+                });
+                result = error ? `Error saving: ${error.message}` : `✅ Saved to memory [${args.category}]: "${args.content}"`;
+              } else {
+                const { error } = await supabase.from("vizzy_memory").delete().eq("id", args.memory_id).eq("user_id", user.id);
+                result = error ? `Error deleting: ${error.message}` : "✅ Memory deleted";
+              }
+            } catch (e) { result = `Tool error: ${e instanceof Error ? e.message : "Unknown"}`; }
+            toolResults.push({ role: "tool", tool_call_id: tc.id, content: result });
+          }
 
-      // If there are pending write actions, we need to read the follow-up response
-      // and append the pending_action event after it
-      if (pendingActions.length > 0) {
-        const followReader = followUpResp.body!.getReader();
-        const followDecoder = new TextDecoder();
-        let followChunks: string[] = [];
-        let followBuf = "";
-
-        while (true) {
-          const { done, value } = await followReader.read();
-          if (done) break;
-          followBuf += followDecoder.decode(value, { stream: true });
-
-          let nl2: number;
-          while ((nl2 = followBuf.indexOf("\n")) !== -1) {
-            let line2 = followBuf.slice(0, nl2);
-            followBuf = followBuf.slice(nl2 + 1);
-            if (line2.endsWith("\r")) line2 = line2.slice(0, -1);
-            if (line2.startsWith("data: ") && line2.slice(6).trim() !== "[DONE]") {
-              followChunks.push(line2 + "\n");
+          // ── Queue write tools for confirmation ──
+          for (const tc of writeTools) {
+            try {
+              const args = JSON.parse(tc.function.arguments);
+              pendingActions.push({ tool: tc.function.name, args, tool_call_id: tc.id });
+              toolResults.push({ role: "tool", tool_call_id: tc.id, content: `⏳ Action "${tc.function.name}" queued for user confirmation.` });
+            } catch (e) {
+              toolResults.push({ role: "tool", tool_call_id: tc.id, content: `Tool error: ${e instanceof Error ? e.message : "Unknown"}` });
             }
           }
+
+          // ── Execute ALL read tools in PARALLEL ──
+          const readResults = await Promise.all(readTools.map(async (tc: any) => {
+            let result = "";
+            try {
+              const args = JSON.parse(tc.function.arguments);
+              result = await executeReadTool(supabase, tc.function.name, args);
+            } catch (e) {
+              result = `Tool error: ${e instanceof Error ? e.message : "Unknown"}`;
+            }
+            return { role: "tool" as const, tool_call_id: tc.id, content: result, toolName: tc.function.name };
+          }));
+          toolResults.push(...readResults);
+
+          // ── Follow-up AI call with tool results (faster model, shorter timeout) ──
+          const followUpMessages = [
+            { role: "system", content: systemPrompt },
+            ...messages,
+            {
+              role: "assistant", content: fullText || null,
+              tool_calls: toolCalls.map((tc: any) => ({
+                id: tc.id, type: "function",
+                function: { name: tc.function.name, arguments: tc.function.arguments },
+              })),
+            },
+            ...toolResults.map((tr: any) => ({ role: tr.role, tool_call_id: tr.tool_call_id, content: tr.content })),
+          ];
+
+          const followController = new AbortController();
+          const followTimeout = setTimeout(() => followController.abort(), 25000);
+          let followUpResp: Response;
+          try {
+            followUpResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+              method: "POST",
+              headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+              body: JSON.stringify({ model: "google/gemini-3-flash-preview", messages: followUpMessages, stream: true }),
+              signal: followController.signal,
+            });
+          } catch (followErr: any) {
+            clearTimeout(followTimeout);
+            console.error("Follow-up AI fetch failed:", followErr.name, followErr.message);
+            // ── Graceful fallback: format raw tool results ──
+            sendSSE("\n\n---\n\n");
+            for (const tr of readResults) {
+              const label = progressLabels[tr.toolName] || tr.toolName;
+              try {
+                const parsed = JSON.parse(tr.content);
+                if (Array.isArray(parsed)) {
+                  sendSSE(`**${label}** (${parsed.length} items):\n`);
+                  for (const item of parsed.slice(0, 10)) {
+                    const name = item.name || item.title || item.delivery_number || item.contact_name || item.id;
+                    sendSSE(`- ${name}${item.status ? ` (${item.status})` : ""}${item.price ? ` — $${item.price}` : ""}\n`);
+                  }
+                } else {
+                  sendSSE(`**${label}:** ${JSON.stringify(parsed).slice(0, 300)}\n`);
+                }
+              } catch { sendSSE(`**${label}:** ${tr.content.slice(0, 300)}\n`); }
+              sendSSE("\n");
+            }
+            // Send pending actions
+            for (const pa of pendingActions) {
+              const desc = buildActionDescription(pa.tool, pa.args);
+              writer.write(enc.encode(`event: pending_action\ndata: ${JSON.stringify({ tool: pa.tool, args: pa.args, description: desc })}\n\n`));
+            }
+            writer.write(enc.encode("data: [DONE]\n\n"));
+            writer.close();
+            return;
+          }
+          clearTimeout(followTimeout);
+
+          if (!followUpResp.ok) {
+            sendSSE(`\n\n_Tool data retrieved but AI summary failed. Raw data above._`);
+            for (const pa of pendingActions) {
+              const desc = buildActionDescription(pa.tool, pa.args);
+              writer.write(enc.encode(`event: pending_action\ndata: ${JSON.stringify({ tool: pa.tool, args: pa.args, description: desc })}\n\n`));
+            }
+            writer.write(enc.encode("data: [DONE]\n\n"));
+            writer.close();
+            return;
+          }
+
+          // ── Stream follow-up response directly to client ──
+          const followReader = followUpResp.body!.getReader();
+          const followDecoder = new TextDecoder();
+          let followBuf = "";
+
+          // Clear the progress message by starting fresh content
+          sendSSE("");
+
+          while (true) {
+            const { done, value } = await followReader.read();
+            if (done) break;
+            followBuf += followDecoder.decode(value, { stream: true });
+
+            let nl2: number;
+            while ((nl2 = followBuf.indexOf("\n")) !== -1) {
+              let line2 = followBuf.slice(0, nl2);
+              followBuf = followBuf.slice(nl2 + 1);
+              if (line2.endsWith("\r")) line2 = line2.slice(0, -1);
+              if (line2.startsWith("data: ") && line2.slice(6).trim() !== "[DONE]") {
+                writer.write(enc.encode(line2 + "\n"));
+              }
+            }
+          }
+
+          // Send pending actions after AI response
+          for (const pa of pendingActions) {
+            const desc = buildActionDescription(pa.tool, pa.args);
+            writer.write(enc.encode(`event: pending_action\ndata: ${JSON.stringify({ tool: pa.tool, args: pa.args, description: desc })}\n\n`));
+          }
+
+          writer.write(enc.encode("data: [DONE]\n\n"));
+          writer.close();
+        } catch (bgErr) {
+          console.error("Background tool processing error:", bgErr);
+          try {
+            sendSSE(`\n\n⚠️ Error processing tools: ${bgErr instanceof Error ? bgErr.message : "Unknown error"}`);
+            writer.write(enc.encode("data: [DONE]\n\n"));
+            writer.close();
+          } catch { /* writer may be closed */ }
         }
+      })();
 
-        // Build response: AI follow-up chunks + pending_action events
-        const encoder = new TextEncoder();
-        let ssePayload = followChunks.join("") + "\n";
-
-        for (const pa of pendingActions) {
-          // Build a human-readable description
-          const desc = buildActionDescription(pa.tool, pa.args);
-          ssePayload += `event: pending_action\ndata: ${JSON.stringify({ tool: pa.tool, args: pa.args, description: desc })}\n\n`;
-        }
-
-        ssePayload += "data: [DONE]\n\n";
-        return new Response(encoder.encode(ssePayload), {
-          headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
-        });
-      }
-
-      // No pending actions — just forward the follow-up response
-      return new Response(followUpResp.body, {
+      return new Response(readable, {
         headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
       });
     }
