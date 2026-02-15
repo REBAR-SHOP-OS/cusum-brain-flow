@@ -103,27 +103,36 @@ export function WebsiteChat({ currentPagePath, onWriteConfirmed }: WebsiteChatPr
 
     let messageText = input.trim();
     const contextPrefix = `[Currently viewing: rebar.shop${currentPagePath}]\n`;
+    const imageUrls: string[] = [];
 
     // Upload attachments
     if (attachments.length > 0) {
       setAttachments((prev) => prev.map((a) => ({ ...a, uploading: true })));
-      const urls: string[] = [];
       for (const att of attachments) {
         const url = await uploadFile(att.file);
-        if (url) urls.push(url);
+        if (url) {
+          if (att.file.type.startsWith("image/")) {
+            imageUrls.push(url);
+          } else {
+            // Non-image files still get appended as links
+            messageText = messageText
+              ? `${messageText}\n\n[Attached file](${url})`
+              : `[Attached file](${url})`;
+          }
+        }
       }
       // Cleanup
       attachments.forEach((a) => URL.revokeObjectURL(a.previewUrl));
       setAttachments([]);
 
-      if (urls.length > 0) {
-        const fileLinks = urls.map((u) => `[Attached file](${u})`).join("\n");
-        messageText = messageText ? `${messageText}\n\n${fileLinks}` : fileLinks;
+      // Add image note to display text (but actual analysis goes via imageUrls)
+      if (imageUrls.length > 0 && !messageText) {
+        messageText = "Analyze this image";
       }
     }
 
     if (!messageText) return;
-    sendMessage(contextPrefix + messageText);
+    sendMessage(contextPrefix + messageText, imageUrls.length > 0 ? imageUrls : undefined);
     setInput("");
   }, [input, attachments, isStreaming, pendingAction, currentPagePath, sendMessage]);
 
