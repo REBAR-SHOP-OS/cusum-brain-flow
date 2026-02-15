@@ -6328,6 +6328,165 @@ export type Database = {
           },
         ]
       }
+      support_conversations: {
+        Row: {
+          assigned_to: string | null
+          company_id: string
+          created_at: string
+          id: string
+          last_message_at: string | null
+          metadata: Json | null
+          resolved_at: string | null
+          status: string
+          tags: string[] | null
+          updated_at: string
+          visitor_email: string | null
+          visitor_name: string | null
+          visitor_token: string
+          widget_config_id: string | null
+        }
+        Insert: {
+          assigned_to?: string | null
+          company_id: string
+          created_at?: string
+          id?: string
+          last_message_at?: string | null
+          metadata?: Json | null
+          resolved_at?: string | null
+          status?: string
+          tags?: string[] | null
+          updated_at?: string
+          visitor_email?: string | null
+          visitor_name?: string | null
+          visitor_token?: string
+          widget_config_id?: string | null
+        }
+        Update: {
+          assigned_to?: string | null
+          company_id?: string
+          created_at?: string
+          id?: string
+          last_message_at?: string | null
+          metadata?: Json | null
+          resolved_at?: string | null
+          status?: string
+          tags?: string[] | null
+          updated_at?: string
+          visitor_email?: string | null
+          visitor_name?: string | null
+          visitor_token?: string
+          widget_config_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_conversations_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "support_conversations_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "profiles_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "support_conversations_widget_config_id_fkey"
+            columns: ["widget_config_id"]
+            isOneToOne: false
+            referencedRelation: "support_widget_configs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      support_messages: {
+        Row: {
+          content: string
+          content_type: string | null
+          conversation_id: string
+          created_at: string
+          id: string
+          is_internal_note: boolean | null
+          metadata: Json | null
+          sender_id: string | null
+          sender_type: string
+        }
+        Insert: {
+          content: string
+          content_type?: string | null
+          conversation_id: string
+          created_at?: string
+          id?: string
+          is_internal_note?: boolean | null
+          metadata?: Json | null
+          sender_id?: string | null
+          sender_type?: string
+        }
+        Update: {
+          content?: string
+          content_type?: string | null
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          is_internal_note?: boolean | null
+          metadata?: Json | null
+          sender_id?: string | null
+          sender_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "support_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      support_widget_configs: {
+        Row: {
+          allowed_domains: string[] | null
+          brand_color: string | null
+          brand_name: string | null
+          company_id: string
+          created_at: string
+          enabled: boolean | null
+          id: string
+          offline_message: string | null
+          updated_at: string
+          welcome_message: string | null
+          widget_key: string
+        }
+        Insert: {
+          allowed_domains?: string[] | null
+          brand_color?: string | null
+          brand_name?: string | null
+          company_id: string
+          created_at?: string
+          enabled?: boolean | null
+          id?: string
+          offline_message?: string | null
+          updated_at?: string
+          welcome_message?: string | null
+          widget_key?: string
+        }
+        Update: {
+          allowed_domains?: string[] | null
+          brand_color?: string | null
+          brand_name?: string | null
+          company_id?: string
+          created_at?: string
+          enabled?: boolean | null
+          id?: string
+          offline_message?: string | null
+          updated_at?: string
+          welcome_message?: string | null
+          widget_key?: string
+        }
+        Relationships: []
+      }
       system_learnings: {
         Row: {
           bar_code: string | null

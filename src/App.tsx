@@ -60,6 +60,7 @@ import Transcribe from "./pages/Transcribe";
 import TranscribeWatch from "./pages/TranscribeWatch";
 import WebsiteManager from "./pages/WebsiteManager";
 import SeoModule from "./pages/SeoModule";
+import SupportInbox from "./pages/SupportInbox";
 
 import LiveChat from "./pages/LiveChat";
 import EmailMarketing from "./pages/EmailMarketing";
@@ -111,6 +112,7 @@ const App = () => (
 
                     <Route path="/website" element={<P><WebsiteManager /></P>} />
                     <Route path="/seo" element={<P><SeoModule /></P>} />
+                    <Route path="/support-inbox" element={<P><SupportInbox /></P>} />
 
                     {/* Sales */}
                     <Route path="/pipeline" element={<P><Pipeline /></P>} />

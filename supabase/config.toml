@@ -252,3 +252,6 @@ verify_jwt = false
 
 [functions.seo-link-audit]
 verify_jwt = false
+
+[functions.support-chat]
+verify_jwt = false
