@@ -133,7 +133,7 @@ export default function WebsiteManager() {
           onDeviceChange={setDevice}
           onRefresh={refreshIframe}
         />
-        <div className="flex-1">{rightPanelContent}</div>
+        <div className="flex-1 overflow-hidden min-h-0">{rightPanelContent}</div>
       </div>
     );
   }
