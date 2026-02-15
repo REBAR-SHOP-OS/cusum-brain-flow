@@ -1,83 +1,56 @@
 
-## Fix: Audio and Ringtone Playback Failures
+
+## Fix: Notification Sound Still Not Playing on Other Devices
 
 ### Root Cause
 
-Mobile browsers (especially iOS Safari) **block `audio.play()`** unless it happens during a direct user tap/click. The app has two categories of audio:
+The current audio unlock pattern in `audioPlayer.ts` has three bugs that cause it to silently fail on many mobile devices:
 
-1. **User-initiated playback** (recording playback, TTS) -- these are triggered by button clicks but the `await fetch()` before `audio.play()` breaks the "user gesture" chain on iOS, causing the play call to be rejected.
-2. **Background notification sounds** (`playMockingjayWhistle`) -- these fire from realtime subscription callbacks with no user gesture at all, so they are always blocked on mobile.
+1. **`{ once: true }` kills retries**: The unlock listeners fire only on the very first click/touch. If that first interaction happens before the module is loaded, or the AudioContext creation fails for any reason, unlock never happens again.
 
-Additionally, `playMockingjayWhistle()` silently swallows all errors (`catch {}`) so failures are invisible.
+2. **Premature `unlocked = true`**: The flag is set to `true` immediately after creating the AudioContext, even if `audioCtx.state` is still `"suspended"`. The `resume()` call is fire-and-forget (`catch(() => {})`), so on iOS Safari the context often stays suspended and all subsequent `playNotificationSound()` calls silently fail.
 
-### Solution: Audio Unlock Pattern
+3. **No pre-loading**: Each notification fetches `mockingjay.mp3` from the network via `fetch()` + `decodeAudioData()`. On slow connections or first-time loads, there's a noticeable delay or timeout, and the sound never plays.
 
-Create a shared audio utility that:
-- **Pre-unlocks** the Web Audio context on the user's first tap anywhere on the page
-- Provides a reliable `playSound()` function that works on mobile
-- For user-initiated playback (recordings/TTS), pre-creates the `Audio` element during the click handler *before* the async fetch
+### Fixes
 
-### Changes
+**1. Robust unlock in `src/lib/audioPlayer.ts`**
 
-**1. New file: `src/lib/audioPlayer.ts`**
+- Remove `{ once: true }` -- keep listening until unlock actually succeeds
+- Only set `unlocked = true` after confirming `audioCtx.state === "running"`
+- After successful unlock, pre-fetch and cache the mockingjay.mp3 AudioBuffer so it's ready instantly
+- Add `await audioCtx.resume()` (not fire-and-forget) inside the unlock function
+- Manually remove listeners only after confirmed unlock
 
-A shared audio utility with:
-- `unlockAudio()` -- called once on first user interaction (`touchstart`/`click`) to create and resume an `AudioContext` and play a silent buffer. This permanently unlocks audio for the page session.
-- `playNotificationSound(url)` -- plays a sound using the unlocked audio context (works for background notifications)
-- `createPreloadedPlayer()` -- returns an Audio element created synchronously during user gesture, with a `.loadAndPlay(url)` method for deferred src assignment
+**2. Cache the decoded audio buffer**
 
-The unlock listener is attached once on import via `document.addEventListener("click", unlockAudio, { once: true })`.
+- Store the decoded `AudioBuffer` for `/mockingjay.mp3` in a module-level variable after the first successful decode
+- On subsequent plays, skip the `fetch()` + `decodeAudioData()` and play directly from cache
+- This eliminates network latency on repeat notifications
 
-**2. Update: `src/lib/notificationSound.ts`**
+**3. Add console logging for diagnostics**
 
-Replace:
-```typescript
-const audio = new Audio("/mockingjay.mp3");
-audio.play();
-```
-With:
-```typescript
-import { playNotificationSound } from "./audioPlayer";
-playNotificationSound("/mockingjay.mp3");
-```
-
-This uses the pre-unlocked AudioContext so notification sounds work even without a direct user gesture.
-
-**3. Update: `src/pages/Phonecalls.tsx` (recording playback)**
-
-Before the `await fetch()`, create the Audio element synchronously (while still in the click handler's microtask):
-```typescript
-const audio = new Audio();       // created during user gesture
-audio.crossOrigin = "anonymous";
-// ... fetch blob ...
-audio.src = blobUrl;             // assign src after fetch
-await audio.play();              // works because element was created in gesture
-```
-This is already nearly correct in the current code -- just need to ensure the Audio() constructor is called before any await.
-
-**4. Update: `src/components/inbox/CallDetailView.tsx`**
-
-Same pattern: move `new Audio()` before the `await fetch()` call so it's created in the user gesture context.
-
-**5. Update: `src/components/inbox/InlineCallSummary.tsx`**
-
-Same pattern as above.
-
-**6. Update: `src/components/teamhub/MessageThread.tsx` (TTS playback)**
-
-Same pattern: create `new Audio()` before `await fetch()` to the TTS endpoint.
+- Log `[audioPlayer] unlocked` when the context transitions to running
+- Log `[audioPlayer] playing from cache` vs `[audioPlayer] fetching audio` so failures are visible in console on all devices
 
 ### Technical Details
 
-**`src/lib/audioPlayer.ts`** (new file):
-- On first click/touch, create a Web `AudioContext`, play a silent buffer to unlock it, then keep the context alive
-- `playNotificationSound(url)`: fetch the audio file as ArrayBuffer, decode it via the AudioContext, and play through a BufferSourceNode -- this bypasses the `HTMLAudioElement.play()` autoplay restriction
-- Fallback: if AudioContext is unavailable, try `new Audio(url).play()` with `.catch(() => {})` to avoid unhandled rejections
+**File: `src/lib/audioPlayer.ts`** (rewrite)
 
-**Recording/TTS files** (4 files):
-- Move `const audio = new Audio()` to before any `await` statement in the click handler
-- This keeps audio element creation within the synchronous part of the user gesture
+```text
+Changes:
+- unlockAudio(): 
+  - await audioCtx.resume() instead of fire-and-forget
+  - Check audioCtx.state === "running" before setting unlocked = true
+  - If state is not running, don't set unlocked (listener stays active for next interaction)
+  - On success, remove listeners manually and pre-cache mockingjay.mp3
+  
+- audioBufferCache: Map<string, AudioBuffer> for decoded buffer caching
 
-**`src/lib/notificationSound.ts`**:
-- Switch to the AudioContext-based approach from `audioPlayer.ts`
-- Add `.catch()` logging so failures are visible in console instead of silently swallowed
+- playNotificationSound(url):
+  - Check cache first, skip fetch if buffer exists
+  - If not cached, fetch + decode + cache
+  - Fallback: try HTMLAudioElement with .play()
+```
+
+No other files need changes -- `notificationSound.ts` and `useNotifications.ts` already call the right functions.
