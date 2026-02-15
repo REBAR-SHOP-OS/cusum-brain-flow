@@ -182,13 +182,19 @@ export function MessageThread({
         continue;
       }
 
-      const { data: urlData } = supabase.storage
+      // Private bucket — use signed URL (7-day expiry)
+      const { data: signedData, error: signError } = await supabase.storage
         .from("team-chat-files")
-        .getPublicUrl(path);
+        .createSignedUrl(path, 604800);
+
+      if (signError || !signedData?.signedUrl) {
+        toast.error(`Failed to get URL for ${file.name}`);
+        continue;
+      }
 
       newAttachments.push({
         name: file.name,
-        url: urlData.publicUrl,
+        url: signedData.signedUrl,
         type: file.type,
         size: file.size,
       });
@@ -554,7 +560,7 @@ export function MessageThread({
 
           {/* Bottom bar */}
           <div className="flex items-center justify-between px-2 pb-1.5 md:pb-2">
-            <div className="flex items-center gap-0.5">
+            <div className="flex items-center gap-1">
               <EmojiPicker onSelect={handleEmojiSelect} disabled={isSending} />
               <VoiceInputButton
                 isListening={speech.isListening}
@@ -574,7 +580,7 @@ export function MessageThread({
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isSending || isUploading}
                 className={cn(
-                  "p-2 rounded-md transition-colors text-muted-foreground hover:text-foreground hover:bg-muted/50",
+                  "p-2.5 md:p-2 rounded-md transition-colors text-muted-foreground hover:text-foreground hover:bg-muted/50 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 flex items-center justify-center",
                   (isSending || isUploading) && "opacity-50 cursor-not-allowed"
                 )}
                 title="Attach file"

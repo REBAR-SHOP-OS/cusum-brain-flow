@@ -1,14 +1,19 @@
 import { supabase } from "@/integrations/supabase/client";
 
-let permissionRequested = false;
+const PERMISSION_ASKED_KEY = "notification_permission_asked";
 
 export async function requestNotificationPermission(): Promise<void> {
-  if (permissionRequested) return;
-  permissionRequested = true;
   try {
-    if ("Notification" in window && Notification.permission === "default") {
-      await Notification.requestPermission();
-    }
+    if (!("Notification" in window)) return;
+
+    // Already granted or denied — nothing to do
+    if (Notification.permission !== "default") return;
+
+    // Only prompt once per device (persisted across reloads)
+    if (localStorage.getItem(PERMISSION_ASKED_KEY)) return;
+
+    localStorage.setItem(PERMISSION_ASKED_KEY, "true");
+    await Notification.requestPermission();
   } catch {
     // Silently fail
   }

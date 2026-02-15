@@ -21,7 +21,7 @@ export function VoiceInputButton({ isListening, isSupported, onToggle, disabled 
           disabled={isDisabled}
           aria-label={isListening ? "Stop voice input" : "Voice input"}
           className={cn(
-            "p-2 rounded-md transition-all",
+            "p-2.5 md:p-2 rounded-md transition-all min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 flex items-center justify-center",
             isListening
               ? "text-destructive bg-destructive/10 animate-pulse"
               : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
