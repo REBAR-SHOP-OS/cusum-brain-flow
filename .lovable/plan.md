@@ -1,142 +1,119 @@
 
-# Grant Website Access to Selected Agents + Proactive Problem Reporting
 
-## Overview
-Give 6 circled agents (Pixel, Prism, Buddy, Commet, Penn, Seomi) full read/write access to rebar.shop via WordPress API tools, and build a proactive website health monitoring system that reports issues to you with **Fix** and **Decline** buttons.
+# Audit, Improve & Modify rebar.shop
 
-## Selected Agents
-- **Pixel** (Social Media) -- can check/update website content related to social integration
-- **Prism** (Data & Insights) -- can audit site analytics, broken pages, performance
-- **Buddy** (Business Development) -- can review landing pages, CTAs, competitive positioning
-- **Commet** (Web Builder) -- already the web builder agent, needs WP tools
-- **Penn** (Copywriting) -- can audit/improve website copy directly
-- **Seomi** (SEO & Search) -- already has WP tools (no change needed)
+## Audit Results (Live Scan)
 
-## Changes
+The automated health check found **8 issues** across 24 pages, 9 posts, and 0 products (WooCommerce returned empty):
 
-### 1. Extend WordPress Tools to 5 More Agents in `ai-agent`
+### CRITICAL (2 issues)
+| Issue | Page | Impact |
+|-------|------|--------|
+| Duplicate slug `rebar-fabrication-2` | Page #20703 "Rebar Fabrication" | SEO authority split -- two identical pages competing |
+| Duplicate slug `20579-2` | Page #20579 "Rebar AI Assistant" | Broken URL, SEO dilution |
 
-**File: `supabase/functions/ai-agent/index.ts`**
+Both pages serve identical content to their non-suffixed counterparts, splitting search authority.
 
-Currently, WP tools (wp_list_posts, wp_list_pages, wp_get_post, wp_get_page, wp_list_products, wp_update_post, wp_update_page, wp_create_post, scrape_page) are only added when `agent === "seo"`. 
+### WARNING (6 issues)
+| Issue | Page | Impact |
+|-------|------|--------|
+| Missing meta description | "My account" (#10) | Poor search snippets |
+| Missing meta description | "Cart" (#8) | Poor search snippets |
+| Missing meta description | "Shop" (#7) | Poor search snippets |
+| Missing meta description | "Track Your Order" (#9281) | Poor search snippets |
+| Missing meta description | "Blog" (#107) | Poor search snippets |
+| No blog post in 130 days | Last post: Oct 2025 | Declining organic rankings |
 
-Change the condition from:
-```typescript
-...(agent === "seo" ? [ ...wpTools ] : [])
-```
-to:
-```typescript
-...((["seo","social","data","bizdev","webbuilder","copywriting"].includes(agent)) ? [ ...wpTools ] : [])
-```
+### Additional Observations (from live scrape)
+- Homepage links to `/rebar-fabrication-2/` instead of `/rebar-fabrication/` -- internal links point to the duplicate
+- Some product images use lazy-load SVG placeholders that never load (broken below-the-fold images)
+- "About Us" copy is keyword-stuffed with awkward transition words ("Moreover", "As a result", "Consequently" on every sentence)
+- Footer only links to Facebook and Instagram -- missing LinkedIn, Google Business Profile
 
-Similarly, expand the tool-call handler condition from `agent === "seo"` to the same set so all 6 agents can execute WP tool calls. Update the `wp_change_log` agent name to use the actual agent code instead of hardcoded "seomi".
+---
 
-### 2. Update Agent System Prompts
+## Fix Plan
 
-**File: `supabase/functions/ai-agent/index.ts`**
+### 1. Fix Duplicate Slugs (Seomi -- Critical)
 
-Add WordPress access instructions to 5 agent prompts (Seomi already has them):
+**Pages affected:** #20703 (`rebar-fabrication-2`) and #20579 (`20579-2`)
 
-- **Pixel**: Add section about checking rebar.shop for social media content alignment, verifying product pages match social campaigns
-- **Prism**: Add section about website data auditing -- page inventory, broken content, publishing gaps
-- **Buddy**: Add section about reviewing landing pages, CTAs, competitor positioning on the website
-- **Commet**: Add full WordPress toolkit instructions (similar to Seomi but focused on content/design)
-- **Penn**: Add section about auditing and improving website copy, headlines, CTAs, product descriptions
+For each duplicate page:
+- Use `wp_update_page` to change the slug to a unique, SEO-friendly value (e.g., `rebar-fabrication-toronto` for #20703)
+- OR if the page is truly redundant (identical content), set its status to `draft` to remove it from indexing
+- Update all internal links on the homepage that point to `-2` URLs to point to the canonical version
 
-Each prompt addition will include:
-- List of available WP tools
-- Instruction to always read before writing
-- Instruction to report problems proactively
+**File:** `supabase/functions/ai-agent/index.ts` -- no code changes needed, Seomi already has these tools
 
-### 3. Add Website Health Check to `generate-suggestions`
+### 2. Add Meta Descriptions to 5 Pages (Seomi)
 
-**File: `supabase/functions/generate-suggestions/index.ts`**
+Use `wp_update_page` to set the `excerpt` field on each page:
 
-Add a new website health check section that runs during suggestion generation:
-1. Fetch posts, pages, and products from rebar.shop via WPClient
-2. Check for common issues:
-   - Pages/posts with missing meta descriptions
-   - Draft posts older than 30 days (stale drafts)
-   - Products with no images or short descriptions
-   - Pages with duplicate slugs or "-2" suffixes
-   - Blog silence (no new post in 30+ days)
-3. Create suggestions assigned to the appropriate agent:
-   - SEO issues --> Seomi
-   - Content quality issues --> Penn
-   - Product page issues --> Commet
-   - Social content gaps --> Pixel
-   - Analytics concerns --> Prism
-   - Business positioning --> Buddy
+| Page | Proposed Meta Description |
+|------|--------------------------|
+| Shop (#7) | "Browse custom rebar fabrication products -- stirrups, dowels, cages, and bend bars. CSA-certified. Same-day quotes. Ontario-wide delivery." |
+| Cart (#8) | "Review your rebar order and proceed to checkout. Fast turnaround and Ontario-wide delivery from Rebar.Shop." |
+| My Account (#10) | "Manage your Rebar.Shop account -- view orders, track deliveries, and update your profile." |
+| Track Your Order (#9281) | "Track your rebar fabrication order status in real-time. Get delivery updates and estimated arrival times." |
+| Blog (#107) | "Expert insights on rebar fabrication, construction reinforcement, and steel industry news from Rebar.Shop." |
 
-### 4. Add "Fix" and "Decline" Buttons to Suggestion Cards
+### 3. Publish a Fresh Blog Post (Penn)
 
-**File: `src/components/agent/AgentSuggestionCard.tsx`**
+Create a new blog post to break the 130-day content silence. Topic suggestion:
+- "2026 Rebar Fabrication Trends in Ontario" or "How to Choose the Right Rebar Size for Your Foundation"
+- Use `wp_create_post` with status `draft` so you can review before publishing
 
-For website-related suggestions (where `entity_type` starts with `"wp_"`):
-- Replace the generic "Act" button with a **"Fix"** button (green, wrench icon) that navigates to `/website` and pre-loads the fix context
-- Add a **"Decline"** button (red, X icon) that dismisses the suggestion with a reason field
-- Keep "Snooze" as-is
+### 4. Improve About Us Copy (Penn)
 
-### 5. Create `website-health-check` Edge Function
+The current copy is over-optimized with forced transition words. Use `wp_update_page` on the About Us page to:
+- Remove excessive "Moreover", "As a result", "Consequently" fillers
+- Write natural, confident prose that still includes key phrases
+- Keep existing heading structure intact (additive-only policy)
 
-**New file: `supabase/functions/website-health-check/index.ts`**
+### 5. Fix Internal Links on Homepage (Commet)
 
-A dedicated function that:
-1. Uses WPClient to scan rebar.shop
-2. Checks for common issues (missing meta, stale content, broken slugs, etc.)
-3. Returns a structured report of issues found
-4. Can be called by `generate-suggestions` or manually triggered
+The homepage links to `/rebar-fabrication-2/` in multiple places. After fixing the duplicate slug, use `wp_update_page` on the homepage to replace all `-2` references with the canonical URL.
 
-This keeps the health check logic reusable and doesn't bloat the suggestion generator.
+### 6. Auto-Generate Suggestions on Schedule
 
-### 6. Register New Function in Config
+The `generate-suggestions` function already calls `website-health-check` and creates agent suggestions with Fix/Decline buttons. No additional code changes needed -- this is already live.
 
-**File: `supabase/config.toml`**
-
-Add `[functions.website-health-check]` with `verify_jwt = false`.
+---
 
 ## Technical Details
 
-### WordPress Tool Condition Change (ai-agent lines ~4162-4312)
-```typescript
-// Before:
-...(agent === "seo" ? [ /* wp tools */ ] : [])
+### No Code Changes Required
 
-// After:
-const WP_AGENTS = ["seo", "social", "data", "bizdev", "webbuilder", "copywriting"];
-...(WP_AGENTS.includes(agent) ? [ /* wp tools */ ] : [])
-```
+All the tools and infrastructure are already in place from the previous implementation:
+- `website-health-check` edge function is deployed and returning results
+- `generate-suggestions` integrates health check results into agent suggestions
+- `AgentSuggestionCard` has Fix/Decline buttons for `wp_*` entity types
+- All 6 agents (Seomi, Pixel, Prism, Buddy, Commet, Penn) have WP tools enabled
 
-### Tool Call Handler Expansion (ai-agent lines ~4399-4533)
-```typescript
-// Before:
-if (agent === "seo" && tc.function?.name?.startsWith("wp_") || ...)
+### Execution Approach
 
-// After:
-const WP_AGENTS = ["seo", "social", "data", "bizdev", "webbuilder", "copywriting"];
-if (WP_AGENTS.includes(agent) && (tc.function?.name?.startsWith("wp_") || tc.function?.name === "scrape_page"))
-```
+The fixes will be executed by sending commands to the agents through their chat interfaces:
 
-### Suggestion Card "Fix" Button Logic
-For `entity_type === "wp_post"` or `"wp_page"` or `"wp_product"`:
-- "Fix" button navigates to `/website` and triggers the agent chat with the fix prompt
-- "Decline" button marks suggestion as dismissed with status "declined"
+1. **Navigate to `/agent/seo`** and instruct Seomi to:
+   - Fix the two duplicate slugs
+   - Add meta descriptions to the 5 pages
 
-### Website Health Check Issues Detected
-| Issue | Assigned Agent | Severity |
-|-------|---------------|----------|
-| Missing meta description | Seomi | warning |
-| Stale draft (30+ days) | Penn | info |
-| Product missing image | Commet | warning |
-| Duplicate slug (-2 suffix) | Seomi | critical |
-| No blog post in 30+ days | Penn | warning |
-| Landing page weak CTA | Buddy | info |
-| Social content mismatch | Pixel | info |
-| Page performance issue | Prism | warning |
+2. **Navigate to `/agent/copywriting`** and instruct Penn to:
+   - Draft a new blog post
+   - Improve the About Us page copy
 
-## Files Modified
-1. `supabase/functions/ai-agent/index.ts` -- expand WP tools + handlers to 6 agents, update prompts
-2. `supabase/functions/generate-suggestions/index.ts` -- add website health check section
-3. `src/components/agent/AgentSuggestionCard.tsx` -- add Fix/Decline buttons for WP suggestions
-4. `supabase/functions/website-health-check/index.ts` -- new health check function
-5. `supabase/config.toml` -- register new function
+3. **Navigate to `/agent/webbuilder`** and instruct Commet to:
+   - Update homepage internal links after slug fixes
+
+All changes will be logged to `wp_change_log` for audit trail and rollback capability.
+
+### What Gets Fixed Immediately vs. Requires Your Approval
+
+| Fix | Method | Approval |
+|-----|--------|----------|
+| Duplicate slugs | Agent updates via WP API | You confirm in agent chat |
+| Meta descriptions | Agent updates via WP API | You confirm in agent chat |
+| New blog post | Created as draft | You review and publish |
+| About Us rewrite | Agent updates via WP API | You confirm in agent chat |
+| Homepage link fixes | Agent updates via WP API | You confirm in agent chat |
+
