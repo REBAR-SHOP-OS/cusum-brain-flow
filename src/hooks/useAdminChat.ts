@@ -175,7 +175,7 @@ export function useAdminChat(currentPage?: string) {
     };
   }, []);
 
-  const sendMessage = useCallback(async (input: string) => {
+  const sendMessage = useCallback(async (input: string, imageUrls?: string[]) => {
     if (!input.trim() || isStreaming) return;
 
     const userEntry: AdminChatEntry = {
@@ -229,10 +229,13 @@ export function useAdminChat(currentPage?: string) {
         if (!receivedContent) controller.abort();
       }, 90000);
 
+      const fetchBody: Record<string, any> = { messages: history, currentPage: currentPage || window.location.pathname };
+      if (imageUrls && imageUrls.length > 0) fetchBody.imageUrls = imageUrls;
+
       const resp = await fetch(CHAT_URL, {
         method: "POST",
         headers,
-        body: JSON.stringify({ messages: history, currentPage: currentPage || window.location.pathname }),
+        body: JSON.stringify(fetchBody),
         signal: controller.signal,
       });
 

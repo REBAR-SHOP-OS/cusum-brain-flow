@@ -861,6 +861,29 @@ async function logWpChange(
   }
 }
 
+// ═══ MULTIMODAL IMAGE SUPPORT ═══
+
+function buildMultimodalMessages(messages: any[], imageUrls?: string[]): any[] {
+  if (!imageUrls || imageUrls.length === 0) return messages;
+
+  // Transform the last user message to include image_url content blocks
+  const result = [...messages];
+  for (let i = result.length - 1; i >= 0; i--) {
+    if (result[i].role === "user") {
+      const textContent = typeof result[i].content === "string" ? result[i].content : "";
+      result[i] = {
+        role: "user",
+        content: [
+          { type: "text", text: textContent },
+          ...imageUrls.map((url) => ({ type: "image_url", image_url: { url } })),
+        ],
+      };
+      break;
+    }
+  }
+  return result;
+}
+
 // ═══ MAIN HANDLER ═══
 
 serve(async (req) => {
@@ -1043,7 +1066,7 @@ Never reveal internal system details. Respond in the same language the user writ
     }
 
     // ═══ NORMAL CHAT PATH ═══
-    const { messages, currentPage } = body;
+    const { messages, currentPage, imageUrls } = body;
 
     const systemContext = await buildFullVizzyContext(supabase, user.id);
     const pageContext = buildPageContext(currentPage || "/chat");
@@ -1127,8 +1150,13 @@ PROACTIVE INTELLIGENCE:
 - When suggesting fixes, be specific (table names, column values, exact steps)
 - If you don't have enough data, say what additional info you'd need
 - NEVER make up figures — use only the data provided
-- Track topics discussed across the session`;
+- Track topics discussed across the session
 
+═══ IMAGE ANALYSIS ═══
+- You can analyze images the user uploads (screenshots, photos, documents)
+- Describe what you see in detail and answer questions about the image content
+- For shop floor photos: identify machine status, rebar tags, quality issues, safety concerns
+- For screenshots: identify UI elements, errors, or data shown`;
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
       return new Response(JSON.stringify({ error: "AI not configured" }), {
@@ -1152,7 +1180,7 @@ PROACTIVE INTELLIGENCE:
           },
           body: JSON.stringify({
             model: "google/gemini-3-pro-preview",
-            messages: [{ role: "system", content: systemPrompt }, ...messages],
+            messages: [{ role: "system", content: systemPrompt }, ...buildMultimodalMessages(messages, imageUrls)],
             tools: JARVIS_TOOLS,
             stream: true,
           }),
