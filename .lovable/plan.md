@@ -1,27 +1,17 @@
 
 
-## Deep-Training Upgrade: Forge (Shop Floor Commander)
+## Deep-Training Upgrade: Atlas (Delivery Navigator)
 
 ### Current State Audit
 
 | Area | What Exists | Gap |
 |------|------------|-----|
-| **System Prompt** | Basic 7-responsibility prompt (lines 1820-1845) | No morning briefing, no team directory, no safety protocols, no machine capability references |
-| **Context Data** | 6 tables loaded: machines, machine_runs, cut_plans, cut_plan_items, work_orders, floor_stock | Missing: machine_capabilities (max bar sizes per machine), operator profiles, completed runs (last 7 days for throughput), orders linked to work orders |
-| **Morning Briefing** | None -- no greeting detection for shopfloor | Penny and Commander both have structured briefings; Forge has zero |
-| **Model Routing** | Complex: `gemini-2.5-flash` (3K tokens). Simple: `flash-lite` (1.5K tokens) | Complex production analysis needs `gemini-2.5-pro` for multi-factor bottleneck reasoning |
-| **Tools** | Only `create_notifications` (shared) | No tool for machine status updates, no escalation to ARIA for delivery/material issues |
-
-### Existing Machines in Database
-
-| Machine | Type | Model | Status |
-|---------|------|-------|--------|
-| CUTTER-01 | cutter | GENSCO DTX 400 | running |
-| CUTTER-02 | cutter | GENSCO DTX 400 | idle |
-| BENDER-01 | bender | GMS B36 | idle |
-| BENDER-02 | bender | GMS B45 | idle |
-| BENDER-03 | bender | Rod Chomper BR18 | idle |
-| SPIRAL-01 | other | Circular Spiral Bender | idle |
+| **System Prompt** | Basic 6-responsibility prompt (25 lines) | No morning briefing, no team directory, no QC gate awareness, no ARIA escalation, no Ontario geography knowledge |
+| **Context Data** | 3 queries: deliveries (20), delivery_stops (50), orders (15) | Missing: customer names for stops, work_order completion %, QC status of orders, driver history/patterns, production readiness |
+| **Morning Briefing** | None | Forge and Commander both have structured briefings; Atlas has zero |
+| **Model Routing** | Single tier: `gemini-2.5-flash` (2K tokens, temp 0.4) | Route planning and multi-stop optimization need `gemini-2.5-pro`; quick status checks could use `flash-lite` |
+| **QC Gate** | DB trigger `block_delivery_without_qc` exists but Atlas has no awareness | Atlas should warn dispatchers before loading if QC is incomplete |
+| **Tables** | deliveries (0 rows), delivery_stops (0 rows) | Schema is ready but empty -- Atlas must handle "no data yet" gracefully |
 
 ---
 
@@ -29,93 +19,82 @@
 
 #### 1. Upgrade System Prompt
 
-Expand Forge's prompt from the current 25 lines to a comprehensive production commander prompt:
+Expand Atlas from 25 lines to a full logistics commander prompt:
 
-**New sections to add:**
-
-- **Team Directory**: Kourosh Zand (Shop Supervisor), operators by machine assignment
-- **Machine Capabilities Reference**: "When assigning work, check `machineCapabilities` context -- each machine has max bar size and max bars per run"
-- **Safety Protocols**: Always flag safety concerns first. Overloaded machines, exceeded capacity, missing operator assignments
-- **Production Priority Logic**: Work orders with nearest `scheduled_start` get priority. Orders with `in_production` status take precedence over `confirmed`
-- **Bottleneck Detection Rules**: Explicit formulas:
-  - Cutter queue > 5 items AND bender queue = 0 --> "Bender starving"
-  - Machine running > 12 hours --> "Cooldown recommended"
-  - Cut plan item at < 50% progress with scheduled_end in < 3 days --> "At risk"
-- **ARIA Escalation Protocol**: When Forge detects material shortage, delivery conflict, or capacity issue affecting customer promises, output structured escalation tag
-
-**File**: `supabase/functions/ai-agent/index.ts` -- replace lines 1820-1845
+**New sections:**
+- **Team Directory**: Driver roster, dispatcher name, vehicle fleet info
+- **Ontario Geography Awareness**: GTA corridors, 400-series highways, common construction site areas (Brampton, Mississauga, Vaughan, Hamilton, etc.)
+- **QC Gate Rules**: "Before confirming any delivery as ready-to-load, check `qc_evidence_uploaded` and `qc_final_approved` on linked orders. If either is false, flag with a warning -- the DB trigger will block the delivery anyway"
+- **Load Planning Logic**: Group stops by geographic proximity, heaviest orders loaded first (LIFO unloading), max stops per truck guidance
+- **Delay Detection Rules**:
+  - Scheduled delivery is today but status still "planned" --> flag as "Not dispatched"
+  - Stop has arrival_time but no departure_time for > 2 hours --> "Driver stuck at site"
+  - Order has `required_date` < 48 hours but no delivery scheduled --> "Unscheduled urgent order"
+- **ARIA Escalation Protocol**: `[ATLAS-ESCALATE]` tag for production delays affecting delivery promises, capacity issues, or customer complaints
 
 #### 2. Enrich Context Data
 
-Add to `fetchContext` when `agent === "shopfloor"`:
+Add to `fetchContext` when `agent === "delivery"`:
 
-| New Data | Table | Query | Purpose |
-|----------|-------|-------|---------|
-| Machine capabilities | `machine_capabilities` | All rows (small table) | Know max bar size, max bars per machine |
-| Operator profiles | `profiles` via `machines.current_operator_profile_id` | Join on active machines | Know who is operating what |
-| Completed runs (7 days) | `machine_runs` where status=completed, last 7 days | Throughput/productivity analysis |
-| Linked orders | `orders` via `work_orders.order_id` | Status, order_number, scheduled dates | Know delivery deadlines driving production priority |
-| Scrap tracking | `machine_runs` | Sum scrap_qty by machine, last 7 days | Waste analysis |
-
-**File**: `supabase/functions/ai-agent/index.ts` -- expand the shopfloor context block (lines 2626-2672)
+| New Data | Source | Query | Purpose |
+|----------|--------|-------|---------|
+| Customer names | `contacts` via `delivery_stops.customer_id` | Join customer_id to get name/phone | Show WHO is receiving, not just address |
+| Order QC status | `orders` | `qc_evidence_uploaded`, `qc_final_approved` on delivery-linked orders | QC gate awareness |
+| Order required_date | `orders` | Already in schema | Know delivery urgency |
+| Work order progress | `work_orders` joined via `orders` | Status, completion % | Know if production is ready for delivery |
+| Recent delivery history | `deliveries` where status = completed, last 14 days | Past performance patterns |
+| Orders needing delivery | `orders` where status in ('confirmed','in_production') and required_date within 7 days | Proactive delivery planning |
 
 #### 3. Add Morning Briefing
 
-When Forge detects a greeting, generate a structured **Shop Floor Briefing**:
+Greeting-triggered structured **Delivery Briefing**:
 
 ```text
-**Shop Floor Briefing -- [Date]**
+**Delivery Briefing -- [Date]**
 
-### 1. Machine Status
-| Machine | Status | Operator | Current Run | Pieces Done/Total |
-(from machineStatus + activeRuns + operator profiles)
+### 1. Today's Dispatches
+| Delivery # | Driver | Vehicle | Stops | Status | First Stop ETA |
+(from deliveries where scheduled_date = today)
 
-### 2. Production Queue
-| Priority | Work Order | Order # | Bar Code | Pieces | Phase | Due Date |
-(from cutPlanItems sorted by linked order delivery date)
+### 2. Stop Details
+| Stop | Customer | Address | Order # | QC Ready? | Status |
+(from delivery_stops linked to today's deliveries)
 
-### 3. Bottlenecks & Risks
-- Items at risk (< 50% progress, due in < 3 days)
-- Machine imbalances (cutter queue vs bender queue)
-- Machines down or blocked
+### 3. Orders Awaiting Delivery
+| Order # | Customer | Required Date | Production Status | QC Status |
+(orders with required_date in next 7 days, no delivery scheduled)
 
-### 4. Yesterday's Output
-| Machine | Runs Completed | Pieces | Scrap | Efficiency |
-(from completedRuns last 24 hours)
+### 4. Delivery Risks
+- Late deliveries (past required_date)
+- QC incomplete on scheduled deliveries
+- Unassigned orders due soon
+- Driver availability gaps
 
-### 5. Actions for Kourosh
-Numbered, specific, assigned with urgency level
+### 5. Actions for Dispatcher
+Numbered, specific, with urgency level
 ```
 
-Model override: `gemini-2.5-pro` with `maxTokens: 5000`, `temperature: 0.2`
-
-**File**: `supabase/functions/ai-agent/index.ts` -- add briefing detection block after Commander's briefing (around line 4573)
+Model override: `gemini-2.5-pro` with `maxTokens: 4500`, `temperature: 0.2`
 
 #### 4. Upgrade Model Routing
 
 | Query Type | Current | Upgraded |
 |-----------|---------|----------|
-| Complex (maintenance, bottleneck, cage, capacity, schedule) | `gemini-2.5-flash` (3K tokens) | `gemini-2.5-pro` (4K tokens, temp 0.2) |
-| Quick status | `flash-lite` (1.5K tokens) | Keep as-is |
-| Briefing | N/A | `gemini-2.5-pro` (5K tokens, temp 0.2) |
-
-**File**: `supabase/functions/ai-agent/index.ts` -- lines 3549-3566
+| Route planning, multi-stop optimization, briefing | `gemini-2.5-flash` (2K) | `gemini-2.5-pro` (4K, temp 0.2) |
+| Quick status checks ("where is delivery X?") | `gemini-2.5-flash` (2K) | `gemini-2.5-flash-lite` (1.5K) |
+| Default logistics queries | `gemini-2.5-flash` (2K) | Keep as-is |
 
 #### 5. Add ARIA Escalation
 
-Forge outputs a structured tag when detecting cross-department issues:
-
 ```text
-[FORGE-ESCALATE]{"to":"aria","reason":"Material shortage for WO-1234","urgency":"high","context":"Floor stock for 20M is 0, need 500 pieces by Friday"}[/FORGE-ESCALATE]
+[ATLAS-ESCALATE]{"to":"aria","reason":"Production delay on Order ORD-1234","urgency":"high","context":"Required date is Feb 17 but work order is only 30% complete. Customer expecting delivery."}[/ATLAS-ESCALATE]
 ```
 
 Trigger conditions:
-- Floor stock for a required bar code = 0 but cut plan needs it
-- Work order scheduled_start passed but status still "queued"
-- Machine down with active production queue > 10 items
-- Delivery deadline < 48 hours but production < 50% complete
-
-Added to the system prompt instructions.
+- Order required_date < 48 hours but production < 80% complete
+- QC blocked delivery with customer already notified of ETA
+- No driver/vehicle available for scheduled delivery
+- Multiple delivery exceptions on same route (customer complaints)
 
 ---
 
@@ -123,9 +102,8 @@ Added to the system prompt instructions.
 
 | File | Changes |
 |------|---------|
-| `supabase/functions/ai-agent/index.ts` | 1. Expand Forge system prompt with team directory, safety protocols, bottleneck formulas, ARIA escalation. 2. Enrich context with machine_capabilities, operator profiles, completed runs, linked orders, scrap data. 3. Add morning briefing detection block. 4. Upgrade model routing for complex queries to Pro. |
+| `supabase/functions/ai-agent/index.ts` | 1. Expand Atlas system prompt with QC gate rules, Ontario geography, load planning, delay detection, ARIA escalation. 2. Enrich context with customer names, QC status, order urgency, work order progress. 3. Add morning briefing detection block. 4. Upgrade model routing with Pro for complex queries and flash-lite for simple status. |
 
 ### No Database Changes Required
 
-All data sources already exist in the database (machines, machine_capabilities, machine_runs, work_orders, orders, floor_stock, profiles).
-
+All data sources (deliveries, delivery_stops, orders, contacts, work_orders) already exist.
