@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Loader2, Square, Trash2, ShieldAlert, CheckCircle2, XCircle, Paperclip, X, Image as ImageIcon } from "lucide-react";
+import { Send, Loader2, Square, Trash2, ShieldAlert, CheckCircle2, XCircle, Paperclip, X, Image as ImageIcon, Maximize2, Minimize2, Minus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -33,9 +33,11 @@ interface Attachment {
 interface WebsiteChatProps {
   currentPagePath: string;
   onWriteConfirmed?: () => void;
+  chatMode?: "normal" | "fullscreen" | "minimized";
+  onChatModeChange?: (mode: "normal" | "fullscreen" | "minimized") => void;
 }
 
-export function WebsiteChat({ currentPagePath, onWriteConfirmed }: WebsiteChatProps) {
+export function WebsiteChat({ currentPagePath, onWriteConfirmed, chatMode = "normal", onChatModeChange }: WebsiteChatProps) {
   const chat = useAdminChat(`/website`);
   const { messages, isStreaming, pendingAction, sendMessage, confirmAction, cancelAction, clearChat, cancelStream } = chat;
 
@@ -194,11 +196,31 @@ export function WebsiteChat({ currentPagePath, onWriteConfirmed }: WebsiteChatPr
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-border shrink-0">
         <h2 className="text-sm font-semibold">AI Job Site Editor</h2>
-        {messages.length > 0 && (
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={clearChat}>
-            <Trash2 className="w-3.5 h-3.5" />
+        <div className="flex items-center gap-0.5">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={() => onChatModeChange?.(chatMode === "fullscreen" ? "normal" : "fullscreen")}
+            title={chatMode === "fullscreen" ? "Exit fullscreen" : "Fullscreen"}
+          >
+            {chatMode === "fullscreen" ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
           </Button>
-        )}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={() => onChatModeChange?.(chatMode === "minimized" ? "normal" : "minimized")}
+            title={chatMode === "minimized" ? "Expand" : "Minimize"}
+          >
+            <Minus className="w-3.5 h-3.5" />
+          </Button>
+          {messages.length > 0 && (
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={clearChat}>
+              <Trash2 className="w-3.5 h-3.5" />
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Messages */}
