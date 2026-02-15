@@ -1,10 +1,34 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { decryptToken } from "../_shared/tokenEncryption.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
+
+async function getGoogleAccessToken(
+  refreshToken: string,
+  clientId: string,
+  clientSecret: string
+): Promise<string> {
+  const res = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: refreshToken,
+      grant_type: "refresh_token",
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Token refresh failed: ${err}`);
+  }
+  const data = await res.json();
+  return data.access_token;
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -37,15 +61,61 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Get Google OAuth tokens from integration_tokens
-    const { data: tokenRow } = await supabase
-      .from("integration_tokens")
-      .select("*")
-      .eq("provider", "google")
+    // Get Google OAuth token from user_gmail_tokens (find any user in this company)
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("user_id")
       .eq("company_id", domain.company_id)
-      .maybeSingle();
+      .limit(10);
 
-    if (!tokenRow?.access_token) {
+    let accessToken: string | null = null;
+
+    const clientId = Deno.env.get("GOOGLE_CLIENT_ID") || Deno.env.get("GMAIL_CLIENT_ID");
+    const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET") || Deno.env.get("GMAIL_CLIENT_SECRET");
+
+    if (!clientId || !clientSecret) {
+      return new Response(
+        JSON.stringify({ error: "Google OAuth credentials not configured on server" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Try each company user's token
+    for (const profile of profiles || []) {
+      const { data: tokenRow } = await supabase
+        .from("user_gmail_tokens")
+        .select("refresh_token, is_encrypted")
+        .eq("user_id", profile.user_id)
+        .maybeSingle();
+
+      if (!tokenRow?.refresh_token) continue;
+
+      try {
+        const refreshToken = tokenRow.is_encrypted
+          ? await decryptToken(tokenRow.refresh_token)
+          : tokenRow.refresh_token;
+
+        accessToken = await getGoogleAccessToken(refreshToken, clientId, clientSecret);
+        break;
+      } catch (e) {
+        console.log(`Token refresh failed for user ${profile.user_id}:`, e);
+        continue;
+      }
+    }
+
+    // Fallback: try shared GMAIL_REFRESH_TOKEN
+    if (!accessToken) {
+      const sharedToken = Deno.env.get("GMAIL_REFRESH_TOKEN");
+      if (sharedToken) {
+        try {
+          accessToken = await getGoogleAccessToken(sharedToken, clientId, clientSecret);
+        } catch (e) {
+          console.log("Shared token refresh failed:", e);
+        }
+      }
+    }
+
+    if (!accessToken) {
       return new Response(
         JSON.stringify({ error: "Google OAuth not connected. Connect Google Search Console first." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -67,7 +137,7 @@ Deno.serve(async (req) => {
       {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${tokenRow.access_token}`,
+          Authorization: `Bearer ${accessToken}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
