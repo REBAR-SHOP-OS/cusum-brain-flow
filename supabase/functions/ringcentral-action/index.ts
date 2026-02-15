@@ -8,7 +8,7 @@ const corsHeaders = {
 };
 
 const RC_SERVER = "https://platform.ringcentral.com";
-const SUPER_ADMIN_EMAILS = ["sattar@rebar.shop", "radin@rebar.shop"];
+const SUPER_ADMIN_EMAILS = ["sattar@rebar.shop", "radin@rebar.shop", "ai@rebar.shop"];
 
 async function getAccessToken(supabaseAdmin: ReturnType<typeof createClient>, userId: string): Promise<string | null> {
   const { data: tokenRow } = await supabaseAdmin

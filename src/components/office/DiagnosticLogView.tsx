@@ -33,7 +33,7 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 
-const SUPER_ADMIN_EMAILS = ["sattar@rebar.shop", "radin@rebar.shop"];
+const SUPER_ADMIN_EMAILS = ["sattar@rebar.shop", "radin@rebar.shop", "ai@rebar.shop"];
 
 type LogType = "events" | "commands" | "machine_runs" | "db_stats";
 
