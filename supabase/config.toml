@@ -243,3 +243,6 @@ verify_jwt = false
 
 [functions.wp-speed-optimizer]
 verify_jwt = false
+
+[functions.seo-email-harvest]
+verify_jwt = false
