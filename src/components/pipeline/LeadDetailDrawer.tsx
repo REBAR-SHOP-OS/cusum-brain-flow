@@ -14,7 +14,7 @@ import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { PIPELINE_STAGES } from "@/pages/Pipeline";
 import { useUserRole } from "@/hooks/useUserRole";
-import { LeadTimeline } from "./LeadTimeline";
+import { OdooChatter } from "./OdooChatter";
 import { LeadEmailThread } from "./LeadEmailThread";
 import { LeadFiles } from "./LeadFiles";
 import { LeadAIPanel } from "./LeadAIPanel";
@@ -233,7 +233,7 @@ export function LeadDetailDrawer({
             </TabsContent>
 
             <TabsContent value="timeline" className="mt-0">
-              <LeadTimeline lead={lead} />
+              <OdooChatter lead={lead} />
             </TabsContent>
 
             <TabsContent value="details" className="space-y-5 mt-0">
