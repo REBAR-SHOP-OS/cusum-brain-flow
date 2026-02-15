@@ -1,68 +1,38 @@
 
 
-# Fix rebar.shop Content Not Loading After Removing AirLift and JetPack
+## Add Fullscreen and Minimize Toggle to the Chat Panel
 
-## Root Cause
+### What This Does
+Adds two toggle buttons to the chat panel header in the Job Site Editor:
+- **Fullscreen**: Expands the chat to take over the entire right side (hides the preview panel)
+- **Minimize**: Collapses the chat panel to a thin strip, giving the preview maximum space
 
-After removing the **AirLift** plugin, images on rebar.shop are broken. The HTML shows all images using `bv-data-src` and `bv-data-srcset` attributes (from AirLift/Flavor optimization) instead of standard `src` and `srcset`. AirLift's JavaScript was responsible for swapping these at load time. Without it, browsers see only empty SVG placeholders and the page looks blank.
+### Changes
 
-**This is a WordPress issue, not related to the chatbot code changes.**
+**File: `src/pages/WebsiteManager.tsx`**
+- Add a `chatMode` state: `"normal" | "fullscreen" | "minimized"`
+- When `fullscreen`: Hide the left preview panel entirely; the chat panel takes 100% width
+- When `minimized`: Collapse the right panel to a narrow strip (just the tab bar + an expand button), preview gets maximum space
+- When `normal`: Current resizable layout (70/30 split)
+- Pass `chatMode` and `onChatModeChange` props down to `WebsiteChat`
 
-## Evidence
+**File: `src/components/website/WebsiteChat.tsx`**
+- Add `Maximize2`, `Minimize2` icons from lucide-react to the header bar (next to the existing trash button)
+- Fullscreen button: toggles between fullscreen and normal
+- Minimize button: toggles between minimized and normal
+- In minimized state, the parent hides the chat body; only a small expand button is visible
 
-Every image on the page looks like this:
-```text
-src="data:image/svg+xml,..." 
-bv-data-src="https://www.rebar.shop/wp-content/uploads/..."
-class="bv-tag-attr-replace bv-lazyload-tag-img"
-```
+### Technical Details
 
-The `bv-tag-attr-replace` and `bv-lazyload-tag-img` classes are AirLift markers. Without the AirLift JS, the real image URLs in `bv-data-src` never get loaded.
+In `WebsiteManager.tsx`:
+- Conditionally render the `ResizablePanelGroup` based on `chatMode`
+- Fullscreen: render only the right panel (no `ResizablePanel` split)
+- Minimized: set right panel `defaultSize` to ~5 and hide content, or conditionally render a collapsed strip
+- Normal: keep existing 70/30 resizable layout
 
-## Fix (WordPress Admin Steps)
-
-These steps must be done in your **WordPress admin panel** (wp-admin):
-
-### Step 1: Clean up AirLift image rewrites
-
-Go to **wp-admin** and run a search-and-replace on your database (using a plugin like "Better Search Replace" or WP-CLI):
-
-- Replace all `bv-data-src=` with `src=`
-- Replace all `bv-data-srcset=` with `srcset=`
-- Remove CSS classes `bv-tag-attr-replace` and `bv-lazyload-tag-img` from image tags
-
-Alternatively, add this temporary JavaScript snippet to your theme's footer (Appearance > Theme File Editor > footer.php, before the closing body tag):
-
-```text
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-  document.querySelectorAll('[bv-data-src]').forEach(function(el) {
-    el.setAttribute('src', el.getAttribute('bv-data-src'));
-    var srcset = el.getAttribute('bv-data-srcset');
-    if (srcset) el.setAttribute('srcset', srcset);
-  });
-});
-</script>
-```
-
-This is a quick fix that makes images load immediately while you do a proper cleanup.
-
-### Step 2: Clear all caches
-
-- If using LiteSpeed or any cache plugin, purge all caches
-- Clear CDN cache if applicable (e.g., Cloudflare)
-
-### Step 3: Re-enable lazy loading properly
-
-Install a standard lazy loading solution (most modern browsers support native `loading="lazy"` which is already in your markup). No extra plugin needed for basic lazy loading.
-
-### Step 4: Restore image optimization (optional)
-
-If you want image optimization back without AirLift, consider:
-- **ShortPixel** or **Imagify** for image compression
-- **Autoptimize** for CSS/JS minification
-
-## Important Note
-
-No changes are needed in the Lovable project. The chatbot widget embedded on rebar.shop is working correctly -- this is purely a WordPress plugin cleanup issue.
+In `WebsiteChat.tsx`:
+- Accept new props: `chatMode?: "normal" | "fullscreen" | "minimized"` and `onChatModeChange?: (mode: "normal" | "fullscreen" | "minimized") => void`
+- Add icon buttons in the header between the title and the trash icon:
+  - Fullscreen toggle (`Maximize2` / `Minimize2`)
+  - Minimize toggle (`Minus` / `Plus`)
 
