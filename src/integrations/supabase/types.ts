@@ -5515,6 +5515,48 @@ export type Database = {
         }
         Relationships: []
       }
+      speed_audit_results: {
+        Row: {
+          audited_at: string
+          cls: number | null
+          company_id: string
+          fcp_ms: number | null
+          id: string
+          issues: Json | null
+          lcp_ms: number | null
+          page_url: string
+          performance_score: number | null
+          recommendations: Json | null
+          ttfb_ms: number | null
+        }
+        Insert: {
+          audited_at?: string
+          cls?: number | null
+          company_id?: string
+          fcp_ms?: number | null
+          id?: string
+          issues?: Json | null
+          lcp_ms?: number | null
+          page_url: string
+          performance_score?: number | null
+          recommendations?: Json | null
+          ttfb_ms?: number | null
+        }
+        Update: {
+          audited_at?: string
+          cls?: number | null
+          company_id?: string
+          fcp_ms?: number | null
+          id?: string
+          issues?: Json | null
+          lcp_ms?: number | null
+          page_url?: string
+          performance_score?: number | null
+          recommendations?: Json | null
+          ttfb_ms?: number | null
+        }
+        Relationships: []
+      }
       suggestions: {
         Row: {
           actions: Json | null

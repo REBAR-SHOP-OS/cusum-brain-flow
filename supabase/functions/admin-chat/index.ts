@@ -25,6 +25,7 @@ const WRITE_TOOLS = new Set([
   "wp_create_product",
   "wp_delete_product",
   "wp_create_post",
+  "wp_optimize_speed",
 ]);
 
 const JARVIS_TOOLS = [
@@ -484,6 +485,29 @@ const JARVIS_TOOLS = [
       },
     },
   },
+  // ─── Speed Optimization Tools ───
+  {
+    type: "function",
+    function: {
+      name: "wp_run_speed_audit",
+      description: "Run a speed audit on rebar.shop — measures TTFB, analyzes HTML for performance issues, and returns recommendations.",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "wp_optimize_speed",
+      description: "Run the image optimizer on all WordPress content to add lazy loading, decoding=async. Requires confirmation. Set dry_run=false to actually apply changes.",
+      parameters: {
+        type: "object",
+        properties: {
+          dry_run: { type: "boolean", description: "If true (default), only shows what would change without modifying content" },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 // ═══ READ TOOL EXECUTION ═══
@@ -636,6 +660,17 @@ async function executeReadTool(supabase: any, toolName: string, args: any): Prom
         });
       } catch (e: any) { return JSON.stringify({ error: e.message }); }
     }
+    case "wp_run_speed_audit": {
+      try {
+        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+        const res = await fetch(`${supabaseUrl}/functions/v1/website-speed-audit`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        });
+        const data = await res.json();
+        return JSON.stringify(data);
+      } catch (e: any) { return JSON.stringify({ error: e.message }); }
+    }
     default:
       return JSON.stringify({ error: `Unknown read tool: ${toolName}` });
   }
@@ -764,6 +799,24 @@ async function executeWriteTool(supabase: any, userId: string, companyId: string
       const result = await wp.createPost(postData);
       await logWpChange(supabase, userId, "/posts", "POST", "post", String(result.id), null, postData);
       return { success: true, message: `Post "${result.title?.rendered || args.title}" created (ID: ${result.id})` };
+    }
+    case "wp_optimize_speed": {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const dryRun = args.dry_run !== false;
+      const res = await fetch(`${supabaseUrl}/functions/v1/wp-speed-optimizer`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dry_run: dryRun }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "Optimizer failed");
+      return {
+        success: true,
+        message: dryRun
+          ? `Dry run complete: ${data.images_fixed} images can be optimized across ${data.items_modified} items (${data.items_scanned} scanned)`
+          : `Optimized ${data.images_fixed} images across ${data.items_modified} items`,
+        data,
+      };
     }
     default:
       throw new Error(`Unknown write tool: ${toolName}`);
@@ -989,6 +1042,12 @@ PROACTIVE INTELLIGENCE:
 - Never delete published content without explicit confirmation
 - Changes are logged to wp_change_log for audit and rollback
 - If a user says "undo last WordPress change", query wp_change_log and use previous_state to restore
+
+═══ WEBSITE SPEED OPTIMIZATION ═══
+- Use wp_run_speed_audit to check current TTFB, page weight, and identify performance issues
+- Use wp_optimize_speed to fix image-level issues (add lazy loading, decoding=async)
+- wp_optimize_speed defaults to dry_run=true (preview only). Set dry_run=false to apply changes.
+- The biggest speed win is installing a caching plugin (server-side) — always mention this
 
 ═══ RULES ═══
 - Be direct and concise — this is for a power user
