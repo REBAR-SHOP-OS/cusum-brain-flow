@@ -1,36 +1,24 @@
 
-# Fix Chat Freezing During Write Action Confirmation
+# Fix Chat Messages Overflowing Off Screen
 
 ## Problem
-When the AI needs to execute a write action (like updating a WordPress page), it shows a confirmation card with Approve/Cancel buttons. However, the text input remains active, so users type "yes" or "ok" instead of clicking Approve. This:
-1. Sends a new chat message, clearing the pending action
-2. The AI calls the same tools again, showing "Checking pages..." in a loop
-3. The chat appears frozen/stuck in an endless cycle
-
-## Solution
-Disable the text input and send button whenever a pending action is awaiting confirmation, and show a helpful placeholder message.
+Long content (URLs, code blocks, script tags) in the AI Website Editor chat extends beyond the visible area, pushing half the page off screen. The existing `overflow-hidden` and `break-words` on the message bubble are insufficient because:
+1. The bubble lacks `min-w-0` which is needed for flex children to actually shrink below their content size
+2. Code blocks and `<pre>` elements have intrinsic minimum widths that push past the container
+3. The parent scroll area doesn't constrain children's width
 
 ## Changes
 
 ### 1. `src/components/website/WebsiteChat.tsx`
-- Change the textarea `disabled` prop from `isStreaming` to `isStreaming || !!pendingAction`
-- Change the placeholder text to `"Approve or cancel the action above..."` when `pendingAction` is set
-- Disable the Send button when `pendingAction` is present
-- Block `handleSend` if `pendingAction` is set
+- Add `min-w-0` to each message bubble div (line 125) so it properly shrinks within the flex/scroll container
+- Add `w-full` to the messages container div to ensure it doesn't expand beyond the scroll area
+- Add `[&_*]:max-w-full` to RichMarkdown className to force all nested elements to respect the container width
 
-### 2. `src/components/layout/LiveChatWidget.tsx`
-- Apply the same fix: disable textarea and send when `pendingAction` is present
-- Destructure `pendingAction` from `useAdminChat` (currently not used in this component)
-- Show the pending action confirmation card (currently missing from LiveChatWidget entirely)
+### 2. `src/components/chat/RichMarkdown.tsx`
+- Add `max-w-full` and `min-w-0` to the root wrapper div (line 65) to prevent the markdown from expanding beyond its parent
+- Add `overflow-wrap: anywhere` via `[overflow-wrap:anywhere]` utility to handle long unbreakable strings like URLs
+- On the code block `<pre>` (line 221), ensure `max-w-full` is set alongside `overflow-x-auto`
+- On inline `<code>` (line 228), add `break-all` to force long inline code to wrap
 
-## Technical Details
-
-**WebsiteChat.tsx** (3 small edits):
-- Line 50 (`handleSend`): Add `|| pendingAction` to the early return guard
-- Line 188-190: Change placeholder and disabled prop to include `pendingAction`
-- Line 197: Add `|| !!pendingAction` to send button disabled state
-
-**LiveChatWidget.tsx** (3 small edits):
-- Destructure `pendingAction`, `confirmAction`, `cancelAction` from `useAdminChat()`
-- Disable textarea when `pendingAction` is set
-- Add a minimal pending action confirmation UI (similar to WebsiteChat)
+### Technical Details
+These are CSS-only fixes -- no logic changes. The key insight is that `overflow-hidden` alone doesn't prevent the element from growing; `min-w-0` is required in flex/grid contexts to allow shrinking, and `overflow-wrap: anywhere` handles unbreakable strings that `word-break` misses.
