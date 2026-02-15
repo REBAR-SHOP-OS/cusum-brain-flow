@@ -5500,55 +5500,76 @@ export type Database = {
       }
       seo_domains: {
         Row: {
+          avg_position: number | null
           avg_visit_duration_seconds: number | null
           bounce_rate: number | null
           company_id: string
           created_at: string
           domain: string
+          estimated_traffic_pct: number | null
           ga_property_id: string | null
           gsc_verified: boolean
           id: string
           pages_per_visit: number | null
+          position_tracking_date: string | null
+          top10_keywords: number | null
+          top3_keywords: number | null
+          total_tracked_keywords: number | null
           traffic_snapshot_month: string | null
           unique_visitors_monthly: number | null
           updated_at: string
           verified_ga: boolean
+          visibility_pct: number | null
           visitors_change_pct: number | null
           visits_change_pct: number | null
           visits_monthly: number | null
         }
         Insert: {
+          avg_position?: number | null
           avg_visit_duration_seconds?: number | null
           bounce_rate?: number | null
           company_id?: string
           created_at?: string
           domain: string
+          estimated_traffic_pct?: number | null
           ga_property_id?: string | null
           gsc_verified?: boolean
           id?: string
           pages_per_visit?: number | null
+          position_tracking_date?: string | null
+          top10_keywords?: number | null
+          top3_keywords?: number | null
+          total_tracked_keywords?: number | null
           traffic_snapshot_month?: string | null
           unique_visitors_monthly?: number | null
           updated_at?: string
           verified_ga?: boolean
+          visibility_pct?: number | null
           visitors_change_pct?: number | null
           visits_change_pct?: number | null
           visits_monthly?: number | null
         }
         Update: {
+          avg_position?: number | null
           avg_visit_duration_seconds?: number | null
           bounce_rate?: number | null
           company_id?: string
           created_at?: string
           domain?: string
+          estimated_traffic_pct?: number | null
           ga_property_id?: string | null
           gsc_verified?: boolean
           id?: string
           pages_per_visit?: number | null
+          position_tracking_date?: string | null
+          top10_keywords?: number | null
+          top3_keywords?: number | null
+          total_tracked_keywords?: number | null
           traffic_snapshot_month?: string | null
           unique_visitors_monthly?: number | null
           updated_at?: string
           verified_ga?: boolean
+          visibility_pct?: number | null
           visitors_change_pct?: number | null
           visits_change_pct?: number | null
           visits_monthly?: number | null
@@ -5800,6 +5821,7 @@ export type Database = {
           engagement_rate: number | null
           id: string
           impressions: number | null
+          issues_json: Json | null
           last_analyzed_at: string | null
           revenue: number | null
           seo_score: number | null
@@ -5820,6 +5842,7 @@ export type Database = {
           engagement_rate?: number | null
           id?: string
           impressions?: number | null
+          issues_json?: Json | null
           last_analyzed_at?: string | null
           revenue?: number | null
           seo_score?: number | null
@@ -5840,6 +5863,7 @@ export type Database = {
           engagement_rate?: number | null
           id?: string
           impressions?: number | null
+          issues_json?: Json | null
           last_analyzed_at?: string | null
           revenue?: number | null
           seo_score?: number | null

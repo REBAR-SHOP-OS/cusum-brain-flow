@@ -226,23 +226,60 @@ export function SeoOverview() {
   });
 
   const importSemrush = useMutation({
-    mutationFn: async (file: File) => {
+    mutationFn: async (files: File[]) => {
       if (!domain?.id) throw new Error("No domain configured");
-      const ab = await file.arrayBuffer();
-      const wb = XLSX.read(ab, { type: "array" });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows: any[] = XLSX.utils.sheet_to_json(ws);
-      const ideas = rows.map((r: any) => ({
-        priority: Number(r["Priority"] || r["priority"] || 0),
-        url: String(r["Url"] || r["url"] || r["URL"] || ""),
-        keyword: String(r["Keyword"] || r["keyword"] || ""),
-        idea: String(r["Idea"] || r["idea"] || ""),
-      })).filter(r => r.keyword);
+
+      let ideas: any[] = [];
+      let auditPages: any[] = [];
+
+      for (const file of files) {
+        const ab = await file.arrayBuffer();
+        const wb = XLSX.read(ab, { type: "array" });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows: any[] = XLSX.utils.sheet_to_json(ws);
+        if (!rows.length) continue;
+
+        const headers = Object.keys(rows[0]);
+        const isIdeasFile = headers.some(h => /^(keyword|idea)$/i.test(h));
+        const isMegaExport = headers.some(h => /^(page url|url)$/i.test(h.toLowerCase())) && headers.length > 10;
+
+        if (isIdeasFile && !isMegaExport) {
+          ideas = rows.map((r: any) => ({
+            priority: Number(r["Priority"] || r["priority"] || 0),
+            url: String(r["Url"] || r["url"] || r["URL"] || ""),
+            keyword: String(r["Keyword"] || r["keyword"] || ""),
+            idea: String(r["Idea"] || r["idea"] || ""),
+          })).filter(r => r.keyword);
+        } else if (isMegaExport) {
+          // Parse mega export: find URL column + count non-zero issue columns
+          const urlCol = headers.find(h => /page url|url/i.test(h)) || headers[0];
+          const issueHeaders = headers.filter(h => h !== urlCol);
+
+          for (const row of rows) {
+            const url = String(row[urlCol] || "").trim();
+            if (!url || !url.startsWith("http")) continue;
+            const issues: Record<string, number> = {};
+            let totalIssues = 0;
+            for (const h of issueHeaders) {
+              const val = Number(row[h] || 0);
+              if (val > 0) {
+                const key = h.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+                issues[key] = val;
+                totalIssues += val;
+              }
+            }
+            if (totalIssues > 0) {
+              auditPages.push({ url, issues, total_issues: totalIssues });
+            }
+          }
+        }
+      }
 
       const { data, error } = await supabase.functions.invoke("seo-semrush-import", {
         body: {
           domain_id: domain.id,
-          ideas,
+          ideas: ideas.length ? ideas : undefined,
+          audit_pages: auditPages.length ? auditPages : undefined,
           traffic: {
             visits: 1200,
             unique_visitors: 1200,
@@ -252,6 +289,15 @@ export function SeoOverview() {
             visits_change_pct: 77.52,
             visitors_change_pct: 66.71,
             month: "2026-01",
+          },
+          position_tracking: {
+            visibility_pct: 72.62,
+            estimated_traffic_pct: 0.16,
+            avg_position: 6.99,
+            top3_keywords: 17,
+            top10_keywords: 19,
+            total_tracked_keywords: 20,
+            date: "2026-02-15",
           },
         },
       });
@@ -269,8 +315,8 @@ export function SeoOverview() {
   });
 
   const handleSemrushUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) importSemrush.mutate(file);
+    const files = e.target.files;
+    if (files?.length) importSemrush.mutate(Array.from(files));
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -293,7 +339,7 @@ export function SeoOverview() {
           <p className="text-sm text-muted-foreground">AI-curated insights from GSC + Analytics + ERP Sources</p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <input type="file" ref={fileInputRef} accept=".xlsx,.xls" className="hidden" onChange={handleSemrushUpload} />
+          <input type="file" ref={fileInputRef} accept=".xlsx,.xls" className="hidden" multiple onChange={handleSemrushUpload} />
           <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={importSemrush.isPending || !domain}>
             {importSemrush.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Upload className="w-4 h-4 mr-1" />}
             Import SEMrush
@@ -445,7 +491,45 @@ export function SeoOverview() {
                   <BarChart3 className="w-4 h-4 text-primary" /> Traffic Summary
                   {domain.traffic_snapshot_month && (
                     <Badge variant="secondary" className="text-[10px] ml-2">{domain.traffic_snapshot_month}</Badge>
+          )}
+
+          {/* Position Tracking (SEMrush) */}
+          {domain?.visibility_pct != null && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-primary" /> Position Tracking
+                  {domain.position_tracking_date && (
+                    <Badge variant="secondary" className="text-[10px] ml-2">{domain.position_tracking_date}</Badge>
                   )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                  <div className="text-center">
+                    <p className="text-xl font-bold">{Number(domain.visibility_pct).toFixed(2)}%</p>
+                    <p className="text-xs text-muted-foreground">Visibility</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-xl font-bold">{Number(domain.avg_position).toFixed(2)}</p>
+                    <p className="text-xs text-muted-foreground">Avg Position</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-xl font-bold">{domain.top3_keywords ?? "—"}</p>
+                    <p className="text-xs text-muted-foreground">Top 3 Keywords</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-xl font-bold">{domain.top10_keywords ?? "—"}</p>
+                    <p className="text-xs text-muted-foreground">Top 10 Keywords</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-xl font-bold">{domain.total_tracked_keywords ?? "—"}</p>
+                    <p className="text-xs text-muted-foreground">Total Tracked</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
                 </CardTitle>
               </CardHeader>
               <CardContent>

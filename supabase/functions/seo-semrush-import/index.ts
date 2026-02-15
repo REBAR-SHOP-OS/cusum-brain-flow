@@ -24,7 +24,7 @@ Deno.serve(async (req) => {
     ).auth.getUser();
     if (authErr || !user) throw new Error("Unauthorized");
 
-    const { domain_id, ideas, traffic } = await req.json();
+    const { domain_id, ideas, traffic, audit_pages, position_tracking } = await req.json();
     if (!domain_id) throw new Error("domain_id required");
 
     // Verify domain exists
@@ -37,7 +37,6 @@ Deno.serve(async (req) => {
 
     // Process ideas
     if (ideas?.length) {
-      // Group by keyword
       const kwMap = new Map<string, { priority: number; url: string; ideas: string[] }>();
       const pageIssues = new Map<string, number>();
 
@@ -73,13 +72,13 @@ Deno.serve(async (req) => {
         if (!error) keywordsUpserted++;
       }
 
-      // Upsert pages into seo_page_ai
+      // Upsert pages into seo_page_ai (from ideas)
       for (const [url, issueCount] of pageIssues) {
         const { error } = await supabase.from("seo_page_ai").upsert({
           domain_id,
           url,
           seo_score: Math.max(0, 100 - issueCount * 15),
-          issues_json: { semrush_issues: issueCount },
+          issues_json: { semrush_ideas_issues: issueCount },
           cwv_status: "unknown",
         }, { onConflict: "domain_id,url" });
         if (!error) pagesUpserted++;
@@ -103,6 +102,25 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Process audit_pages from mega export
+    let auditPagesUpserted = 0;
+    if (audit_pages?.length) {
+      for (const page of audit_pages) {
+        const url = (page.url || "").trim();
+        if (!url) continue;
+        const totalIssues = page.total_issues || Object.values(page.issues || {}).reduce((s: number, v: any) => s + (Number(v) || 0), 0);
+        const seoScore = Math.max(0, Math.round(100 - totalIssues * 5));
+        const { error } = await supabase.from("seo_page_ai").upsert({
+          domain_id,
+          url,
+          seo_score: seoScore,
+          issues_json: page.issues || {},
+          cwv_status: "unknown",
+        }, { onConflict: "domain_id,url" });
+        if (!error) auditPagesUpserted++;
+      }
+    }
+
     // Update traffic stats
     if (traffic) {
       await supabase.from("seo_domains").update({
@@ -117,11 +135,25 @@ Deno.serve(async (req) => {
       }).eq("id", domain_id);
     }
 
+    // Update position tracking stats
+    if (position_tracking) {
+      await supabase.from("seo_domains").update({
+        visibility_pct: position_tracking.visibility_pct ?? null,
+        estimated_traffic_pct: position_tracking.estimated_traffic_pct ?? null,
+        avg_position: position_tracking.avg_position ?? null,
+        top3_keywords: position_tracking.top3_keywords ?? null,
+        top10_keywords: position_tracking.top10_keywords ?? null,
+        total_tracked_keywords: position_tracking.total_tracked_keywords ?? null,
+        position_tracking_date: position_tracking.date ?? null,
+      }).eq("id", domain_id);
+    }
+
     return new Response(JSON.stringify({
       success: true,
       keywords_upserted: keywordsUpserted,
-      pages_upserted: pagesUpserted,
+      pages_upserted: pagesUpserted + auditPagesUpserted,
       insights_created: insightsCreated,
+      audit_pages_upserted: auditPagesUpserted,
     }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
     return new Response(JSON.stringify({ error: e.message }), {
