@@ -103,21 +103,11 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Fallback: try shared GMAIL_REFRESH_TOKEN
-    if (!accessToken) {
-      const sharedToken = Deno.env.get("GMAIL_REFRESH_TOKEN");
-      if (sharedToken) {
-        try {
-          accessToken = await getGoogleAccessToken(sharedToken, clientId, clientSecret);
-        } catch (e) {
-          console.log("Shared token refresh failed:", e);
-        }
-      }
-    }
-
+    // Fallback: try shared GMAIL_REFRESH_TOKEN — but ONLY if no per-user token found
+    // Note: shared Gmail token likely lacks Search Console scopes, so skip it for GSC
     if (!accessToken) {
       return new Response(
-        JSON.stringify({ error: "Google OAuth not connected. Connect Google Search Console first." }),
+        JSON.stringify({ error: "Google Search Console not connected. Click 'Connect Google' on the SEO dashboard to grant Search Console access." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
