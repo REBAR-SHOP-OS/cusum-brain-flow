@@ -1,31 +1,24 @@
 
-## Fix: Minimize Button Not Working Properly in Fullscreen
+## Fix: Chat Controls Hidden When Content Overflows in Fullscreen
 
 ### Problem
-When the chat is in **fullscreen** mode, clicking the minimize button (`-`) sets the mode to "minimized" (thin strip), skipping the "normal" split view entirely. The user expects minimize to return to the normal 70/30 split view.
+In fullscreen mode, when there's a lot of chat content, the messages overflow and push the minimize/fullscreen buttons out of view. The header stays at the top but the overall container grows beyond the viewport.
+
+### Root Cause
+The fullscreen wrapper `<div className="flex-1">` around `rightPanelContent` (line 136 in `WebsiteManager.tsx`) doesn't constrain its height, so the inner content can expand indefinitely instead of scrolling.
 
 ### Solution
-Update the minimize button logic in `WebsiteChat.tsx` so it cycles correctly:
-- **From fullscreen** -> clicking minimize goes to **normal** (split view)
-- **From normal** -> clicking minimize goes to **minimized** (thin strip)
-- **From minimized** -> clicking expand goes to **normal**
+Add `overflow-hidden` and `min-h-0` to the fullscreen container div so flex children are properly constrained within the viewport height.
 
-### File Change: `src/components/website/WebsiteChat.tsx`
+### File Change: `src/pages/WebsiteManager.tsx`
 
-Update the minimize button's `onClick` handler (around line 207):
-
-**Current logic:**
+**Line 136** - Change:
 ```typescript
-onClick={() => onChatModeChange?.(chatMode === "minimized" ? "normal" : "minimized")}
+<div className="flex-1">{rightPanelContent}</div>
+```
+To:
+```typescript
+<div className="flex-1 overflow-hidden min-h-0">{rightPanelContent}</div>
 ```
 
-**Fixed logic:**
-```typescript
-onClick={() => {
-  if (chatMode === "fullscreen") onChatModeChange?.("normal");
-  else if (chatMode === "normal") onChatModeChange?.("minimized");
-  else onChatModeChange?.("normal");
-}}
-```
-
-This ensures the button always steps down one level (fullscreen -> normal -> minimized) instead of jumping from fullscreen directly to minimized.
+This single class addition ensures the chat panel stays within the viewport bounds and the header with minimize/fullscreen buttons remains always visible and accessible, regardless of content length.
