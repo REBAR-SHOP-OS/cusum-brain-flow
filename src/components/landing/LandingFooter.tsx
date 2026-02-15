@@ -51,6 +51,17 @@ export function LandingFooter() {
           </div>
 
           <div className="space-y-2">
+            <p className="font-semibold text-foreground mb-2">Quick Links</p>
+            <div className="flex flex-col gap-1">
+              <a href="https://rebar.shop/shop/" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">Products</a>
+              <a href="https://rebar.shop/rebar-fabrication/" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">Fabrication</a>
+              <a href="https://rebar.shop/rebar-estimating/" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">Estimating</a>
+              <a href="https://rebar.shop/rebar-detailing-shop-drawings/" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">Detailing</a>
+              <a href="https://crm.rebar.shop/contactus" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">Contact</a>
+            </div>
+          </div>
+
+          <div className="space-y-2">
             <p className="font-semibold text-foreground mb-2">Follow Us</p>
             <div className="flex items-center gap-4">
               <a href="https://www.linkedin.com/company/rebar-shop" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors" aria-label="LinkedIn">
