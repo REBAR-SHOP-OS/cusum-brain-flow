@@ -135,7 +135,7 @@ export function SeoCopilot() {
         <h1 className="text-2xl font-bold flex items-center gap-2">
           <MessageSquare className="w-5 h-5 text-primary" /> SEO Copilot
         </h1>
-        <p className="text-sm text-muted-foreground">Ask AI questions about your SEO performance using real data</p>
+        <p className="text-sm text-muted-foreground">Ask questions about your search performance — answers are grounded in real data</p>
       </div>
 
       {/* Chat area */}
@@ -145,8 +145,8 @@ export function SeoCopilot() {
             <div className="flex flex-col items-center justify-center h-full gap-4 text-center">
               <Sparkles className="w-10 h-10 text-primary/40" />
               <div>
-                <p className="text-sm font-medium">Ask me anything about your SEO</p>
-                <p className="text-xs text-muted-foreground">I'll answer using your real GSC + GA data</p>
+                 <p className="text-sm font-medium">Ask anything about your search performance</p>
+                 <p className="text-xs text-muted-foreground">Answers are based on your Search Console and Analytics data</p>
               </div>
               <div className="flex flex-wrap gap-2 max-w-lg justify-center">
                 {quickQuestions.map((q, i) => (
@@ -200,7 +200,7 @@ export function SeoCopilot() {
         {/* Input */}
         <div className="border-t p-3 flex gap-2">
           <Input
-            placeholder={domain ? "Ask about your SEO..." : "Configure a domain first"}
+            placeholder={domain ? "Ask a question..." : "Set up a domain first"}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage(input)}

@@ -90,7 +90,7 @@ export function SeoTasks() {
       });
       if (error) throw error;
       if (data?.success) {
-        toast.success("Task executed successfully!", {
+        toast.success("Done — task completed", {
           description: data.results?.join(", "),
         });
         qc.invalidateQueries({ queryKey: ["seo-tasks"] });
@@ -124,8 +124,8 @@ export function SeoTasks() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">SEO Tasks</h1>
-        <p className="text-sm text-muted-foreground">AI-generated and manual SEO tasks</p>
+         <h1 className="text-2xl font-bold">SEO Action Items</h1>
+        <p className="text-sm text-muted-foreground">Automated and manual tasks to improve search performance</p>
       </div>
 
       {isLoading ? (
@@ -160,7 +160,7 @@ export function SeoTasks() {
                         {task.ai_reasoning && (
                           <div className="bg-primary/5 rounded p-2 border border-primary/10">
                             <p className="text-[10px] text-primary font-medium flex items-center gap-1">
-                              <Sparkles className="w-3 h-3" /> AI Reasoning
+                              <Sparkles className="w-3 h-3" /> Why this matters
                             </p>
                             <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{task.ai_reasoning}</p>
                           </div>
@@ -242,9 +242,9 @@ export function SeoTasks() {
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               {analyzeResult?.can_execute ? (
-                <><Zap className="w-5 h-5 text-primary" /> AI Execution Plan</>
+                 <><Zap className="w-5 h-5 text-primary" /> Execution Plan</>
               ) : (
-                <><AlertTriangle className="w-5 h-5 text-yellow-500" /> Manual Action Required</>
+                 <><AlertTriangle className="w-5 h-5 text-yellow-500" /> Manual Steps Required</>
               )}
             </AlertDialogTitle>
             <AlertDialogDescription asChild>
@@ -253,7 +253,7 @@ export function SeoTasks() {
 
                 {analyzeResult?.can_execute && analyzeResult.actions?.length ? (
                   <div className="space-y-1.5">
-                    <p className="text-xs font-medium">Proposed actions:</p>
+                    <p className="text-xs font-medium">Planned actions:</p>
                     {analyzeResult.actions.map((action, i) => (
                       <div key={i} className="bg-muted/50 rounded p-2 text-xs space-y-0.5">
                         <p className="font-medium">{action.type.replace("wp_", "").replace(/_/g, " ")}</p>
@@ -267,7 +267,7 @@ export function SeoTasks() {
                   </div>
                 ) : analyzeResult?.human_steps ? (
                   <div className="bg-yellow-500/5 rounded p-3 border border-yellow-500/10">
-                    <p className="text-xs font-medium mb-1">Steps for human operator:</p>
+                    <p className="text-xs font-medium mb-1">What you need to do:</p>
                     <p className="text-xs text-muted-foreground whitespace-pre-line">
                       {analyzeResult.human_steps}
                     </p>
@@ -294,8 +294,8 @@ export function SeoTasks() {
                 )}
               </AlertDialogAction>
             ) : (
-              <AlertDialogAction onClick={(e) => { e.preventDefault(); handleMoveToInProgress(); }}>
-                Move to In Progress
+               <AlertDialogAction onClick={(e) => { e.preventDefault(); handleMoveToInProgress(); }}>
+                 Mark as In Progress
               </AlertDialogAction>
             )}
           </AlertDialogFooter>

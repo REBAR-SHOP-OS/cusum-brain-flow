@@ -52,9 +52,9 @@ export function SeoPages() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold flex items-center gap-2">
-          <FileText className="w-5 h-5 text-primary" /> AI Pages
+           <FileText className="w-5 h-5 text-primary" /> Page Performance
         </h1>
-        <p className="text-sm text-muted-foreground">Pages ranked by SEO score with inline AI recommendations</p>
+        <p className="text-sm text-muted-foreground">All indexed pages ranked by SEO health, with AI-generated recommendations</p>
       </div>
 
       <div className="relative max-w-md">
@@ -70,11 +70,11 @@ export function SeoPages() {
                 <tr className="border-b bg-muted/50">
                   <th className="text-left p-3 font-medium">URL</th>
                   <th className="text-center p-3 font-medium w-20">SEO Score</th>
-                  <th className="text-right p-3 font-medium w-20">Impr.</th>
-                  <th className="text-right p-3 font-medium w-16">Clicks</th>
-                  <th className="text-right p-3 font-medium w-20">Sessions</th>
-                  <th className="text-center p-3 font-medium w-20">Engage.</th>
-                  <th className="text-right p-3 font-medium w-16">Conv.</th>
+                   <th className="text-right p-3 font-medium w-20">Impressions</th>
+                   <th className="text-right p-3 font-medium w-16">Clicks</th>
+                   <th className="text-right p-3 font-medium w-20">Sessions</th>
+                   <th className="text-center p-3 font-medium w-20">Engagement</th>
+                   <th className="text-right p-3 font-medium w-16">Conversions</th>
                   <th className="text-center p-3 font-medium w-20">CWV</th>
                   <th className="text-left p-3 font-medium">AI Recommendations</th>
                 </tr>
@@ -83,7 +83,7 @@ export function SeoPages() {
                 {isLoading ? (
                   <tr><td colSpan={9} className="p-8 text-center text-muted-foreground">Loading...</td></tr>
                 ) : !filtered.length ? (
-                  <tr><td colSpan={9} className="p-8 text-center text-muted-foreground">No pages found. Run AI analysis to populate page data.</td></tr>
+                  <tr><td colSpan={9} className="p-8 text-center text-muted-foreground">No pages yet. Run a full analysis to populate page performance data.</td></tr>
                 ) : (
                   filtered.map((pg: any) => {
                     const recs = Array.isArray(pg.ai_recommendations) ? pg.ai_recommendations : [];
@@ -111,7 +111,7 @@ export function SeoPages() {
                         <td className="p-3 text-right font-mono text-xs">{pg.conversions || 0}</td>
                         <td className="p-3 text-center">
                           <Badge className={`text-[10px] ${cwvColors[pg.cwv_status] || cwvColors.unknown}`}>
-                            {pg.cwv_status === "needs_improvement" ? "Needs Fix" : pg.cwv_status}
+                            {pg.cwv_status === "needs_improvement" ? "Needs Work" : pg.cwv_status}
                           </Badge>
                         </td>
                         <td className="p-3">

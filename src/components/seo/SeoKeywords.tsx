@@ -90,9 +90,9 @@ export function SeoKeywords() {
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-primary" /> AI Keywords
+             <Sparkles className="w-5 h-5 text-primary" /> Keyword Intelligence
           </h1>
-          <p className="text-sm text-muted-foreground">AI-curated keyword opportunities from GSC + ERP sources, ranked by impact</p>
+          <p className="text-sm text-muted-foreground">Keyword opportunities ranked by impact, sourced from Search Console and ERP data</p>
         </div>
 
         {/* Filters */}
@@ -158,7 +158,7 @@ export function SeoKeywords() {
                     <th className="text-center p-3 font-medium w-24">Intent</th>
                     <th className="text-left p-3 font-medium w-28">Cluster</th>
                     <th className="text-center p-3 font-medium w-24">Opportunity</th>
-                    <th className="text-center p-3 font-medium w-24">Biz Score</th>
+                    <th className="text-center p-3 font-medium w-24">Relevance</th>
                     <th className="text-center p-3 font-medium w-24">Status</th>
                     <th className="text-center p-3 font-medium w-32">Sources</th>
                     <th className="text-right p-3 font-medium w-16">Clicks</th>
@@ -168,7 +168,7 @@ export function SeoKeywords() {
                   {isLoading ? (
                     <tr><td colSpan={10} className="p-8 text-center text-muted-foreground">Loading...</td></tr>
                   ) : !filtered.length ? (
-                    <tr><td colSpan={10} className="p-8 text-center text-muted-foreground">No keywords found. Run an AI analysis to harvest keywords from all sources.</td></tr>
+                    <tr><td colSpan={10} className="p-8 text-center text-muted-foreground">No keywords yet. Run a full analysis to discover keyword opportunities.</td></tr>
                   ) : (
                     filtered.map((kw: any) => (
                       <tr key={kw.id} className="border-b hover:bg-muted/30 transition-colors">

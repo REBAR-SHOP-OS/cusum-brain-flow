@@ -334,27 +334,27 @@ export function SeoOverview() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Sparkles className="w-6 h-6 text-primary" /> AI SEO Dashboard
+            <Sparkles className="w-6 h-6 text-primary" /> SEO Intelligence Dashboard
           </h1>
-          <p className="text-sm text-muted-foreground">AI-curated insights from GSC + Analytics + ERP Sources</p>
+          <p className="text-sm text-muted-foreground">Actionable insights powered by Search Console, Analytics, and ERP data</p>
         </div>
         <div className="flex gap-2 flex-wrap">
           <input type="file" ref={fileInputRef} accept=".xlsx,.xls" className="hidden" multiple onChange={handleSemrushUpload} />
           <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={importSemrush.isPending || !domain}>
             {importSemrush.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Upload className="w-4 h-4 mr-1" />}
-            Import SEMrush
+            Import SEMrush Data
           </Button>
           <Button variant="outline" size="sm" onClick={() => syncGsc.mutate()} disabled={syncGsc.isPending || !domain || googleStatus !== "connected"}>
             {syncGsc.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Search className="w-4 h-4 mr-1" />}
-            Sync GSC
+            Sync Search Console
           </Button>
           <Button variant="outline" size="sm" onClick={() => mineReports.mutate()} disabled={mineReports.isPending || !domain}>
             {mineReports.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Mail className="w-4 h-4 mr-1" />}
-            Mine SEO Reports
+            Mine Inbound Reports
           </Button>
           <Button size="sm" onClick={() => runAnalysis.mutate()} disabled={runAnalysis.isPending || !domain}>
             {runAnalysis.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Zap className="w-4 h-4 mr-1" />}
-            Run AI Analysis
+            Run Full Analysis
           </Button>
         </div>
       </div>
@@ -363,7 +363,7 @@ export function SeoOverview() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
-              <Globe className="w-4 h-4 text-primary" /> Set Up Your Domain
+              <Globe className="w-4 h-4 text-primary" /> Configure Your Domain
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -414,7 +414,7 @@ export function SeoOverview() {
                 ) : (
                   <>
                     <Link2 className="w-4 h-4 text-yellow-500" />
-                    <span className="text-sm">Google not connected — running ERP-only keyword harvest</span>
+                    <span className="text-sm">Google not connected — using ERP-only keyword intelligence</span>
                   </>
                 )}
               </div>
@@ -432,7 +432,7 @@ export function SeoOverview() {
                 <Activity className="w-8 h-8 text-primary" />
                 <div>
                   <p className="text-2xl font-bold">{pgStats?.avgScore ?? "—"}</p>
-                  <p className="text-xs text-muted-foreground">Avg SEO Score</p>
+                  <p className="text-xs text-muted-foreground">Avg Page Score</p>
                 </div>
               </CardContent>
             </Card>
@@ -441,7 +441,7 @@ export function SeoOverview() {
                 <Search className="w-8 h-8 text-primary" />
                 <div>
                   <p className="text-2xl font-bold">{kwStats?.total ?? 0}</p>
-                  <p className="text-xs text-muted-foreground">Keywords Tracked</p>
+                  <p className="text-xs text-muted-foreground">Tracked Keywords</p>
                 </div>
               </CardContent>
             </Card>
@@ -450,7 +450,7 @@ export function SeoOverview() {
                 <TrendingUp className="w-8 h-8 text-green-500" />
                 <div>
                   <p className="text-2xl font-bold">{kwStats?.totalClicks?.toLocaleString() ?? 0}</p>
-                  <p className="text-xs text-muted-foreground">Organic Clicks (28d)</p>
+                  <p className="text-xs text-muted-foreground">Clicks (28 days)</p>
                 </div>
               </CardContent>
             </Card>
@@ -459,7 +459,7 @@ export function SeoOverview() {
                 <TrendingDown className="w-8 h-8 text-destructive" />
                 <div>
                   <p className="text-2xl font-bold">{kwStats?.declining ?? 0}</p>
-                  <p className="text-xs text-muted-foreground">Declining Keywords</p>
+                  <p className="text-xs text-muted-foreground">Declining</p>
                 </div>
               </CardContent>
             </Card>
@@ -468,7 +468,7 @@ export function SeoOverview() {
                 <Layers className="w-8 h-8 text-primary" />
                 <div>
                   <p className="text-2xl font-bold">{kwStats?.crossValidated ?? 0}</p>
-                  <p className="text-xs text-muted-foreground">Cross-validated (3+)</p>
+                  <p className="text-xs text-muted-foreground">Multi-Source (3+)</p>
                 </div>
               </CardContent>
             </Card>
@@ -477,7 +477,7 @@ export function SeoOverview() {
                 <AlertTriangle className="w-8 h-8 text-yellow-500" />
                 <div>
                   <p className="text-2xl font-bold">{taskStats?.open ?? 0}</p>
-                  <p className="text-xs text-muted-foreground">Open AI Tasks</p>
+                  <p className="text-xs text-muted-foreground">Open Tasks</p>
                 </div>
               </CardContent>
             </Card>
@@ -491,45 +491,7 @@ export function SeoOverview() {
                   <BarChart3 className="w-4 h-4 text-primary" /> Traffic Summary
                   {domain.traffic_snapshot_month && (
                     <Badge variant="secondary" className="text-[10px] ml-2">{domain.traffic_snapshot_month}</Badge>
-          )}
-
-          {/* Position Tracking (SEMrush) */}
-          {domain?.visibility_pct != null && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <TrendingUp className="w-4 h-4 text-primary" /> Position Tracking
-                  {domain.position_tracking_date && (
-                    <Badge variant="secondary" className="text-[10px] ml-2">{domain.position_tracking_date}</Badge>
                   )}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                  <div className="text-center">
-                    <p className="text-xl font-bold">{Number(domain.visibility_pct).toFixed(2)}%</p>
-                    <p className="text-xs text-muted-foreground">Visibility</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-xl font-bold">{Number(domain.avg_position).toFixed(2)}</p>
-                    <p className="text-xs text-muted-foreground">Avg Position</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-xl font-bold">{domain.top3_keywords ?? "—"}</p>
-                    <p className="text-xs text-muted-foreground">Top 3 Keywords</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-xl font-bold">{domain.top10_keywords ?? "—"}</p>
-                    <p className="text-xs text-muted-foreground">Top 10 Keywords</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-xl font-bold">{domain.total_tracked_keywords ?? "—"}</p>
-                    <p className="text-xs text-muted-foreground">Total Tracked</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -571,6 +533,44 @@ export function SeoOverview() {
             </Card>
           )}
 
+          {/* Position Tracking (SEMrush) */}
+          {domain?.visibility_pct != null && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-primary" /> Position Tracking
+                  {domain.position_tracking_date && (
+                    <Badge variant="secondary" className="text-[10px] ml-2">{domain.position_tracking_date}</Badge>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                  <div className="text-center">
+                    <p className="text-xl font-bold">{Number(domain.visibility_pct).toFixed(2)}%</p>
+                    <p className="text-xs text-muted-foreground">Visibility</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-xl font-bold">{Number(domain.avg_position).toFixed(2)}</p>
+                    <p className="text-xs text-muted-foreground">Avg Position</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-xl font-bold">{domain.top3_keywords ?? "—"}</p>
+                    <p className="text-xs text-muted-foreground">Top 3 Keywords</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-xl font-bold">{domain.top10_keywords ?? "—"}</p>
+                    <p className="text-xs text-muted-foreground">Top 10 Keywords</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-xl font-bold">{domain.total_tracked_keywords ?? "—"}</p>
+                    <p className="text-xs text-muted-foreground">Total Tracked</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {sortedSources.length > 0 && (
             <Card>
               <CardHeader>
@@ -590,7 +590,7 @@ export function SeoOverview() {
                   ))}
                 </div>
                 <p className="text-xs text-muted-foreground mt-3">
-                  Keywords sourced from {sortedSources.length} channels across your ERP
+                  Keyword signals collected from {sortedSources.length} ERP channels
                 </p>
               </CardContent>
             </Card>
@@ -605,7 +605,7 @@ export function SeoOverview() {
             </CardHeader>
             <CardContent>
               {!insights?.length ? (
-                <p className="text-sm text-muted-foreground">No insights yet. Run an AI analysis to generate insights.</p>
+                <p className="text-sm text-muted-foreground">No insights yet. Run a full analysis to generate recommendations.</p>
               ) : (
                 <div className="space-y-3">
                   {insights.map((ins: any) => {
