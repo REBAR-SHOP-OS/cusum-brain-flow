@@ -1,78 +1,174 @@
 
 
-# Recover Speed After Air Lift Plugin Removal
+# Rebar SEO Module -- Full Build Plan
 
-## The Problem
+## Overview
 
-Air Lift was handling page caching, asset optimization (CSS/JS minification), and possibly CDN integration. Removing it without a replacement means every page load now hits PHP and the database directly, causing the speed drop you're seeing.
+A standalone ERP module at `/seo` with its own sidebar navigation, 3 data source integrations, 7 new database tables, 3 edge functions, and 4 dashboard pages. No third-party SEO tools (Wincher/SEMrush) -- everything is built in-house using Google Search Console API, an internal crawler, and an optional SERP provider (DataForSEO).
 
-## What We Can Do
+---
 
-### 1. Add "Post-Air Lift Recovery" checklist items to the Speed Dashboard
+## Module Architecture
 
-Add new critical health checklist items specifically for the Air Lift removal situation, guiding you through the replacement steps:
+```text
+/seo (page)
+  |-- Overview Dashboard (default)
+  |-- Keywords (rank tracker)
+  |-- Audit (site crawl results)
+  |-- SEO Tasks (kanban board)
+```
 
-- **Install replacement caching plugin** (Critical) -- "Install LiteSpeed Cache (if on LiteSpeed server) or WP Super Cache. Enable page caching, browser caching, and GZIP compression. This alone recovers 60-80% of the lost speed."
-- **Clean up Air Lift leftovers** (Warning) -- "Remove leftover Air Lift database tables and wp-content files. Use Advanced Database Cleaner to find orphaned tables prefixed with the plugin name. Check wp-content for any remaining Air Lift folders."
-- **Re-enable CSS/JS minification** (Warning) -- "Install Autoptimize to restore CSS/JS minification and deferral that Air Lift was handling. Enable 'Aggregate CSS', 'Aggregate JS', and 'Defer JS'."
+The module follows the same sidebar pattern as `/office` (OfficeSidebar) -- a dedicated left sidebar with section buttons, content area on the right.
 
-### 2. Update the speed audit recommendations
+---
 
-Update the `website-speed-audit` edge function to prioritize the caching plugin recommendation higher (priority 0) since there is currently no active caching solution.
+## 1. Database Tables (7 new tables via migration)
 
-### 3. Run a fresh speed audit after changes
+| Table | Purpose |
+|-------|---------|
+| `seo_domains` | Registered domains to track (id, domain, gsc_verified, company_id, created_at) |
+| `seo_keywords` | Keywords to track (id, domain_id, keyword, target_url, country, device, intent, tags[], active, created_at) |
+| `seo_rank_history` | Daily rank snapshots (id, keyword_id, date, position, url_found, source, impressions, clicks, ctr, created_at) |
+| `seo_crawl_runs` | Crawl audit snapshots (id, domain_id, status, pages_crawled, health_score, started_at, completed_at) |
+| `seo_crawl_pages` | Individual page data per crawl (id, crawl_run_id, url, status_code, title, meta_description, h1, canonical, robots_directives, in_sitemap, redirect_target, issues_json, created_at) |
+| `seo_issues` | Extracted issues from crawls (id, crawl_run_id, page_id, severity, issue_type, title, description, created_at) |
+| `seo_tasks` | SEO-specific task board (id, domain_id, title, description, status, priority, entity_type, entity_url, linked_issue_id, assigned_to, company_id, created_at, updated_at) |
 
-Trigger the audit to get updated TTFB numbers so you can compare before/after installing the replacement plugin.
+All tables include `company_id` for tenant isolation with RLS policies matching existing patterns (admin/office roles).
 
-## What You Need To Do On the Server
+---
 
-These actions require WordPress admin access (we cannot install plugins via the REST API):
+## 2. Edge Functions (3 new)
 
-1. Go to **Plugins > Add New** in WordPress admin
-2. Search for **"LiteSpeed Cache"** (if your host uses LiteSpeed) or **"WP Super Cache"**
-3. Install and activate it
-4. Enable page caching in the plugin settings
-5. Optionally install **Autoptimize** for CSS/JS minification
+### A. `seo-gsc-sync` -- Google Search Console Data Import
+- Uses existing Google OAuth tokens (already stored via `google-oauth` function with `webmasters.readonly` scope)
+- Calls GSC API: `searchAnalytics.query` for queries, pages, impressions, clicks, avg position by date
+- Upserts into `seo_rank_history` (source = 'gsc')
+- Supports date range parameter (default: last 28 days)
+- Scheduled via cron (daily)
 
-## Technical Details
+### B. `seo-site-crawl` -- Internal Crawler
+- Starts from sitemap.xml, discovers all indexable pages
+- For each page: fetches HTML, extracts title, meta description, H1, canonical, robots meta, status code, redirects
+- Cross-references against sitemap coverage
+- Detects: broken links (4xx/5xx), duplicate titles/descriptions, missing H1, missing canonical, noindex on indexed pages
+- Writes results to `seo_crawl_runs`, `seo_crawl_pages`, `seo_issues`
+- Calculates health score (0-100) based on issue counts and severity weights
 
-### Files Modified
+### C. `seo-rank-check` -- Optional SERP Provider
+- Uses DataForSEO API (or SerpAPI as fallback) for real-time keyword position checks
+- Checks specified keywords by country/device
+- Stores daily position + ranking URL in `seo_rank_history` (source = 'serp')
+- Requires `DATAFORSEO_LOGIN` and `DATAFORSEO_PASSWORD` secrets (optional -- module works without it, falling back to GSC avg position)
+
+---
+
+## 3. Frontend Components
+
+### A. `src/pages/SeoModule.tsx` -- Main page
+- Registered at `/seo` route in App.tsx
+- Contains `SeoSidebar` (like OfficeSidebar) + content area
+- Sections: overview, keywords, audit, tasks
+
+### B. `src/components/seo/SeoSidebar.tsx`
+- Navigation: Overview, Keywords, Audit, Tasks
+- Icons: BarChart3, Search, Bug, CheckSquare
+
+### C. `src/components/seo/SeoOverview.tsx` -- Dashboard
+- Health score trend chart (from `seo_crawl_runs`)
+- Top 5 winners/losers keywords (biggest position change last 7d)
+- Pages with biggest visibility change (impressions delta from GSC)
+- Issues by severity (pie/bar from latest crawl)
+- Quick stats: total keywords tracked, avg position, total issues
+
+### D. `src/components/seo/SeoKeywords.tsx` -- Keyword Tracker
+- Table: keyword, current position, change (delta), best, target URL, country, device, intent, tags
+- Rank history sparkline or expandable chart per keyword
+- Filters: country, device, intent, tags
+- Add keyword form
+- Alerts indicator (rank drop > 5 positions highlighted red)
+
+### E. `src/components/seo/SeoAudit.tsx` -- Site Audit
+- List of crawl runs with date, pages crawled, health score, status
+- "Run Crawl" button triggers `seo-site-crawl`
+- Expandable run showing issues grouped by severity (critical/warning/info)
+- Issue types: broken_link, duplicate_title, duplicate_description, missing_h1, missing_canonical, missing_meta, noindex_conflict, redirect_chain, slow_page
+- "Create Task" button on each issue (creates `seo_tasks` entry)
+
+### F. `src/components/seo/SeoTasks.tsx` -- Kanban Board
+- Columns: Open, In Progress, Done
+- Cards show: title, severity badge, entity URL, assigned user
+- Drag or dropdown to change status
+- Filter by severity, entity type
+- Linked back to issue/page
+
+---
+
+## 4. Routing and Navigation Updates
 
 | File | Change |
 |------|--------|
-| `src/components/website/SpeedDashboard.tsx` | Add 3 new recovery checklist items to `SERVER_HEALTH_ITEMS` for the Air Lift removal situation |
-| `supabase/functions/website-speed-audit/index.ts` | Add a high-priority "no caching plugin detected" recommendation and an Air Lift cleanup recommendation |
+| `src/App.tsx` | Add `<Route path="/seo" element={<P><SeoModule /></P>} />` |
+| `src/hooks/useActiveModule.ts` | Add `/seo` entry: `{ module: "SEO", moduleRoute: "/seo" }` |
+| `src/components/layout/AppSidebar.tsx` | Add "SEO" nav item under "Office" group with Search icon, roles: `["admin", "office"]` |
 
-### SpeedDashboard.tsx
+---
 
-Add to `SERVER_HEALTH_ITEMS` array:
-
-```text
-- id: "replace_cache_plugin"
-  severity: critical
-  title: "Install Replacement Caching Plugin"
-  description: "Air Lift was removed. Install LiteSpeed Cache or WP Super Cache immediately to restore page caching, browser caching, and GZIP. This is the #1 fix for the speed drop."
-
-- id: "airlift_cleanup"
-  severity: warning
-  title: "Clean Up Air Lift Leftovers"
-  description: "Check database for orphaned Air Lift tables using Advanced Database Cleaner. Remove any leftover files in wp-content/plugins/ and wp-content/cache/."
-
-- id: "restore_minification"
-  severity: warning  
-  title: "Restore CSS/JS Minification"
-  description: "Install Autoptimize to replace Air Lift's asset optimization. Enable Aggregate CSS, Aggregate JS, and Defer JS loading."
-```
-
-### website-speed-audit/index.ts
-
-Add before existing recommendations:
+## 5. Data Flow
 
 ```text
-- action: "replace_caching_plugin"
-  priority: 0
-  title: "URGENT: Install replacement caching plugin"
-  description: "No active caching plugin detected after Air Lift removal. Install LiteSpeed Cache or WP Super Cache to restore page caching. This is the single most impactful fix for the current speed regression."
-  requires_server_access: true
+Daily cron:
+  1. seo-gsc-sync -> pulls GSC data -> seo_rank_history (source='gsc')
+  2. seo-rank-check (if SERP configured) -> checks keywords -> seo_rank_history (source='serp')
+  3. seo-site-crawl (weekly or manual) -> crawls site -> seo_crawl_runs + seo_crawl_pages + seo_issues
+
+Frontend reads:
+  - seo_rank_history for keyword charts
+  - seo_crawl_runs + seo_issues for audit dashboard
+  - seo_tasks for kanban board
 ```
+
+---
+
+## 6. Secrets Needed
+
+| Secret | Required? | Purpose |
+|--------|-----------|---------|
+| Google OAuth (existing) | Yes | GSC API access -- already connected |
+| `DATAFORSEO_LOGIN` | Optional | DataForSEO SERP checks |
+| `DATAFORSEO_PASSWORD` | Optional | DataForSEO SERP checks |
+
+The module will work with GSC-only mode. SERP provider is additive.
+
+---
+
+## 7. Implementation Order
+
+1. **Database migration**: Create all 7 tables with RLS policies
+2. **Edge function `seo-gsc-sync`**: GSC data import
+3. **Edge function `seo-site-crawl`**: Internal crawler
+4. **Edge function `seo-rank-check`**: Optional SERP provider
+5. **Frontend**: SeoModule page + sidebar + all 4 sub-pages
+6. **Routing**: App.tsx, sidebar, breadcrumb updates
+7. **Cron setup**: Daily GSC sync + optional SERP checks
+
+---
+
+## 8. Files Created/Modified
+
+| File | Action |
+|------|--------|
+| `src/pages/SeoModule.tsx` | Create |
+| `src/components/seo/SeoSidebar.tsx` | Create |
+| `src/components/seo/SeoOverview.tsx` | Create |
+| `src/components/seo/SeoKeywords.tsx` | Create |
+| `src/components/seo/SeoAudit.tsx` | Create |
+| `src/components/seo/SeoTasks.tsx` | Create |
+| `supabase/functions/seo-gsc-sync/index.ts` | Create |
+| `supabase/functions/seo-site-crawl/index.ts` | Create |
+| `supabase/functions/seo-rank-check/index.ts` | Create |
+| `src/App.tsx` | Modify (add route) |
+| `src/hooks/useActiveModule.ts` | Modify (add SEO entry) |
+| `src/components/layout/AppSidebar.tsx` | Modify (add nav item) |
+| Database migration | 7 tables + RLS + realtime |
 
