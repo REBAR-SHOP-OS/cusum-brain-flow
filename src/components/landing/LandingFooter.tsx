@@ -28,7 +28,7 @@ export function LandingFooter() {
         </div>
 
         {/* Row 2: Business details (additive) */}
-        <div className="border-t border-border pt-8 grid grid-cols-1 md:grid-cols-3 gap-6 text-sm text-muted-foreground">
+        <div className="border-t border-border pt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 text-sm text-muted-foreground">
           <address className="not-italic space-y-2">
             <p className="font-semibold text-foreground mb-2">Contact</p>
             <p className="flex items-center gap-2">

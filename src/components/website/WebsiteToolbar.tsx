@@ -51,10 +51,10 @@ export function WebsiteToolbar({
   ];
 
   return (
-    <div className="flex items-center gap-2 px-4 py-2 border-b border-border bg-card shrink-0">
+    <div className="flex flex-wrap items-center gap-2 px-3 sm:px-4 py-2 border-b border-border bg-card shrink-0">
       {/* Page selector */}
       <Select value={currentPath} onValueChange={onPageChange}>
-        <SelectTrigger className="w-44 h-9 text-sm">
+        <SelectTrigger className="w-32 sm:w-44 h-9 text-sm">
           <SelectValue placeholder="Select page" />
         </SelectTrigger>
         <SelectContent>
@@ -66,8 +66,8 @@ export function WebsiteToolbar({
         </SelectContent>
       </Select>
 
-      {/* Device toggles */}
-      <div className="flex items-center bg-muted rounded-lg p-0.5">
+      {/* Device toggles — hidden on mobile */}
+      <div className="hidden sm:flex items-center bg-muted rounded-lg p-0.5">
         {deviceButtons.map(({ mode, icon: Icon, label }) => (
           <Button
             key={mode}

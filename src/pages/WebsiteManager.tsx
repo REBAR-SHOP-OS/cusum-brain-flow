@@ -4,9 +4,10 @@ import { WebsiteToolbar, DeviceMode } from "@/components/website/WebsiteToolbar"
 import { WebsiteChat } from "@/components/website/WebsiteChat";
 import { SpeedDashboard } from "@/components/website/SpeedDashboard";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MessageSquare, Gauge, Maximize2 } from "lucide-react";
+import { MessageSquare, Gauge, Maximize2, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 const SITE_ORIGIN = "https://rebar.shop";
 
@@ -23,7 +24,9 @@ export default function WebsiteManager() {
   const [device, setDevice] = useState<DeviceMode>("desktop");
   const [rightPanel, setRightPanel] = useState<"chat" | "speed">("chat");
   const [chatMode, setChatMode] = useState<ChatMode>("normal");
+  const [mobileTab, setMobileTab] = useState<"preview" | "chat">("preview");
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const isMobile = useIsMobile();
 
   const refreshIframe = useCallback(() => {
     if (iframeRef.current) {
@@ -134,6 +137,34 @@ export default function WebsiteManager() {
           onRefresh={refreshIframe}
         />
         <div className="flex-1 overflow-hidden min-h-0">{rightPanelContent}</div>
+      </div>
+    );
+  }
+
+  // Mobile: tabbed interface
+  if (isMobile) {
+    return (
+      <div className="flex flex-col h-[calc(100vh-3.5rem)]">
+        <WebsiteToolbar
+          currentPath={currentPath}
+          onPageChange={handlePageChange}
+          device={device}
+          onDeviceChange={setDevice}
+          onRefresh={refreshIframe}
+        />
+        <Tabs value={mobileTab} onValueChange={(v) => setMobileTab(v as "preview" | "chat")} className="shrink-0">
+          <TabsList className="w-full rounded-none border-b border-border bg-card h-9">
+            <TabsTrigger value="preview" className="text-xs gap-1 flex-1">
+              <Eye className="w-3.5 h-3.5" /> Preview
+            </TabsTrigger>
+            <TabsTrigger value="chat" className="text-xs gap-1 flex-1">
+              <MessageSquare className="w-3.5 h-3.5" /> Chat
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+        <div className="flex-1 overflow-hidden min-h-0">
+          {mobileTab === "preview" ? previewPanel : rightPanelContent}
+        </div>
       </div>
     );
   }
