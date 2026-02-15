@@ -1,13 +1,20 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, Zap, AlertTriangle, CheckCircle, RefreshCw, Gauge, Image, Server } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Loader2, Zap, AlertTriangle, CheckCircle, RefreshCw, Gauge, Image, Server, Stethoscope } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+
+const SERVER_HEALTH_ITEMS = [
+  { id: "autoload", severity: "critical" as const, title: "Autoloaded Options Bloat", description: "Autoloaded data is 1.1 MB. Install Advanced Database Cleaner or WP-Optimize to purge stale transients and expired options. Target: under 800 KB." },
+  { id: "redis", severity: "critical" as const, title: "No Persistent Object Cache", description: "No Redis/Memcached detected. Enable persistent object caching via your hosting panel (most managed hosts offer one-click Redis). This eliminates redundant database queries on every page load." },
+  { id: "consent", severity: "warning" as const, title: "Consent API Non-Compliance", description: "One or more plugins don't declare cookie consent via the WP Consent API. Update CookieYes/cookie plugins or replace with a Consent API-compatible alternative." },
+];
 
 interface SpeedIssue {
   type: string;
@@ -70,6 +77,17 @@ function MetricCard({ label, value, unit, status }: { label: string; value: numb
 export function SpeedDashboard() {
   const queryClient = useQueryClient();
   const [optimizerMode, setOptimizerMode] = useState<"dry_run" | "live">("dry_run");
+  const [checkedHealth, setCheckedHealth] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem("speed-health-checklist") || "[]"); } catch { return []; }
+  });
+
+  const toggleHealthItem = (id: string) => {
+    setCheckedHealth(prev => {
+      const next = prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id];
+      localStorage.setItem("speed-health-checklist", JSON.stringify(next));
+      return next;
+    });
+  };
 
   const auditQuery = useQuery<AuditResult>({
     queryKey: ["speed-audit"],
@@ -231,6 +249,35 @@ export function SpeedDashboard() {
                   ))}
                 </div>
               )}
+
+              {/* WordPress Health Checklist */}
+              <Card className="p-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Stethoscope className="w-4 h-4 text-primary" />
+                  <h3 className="text-sm font-semibold">WordPress Health Checklist</h3>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Server-side issues from Site Health report. Check off as you resolve them.
+                </p>
+                <div className="space-y-2">
+                  {SERVER_HEALTH_ITEMS.map(item => (
+                    <label key={item.id} className={cn("flex items-start gap-2 p-2 rounded cursor-pointer transition-colors", checkedHealth.includes(item.id) ? "bg-muted/50 opacity-60" : "hover:bg-muted/30")}>
+                      <Checkbox
+                        checked={checkedHealth.includes(item.id)}
+                        onCheckedChange={() => toggleHealthItem(item.id)}
+                        className="mt-0.5"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className={cn("text-xs font-medium", checkedHealth.includes(item.id) && "line-through")}>{item.title}</span>
+                          <Badge variant={item.severity === "critical" ? "destructive" : "secondary"} className="text-[10px]">{item.severity}</Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </Card>
 
               {/* Server-side Recommendations */}
               {audit.recommendations.length > 0 && (

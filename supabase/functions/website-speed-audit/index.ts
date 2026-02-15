@@ -209,6 +209,29 @@ serve(async (req) => {
     // Generate recommendations based on findings
     const avgTTFB = Object.values(ttfbResults).reduce((s, v) => s + v, 0) / Object.values(ttfbResults).length;
 
+    // Hardcoded Site Health items (from WP Site Health report)
+    recommendations.push({
+      action: "fix_autoloaded_options",
+      priority: 0,
+      title: "Clean autoloaded options bloat (1.1 MB)",
+      description: "Autoloaded data is 1.1 MB. Install Advanced Database Cleaner or WP-Optimize to purge stale transients and expired options. Target: under 800 KB.",
+      requires_server_access: true,
+    });
+    recommendations.push({
+      action: "enable_object_cache",
+      priority: 1,
+      title: "Enable persistent object cache (Redis/Memcached)",
+      description: "No Redis/Memcached detected. Enable persistent object caching via your hosting panel (most managed hosts offer one-click Redis). This eliminates redundant database queries on every page load.",
+      requires_server_access: true,
+    });
+    recommendations.push({
+      action: "fix_consent_api",
+      priority: 2,
+      title: "Fix Consent API non-compliance",
+      description: "One or more plugins don't declare cookie consent via the WP Consent API. Update CookieYes/cookie plugins or replace with a Consent API-compatible alternative.",
+      requires_server_access: true,
+    });
+
     if (avgTTFB > 2000) {
       recommendations.push({
         action: "install_cache_plugin",
