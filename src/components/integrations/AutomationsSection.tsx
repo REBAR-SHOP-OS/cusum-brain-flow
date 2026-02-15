@@ -3,7 +3,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Bot, Mail, FileText, MessageCircle, Sparkles, Send } from "lucide-react";
+import { Bot, Mail, FileText, MessageCircle, Sparkles, Send, Globe } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface Automation {
@@ -12,7 +12,7 @@ export interface Automation {
   description: string;
   enabled: boolean;
   color: "purple" | "blue" | "gold" | "teal";
-  icon: "social" | "inbox" | "summary" | "comment" | "email";
+  icon: "social" | "inbox" | "summary" | "comment" | "email" | "website";
   beta?: boolean;
   route?: string;
 }
@@ -63,6 +63,15 @@ const defaultAutomations: Automation[] = [
     icon: "email",
     route: "/email-marketing",
   },
+  {
+    id: "website-manager",
+    name: "Website Manager",
+    description: "Visual editing and AI management for rebar.shop",
+    enabled: true,
+    color: "blue",
+    icon: "website",
+    route: "/website",
+  },
 ];
 
 const colorGradients = {
@@ -78,6 +87,7 @@ const iconComponents = {
   summary: FileText,
   comment: MessageCircle,
   email: Send,
+  website: Globe,
 };
 
 interface AutomationCardProps {
