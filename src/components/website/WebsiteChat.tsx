@@ -202,8 +202,8 @@ export function WebsiteChat({ currentPagePath, onWriteConfirmed }: WebsiteChatPr
       </div>
 
       {/* Messages */}
-      <ScrollArea className="flex-1">
-        <div className="p-3 space-y-3 w-full">
+      <ScrollArea className="flex-1 overflow-hidden">
+        <div className="p-3 space-y-3 w-full overflow-hidden">
           {messages.length === 0 && (
             <div className="text-center py-8 space-y-3">
               <p className="text-sm text-muted-foreground">
@@ -230,7 +230,7 @@ export function WebsiteChat({ currentPagePath, onWriteConfirmed }: WebsiteChatPr
             <div
               key={msg.id}
               className={cn(
-                "rounded-xl px-3 py-2 text-sm max-w-[95%] overflow-hidden break-words min-w-0",
+                "rounded-xl px-3 py-2 text-sm max-w-[95%] overflow-hidden break-words min-w-0 [overflow-wrap:anywhere] [word-break:break-all]",
                 msg.role === "user"
                   ? "ml-auto bg-primary text-primary-foreground"
                   : "mr-auto bg-muted text-foreground"
@@ -239,7 +239,7 @@ export function WebsiteChat({ currentPagePath, onWriteConfirmed }: WebsiteChatPr
               {msg.role === "assistant" ? (
                 <RichMarkdown content={msg.content} className="text-sm [&_p]:text-sm [&_pre]:overflow-x-auto [&_code]:break-all [&_p]:break-words [&_*]:max-w-full" />
               ) : (
-                <p className="whitespace-pre-wrap">
+                <p className="whitespace-pre-wrap break-all [overflow-wrap:anywhere]">
                   {/* Strip the context prefix from display */}
                   {msg.content.replace(/^\[Currently viewing:.*?\]\n/, "")}
                 </p>
