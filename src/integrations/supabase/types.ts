@@ -6855,6 +6855,7 @@ export type Database = {
       }
       team_messages: {
         Row: {
+          attachments: Json | null
           channel_id: string
           created_at: string
           id: string
@@ -6864,6 +6865,7 @@ export type Database = {
           translations: Json
         }
         Insert: {
+          attachments?: Json | null
           channel_id: string
           created_at?: string
           id?: string
@@ -6873,6 +6875,7 @@ export type Database = {
           translations?: Json
         }
         Update: {
+          attachments?: Json | null
           channel_id?: string
           created_at?: string
           id?: string

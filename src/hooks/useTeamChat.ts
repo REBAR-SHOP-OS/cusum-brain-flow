@@ -12,6 +12,13 @@ export interface TeamChannel {
   created_at: string;
 }
 
+export interface ChatAttachment {
+  name: string;
+  url: string;
+  type: string;
+  size: number;
+}
+
 export interface TeamMessage {
   id: string;
   channel_id: string;
@@ -19,6 +26,7 @@ export interface TeamMessage {
   original_text: string;
   original_language: string;
   translations: Record<string, string>;
+  attachments: ChatAttachment[];
   created_at: string;
   sender?: Profile;
 }
@@ -113,12 +121,14 @@ export function useSendMessage() {
       text,
       senderLang,
       targetLangs,
+      attachments = [],
     }: {
       channelId: string;
       senderProfileId: string;
       text: string;
       senderLang: string;
       targetLangs: string[];
+      attachments?: ChatAttachment[];
     }) => {
       // Get translations from edge function
       let translations: Record<string, string> = {};
@@ -146,6 +156,7 @@ export function useSendMessage() {
           original_text: text,
           original_language: senderLang,
           translations,
+          attachments,
         });
 
       if (insertError) throw insertError;
