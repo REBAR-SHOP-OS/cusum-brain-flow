@@ -1,38 +1,65 @@
 /**
- * Shared audio utility that pre-unlocks Web Audio on first user interaction.
- * This enables reliable audio playback on mobile browsers (especially iOS Safari)
- * which block audio.play() unless triggered within a user gesture context.
+ * Shared audio utility with robust Web Audio unlock for mobile browsers.
+ * Keeps retrying unlock on every user interaction until AudioContext is confirmed running.
+ * Pre-caches notification sounds for instant playback.
  */
 
 let audioCtx: AudioContext | null = null;
 let unlocked = false;
+const audioBufferCache = new Map<string, AudioBuffer>();
 
-function unlockAudio() {
+async function preCacheSound(url: string): Promise<void> {
+  if (!audioCtx || audioBufferCache.has(url)) return;
+  try {
+    const response = await fetch(url);
+    const arrayBuffer = await response.arrayBuffer();
+    const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+    audioBufferCache.set(url, audioBuffer);
+    console.log("[audioPlayer] pre-cached:", url);
+  } catch (err) {
+    console.warn("[audioPlayer] pre-cache failed:", url, err);
+  }
+}
+
+async function unlockAudio() {
   if (unlocked) return;
   try {
-    const AC = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AC) return;
-    audioCtx = new AC();
-    // Play a silent buffer to unlock the context
+    if (!audioCtx) {
+      const AC = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AC) return;
+      audioCtx = new AC();
+    }
+
+    // Play a silent buffer to satisfy gesture requirement
     const buffer = audioCtx.createBuffer(1, 1, 22050);
     const source = audioCtx.createBufferSource();
     source.buffer = buffer;
     source.connect(audioCtx.destination);
     source.start(0);
+
     if (audioCtx.state === "suspended") {
-      audioCtx.resume().catch(() => {});
+      await audioCtx.resume();
     }
-    unlocked = true;
-  } catch {
-    // AudioContext unavailable — fall back gracefully
+
+    if (audioCtx.state === "running") {
+      unlocked = true;
+      console.log("[audioPlayer] unlocked");
+      // Remove listeners now that we're confirmed running
+      document.removeEventListener("click", unlockAudio, true);
+      document.removeEventListener("touchstart", unlockAudio, true);
+      // Pre-cache the notification sound
+      preCacheSound("/mockingjay.mp3");
+    }
+    // If state is NOT running, listeners stay active for next interaction
+  } catch (err) {
+    console.warn("[audioPlayer] unlock attempt failed:", err);
   }
 }
 
-// Attach unlock listeners on import
+// Attach unlock listeners — NO { once: true } so they retry until success
 if (typeof document !== "undefined") {
-  const opts = { once: true, capture: true } as const;
-  document.addEventListener("click", unlockAudio, opts);
-  document.addEventListener("touchstart", unlockAudio, opts);
+  document.addEventListener("click", unlockAudio, true);
+  document.addEventListener("touchstart", unlockAudio, true);
 }
 
 /**
@@ -47,9 +74,18 @@ export async function playNotificationSound(url: string): Promise<void> {
       if (audioCtx.state === "suspended") {
         await audioCtx.resume();
       }
-      const response = await fetch(url);
-      const arrayBuffer = await response.arrayBuffer();
-      const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+
+      let audioBuffer = audioBufferCache.get(url);
+      if (audioBuffer) {
+        console.log("[audioPlayer] playing from cache:", url);
+      } else {
+        console.log("[audioPlayer] fetching audio:", url);
+        const response = await fetch(url);
+        const arrayBuffer = await response.arrayBuffer();
+        audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+        audioBufferCache.set(url, audioBuffer);
+      }
+
       const source = audioCtx.createBufferSource();
       source.buffer = audioBuffer;
       const gain = audioCtx.createGain();
@@ -63,7 +99,7 @@ export async function playNotificationSound(url: string): Promise<void> {
     }
   }
 
-  // Fallback: HTMLAudioElement (will fail on mobile without gesture, but best effort)
+  // Fallback: HTMLAudioElement
   try {
     const audio = new Audio(url);
     audio.volume = 0.5;
