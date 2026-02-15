@@ -210,7 +210,11 @@ export function WebsiteChat({ currentPagePath, onWriteConfirmed, chatMode = "nor
             variant="ghost"
             size="icon"
             className="h-7 w-7"
-            onClick={() => onChatModeChange?.(chatMode === "minimized" ? "normal" : "minimized")}
+            onClick={() => {
+              if (chatMode === "fullscreen") onChatModeChange?.("normal");
+              else if (chatMode === "normal") onChatModeChange?.("minimized");
+              else onChatModeChange?.("normal");
+            }}
             title={chatMode === "minimized" ? "Expand" : "Minimize"}
           >
             <Minus className="w-3.5 h-3.5" />
