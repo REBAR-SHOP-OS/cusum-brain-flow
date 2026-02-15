@@ -1,10 +1,14 @@
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { TrendingUp, TrendingDown, Search, AlertTriangle, Activity, Zap, Loader2, Sparkles, Layers } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { TrendingUp, TrendingDown, Search, AlertTriangle, Activity, Zap, Loader2, Sparkles, Layers, Globe } from "lucide-react";
 import { toast } from "sonner";
+import { useCompanyId } from "@/hooks/useCompanyId";
 
 const SOURCE_COLORS: Record<string, string> = {
   gsc: "bg-blue-500/10 text-blue-600",
@@ -20,6 +24,9 @@ const SOURCE_COLORS: Record<string, string> = {
 
 export function SeoOverview() {
   const qc = useQueryClient();
+  const { companyId } = useCompanyId();
+  const [domainInput, setDomainInput] = useState("rebar.shop");
+  const [gaInput, setGaInput] = useState("");
 
   const { data: domain } = useQuery({
     queryKey: ["seo-domain"],
@@ -120,6 +127,22 @@ export function SeoOverview() {
     onError: (e: any) => toast.error(e.message),
   });
 
+  const setupDomain = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("seo_domains").insert({
+        domain: domainInput.trim(),
+        ga_property_id: gaInput.trim() || null,
+        company_id: companyId!,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["seo-domain"] });
+      toast.success(`Domain "${domainInput}" configured successfully`);
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
   const syncGsc = useMutation({
     mutationFn: async () => {
       if (!domain?.id) throw new Error("No domain");
@@ -168,8 +191,33 @@ export function SeoOverview() {
 
       {!domain && (
         <Card>
-          <CardContent className="py-8 text-center text-muted-foreground">
-            No domain configured. Set up a domain to begin AI SEO analysis.
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Globe className="w-4 h-4 text-primary" /> Set Up Your Domain
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="domain">Domain Name</Label>
+              <Input id="domain" value={domainInput} onChange={(e) => setDomainInput(e.target.value)} placeholder="example.com" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="ga">GA4 Property ID (optional)</Label>
+              <Input id="ga" value={gaInput} onChange={(e) => setGaInput(e.target.value)} placeholder="properties/123456789" />
+            </div>
+            <Button
+              onClick={() => {
+                if (!domainInput.trim() || !companyId) {
+                  toast.error("Domain name and company are required");
+                  return;
+                }
+                setupDomain.mutate();
+              }}
+              disabled={setupDomain.isPending || !companyId}
+            >
+              {setupDomain.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Globe className="w-4 h-4 mr-1" />}
+              Set Up Domain
+            </Button>
           </CardContent>
         </Card>
       )}
