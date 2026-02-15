@@ -5807,6 +5807,62 @@ export type Database = {
           },
         ]
       }
+      seo_link_audit: {
+        Row: {
+          anchor_text: string | null
+          company_id: string
+          created_at: string
+          domain_id: string | null
+          id: string
+          is_fixed: boolean
+          link_href: string | null
+          link_type: string
+          page_url: string
+          status: string
+          suggested_anchor: string | null
+          suggested_href: string | null
+          suggestion: string | null
+        }
+        Insert: {
+          anchor_text?: string | null
+          company_id: string
+          created_at?: string
+          domain_id?: string | null
+          id?: string
+          is_fixed?: boolean
+          link_href?: string | null
+          link_type?: string
+          page_url: string
+          status?: string
+          suggested_anchor?: string | null
+          suggested_href?: string | null
+          suggestion?: string | null
+        }
+        Update: {
+          anchor_text?: string | null
+          company_id?: string
+          created_at?: string
+          domain_id?: string | null
+          id?: string
+          is_fixed?: boolean
+          link_href?: string | null
+          link_type?: string
+          page_url?: string
+          status?: string
+          suggested_anchor?: string | null
+          suggested_href?: string | null
+          suggestion?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "seo_link_audit_domain_id_fkey"
+            columns: ["domain_id"]
+            isOneToOne: false
+            referencedRelation: "seo_domains"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       seo_page_ai: {
         Row: {
           ai_recommendations: Json | null
