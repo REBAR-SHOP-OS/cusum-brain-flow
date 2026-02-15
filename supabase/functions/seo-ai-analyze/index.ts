@@ -126,6 +126,29 @@ Deno.serve(async (req) => {
 
     console.log(`GSC: ${gscKeywords.length} keywords, ${gscPages.length} pages`);
 
+    // ---- STEP 1.5: Run multi-source keyword harvest ----
+    try {
+      const harvestRes = await fetch(
+        `${supabaseUrl}/functions/v1/seo-keyword-harvest`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${serviceKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ domain_id }),
+        }
+      );
+      if (harvestRes.ok) {
+        const harvestData = await harvestRes.json();
+        console.log(`Keyword harvest: ${harvestData.keywords_harvested} keywords from ${harvestData.sources_queried} sources`);
+      } else {
+        console.error("Keyword harvest failed:", await harvestRes.text());
+      }
+    } catch (e) {
+      console.error("Keyword harvest error:", e);
+    }
+
     // ---- STEP 2: Pull GA4 data (if configured) ----
     let gaPages: any[] = [];
     if (domain.verified_ga && domain.ga_property_id) {
