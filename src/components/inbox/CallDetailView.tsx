@@ -98,6 +98,10 @@ export function CallDetailView({ communication, footer }: CallDetailViewProps) {
     if (!recordingUri) return;
     setLoadingAudio(true);
 
+    // Create Audio element synchronously during user gesture (before any await)
+    const audio = new Audio();
+    audioRef.current = audio;
+
     try {
       const projectUrl = import.meta.env.VITE_SUPABASE_URL;
       const { data: { session } } = await supabase.auth.getSession();
@@ -110,8 +114,7 @@ export function CallDetailView({ communication, footer }: CallDetailViewProps) {
 
       const blob = await resp.blob();
       const blobUrl = URL.createObjectURL(blob);
-      const audio = new Audio(blobUrl);
-      audioRef.current = audio;
+      audio.src = blobUrl;
 
       audio.onended = () => {
         setPlaying(false);
