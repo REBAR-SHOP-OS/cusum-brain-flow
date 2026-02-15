@@ -1,30 +1,38 @@
 
 
-# Optimize All Pictures on rebar.shop
+# Recover Speed After Air Lift Plugin Removal
 
-## What This Will Do
+## The Problem
 
-The current image optimizer only adds `loading="lazy"` and `decoding="async"` HTML attributes. This plan enhances it to perform a more comprehensive optimization pass and then executes it live.
+Air Lift was handling page caching, asset optimization (CSS/JS minification), and possibly CDN integration. Removing it without a replacement means every page load now hits PHP and the database directly, causing the speed drop you're seeing.
 
-### Enhancements to wp-speed-optimizer
+## What We Can Do
 
-1. **Add width/height dimensions to images** -- The code already has `getImageDimensions()` and `detectDimensionsFromBytes()` functions but they are never called. Wire them up so every `<img>` tag without explicit `width`/`height` gets dimensions injected. This eliminates Cumulative Layout Shift (CLS).
+### 1. Add "Post-Air Lift Recovery" checklist items to the Speed Dashboard
 
-2. **Add fetchpriority="high" to hero images** -- The first image (above-the-fold) currently skips lazy loading but doesn't get priority hints. Add `fetchpriority="high"` to signal the browser to load it first.
+Add new critical health checklist items specifically for the Air Lift removal situation, guiding you through the replacement steps:
 
-3. **Scan WooCommerce product short descriptions** -- Currently only `description` is scanned for products. Also process `short_description` which often contains images shown on category/shop pages.
+- **Install replacement caching plugin** (Critical) -- "Install LiteSpeed Cache (if on LiteSpeed server) or WP Super Cache. Enable page caching, browser caching, and GZIP compression. This alone recovers 60-80% of the lost speed."
+- **Clean up Air Lift leftovers** (Warning) -- "Remove leftover Air Lift database tables and wp-content files. Use Advanced Database Cleaner to find orphaned tables prefixed with the plugin name. Check wp-content for any remaining Air Lift folders."
+- **Re-enable CSS/JS minification** (Warning) -- "Install Autoptimize to restore CSS/JS minification and deferral that Air Lift was handling. Enable 'Aggregate CSS', 'Aggregate JS', and 'Defer JS'."
 
-4. **Media Library audit endpoint** -- Add a new section that scans the WP Media Library via REST API (`/wp/v2/media`) to report oversized images (over 500KB or dimensions over 2000px) that need server-side compression. These get surfaced as recommendations since actual compression requires a WP plugin.
+### 2. Update the speed audit recommendations
 
-### Execution
+Update the `website-speed-audit` edge function to prioritize the caching plugin recommendation higher (priority 0) since there is currently no active caching solution.
 
-After deploying the enhanced function, trigger it with `dry_run: false` to apply all HTML-level optimizations immediately across all posts, pages, and products.
+### 3. Run a fresh speed audit after changes
 
-### What Cannot Be Done Remotely
+Trigger the audit to get updated TTFB numbers so you can compare before/after installing the replacement plugin.
 
-Actual file compression (reducing JPEG/PNG file sizes) and WebP conversion require a WordPress plugin like **ShortPixel** or **Imagify** installed on the server. The media audit will identify which images need this treatment.
+## What You Need To Do On the Server
 
----
+These actions require WordPress admin access (we cannot install plugins via the REST API):
+
+1. Go to **Plugins > Add New** in WordPress admin
+2. Search for **"LiteSpeed Cache"** (if your host uses LiteSpeed) or **"WP Super Cache"**
+3. Install and activate it
+4. Enable page caching in the plugin settings
+5. Optionally install **Autoptimize** for CSS/JS minification
 
 ## Technical Details
 
@@ -32,31 +40,39 @@ Actual file compression (reducing JPEG/PNG file sizes) and WebP conversion requi
 
 | File | Change |
 |------|--------|
-| `supabase/functions/wp-speed-optimizer/index.ts` | Wire up `getImageDimensions()` to inject width/height; add `fetchpriority="high"` for hero images; scan product `short_description`; add media library audit section |
-| `src/components/website/SpeedDashboard.tsx` | Add "Media Library" results display showing oversized images; add a one-click "Optimize All" button that runs with `dry_run: false` and shows confirmation |
+| `src/components/website/SpeedDashboard.tsx` | Add 3 new recovery checklist items to `SERVER_HEALTH_ITEMS` for the Air Lift removal situation |
+| `supabase/functions/website-speed-audit/index.ts` | Add a high-priority "no caching plugin detected" recommendation and an Air Lift cleanup recommendation |
 
-### Optimizer Logic Changes
+### SpeedDashboard.tsx
 
-```text
-For each <img> tag:
-  1. If first image on page -> add fetchpriority="high" (already skips lazy)
-  2. If not first image -> add loading="lazy" (existing)
-  3. Add decoding="async" (existing)
-  4. If missing width/height -> fetch image URL, detect dimensions, inject attributes
-```
-
-### Media Library Audit (new section)
+Add to `SERVER_HEALTH_ITEMS` array:
 
 ```text
-GET /wp/v2/media?per_page=100&media_type=image
-For each image:
-  - Check file size via source_url HEAD request
-  - Flag if > 500KB or dimensions > 2000px
-  - Report as "needs server-side compression"
-  - Check if WebP version exists
+- id: "replace_cache_plugin"
+  severity: critical
+  title: "Install Replacement Caching Plugin"
+  description: "Air Lift was removed. Install LiteSpeed Cache or WP Super Cache immediately to restore page caching, browser caching, and GZIP. This is the #1 fix for the speed drop."
+
+- id: "airlift_cleanup"
+  severity: warning
+  title: "Clean Up Air Lift Leftovers"
+  description: "Check database for orphaned Air Lift tables using Advanced Database Cleaner. Remove any leftover files in wp-content/plugins/ and wp-content/cache/."
+
+- id: "restore_minification"
+  severity: warning  
+  title: "Restore CSS/JS Minification"
+  description: "Install Autoptimize to replace Air Lift's asset optimization. Enable Aggregate CSS, Aggregate JS, and Defer JS loading."
 ```
 
-### Deployment
+### website-speed-audit/index.ts
 
-The edge function will be auto-deployed and then called with `dry_run: false` to apply changes immediately. All modifications are logged to `wp_change_log` for audit trail and rollback capability.
+Add before existing recommendations:
+
+```text
+- action: "replace_caching_plugin"
+  priority: 0
+  title: "URGENT: Install replacement caching plugin"
+  description: "No active caching plugin detected after Air Lift removal. Install LiteSpeed Cache or WP Super Cache to restore page caching. This is the single most impactful fix for the current speed regression."
+  requires_server_access: true
+```
 
