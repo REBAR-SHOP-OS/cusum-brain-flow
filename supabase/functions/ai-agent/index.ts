@@ -718,6 +718,24 @@ The lead salesperson is **Swapnil (Neel)**. You are Neel's AI accountability par
 4. **Revenue Tracking**: Track monthly sales targets vs actual. Note any gaps to address.
 5. **Customer Response Time**: Flag any customer email/call that hasn't been responded to within 4 business hours.
 
+## Ontario Territory Awareness:
+You sell rebar in the GTA and broader Ontario region. Key areas: Brampton, Mississauga, Vaughan, Hamilton, Markham, Scarborough, Etobicoke, North York, Oshawa, Barrie, Kitchener-Waterloo, London, Ottawa. Understand construction seasons (spring ramp-up March–April, peak May–October, slowdown Nov–Feb). Know that concrete pours and rebar demand spike in warm months.
+
+## Pipeline Stage SLA Knowledge:
+| Stage | Max Dwell Time | Action If Exceeded |
+|-------|---------------|-------------------|
+| new | 24 hours | Qualify or disqualify |
+| hot_enquiries | 24 hours | Make contact, send intro |
+| telephonic_enquiries | 24 hours | Follow-up call |
+| qualified | 24 hours | Assign estimator |
+| estimation_ben / estimation_karthick | 48 hours | Check with Gauge |
+| qc_ben | 24 hours | Escalate QC review |
+| quotation_priority / quotation_bids | 48 hours | Send quote |
+| rfi / addendums | 48 hours | Respond to customer |
+| shop_drawing / shop_drawing_approval | 72-120 hours | Track approval |
+
+Flag any lead exceeding its stage SLA with 🔴 and recommend specific action.
+
 ## Communication Style:
 - Professional, clear, and data-driven
 - Present facts and recommendations without judgment
@@ -726,12 +744,41 @@ The lead salesperson is **Swapnil (Neel)**. You are Neel's AI accountability par
 - Reference actual data from context (leads, quotes, orders, communications)
 - If pipeline is healthy, acknowledge it. If there are areas to address, be specific and constructive.
 
+## Internal Team Directory:
+| Name | Extension | Email |
+|------|-----------|-------|
+| Sattar Esmaeili (CEO) | ext:101 | sattar@rebar.shop |
+| Vicky Anderson (Accountant) | ext:201 | vicky@rebar.shop |
+| Behnam (Ben) Rajabifar (Estimator) | ext:203 | rfq@rebar.shop |
+| Saurabh Sehgal (Sales) | ext:206 | saurabh@rebar.shop |
+| Swapnil Mahajan (Neel) | ext:209 | neel@rebar.shop |
+| Radin Lachini (AI Manager) | ext:222 | radin@rebar.shop |
+| Kourosh Zand (Shop Supervisor) | — | ai@rebar.shop |
+
+## Cross-Department Awareness:
+- **Estimation delays**: If a lead is stuck in estimation_ben/estimation_karthick >48hrs, know this blocks quoting. Reference context.estimationQueue if available.
+- **Production status**: If a customer asks about order status, check context.recentOrders for production/delivery info. Don't guess — reference actual data.
+- **AR issues**: If context shows a customer has overdue invoices (from context.customerAR), mention it before recommending new quotes: "Note: this customer has outstanding AR — check with Penny before extending new credit."
+
+## ARIA Escalation Protocol:
+When you detect issues that cross departmental boundaries, output:
+[BLITZ-ESCALATE]{"to":"aria","reason":"description","urgency":"high|medium","context":"relevant details"}[/BLITZ-ESCALATE]
+
+**Trigger conditions:**
+- Estimation taking >48hrs on a deal worth >$25K → escalate to check Gauge capacity
+- Customer with overdue AR >30 days requesting new quote → escalate to Penny for credit hold check
+- Customer complaint about delivery timing → escalate to Atlas for delivery status
+- Production delay on confirmed order → escalate to Forge for production timeline
+- Lead requiring custom product/spec outside standard catalog → escalate to Gauge for feasibility
+- Lost deal worth >$50K → escalate for competitive intelligence review
+
 ## 💡 Ideas You Should Create:
 - Customer inactive 45+ days → suggest a re-engagement call or email
 - Quote sent but no response in 3+ days → suggest a follow-up
 - High-margin product not yet offered to an active customer → suggest an upsell
 - Lead stagnant in same pipeline stage for 5+ days → suggest moving it or taking action
-- Customer ordering frequently but not on contract pricing → suggest a pricing agreement`,
+- Customer ordering frequently but not on contract pricing → suggest a pricing agreement
+- Lead source pattern: if a source (e.g., website, referral) has high conversion, flag it for more investment`,
 
   commander: `You are **Commander**, the AI Sales Department Manager for REBAR SHOP OS.
 You have **22 years of B2B industrial sales management experience**, specializing in rebar/steel/construction sales cycles, territory management, and team coaching. You sit ABOVE Blitz (the sales rep agent) and manage the entire sales department.
@@ -3225,12 +3272,89 @@ async function fetchContext(supabase: ReturnType<typeof createClient>, agent: st
     }
 
     if (agent === "sales") {
-      const { data: leads } = await supabase
-        .from("leads")
-        .select("id, title, stage, expected_value, probability, customer_id")
-        .order("updated_at", { ascending: false })
-        .limit(10);
-      context.pipelineLeads = leads;
+      try {
+        // Full pipeline leads (up to 100) with activity tracking
+        const { data: leads } = await supabase
+          .from("leads")
+          .select("id, name, company, title, stage, expected_value, probability, customer_id, assigned_to, source, status, created_at, updated_at, notes, sla_deadline, sla_breached")
+          .not("status", "eq", "lost")
+          .order("updated_at", { ascending: false })
+          .limit(100);
+        context.pipelineLeads = leads;
+
+        // Stale leads (no update in >5 days)
+        const fiveDaysAgo = new Date(Date.now() - 5 * 86400000).toISOString();
+        const staleLeads = (leads || []).filter((l: Record<string, unknown>) => 
+          l.updated_at && (l.updated_at as string) < fiveDaysAgo
+        );
+        context.staleLeadCount = staleLeads.length;
+        context.staleLeads = staleLeads.slice(0, 10);
+
+        // SLA-breached leads
+        const breachedLeads = (leads || []).filter((l: Record<string, unknown>) => l.sla_breached === true);
+        context.slaBreachedLeads = breachedLeads.slice(0, 10);
+        context.slaBreachedCount = breachedLeads.length;
+
+        // Lead activities (last 14 days) for follow-up tracking
+        const fourteenDaysAgo = new Date(Date.now() - 14 * 86400000).toISOString();
+        const { data: leadActs } = await supabase
+          .from("lead_activities")
+          .select("id, lead_id, type, description, created_at, created_by")
+          .gte("created_at", fourteenDaysAgo)
+          .order("created_at", { ascending: false })
+          .limit(200);
+        context.recentLeadActivities = leadActs;
+
+        // Quotes with age tracking
+        const { data: allQuotes } = await supabase
+          .from("quotes")
+          .select("id, quote_number, customer_id, total_amount, status, margin_percent, created_at, updated_at")
+          .order("created_at", { ascending: false })
+          .limit(50);
+        context.allQuotes = allQuotes;
+
+        // Quotes awaiting response (sent but not accepted/declined)
+        const pendingQuotes = (allQuotes || []).filter((q: Record<string, unknown>) => q.status === "sent");
+        context.pendingQuotes = pendingQuotes;
+        context.pendingQuoteCount = pendingQuotes.length;
+
+        // Communications (last 7 days) for response time tracking
+        const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString();
+        const { data: salesComms } = await supabase
+          .from("communications")
+          .select("id, subject, from_address, to_address, body_preview, source, direction, received_at, status")
+          .gte("received_at", sevenDaysAgo)
+          .order("received_at", { ascending: false })
+          .limit(100);
+        context.recentComms = salesComms;
+
+        // Unanswered inbound comms
+        const unanswered = (salesComms || []).filter((c: Record<string, unknown>) => 
+          c.direction === "inbound" && (!c.status || c.status === "unread")
+        );
+        context.unansweredCommsCount = unanswered.length;
+
+        // Recent orders for revenue tracking
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString();
+        const { data: recentOrd } = await supabase
+          .from("orders")
+          .select("id, order_number, customer_id, total_amount, status, order_date, created_at")
+          .gte("created_at", thirtyDaysAgo)
+          .order("created_at", { ascending: false })
+          .limit(50);
+        context.recentOrders30d = recentOrd;
+
+        // Customer AR snapshot for credit awareness
+        const { data: customerAR } = await supabase
+          .from("accounting_mirror")
+          .select("customer_id, balance, data")
+          .eq("entity_type", "Invoice")
+          .gt("balance", 0)
+          .limit(20);
+        context.customerAR = customerAR;
+      } catch (e) {
+        console.error("Blitz context enrichment failed:", e);
+      }
     }
 
     if (agent === "social") {
@@ -3679,22 +3803,40 @@ function selectModel(agent: string, message: string, hasAttachments: boolean, hi
     };
   }
 
-  // Sales — quick pipeline actions vs deeper analysis
+  // Sales — briefing/analysis vs pipeline actions vs quick checks
   if (agent === "sales") {
-    const isAnalysis = /pipeline\s*review|forecast|analysis|summary|report/i.test(message);
+    const isBriefing = /briefing|daily|morning|review|report|summary|kpi|performance|forecast/i.test(message);
+    const isAnalysis = /pipeline\s*review|forecast|analysis|strategy|deal.*review|coaching|what.*should.*do/i.test(message);
+    const isQuickCheck = /status|where|how.*many|count|check|update/i.test(message);
+    if (isBriefing) {
+      return {
+        model: "google/gemini-2.5-pro",
+        maxTokens: 4500,
+        temperature: 0.2,
+        reason: "sales briefing → Pro for comprehensive pipeline synthesis",
+      };
+    }
     if (isAnalysis) {
       return {
         model: "google/gemini-3-flash-preview",
-        maxTokens: 2500,
+        maxTokens: 3000,
+        temperature: 0.4,
+        reason: "sales analysis/strategy → Flash-preview for balanced depth",
+      };
+    }
+    if (isQuickCheck) {
+      return {
+        model: "google/gemini-2.5-flash-lite",
+        maxTokens: 1500,
         temperature: 0.5,
-        reason: "sales analysis → Flash-preview for balanced output",
+        reason: "sales quick check → Flash-Lite for speed",
       };
     }
     return {
-      model: "google/gemini-2.5-flash-lite",
-      maxTokens: 1500,
-      temperature: 0.6,
-      reason: "sales quick action → Flash-Lite for speed",
+      model: "google/gemini-2.5-flash",
+      maxTokens: 2000,
+      temperature: 0.5,
+      reason: "sales default → Flash for balanced output",
     };
   }
 
@@ -4758,6 +4900,66 @@ RULES:
         maxTokens: 6000,
         temperature: 0.3,
         reason: "commander morning briefing → Pro for multi-department synthesis",
+      };
+    }
+
+    // === BLITZ MORNING BRIEFING: Greeting detection for sales rep agent ===
+    if (agent === "sales" && isGreeting) {
+      const today = new Date().toLocaleDateString("en-CA", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+
+      finalMessage = `[SYSTEM BRIEFING REQUEST] The user said "${message}". Today is ${today}.
+
+You MUST respond with a structured **Sales Briefing** covering ALL 5 sections below using the context data provided. Reference ACTUAL data — do not fabricate.
+
+FORMAT — follow exactly:
+
+**⚡ Good morning ${userFullName.split(" ")[0]}! Here's your Sales Briefing for ${today}:**
+
+### 1. 📊 Pipeline Snapshot
+| Metric | Value |
+|--------|-------|
+| Active Leads | Count from pipelineLeads where status != lost |
+| Total Pipeline Value | Sum of expected_value from pipelineLeads |
+| Stale Leads (>5 days) | From context.staleLeadCount |
+| SLA Breached | From context.slaBreachedCount |
+| Pending Quotes | From context.pendingQuoteCount |
+| Unanswered Comms | From context.unansweredCommsCount |
+
+### 2. 🔴 Leads Needing Action
+From context.staleLeads and context.slaBreachedLeads, list top 5 by urgency:
+| Lead | Company | Stage | Value | Days Stale | SLA | Action |
+For each, recommend a SPECIFIC next step (call, email, quote, escalate).
+
+### 3. 📝 Quotes Awaiting Response
+From context.pendingQuotes, list all sent but not responded:
+| Quote # | Customer | Amount | Days Waiting | Suggested Action |
+Flag any >3 days waiting with 🔴.
+
+### 4. 💰 Revenue Tracker
+From context.recentOrders30d, compute:
+- Orders this month (count + total $)
+- Conversion: quotes accepted vs sent from context.allQuotes
+- Top customer by revenue this month
+
+### 5. 🎯 Today's Priority Actions
+Numbered list, max 5 items, each with:
+- Specific action (call X, email Y, follow up on Z)
+- Why it's urgent (deal value, days waiting, SLA breach)
+- Expected outcome
+
+RULES:
+- Use tables and emoji tags for scannability
+- Bold dollar amounts and key metrics
+- Flag urgent items with 🔴, warnings with 🟡, healthy with 🟢
+- End with "**🎯 Priority #1:** [single most important thing to do right now]"
+- If context.customerAR shows overdue AR for a customer with pending quotes, flag it as ⚠️
+- If a category has no data, say "No items" — do NOT skip the section`;
+
+      briefingModelOverride = {
+        model: "google/gemini-2.5-pro",
+        maxTokens: 4500,
+        temperature: 0.2,
+        reason: "blitz morning briefing → Pro for pipeline synthesis",
       };
     }
 
