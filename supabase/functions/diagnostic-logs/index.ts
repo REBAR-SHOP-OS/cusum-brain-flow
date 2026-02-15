@@ -7,7 +7,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const SUPER_ADMIN_EMAIL = "sattar@rebar.shop";
+const SUPER_ADMIN_EMAILS = ["sattar@rebar.shop", "radin@rebar.shop"];
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -41,7 +41,7 @@ serve(async (req) => {
     }
 
     // Super-admin check
-    if (user.email !== SUPER_ADMIN_EMAIL) {
+    if (!SUPER_ADMIN_EMAILS.includes(user.email ?? "")) {
       return new Response(
         JSON.stringify({ error: "Forbidden: Super admin access only" }),
         {

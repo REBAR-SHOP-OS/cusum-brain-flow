@@ -8,7 +8,7 @@ const corsHeaders = {
 };
 
 const RC_SERVER = "https://platform.ringcentral.com";
-const SUPER_ADMIN_EMAIL = "sattar@rebar.shop";
+const SUPER_ADMIN_EMAILS = ["sattar@rebar.shop", "radin@rebar.shop"];
 
 async function getAccessToken(supabaseAdmin: ReturnType<typeof createClient>, userId: string): Promise<string | null> {
   const { data: tokenRow } = await supabaseAdmin
@@ -95,7 +95,7 @@ serve(async (req) => {
       .eq("user_id", userId)
       .maybeSingle();
 
-    if (profile?.email !== SUPER_ADMIN_EMAIL) {
+    if (!SUPER_ADMIN_EMAILS.includes(profile?.email ?? "")) {
       return new Response(JSON.stringify({ error: "Forbidden" }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
