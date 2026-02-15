@@ -3,8 +3,20 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { TrendingUp, TrendingDown, Search, AlertTriangle, Activity, Zap, Loader2, Sparkles } from "lucide-react";
+import { TrendingUp, TrendingDown, Search, AlertTriangle, Activity, Zap, Loader2, Sparkles, Layers } from "lucide-react";
 import { toast } from "sonner";
+
+const SOURCE_COLORS: Record<string, string> = {
+  gsc: "bg-blue-500/10 text-blue-600",
+  social: "bg-pink-500/10 text-pink-600",
+  email: "bg-amber-500/10 text-amber-600",
+  leads: "bg-green-500/10 text-green-600",
+  quotes: "bg-purple-500/10 text-purple-600",
+  orders: "bg-cyan-500/10 text-cyan-600",
+  knowledge: "bg-orange-500/10 text-orange-600",
+  wordpress: "bg-indigo-500/10 text-indigo-600",
+  prospects: "bg-rose-500/10 text-rose-600",
+};
 
 export function SeoOverview() {
   const qc = useQueryClient();
@@ -17,25 +29,33 @@ export function SeoOverview() {
     },
   });
 
-  // AI keyword stats
   const { data: kwStats } = useQuery({
     queryKey: ["seo-ai-kw-stats", domain?.id],
     enabled: !!domain?.id,
     queryFn: async () => {
       const { data } = await supabase
         .from("seo_keyword_ai")
-        .select("opportunity_score, status, impressions_28d, clicks_28d")
+        .select("opportunity_score, status, impressions_28d, clicks_28d, sources, source_count")
         .eq("domain_id", domain!.id);
       const all = data || [];
       const totalImpressions = all.reduce((s: number, k: any) => s + (k.impressions_28d || 0), 0);
       const totalClicks = all.reduce((s: number, k: any) => s + (k.clicks_28d || 0), 0);
       const winners = all.filter((k: any) => k.status === "winner").length;
       const declining = all.filter((k: any) => k.status === "declining").length;
-      return { total: all.length, totalImpressions, totalClicks, winners, declining };
+      const crossValidated = all.filter((k: any) => (k.source_count || 0) >= 3).length;
+
+      // Source distribution
+      const sourceCounts: Record<string, number> = {};
+      for (const k of all) {
+        for (const src of (k.sources || [])) {
+          sourceCounts[src] = (sourceCounts[src] || 0) + 1;
+        }
+      }
+
+      return { total: all.length, totalImpressions, totalClicks, winners, declining, crossValidated, sourceCounts };
     },
   });
 
-  // AI page stats
   const { data: pgStats } = useQuery({
     queryKey: ["seo-ai-pg-stats", domain?.id],
     enabled: !!domain?.id,
@@ -53,7 +73,6 @@ export function SeoOverview() {
     },
   });
 
-  // Top insights
   const { data: insights } = useQuery({
     queryKey: ["seo-ai-insights", domain?.id],
     enabled: !!domain?.id,
@@ -68,7 +87,6 @@ export function SeoOverview() {
     },
   });
 
-  // Open tasks count
   const { data: taskStats } = useQuery({
     queryKey: ["seo-ai-task-stats", domain?.id],
     enabled: !!domain?.id,
@@ -82,7 +100,6 @@ export function SeoOverview() {
     },
   });
 
-  // Run AI Analysis
   const runAnalysis = useMutation({
     mutationFn: async () => {
       if (!domain?.id) throw new Error("No domain configured");
@@ -103,7 +120,6 @@ export function SeoOverview() {
     onError: (e: any) => toast.error(e.message),
   });
 
-  // Sync GSC
   const syncGsc = useMutation({
     mutationFn: async () => {
       if (!domain?.id) throw new Error("No domain");
@@ -127,6 +143,8 @@ export function SeoOverview() {
     action: { color: "text-yellow-600 bg-yellow-500/10", label: "Action" },
   };
 
+  const sortedSources = Object.entries(kwStats?.sourceCounts || {}).sort(([, a], [, b]) => b - a);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -134,7 +152,7 @@ export function SeoOverview() {
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Sparkles className="w-6 h-6 text-primary" /> AI SEO Dashboard
           </h1>
-          <p className="text-sm text-muted-foreground">AI-curated insights from Google Search Console + Analytics</p>
+          <p className="text-sm text-muted-foreground">AI-curated insights from GSC + Analytics + ERP Sources</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => syncGsc.mutate()} disabled={syncGsc.isPending || !domain}>
@@ -159,7 +177,7 @@ export function SeoOverview() {
       {domain && (
         <>
           {/* Stat cards */}
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
             <Card>
               <CardContent className="pt-4 flex items-center gap-3">
                 <Activity className="w-8 h-8 text-primary" />
@@ -198,6 +216,15 @@ export function SeoOverview() {
             </Card>
             <Card>
               <CardContent className="pt-4 flex items-center gap-3">
+                <Layers className="w-8 h-8 text-primary" />
+                <div>
+                  <p className="text-2xl font-bold">{kwStats?.crossValidated ?? 0}</p>
+                  <p className="text-xs text-muted-foreground">Cross-validated (3+)</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-4 flex items-center gap-3">
                 <AlertTriangle className="w-8 h-8 text-yellow-500" />
                 <div>
                   <p className="text-2xl font-bold">{taskStats?.open ?? 0}</p>
@@ -206,6 +233,32 @@ export function SeoOverview() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Keyword Source Distribution */}
+          {sortedSources.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-primary" /> Keyword Sources
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap gap-3">
+                  {sortedSources.map(([src, count]) => (
+                    <div key={src} className="flex items-center gap-2">
+                      <Badge className={`text-xs ${SOURCE_COLORS[src] || "bg-muted text-muted-foreground"}`}>
+                        {src}
+                      </Badge>
+                      <span className="text-sm font-mono font-medium">{count}</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground mt-3">
+                  Keywords sourced from {sortedSources.length} channels across your ERP
+                </p>
+              </CardContent>
+            </Card>
+          )}
 
           {/* AI Insights */}
           <Card>

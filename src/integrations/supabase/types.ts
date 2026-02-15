@@ -5635,17 +5635,22 @@ export type Database = {
       seo_keyword_ai: {
         Row: {
           avg_position: number | null
+          business_relevance: number | null
           clicks_28d: number | null
           company_id: string
           created_at: string
           ctr: number | null
           domain_id: string
+          harvested_at: string | null
           id: string
           impressions_28d: number | null
           intent: string | null
           keyword: string
           last_analyzed_at: string | null
           opportunity_score: number | null
+          sample_context: string | null
+          source_count: number | null
+          sources: string[] | null
           status: string | null
           top_page: string | null
           topic_cluster: string | null
@@ -5653,17 +5658,22 @@ export type Database = {
         }
         Insert: {
           avg_position?: number | null
+          business_relevance?: number | null
           clicks_28d?: number | null
           company_id: string
           created_at?: string
           ctr?: number | null
           domain_id: string
+          harvested_at?: string | null
           id?: string
           impressions_28d?: number | null
           intent?: string | null
           keyword: string
           last_analyzed_at?: string | null
           opportunity_score?: number | null
+          sample_context?: string | null
+          source_count?: number | null
+          sources?: string[] | null
           status?: string | null
           top_page?: string | null
           topic_cluster?: string | null
@@ -5671,17 +5681,22 @@ export type Database = {
         }
         Update: {
           avg_position?: number | null
+          business_relevance?: number | null
           clicks_28d?: number | null
           company_id?: string
           created_at?: string
           ctr?: number | null
           domain_id?: string
+          harvested_at?: string | null
           id?: string
           impressions_28d?: number | null
           intent?: string | null
           keyword?: string
           last_analyzed_at?: string | null
           opportunity_score?: number | null
+          sample_context?: string | null
+          source_count?: number | null
+          sources?: string[] | null
           status?: string | null
           top_page?: string | null
           topic_cluster?: string | null
