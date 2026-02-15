@@ -7,6 +7,10 @@ import { InteractiveBrainBg } from "@/components/brain/InteractiveBrainBg";
 import { TestimonialSection } from "@/components/landing/TestimonialSection";
 import { LandingFooter } from "@/components/landing/LandingFooter";
 import { PublicChatWidget } from "@/components/landing/PublicChatWidget";
+import { ProductShowcase } from "@/components/landing/ProductShowcase";
+import { ServicesGrid } from "@/components/landing/ServicesGrid";
+import { QuoteRequestBanner } from "@/components/landing/QuoteRequestBanner";
+import { TrustBadges } from "@/components/landing/TrustBadges";
 
 const STATS = [
   { value: 10000, suffix: "+", label: "Tons Processed", prefix: "" },
@@ -127,6 +131,9 @@ export default function Landing() {
           </div>
         </section>
 
+        {/* Quote Request Banner (additive) */}
+        <QuoteRequestBanner />
+
         {/* How It Works */}
         <section className="py-20 px-6" aria-label="How it works">
           <div className="max-w-5xl mx-auto">
@@ -147,6 +154,9 @@ export default function Landing() {
           </div>
         </section>
 
+        {/* Product Showcase (additive) */}
+        <ProductShowcase />
+
         {/* Trust / Standards */}
         <section className="py-16 px-6 bg-muted/30" aria-label="Trust">
           <div className="max-w-4xl mx-auto text-center">
@@ -164,6 +174,7 @@ export default function Landing() {
                 </div>
               ))}
             </div>
+            <TrustBadges />
           </div>
         </section>
 
@@ -190,6 +201,9 @@ export default function Landing() {
             </div>
           </div>
         </section>
+
+        {/* Services Grid (additive) */}
+        <ServicesGrid />
 
         {/* Bottom CTA */}
         <section className="py-20 px-6 bg-primary/5" aria-label="Final call to action">
