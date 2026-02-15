@@ -237,3 +237,6 @@ verify_jwt = false
 
 [functions.website-speed-audit]
 verify_jwt = false
+
+[functions.website-agent]
+verify_jwt = false
