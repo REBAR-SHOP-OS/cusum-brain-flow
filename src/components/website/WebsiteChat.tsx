@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Loader2, Square, Trash2, ShieldAlert, CheckCircle2, XCircle, Paperclip, X, Image as ImageIcon, Maximize2, Minimize2, Minus } from "lucide-react";
+import { Send, Loader2, Square, Trash2, ShieldAlert, CheckCircle2, XCircle, Paperclip, X, Image as ImageIcon, Maximize2, Minimize2, Minus, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -18,6 +18,7 @@ const TOOL_LABELS: Record<string, string> = {
 };
 
 const QUICK_ACTIONS = [
+  "Inspect this page",
   "List all pages",
   "Check site health",
   "Show recent posts",
@@ -357,8 +358,22 @@ export function WebsiteChat({ currentPagePath, onWriteConfirmed, chatMode = "nor
             className="h-9 w-9 rounded-lg shrink-0"
             onClick={() => fileRef.current?.click()}
             disabled={isStreaming || !!pendingAction || isUploading}
+            title="Attach file"
           >
             <Paperclip className="w-4 h-4" />
+          </Button>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-9 w-9 rounded-lg shrink-0"
+            onClick={() => {
+              const contextPrefix = `[Currently viewing: rebar.shop${currentPagePath}]\n`;
+              sendMessage(contextPrefix + "Inspect and analyze this page");
+            }}
+            disabled={isStreaming || !!pendingAction || isUploading}
+            title="Inspect current page"
+          >
+            <Eye className="w-4 h-4" />
           </Button>
           <textarea
             ref={inputRef}
