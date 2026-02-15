@@ -181,7 +181,7 @@ export const agentConfigs: Record<string, AgentConfig> = {
     agentType: "seo",
     greeting: "Hello! I'm Seomi, your SEO specialist.",
     placeholder: "Ask about rankings, keywords, search performance...",
-    capabilities: ["Keyword research", "On-page SEO audit", "Content optimization", "Search Console insights"],
+    capabilities: ["Live page SEO audit", "Edit meta titles & descriptions", "Create & publish blog posts", "Fix on-page SEO issues", "Keyword optimization", "Content analysis"],
   },
   growth: {
     name: "Gigi",
