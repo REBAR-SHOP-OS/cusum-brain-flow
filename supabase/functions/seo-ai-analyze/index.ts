@@ -58,6 +58,7 @@ Deno.serve(async (req) => {
 
     let gscKeywords: any[] = [];
     let gscPages: any[] = [];
+    let gaPages: any[] = [];
 
     if (hasGoogleOAuth) {
       const siteUrl = `sc-domain:${domain.domain}`;
