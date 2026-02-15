@@ -2,6 +2,9 @@ import { useState, useRef, useCallback } from "react";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { WebsiteToolbar, DeviceMode } from "@/components/website/WebsiteToolbar";
 import { WebsiteChat } from "@/components/website/WebsiteChat";
+import { SpeedDashboard } from "@/components/website/SpeedDashboard";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { MessageSquare, Gauge } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const SITE_ORIGIN = "https://rebar.shop";
@@ -15,6 +18,7 @@ const DEVICE_WIDTHS: Record<DeviceMode, string> = {
 export default function WebsiteManager() {
   const [currentPath, setCurrentPath] = useState("/");
   const [device, setDevice] = useState<DeviceMode>("desktop");
+  const [rightPanel, setRightPanel] = useState<"chat" | "speed">("chat");
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   const refreshIframe = useCallback(() => {
@@ -73,12 +77,30 @@ export default function WebsiteManager() {
 
         <ResizableHandle withHandle />
 
-        {/* AI Chat Panel */}
+        {/* Right Panel: Chat or Speed */}
         <ResizablePanel defaultSize={30} minSize={20} maxSize={50}>
-          <WebsiteChat
-            currentPagePath={currentPath}
-            onWriteConfirmed={handleWriteConfirmed}
-          />
+          <div className="flex flex-col h-full">
+            <Tabs value={rightPanel} onValueChange={(v) => setRightPanel(v as "chat" | "speed")} className="shrink-0">
+              <TabsList className="w-full rounded-none border-b border-border bg-card h-9">
+                <TabsTrigger value="chat" className="text-xs gap-1 flex-1">
+                  <MessageSquare className="w-3.5 h-3.5" /> Chat
+                </TabsTrigger>
+                <TabsTrigger value="speed" className="text-xs gap-1 flex-1">
+                  <Gauge className="w-3.5 h-3.5" /> Speed
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+            <div className="flex-1 overflow-hidden">
+              {rightPanel === "chat" ? (
+                <WebsiteChat
+                  currentPagePath={currentPath}
+                  onWriteConfirmed={handleWriteConfirmed}
+                />
+              ) : (
+                <SpeedDashboard />
+              )}
+            </div>
+          </div>
         </ResizablePanel>
       </ResizablePanelGroup>
     </div>

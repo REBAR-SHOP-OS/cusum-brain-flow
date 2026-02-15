@@ -240,3 +240,6 @@ verify_jwt = false
 
 [functions.website-agent]
 verify_jwt = false
+
+[functions.wp-speed-optimizer]
+verify_jwt = false
