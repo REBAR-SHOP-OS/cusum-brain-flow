@@ -135,7 +135,7 @@ export function useAdminChat(currentPage?: string) {
     }
 
     if (!assistantSoFar) {
-      upsertAssistant("No response from AI.");
+      upsertAssistant("⚠️ No response from AI. The request may have timed out — try a simpler message or check your connection.");
     }
 
     return assistantSoFar;
