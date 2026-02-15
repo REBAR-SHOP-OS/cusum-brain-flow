@@ -249,3 +249,6 @@ verify_jwt = false
 
 [functions.seo-task-execute]
 verify_jwt = false
+
+[functions.seo-link-audit]
+verify_jwt = false
