@@ -42,6 +42,7 @@ export function useFixRequestMonitor() {
           .select("id, description, affected_area")
           .eq("user_id", user.id)
           .eq("status", "open")
+          .not("description", "like", "🤖 Auto-detected:%")
           .order("created_at", { ascending: false })
           .limit(5);
 
