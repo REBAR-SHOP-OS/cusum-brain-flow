@@ -4,6 +4,9 @@ import { ArrowRight, Mail, BarChart3, Truck, Factory, Brain, Calculator, Users, 
 import { AnimatedCounter } from "@/components/ceo/AnimatedCounter";
 import logoCoin from "@/assets/logo-coin.png";
 import { InteractiveBrainBg } from "@/components/brain/InteractiveBrainBg";
+import { TestimonialSection } from "@/components/landing/TestimonialSection";
+import { LandingFooter } from "@/components/landing/LandingFooter";
+import { PublicChatWidget } from "@/components/landing/PublicChatWidget";
 
 const STATS = [
   { value: 10000, suffix: "+", label: "Tons Processed", prefix: "" },
@@ -54,6 +57,9 @@ export default function Landing() {
           <InteractiveBrainBg />
           <div className="absolute inset-0 bg-gradient-to-b from-background/40 via-transparent to-background/80 pointer-events-none" />
           <div className="relative z-10 max-w-5xl mx-auto text-center">
+            <span className="inline-block mb-4 px-4 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-semibold tracking-wide">
+              Ontario's #1 AI Rebar Platform
+            </span>
             <h1 className="text-4xl md:text-6xl font-extrabold text-foreground mb-6 leading-tight tracking-tight">
               AI-Powered Rebar Fabrication<br className="hidden md:block" /> & Shop Management
             </h1>
@@ -66,7 +72,7 @@ export default function Landing() {
                 <Button size="lg" className="text-base px-8">Start Free <ArrowRight className="w-4 h-4 ml-2" /></Button>
               </Link>
               <a href="https://rebar.shop" target="_blank" rel="noopener noreferrer">
-                <Button size="lg" variant="outline" className="text-base px-8">Visit Rebar.shop</Button>
+                <Button size="lg" variant="outline" className="text-base px-8">Watch Demo</Button>
               </a>
             </div>
 
@@ -106,6 +112,9 @@ export default function Landing() {
             </div>
           </div>
         </section>
+
+        {/* Testimonials (additive) */}
+        <TestimonialSection />
 
         {/* Mid-page CTA */}
         <section className="py-16 px-6 bg-primary/5" aria-label="Call to action">
@@ -200,22 +209,10 @@ export default function Landing() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-border py-8 px-6" role="contentinfo">
-        <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <img src={logoCoin} alt="REBAR SHOP OS" className="w-6 h-6 rounded" width={24} height={24} />
-            <span className="font-semibold text-foreground">REBAR SHOP OS</span>
-            <span className="text-xs text-muted-foreground ml-2">by <a href="https://rebar.shop" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors underline">Rebar.shop</a></span>
-          </div>
-          <nav className="flex items-center gap-6 text-sm text-muted-foreground" aria-label="Footer navigation">
-            <Link to="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</Link>
-            <Link to="/terms" className="hover:text-foreground transition-colors">Terms of Service</Link>
-          </nav>
-          <p className="text-sm text-muted-foreground">
-            © {new Date().getFullYear()} Rebar.shop – Ontario Steel Detailing. All rights reserved.
-          </p>
-        </div>
-      </footer>
+      <LandingFooter />
+
+      {/* Public Chat Widget */}
+      <PublicChatWidget />
     </div>
   );
 }
