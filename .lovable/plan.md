@@ -1,38 +1,62 @@
 
 
-# Add Server-Side Health Checklist to Speed Dashboard
+# Optimize All Pictures on rebar.shop
 
-## What Changes
+## What This Will Do
 
-### 1. Add a static "WordPress Health Checklist" section to SpeedDashboard.tsx
+The current image optimizer only adds `loading="lazy"` and `decoding="async"` HTML attributes. This plan enhances it to perform a more comprehensive optimization pass and then executes it live.
 
-A new section below the existing Server-Side Recommendations that shows the 3 items from the Site Health report as a persistent, trackable checklist with localStorage persistence:
+### Enhancements to wp-speed-optimizer
 
-- **Autoloaded Options Bloat** (Critical) -- "Autoloaded data is 1.1 MB. Install Advanced Database Cleaner or WP-Optimize to purge stale transients and expired options. Target: under 800 KB."
-- **No Persistent Object Cache** (Critical) -- "No Redis/Memcached detected. Enable persistent object caching via your hosting panel (most managed hosts offer one-click Redis). This eliminates redundant database queries on every page load."  
-- **Consent API Non-Compliance** (Warning) -- "One or more plugins don't declare cookie consent via the WP Consent API. Update CookieYes/cookie plugins or replace with a Consent API-compatible alternative."
+1. **Add width/height dimensions to images** -- The code already has `getImageDimensions()` and `detectDimensionsFromBytes()` functions but they are never called. Wire them up so every `<img>` tag without explicit `width`/`height` gets dimensions injected. This eliminates Cumulative Layout Shift (CLS).
 
-Each item will have a checkbox that persists to localStorage so you can track what you've done.
+2. **Add fetchpriority="high" to hero images** -- The first image (above-the-fold) currently skips lazy loading but doesn't get priority hints. Add `fetchpriority="high"` to signal the browser to load it first.
 
-### 2. Enhance website-speed-audit to include these 3 items
+3. **Scan WooCommerce product short descriptions** -- Currently only `description` is scanned for products. Also process `short_description` which often contains images shown on category/shop pages.
 
-Add these as hardcoded high-priority recommendations in the edge function so they always show up in the recommendations array (until manually dismissed). This ensures JARVIS also surfaces them when asked about speed.
+4. **Media Library audit endpoint** -- Add a new section that scans the WP Media Library via REST API (`/wp/v2/media`) to report oversized images (over 500KB or dimensions over 2000px) that need server-side compression. These get surfaced as recommendations since actual compression requires a WP plugin.
+
+### Execution
+
+After deploying the enhanced function, trigger it with `dry_run: false` to apply all HTML-level optimizations immediately across all posts, pages, and products.
+
+### What Cannot Be Done Remotely
+
+Actual file compression (reducing JPEG/PNG file sizes) and WebP conversion require a WordPress plugin like **ShortPixel** or **Imagify** installed on the server. The media audit will identify which images need this treatment.
+
+---
 
 ## Technical Details
 
-### SpeedDashboard.tsx changes:
-- Import `Checkbox` from radix
-- Add a `SERVER_HEALTH_ITEMS` constant array with the 3 items
-- Add state managed via `localStorage` key `speed-health-checklist`
-- Render a "WordPress Health Checklist" card section with checkboxes, severity badges, and descriptions
-- Place it above the dynamic Server-Side Recommendations section
+### Files Modified
 
-### website-speed-audit/index.ts changes:
-- Add the 3 Site Health items as priority 0-2 recommendations with `requires_server_access: true`
-- These appear before the existing dynamic recommendations
-
-### Files Modified:
 | File | Change |
 |------|--------|
-| `src/components/website/SpeedDashboard.tsx` | Add health checklist UI with localStorage-persisted checkboxes |
-| `supabase/functions/website-speed-audit/index.ts` | Add 3 hardcoded Site Health recommendations at top priority |
+| `supabase/functions/wp-speed-optimizer/index.ts` | Wire up `getImageDimensions()` to inject width/height; add `fetchpriority="high"` for hero images; scan product `short_description`; add media library audit section |
+| `src/components/website/SpeedDashboard.tsx` | Add "Media Library" results display showing oversized images; add a one-click "Optimize All" button that runs with `dry_run: false` and shows confirmation |
+
+### Optimizer Logic Changes
+
+```text
+For each <img> tag:
+  1. If first image on page -> add fetchpriority="high" (already skips lazy)
+  2. If not first image -> add loading="lazy" (existing)
+  3. Add decoding="async" (existing)
+  4. If missing width/height -> fetch image URL, detect dimensions, inject attributes
+```
+
+### Media Library Audit (new section)
+
+```text
+GET /wp/v2/media?per_page=100&media_type=image
+For each image:
+  - Check file size via source_url HEAD request
+  - Flag if > 500KB or dimensions > 2000px
+  - Report as "needs server-side compression"
+  - Check if WebP version exists
+```
+
+### Deployment
+
+The edge function will be auto-deployed and then called with `dry_run: false` to apply changes immediately. All modifications are logged to `wp_change_log` for audit trail and rollback capability.
+
