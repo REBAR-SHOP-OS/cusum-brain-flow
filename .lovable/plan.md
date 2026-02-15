@@ -1,98 +1,113 @@
 
 
-# Import SEMrush Data into SEO Module
+# Update SEO Module with New SEMrush Data
 
-## What We Have
+## Overview
 
-The uploaded files contain two sets of SEMrush data for rebar.shop:
+Import three new SEMrush data sources into the existing SEO module:
+1. **Ideas XLSX** (updated version) -- same format as before, re-import with latest data
+2. **Mega Export XLSX** -- site audit with ~100 issue categories per page URL (broken links, missing titles, etc.)
+3. **Position Tracking PDF** -- keyword rankings, visibility (72.62%), avg position (6.99), top 3/10 counts, SERP features
 
-1. **XLSX "Ideas" report** -- ~90+ rows with columns: Priority, URL, Keyword, Idea (issue/recommendation text)
-2. **Traffic Summary screenshot** -- Jan 2026 stats: 1.2K visits (+77.52%), 1.2K unique visitors (+66.71%), 3.3 pages/visit, 02:16 avg duration, 57.55% bounce rate
+The traffic summary screenshot is the same as before (Jan 2026: 1.2K visits, 57.55% bounce rate).
 
-## Plan
+## Changes
 
-### 1. Add traffic summary fields to `seo_domains` table
+### 1. Database Migration
 
-Add columns to store the SEMrush traffic overview data directly on the domain record:
+Add new columns to `seo_domains` for position tracking metrics:
 
 | Column | Type | Purpose |
 |--------|------|---------|
-| `visits_monthly` | integer | 1,200 |
-| `unique_visitors_monthly` | integer | 1,200 |
-| `pages_per_visit` | numeric | 3.3 |
-| `avg_visit_duration_seconds` | integer | 136 (2:16) |
-| `bounce_rate` | numeric | 57.55 |
-| `visits_change_pct` | numeric | 77.52 |
-| `visitors_change_pct` | numeric | 66.71 |
-| `traffic_snapshot_month` | text | "2026-01" |
+| `visibility_pct` | numeric | 72.62% |
+| `estimated_traffic_pct` | numeric | 0.16% |
+| `avg_position` | numeric | 6.99 |
+| `top3_keywords` | integer | 17 |
+| `top10_keywords` | integer | 19 |
+| `total_tracked_keywords` | integer | 20 |
+| `position_tracking_date` | text | "2026-02-15" |
 
-### 2. Create edge function `seo-semrush-import`
+Add `issues_json` column to `seo_page_ai` (missing -- the edge function was trying to write to it):
 
-An edge function that accepts the parsed SEMrush data and upserts it into:
+| Column | Type | Purpose |
+|--------|------|---------|
+| `issues_json` | jsonb | Stores per-page audit issues from mega export |
 
-- **`seo_keyword_ai`** -- Each unique keyword from the XLSX, with `sources: ['seo_tools']`, `top_page` set to the URL, `opportunity_score` from Priority column, `status: 'opportunity'`
-- **`seo_page_ai`** -- Each unique URL from the XLSX, upserted with issue count data
-- **`seo_insight`** -- Each "Idea" text becomes an insight with `insight_type: 'action'` or `'risk'`, linked to the keyword/page entity
-- **`seo_domains`** -- Updates the traffic summary fields from the summary data
+### 2. Update Edge Function `seo-semrush-import`
 
-The function will deduplicate keywords (same keyword appearing with multiple ideas) and pages (same URL with multiple issues).
+Extend to accept two additional data sections:
 
-### 3. Add "Import SEMrush Data" button to SEO Overview
+- **`audit_pages`** -- Array of `{ url, issues: { broken_internal_links: 2, missing_h1: 1, ... } }` parsed from the mega export. Upserts into `seo_page_ai` with the `issues_json` column and computes `seo_score` based on total issue count.
+- **`position_tracking`** -- Object with visibility, avg position, top 3/10 counts. Updates the new `seo_domains` columns.
 
-Add an upload button on the SEO dashboard that:
-- Accepts `.xlsx` files
-- Parses the file client-side using a lightweight parser
-- Sends the parsed rows + traffic summary to the `seo-semrush-import` edge function
-- Shows a toast with import results
+### 3. Update Frontend `SeoOverview.tsx`
 
-Also add a traffic summary card to the overview showing the SEMrush stats (visits, bounce rate, etc.) when available.
+- **Enhance the import button** to accept multiple files at once (ideas XLSX + mega export XLSX).
+- **Parse mega export** client-side: extract page URLs and count non-zero issues per page, send as `audit_pages` array.
+- **Hard-code position tracking data** from the PDF into the import payload (visibility: 72.62%, avg position: 6.99, top3: 17, top10: 19, total: 20).
+- **Add Position Tracking card** below the Traffic Summary card showing visibility, avg position, top 3/10 keyword counts.
+- **Update traffic data** to match the screenshot (same as before -- already hard-coded).
 
-### 4. Hard-code the traffic summary from the screenshot
+### 4. Trigger the import
 
-Since the screenshot data can't be auto-extracted from the XLSX, we'll include the traffic stats as part of the import call with pre-filled values from the screenshot, or add a small form for the user to enter them.
+After code changes, the user clicks "Import SEMrush" and selects both XLSX files. The system will:
+- Detect which file is the ideas report vs the mega export by checking column headers
+- Parse both and send combined payload to the edge function
+- Display success toast with counts
 
 ## Technical Details
 
-### Database Migration
+### Database Migration SQL
 
 ```sql
-ALTER TABLE seo_domains 
-  ADD COLUMN visits_monthly integer,
-  ADD COLUMN unique_visitors_monthly integer,
-  ADD COLUMN pages_per_visit numeric,
-  ADD COLUMN avg_visit_duration_seconds integer,
-  ADD COLUMN bounce_rate numeric,
-  ADD COLUMN visits_change_pct numeric,
-  ADD COLUMN visitors_change_pct numeric,
-  ADD COLUMN traffic_snapshot_month text;
+ALTER TABLE public.seo_domains
+  ADD COLUMN IF NOT EXISTS visibility_pct numeric,
+  ADD COLUMN IF NOT EXISTS estimated_traffic_pct numeric,
+  ADD COLUMN IF NOT EXISTS avg_position numeric,
+  ADD COLUMN IF NOT EXISTS top3_keywords integer,
+  ADD COLUMN IF NOT EXISTS top10_keywords integer,
+  ADD COLUMN IF NOT EXISTS total_tracked_keywords integer,
+  ADD COLUMN IF NOT EXISTS position_tracking_date text;
+
+ALTER TABLE public.seo_page_ai
+  ADD COLUMN IF NOT EXISTS issues_json jsonb;
 ```
 
-### Edge Function: `seo-semrush-import`
+### Edge Function Changes
 
-Accepts JSON body:
+Accept new body fields:
 ```json
 {
   "domain_id": "uuid",
-  "ideas": [
-    { "priority": 3.03, "url": "...", "keyword": "...", "idea": "..." }
+  "ideas": [...],
+  "traffic": {...},
+  "audit_pages": [
+    { "url": "https://rebar.shop/about/", "issues": { "missing_h1": 1, "broken_internal_links": 2 }, "total_issues": 3 }
   ],
-  "traffic": {
-    "visits": 1200, "unique_visitors": 1200,
-    "pages_per_visit": 3.3, "avg_duration_seconds": 136,
-    "bounce_rate": 57.55, "visits_change_pct": 77.52,
-    "visitors_change_pct": 66.71, "month": "2026-01"
+  "position_tracking": {
+    "visibility_pct": 72.62,
+    "estimated_traffic_pct": 0.16,
+    "avg_position": 6.99,
+    "top3_keywords": 17,
+    "top10_keywords": 19,
+    "total_tracked_keywords": 20,
+    "date": "2026-02-15"
   }
 }
 ```
 
-### Files Modified/Created
+### Files Modified
 
 | File | Change |
 |------|--------|
-| `supabase/functions/seo-semrush-import/index.ts` | New edge function for importing data |
-| `src/components/seo/SeoOverview.tsx` | Add "Import SEMrush" button + traffic summary card |
+| `supabase/functions/seo-semrush-import/index.ts` | Add audit_pages and position_tracking processing |
+| `src/components/seo/SeoOverview.tsx` | Multi-file upload, mega export parsing, position tracking card, hard-coded PDF data |
 
-### Client-side XLSX Parsing
+### Frontend Mega Export Parsing Logic
 
-Use the already-installed `@zip.js/zip.js` or parse XLSX manually (XLSX is a ZIP of XML files). Alternatively, parse the XLSX in the edge function. The simplest approach: parse client-side, extract the 4 columns, send as JSON to the edge function.
+The mega export has ~100 issue columns. Client-side parsing will:
+1. Read column headers from row 1
+2. For each page URL row, count columns with non-zero values
+3. Build an issues object with only non-zero issue types
+4. Filter out pages with zero total issues to reduce payload size
 
