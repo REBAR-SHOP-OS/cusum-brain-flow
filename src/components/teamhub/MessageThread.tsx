@@ -31,6 +31,7 @@ import type { TeamMeeting } from "@/hooks/useTeamMeetings";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { primeMobileAudio } from "@/lib/audioPlayer";
 
 const LANG_LABELS: Record<string, { name: string; flag: string }> = {
   en: { name: "English", flag: "🇬🇧" },
@@ -219,8 +220,8 @@ export function MessageThread({
 
     setPlayingMsgId(msgId);
 
-    // Create Audio element synchronously during user gesture (before any await)
-    const audio = new Audio();
+    // Prime audio element synchronously during user gesture (silent WAV)
+    const audio = primeMobileAudio();
     audioRef.current = audio;
 
     try {
@@ -241,6 +242,9 @@ export function MessageThread({
 
       const audioBlob = await response.blob();
       const audioUrl = URL.createObjectURL(audioBlob);
+
+      // Pause silent playback, swap to real source, replay
+      audio.pause();
       audio.src = audioUrl;
 
       audio.onended = () => {

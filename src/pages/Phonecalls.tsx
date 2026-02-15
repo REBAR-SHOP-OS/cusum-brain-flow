@@ -21,6 +21,7 @@ import { CallSummaryDialog } from "@/components/phonecalls/CallSummaryDialog";
 import { CallAnalysisDialog } from "@/components/phonecalls/CallAnalysisDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { primeMobileAudio } from "@/lib/audioPlayer";
 
 type CallFilter = "all" | "missed";
 
@@ -156,7 +157,8 @@ export default function Phonecalls() {
       const projectUrl = import.meta.env.VITE_SUPABASE_URL;
       const audioUrl = `${projectUrl}/functions/v1/ringcentral-recording?action=recording&uri=${encodeURIComponent(recordingUri)}`;
 
-      const audio = new Audio();
+      // Prime audio element synchronously during user gesture (silent WAV)
+      const audio = primeMobileAudio();
       audio.crossOrigin = "anonymous";
 
       const resp = await fetch(audioUrl, {
@@ -173,6 +175,9 @@ export default function Phonecalls() {
 
       const blob = await resp.blob();
       const blobUrl = URL.createObjectURL(blob);
+
+      // Pause silent playback, swap to real source, replay
+      audio.pause();
       audio.src = blobUrl;
 
       audio.onended = () => {

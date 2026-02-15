@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { primeMobileAudio } from "@/lib/audioPlayer";
 
 function parseDisplayName(raw: string): { name: string; address: string } {
   const match = raw.match(/^(?:"?([^"]*)"?\s)?<?([^>]+)>?$/);
@@ -98,8 +99,8 @@ export function CallDetailView({ communication, footer }: CallDetailViewProps) {
     if (!recordingUri) return;
     setLoadingAudio(true);
 
-    // Create Audio element synchronously during user gesture (before any await)
-    const audio = new Audio();
+    // Prime audio element synchronously during user gesture (silent WAV)
+    const audio = primeMobileAudio();
     audioRef.current = audio;
 
     try {
@@ -114,6 +115,9 @@ export function CallDetailView({ communication, footer }: CallDetailViewProps) {
 
       const blob = await resp.blob();
       const blobUrl = URL.createObjectURL(blob);
+
+      // Pause silent playback, swap to real source, replay
+      audio.pause();
       audio.src = blobUrl;
 
       audio.onended = () => {

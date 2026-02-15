@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { primeMobileAudio } from "@/lib/audioPlayer";
 
 interface CallSummaryResult {
   transcription: {
@@ -111,8 +112,8 @@ export function InlineCallSummary({
     if (!recordingUri) return;
     setLoadingAudio(true);
 
-    // Create Audio element synchronously during user gesture (before any await)
-    const audio = new Audio();
+    // Prime audio element synchronously during user gesture (silent WAV)
+    const audio = primeMobileAudio();
     audioRef.current = audio;
 
     try {
@@ -131,7 +132,11 @@ export function InlineCallSummary({
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const blob = await resp.blob();
       const blobUrl = URL.createObjectURL(blob);
+
+      // Pause silent playback, swap to real source, replay
+      audio.pause();
       audio.src = blobUrl;
+
       audio.onended = () => {
         setPlaying(false);
         URL.revokeObjectURL(blobUrl);
