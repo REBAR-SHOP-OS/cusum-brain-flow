@@ -1,18 +1,21 @@
 
-# Fix Chat Box Frame Overflow
+# Add Chat Memory (Persist Messages Across Refresh)
 
 ## Problem
-Long text content (URLs, code snippets, script tags) in the Website Chat panel overflows horizontally beyond the message bubbles and panel boundaries, breaking the layout.
+The Website Chat (AI Job Site Editor) loses all conversation history on page refresh because messages are stored only in React state.
 
 ## Solution
-Add proper text overflow handling to the chat message bubbles in `WebsiteChat.tsx`:
+Use `localStorage` to persist chat messages in the `useAdminChat` hook. Messages will be saved automatically and restored when the page loads.
 
-### Changes to `src/components/website/WebsiteChat.tsx`
-1. Add `overflow-hidden break-words` to the message bubble container (the div with `rounded-xl px-3 py-2`)
-2. Add `overflow-x-auto` to the RichMarkdown wrapper so code blocks get horizontal scrollbars instead of overflowing
-3. Add `[&_pre]:overflow-x-auto [&_code]:break-all` to the RichMarkdown className to handle inline code and code blocks
+### Changes to `src/hooks/useAdminChat.ts`
+1. **Storage key**: Use a key like `admin-chat-{currentPage}` so different pages keep separate histories
+2. **Load on init**: Initialize `messages` state from localStorage instead of an empty array
+3. **Save on change**: Add a `useEffect` that writes messages to localStorage whenever they update
+4. **Clear also clears storage**: Update `clearChat` to remove the localStorage entry
+5. **Cap stored messages**: Only keep the last 50 messages in storage to avoid bloating localStorage
 
 ### Technical Details
-- Line 125: Add `overflow-hidden break-words` to the message `className`
-- Line 132: Update RichMarkdown className to include `[&_pre]:overflow-x-auto [&_code]:break-all [&_p]:break-words`
-- This ensures long URLs wrap, code blocks scroll horizontally, and no content escapes the bubble frame
+- Add a `useEffect` with `messages` dependency that calls `localStorage.setItem(storageKey, JSON.stringify(messages))`
+- Change `useState<AdminChatEntry[]>([])` to a lazy initializer that reads from localStorage
+- Serialize timestamps as ISO strings and parse them back on load
+- The `clearChat` function will call `localStorage.removeItem(storageKey)`
