@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Send, User, UserCheck, CheckCircle, MessageSquare, StickyNote, Sparkles, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { playMockingjayWhistle } from "@/lib/notificationSound";
+import { showBrowserNotification } from "@/lib/browserNotification";
 import { formatDistanceToNow } from "date-fns";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -85,7 +87,16 @@ export function SupportChatView({ conversationId }: Props) {
         table: "support_messages",
         filter: `conversation_id=eq.${conversationId}`,
       }, (payload) => {
-        setMessages((prev) => [...prev, payload.new as Message]);
+        const msg = payload.new as Message;
+        setMessages((prev) => [...prev, msg]);
+        if (msg.sender_type === "visitor") {
+          playMockingjayWhistle();
+          showBrowserNotification(
+            "New support message",
+            msg.content?.slice(0, 100),
+            "/support-inbox"
+          );
+        }
       })
       .subscribe();
 

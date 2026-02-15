@@ -1,15 +1,21 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { SupportSidebar } from "@/components/support/SupportSidebar";
 import { SupportConversationList } from "@/components/support/SupportConversationList";
 import { SupportChatView } from "@/components/support/SupportChatView";
 import { SupportWidgetSettings } from "@/components/support/SupportWidgetSettings";
 import { KnowledgeBase } from "@/components/support/KnowledgeBase";
+import { requestNotificationPermission, registerPushSubscription } from "@/lib/browserNotification";
 
 export type SupportSection = "inbox" | "knowledge-base" | "settings";
 
 export default function SupportInbox() {
   const [section, setSection] = useState<SupportSection>("inbox");
   const [selectedConvoId, setSelectedConvoId] = useState<string | null>(null);
+
+  useEffect(() => {
+    requestNotificationPermission();
+    registerPushSubscription();
+  }, []);
 
   return (
     <div className="flex h-full overflow-hidden">
