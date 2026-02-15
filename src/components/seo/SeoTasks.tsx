@@ -1,9 +1,15 @@
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ExternalLink, Sparkles, Bot, User } from "lucide-react";
+import {
+  AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction,
+} from "@/components/ui/alert-dialog";
+import { ExternalLink, Sparkles, Bot, User, Zap, Loader2, CheckCircle, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 
 const columns = ["open", "in_progress", "done"] as const;
@@ -20,8 +26,20 @@ const taskTypeColors: Record<string, string> = {
   internal_link: "bg-blue-500/10 text-blue-600",
 };
 
+interface AnalyzeResult {
+  can_execute: boolean;
+  plan_summary: string;
+  actions?: { type: string; target: string; field?: string; value?: string }[];
+  human_steps?: string;
+}
+
 export function SeoTasks() {
   const qc = useQueryClient();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [analyzingTaskId, setAnalyzingTaskId] = useState<string | null>(null);
+  const [executingTaskId, setExecutingTaskId] = useState<string | null>(null);
+  const [analyzeResult, setAnalyzeResult] = useState<AnalyzeResult | null>(null);
+  const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
 
   const { data: tasks, isLoading } = useQuery({
     queryKey: ["seo-tasks"],
@@ -45,6 +63,57 @@ export function SeoTasks() {
     },
     onError: (e: any) => toast.error(e.message),
   });
+
+  const handleAnalyze = async (taskId: string) => {
+    setAnalyzingTaskId(taskId);
+    setCurrentTaskId(taskId);
+    try {
+      const { data, error } = await supabase.functions.invoke("seo-task-execute", {
+        body: { task_id: taskId, phase: "analyze" },
+      });
+      if (error) throw error;
+      setAnalyzeResult(data);
+      setDialogOpen(true);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to analyze task");
+    } finally {
+      setAnalyzingTaskId(null);
+    }
+  };
+
+  const handleExecute = async () => {
+    if (!currentTaskId) return;
+    setExecutingTaskId(currentTaskId);
+    try {
+      const { data, error } = await supabase.functions.invoke("seo-task-execute", {
+        body: { task_id: currentTaskId, phase: "execute" },
+      });
+      if (error) throw error;
+      if (data?.success) {
+        toast.success("Task executed successfully!", {
+          description: data.results?.join(", "),
+        });
+        qc.invalidateQueries({ queryKey: ["seo-tasks"] });
+      } else {
+        toast.error(data?.error || "Execution failed");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Execution failed");
+    } finally {
+      setExecutingTaskId(null);
+      setDialogOpen(false);
+      setAnalyzeResult(null);
+      setCurrentTaskId(null);
+    }
+  };
+
+  const handleMoveToInProgress = async () => {
+    if (!currentTaskId) return;
+    updateStatus.mutate({ id: currentTaskId, status: "in_progress" });
+    setDialogOpen(false);
+    setAnalyzeResult(null);
+    setCurrentTaskId(null);
+  };
 
   const grouped = {
     open: tasks?.filter((t: any) => t.status === "open") || [],
@@ -79,9 +148,7 @@ export function SeoTasks() {
                         <div className="flex items-start justify-between gap-1">
                           <p className="text-sm font-medium leading-tight">{task.title}</p>
                           <div className="flex items-center gap-1 shrink-0">
-                            {task.created_by === "ai" && (
-                              <Bot className="w-3 h-3 text-primary" />
-                            )}
+                            {task.created_by === "ai" && <Bot className="w-3 h-3 text-primary" />}
                             <Badge className={`text-[10px] ${priorityColors[task.priority] || ""}`}>
                               {task.priority}
                             </Badge>
@@ -90,7 +157,6 @@ export function SeoTasks() {
                         {task.description && (
                           <p className="text-xs text-muted-foreground line-clamp-2">{task.description}</p>
                         )}
-                        {/* AI reasoning */}
                         {task.ai_reasoning && (
                           <div className="bg-primary/5 rounded p-2 border border-primary/10">
                             <p className="text-[10px] text-primary font-medium flex items-center gap-1">
@@ -99,13 +165,11 @@ export function SeoTasks() {
                             <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{task.ai_reasoning}</p>
                           </div>
                         )}
-                        {/* Expected impact */}
                         {task.expected_impact && (
                           <p className="text-[10px] text-muted-foreground">
                             <span className="font-medium">Impact:</span> {task.expected_impact}
                           </p>
                         )}
-                        {/* Task type + creator badges */}
                         <div className="flex items-center gap-1 flex-wrap">
                           {task.task_type && (
                             <Badge className={`text-[10px] ${taskTypeColors[task.task_type] || ""}`}>
@@ -125,6 +189,33 @@ export function SeoTasks() {
                             <ExternalLink className="w-3 h-3" /> {task.entity_url.substring(0, 50)}
                           </a>
                         )}
+
+                        {/* Execute button - only for open/in_progress */}
+                        {(task.status === "open" || task.status === "in_progress") && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="w-full h-7 text-xs gap-1"
+                            disabled={analyzingTaskId === task.id}
+                            onClick={() => handleAnalyze(task.id)}
+                          >
+                            {analyzingTaskId === task.id ? (
+                              <><Loader2 className="w-3 h-3 animate-spin" /> Analyzing...</>
+                            ) : (
+                              <><Zap className="w-3 h-3" /> Execute</>
+                            )}
+                          </Button>
+                        )}
+
+                        {/* Execution log for done tasks */}
+                        {task.status === "done" && task.executed_by === "ai" && task.executed_at && (
+                          <div className="bg-green-500/5 rounded p-1.5 border border-green-500/10">
+                            <p className="text-[10px] text-green-600 font-medium flex items-center gap-1">
+                              <CheckCircle className="w-3 h-3" /> AI Executed
+                            </p>
+                          </div>
+                        )}
+
                         <Select value={task.status} onValueChange={(v) => updateStatus.mutate({ id: task.id, status: v })}>
                           <SelectTrigger className="h-7 text-xs">
                             <SelectValue />
@@ -144,6 +235,72 @@ export function SeoTasks() {
           ))}
         </div>
       )}
+
+      {/* Execution Dialog */}
+      <AlertDialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <AlertDialogContent className="max-w-lg">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              {analyzeResult?.can_execute ? (
+                <><Zap className="w-5 h-5 text-primary" /> AI Execution Plan</>
+              ) : (
+                <><AlertTriangle className="w-5 h-5 text-yellow-500" /> Manual Action Required</>
+              )}
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-left">
+                <p className="text-sm">{analyzeResult?.plan_summary}</p>
+
+                {analyzeResult?.can_execute && analyzeResult.actions?.length ? (
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-medium">Proposed actions:</p>
+                    {analyzeResult.actions.map((action, i) => (
+                      <div key={i} className="bg-muted/50 rounded p-2 text-xs space-y-0.5">
+                        <p className="font-medium">{action.type.replace("wp_", "").replace(/_/g, " ")}</p>
+                        <p className="text-muted-foreground">Target: {action.target}</p>
+                        {action.field && <p className="text-muted-foreground">Field: {action.field}</p>}
+                        {action.value && (
+                          <p className="text-muted-foreground line-clamp-2">Value: {action.value}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : analyzeResult?.human_steps ? (
+                  <div className="bg-yellow-500/5 rounded p-3 border border-yellow-500/10">
+                    <p className="text-xs font-medium mb-1">Steps for human operator:</p>
+                    <p className="text-xs text-muted-foreground whitespace-pre-line">
+                      {analyzeResult.human_steps}
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={!!executingTaskId}>Cancel</AlertDialogCancel>
+            {analyzeResult?.can_execute ? (
+              <AlertDialogAction
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleExecute();
+                }}
+                disabled={!!executingTaskId}
+                className="gap-1"
+              >
+                {executingTaskId ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> Executing...</>
+                ) : (
+                  <><CheckCircle className="w-4 h-4" /> Confirm & Execute</>
+                )}
+              </AlertDialogAction>
+            ) : (
+              <AlertDialogAction onClick={(e) => { e.preventDefault(); handleMoveToInProgress(); }}>
+                Move to In Progress
+              </AlertDialogAction>
+            )}
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -5942,6 +5942,9 @@ export type Database = {
           domain_id: string | null
           entity_type: string | null
           entity_url: string | null
+          executed_at: string | null
+          executed_by: string | null
+          execution_log: Json | null
           expected_impact: string | null
           id: string
           linked_issue_id: string | null
@@ -5961,6 +5964,9 @@ export type Database = {
           domain_id?: string | null
           entity_type?: string | null
           entity_url?: string | null
+          executed_at?: string | null
+          executed_by?: string | null
+          execution_log?: Json | null
           expected_impact?: string | null
           id?: string
           linked_issue_id?: string | null
@@ -5980,6 +5986,9 @@ export type Database = {
           domain_id?: string | null
           entity_type?: string | null
           entity_url?: string | null
+          executed_at?: string | null
+          executed_by?: string | null
+          execution_log?: Json | null
           expected_impact?: string | null
           id?: string
           linked_issue_id?: string | null
