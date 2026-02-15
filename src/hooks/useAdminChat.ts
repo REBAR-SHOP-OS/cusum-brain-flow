@@ -27,6 +27,11 @@ const TOOL_LABELS: Record<string, string> = {
   update_lead_status: "Update Lead Status",
   update_cut_plan_status: "Update Cut Plan Status",
   create_event: "Log Activity Event",
+  wp_update_post: "Update WordPress Post",
+  wp_update_page: "Update WordPress Page",
+  wp_update_product: "Update WooCommerce Product",
+  wp_update_order_status: "Update WooCommerce Order",
+  wp_create_redirect: "Create 301 Redirect",
 };
 
 export function useAdminChat(currentPage?: string) {
