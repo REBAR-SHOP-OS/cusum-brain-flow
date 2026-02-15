@@ -1,24 +1,45 @@
 
-# Fix Chat Messages Overflowing Off Screen
+# Add Image Analysis to Website Chat
 
 ## Problem
-Long content (URLs, code blocks, script tags) in the AI Website Editor chat extends beyond the visible area, pushing half the page off screen. The existing `overflow-hidden` and `break-words` on the message bubble are insufficient because:
-1. The bubble lacks `min-w-0` which is needed for flex children to actually shrink below their content size
-2. Code blocks and `<pre>` elements have intrinsic minimum widths that push past the container
-3. The parent scroll area doesn't constrain children's width
+When you upload a screenshot or photo in the chat, it just attaches a link. The AI (JARVIS) never actually sees or analyzes the image -- it only gets a text URL. You want the AI to look at the image and help based on what it sees.
 
-## Changes
+## Solution
+Two changes are needed:
 
-### 1. `src/components/website/WebsiteChat.tsx`
-- Add `min-w-0` to each message bubble div (line 125) so it properly shrinks within the flex/scroll container
-- Add `w-full` to the messages container div to ensure it doesn't expand beyond the scroll area
-- Add `[&_*]:max-w-full` to RichMarkdown className to force all nested elements to respect the container width
+### 1. Frontend: Send image URLs separately (`WebsiteChat.tsx`)
+Instead of embedding image URLs as markdown links in the message text, send them as a separate `imageUrls` array in the request body. This lets the backend know which URLs are images that need visual analysis.
 
-### 2. `src/components/chat/RichMarkdown.tsx`
-- Add `max-w-full` and `min-w-0` to the root wrapper div (line 65) to prevent the markdown from expanding beyond its parent
-- Add `overflow-wrap: anywhere` via `[overflow-wrap:anywhere]` utility to handle long unbreakable strings like URLs
-- On the code block `<pre>` (line 221), ensure `max-w-full` is set alongside `overflow-x-auto`
-- On inline `<code>` (line 228), add `break-all` to force long inline code to wrap
+- In `handleSend`, collect uploaded image URLs into an `imageUrls` array
+- Pass `imageUrls` alongside `messages` in the fetch body
+- Still show the image thumbnails in the user's chat bubble for context
 
-### Technical Details
-These are CSS-only fixes -- no logic changes. The key insight is that `overflow-hidden` alone doesn't prevent the element from growing; `min-w-0` is required in flex/grid contexts to allow shrinking, and `overflow-wrap: anywhere` handles unbreakable strings that `word-break` misses.
+### 2. Backend: Convert image URLs to multimodal content (`admin-chat/index.ts`)
+Before sending messages to the AI gateway, detect any messages that include `imageUrls` and convert them into the multimodal format the AI model expects.
+
+- Parse `imageUrls` from the request body
+- When building the messages array for the AI, convert the last user message from a plain string into a multimodal content array:
+  ```
+  { role: "user", content: [
+    { type: "text", text: "user's question" },
+    { type: "image_url", image_url: { url: "signed-url" } }
+  ]}
+  ```
+- Add a line to the system prompt telling JARVIS it can analyze uploaded images
+- This works with the existing `google/gemini-3-pro-preview` model which supports vision
+
+## Technical Details
+
+**`src/components/website/WebsiteChat.tsx`**:
+- Change `handleSend` to build an `imageUrls: string[]` from uploaded attachments
+- Pass `{ messages: history, currentPage, imageUrls }` in the fetch body (via `sendMessage`)
+- Show image thumbnails in user message bubbles instead of raw markdown links
+
+**`src/hooks/useAdminChat.ts`**:
+- Update `sendMessage` signature to accept optional `imageUrls: string[]`
+- Include `imageUrls` in the POST body to admin-chat
+
+**`supabase/functions/admin-chat/index.ts`**:
+- Extract `imageUrls` from `body` alongside `messages` and `currentPage`
+- Before calling the AI gateway, transform the last user message: if `imageUrls` has entries, convert `content` from a string to a multimodal array with text + image_url blocks
+- Add to system prompt: "You can analyze images the user uploads. Describe what you see and answer questions about them."
