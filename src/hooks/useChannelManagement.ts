@@ -3,6 +3,28 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { useMyProfile } from "@/hooks/useTeamChat";
 
+/**
+ * Reusable helper: get the current user's company_id from their profile.
+ * Uses the already-loaded myProfile when available, falls back to a DB query.
+ */
+async function resolveCompanyId(
+  userId: string,
+  myProfile: { company_id?: string } | null
+): Promise<string> {
+  if (myProfile?.company_id) return myProfile.company_id;
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("company_id")
+    .eq("user_id", userId)
+    .single();
+
+  if (error || !data?.company_id) {
+    throw new Error("Could not resolve your company. Please contact an admin.");
+  }
+  return data.company_id;
+}
+
 export function useCreateChannel() {
   const { user } = useAuth();
   const myProfile = useMyProfile();
@@ -19,15 +41,14 @@ export function useCreateChannel() {
       memberIds: string[];
     }) => {
       if (!user) throw new Error("Not logged in");
-      if (!myProfile) throw new Error("Your profile is not set up yet. Please ask an admin to link your account.");
+      if (!myProfile)
+        throw new Error(
+          "Your profile is not set up yet. Please ask an admin to link your account."
+        );
 
-      // Create the channel (include company_id for RLS)
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("company_id")
-        .eq("user_id", user.id)
-        .single();
+      const companyId = await resolveCompanyId(user.id, myProfile as any);
 
+      // Create the channel
       const { data: channel, error: channelErr } = await (supabase as any)
         .from("team_channels")
         .insert({
@@ -35,18 +56,17 @@ export function useCreateChannel() {
           description: description || null,
           channel_type: "group",
           created_by: user.id,
-          company_id: profile?.company_id || null,
+          company_id: companyId,
         })
         .select("id")
         .single();
 
       if (channelErr) throw channelErr;
 
-      // Make sure creator is included in members
+      // Ensure creator is always a member
       const allMemberIds = new Set(memberIds);
       allMemberIds.add(myProfile.id);
 
-      // Add all members
       const memberRows = [...allMemberIds].map((profileId) => ({
         channel_id: channel.id,
         profile_id: profileId,
@@ -80,28 +100,35 @@ export function useOpenDM() {
       targetName: string;
     }) => {
       if (!user) throw new Error("Not logged in");
-      if (!myProfile) throw new Error("Your profile is not set up yet. Please ask an admin to link your account.");
+      if (!myProfile)
+        throw new Error(
+          "Your profile is not set up yet. Please ask an admin to link your account."
+        );
+      if (targetProfileId === myProfile.id)
+        throw new Error("You cannot DM yourself.");
 
-      // Check if a DM channel already exists between these two users
+      // --- Check for existing DM ---
       const { data: existingMembers } = await (supabase as any)
         .from("team_channel_members")
         .select("channel_id")
         .eq("profile_id", myProfile.id);
 
-      const myChannelIds = (existingMembers || []).map((m: any) => m.channel_id);
+      const myChannelIds = (existingMembers || []).map(
+        (m: any) => m.channel_id
+      );
 
       if (myChannelIds.length > 0) {
-        // Find DM channels where the target is also a member
         const { data: sharedMembers } = await (supabase as any)
           .from("team_channel_members")
           .select("channel_id")
           .eq("profile_id", targetProfileId)
           .in("channel_id", myChannelIds);
 
-        const sharedChannelIds = (sharedMembers || []).map((m: any) => m.channel_id);
+        const sharedChannelIds = (sharedMembers || []).map(
+          (m: any) => m.channel_id
+        );
 
         if (sharedChannelIds.length > 0) {
-          // Check if any of these shared channels are DMs
           const { data: dmChannels } = await (supabase as any)
             .from("team_channels")
             .select("id")
@@ -114,16 +141,10 @@ export function useOpenDM() {
         }
       }
 
-      // No existing DM — create one (include company_id for RLS)
-      const dmName = [myProfile.full_name, targetName]
-        .sort()
-        .join(" & ");
+      // --- Create new DM channel ---
+      const companyId = await resolveCompanyId(user.id, myProfile as any);
 
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("company_id")
-        .eq("user_id", user.id)
-        .single();
+      const dmName = [myProfile.full_name, targetName].sort().join(" & ");
 
       const { data: channel, error: channelErr } = await (supabase as any)
         .from("team_channels")
@@ -131,14 +152,14 @@ export function useOpenDM() {
           name: dmName,
           channel_type: "dm",
           created_by: user.id,
-          company_id: profile?.company_id || null,
+          company_id: companyId,
         })
         .select("id")
         .single();
 
       if (channelErr) throw channelErr;
 
-      // Add both members
+      // Add both members atomically
       const { error: membersErr } = await (supabase as any)
         .from("team_channel_members")
         .insert([
@@ -157,10 +178,14 @@ export function useOpenDM() {
 }
 
 export function useDeleteChannel() {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (channelId: string) => {
+      if (!user) throw new Error("Not logged in");
+
+      // Delete members, messages, then channel
       const { error: membersErr } = await (supabase as any)
         .from("team_channel_members")
         .delete()
