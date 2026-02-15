@@ -52,7 +52,11 @@ export class WPClient {
   ): Promise<any> {
     await acquireSlot();
     try {
-      const url = new URL(`${this.baseUrl}${endpoint}`);
+      // WC endpoints use a different base: /wp-json/wc/v3 instead of /wp-json/wp/v2
+      const base = endpoint.startsWith("/wc/v3/") || endpoint.startsWith("/wc/v3")
+        ? this.baseUrl.replace(/\/wp\/v2\/?$/, "")
+        : this.baseUrl;
+      const url = new URL(`${base}${endpoint}`);
       if (params) {
         Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
       }
@@ -150,7 +154,7 @@ export class WPClient {
   async listProducts(params: Record<string, string> = {}) {
     try {
       return await this.get(
-        this.baseUrl.replace(/\/wp\/v2\/?$/, "") ? `/wc/v3/products` : `/wc/v3/products`,
+        `/wc/v3/products`,
         { per_page: "20", ...params },
       );
     } catch (e: any) {
