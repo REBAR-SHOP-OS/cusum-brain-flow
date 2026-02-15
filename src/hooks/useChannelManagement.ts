@@ -21,7 +21,13 @@ export function useCreateChannel() {
       if (!user) throw new Error("Not logged in");
       if (!myProfile) throw new Error("Your profile is not set up yet. Please ask an admin to link your account.");
 
-      // Create the channel
+      // Create the channel (include company_id for RLS)
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("company_id")
+        .eq("user_id", user.id)
+        .single();
+
       const { data: channel, error: channelErr } = await (supabase as any)
         .from("team_channels")
         .insert({
@@ -29,6 +35,7 @@ export function useCreateChannel() {
           description: description || null,
           channel_type: "group",
           created_by: user.id,
+          company_id: profile?.company_id || null,
         })
         .select("id")
         .single();
@@ -107,10 +114,16 @@ export function useOpenDM() {
         }
       }
 
-      // No existing DM — create one
+      // No existing DM — create one (include company_id for RLS)
       const dmName = [myProfile.full_name, targetName]
         .sort()
         .join(" & ");
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("company_id")
+        .eq("user_id", user.id)
+        .single();
 
       const { data: channel, error: channelErr } = await (supabase as any)
         .from("team_channels")
@@ -118,6 +131,7 @@ export function useOpenDM() {
           name: dmName,
           channel_type: "dm",
           created_by: user.id,
+          company_id: profile?.company_id || null,
         })
         .select("id")
         .single();
