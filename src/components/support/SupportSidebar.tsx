@@ -1,4 +1,4 @@
-import { Inbox, Settings } from "lucide-react";
+import { Inbox, Settings, BookOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SupportSection } from "@/pages/SupportInbox";
 
@@ -9,6 +9,7 @@ interface Props {
 
 const items: { id: SupportSection; label: string; icon: React.ElementType }[] = [
   { id: "inbox", label: "Inbox", icon: Inbox },
+  { id: "knowledge-base", label: "Knowledge Base", icon: BookOpen },
   { id: "settings", label: "Widget Settings", icon: Settings },
 ];
 

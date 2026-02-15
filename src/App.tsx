@@ -61,6 +61,7 @@ import TranscribeWatch from "./pages/TranscribeWatch";
 import WebsiteManager from "./pages/WebsiteManager";
 import SeoModule from "./pages/SeoModule";
 import SupportInbox from "./pages/SupportInbox";
+import KnowledgeBasePublic from "./pages/KnowledgeBasePublic";
 
 import LiveChat from "./pages/LiveChat";
 import EmailMarketing from "./pages/EmailMarketing";
@@ -178,6 +179,7 @@ const App = () => (
                     <Route path="/terms-of-service" element={<TermsOfService />} />
                     <Route path="/portal" element={<CustomerPortal />} />
                     <Route path="/install" element={<Install />} />
+                    <Route path="/knowledge-base" element={<KnowledgeBasePublic />} />
                     <Route path="/unsubscribe" element={<Unsubscribe />} />
 
                     <Route path="*" element={<NotFound />} />
