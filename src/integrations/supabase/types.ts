@@ -6548,6 +6548,8 @@ export type Database = {
       }
       support_widget_configs: {
         Row: {
+          ai_enabled: boolean
+          ai_system_prompt: string | null
           allowed_domains: string[] | null
           brand_color: string | null
           brand_name: string | null
@@ -6561,6 +6563,8 @@ export type Database = {
           widget_key: string
         }
         Insert: {
+          ai_enabled?: boolean
+          ai_system_prompt?: string | null
           allowed_domains?: string[] | null
           brand_color?: string | null
           brand_name?: string | null
@@ -6574,6 +6578,8 @@ export type Database = {
           widget_key?: string
         }
         Update: {
+          ai_enabled?: boolean
+          ai_system_prompt?: string | null
           allowed_domains?: string[] | null
           brand_color?: string | null
           brand_name?: string | null

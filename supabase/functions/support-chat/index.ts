@@ -21,173 +21,22 @@ Deno.serve(async (req) => {
 
     // ── Widget JS embed endpoint ──
     if (action === "widget.js") {
-      const widgetKey = url.searchParams.get("key");
-      if (!widgetKey) {
-        return new Response("Missing key", { status: 400, headers: corsHeaders });
-      }
-
-      const { data: config } = await supabase
-        .from("support_widget_configs")
-        .select("*")
-        .eq("widget_key", widgetKey)
-        .eq("enabled", true)
-        .single();
-
-      if (!config) {
-        return new Response("// Widget not found or disabled", {
-          status: 404,
-          headers: { ...corsHeaders, "Content-Type": "application/javascript" },
-        });
-      }
-
-      const widgetJs = generateWidgetJs(config, supabaseUrl);
-      return new Response(widgetJs, {
-        headers: { ...corsHeaders, "Content-Type": "application/javascript", "Cache-Control": "public, max-age=300" },
-      });
+      return handleWidgetJs(url, supabase, supabaseUrl);
     }
 
     // ── Start conversation ──
     if (action === "start") {
-      const { widget_key, visitor_name, visitor_email } = await req.json();
-
-      const { data: config } = await supabase
-        .from("support_widget_configs")
-        .select("id, company_id")
-        .eq("widget_key", widget_key)
-        .eq("enabled", true)
-        .single();
-
-      if (!config) {
-        return new Response(JSON.stringify({ error: "Widget not found" }), {
-          status: 404,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      const { data: convo, error } = await supabase
-        .from("support_conversations")
-        .insert({
-          company_id: config.company_id,
-          widget_config_id: config.id,
-          visitor_name: visitor_name?.slice(0, 100) || "Visitor",
-          visitor_email: visitor_email?.slice(0, 255) || null,
-          status: "open",
-        })
-        .select("id, visitor_token")
-        .single();
-
-      if (error) throw error;
-
-      // Insert system welcome message
-      await supabase.from("support_messages").insert({
-        conversation_id: convo.id,
-        sender_type: "system",
-        content: "Conversation started",
-        content_type: "system",
-      });
-
-      return new Response(JSON.stringify({ conversation_id: convo.id, visitor_token: convo.visitor_token }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return handleStart(req, supabase);
     }
 
     // ── Send message (visitor) ──
     if (action === "send") {
-      const { conversation_id, content, visitor_token } = await req.json();
-
-      if (!conversation_id || !content || !visitor_token) {
-        return new Response(JSON.stringify({ error: "Missing fields" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      // Verify visitor token
-      const { data: convo } = await supabase
-        .from("support_conversations")
-        .select("id, status")
-        .eq("id", conversation_id)
-        .eq("visitor_token", visitor_token)
-        .single();
-
-      if (!convo) {
-        return new Response(JSON.stringify({ error: "Invalid conversation" }), {
-          status: 403,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      const sanitizedContent = content.slice(0, 5000).trim();
-      if (!sanitizedContent) {
-        return new Response(JSON.stringify({ error: "Empty message" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      const { data: msg, error } = await supabase
-        .from("support_messages")
-        .insert({
-          conversation_id,
-          sender_type: "visitor",
-          content: sanitizedContent,
-        })
-        .select("id, created_at")
-        .single();
-
-      if (error) throw error;
-
-      // Update last_message_at
-      await supabase
-        .from("support_conversations")
-        .update({ last_message_at: new Date().toISOString() })
-        .eq("id", conversation_id);
-
-      return new Response(JSON.stringify({ message_id: msg.id, created_at: msg.created_at }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return handleSend(req, supabase);
     }
 
     // ── Poll messages (visitor) ──
     if (action === "poll") {
-      const conversationId = url.searchParams.get("conversation_id");
-      const visitorToken = url.searchParams.get("visitor_token");
-      const after = url.searchParams.get("after") || "1970-01-01T00:00:00Z";
-
-      if (!conversationId || !visitorToken) {
-        return new Response(JSON.stringify({ error: "Missing params" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      // Verify token
-      const { data: convo } = await supabase
-        .from("support_conversations")
-        .select("id")
-        .eq("id", conversationId)
-        .eq("visitor_token", visitorToken)
-        .single();
-
-      if (!convo) {
-        return new Response(JSON.stringify({ error: "Invalid" }), {
-          status: 403,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      const { data: messages } = await supabase
-        .from("support_messages")
-        .select("id, sender_type, content, content_type, created_at")
-        .eq("conversation_id", conversationId)
-        .eq("is_internal_note", false)
-        .gt("created_at", after)
-        .order("created_at", { ascending: true })
-        .limit(50);
-
-      return new Response(JSON.stringify({ messages: messages || [] }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return handlePoll(url, supabase);
     }
 
     return new Response(JSON.stringify({ error: "Unknown action" }), {
@@ -203,6 +52,261 @@ Deno.serve(async (req) => {
   }
 });
 
+// ── Widget JS ──
+async function handleWidgetJs(url: URL, supabase: any, supabaseUrl: string) {
+  const widgetKey = url.searchParams.get("key");
+  if (!widgetKey) {
+    return new Response("Missing key", { status: 400, headers: corsHeaders });
+  }
+
+  const { data: config } = await supabase
+    .from("support_widget_configs")
+    .select("*")
+    .eq("widget_key", widgetKey)
+    .eq("enabled", true)
+    .single();
+
+  if (!config) {
+    return new Response("// Widget not found or disabled", {
+      status: 404,
+      headers: { ...corsHeaders, "Content-Type": "application/javascript" },
+    });
+  }
+
+  const widgetJs = generateWidgetJs(config, supabaseUrl);
+  return new Response(widgetJs, {
+    headers: { ...corsHeaders, "Content-Type": "application/javascript", "Cache-Control": "public, max-age=300" },
+  });
+}
+
+// ── Start Conversation ──
+async function handleStart(req: Request, supabase: any) {
+  const { widget_key, visitor_name, visitor_email } = await req.json();
+
+  const { data: config } = await supabase
+    .from("support_widget_configs")
+    .select("id, company_id")
+    .eq("widget_key", widget_key)
+    .eq("enabled", true)
+    .single();
+
+  if (!config) {
+    return new Response(JSON.stringify({ error: "Widget not found" }), {
+      status: 404,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  const { data: convo, error } = await supabase
+    .from("support_conversations")
+    .insert({
+      company_id: config.company_id,
+      widget_config_id: config.id,
+      visitor_name: visitor_name?.slice(0, 100) || "Visitor",
+      visitor_email: visitor_email?.slice(0, 255) || null,
+      status: "open",
+    })
+    .select("id, visitor_token")
+    .single();
+
+  if (error) throw error;
+
+  await supabase.from("support_messages").insert({
+    conversation_id: convo.id,
+    sender_type: "system",
+    content: "Conversation started",
+    content_type: "system",
+  });
+
+  return new Response(JSON.stringify({ conversation_id: convo.id, visitor_token: convo.visitor_token }), {
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+// ── Send Message (visitor) ──
+async function handleSend(req: Request, supabase: any) {
+  const { conversation_id, content, visitor_token } = await req.json();
+
+  if (!conversation_id || !content || !visitor_token) {
+    return new Response(JSON.stringify({ error: "Missing fields" }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  const { data: convo } = await supabase
+    .from("support_conversations")
+    .select("id, status, company_id, widget_config_id")
+    .eq("id", conversation_id)
+    .eq("visitor_token", visitor_token)
+    .single();
+
+  if (!convo) {
+    return new Response(JSON.stringify({ error: "Invalid conversation" }), {
+      status: 403,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  const sanitizedContent = content.slice(0, 5000).trim();
+  if (!sanitizedContent) {
+    return new Response(JSON.stringify({ error: "Empty message" }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  const { data: msg, error } = await supabase
+    .from("support_messages")
+    .insert({
+      conversation_id,
+      sender_type: "visitor",
+      content: sanitizedContent,
+    })
+    .select("id, created_at")
+    .single();
+
+  if (error) throw error;
+
+  await supabase
+    .from("support_conversations")
+    .update({ last_message_at: new Date().toISOString() })
+    .eq("id", conversation_id);
+
+  // Fire-and-forget AI auto-reply
+  triggerAiReply(supabase, convo, sanitizedContent).catch((e) =>
+    console.error("AI reply error:", e)
+  );
+
+  return new Response(JSON.stringify({ message_id: msg.id, created_at: msg.created_at }), {
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+// ── Poll Messages (visitor) ──
+async function handlePoll(url: URL, supabase: any) {
+  const conversationId = url.searchParams.get("conversation_id");
+  const visitorToken = url.searchParams.get("visitor_token");
+  const after = url.searchParams.get("after") || "1970-01-01T00:00:00Z";
+
+  if (!conversationId || !visitorToken) {
+    return new Response(JSON.stringify({ error: "Missing params" }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  const { data: convo } = await supabase
+    .from("support_conversations")
+    .select("id")
+    .eq("id", conversationId)
+    .eq("visitor_token", visitorToken)
+    .single();
+
+  if (!convo) {
+    return new Response(JSON.stringify({ error: "Invalid" }), {
+      status: 403,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  const { data: messages } = await supabase
+    .from("support_messages")
+    .select("id, sender_type, content, content_type, created_at")
+    .eq("conversation_id", conversationId)
+    .eq("is_internal_note", false)
+    .gt("created_at", after)
+    .order("created_at", { ascending: true })
+    .limit(50);
+
+  return new Response(JSON.stringify({ messages: messages || [] }), {
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+// ── AI Auto-Reply ──
+async function triggerAiReply(supabase: any, convo: any, visitorMessage: string) {
+  // Check if AI is enabled for this widget
+  const { data: widgetConfig } = await supabase
+    .from("support_widget_configs")
+    .select("ai_enabled, ai_system_prompt, company_id")
+    .eq("id", convo.widget_config_id)
+    .single();
+
+  if (!widgetConfig?.ai_enabled) return;
+
+  // Fetch published KB articles for context
+  const { data: articles } = await supabase
+    .from("kb_articles")
+    .select("title, content, excerpt")
+    .eq("company_id", widgetConfig.company_id)
+    .eq("is_published", true)
+    .limit(20);
+
+  const kbContext = (articles || [])
+    .map((a: any) => `## ${a.title}\n${a.excerpt || ""}\n${a.content}`)
+    .join("\n\n---\n\n");
+
+  // Fetch recent conversation history
+  const { data: history } = await supabase
+    .from("support_messages")
+    .select("sender_type, content")
+    .eq("conversation_id", convo.id)
+    .eq("is_internal_note", false)
+    .neq("content_type", "system")
+    .order("created_at", { ascending: true })
+    .limit(20);
+
+  const messages = [
+    {
+      role: "system",
+      content: `${widgetConfig.ai_system_prompt || "You are a helpful support assistant."}\n\n## Knowledge Base Articles:\n${kbContext || "No articles available."}`,
+    },
+    ...(history || []).map((m: any) => ({
+      role: m.sender_type === "visitor" ? "user" : "assistant",
+      content: m.content,
+    })),
+  ];
+
+  const apiKey = Deno.env.get("LOVABLE_API_KEY");
+  if (!apiKey) {
+    console.error("LOVABLE_API_KEY not set, skipping AI reply");
+    return;
+  }
+
+  const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "google/gemini-3-flash-preview",
+      messages,
+      stream: false,
+    }),
+  });
+
+  if (!aiResponse.ok) {
+    const errText = await aiResponse.text();
+    console.error("AI gateway error:", aiResponse.status, errText);
+    return;
+  }
+
+  const aiData = await aiResponse.json();
+  const reply = aiData.choices?.[0]?.message?.content;
+
+  if (!reply) return;
+
+  // Insert bot message
+  await supabase.from("support_messages").insert({
+    conversation_id: convo.id,
+    sender_type: "bot",
+    content: reply.slice(0, 5000),
+  });
+}
+
+// ── Widget JS Generator ──
 function generateWidgetJs(config: any, supabaseUrl: string): string {
   const chatUrl = `${supabaseUrl}/functions/v1/support-chat`;
   return `
