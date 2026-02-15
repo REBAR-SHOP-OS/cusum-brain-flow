@@ -65,7 +65,7 @@ const defaultAutomations: Automation[] = [
   },
   {
     id: "website-manager",
-    name: "Website Manager",
+    name: "Job Site Manager",
     description: "Visual editing and AI management for rebar.shop",
     enabled: true,
     color: "blue",
