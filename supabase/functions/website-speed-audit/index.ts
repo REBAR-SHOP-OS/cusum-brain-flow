@@ -209,6 +209,23 @@ serve(async (req) => {
     // Generate recommendations based on findings
     const avgTTFB = Object.values(ttfbResults).reduce((s, v) => s + v, 0) / Object.values(ttfbResults).length;
 
+    // URGENT: Post-Air Lift removal — no caching plugin detected
+    recommendations.push({
+      action: "replace_caching_plugin",
+      priority: 0,
+      title: "URGENT: Install replacement caching plugin",
+      description: "No active caching plugin detected after Air Lift removal. Install LiteSpeed Cache or WP Super Cache to restore page caching. This is the single most impactful fix for the current speed regression.",
+      requires_server_access: true,
+    });
+
+    recommendations.push({
+      action: "airlift_cleanup",
+      priority: 1,
+      title: "Clean up Air Lift database leftovers",
+      description: "Remove orphaned Air Lift tables and wp-content files using Advanced Database Cleaner. Stale data from removed plugins bloats autoloaded options and slows queries.",
+      requires_server_access: true,
+    });
+
     // Hardcoded Site Health items (from WP Site Health report)
     recommendations.push({
       action: "fix_autoloaded_options",

@@ -11,6 +11,9 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 const SERVER_HEALTH_ITEMS = [
+  { id: "replace_cache_plugin", severity: "critical" as const, title: "Install Replacement Caching Plugin", description: "Air Lift was removed. Install LiteSpeed Cache or WP Super Cache immediately to restore page caching, browser caching, and GZIP. This is the #1 fix for the speed drop." },
+  { id: "airlift_cleanup", severity: "warning" as const, title: "Clean Up Air Lift Leftovers", description: "Check database for orphaned Air Lift tables using Advanced Database Cleaner. Remove any leftover files in wp-content/plugins/ and wp-content/cache/." },
+  { id: "restore_minification", severity: "warning" as const, title: "Restore CSS/JS Minification", description: "Install Autoptimize to replace Air Lift's asset optimization. Enable Aggregate CSS, Aggregate JS, and Defer JS loading." },
   { id: "autoload", severity: "critical" as const, title: "Autoloaded Options Bloat", description: "Autoloaded data is 1.1 MB. Install Advanced Database Cleaner or WP-Optimize to purge stale transients and expired options. Target: under 800 KB." },
   { id: "redis", severity: "critical" as const, title: "No Persistent Object Cache", description: "No Redis/Memcached detected. Enable persistent object caching via your hosting panel (most managed hosts offer one-click Redis). This eliminates redundant database queries on every page load." },
   { id: "consent", severity: "warning" as const, title: "Consent API Non-Compliance", description: "One or more plugins don't declare cookie consent via the WP Consent API. Update CookieYes/cookie plugins or replace with a Consent API-compatible alternative." },
