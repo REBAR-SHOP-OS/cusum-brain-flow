@@ -62,7 +62,7 @@ function isRTL(text: string): boolean {
 export function RichMarkdown({ content, className, onRegenerateImage, onActionItem, onTableRowAction, dismissedItems, rescheduledItems }: RichMarkdownProps) {
   const rtl = isRTL(content);
   return (
-    <div className={cn("text-sm leading-relaxed break-words overflow-hidden", rtl && "text-right", className)} dir={rtl ? "rtl" : undefined}>
+    <div className={cn("text-sm leading-relaxed break-words overflow-hidden max-w-full min-w-0 [overflow-wrap:anywhere]", rtl && "text-right", className)} dir={rtl ? "rtl" : undefined}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
@@ -218,14 +218,14 @@ export function RichMarkdown({ content, className, onRegenerateImage, onActionIt
                   <div className="bg-muted/80 px-3 py-1 text-[10px] uppercase tracking-wider text-muted-foreground font-bold border-b border-border/50">
                     {codeClassName?.replace("language-", "") || "code"}
                   </div>
-                  <pre className="bg-muted/40 p-3 overflow-x-auto">
+                  <pre className="bg-muted/40 p-3 overflow-x-auto max-w-full">
                     <code className="text-xs font-mono text-foreground/90">{children}</code>
                   </pre>
                 </div>
               );
             }
             return (
-              <code className="bg-primary/10 text-primary px-1.5 py-0.5 rounded text-xs font-mono font-semibold">
+              <code className="bg-primary/10 text-primary px-1.5 py-0.5 rounded text-xs font-mono font-semibold break-all">
                 {children}
               </code>
             );

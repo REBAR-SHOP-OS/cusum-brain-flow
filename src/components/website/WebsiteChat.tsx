@@ -95,7 +95,7 @@ export function WebsiteChat({ currentPagePath, onWriteConfirmed }: WebsiteChatPr
 
       {/* Messages */}
       <ScrollArea className="flex-1">
-        <div className="p-3 space-y-3">
+        <div className="p-3 space-y-3 w-full">
           {messages.length === 0 && (
             <div className="text-center py-8 space-y-3">
               <p className="text-sm text-muted-foreground">
@@ -122,14 +122,14 @@ export function WebsiteChat({ currentPagePath, onWriteConfirmed }: WebsiteChatPr
             <div
               key={msg.id}
               className={cn(
-                "rounded-xl px-3 py-2 text-sm max-w-[95%] overflow-hidden break-words",
+                "rounded-xl px-3 py-2 text-sm max-w-[95%] overflow-hidden break-words min-w-0",
                 msg.role === "user"
                   ? "ml-auto bg-primary text-primary-foreground"
                   : "mr-auto bg-muted text-foreground"
               )}
             >
               {msg.role === "assistant" ? (
-                <RichMarkdown content={msg.content} className="text-sm [&_p]:text-sm [&_pre]:overflow-x-auto [&_code]:break-all [&_p]:break-words" />
+                <RichMarkdown content={msg.content} className="text-sm [&_p]:text-sm [&_pre]:overflow-x-auto [&_code]:break-all [&_p]:break-words [&_*]:max-w-full" />
               ) : (
                 <p className="whitespace-pre-wrap">
                   {/* Strip the context prefix from display */}
