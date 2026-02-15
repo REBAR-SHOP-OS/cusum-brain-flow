@@ -5383,6 +5383,365 @@ export type Database = {
         }
         Relationships: []
       }
+      seo_crawl_pages: {
+        Row: {
+          canonical: string | null
+          company_id: string
+          crawl_run_id: string
+          created_at: string
+          h1: string | null
+          id: string
+          in_sitemap: boolean | null
+          issues_json: Json | null
+          load_time_ms: number | null
+          meta_description: string | null
+          redirect_target: string | null
+          robots_directives: string | null
+          status_code: number | null
+          title: string | null
+          url: string
+          word_count: number | null
+        }
+        Insert: {
+          canonical?: string | null
+          company_id?: string
+          crawl_run_id: string
+          created_at?: string
+          h1?: string | null
+          id?: string
+          in_sitemap?: boolean | null
+          issues_json?: Json | null
+          load_time_ms?: number | null
+          meta_description?: string | null
+          redirect_target?: string | null
+          robots_directives?: string | null
+          status_code?: number | null
+          title?: string | null
+          url: string
+          word_count?: number | null
+        }
+        Update: {
+          canonical?: string | null
+          company_id?: string
+          crawl_run_id?: string
+          created_at?: string
+          h1?: string | null
+          id?: string
+          in_sitemap?: boolean | null
+          issues_json?: Json | null
+          load_time_ms?: number | null
+          meta_description?: string | null
+          redirect_target?: string | null
+          robots_directives?: string | null
+          status_code?: number | null
+          title?: string | null
+          url?: string
+          word_count?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "seo_crawl_pages_crawl_run_id_fkey"
+            columns: ["crawl_run_id"]
+            isOneToOne: false
+            referencedRelation: "seo_crawl_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      seo_crawl_runs: {
+        Row: {
+          company_id: string
+          completed_at: string | null
+          domain_id: string
+          health_score: number | null
+          id: string
+          issues_critical: number | null
+          issues_info: number | null
+          issues_warning: number | null
+          pages_crawled: number | null
+          started_at: string
+          status: string
+        }
+        Insert: {
+          company_id?: string
+          completed_at?: string | null
+          domain_id: string
+          health_score?: number | null
+          id?: string
+          issues_critical?: number | null
+          issues_info?: number | null
+          issues_warning?: number | null
+          pages_crawled?: number | null
+          started_at?: string
+          status?: string
+        }
+        Update: {
+          company_id?: string
+          completed_at?: string | null
+          domain_id?: string
+          health_score?: number | null
+          id?: string
+          issues_critical?: number | null
+          issues_info?: number | null
+          issues_warning?: number | null
+          pages_crawled?: number | null
+          started_at?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "seo_crawl_runs_domain_id_fkey"
+            columns: ["domain_id"]
+            isOneToOne: false
+            referencedRelation: "seo_domains"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      seo_domains: {
+        Row: {
+          company_id: string
+          created_at: string
+          domain: string
+          gsc_verified: boolean
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string
+          domain: string
+          gsc_verified?: boolean
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          domain?: string
+          gsc_verified?: boolean
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      seo_issues: {
+        Row: {
+          company_id: string
+          crawl_run_id: string
+          created_at: string
+          description: string | null
+          id: string
+          issue_type: string
+          page_id: string | null
+          page_url: string | null
+          severity: string
+          title: string
+        }
+        Insert: {
+          company_id?: string
+          crawl_run_id: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          issue_type: string
+          page_id?: string | null
+          page_url?: string | null
+          severity?: string
+          title: string
+        }
+        Update: {
+          company_id?: string
+          crawl_run_id?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          issue_type?: string
+          page_id?: string | null
+          page_url?: string | null
+          severity?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "seo_issues_crawl_run_id_fkey"
+            columns: ["crawl_run_id"]
+            isOneToOne: false
+            referencedRelation: "seo_crawl_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "seo_issues_page_id_fkey"
+            columns: ["page_id"]
+            isOneToOne: false
+            referencedRelation: "seo_crawl_pages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      seo_keywords: {
+        Row: {
+          active: boolean
+          company_id: string
+          country: string
+          created_at: string
+          device: string
+          domain_id: string
+          id: string
+          intent: string | null
+          keyword: string
+          tags: string[] | null
+          target_url: string | null
+        }
+        Insert: {
+          active?: boolean
+          company_id?: string
+          country?: string
+          created_at?: string
+          device?: string
+          domain_id: string
+          id?: string
+          intent?: string | null
+          keyword: string
+          tags?: string[] | null
+          target_url?: string | null
+        }
+        Update: {
+          active?: boolean
+          company_id?: string
+          country?: string
+          created_at?: string
+          device?: string
+          domain_id?: string
+          id?: string
+          intent?: string | null
+          keyword?: string
+          tags?: string[] | null
+          target_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "seo_keywords_domain_id_fkey"
+            columns: ["domain_id"]
+            isOneToOne: false
+            referencedRelation: "seo_domains"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      seo_rank_history: {
+        Row: {
+          clicks: number | null
+          company_id: string
+          created_at: string
+          ctr: number | null
+          date: string
+          id: string
+          impressions: number | null
+          keyword_id: string
+          position: number | null
+          source: string
+          url_found: string | null
+        }
+        Insert: {
+          clicks?: number | null
+          company_id?: string
+          created_at?: string
+          ctr?: number | null
+          date: string
+          id?: string
+          impressions?: number | null
+          keyword_id: string
+          position?: number | null
+          source?: string
+          url_found?: string | null
+        }
+        Update: {
+          clicks?: number | null
+          company_id?: string
+          created_at?: string
+          ctr?: number | null
+          date?: string
+          id?: string
+          impressions?: number | null
+          keyword_id?: string
+          position?: number | null
+          source?: string
+          url_found?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "seo_rank_history_keyword_id_fkey"
+            columns: ["keyword_id"]
+            isOneToOne: false
+            referencedRelation: "seo_keywords"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      seo_tasks: {
+        Row: {
+          assigned_to: string | null
+          company_id: string
+          created_at: string
+          description: string | null
+          domain_id: string | null
+          entity_type: string | null
+          entity_url: string | null
+          id: string
+          linked_issue_id: string | null
+          priority: string
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          company_id?: string
+          created_at?: string
+          description?: string | null
+          domain_id?: string | null
+          entity_type?: string | null
+          entity_url?: string | null
+          id?: string
+          linked_issue_id?: string | null
+          priority?: string
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          assigned_to?: string | null
+          company_id?: string
+          created_at?: string
+          description?: string | null
+          domain_id?: string | null
+          entity_type?: string | null
+          entity_url?: string | null
+          id?: string
+          linked_issue_id?: string | null
+          priority?: string
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "seo_tasks_domain_id_fkey"
+            columns: ["domain_id"]
+            isOneToOne: false
+            referencedRelation: "seo_domains"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "seo_tasks_linked_issue_id_fkey"
+            columns: ["linked_issue_id"]
+            isOneToOne: false
+            referencedRelation: "seo_issues"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sla_escalation_log: {
         Row: {
           breached_at: string
