@@ -1,119 +1,133 @@
 
 
-# Audit, Improve & Modify rebar.shop
+# Fix All Speed Issues on rebar.shop
 
-## Audit Results (Live Scan)
+## Current Performance (from your PageSpeed reports)
 
-The automated health check found **8 issues** across 24 pages, 9 posts, and 0 products (WooCommerce returned empty):
+| Metric | Mobile | Desktop | Target |
+|--------|--------|---------|--------|
+| TTFB | 3.2s | 3.5s | < 0.8s |
+| FCP | 3.9s | 3.9s | < 1.8s |
+| LCP | 4.3s | 4.4s | < 2.5s |
+| CLS | 0.05 | 0.03 | < 0.1 (passing) |
+| Core Web Vitals | FAILED | FAILED | Pass |
 
-### CRITICAL (2 issues)
-| Issue | Page | Impact |
-|-------|------|--------|
-| Duplicate slug `rebar-fabrication-2` | Page #20703 "Rebar Fabrication" | SEO authority split -- two identical pages competing |
-| Duplicate slug `20579-2` | Page #20579 "Rebar AI Assistant" | Broken URL, SEO dilution |
+**Root cause**: The TTFB (Time to First Byte) at 3.2-3.5s accounts for ~80% of the delay. This means the WordPress server takes 3+ seconds just to start responding, before any content loads.
 
-Both pages serve identical content to their non-suffixed counterparts, splitting search authority.
+## What We Can Fix (via WordPress API)
 
-### WARNING (6 issues)
-| Issue | Page | Impact |
-|-------|------|--------|
-| Missing meta description | "My account" (#10) | Poor search snippets |
-| Missing meta description | "Cart" (#8) | Poor search snippets |
-| Missing meta description | "Shop" (#7) | Poor search snippets |
-| Missing meta description | "Track Your Order" (#9281) | Poor search snippets |
-| Missing meta description | "Blog" (#107) | Poor search snippets |
-| No blog post in 130 days | Last post: Oct 2025 | Declining organic rankings |
+Since we have full read/write access to rebar.shop via the WP REST API, here is what we can address:
 
-### Additional Observations (from live scrape)
-- Homepage links to `/rebar-fabrication-2/` instead of `/rebar-fabrication/` -- internal links point to the duplicate
-- Some product images use lazy-load SVG placeholders that never load (broken below-the-fold images)
-- "About Us" copy is keyword-stuffed with awkward transition words ("Moreover", "As a result", "Consequently" on every sentence)
-- Footer only links to Facebook and Instagram -- missing LinkedIn, Google Business Profile
+### 1. Create a Speed Audit Edge Function
+
+**New file: `supabase/functions/website-speed-audit/index.ts`**
+
+A dedicated function that:
+- Measures actual TTFB by timing a fetch to the homepage and key pages
+- Scrapes the homepage HTML to identify speed-killing patterns
+- Checks for unoptimized images (missing width/height, no lazy loading, oversized)
+- Detects render-blocking resources in the page source
+- Counts total page weight and number of requests
+- Returns actionable findings with severity levels
+
+### 2. Add Speed Checks to Existing Health Check
+
+**File: `supabase/functions/website-health-check/index.ts`**
+
+Add performance-related checks alongside existing SEO checks:
+- Measure TTFB for homepage, a product page, and blog page
+- Flag if TTFB exceeds 1.5s (warning) or 2.5s (critical)
+- Check page content size (flag if homepage HTML > 200KB)
+- Detect if pages embed large inline CSS/JS blocks
+- Check for excessive post revisions that bloat the database
+
+### 3. Content Optimization via WP API
+
+**Executed through existing agent tools (no new code needed)**:
+- Audit all published pages for oversized embedded images in post content
+- Replace large inline images with properly sized versions using `wp_update_page`
+- Remove unnecessary shortcodes or heavy page builder markup from key pages
+- Trim excessive post revisions on high-traffic pages
+
+### 4. Add Speed Recommendations to Agent Prompts
+
+**File: `supabase/functions/ai-agent/index.ts`**
+
+Update the **Commet (webbuilder)** and **Prism (data)** agent prompts to include speed awareness:
+- Commet: When editing pages, always check content weight, image sizes, and recommend lazy loading
+- Prism: Include TTFB and page load metrics in data analysis reports
+
+### 5. Generate Speed-Specific Suggestions
+
+**File: `supabase/functions/generate-suggestions/index.ts`**
+
+Add speed audit results to the suggestion pipeline so Fix/Decline cards appear for:
+- Slow TTFB (assigned to Commet/webbuilder)
+- Heavy page content (assigned to Penn/copywriting to trim)
+- Missing image optimization (assigned to Commet)
 
 ---
 
-## Fix Plan
+## What Requires Server-Side Action (recommendations only)
 
-### 1. Fix Duplicate Slugs (Seomi -- Critical)
+These cannot be fixed via the WP REST API but will be surfaced as critical recommendations:
 
-**Pages affected:** #20703 (`rebar-fabrication-2`) and #20579 (`20579-2`)
-
-For each duplicate page:
-- Use `wp_update_page` to change the slug to a unique, SEO-friendly value (e.g., `rebar-fabrication-toronto` for #20703)
-- OR if the page is truly redundant (identical content), set its status to `draft` to remove it from indexing
-- Update all internal links on the homepage that point to `-2` URLs to point to the canonical version
-
-**File:** `supabase/functions/ai-agent/index.ts` -- no code changes needed, Seomi already has these tools
-
-### 2. Add Meta Descriptions to 5 Pages (Seomi)
-
-Use `wp_update_page` to set the `excerpt` field on each page:
-
-| Page | Proposed Meta Description |
-|------|--------------------------|
-| Shop (#7) | "Browse custom rebar fabrication products -- stirrups, dowels, cages, and bend bars. CSA-certified. Same-day quotes. Ontario-wide delivery." |
-| Cart (#8) | "Review your rebar order and proceed to checkout. Fast turnaround and Ontario-wide delivery from Rebar.Shop." |
-| My Account (#10) | "Manage your Rebar.Shop account -- view orders, track deliveries, and update your profile." |
-| Track Your Order (#9281) | "Track your rebar fabrication order status in real-time. Get delivery updates and estimated arrival times." |
-| Blog (#107) | "Expert insights on rebar fabrication, construction reinforcement, and steel industry news from Rebar.Shop." |
-
-### 3. Publish a Fresh Blog Post (Penn)
-
-Create a new blog post to break the 130-day content silence. Topic suggestion:
-- "2026 Rebar Fabrication Trends in Ontario" or "How to Choose the Right Rebar Size for Your Foundation"
-- Use `wp_create_post` with status `draft` so you can review before publishing
-
-### 4. Improve About Us Copy (Penn)
-
-The current copy is over-optimized with forced transition words. Use `wp_update_page` on the About Us page to:
-- Remove excessive "Moreover", "As a result", "Consequently" fillers
-- Write natural, confident prose that still includes key phrases
-- Keep existing heading structure intact (additive-only policy)
-
-### 5. Fix Internal Links on Homepage (Commet)
-
-The homepage links to `/rebar-fabrication-2/` in multiple places. After fixing the duplicate slug, use `wp_update_page` on the homepage to replace all `-2` references with the canonical URL.
-
-### 6. Auto-Generate Suggestions on Schedule
-
-The `generate-suggestions` function already calls `website-health-check` and creates agent suggestions with Fix/Decline buttons. No additional code changes needed -- this is already live.
+| Issue | Fix Required | Who |
+|-------|-------------|-----|
+| **TTFB 3.2-3.5s** | Install a caching plugin (WP Super Cache, LiteSpeed Cache, or W3 Total Cache) | Server admin |
+| **No page cache** | Enable full-page caching at the hosting level | Hosting provider |
+| **No CDN** | Set up Cloudflare or similar CDN for static assets | Server admin |
+| **PHP performance** | Enable OPcache, upgrade to PHP 8.2+ | Hosting provider |
+| **Database bloat** | Clean post revisions, transients, spam comments | Server admin (or WP-Optimize plugin) |
+| **Render-blocking CSS/JS** | Minify and defer non-critical JS, inline critical CSS | Autoptimize or similar plugin |
+| **Image compression** | Install ShortPixel or Imagify for automatic WebP conversion | Server admin |
 
 ---
 
 ## Technical Details
 
-### No Code Changes Required
+### Speed Audit Function (`website-speed-audit/index.ts`)
 
-All the tools and infrastructure are already in place from the previous implementation:
-- `website-health-check` edge function is deployed and returning results
-- `generate-suggestions` integrates health check results into agent suggestions
-- `AgentSuggestionCard` has Fix/Decline buttons for `wp_*` entity types
-- All 6 agents (Seomi, Pixel, Prism, Buddy, Commet, Penn) have WP tools enabled
+```text
+Input: None (audits rebar.shop automatically)
+Output:
+{
+  "ok": true,
+  "ttfb": { "homepage": 3200, "blog": 2800 },
+  "page_weight": { "homepage_html_kb": 245 },
+  "issues": [
+    { "type": "slow_ttfb", "severity": "critical", ... },
+    { "type": "heavy_page", "severity": "warning", ... },
+    { "type": "unoptimized_images", "severity": "warning", ... }
+  ],
+  "recommendations": [
+    { "action": "install_cache_plugin", "priority": 1, ... },
+    { "action": "enable_cdn", "priority": 2, ... }
+  ]
+}
+```
 
-### Execution Approach
+### Health Check Updates
 
-The fixes will be executed by sending commands to the agents through their chat interfaces:
+Add after the existing product checks (line ~184):
+- TTFB measurement using `performance.now()` around a fetch to the homepage
+- Page content size check by fetching HTML and measuring byte length
+- Image audit by scanning page content for `<img>` tags without `loading="lazy"` or missing dimensions
 
-1. **Navigate to `/agent/seo`** and instruct Seomi to:
-   - Fix the two duplicate slugs
-   - Add meta descriptions to the 5 pages
+### Config Registration
 
-2. **Navigate to `/agent/copywriting`** and instruct Penn to:
-   - Draft a new blog post
-   - Improve the About Us page copy
+Add `[functions.website-speed-audit]` with `verify_jwt = false` to `supabase/config.toml`.
 
-3. **Navigate to `/agent/webbuilder`** and instruct Commet to:
-   - Update homepage internal links after slug fixes
+## Files Modified
+1. `supabase/functions/website-speed-audit/index.ts` -- NEW speed audit function
+2. `supabase/functions/website-health-check/index.ts` -- add performance checks
+3. `supabase/functions/ai-agent/index.ts` -- update Commet and Prism prompts for speed awareness
+4. `supabase/functions/generate-suggestions/index.ts` -- add speed issues to suggestion pipeline
+5. `supabase/config.toml` -- register new function
 
-All changes will be logged to `wp_change_log` for audit trail and rollback capability.
-
-### What Gets Fixed Immediately vs. Requires Your Approval
-
-| Fix | Method | Approval |
-|-----|--------|----------|
-| Duplicate slugs | Agent updates via WP API | You confirm in agent chat |
-| Meta descriptions | Agent updates via WP API | You confirm in agent chat |
-| New blog post | Created as draft | You review and publish |
-| About Us rewrite | Agent updates via WP API | You confirm in agent chat |
-| Homepage link fixes | Agent updates via WP API | You confirm in agent chat |
+## Expected Outcome
+- Automated speed monitoring with actionable Fix/Decline cards
+- Content-level optimizations applied directly via WP API (trim heavy pages, optimize image references)
+- Clear list of server-side recommendations you can share with your hosting provider
+- Agents proactively flag speed regressions going forward
 
