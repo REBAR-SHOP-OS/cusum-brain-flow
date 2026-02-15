@@ -1,75 +1,55 @@
 
 
-## Audit and Fix: Job Site Editor Links, Mobile Navigation, and Responsive Layout
+## Feature: Let Chat Inspect the Currently Open Page
 
-### Issues Found
+### What This Does
+Adds a new "Inspect Page" capability so the AI chat can fetch and analyze the live HTML content of whatever page is currently open in the preview iframe. Since the iframe loads rebar.shop (cross-origin), we can't read its DOM from the browser -- instead, the edge function fetches the page server-side and extracts the meaningful content.
 
-**1. Missing Mobile Navigation Links (MobileNavV2.tsx)**
-The mobile "More" menu is missing links for Job Site (/website), SEO (/seo), and Support Inbox (/support-inbox). These exist in the desktop sidebar but were never added to the mobile nav, so users on phones cannot reach these pages.
+### Changes
 
-**2. WebsiteManager Layout Broken on Mobile (WebsiteManager.tsx)**
-The horizontal `ResizablePanelGroup` (70/30 split) is unusable on small screens -- both panels are too narrow to use. On mobile, the page should show either the preview or the chat, with a toggle to switch between them instead of side-by-side panels.
+**1. Edge Function: `supabase/functions/admin-chat/index.ts`**
 
-**3. WebsiteToolbar Overflow on Mobile (WebsiteToolbar.tsx)**
-The toolbar crams the page selector, 3 device toggle buttons, refresh, and external link into a single row. On mobile this overflows or gets clipped. Needs `flex-wrap` and tighter spacing on small screens.
+- Add a new read tool `wp_inspect_page` to the JARVIS_TOOLS array:
+  - Parameter: `url` (string) -- the full URL or path on rebar.shop to inspect
+  - Description: "Fetch and analyze the live HTML content of a page on rebar.shop"
+- Add execution logic in `executeReadTool`:
+  - Fetch the page HTML from `https://rebar.shop{path}`
+  - Strip `<script>`, `<style>`, `<nav>`, `<footer>` tags to reduce noise
+  - Extract text content, meta tags (title, description, OG tags), headings, links, and images
+  - Return structured JSON with: `title`, `meta_description`, `headings`, `text_content` (truncated to ~4000 chars), `links`, `images`, `forms`
+- Update the system prompt to mention the inspect capability and instruct the AI to use it when the user asks about what's on the current page
+- Add `wp_inspect_page` to the progress labels map
 
-**4. Landing Page Header Not Mobile-Friendly (Landing.tsx)**
-The header navigation (Sign In + Get Started buttons) can overflow on very small screens. Needs responsive wrapping or smaller button sizing.
+**2. Frontend: `src/components/website/WebsiteChat.tsx`**
 
-**5. Landing Page Hero Buttons Don't Wrap (Landing.tsx)**
-The CTA buttons ("Start Free" + "Watch Demo") use `flex` without `flex-wrap`, so they overflow on narrow screens.
+- Add an "Inspect Page" quick action button (eye icon) next to the existing quick actions
+- When clicked, it sends a message like: `[Currently viewing: rebar.shop/path]\nInspect and analyze this page`
+- Add "Inspect this page" to the QUICK_ACTIONS array so it appears as a suggestion chip
 
-**6. LandingFooter Row 2 Has 4 Children in 3-Column Grid (LandingFooter.tsx)**
-The second row declares `md:grid-cols-3` but has 4 children (Contact, Service Area, Quick Links, Follow Us). The 4th item wraps awkwardly. Should be `md:grid-cols-2 lg:grid-cols-4` for proper layout.
-
----
-
-### Plan
-
-**File 1: `src/components/layout/MobileNavV2.tsx`**
-- Add Job Site (Globe icon), SEO, and Support to the `moreItems` array with appropriate role restrictions matching the desktop sidebar
-
-**File 2: `src/pages/WebsiteManager.tsx`**
-- Import `useIsMobile` hook
-- On mobile (below 768px): hide the resizable split layout
-- Instead show a tabbed interface: "Preview" tab shows the iframe, "Chat" tab shows the chat panel (full width)
-- Keep desktop layout unchanged
-
-**File 3: `src/components/website/WebsiteToolbar.tsx`**
-- Add `flex-wrap` to the toolbar container
-- Hide device toggle buttons on mobile (they don't make sense when the preview is already on a phone)
-- Make the page selector narrower on small screens
-
-**File 4: `src/pages/Landing.tsx`**
-- Add `flex-wrap` to hero CTA buttons container
-- Make header buttons responsive: smaller on mobile, use `gap-2` instead of `gap-4`
-
-**File 5: `src/components/landing/LandingFooter.tsx`**
-- Change footer row 2 grid to `grid-cols-1 sm:grid-cols-2 lg:grid-cols-4` for proper wrapping
-
----
-
-### Technical Details
-
-In `WebsiteManager.tsx`, the mobile layout replaces the `ResizablePanelGroup` with a simple state toggle:
+### How It Works
 
 ```text
-+----------------------------------+
-| WebsiteToolbar (page selector)   |
-+----------------------------------+
-| [Preview] [Chat/Speed]  <- tabs  |
-+----------------------------------+
-|                                  |
-|   Full-width content area        |
-|   (either preview or chat)       |
-|                                  |
-+----------------------------------+
+User clicks "Inspect this page" or asks "what's on this page?"
+    |
+    v
+Chat sends message with current path context
+    |
+    v
+AI calls wp_inspect_page tool with the path
+    |
+    v
+Edge function fetches https://rebar.shop/path server-side
+    |
+    v
+Strips scripts/styles, extracts structured content
+    |
+    v
+AI analyzes and summarizes the page content
 ```
 
-In `MobileNavV2.tsx`, additions to `moreItems`:
-```typescript
-{ name: "Job Site", href: "/website", icon: Globe, roles: ["admin", "office"] },
-{ name: "SEO", href: "/seo", icon: Search, roles: ["admin", "office"] },
-{ name: "Support", href: "/support-inbox", icon: Headset, roles: ["admin", "office"] },
-```
+### Technical Notes
+- The fetch happens server-side in the edge function, so there are no CORS issues
+- HTML is sanitized and truncated to stay within token limits (~4000 chars of text)
+- Meta tags, headings, and link structure are extracted separately for structured analysis
+- The AI can then answer questions like "what products are on this page?", "is the contact form working?", "what does this page look like?"
 
