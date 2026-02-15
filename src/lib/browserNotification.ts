@@ -58,6 +58,12 @@ export async function registerPushSubscription(): Promise<void> {
       return;
     }
 
+    // Only attempt push registration if permission is already granted
+    if (!("Notification" in window) || Notification.permission !== "granted") {
+      console.log("Push registration skipped: notification permission not granted");
+      return;
+    }
+
     // Get VAPID public key
     const vapidPublicKey = await getVapidPublicKey();
     if (!vapidPublicKey) {

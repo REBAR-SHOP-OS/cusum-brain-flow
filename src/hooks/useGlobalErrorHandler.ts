@@ -80,6 +80,10 @@ function isIgnoredError(message: string): boolean {
     "Load failed",
     "cancelled",
     "error_type",
+    "not allowed by the user agent",
+    "denied permission",
+    "Permission denied",
+    "push subscription",
   ];
   return ignored.some((pattern) => message.includes(pattern));
 }
