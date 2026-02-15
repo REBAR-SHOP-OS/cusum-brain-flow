@@ -1,104 +1,115 @@
 
 
-# Rewrite and Improve SEO Module Report
+# SEO Link Audit and Fix System
 
 ## Overview
 
-Improve the clarity, structure, and readability of all text, labels, and descriptions across the SEO module's five sections -- without changing any data, metrics, functionality, or technical recommendations.
+Build a new edge function (`seo-link-audit`) that crawls all pages on rebar.shop, audits every link (internal and external), identifies issues, and proposes intelligent fixes -- including adding authoritative outbound links to RSIC (Reinforcing Steel Institute of Canada) resources where relevant.
 
-Additionally, fix a JSX rendering bug in SeoOverview.tsx where the Position Tracking card is incorrectly nested inside the Traffic Summary card (lines 486-572).
+The system will:
+1. Crawl each page and extract all `<a>` tags (href, anchor text, rel attributes)
+2. Identify broken internal links, missing anchor text, nofollow issues, and link gaps
+3. Use AI to propose where to add RSIC outbound links based on page content context
+4. Present results in a new "Link Audit" tab on the SEO dashboard
+5. Allow one-click execution of fixes via the existing `seo-task-execute` infrastructure
 
-## Changes by File
+## RSIC Link Mapping
 
-### 1. `src/components/seo/SeoOverview.tsx`
+The AI will intelligently match page content keywords to these authoritative RSIC resources:
 
-**Bug fix:** The Position Tracking card (lines 496-532) is improperly nested inside the Traffic Summary card's JSX. The closing tags are tangled, causing a broken layout. This will be restructured so Traffic Summary and Position Tracking render as two separate, sequential cards.
+| Content Keyword | RSIC Link | Anchor Text |
+|----------------|-----------|-------------|
+| "standard practice", "bar placing" | https://rebar.org/manual-of-standard-practice/ | Manual of Standard Practice |
+| "reinforcing steel", "rebar industry" | https://rebar.org/ | Reinforcing Steel Institute of Canada |
+| "certification", "quality assurance" | https://rebar.org/certification/ | RSIC Certification Program |
+| "bar supports", "bar chairs" | https://rebar.org/bar-supports/ | RSIC Bar Supports Guide |
+| "epoxy coated", "corrosion protection" | https://rebar.org/epoxy-coated-rebar/ | Epoxy-Coated Reinforcing Steel |
+| "detailing", "bar bending schedule" | https://rebar.org/manual-of-standard-practice/ | Standard Detailing Practice |
 
-**Text improvements:**
+## Changes
 
-| Current | Improved |
-|---------|----------|
-| "AI SEO Dashboard" | "SEO Intelligence Dashboard" |
-| "AI-curated insights from GSC + Analytics + ERP Sources" | "Actionable insights powered by Search Console, Analytics, and ERP data" |
-| "Import SEMrush" | "Import SEMrush Data" |
-| "Sync GSC" | "Sync Search Console" |
-| "Mine SEO Reports" | "Mine Inbound Reports" |
-| "Run AI Analysis" | "Run Full Analysis" |
-| "Set Up Your Domain" | "Configure Your Domain" |
-| "GA4 Property ID (optional)" | "GA4 Property ID (optional)" (no change) |
-| "Google not connected -- running ERP-only keyword harvest" | "Google not connected -- using ERP-only keyword intelligence" |
-| "Avg SEO Score" | "Avg Page Score" |
-| "Keywords Tracked" | "Tracked Keywords" |
-| "Organic Clicks (28d)" | "Clicks (28 days)" |
-| "Declining Keywords" | "Declining" |
-| "Cross-validated (3+)" | "Multi-Source (3+)" |
-| "Open AI Tasks" | "Open Tasks" |
-| "Keywords sourced from N channels across your ERP" | "Keyword signals collected from N ERP channels" |
-| "No insights yet. Run an AI analysis to generate insights." | "No insights yet. Run a full analysis to generate recommendations." |
+### 1. Database Migration
 
-### 2. `src/components/seo/SeoKeywords.tsx`
+Add a new `seo_link_audit` table to store audit results per page:
 
-| Current | Improved |
-|---------|----------|
-| "AI Keywords" | "Keyword Intelligence" |
-| "AI-curated keyword opportunities from GSC + ERP sources, ranked by impact" | "Keyword opportunities ranked by impact, sourced from Search Console and ERP data" |
-| "No keywords found. Run an AI analysis to harvest keywords from all sources." | "No keywords yet. Run a full analysis to discover keyword opportunities." |
-| "Biz Score" (table header) | "Relevance" |
+| Column | Type | Purpose |
+|--------|------|---------|
+| `id` | uuid (PK) | Primary key |
+| `domain_id` | uuid (FK) | Link to seo_domains |
+| `page_url` | text | Page that was audited |
+| `link_href` | text | The link URL found |
+| `anchor_text` | text | Anchor text of the link |
+| `link_type` | text | 'internal', 'external', 'rsic_opportunity' |
+| `status` | text | 'ok', 'broken', 'missing_anchor', 'nofollow_issue', 'opportunity' |
+| `suggestion` | text | AI-generated fix suggestion |
+| `suggested_href` | text | Proposed corrected/new href |
+| `suggested_anchor` | text | Proposed anchor text |
+| `is_fixed` | boolean | Whether fix has been applied |
+| `company_id` | uuid | Company ownership |
+| `created_at` | timestamptz | Audit timestamp |
 
-### 3. `src/components/seo/SeoPages.tsx`
+### 2. New Edge Function: `seo-link-audit`
 
-| Current | Improved |
-|---------|----------|
-| "AI Pages" | "Page Performance" |
-| "Pages ranked by SEO score with inline AI recommendations" | "All indexed pages ranked by SEO health, with AI-generated recommendations" |
-| "No pages found. Run AI analysis to populate page data." | "No pages yet. Run a full analysis to populate page performance data." |
-| "Impr." (table header) | "Impressions" |
-| "Engage." (table header) | "Engagement" |
-| "Conv." (table header) | "Conversions" |
-| "Needs Fix" (CWV badge) | "Needs Work" |
+Two-phase function similar to existing `seo-task-execute`:
 
-### 4. `src/components/seo/SeoTasks.tsx`
+**Phase "crawl":**
+- Fetches all pages from WordPress (pages + posts + products)
+- For each page, parses HTML and extracts all `<a>` tags
+- Categorizes each link: internal, external, broken (4xx/5xx), missing anchor text
+- Identifies content sections where RSIC links would be contextually relevant
+- Uses AI (Lovable AI gateway) to match page content keywords to RSIC resources
+- Stores all findings in `seo_link_audit` table
+- Returns summary statistics
 
-| Current | Improved |
-|---------|----------|
-| "SEO Tasks" | "SEO Action Items" |
-| "AI-generated and manual SEO tasks" | "Automated and manual tasks to improve search performance" |
-| "AI Reasoning" | "Why this matters" |
-| "AI Execution Plan" (dialog) | "Execution Plan" |
-| "Manual Action Required" (dialog) | "Manual Steps Required" |
-| "Proposed actions:" | "Planned actions:" |
-| "Steps for human operator:" | "What you need to do:" |
-| "Move to In Progress" | "Mark as In Progress" |
-| "Task executed successfully!" | "Done -- task completed" |
+**Phase "fix":**
+- Accepts a list of audit record IDs to fix
+- For each fix:
+  - If broken internal link: updates href to correct URL via WPClient
+  - If RSIC opportunity: injects the link into page content at the contextually appropriate location via WPClient
+  - If missing anchor text: updates the anchor text
+- Logs all changes to `wp_change_log`
+- Marks audit records as `is_fixed = true`
 
-### 5. `src/components/seo/SeoCopilot.tsx`
+**AI Analysis Prompt:**
+The AI receives page content (text) and a list of available RSIC resources. It identifies the best 1-3 places in the content where an RSIC link would be natural, authoritative, and SEO-beneficial. It avoids over-linking (max 2 RSIC links per page) and only links where the context genuinely discusses the topic.
 
-| Current | Improved |
-|---------|----------|
-| "SEO Copilot" | "SEO Copilot" (no change) |
-| "Ask AI questions about your SEO performance using real data" | "Ask questions about your search performance -- answers are grounded in real data" |
-| "Ask me anything about your SEO" | "Ask anything about your search performance" |
-| "I'll answer using your real GSC + GA data" | "Answers are based on your Search Console and Analytics data" |
-| "Ask about your SEO..." (placeholder) | "Ask a question..." |
-| "Configure a domain first" | "Set up a domain first" |
+### 3. Frontend: New "Links" Tab in SEO Module
 
-### 6. `src/components/seo/SeoSidebar.tsx`
+Add a new tab in the SEO sidebar and a new component `SeoLinks.tsx`:
 
-| Current | Improved |
-|---------|----------|
-| "Rebar AI SEO" | "SEO Module" |
-| "AI Dashboard" | "Dashboard" |
+**Tab content:**
+- Summary cards: Total Links Audited, Broken Links, RSIC Opportunities, Fixed
+- "Run Link Audit" button to trigger the crawl phase
+- Results table with columns: Page URL, Link, Type, Status, Suggestion, Action
+- Each row with an "Apply Fix" button that calls the fix phase
+- "Fix All" button to batch-apply all suggested fixes
+- Filter by status: All, Broken, Opportunities, Fixed
 
-## What Does NOT Change
+### 4. Sidebar Update
 
-- No new numbers, metrics, or data points added
-- No sections removed
-- No functionality changes
-- No color or layout redesign (except fixing the broken JSX nesting)
-- All code snippets preserved as-is
-- All technical recommendations remain identical
+Add a new nav item in `SeoSidebar.tsx`:
+- Icon: `Link2`
+- Label: "Links"
+- Route: triggers the links tab
+
+## Files to Create/Modify
+
+| File | Change |
+|------|--------|
+| Database migration | Create `seo_link_audit` table |
+| `supabase/functions/seo-link-audit/index.ts` | New edge function (crawl + fix phases) |
+| `src/components/seo/SeoLinks.tsx` | New component for link audit UI |
+| `src/components/seo/SeoSidebar.tsx` | Add "Links" nav item |
+| `src/pages/Seo.tsx` | Add "links" tab rendering |
+| `supabase/config.toml` | Register new edge function |
 
 ## Technical Notes
 
-The JSX bug in SeoOverview.tsx (lines 486-572) has the Position Tracking card's JSX appearing between the Traffic Summary card's `<CardHeader>` opening tag content and its `<CardContent>`. The fix restructures these as two properly closed, sibling `<Card>` elements wrapped in a fragment.
+- The edge function uses `WPClient` to fetch page content and apply fixes
+- AI analysis uses the Lovable AI gateway with structured tool-calling (same pattern as `seo-task-execute`)
+- RSIC links are added with `rel="noopener noreferrer"` and `target="_blank"` for external links
+- Maximum 2 RSIC outbound links per page to avoid over-optimization
+- All WordPress content modifications are logged to `wp_change_log` for audit trail
+- The crawl phase validates each link by making a HEAD request to check for 404s/redirects
+- Internal links are checked against the site's own URL structure for consistency (www vs non-www, trailing slashes)
 
