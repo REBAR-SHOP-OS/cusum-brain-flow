@@ -33,7 +33,7 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 
-const SUPER_ADMIN_EMAIL = "sattar@rebar.shop";
+const SUPER_ADMIN_EMAILS = ["sattar@rebar.shop", "radin@rebar.shop"];
 
 type LogType = "events" | "commands" | "machine_runs" | "db_stats";
 
@@ -79,7 +79,7 @@ export function DiagnosticLogView() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [hasLoaded, setHasLoaded] = useState(false);
 
-  const isSuperAdmin = user?.email === SUPER_ADMIN_EMAIL;
+  const isSuperAdmin = SUPER_ADMIN_EMAILS.includes(user?.email ?? "");
 
   const fetchLogs = useCallback(async () => {
     setLoading(true);
