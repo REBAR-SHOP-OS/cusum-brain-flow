@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { decryptToken } from "../_shared/tokenEncryption.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -39,15 +40,65 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Get Google OAuth tokens (optional — GSC/GA features degrade gracefully)
-    const { data: tokenRow } = await supabase
-      .from("integration_tokens")
-      .select("*")
-      .eq("provider", "google")
-      .eq("company_id", domain.company_id)
-      .maybeSingle();
+    // Get Google OAuth tokens from user_gmail_tokens (optional — degrades gracefully)
+    // Find any user in this company who has connected Google
+    const { data: companyProfiles } = await supabase
+      .from("profiles")
+      .select("user_id")
+      .eq("company_id", domain.company_id);
 
-    const hasGoogleOAuth = !!tokenRow?.access_token;
+    let hasGoogleOAuth = false;
+    let googleAccessToken = "";
+
+    if (companyProfiles && companyProfiles.length > 0) {
+      for (const profile of companyProfiles) {
+        const { data: tokenRow } = await supabase
+          .from("user_gmail_tokens")
+          .select("refresh_token, is_encrypted")
+          .eq("user_id", profile.user_id)
+          .maybeSingle();
+
+        if (tokenRow?.refresh_token) {
+          try {
+            // Decrypt refresh token
+            const refreshToken = tokenRow.is_encrypted
+              ? await decryptToken(tokenRow.refresh_token)
+              : tokenRow.refresh_token;
+
+            // Exchange refresh token for access token
+            const clientId = Deno.env.get("GOOGLE_CLIENT_ID") || Deno.env.get("GMAIL_CLIENT_ID");
+            const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET") || Deno.env.get("GMAIL_CLIENT_SECRET");
+
+            if (clientId && clientSecret) {
+              const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: new URLSearchParams({
+                  client_id: clientId,
+                  client_secret: clientSecret,
+                  refresh_token: refreshToken,
+                  grant_type: "refresh_token",
+                }),
+              });
+
+              if (tokenRes.ok) {
+                const tokenData = await tokenRes.json();
+                googleAccessToken = tokenData.access_token;
+                hasGoogleOAuth = true;
+                console.log("Google OAuth connected via user:", profile.user_id);
+                break;
+              }
+            }
+          } catch (e) {
+            console.error("Failed to refresh Google token:", e);
+          }
+        }
+      }
+    }
+
+    if (!hasGoogleOAuth) {
+      console.log("Google OAuth not connected — skipping GSC/GA, running ERP harvest only");
+    }
 
     // ---- STEP 1: Pull GSC data (28 days) — only if Google OAuth connected ----
     const endDate = new Date();
@@ -68,7 +119,7 @@ Deno.serve(async (req) => {
         {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${tokenRow.access_token}`,
+            Authorization: `Bearer ${googleAccessToken}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
@@ -85,7 +136,7 @@ Deno.serve(async (req) => {
         {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${tokenRow.access_token}`,
+            Authorization: `Bearer ${googleAccessToken}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
@@ -155,7 +206,7 @@ Deno.serve(async (req) => {
           {
             method: "POST",
             headers: {
-              Authorization: `Bearer ${tokenRow.access_token}`,
+              Authorization: `Bearer ${googleAccessToken}`,
               "Content-Type": "application/json",
             },
             body: JSON.stringify({

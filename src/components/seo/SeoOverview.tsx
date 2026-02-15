@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { TrendingUp, TrendingDown, Search, AlertTriangle, Activity, Zap, Loader2, Sparkles, Layers, Globe } from "lucide-react";
+import { TrendingUp, TrendingDown, Search, AlertTriangle, Activity, Zap, Loader2, Sparkles, Layers, Globe, Link2, CheckCircle } from "lucide-react";
 import { toast } from "sonner";
 import { useCompanyId } from "@/hooks/useCompanyId";
 
@@ -27,6 +27,41 @@ export function SeoOverview() {
   const { companyId } = useCompanyId();
   const [domainInput, setDomainInput] = useState("rebar.shop");
   const [gaInput, setGaInput] = useState("");
+  const [googleStatus, setGoogleStatus] = useState<"checking" | "connected" | "not_connected">("checking");
+  const [googleEmail, setGoogleEmail] = useState<string | null>(null);
+
+  // Check Google connection status
+  useEffect(() => {
+    const check = async () => {
+      try {
+        const { data } = await supabase.functions.invoke("google-oauth", {
+          body: { action: "check-status", integration: "google-search-console" },
+        });
+        if (data?.status === "connected") {
+          setGoogleStatus("connected");
+          setGoogleEmail(data.email || null);
+        } else {
+          setGoogleStatus("not_connected");
+        }
+      } catch {
+        setGoogleStatus("not_connected");
+      }
+    };
+    check();
+  }, []);
+
+  const connectGoogle = async () => {
+    try {
+      const redirectUri = `${window.location.origin}/integrations/callback`;
+      const { data, error } = await supabase.functions.invoke("google-oauth", {
+        body: { action: "get-auth-url", integration: "google-search-console", redirectUri },
+      });
+      if (error) throw error;
+      if (data?.authUrl) window.location.href = data.authUrl;
+    } catch (e: any) {
+      toast.error(e.message || "Failed to start Google OAuth");
+    }
+  };
 
   const { data: domain } = useQuery({
     queryKey: ["seo-domain"],
@@ -224,6 +259,34 @@ export function SeoOverview() {
 
       {domain && (
         <>
+          {/* Google Connection Status */}
+          <Card className={googleStatus === "connected" ? "border-green-500/30" : "border-yellow-500/30"}>
+            <CardContent className="py-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {googleStatus === "connected" ? (
+                  <>
+                    <CheckCircle className="w-4 h-4 text-green-500" />
+                    <span className="text-sm">Google connected as <strong>{googleEmail}</strong> — GSC & GA4 data active</span>
+                  </>
+                ) : googleStatus === "checking" ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">Checking Google connection...</span>
+                  </>
+                ) : (
+                  <>
+                    <Link2 className="w-4 h-4 text-yellow-500" />
+                    <span className="text-sm">Google not connected — running ERP-only keyword harvest</span>
+                  </>
+                )}
+              </div>
+              {googleStatus === "not_connected" && (
+                <Button size="sm" variant="outline" onClick={connectGoogle}>
+                  <Link2 className="w-4 h-4 mr-1" /> Connect Google
+                </Button>
+              )}
+            </CardContent>
+          </Card>
           {/* Stat cards */}
           <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
             <Card>
