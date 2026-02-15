@@ -6359,6 +6359,48 @@ export type Database = {
           },
         ]
       }
+      wp_change_log: {
+        Row: {
+          created_at: string
+          endpoint: string
+          entity_id: string
+          entity_type: string
+          error_message: string | null
+          id: string
+          method: string
+          new_state: Json | null
+          previous_state: Json | null
+          result: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          endpoint: string
+          entity_id: string
+          entity_type: string
+          error_message?: string | null
+          id?: string
+          method: string
+          new_state?: Json | null
+          previous_state?: Json | null
+          result?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          endpoint?: string
+          entity_id?: string
+          entity_type?: string
+          error_message?: string | null
+          id?: string
+          method?: string
+          new_state?: Json | null
+          previous_state?: Json | null
+          result?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       wwm_standards: {
         Row: {
           created_at: string

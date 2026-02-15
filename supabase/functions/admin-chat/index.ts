@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildFullVizzyContext } from "../_shared/vizzyFullContext.ts";
 import { buildPageContext } from "../_shared/pageMap.ts";
+import { WPClient } from "../_shared/wpClient.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -16,6 +17,11 @@ const WRITE_TOOLS = new Set([
   "update_lead_status",
   "update_cut_plan_status",
   "create_event",
+  "wp_update_post",
+  "wp_update_page",
+  "wp_update_product",
+  "wp_update_order_status",
+  "wp_create_redirect",
 ]);
 
 const JARVIS_TOOLS = [
@@ -208,6 +214,170 @@ const JARVIS_TOOLS = [
       },
     },
   },
+  // ─── WordPress Read Tools ───
+  {
+    type: "function",
+    function: {
+      name: "wp_list_posts",
+      description: "List/search posts on rebar.shop with optional filters.",
+      parameters: {
+        type: "object",
+        properties: {
+          status: { type: "string", enum: ["publish", "draft", "pending", "private"], description: "Filter by post status" },
+          search: { type: "string", description: "Search term for post title/content" },
+          per_page: { type: "string", description: "Number of results (max 20)" },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "wp_list_pages",
+      description: "List/search pages on rebar.shop.",
+      parameters: {
+        type: "object",
+        properties: {
+          status: { type: "string", enum: ["publish", "draft", "pending", "private"], description: "Filter by page status" },
+          search: { type: "string", description: "Search term" },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "wp_list_products",
+      description: "List WooCommerce products from rebar.shop with optional filters.",
+      parameters: {
+        type: "object",
+        properties: {
+          status: { type: "string", enum: ["publish", "draft", "pending"], description: "Filter by product status" },
+          search: { type: "string", description: "Search term for product name" },
+          stock_status: { type: "string", enum: ["instock", "outofstock", "onbackorder"], description: "Filter by stock status" },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "wp_list_orders",
+      description: "List WooCommerce orders from rebar.shop with optional filters.",
+      parameters: {
+        type: "object",
+        properties: {
+          status: { type: "string", enum: ["pending", "processing", "on-hold", "completed", "cancelled", "refunded", "failed"], description: "Filter by order status" },
+          after: { type: "string", description: "Only orders after this ISO date" },
+          before: { type: "string", description: "Only orders before this ISO date" },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "wp_get_site_health",
+      description: "Get basic site health info from rebar.shop — recent posts count, pages count, and check if WooCommerce is active.",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+    },
+  },
+  // ─── WordPress Write Tools (require confirmation) ───
+  {
+    type: "function",
+    function: {
+      name: "wp_update_post",
+      description: "Update a post on rebar.shop (title, content, status, or slug). Requires confirmation. Use wp_list_posts first to get the post ID.",
+      parameters: {
+        type: "object",
+        properties: {
+          post_id: { type: "string", description: "WordPress post ID" },
+          title: { type: "string", description: "New title" },
+          content: { type: "string", description: "New content (HTML)" },
+          status: { type: "string", enum: ["publish", "draft", "pending", "private"], description: "New status" },
+          slug: { type: "string", description: "New URL slug (⚠️ suggest creating a redirect first)" },
+        },
+        required: ["post_id"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "wp_update_page",
+      description: "Update a page on rebar.shop. Requires confirmation. Use wp_list_pages first.",
+      parameters: {
+        type: "object",
+        properties: {
+          page_id: { type: "string", description: "WordPress page ID" },
+          title: { type: "string", description: "New title" },
+          content: { type: "string", description: "New content (HTML)" },
+          status: { type: "string", enum: ["publish", "draft", "pending", "private"], description: "New status" },
+          slug: { type: "string", description: "New URL slug" },
+        },
+        required: ["page_id"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "wp_update_product",
+      description: "Update a WooCommerce product on rebar.shop. Requires confirmation.",
+      parameters: {
+        type: "object",
+        properties: {
+          product_id: { type: "string", description: "WooCommerce product ID" },
+          regular_price: { type: "string", description: "New regular price" },
+          sale_price: { type: "string", description: "New sale price" },
+          stock_quantity: { type: "number", description: "New stock quantity" },
+          stock_status: { type: "string", enum: ["instock", "outofstock", "onbackorder"], description: "Stock status" },
+          status: { type: "string", enum: ["publish", "draft", "pending"], description: "Product status" },
+          description: { type: "string", description: "New product description (HTML)" },
+        },
+        required: ["product_id"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "wp_update_order_status",
+      description: "Update the status of a WooCommerce order. Requires confirmation.",
+      parameters: {
+        type: "object",
+        properties: {
+          order_id: { type: "string", description: "WooCommerce order ID" },
+          status: { type: "string", enum: ["pending", "processing", "on-hold", "completed", "cancelled", "refunded"], description: "New order status" },
+        },
+        required: ["order_id", "status"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "wp_create_redirect",
+      description: "Create a 301 redirect on rebar.shop from old URL to new URL. Requires confirmation.",
+      parameters: {
+        type: "object",
+        properties: {
+          from_url: { type: "string", description: "Old URL path (e.g. /old-page)" },
+          to_url: { type: "string", description: "New URL path (e.g. /new-page)" },
+        },
+        required: ["from_url", "to_url"],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 // ═══ READ TOOL EXECUTION ═══
@@ -252,6 +422,79 @@ async function executeReadTool(supabase: any, toolName: string, args: any): Prom
       if (error) return JSON.stringify({ error: error.message });
       return JSON.stringify(data || []);
     }
+    // ─── WordPress Read Tools ───
+    case "wp_list_posts": {
+      try {
+        const wp = new WPClient();
+        const params: Record<string, string> = {};
+        if (args.status) params.status = args.status;
+        if (args.search) params.search = args.search;
+        if (args.per_page) params.per_page = String(Math.min(Number(args.per_page), 20));
+        const posts = await wp.listPosts(params);
+        return JSON.stringify(Array.isArray(posts) ? posts.map((p: any) => ({
+          id: p.id, title: p.title?.rendered, status: p.status, slug: p.slug, date: p.date, link: p.link,
+        })) : posts);
+      } catch (e: any) { return JSON.stringify({ error: e.message }); }
+    }
+    case "wp_list_pages": {
+      try {
+        const wp = new WPClient();
+        const params: Record<string, string> = {};
+        if (args.status) params.status = args.status;
+        if (args.search) params.search = args.search;
+        const pages = await wp.listPages(params);
+        return JSON.stringify(Array.isArray(pages) ? pages.map((p: any) => ({
+          id: p.id, title: p.title?.rendered, status: p.status, slug: p.slug, link: p.link,
+        })) : pages);
+      } catch (e: any) { return JSON.stringify({ error: e.message }); }
+    }
+    case "wp_list_products": {
+      try {
+        const wp = new WPClient();
+        const params: Record<string, string> = {};
+        if (args.status) params.status = args.status;
+        if (args.search) params.search = args.search;
+        if (args.stock_status) params.stock_status = args.stock_status;
+        const products = await wp.listProducts(params);
+        if (!Array.isArray(products)) return JSON.stringify(products);
+        return JSON.stringify(products.map((p: any) => ({
+          id: p.id, name: p.name, status: p.status, price: p.price, regular_price: p.regular_price,
+          stock_quantity: p.stock_quantity, stock_status: p.stock_status, permalink: p.permalink,
+        })));
+      } catch (e: any) { return JSON.stringify({ error: e.message }); }
+    }
+    case "wp_list_orders": {
+      try {
+        const wp = new WPClient();
+        const params: Record<string, string> = {};
+        if (args.status) params.status = args.status;
+        if (args.after) params.after = args.after;
+        if (args.before) params.before = args.before;
+        const orders = await wp.listOrders(params);
+        if (!Array.isArray(orders)) return JSON.stringify(orders);
+        return JSON.stringify(orders.map((o: any) => ({
+          id: o.id, number: o.number, status: o.status, total: o.total, currency: o.currency,
+          date_created: o.date_created, billing_name: `${o.billing?.first_name || ""} ${o.billing?.last_name || ""}`.trim(),
+        })));
+      } catch (e: any) { return JSON.stringify({ error: e.message }); }
+    }
+    case "wp_get_site_health": {
+      try {
+        const wp = new WPClient();
+        const [posts, pages] = await Promise.all([
+          wp.listPosts({ per_page: "1" }).catch(() => []),
+          wp.listPages({ per_page: "1" }).catch(() => []),
+        ]);
+        let wooActive = false;
+        try { await wp.listProducts({ per_page: "1" }); wooActive = true; } catch {}
+        return JSON.stringify({
+          wp_active: true,
+          has_posts: Array.isArray(posts) && posts.length > 0,
+          has_pages: Array.isArray(pages) && pages.length > 0,
+          woocommerce_active: wooActive,
+        });
+      } catch (e: any) { return JSON.stringify({ error: e.message }); }
+    }
     default:
       return JSON.stringify({ error: `Unknown read tool: ${toolName}` });
   }
@@ -295,6 +538,61 @@ async function executeWriteTool(supabase: any, userId: string, companyId: string
       if (error) throw error;
       return { success: true, message: `Event logged: ${args.event_type}`, data };
     }
+    // ─── WordPress Write Tools ───
+    case "wp_update_post": {
+      const wp = new WPClient();
+      const prev = await wp.getPost(args.post_id);
+      const update: Record<string, unknown> = {};
+      if (args.title) update.title = args.title;
+      if (args.content) update.content = args.content;
+      if (args.status) update.status = args.status;
+      if (args.slug) update.slug = args.slug;
+      const result = await wp.updatePost(args.post_id, update);
+      await logWpChange(supabase, userId, `/posts/${args.post_id}`, "PUT", "post", args.post_id, prev, update);
+      return { success: true, message: `Post "${result.title?.rendered || args.post_id}" updated` };
+    }
+    case "wp_update_page": {
+      const wp = new WPClient();
+      const prev = await wp.getPage(args.page_id);
+      const update: Record<string, unknown> = {};
+      if (args.title) update.title = args.title;
+      if (args.content) update.content = args.content;
+      if (args.status) update.status = args.status;
+      if (args.slug) update.slug = args.slug;
+      const result = await wp.updatePage(args.page_id, update);
+      await logWpChange(supabase, userId, `/pages/${args.page_id}`, "PUT", "page", args.page_id, prev, update);
+      return { success: true, message: `Page "${result.title?.rendered || args.page_id}" updated` };
+    }
+    case "wp_update_product": {
+      const wp = new WPClient();
+      const prev = await wp.getProduct(args.product_id);
+      const update: Record<string, unknown> = {};
+      if (args.regular_price) update.regular_price = args.regular_price;
+      if (args.sale_price) update.sale_price = args.sale_price;
+      if (args.stock_quantity !== undefined) update.stock_quantity = args.stock_quantity;
+      if (args.stock_status) update.stock_status = args.stock_status;
+      if (args.status) update.status = args.status;
+      if (args.description) update.description = args.description;
+      const result = await wp.updateProduct(args.product_id, update);
+      await logWpChange(supabase, userId, `/wc/v3/products/${args.product_id}`, "PUT", "product", args.product_id, prev, update);
+      return { success: true, message: `Product "${result.name || args.product_id}" updated` };
+    }
+    case "wp_update_order_status": {
+      const wp = new WPClient();
+      const prev = await wp.getOrder(args.order_id);
+      const result = await wp.updateOrder(args.order_id, { status: args.status });
+      await logWpChange(supabase, userId, `/wc/v3/orders/${args.order_id}`, "PUT", "order", args.order_id, { status: prev.status }, { status: args.status });
+      return { success: true, message: `Order #${result.number || args.order_id} status → ${args.status}` };
+    }
+    case "wp_create_redirect": {
+      // Use WordPress post meta or a redirect plugin. Fallback: create a draft page with meta refresh.
+      const wp = new WPClient();
+      const redirectHtml = `<!-- 301 Redirect --><meta http-equiv="refresh" content="0;url=${args.to_url}"><link rel="canonical" href="${args.to_url}">`;
+      const slug = args.from_url.replace(/^\//, "").replace(/\/$/, "");
+      const result = await wp.post("/pages", { title: `Redirect: ${args.from_url}`, content: redirectHtml, slug, status: "publish" });
+      await logWpChange(supabase, userId, "/pages", "POST", "redirect", String(result.id), null, { from: args.from_url, to: args.to_url });
+      return { success: true, message: `Redirect created: ${args.from_url} → ${args.to_url}` };
+    }
     default:
       throw new Error(`Unknown write tool: ${toolName}`);
   }
@@ -313,6 +611,23 @@ async function logAction(supabase: any, userId: string, companyId: string, tool:
     source: "system",
     dedupe_key: `jarvis:${tool}:${JSON.stringify(args)}:${new Date().toISOString().slice(0, 16)}`,
   }).catch(() => {});
+}
+
+async function logWpChange(
+  supabase: any, userId: string, endpoint: string, method: string,
+  entityType: string, entityId: string, previousState: any, newState: any, errorMsg?: string,
+) {
+  await supabase.from("wp_change_log").insert({
+    user_id: userId,
+    endpoint,
+    method,
+    entity_type: entityType,
+    entity_id: entityId,
+    previous_state: previousState,
+    new_state: newState,
+    result: errorMsg ? "failed" : "success",
+    error_message: errorMsg || null,
+  }).catch((e: any) => console.error("wp_change_log insert error:", e.message));
 }
 
 // ═══ MAIN HANDLER ═══
@@ -482,6 +797,16 @@ PROACTIVE INTELLIGENCE:
 - If an entity is ambiguous (e.g. "that machine"), ask for clarification BEFORE calling a tool.
 - Prefer tools over explanation when the request is actionable.
 - When reporting read results, summarize naturally — don't dump raw JSON.
+
+═══ WORDPRESS MANAGEMENT (rebar.shop) ═══
+- You can read and modify content on rebar.shop via WordPress REST API
+- READ tools: wp_list_posts, wp_list_pages, wp_list_products, wp_list_orders, wp_get_site_health — execute immediately
+- WRITE tools: wp_update_post, wp_update_page, wp_update_product, wp_update_order_status, wp_create_redirect — require user confirmation (same as ERP actions)
+- Use wp_list_* tools to inspect current state before making changes
+- When changing URLs/slugs, ALWAYS suggest creating a redirect first using wp_create_redirect
+- Never delete published content without explicit confirmation
+- Changes are logged to wp_change_log for audit and rollback
+- If a user says "undo last WordPress change", query wp_change_log and use previous_state to restore
 
 ═══ RULES ═══
 - Be direct and concise — this is for a power user
@@ -745,6 +1070,17 @@ function buildActionDescription(tool: string, args: any): string {
       return `Change cut plan ${args.cut_plan_id?.slice(0, 8) || "?"} status to "${args.status}"`;
     case "create_event":
       return `Log event: ${args.event_type} — ${args.description || ""}`;
+    // WordPress write tools
+    case "wp_update_post":
+      return `Update post #${args.post_id}${args.title ? ` title → "${args.title}"` : ""}${args.status ? ` status → ${args.status}` : ""}`;
+    case "wp_update_page":
+      return `Update page #${args.page_id}${args.title ? ` title → "${args.title}"` : ""}${args.status ? ` status → ${args.status}` : ""}`;
+    case "wp_update_product":
+      return `Update product #${args.product_id}${args.regular_price ? ` price → $${args.regular_price}` : ""}${args.stock_quantity !== undefined ? ` stock → ${args.stock_quantity}` : ""}`;
+    case "wp_update_order_status":
+      return `Change order #${args.order_id} status → "${args.status}"`;
+    case "wp_create_redirect":
+      return `Create redirect: ${args.from_url} → ${args.to_url}`;
     default:
       return `Execute ${tool}`;
   }
