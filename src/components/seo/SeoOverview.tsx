@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { TrendingUp, TrendingDown, Search, AlertTriangle, Activity, Zap, Loader2, Sparkles, Layers, Globe, Link2, CheckCircle } from "lucide-react";
+import { TrendingUp, TrendingDown, Search, AlertTriangle, Activity, Zap, Loader2, Sparkles, Layers, Globe, Link2, CheckCircle, Mail } from "lucide-react";
 import { toast } from "sonner";
 import { useCompanyId } from "@/hooks/useCompanyId";
 
@@ -20,6 +20,7 @@ const SOURCE_COLORS: Record<string, string> = {
   knowledge: "bg-orange-500/10 text-orange-600",
   wordpress: "bg-indigo-500/10 text-indigo-600",
   prospects: "bg-rose-500/10 text-rose-600",
+  seo_tools: "bg-emerald-500/10 text-emerald-600",
 };
 
 export function SeoOverview() {
@@ -162,6 +163,23 @@ export function SeoOverview() {
     onError: (e: any) => toast.error(e.message),
   });
 
+  const mineReports = useMutation({
+    mutationFn: async () => {
+      if (!domain?.id) throw new Error("No domain configured");
+      const { data, error } = await supabase.functions.invoke("seo-email-harvest", {
+        body: { domain_id: domain.id },
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["seo-ai-kw-stats"] });
+      qc.invalidateQueries({ queryKey: ["seo-ai-insights"] });
+      toast.success(`Mined ${data.emails_parsed} reports: ${data.keywords_extracted} keywords, ${data.issues_found} issues extracted`);
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
   const setupDomain = useMutation({
     mutationFn: async () => {
       const { error } = await supabase.from("seo_domains").insert({
@@ -216,6 +234,10 @@ export function SeoOverview() {
           <Button variant="outline" size="sm" onClick={() => syncGsc.mutate()} disabled={syncGsc.isPending || !domain}>
             {syncGsc.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Search className="w-4 h-4 mr-1" />}
             Sync GSC
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => mineReports.mutate()} disabled={mineReports.isPending || !domain}>
+            {mineReports.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Mail className="w-4 h-4 mr-1" />}
+            Mine SEO Reports
           </Button>
           <Button size="sm" onClick={() => runAnalysis.mutate()} disabled={runAnalysis.isPending || !domain}>
             {runAnalysis.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Zap className="w-4 h-4 mr-1" />}

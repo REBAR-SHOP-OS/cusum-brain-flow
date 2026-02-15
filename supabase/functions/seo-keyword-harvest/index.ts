@@ -173,7 +173,36 @@ Deno.serve(async (req) => {
       }
     } catch (e) { console.log("prospects skip:", e); }
 
-    // ---- SOURCE 9: Existing GSC keywords (already in seo_keyword_ai) ----
+    // ---- SOURCE 9: SEO Tool Report Emails (Semrush, Wincher, Yoast, Ahrefs) ----
+    try {
+      const seoToolSenders = ["%semrush%", "%wincher%", "%yoast%", "%ahrefs%", "%moz.com%", "%searchconsole%"];
+      const { data: seoEmails } = await supabase
+        .from("communications")
+        .select("from_address, subject, body_preview, metadata")
+        .eq("company_id", companyId)
+        .eq("source", "gmail")
+        .gte("received_at", cutoffStr)
+        .or(seoToolSenders.map((s) => `from_address.ilike.${s}`).join(","))
+        .limit(20);
+      for (const em of seoEmails || []) {
+        const meta = em.metadata as Record<string, unknown> | null;
+        const rawBody = (meta?.body as string) || em.body_preview || "";
+        // Strip HTML for clean text
+        const cleanText = rawBody
+          .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+          .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+          .replace(/<[^>]+>/g, " ")
+          .replace(/&nbsp;/g, " ")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 2000);
+        if (cleanText.length > 50) {
+          snippets.push({ source: "seo_tools", text: `${em.subject || ""} ${cleanText}`.slice(0, 500) });
+        }
+      }
+    } catch (e) { console.log("seo_tool_emails skip:", e); }
+
+    // ---- SOURCE 10: Existing GSC keywords (already in seo_keyword_ai) ----
     const { data: existingKw } = await supabase
       .from("seo_keyword_ai")
       .select("keyword, sources")
