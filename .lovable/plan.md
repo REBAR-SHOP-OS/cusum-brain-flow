@@ -1,38 +1,31 @@
 
+## Fix: Minimize Button Not Working Properly in Fullscreen
 
-## Add Fullscreen and Minimize Toggle to the Chat Panel
+### Problem
+When the chat is in **fullscreen** mode, clicking the minimize button (`-`) sets the mode to "minimized" (thin strip), skipping the "normal" split view entirely. The user expects minimize to return to the normal 70/30 split view.
 
-### What This Does
-Adds two toggle buttons to the chat panel header in the Job Site Editor:
-- **Fullscreen**: Expands the chat to take over the entire right side (hides the preview panel)
-- **Minimize**: Collapses the chat panel to a thin strip, giving the preview maximum space
+### Solution
+Update the minimize button logic in `WebsiteChat.tsx` so it cycles correctly:
+- **From fullscreen** -> clicking minimize goes to **normal** (split view)
+- **From normal** -> clicking minimize goes to **minimized** (thin strip)
+- **From minimized** -> clicking expand goes to **normal**
 
-### Changes
+### File Change: `src/components/website/WebsiteChat.tsx`
 
-**File: `src/pages/WebsiteManager.tsx`**
-- Add a `chatMode` state: `"normal" | "fullscreen" | "minimized"`
-- When `fullscreen`: Hide the left preview panel entirely; the chat panel takes 100% width
-- When `minimized`: Collapse the right panel to a narrow strip (just the tab bar + an expand button), preview gets maximum space
-- When `normal`: Current resizable layout (70/30 split)
-- Pass `chatMode` and `onChatModeChange` props down to `WebsiteChat`
+Update the minimize button's `onClick` handler (around line 207):
 
-**File: `src/components/website/WebsiteChat.tsx`**
-- Add `Maximize2`, `Minimize2` icons from lucide-react to the header bar (next to the existing trash button)
-- Fullscreen button: toggles between fullscreen and normal
-- Minimize button: toggles between minimized and normal
-- In minimized state, the parent hides the chat body; only a small expand button is visible
+**Current logic:**
+```typescript
+onClick={() => onChatModeChange?.(chatMode === "minimized" ? "normal" : "minimized")}
+```
 
-### Technical Details
+**Fixed logic:**
+```typescript
+onClick={() => {
+  if (chatMode === "fullscreen") onChatModeChange?.("normal");
+  else if (chatMode === "normal") onChatModeChange?.("minimized");
+  else onChatModeChange?.("normal");
+}}
+```
 
-In `WebsiteManager.tsx`:
-- Conditionally render the `ResizablePanelGroup` based on `chatMode`
-- Fullscreen: render only the right panel (no `ResizablePanel` split)
-- Minimized: set right panel `defaultSize` to ~5 and hide content, or conditionally render a collapsed strip
-- Normal: keep existing 70/30 resizable layout
-
-In `WebsiteChat.tsx`:
-- Accept new props: `chatMode?: "normal" | "fullscreen" | "minimized"` and `onChatModeChange?: (mode: "normal" | "fullscreen" | "minimized") => void`
-- Add icon buttons in the header between the title and the trash icon:
-  - Fullscreen toggle (`Maximize2` / `Minimize2`)
-  - Minimize toggle (`Minus` / `Plus`)
-
+This ensures the button always steps down one level (fullscreen -> normal -> minimized) instead of jumping from fullscreen directly to minimized.
