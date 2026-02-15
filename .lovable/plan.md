@@ -1,21 +1,36 @@
 
-# Add Chat Memory (Persist Messages Across Refresh)
+# Fix Chat Freezing During Write Action Confirmation
 
 ## Problem
-The Website Chat (AI Job Site Editor) loses all conversation history on page refresh because messages are stored only in React state.
+When the AI needs to execute a write action (like updating a WordPress page), it shows a confirmation card with Approve/Cancel buttons. However, the text input remains active, so users type "yes" or "ok" instead of clicking Approve. This:
+1. Sends a new chat message, clearing the pending action
+2. The AI calls the same tools again, showing "Checking pages..." in a loop
+3. The chat appears frozen/stuck in an endless cycle
 
 ## Solution
-Use `localStorage` to persist chat messages in the `useAdminChat` hook. Messages will be saved automatically and restored when the page loads.
+Disable the text input and send button whenever a pending action is awaiting confirmation, and show a helpful placeholder message.
 
-### Changes to `src/hooks/useAdminChat.ts`
-1. **Storage key**: Use a key like `admin-chat-{currentPage}` so different pages keep separate histories
-2. **Load on init**: Initialize `messages` state from localStorage instead of an empty array
-3. **Save on change**: Add a `useEffect` that writes messages to localStorage whenever they update
-4. **Clear also clears storage**: Update `clearChat` to remove the localStorage entry
-5. **Cap stored messages**: Only keep the last 50 messages in storage to avoid bloating localStorage
+## Changes
 
-### Technical Details
-- Add a `useEffect` with `messages` dependency that calls `localStorage.setItem(storageKey, JSON.stringify(messages))`
-- Change `useState<AdminChatEntry[]>([])` to a lazy initializer that reads from localStorage
-- Serialize timestamps as ISO strings and parse them back on load
-- The `clearChat` function will call `localStorage.removeItem(storageKey)`
+### 1. `src/components/website/WebsiteChat.tsx`
+- Change the textarea `disabled` prop from `isStreaming` to `isStreaming || !!pendingAction`
+- Change the placeholder text to `"Approve or cancel the action above..."` when `pendingAction` is set
+- Disable the Send button when `pendingAction` is present
+- Block `handleSend` if `pendingAction` is set
+
+### 2. `src/components/layout/LiveChatWidget.tsx`
+- Apply the same fix: disable textarea and send when `pendingAction` is present
+- Destructure `pendingAction` from `useAdminChat` (currently not used in this component)
+- Show the pending action confirmation card (currently missing from LiveChatWidget entirely)
+
+## Technical Details
+
+**WebsiteChat.tsx** (3 small edits):
+- Line 50 (`handleSend`): Add `|| pendingAction` to the early return guard
+- Line 188-190: Change placeholder and disabled prop to include `pendingAction`
+- Line 197: Add `|| !!pendingAction` to send button disabled state
+
+**LiveChatWidget.tsx** (3 small edits):
+- Destructure `pendingAction`, `confirmAction`, `cancelAction` from `useAdminChat()`
+- Disable textarea when `pendingAction` is set
+- Add a minimal pending action confirmation UI (similar to WebsiteChat)
