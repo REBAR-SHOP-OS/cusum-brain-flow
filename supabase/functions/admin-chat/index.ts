@@ -825,23 +825,38 @@ PROACTIVE INTELLIGENCE:
       });
     }
 
-    // First call with tools
-    const aiResponse = await fetch(
-      "https://ai.gateway.lovable.dev/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-3-pro-preview",
-          messages: [{ role: "system", content: systemPrompt }, ...messages],
-          tools: JARVIS_TOOLS,
-          stream: true,
-        }),
-      }
-    );
+    // First call with tools (55s timeout to fail gracefully before edge function limit)
+    const aiController = new AbortController();
+    const aiTimeout = setTimeout(() => aiController.abort(), 55000);
+    let aiResponse: Response;
+    try {
+      aiResponse = await fetch(
+        "https://ai.gateway.lovable.dev/v1/chat/completions",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${LOVABLE_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "google/gemini-3-pro-preview",
+            messages: [{ role: "system", content: systemPrompt }, ...messages],
+            tools: JARVIS_TOOLS,
+            stream: true,
+          }),
+          signal: aiController.signal,
+        }
+      );
+    } catch (fetchErr: any) {
+      clearTimeout(aiTimeout);
+      console.error("AI gateway fetch failed:", fetchErr.name, fetchErr.message);
+      const isTimeout = fetchErr.name === "AbortError";
+      return new Response(JSON.stringify({ error: isTimeout ? "AI request timed out. Try a simpler question." : `AI gateway error: ${fetchErr.message}` }), {
+        status: isTimeout ? 504 : 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    clearTimeout(aiTimeout);
 
     if (!aiResponse.ok) {
       if (aiResponse.status === 429) {
@@ -972,21 +987,37 @@ PROACTIVE INTELLIGENCE:
         ...toolResults,
       ];
 
-      const followUpResp = await fetch(
-        "https://ai.gateway.lovable.dev/v1/chat/completions",
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${LOVABLE_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "google/gemini-3-pro-preview",
-            messages: followUpMessages,
-            stream: true,
-          }),
-        }
-      );
+      const followController = new AbortController();
+      const followTimeout = setTimeout(() => followController.abort(), 45000);
+      let followUpResp: Response;
+      try {
+        followUpResp = await fetch(
+          "https://ai.gateway.lovable.dev/v1/chat/completions",
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${LOVABLE_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model: "google/gemini-3-pro-preview",
+              messages: followUpMessages,
+              stream: true,
+            }),
+            signal: followController.signal,
+          }
+        );
+      } catch (followErr: any) {
+        clearTimeout(followTimeout);
+        console.error("Follow-up AI fetch failed:", followErr.name, followErr.message);
+        const encoder = new TextEncoder();
+        const errorText = `⚠️ Tool results were processed but the AI summary timed out. ${fullText || ""}`;
+        const sseData = `data: ${JSON.stringify({ choices: [{ delta: { content: errorText } }] })}\n\ndata: [DONE]\n\n`;
+        return new Response(encoder.encode(sseData), {
+          headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
+        });
+      }
+      clearTimeout(followTimeout);
 
       if (!followUpResp.ok) {
         const encoder = new TextEncoder();

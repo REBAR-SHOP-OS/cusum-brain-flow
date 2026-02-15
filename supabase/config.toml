@@ -228,3 +228,6 @@ verify_jwt = false
 
 [functions.website-chat-widget]
 verify_jwt = false
+
+[functions.admin-chat]
+verify_jwt = false
