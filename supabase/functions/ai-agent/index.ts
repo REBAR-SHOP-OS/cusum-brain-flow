@@ -1463,39 +1463,60 @@ You are an HR specialist for a rebar fabrication company, helping with hiring, o
   seo: `You are **Seomi**, the SEO & Search Agent for REBAR SHOP OS by Rebar.shop.
 
 ## Your Role:
-You are an SEO specialist focused on improving rebar.shop's search visibility and driving organic traffic from construction professionals in Ontario.
+You are a HANDS-ON SEO specialist with DIRECT ACCESS to rebar.shop via WordPress API tools. You don't just advise — you read, audit, fix, and create content directly.
 
-## Core Responsibilities:
-1. **Keyword Research**: Identify high-value keywords for rebar.shop:
-   - Transactional: "buy rebar Ontario", "rebar fabrication near me", "custom rebar order"
-   - Informational: "rebar sizes chart", "CSA G30.18 specifications", "how to estimate rebar"
-   - Local: "rebar supplier Toronto", "rebar delivery GTA", "rebar fabricator Hamilton"
-2. **On-Page SEO Audit**: Analyze and recommend:
-   - Title tags (under 60 chars, keyword-first)
-   - Meta descriptions (under 160 chars, CTA-driven)
+## Your Tools:
+You have the following tools available:
+- **wp_list_posts** — list/search all blog posts
+- **wp_list_pages** — list/search all pages
+- **wp_get_post** — get a single post with full content by ID
+- **wp_get_page** — get a single page with full content by ID
+- **wp_list_products** — list WooCommerce products
+- **wp_update_post** — update a post's title, content, slug, excerpt, meta
+- **wp_update_page** — update a page's title, content, slug
+- **wp_create_post** — create a new blog post (draft by default)
+- **scrape_page** — fetch and analyze any rebar.shop URL for live on-page SEO audit
+
+## Workflow:
+1. **Always scrape or fetch a page FIRST** before suggesting SEO fixes
+2. **Tell the user what you plan to change** before making edits
+3. **Use wp_update_post/wp_update_page** to apply fixes directly
+4. **Create blog posts as drafts** using wp_create_post — never publish directly
+5. **Log all changes** so the user has a clear audit trail
+
+## Core Capabilities:
+1. **Live Page Audit**: Scrape any rebar.shop page and analyze:
+   - Title tag (under 60 chars, keyword-first)
+   - Meta description (under 160 chars, CTA-driven)
    - Header hierarchy (single H1, logical H2/H3 structure)
    - Image alt text optimization
    - Internal linking strategy
-3. **Content Strategy**: Plan content that targets search intent:
-   - Blog topics ranked by search volume and competition
-   - FAQ pages for common rebar questions
-   - Service area pages for different Ontario regions
-   - Technical guides (rebar sizes, shape codes, weight tables)
-4. **Technical SEO**: Recommend:
-   - Schema markup (LocalBusiness, Product, FAQPage)
-   - Site speed improvements
-   - Mobile responsiveness fixes
-   - Canonical URL strategy
-   - XML sitemap optimization
-5. **Search Console Analysis**: When given Google Search Console data, analyze:
-   - Top performing queries and pages
-   - Click-through rates and improvement opportunities
-   - Index coverage issues
-   - Core Web Vitals status
-6. **Competitor SEO**: Analyze competitor websites for:
-   - Keyword gaps
-   - Backlink opportunities
-   - Content they rank for that rebar.shop doesn't
+   - Content quality and keyword density
+2. **Direct Fixes**: When you find issues, fix them:
+   - Update meta titles and descriptions
+   - Fix header hierarchy
+   - Improve content for target keywords
+   - Update slugs for better URLs
+3. **Content Creation**: Create SEO-optimized blog posts:
+   - Target specific keywords
+   - Include proper header structure
+   - Add internal links to products/services
+   - Always create as draft for review
+4. **Keyword Research**: Identify high-value keywords:
+   - Transactional: "buy rebar Ontario", "rebar fabrication near me"
+   - Informational: "rebar sizes chart", "CSA G30.18 specifications"
+   - Local: "rebar supplier Toronto", "rebar delivery GTA"
+5. **Technical SEO**: Recommend schema markup, speed improvements, canonical URLs
+6. **Competitor Analysis**: Analyze competitor websites for keyword gaps
+
+## SEO Best Practices Checklist:
+- ✅ Every page has a unique title tag under 60 chars
+- ✅ Every page has a meta description under 160 chars
+- ✅ Only one H1 per page, matching search intent
+- ✅ Images have descriptive alt text
+- ✅ Internal links to relevant pages
+- ✅ Clean URL slugs with target keywords
+- ✅ Schema markup where applicable
 
 ## Formatting:
 - Show keyword suggestions with estimated search volume
@@ -1504,10 +1525,11 @@ You are an SEO specialist focused on improving rebar.shop's search visibility an
 - Always include implementation steps
 
 ## 💡 Ideas You Should Create:
-- Keyword ranking dropped significantly → suggest content refresh or new backlinks
-- Competitor content outranking on key terms → suggest a better article
-- Seasonal search trend approaching → suggest preparing content in advance
-- High-impression, low-CTR page → suggest improving title/meta description`,
+- Keyword ranking dropped → suggest content refresh
+- Competitor outranking on key terms → suggest a better article
+- Seasonal search trend approaching → prepare content in advance
+- High-impression, low-CTR page → improve title/meta description
+- Page missing H1 or meta description → fix it immediately`,
 
   growth: `You are **Gigi**, the Personal Development Agent for REBAR SHOP OS by Rebar.shop.
 
@@ -4137,6 +4159,157 @@ RULES:
           },
         },
       }] : []),
+      // SEO agent tools — WordPress read/write + page scraping
+      ...(agent === "seo" ? [
+        {
+          type: "function" as const,
+          function: {
+            name: "wp_list_posts",
+            description: "List blog posts from rebar.shop. Optionally search by keyword.",
+            parameters: {
+              type: "object",
+              properties: {
+                search: { type: "string", description: "Search keyword to filter posts" },
+                per_page: { type: "string", description: "Number of posts to return (default 20, max 100)" },
+                status: { type: "string", description: "Post status: publish, draft, pending, private" },
+              },
+              additionalProperties: false,
+            },
+          },
+        },
+        {
+          type: "function" as const,
+          function: {
+            name: "wp_list_pages",
+            description: "List pages from rebar.shop. Optionally search by keyword.",
+            parameters: {
+              type: "object",
+              properties: {
+                search: { type: "string", description: "Search keyword to filter pages" },
+                per_page: { type: "string", description: "Number of pages to return (default 20, max 100)" },
+              },
+              additionalProperties: false,
+            },
+          },
+        },
+        {
+          type: "function" as const,
+          function: {
+            name: "wp_get_post",
+            description: "Get a single blog post with full content by its WordPress ID.",
+            parameters: {
+              type: "object",
+              properties: {
+                id: { type: "string", description: "WordPress post ID" },
+              },
+              required: ["id"],
+              additionalProperties: false,
+            },
+          },
+        },
+        {
+          type: "function" as const,
+          function: {
+            name: "wp_get_page",
+            description: "Get a single page with full content by its WordPress ID.",
+            parameters: {
+              type: "object",
+              properties: {
+                id: { type: "string", description: "WordPress page ID" },
+              },
+              required: ["id"],
+              additionalProperties: false,
+            },
+          },
+        },
+        {
+          type: "function" as const,
+          function: {
+            name: "wp_list_products",
+            description: "List WooCommerce products from rebar.shop.",
+            parameters: {
+              type: "object",
+              properties: {
+                search: { type: "string", description: "Search keyword to filter products" },
+                per_page: { type: "string", description: "Number of products to return (default 20)" },
+              },
+              additionalProperties: false,
+            },
+          },
+        },
+        {
+          type: "function" as const,
+          function: {
+            name: "wp_update_post",
+            description: "Update a blog post's title, content, slug, excerpt, or status. Always tell the user what you're changing before calling this.",
+            parameters: {
+              type: "object",
+              properties: {
+                id: { type: "string", description: "WordPress post ID to update" },
+                title: { type: "string", description: "New post title" },
+                content: { type: "string", description: "New post content (HTML)" },
+                slug: { type: "string", description: "New URL slug" },
+                excerpt: { type: "string", description: "New excerpt / meta description" },
+                status: { type: "string", description: "Post status: publish, draft, pending" },
+              },
+              required: ["id"],
+              additionalProperties: false,
+            },
+          },
+        },
+        {
+          type: "function" as const,
+          function: {
+            name: "wp_update_page",
+            description: "Update a page's title, content, or slug. Always tell the user what you're changing before calling this.",
+            parameters: {
+              type: "object",
+              properties: {
+                id: { type: "string", description: "WordPress page ID to update" },
+                title: { type: "string", description: "New page title" },
+                content: { type: "string", description: "New page content (HTML)" },
+                slug: { type: "string", description: "New URL slug" },
+              },
+              required: ["id"],
+              additionalProperties: false,
+            },
+          },
+        },
+        {
+          type: "function" as const,
+          function: {
+            name: "wp_create_post",
+            description: "Create a new blog post (as draft by default). Use for SEO content strategy.",
+            parameters: {
+              type: "object",
+              properties: {
+                title: { type: "string", description: "Post title" },
+                content: { type: "string", description: "Post content (HTML)" },
+                slug: { type: "string", description: "URL slug" },
+                excerpt: { type: "string", description: "Post excerpt / meta description" },
+                status: { type: "string", description: "Post status (default: draft)" },
+              },
+              required: ["title", "content"],
+              additionalProperties: false,
+            },
+          },
+        },
+        {
+          type: "function" as const,
+          function: {
+            name: "scrape_page",
+            description: "Fetch and analyze any rebar.shop URL for a live on-page SEO audit. Returns the page HTML which you should analyze for title, meta description, headings, content quality, and other SEO factors.",
+            parameters: {
+              type: "object",
+              properties: {
+                url: { type: "string", description: "Full URL to scrape (must be a rebar.shop URL)" },
+              },
+              required: ["url"],
+              additionalProperties: false,
+            },
+          },
+        },
+      ] : []),
     ];
 
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -4181,6 +4354,7 @@ RULES:
     // Handle tool calls — create notifications and send emails
     const toolCalls = choice?.message?.tool_calls;
     const emailResults: { success: boolean; to?: string; error?: string }[] = [];
+    const seoToolResults: { id: string; name: string; result: any }[] = [];
     if (toolCalls && toolCalls.length > 0) {
       for (const tc of toolCalls) {
         // Handle send_email tool calls
@@ -4222,6 +4396,142 @@ RULES:
           }
         }
         
+        // Handle SEO WordPress tool calls
+        if (agent === "seo" && tc.function?.name?.startsWith("wp_") || (agent === "seo" && tc.function?.name === "scrape_page")) {
+          try {
+            const { WPClient } = await import("../_shared/wpClient.ts");
+            const wp = new WPClient();
+            const args = JSON.parse(tc.function.arguments || "{}");
+            const toolName = tc.function.name;
+            let toolResult: any = {};
+
+            if (toolName === "wp_list_posts") {
+              const params: Record<string, string> = {};
+              if (args.search) params.search = args.search;
+              if (args.per_page) params.per_page = args.per_page;
+              if (args.status) params.status = args.status;
+              toolResult = await wp.listPosts(params);
+            } else if (toolName === "wp_list_pages") {
+              const params: Record<string, string> = {};
+              if (args.search) params.search = args.search;
+              if (args.per_page) params.per_page = args.per_page;
+              toolResult = await wp.listPages(params);
+            } else if (toolName === "wp_get_post") {
+              toolResult = await wp.getPost(args.id);
+            } else if (toolName === "wp_get_page") {
+              toolResult = await wp.getPage(args.id);
+            } else if (toolName === "wp_list_products") {
+              const params: Record<string, string> = {};
+              if (args.search) params.search = args.search;
+              if (args.per_page) params.per_page = args.per_page;
+              toolResult = await wp.listProducts(params);
+            } else if (toolName === "wp_update_post") {
+              const data: Record<string, unknown> = {};
+              if (args.title) data.title = args.title;
+              if (args.content) data.content = args.content;
+              if (args.slug) data.slug = args.slug;
+              if (args.excerpt) data.excerpt = args.excerpt;
+              if (args.status) data.status = args.status;
+              toolResult = await wp.updatePost(args.id, data);
+              // Log change
+              await svcClient.from("wp_change_log").insert({
+                user_id: user.id,
+                company_id: companyId,
+                action: "update_post",
+                entity_type: "post",
+                entity_id: args.id,
+                changes: data,
+                agent: "seomi",
+              });
+              console.log(`📝 Seomi updated post ${args.id}`);
+            } else if (toolName === "wp_update_page") {
+              const data: Record<string, unknown> = {};
+              if (args.title) data.title = args.title;
+              if (args.content) data.content = args.content;
+              if (args.slug) data.slug = args.slug;
+              toolResult = await wp.updatePage(args.id, data);
+              await svcClient.from("wp_change_log").insert({
+                user_id: user.id,
+                company_id: companyId,
+                action: "update_page",
+                entity_type: "page",
+                entity_id: args.id,
+                changes: data,
+                agent: "seomi",
+              });
+              console.log(`📝 Seomi updated page ${args.id}`);
+            } else if (toolName === "wp_create_post") {
+              const data: Record<string, unknown> = {
+                title: args.title,
+                content: args.content,
+                status: args.status || "draft",
+              };
+              if (args.slug) data.slug = args.slug;
+              if (args.excerpt) data.excerpt = args.excerpt;
+              toolResult = await wp.post("/posts", data);
+              await svcClient.from("wp_change_log").insert({
+                user_id: user.id,
+                company_id: companyId,
+                action: "create_post",
+                entity_type: "post",
+                entity_id: String(toolResult?.id || ""),
+                changes: data,
+                agent: "seomi",
+              });
+              console.log(`📝 Seomi created draft post: ${args.title}`);
+            } else if (toolName === "scrape_page") {
+              // Simple fetch-based scraper (no Firecrawl dependency)
+              const targetUrl = args.url;
+              if (!targetUrl.includes("rebar.shop")) {
+                toolResult = { error: "Can only scrape rebar.shop URLs" };
+              } else {
+                try {
+                  const pageRes = await fetch(targetUrl, {
+                    headers: { "User-Agent": "SeomiBot/1.0 (SEO Audit)" },
+                  });
+                  if (pageRes.ok) {
+                    const html = await pageRes.text();
+                    // Extract key SEO elements
+                    const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+                    const metaDescMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([\s\S]*?)["']/i);
+                    const h1Matches = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/gi) || [];
+                    const h2Matches = html.match(/<h2[^>]*>([\s\S]*?)<\/h2>/gi) || [];
+                    const imgNoAlt = (html.match(/<img(?![^>]*alt=["'][^"']+["'])[^>]*>/gi) || []).length;
+                    const canonicalMatch = html.match(/<link[^>]*rel=["']canonical["'][^>]*href=["']([\s\S]*?)["']/i);
+                    // Strip HTML tags for content length
+                    const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+                    const bodyText = bodyMatch ? bodyMatch[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() : "";
+                    
+                    toolResult = {
+                      url: targetUrl,
+                      title: titleMatch ? titleMatch[1].trim() : "MISSING",
+                      titleLength: titleMatch ? titleMatch[1].trim().length : 0,
+                      metaDescription: metaDescMatch ? metaDescMatch[1].trim() : "MISSING",
+                      metaDescLength: metaDescMatch ? metaDescMatch[1].trim().length : 0,
+                      h1Tags: h1Matches.map((h: string) => h.replace(/<[^>]+>/g, "").trim()),
+                      h2Tags: h2Matches.map((h: string) => h.replace(/<[^>]+>/g, "").trim()),
+                      imagesWithoutAlt: imgNoAlt,
+                      canonical: canonicalMatch ? canonicalMatch[1].trim() : "MISSING",
+                      wordCount: bodyText.split(/\s+/).length,
+                      contentPreview: bodyText.slice(0, 500),
+                    };
+                  } else {
+                    toolResult = { error: `Failed to fetch page: ${pageRes.status}` };
+                  }
+                } catch (scrapeErr) {
+                  toolResult = { error: `Scrape failed: ${scrapeErr instanceof Error ? scrapeErr.message : "Unknown error"}` };
+                }
+              }
+            }
+
+            // Store result for follow-up; we need to do a second AI call with tool results
+            seoToolResults.push({ id: tc.id, name: toolName, result: toolResult });
+          } catch (e) {
+            console.error(`SEO tool ${tc.function.name} failed:`, e);
+            seoToolResults.push({ id: tc.id, name: tc.function.name, result: { error: e instanceof Error ? e.message : "Tool execution failed" } });
+          }
+        }
+
         if (tc.function?.name === "create_notifications") {
           try {
             const args = JSON.parse(tc.function.arguments);
@@ -4282,18 +4592,30 @@ RULES:
         }
       }
 
-      // If the AI only returned tool calls and no text, do a follow-up to get a reply
-      if (!reply && (createdNotifications.length > 0 || emailResults.length > 0)) {
+      // If the AI returned tool calls, do a follow-up to get a reply with tool results
+      // SEO tools ALWAYS need a follow-up since the AI must analyze the returned data
+      if (seoToolResults.length > 0 || (!reply && (createdNotifications.length > 0 || emailResults.length > 0))) {
         const toolResultMessages = [
           ...messages,
           choice.message,
-          ...toolCalls.map((tc: any) => ({
-            role: "tool" as const,
-            tool_call_id: tc.id,
-            content: tc.function?.name === "send_email"
-              ? JSON.stringify(emailResults.find(r => true) || { success: false, error: "No result" })
-              : JSON.stringify({ success: true, created: createdNotifications.length }),
-          })),
+          ...toolCalls.map((tc: any) => {
+            // Check if this is an SEO tool result
+            const seoResult = seoToolResults.find(r => r.id === tc.id);
+            if (seoResult) {
+              return {
+                role: "tool" as const,
+                tool_call_id: tc.id,
+                content: JSON.stringify(seoResult.result),
+              };
+            }
+            return {
+              role: "tool" as const,
+              tool_call_id: tc.id,
+              content: tc.function?.name === "send_email"
+                ? JSON.stringify(emailResults.find(r => true) || { success: false, error: "No result" })
+                : JSON.stringify({ success: true, created: createdNotifications.length }),
+            };
+          }),
         ];
 
         const followUp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {

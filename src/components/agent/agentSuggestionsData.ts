@@ -77,9 +77,9 @@ export const agentSuggestions: Record<string, AgentSuggestion[]> = {
     { title: "Draft an employee onboarding checklist", category: "Onboarding" },
   ],
   seo: [
-    { title: "What keywords should rebar.shop target?", category: "Keywords" },
-    { title: "Audit our current search rankings", category: "Audit" },
-    { title: "Create a content plan for better SEO", category: "Strategy" },
+    { title: "Audit the homepage SEO", category: "Audit" },
+    { title: "Fix meta descriptions on all pages", category: "Fix" },
+    { title: "Create a blog post about rebar sizes", category: "Content" },
   ],
   growth: [
     { title: "Help me set quarterly goals", category: "Goals" },
