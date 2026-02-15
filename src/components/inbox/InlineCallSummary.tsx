@@ -110,6 +110,11 @@ export function InlineCallSummary({
     }
     if (!recordingUri) return;
     setLoadingAudio(true);
+
+    // Create Audio element synchronously during user gesture (before any await)
+    const audio = new Audio();
+    audioRef.current = audio;
+
     try {
       const projectUrl = import.meta.env.VITE_SUPABASE_URL;
       const {
@@ -126,8 +131,7 @@ export function InlineCallSummary({
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const blob = await resp.blob();
       const blobUrl = URL.createObjectURL(blob);
-      const audio = new Audio(blobUrl);
-      audioRef.current = audio;
+      audio.src = blobUrl;
       audio.onended = () => {
         setPlaying(false);
         URL.revokeObjectURL(blobUrl);

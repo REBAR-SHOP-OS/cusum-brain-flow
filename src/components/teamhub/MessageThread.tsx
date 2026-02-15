@@ -218,6 +218,11 @@ export function MessageThread({
     }
 
     setPlayingMsgId(msgId);
+
+    // Create Audio element synchronously during user gesture (before any await)
+    const audio = new Audio();
+    audioRef.current = audio;
+
     try {
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
@@ -236,8 +241,7 @@ export function MessageThread({
 
       const audioBlob = await response.blob();
       const audioUrl = URL.createObjectURL(audioBlob);
-      const audio = new Audio(audioUrl);
-      audioRef.current = audio;
+      audio.src = audioUrl;
 
       audio.onended = () => {
         setPlayingMsgId(null);
