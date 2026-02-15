@@ -1,0 +1,519 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { WPClient } from "../_shared/wpClient.ts";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+// ─── Rate Limiter ───
+const rateLimitMap = new Map<string, number[]>();
+const RATE_LIMIT_MAX = 10;
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const MAX_CONVERSATION_MESSAGES = 20;
+
+function isRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const timestamps = rateLimitMap.get(ip) ?? [];
+  const recent = timestamps.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
+  if (recent.length >= RATE_LIMIT_MAX) {
+    rateLimitMap.set(ip, recent);
+    return true;
+  }
+  recent.push(now);
+  rateLimitMap.set(ip, recent);
+  return false;
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, timestamps] of rateLimitMap.entries()) {
+    const recent = timestamps.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
+    if (recent.length === 0) rateLimitMap.delete(ip);
+    else rateLimitMap.set(ip, recent);
+  }
+}, 300_000);
+
+// ─── System Prompt ───
+const SYSTEM_PROMPT = `You are the intelligent AI sales assistant for **Rebar Shop** — a rebar fabrication company based in Sydney, Australia.
+
+You have access to LIVE tools that let you search our product catalog, look up rebar specifications, check stock, and create quote requests. USE THESE TOOLS proactively whenever a customer asks about products, prices, sizes, or wants a quote.
+
+## About Rebar Shop
+- Rebar fabrication shop specialising in cutting, bending, and delivering reinforcing steel
+- We serve residential, commercial, and civil construction projects across Sydney and surrounding areas
+- Website: www.rebar.shop
+- Fast turnaround, competitive pricing, reliable delivery
+
+## Products & Services
+- **Cut & Bend Rebar**: Custom fabrication to bar bending schedules (BBS)
+- **Straight Bar Supply**: Stock lengths of deformed bar (N12, N16, N20, N24, N28, N32, N36)
+- **Mesh & Accessories**: SL mesh, bar chairs, tie wire, couplers
+- **Scheduling & Estimating**: We read drawings and prepare bar lists
+- **Delivery**: Greater Sydney, Central Coast, Blue Mountains, Wollongong
+
+## How to Use Tools
+- When a customer asks about a product → use search_products
+- When they mention a bar size (e.g. N16, N20) → use lookup_rebar_specs to give precise specs
+- When they ask about stock → use check_availability
+- When they want a quote → collect their name, email, project details, and items, then use create_quote_request
+
+## Quote Flow
+1. Customer expresses interest in specific products/quantities
+2. You look up specs and products using tools
+3. You collect: customer name, email (required), phone (optional), project name, list of items
+4. You call create_quote_request to submit it
+5. Confirm the quote number and tell them the team will follow up
+
+## Guidelines
+- Keep responses concise (2-4 sentences when possible)
+- Use Australian English spelling
+- Be warm, professional, and proactive
+- For pricing, encourage getting a formal quote — don't guess prices
+- If asked about things outside rebar/construction, politely redirect
+- ALWAYS use tools when relevant — don't guess about products or specs`;
+
+// ─── Tool Definitions ───
+const tools = [
+  {
+    type: "function",
+    function: {
+      name: "search_products",
+      description: "Search the WooCommerce product catalog by keyword. Returns product names, prices, and IDs.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Search keyword (e.g. 'N16', 'mesh', 'tie wire')" },
+        },
+        required: ["query"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_product_details",
+      description: "Get full details of a specific WooCommerce product by its ID.",
+      parameters: {
+        type: "object",
+        properties: {
+          product_id: { type: "string", description: "WooCommerce product ID" },
+        },
+        required: ["product_id"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "lookup_rebar_specs",
+      description: "Look up rebar bar specifications (diameter, mass per metre, area) from the ERP database. Can search by bar code like N12, N16, N20 etc.",
+      parameters: {
+        type: "object",
+        properties: {
+          bar_code: { type: "string", description: "Bar code to look up, e.g. 'N16', 'N20', 'N32'. Use '%' for wildcard." },
+        },
+        required: ["bar_code"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "check_availability",
+      description: "Check stock availability for a specific bar code from the ERP floor stock.",
+      parameters: {
+        type: "object",
+        properties: {
+          bar_code: { type: "string", description: "Bar code to check, e.g. 'N16', 'N20'" },
+        },
+        required: ["bar_code"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "create_quote_request",
+      description: "Create a quote request in the ERP system. The sales team will follow up with a formal quote.",
+      parameters: {
+        type: "object",
+        properties: {
+          customer_name: { type: "string", description: "Customer's full name" },
+          customer_email: { type: "string", description: "Customer's email address" },
+          customer_phone: { type: "string", description: "Customer's phone number (optional)" },
+          project_name: { type: "string", description: "Project name or address" },
+          items: {
+            type: "array",
+            description: "List of requested items",
+            items: {
+              type: "object",
+              properties: {
+                description: { type: "string" },
+                bar_code: { type: "string" },
+                quantity: { type: "string" },
+                unit: { type: "string", description: "e.g. metres, tonnes, pieces" },
+                notes: { type: "string" },
+              },
+              required: ["description"],
+              additionalProperties: false,
+            },
+          },
+          notes: { type: "string", description: "Additional notes or requirements" },
+        },
+        required: ["customer_name", "customer_email", "items"],
+        additionalProperties: false,
+      },
+    },
+  },
+];
+
+// ─── Tool Execution ───
+async function executeTool(
+  name: string,
+  args: Record<string, any>,
+  supabase: any,
+  wp: WPClient | null,
+): Promise<string> {
+  try {
+    switch (name) {
+      case "search_products": {
+        if (!wp) return JSON.stringify({ error: "Product catalog temporarily unavailable" });
+        const query = String(args.query || "").slice(0, 100);
+        const products = await wp.listProducts({ search: query, per_page: "8", status: "publish" });
+        const simplified = (products || []).map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          price: p.price,
+          regular_price: p.regular_price,
+          sale_price: p.sale_price,
+          stock_status: p.stock_status,
+          short_description: (p.short_description || "").replace(/<[^>]*>/g, "").slice(0, 150),
+          permalink: p.permalink,
+        }));
+        return JSON.stringify({ products: simplified, count: simplified.length });
+      }
+
+      case "get_product_details": {
+        if (!wp) return JSON.stringify({ error: "Product catalog temporarily unavailable" });
+        const id = String(args.product_id || "");
+        if (!id || !/^\d+$/.test(id)) return JSON.stringify({ error: "Invalid product ID" });
+        const p = await wp.getProduct(id);
+        return JSON.stringify({
+          id: p.id,
+          name: p.name,
+          price: p.price,
+          regular_price: p.regular_price,
+          description: (p.description || "").replace(/<[^>]*>/g, "").slice(0, 500),
+          short_description: (p.short_description || "").replace(/<[^>]*>/g, "").slice(0, 300),
+          stock_status: p.stock_status,
+          stock_quantity: p.stock_quantity,
+          categories: (p.categories || []).map((c: any) => c.name),
+          permalink: p.permalink,
+          weight: p.weight,
+          dimensions: p.dimensions,
+        });
+      }
+
+      case "lookup_rebar_specs": {
+        const barCode = String(args.bar_code || "").toUpperCase().slice(0, 10);
+        const { data, error } = await supabase
+          .from("rebar_sizes")
+          .select("bar_code, diameter_mm, mass_kg_per_m, area_mm2, standard")
+          .ilike("bar_code", barCode.includes("%") ? barCode : `%${barCode}%`)
+          .limit(10);
+        if (error) return JSON.stringify({ error: error.message });
+        return JSON.stringify({ specs: data || [], count: (data || []).length });
+      }
+
+      case "check_availability": {
+        const barCode = String(args.bar_code || "").toUpperCase().slice(0, 10);
+        const { data, error } = await supabase
+          .from("floor_stock")
+          .select("bar_code, length_mm, qty_on_hand, qty_reserved")
+          .ilike("bar_code", `%${barCode}%`)
+          .gt("qty_on_hand", 0)
+          .limit(20);
+        if (error) return JSON.stringify({ error: error.message });
+        const summary = (data || []).map((row: any) => ({
+          bar_code: row.bar_code,
+          length_mm: row.length_mm,
+          available: row.qty_on_hand - (row.qty_reserved || 0),
+          total_on_hand: row.qty_on_hand,
+        }));
+        return JSON.stringify({ stock: summary, count: summary.length });
+      }
+
+      case "create_quote_request": {
+        const customerName = String(args.customer_name || "").slice(0, 200);
+        const customerEmail = String(args.customer_email || "").slice(0, 200);
+        const customerPhone = String(args.customer_phone || "").slice(0, 50);
+        const projectName = String(args.project_name || "").slice(0, 300);
+        const items = Array.isArray(args.items) ? args.items.slice(0, 20) : [];
+        const notes = String(args.notes || "").slice(0, 1000);
+
+        if (!customerName || !customerEmail) {
+          return JSON.stringify({ error: "Customer name and email are required" });
+        }
+
+        // Generate quote number
+        const { data: seqData } = await supabase.rpc("nextval_quote_request_seq");
+        const year = new Date().getFullYear();
+        let seqNum = 1;
+        
+        // Fallback: count existing rows if sequence RPC doesn't exist
+        if (seqData != null) {
+          seqNum = Number(seqData);
+        } else {
+          const { count } = await supabase
+            .from("quote_requests")
+            .select("id", { count: "exact", head: true });
+          seqNum = (count || 0) + 1;
+        }
+        const quoteNumber = `QR-${year}-${String(seqNum).padStart(4, "0")}`;
+
+        const { data, error } = await supabase.from("quote_requests").insert({
+          quote_number: quoteNumber,
+          customer_name: customerName,
+          customer_email: customerEmail,
+          customer_phone: customerPhone || null,
+          project_name: projectName || null,
+          items,
+          notes: notes || null,
+          status: "new",
+          source: "website_chat",
+        }).select("id, quote_number").single();
+
+        if (error) return JSON.stringify({ error: "Failed to create quote request: " + error.message });
+        return JSON.stringify({
+          success: true,
+          quote_number: data.quote_number,
+          message: `Quote request ${data.quote_number} created successfully. Our team will review and send a formal quote.`,
+        });
+      }
+
+      default:
+        return JSON.stringify({ error: `Unknown tool: ${name}` });
+    }
+  } catch (e: any) {
+    console.error(`Tool ${name} error:`, e.message);
+    return JSON.stringify({ error: `Tool error: ${e.message}` });
+  }
+}
+
+// ─── SSE Stream Parser for Tool Calls ───
+async function bufferStreamForToolCalls(response: Response): Promise<{
+  content: string;
+  toolCalls: Array<{ id: string; function: { name: string; arguments: string } }>;
+  finishReason: string | null;
+}> {
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let content = "";
+  const toolCallsMap: Record<number, { id: string; function: { name: string; arguments: string } }> = {};
+  let finishReason: string | null = null;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    let idx: number;
+    while ((idx = buffer.indexOf("\n")) !== -1) {
+      let line = buffer.slice(0, idx);
+      buffer = buffer.slice(idx + 1);
+      if (line.endsWith("\r")) line = line.slice(0, -1);
+      if (!line.startsWith("data: ")) continue;
+      const json = line.slice(6).trim();
+      if (json === "[DONE]") continue;
+
+      try {
+        const parsed = JSON.parse(json);
+        const choice = parsed.choices?.[0];
+        if (!choice) continue;
+
+        if (choice.finish_reason) finishReason = choice.finish_reason;
+
+        const delta = choice.delta;
+        if (delta?.content) content += delta.content;
+
+        if (delta?.tool_calls) {
+          for (const tc of delta.tool_calls) {
+            const i = tc.index ?? 0;
+            if (!toolCallsMap[i]) {
+              toolCallsMap[i] = { id: tc.id || `call_${i}`, function: { name: "", arguments: "" } };
+            }
+            if (tc.function?.name) toolCallsMap[i].function.name += tc.function.name;
+            if (tc.function?.arguments) toolCallsMap[i].function.arguments += tc.function.arguments;
+          }
+        }
+      } catch { /* partial JSON, skip */ }
+    }
+  }
+
+  return {
+    content,
+    toolCalls: Object.values(toolCallsMap),
+    finishReason,
+  };
+}
+
+// ─── Main Handler ───
+serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  try {
+    // Rate limit
+    const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+               req.headers.get("cf-connecting-ip") || "unknown";
+    if (isRateLimited(ip)) {
+      return new Response(JSON.stringify({ error: "Too many requests. Please wait a moment." }), {
+        status: 429,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const { messages } = await req.json();
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return new Response(JSON.stringify({ error: "Messages required" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const trimmed = messages.slice(-MAX_CONVERSATION_MESSAGES);
+
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    let wp: WPClient | null = null;
+    try { wp = new WPClient(); } catch { /* WP not configured, tools will gracefully fail */ }
+
+    // ─── First AI Call (with tools) ───
+    const firstResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-3-flash-preview",
+        messages: [{ role: "system", content: SYSTEM_PROMPT }, ...trimmed],
+        tools,
+        stream: true,
+      }),
+    });
+
+    if (!firstResponse.ok) {
+      const status = firstResponse.status;
+      if (status === 429) {
+        return new Response(JSON.stringify({ error: "Service is busy. Please try again." }), {
+          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (status === 402) {
+        return new Response(JSON.stringify({ error: "Service temporarily unavailable." }), {
+          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      console.error("AI gateway error:", status, await firstResponse.text());
+      return new Response(JSON.stringify({ error: "Chat service temporarily unavailable" }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Buffer the first response to check for tool calls
+    const firstResult = await bufferStreamForToolCalls(firstResponse);
+
+    // ─── No tool calls → stream the content directly ───
+    if (firstResult.toolCalls.length === 0) {
+      // Re-do the call without tools to get a clean stream for the client
+      const streamResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-3-flash-preview",
+          messages: [{ role: "system", content: SYSTEM_PROMPT }, ...trimmed],
+          stream: true,
+        }),
+      });
+
+      return new Response(streamResponse.body, {
+        headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
+      });
+    }
+
+    // ─── Execute tool calls in parallel ───
+    console.log(`Executing ${firstResult.toolCalls.length} tool call(s)...`);
+    const toolResults = await Promise.all(
+      firstResult.toolCalls.map(async (tc) => {
+        let args: Record<string, any> = {};
+        try { args = JSON.parse(tc.function.arguments); } catch { /* empty args */ }
+        console.log(`Tool: ${tc.function.name}`, args);
+        const result = await executeTool(tc.function.name, args, supabase, wp);
+        return { tool_call_id: tc.id, role: "tool" as const, content: result };
+      }),
+    );
+
+    // ─── Second AI Call with tool results (streamed to client) ───
+    const followUpMessages = [
+      { role: "system", content: SYSTEM_PROMPT },
+      ...trimmed,
+      {
+        role: "assistant",
+        content: firstResult.content || null,
+        tool_calls: firstResult.toolCalls.map((tc) => ({
+          id: tc.id,
+          type: "function",
+          function: { name: tc.function.name, arguments: tc.function.arguments },
+        })),
+      },
+      ...toolResults,
+    ];
+
+    const finalResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-3-flash-preview",
+        messages: followUpMessages,
+        stream: true,
+      }),
+    });
+
+    if (!finalResponse.ok) {
+      console.error("Final AI call error:", finalResponse.status);
+      // Fallback: return a basic response
+      const fallback = `data: ${JSON.stringify({ choices: [{ delta: { content: firstResult.content || "I found some information for you but had trouble formatting the response. Please try again." } }] })}\n\ndata: [DONE]\n\n`;
+      return new Response(fallback, {
+        headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
+      });
+    }
+
+    return new Response(finalResponse.body, {
+      headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
+    });
+  } catch (e) {
+    console.error("website-agent error:", e);
+    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+});

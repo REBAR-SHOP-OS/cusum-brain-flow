@@ -5106,6 +5106,54 @@ export type Database = {
         }
         Relationships: []
       }
+      quote_requests: {
+        Row: {
+          chat_transcript: Json | null
+          company_id: string
+          created_at: string
+          customer_email: string | null
+          customer_name: string
+          customer_phone: string | null
+          id: string
+          items: Json | null
+          notes: string | null
+          project_name: string | null
+          quote_number: string
+          source: string
+          status: string
+        }
+        Insert: {
+          chat_transcript?: Json | null
+          company_id?: string
+          created_at?: string
+          customer_email?: string | null
+          customer_name: string
+          customer_phone?: string | null
+          id?: string
+          items?: Json | null
+          notes?: string | null
+          project_name?: string | null
+          quote_number: string
+          source?: string
+          status?: string
+        }
+        Update: {
+          chat_transcript?: Json | null
+          company_id?: string
+          created_at?: string
+          customer_email?: string | null
+          customer_name?: string
+          customer_phone?: string | null
+          id?: string
+          items?: Json | null
+          notes?: string | null
+          project_name?: string | null
+          quote_number?: string
+          source?: string
+          status?: string
+        }
+        Relationships: []
+      }
       quotes: {
         Row: {
           company_id: string | null
