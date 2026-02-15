@@ -45,6 +45,17 @@ interface AuditResult {
   recommendations: Recommendation[];
 }
 
+interface MediaAuditItem {
+  id: number;
+  title: string;
+  source_url: string;
+  file_size_bytes: number | null;
+  width: number | null;
+  height: number | null;
+  mime_type: string;
+  issues: string[];
+}
+
 interface OptimizerResult {
   ok: boolean;
   dry_run: boolean;
@@ -58,6 +69,8 @@ interface OptimizerResult {
     changes: string[];
     images_fixed: number;
   }>;
+  media_audit: MediaAuditItem[];
+  media_audit_count: number;
 }
 
 function MetricCard({ label, value, unit, status }: { label: string; value: number | string; unit: string; status: "good" | "warning" | "critical" }) {
@@ -176,14 +189,14 @@ export function SpeedDashboard() {
                   <h3 className="text-sm font-semibold">Image Optimizer</h3>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Adds lazy loading, decoding="async" to all images in posts, pages, and products.
+                  Adds lazy loading, decoding, fetchpriority, and width/height dimensions to all images.
                 </p>
                 <div className="flex gap-2">
                   <Button
                     size="sm"
                     variant="outline"
                     className="h-7 text-xs gap-1"
-                    onClick={() => optimizerMutation.mutate(true)}
+                    onClick={() => { setOptimizerMode("dry_run"); optimizerMutation.mutate(true); }}
                     disabled={optimizerMutation.isPending}
                   >
                     {optimizerMutation.isPending && optimizerMode === "dry_run" ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
@@ -225,7 +238,36 @@ export function SpeedDashboard() {
                 )}
               </Card>
 
-              {/* Issues */}
+              {/* Media Library Audit Results */}
+              {optimizerMutation.data?.media_audit && optimizerMutation.data.media_audit.length > 0 && (
+                <Card className="p-3 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-yellow-500" />
+                    <h3 className="text-sm font-semibold">Media Library: {optimizerMutation.data.media_audit_count} Oversized Images</h3>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    These images need server-side compression (ShortPixel/Imagify plugin required).
+                  </p>
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                    {optimizerMutation.data.media_audit.slice(0, 20).map((item) => (
+                      <div key={item.id} className="text-xs bg-muted rounded p-1.5">
+                        <span className="font-medium">{item.title}</span>
+                        <span className="text-muted-foreground ml-1">({item.mime_type})</span>
+                        {item.width && item.height && (
+                          <span className="text-muted-foreground ml-1">{item.width}×{item.height}</span>
+                        )}
+                        {item.file_size_bytes && (
+                          <span className="text-muted-foreground ml-1">{(item.file_size_bytes / 1024).toFixed(0)} KB</span>
+                        )}
+                        <ul className="mt-0.5 text-muted-foreground">
+                          {item.issues.map((issue, i) => <li key={i}>• {issue}</li>)}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              )}
+
               {audit.issues.length > 0 && (
                 <div className="space-y-1.5">
                   <h3 className="text-xs font-semibold text-muted-foreground uppercase">Issues</h3>
