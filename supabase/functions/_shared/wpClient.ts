@@ -44,6 +44,10 @@ export class WPClient {
     this.wcConsumerSecret = Deno.env.get("WC_CONSUMER_SECRET") || null;
   }
 
+  private isWcEndpoint(endpoint: string): boolean {
+    return endpoint.startsWith("/wc/v3");
+  }
+
   private async request(
     method: string,
     endpoint: string,
@@ -53,7 +57,7 @@ export class WPClient {
     await acquireSlot();
     try {
       // WC endpoints use a different base: /wp-json/wc/v3 instead of /wp-json/wp/v2
-      const base = endpoint.startsWith("/wc/v3/") || endpoint.startsWith("/wc/v3")
+      const base = this.isWcEndpoint(endpoint)
         ? this.baseUrl.replace(/\/wp\/v2\/?$/, "")
         : this.baseUrl;
       const url = new URL(`${base}${endpoint}`);
@@ -61,7 +65,7 @@ export class WPClient {
         Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
       }
 
-      const useWcAuth = endpoint.startsWith("/wc/v3/") && this.wcConsumerKey && this.wcConsumerSecret;
+      const useWcAuth = this.isWcEndpoint(endpoint) && this.wcConsumerKey && this.wcConsumerSecret;
 
       const headers: Record<string, string> = {};
       if (useWcAuth) {
@@ -77,7 +81,26 @@ export class WPClient {
         init.body = JSON.stringify(body);
       }
 
-      const res = await fetch(url.toString(), init);
+      let res = await fetch(url.toString(), init);
+
+      // Fallback: if WC auth failed with 401, retry with Basic Auth
+      if (useWcAuth && res.status === 401) {
+        console.warn("WC consumer key auth failed (401), retrying with Basic Auth...");
+        const fallbackUrl = new URL(`${base}${endpoint}`);
+        if (params) {
+          Object.entries(params).forEach(([k, v]) => fallbackUrl.searchParams.set(k, v));
+        }
+        const fallbackHeaders: Record<string, string> = { Authorization: this.authHeader };
+        if (body && (method === "POST" || method === "PUT" || method === "PATCH")) {
+          fallbackHeaders["Content-Type"] = "application/json";
+        }
+        res = await fetch(fallbackUrl.toString(), {
+          method,
+          headers: fallbackHeaders,
+          body: init.body,
+        });
+      }
+
       const text = await res.text();
 
       if (!res.ok) {
@@ -85,7 +108,8 @@ export class WPClient {
         try {
           const err = JSON.parse(text);
           throw new Error(`WP API ${res.status}: ${err.message || text}`);
-        } catch {
+        } catch (e) {
+          if (e instanceof Error && e.message.startsWith("WP API")) throw e;
           throw new Error(`WP API ${res.status}: ${text.slice(0, 300)}`);
         }
       }
@@ -134,6 +158,10 @@ export class WPClient {
     return this.get(`/pages/${id}`);
   }
 
+  async createPost(data: Record<string, unknown>) {
+    return this.post("/posts", data);
+  }
+
   async updatePost(id: string, data: Record<string, unknown>) {
     return this.put(`/posts/${id}`, data);
   }
@@ -144,44 +172,28 @@ export class WPClient {
 
   // ─── Convenience: WooCommerce REST API ───
 
-  private wcBase(): string {
-    // WooCommerce uses a different base path
-    // WP_BASE_URL is like https://rebar.shop/wp-json/wp/v2
-    // We need https://rebar.shop/wp-json/wc/v3
-    return this.baseUrl.replace(/\/wp\/v2\/?$/, "/wc/v3");
-  }
-
   async listProducts(params: Record<string, string> = {}) {
-    try {
-      return await this.get(
-        `/wc/v3/products`,
-        { per_page: "20", ...params },
-      );
-    } catch (e: any) {
-      if (e.message?.includes("404") || e.message?.includes("rest_no_route")) {
-        return { error: "WooCommerce not available on this site" };
-      }
-      throw e;
-    }
+    return this.get(`/wc/v3/products`, { per_page: "20", ...params });
   }
 
   async listOrders(params: Record<string, string> = {}) {
-    try {
-      return await this.get(`/wc/v3/orders`, { per_page: "20", ...params });
-    } catch (e: any) {
-      if (e.message?.includes("404") || e.message?.includes("rest_no_route")) {
-        return { error: "WooCommerce not available on this site" };
-      }
-      throw e;
-    }
+    return this.get(`/wc/v3/orders`, { per_page: "20", ...params });
   }
 
   async getProduct(id: string) {
     return this.get(`/wc/v3/products/${id}`);
   }
 
+  async createProduct(data: Record<string, unknown>) {
+    return this.post(`/wc/v3/products`, data);
+  }
+
   async updateProduct(id: string, data: Record<string, unknown>) {
     return this.put(`/wc/v3/products/${id}`, data);
+  }
+
+  async deleteProduct(id: string, force = false) {
+    return this.delete(`/wc/v3/products/${id}`, force ? { force: "true" } : {});
   }
 
   async getOrder(id: string) {

@@ -32,6 +32,9 @@ const TOOL_LABELS: Record<string, string> = {
   wp_update_product: "Update WooCommerce Product",
   wp_update_order_status: "Update WooCommerce Order",
   wp_create_redirect: "Create 301 Redirect",
+  wp_create_product: "Create WooCommerce Product",
+  wp_delete_product: "Delete WooCommerce Product",
+  wp_create_post: "Create WordPress Post",
 };
 
 export function useAdminChat(currentPage?: string) {

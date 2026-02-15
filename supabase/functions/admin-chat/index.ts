@@ -22,6 +22,9 @@ const WRITE_TOOLS = new Set([
   "wp_update_product",
   "wp_update_order_status",
   "wp_create_redirect",
+  "wp_create_product",
+  "wp_delete_product",
+  "wp_create_post",
 ]);
 
 const JARVIS_TOOLS = [
@@ -378,6 +381,109 @@ const JARVIS_TOOLS = [
       },
     },
   },
+  // ─── New Read Tools ───
+  {
+    type: "function",
+    function: {
+      name: "wp_get_product",
+      description: "Get full details of a single WooCommerce product by ID.",
+      parameters: {
+        type: "object",
+        properties: {
+          product_id: { type: "string", description: "WooCommerce product ID" },
+        },
+        required: ["product_id"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "wp_get_page",
+      description: "Get full details of a single WordPress page by ID.",
+      parameters: {
+        type: "object",
+        properties: {
+          page_id: { type: "string", description: "WordPress page ID" },
+        },
+        required: ["page_id"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "wp_get_post",
+      description: "Get full details of a single WordPress post by ID.",
+      parameters: {
+        type: "object",
+        properties: {
+          post_id: { type: "string", description: "WordPress post ID" },
+        },
+        required: ["post_id"],
+        additionalProperties: false,
+      },
+    },
+  },
+  // ─── New Write Tools (require confirmation) ───
+  {
+    type: "function",
+    function: {
+      name: "wp_create_product",
+      description: "Create a new WooCommerce product on rebar.shop. Requires confirmation.",
+      parameters: {
+        type: "object",
+        properties: {
+          name: { type: "string", description: "Product name" },
+          regular_price: { type: "string", description: "Regular price" },
+          description: { type: "string", description: "Product description (HTML)" },
+          short_description: { type: "string", description: "Short description (HTML)" },
+          status: { type: "string", enum: ["publish", "draft", "pending"], description: "Product status" },
+          stock_quantity: { type: "number", description: "Stock quantity" },
+          manage_stock: { type: "boolean", description: "Whether to manage stock" },
+          categories: { type: "string", description: "Comma-separated category IDs" },
+        },
+        required: ["name"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "wp_delete_product",
+      description: "Delete (trash) a WooCommerce product. Requires confirmation. Use wp_list_products or wp_get_product first.",
+      parameters: {
+        type: "object",
+        properties: {
+          product_id: { type: "string", description: "WooCommerce product ID" },
+          force: { type: "boolean", description: "True to permanently delete instead of trashing" },
+        },
+        required: ["product_id"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "wp_create_post",
+      description: "Create a new blog post on rebar.shop. Requires confirmation.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "Post title" },
+          content: { type: "string", description: "Post content (HTML)" },
+          status: { type: "string", enum: ["publish", "draft", "pending", "private"], description: "Post status" },
+          categories: { type: "string", description: "Comma-separated category IDs" },
+        },
+        required: ["title"],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 // ═══ READ TOOL EXECUTION ═══
@@ -495,6 +601,41 @@ async function executeReadTool(supabase: any, toolName: string, args: any): Prom
         });
       } catch (e: any) { return JSON.stringify({ error: e.message }); }
     }
+    // ─── New Read Tools ───
+    case "wp_get_product": {
+      try {
+        const wp = new WPClient();
+        const product = await wp.getProduct(args.product_id);
+        return JSON.stringify({
+          id: product.id, name: product.name, status: product.status, slug: product.slug,
+          price: product.price, regular_price: product.regular_price, sale_price: product.sale_price,
+          stock_quantity: product.stock_quantity, stock_status: product.stock_status,
+          description: product.description, short_description: product.short_description,
+          categories: product.categories, images: product.images?.map((i: any) => i.src),
+          permalink: product.permalink, sku: product.sku, weight: product.weight,
+        });
+      } catch (e: any) { return JSON.stringify({ error: e.message }); }
+    }
+    case "wp_get_page": {
+      try {
+        const wp = new WPClient();
+        const page = await wp.getPage(args.page_id);
+        return JSON.stringify({
+          id: page.id, title: page.title?.rendered, status: page.status, slug: page.slug,
+          content: page.content?.rendered?.slice(0, 2000), link: page.link, date: page.date,
+        });
+      } catch (e: any) { return JSON.stringify({ error: e.message }); }
+    }
+    case "wp_get_post": {
+      try {
+        const wp = new WPClient();
+        const post = await wp.getPost(args.post_id);
+        return JSON.stringify({
+          id: post.id, title: post.title?.rendered, status: post.status, slug: post.slug,
+          content: post.content?.rendered?.slice(0, 2000), link: post.link, date: post.date,
+        });
+      } catch (e: any) { return JSON.stringify({ error: e.message }); }
+    }
     default:
       return JSON.stringify({ error: `Unknown read tool: ${toolName}` });
   }
@@ -592,6 +733,37 @@ async function executeWriteTool(supabase: any, userId: string, companyId: string
       const result = await wp.post("/pages", { title: `Redirect: ${args.from_url}`, content: redirectHtml, slug, status: "publish" });
       await logWpChange(supabase, userId, "/pages", "POST", "redirect", String(result.id), null, { from: args.from_url, to: args.to_url });
       return { success: true, message: `Redirect created: ${args.from_url} → ${args.to_url}` };
+    }
+    case "wp_create_product": {
+      const wp = new WPClient();
+      const productData: Record<string, unknown> = { name: args.name };
+      if (args.regular_price) productData.regular_price = args.regular_price;
+      if (args.description) productData.description = args.description;
+      if (args.short_description) productData.short_description = args.short_description;
+      if (args.status) productData.status = args.status;
+      if (args.stock_quantity !== undefined) { productData.stock_quantity = args.stock_quantity; productData.manage_stock = true; }
+      if (args.manage_stock !== undefined) productData.manage_stock = args.manage_stock;
+      if (args.categories) productData.categories = args.categories.split(",").map((c: string) => ({ id: parseInt(c.trim()) }));
+      const result = await wp.createProduct(productData);
+      await logWpChange(supabase, userId, "/wc/v3/products", "POST", "product", String(result.id), null, productData);
+      return { success: true, message: `Product "${result.name}" created (ID: ${result.id})` };
+    }
+    case "wp_delete_product": {
+      const wp = new WPClient();
+      const prev = await wp.getProduct(args.product_id);
+      const result = await wp.deleteProduct(args.product_id, args.force === true);
+      await logWpChange(supabase, userId, `/wc/v3/products/${args.product_id}`, "DELETE", "product", args.product_id, prev, { deleted: true, force: args.force });
+      return { success: true, message: `Product "${prev.name || args.product_id}" ${args.force ? "permanently deleted" : "trashed"}` };
+    }
+    case "wp_create_post": {
+      const wp = new WPClient();
+      const postData: Record<string, unknown> = { title: args.title };
+      if (args.content) postData.content = args.content;
+      if (args.status) postData.status = args.status; else postData.status = "draft";
+      if (args.categories) postData.categories = args.categories.split(",").map((c: string) => parseInt(c.trim()));
+      const result = await wp.createPost(postData);
+      await logWpChange(supabase, userId, "/posts", "POST", "post", String(result.id), null, postData);
+      return { success: true, message: `Post "${result.title?.rendered || args.title}" created (ID: ${result.id})` };
     }
     default:
       throw new Error(`Unknown write tool: ${toolName}`);
@@ -798,10 +970,14 @@ PROACTIVE INTELLIGENCE:
 - Prefer tools over explanation when the request is actionable.
 - When reporting read results, summarize naturally — don't dump raw JSON.
 
-═══ WORDPRESS MANAGEMENT (rebar.shop) ═══
-- You can read and modify content on rebar.shop via WordPress REST API
-- READ tools: wp_list_posts, wp_list_pages, wp_list_products, wp_list_orders, wp_get_site_health — execute immediately
-- WRITE tools: wp_update_post, wp_update_page, wp_update_product, wp_update_order_status, wp_create_redirect — require user confirmation (same as ERP actions)
+═══ WORDPRESS & WOOCOMMERCE MANAGEMENT (rebar.shop) ═══
+- You have FULL read and write access to rebar.shop via WordPress REST API and WooCommerce REST API
+- READ tools: wp_list_posts, wp_list_pages, wp_list_products, wp_list_orders, wp_get_site_health, wp_get_product, wp_get_page, wp_get_post — execute immediately
+- WRITE tools: wp_update_post, wp_update_page, wp_update_product, wp_update_order_status, wp_create_redirect, wp_create_product, wp_delete_product, wp_create_post — require user confirmation
+- Use wp_get_product / wp_get_post / wp_get_page to get full details of a single item by ID
+- Use wp_create_product to create new WooCommerce products (name, price, description, stock, status)
+- Use wp_delete_product to trash or permanently delete products
+- Use wp_create_post to create new blog posts (title, content, status)
 - Use wp_list_* tools to inspect current state before making changes
 - When changing URLs/slugs, ALWAYS suggest creating a redirect first using wp_create_redirect
 - Never delete published content without explicit confirmation
@@ -1112,6 +1288,12 @@ function buildActionDescription(tool: string, args: any): string {
       return `Change order #${args.order_id} status → "${args.status}"`;
     case "wp_create_redirect":
       return `Create redirect: ${args.from_url} → ${args.to_url}`;
+    case "wp_create_product":
+      return `Create product: "${args.name}"${args.regular_price ? ` @ $${args.regular_price}` : ""}`;
+    case "wp_delete_product":
+      return `Delete product #${args.product_id}${args.force ? " (permanent)" : ""}`;
+    case "wp_create_post":
+      return `Create post: "${args.title}"${args.status ? ` (${args.status})` : ""}`;
     default:
       return `Execute ${tool}`;
   }
