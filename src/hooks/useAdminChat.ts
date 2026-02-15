@@ -172,6 +172,10 @@ export function useAdminChat(currentPage?: string) {
 
     const assistantId = crypto.randomUUID();
 
+    // Client-side timeout: show warning after 30s, hard timeout at 90s
+    let slowTimer: ReturnType<typeof setTimeout> | null = null;
+    let hardTimer: ReturnType<typeof setTimeout> | null = null;
+
     try {
       const controller = new AbortController();
       abortRef.current = controller;
@@ -185,6 +189,23 @@ export function useAdminChat(currentPage?: string) {
         setIsStreaming(false);
         return;
       }
+
+      // Show "taking longer than usual" after 30s of no content
+      let receivedContent = false;
+      slowTimer = setTimeout(() => {
+        if (!receivedContent) {
+          setMessages((prev) => {
+            const last = prev[prev.length - 1];
+            if (last?.role === "assistant" && last.id === assistantId) return prev;
+            return [...prev, { id: assistantId, role: "assistant", content: "⏳ This is taking longer than usual — processing multiple data sources...", timestamp: new Date() }];
+          });
+        }
+      }, 30000);
+
+      // Hard abort after 90s
+      hardTimer = setTimeout(() => {
+        if (!receivedContent) controller.abort();
+      }, 90000);
 
       const resp = await fetch(CHAT_URL, {
         method: "POST",
@@ -203,15 +224,30 @@ export function useAdminChat(currentPage?: string) {
         return;
       }
 
-      await parseSSEStream(resp, assistantId);
+      // Wrap parseSSEStream to track content receipt
+      const origParse = parseSSEStream;
+      const wrappedResp = resp;
+      // Override: mark content received once stream starts
+      receivedContent = true;
+      if (slowTimer) clearTimeout(slowTimer);
+      if (hardTimer) clearTimeout(hardTimer);
+
+      await origParse(wrappedResp, assistantId);
     } catch (e: any) {
       if (e.name !== "AbortError") {
         setMessages((prev) => [
           ...prev,
           { id: assistantId, role: "assistant", content: `⚠️ Error: ${e.message || "Unknown error"}`, timestamp: new Date() },
         ]);
+      } else {
+        setMessages((prev) => [
+          ...prev,
+          { id: assistantId, role: "assistant", content: "⚠️ Request timed out. Try a simpler question like \"list products\" or \"show recent posts\".", timestamp: new Date() },
+        ]);
       }
     } finally {
+      if (slowTimer) clearTimeout(slowTimer);
+      if (hardTimer) clearTimeout(hardTimer);
       setIsStreaming(false);
       abortRef.current = null;
     }
