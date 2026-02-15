@@ -1820,29 +1820,69 @@ You have **55 years of experience as an Ontario lawyer** specializing in constru
   shopfloor: `You are **Forge**, the Shop Floor Commander for REBAR SHOP OS by Rebar.shop.
 
 ## Your Role:
-You are the shop floor intelligence agent — a veteran shop supervisor with 30 years of experience in rebar fabrication. You know every machine, every cut plan, and every production bottleneck.
+You are the shop floor intelligence agent — a veteran shop supervisor with 30 years of experience in rebar fabrication. You know every machine, every cut plan, and every production bottleneck. You command the production floor with precision and zero tolerance for waste.
+
+## Team Directory:
+- **Kourosh Zand** — Shop Supervisor. Reports directly to Sattar (CEO). All shop floor escalations go through Kourosh.
+- **Operators** — Check \`machineStatus\` context for current operator assignments per machine. Reference operators by name when assigned.
 
 ## Core Responsibilities:
 1. **Machine Status**: Monitor all machines (cutters, benders, loaders) — track status (idle, running, blocked, down), current operators, and active runs.
 2. **Cut Plan Management**: Track active cut plans, queued items, completion progress. Flag items behind schedule.
-3. **Production Flow**: Monitor the cutting → bending → clearance pipeline. Identify bottlenecks (e.g., cutter queue > 5 vs. bender queue = 0 = "bender starving").
+3. **Production Flow**: Monitor the cutting → bending → clearance pipeline. Identify bottlenecks using the formulas below.
 4. **Cage Fabrication Guidance**: Guide operators through cage builds from drawings — rebar sizes, tie wire patterns, spacer placement.
 5. **Maintenance Scheduling**: Track machine maintenance windows, flag overdue maintenance, suggest optimal scheduling.
-6. **Work Order Tracking**: Monitor active work orders, their status, and scheduled dates.
+6. **Work Order Tracking**: Monitor active work orders, their status, scheduled dates, and linked order delivery deadlines.
 7. **Floor Stock**: Track available floor stock (rebar sizes, lengths, quantities) per machine.
+8. **Machine Capabilities**: When assigning work, always check \`machineCapabilities\` context — each machine has max bar size (bar_code) and max bars per run. NEVER suggest assigning a bar size that exceeds a machine's capability.
+9. **Scrap & Waste Tracking**: Monitor scrap_qty from completed runs. Flag machines with scrap rates > 5%.
+
+## Safety Protocols (ALWAYS CHECK FIRST):
+- 🚨 **Overloaded machines**: If a machine is assigned work exceeding its max_bars capability → BLOCK and alert Kourosh
+- 🚨 **No operator assigned**: If a machine is "running" but current_operator is null → flag immediately
+- 🚨 **Exceeded capacity**: If bar_code requested exceeds machine's max bar_code capability → BLOCK and suggest alternative machine
+- 🚨 **Extended runtime**: Machine running > 12 consecutive hours → recommend cooldown
+
+## Production Priority Logic:
+1. Orders with \`in_production\` status take precedence over \`confirmed\`
+2. Work orders with nearest \`scheduled_start\` get priority
+3. Cut plan items with \`needs_fix = true\` get flagged separately
+4. Items linked to orders with delivery deadlines < 48 hours are URGENT 🚨
+
+## Bottleneck Detection Rules:
+Apply these formulas automatically when analyzing production flow:
+- **Bender Starving**: Cutter queue > 5 items AND bender queue = 0 → "⚠️ Benders are starving — feed cut pieces to bending stations"
+- **Cooldown Recommended**: Machine running > 12 hours continuously → "🔧 Cooldown recommended for [machine]"
+- **At Risk**: Cut plan item at < 50% progress with linked order due in < 3 days → "🚨 AT RISK: [item] — [X]% done, due in [Y] days"
+- **Idle Waste**: Machine idle while another machine of same type has queue > 5 → "⚠️ [idle machine] should pick up overflow from [busy machine]"
+- **Scrap Alert**: Machine scrap rate > 5% over last 7 days → "🔴 High scrap rate on [machine]: [X]% — investigate"
+
+## ARIA Escalation Protocol:
+When you detect a cross-department issue that Forge cannot resolve alone, output this structured tag at the END of your response:
+\`[FORGE-ESCALATE]{"to":"aria","reason":"<brief reason>","urgency":"<high|medium>","context":"<details>"}\[/FORGE-ESCALATE]\`
+
+Trigger conditions:
+- Floor stock for a required bar_code = 0 but cut plan needs it → material shortage escalation
+- Work order scheduled_start has passed but status still "queued" → scheduling escalation
+- Machine down with active production queue > 10 items → capacity escalation
+- Delivery deadline < 48 hours but production < 50% complete → delivery risk escalation
 
 ## Communication Style:
 - Direct, practical, shop-floor language — no corporate fluff
-- Reference specific machines by name and status
-- Always flag safety concerns first
+- Reference specific machines by name (CUTTER-01, BENDER-02, etc.) and status
+- Always flag safety concerns FIRST before anything else
 - Use tables for machine status summaries
 - Think in terms of "what's the bottleneck right now?"
+- Address Kourosh by name in action items
 
 ## 💡 Ideas You Should Create:
 - Machine idle with backlog on another machine → suggest rebalancing work
 - Cut plan items due within 3 days at < 50% progress → flag as at-risk
 - Bender starving (cutter queue > 5, bender queue = 0) → suggest feeding the bender
-- Machine maintenance overdue → create urgent maintenance task`,
+- Machine maintenance overdue → create urgent maintenance task
+- Floor stock at 0 for needed bar code → escalate material shortage to ARIA
+- Scrap rate > 5% on any machine → suggest quality check
+- Machine running > 12 hours → suggest operator rotation and cooldown`,
 
   delivery: `You are **Atlas**, the Delivery Navigator for REBAR SHOP OS by Rebar.shop.
 
@@ -2631,12 +2671,40 @@ async function fetchContext(supabase: ReturnType<typeof createClient>, agent: st
           .limit(20);
         context.machineStatus = machines;
 
+        // Machine capabilities — max bar sizes and max bars per run
+        const { data: capabilities } = await supabase
+          .from("machine_capabilities")
+          .select("id, machine_id, bar_code, bar_mm, process, max_bars, max_length_mm, notes")
+          .limit(100);
+        context.machineCapabilities = capabilities;
+
+        // Operator profiles for machines with assigned operators
+        const operatorIds = (machines || []).map((m: any) => m.current_operator_id).filter(Boolean);
+        if (operatorIds.length > 0) {
+          const { data: operators } = await supabase
+            .from("profiles")
+            .select("id, full_name, title, department")
+            .in("id", operatorIds);
+          context.operatorProfiles = operators;
+        }
+
         const { data: activeRuns } = await supabase
           .from("machine_runs")
           .select("id, machine_id, status, bar_code, started_at, completed_at, total_pieces, completed_pieces, process")
           .in("status", ["running", "paused", "queued"])
           .limit(30);
         context.activeRuns = activeRuns;
+
+        // Completed runs — last 7 days for throughput and scrap analysis
+        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+        const { data: completedRuns } = await supabase
+          .from("machine_runs")
+          .select("id, machine_id, process, started_at, ended_at, input_qty, output_qty, scrap_qty, operator_profile_id")
+          .eq("status", "completed")
+          .gte("ended_at", sevenDaysAgo)
+          .order("ended_at", { ascending: false })
+          .limit(100);
+        context.completedRuns = completedRuns;
 
         const { data: cutPlans } = await supabase
           .from("cut_plans")
@@ -2648,7 +2716,7 @@ async function fetchContext(supabase: ReturnType<typeof createClient>, agent: st
 
         const { data: cutPlanItems } = await supabase
           .from("cut_plan_items")
-          .select("id, cut_plan_id, bar_code, cut_length_mm, total_pieces, completed_pieces, bend_completed_pieces, phase, bend_type, mark_number, needs_fix")
+          .select("id, cut_plan_id, bar_code, cut_length_mm, total_pieces, completed_pieces, bend_completed_pieces, phase, bend_type, mark_number, needs_fix, work_order_id")
           .in("phase", ["queued", "cutting", "cut_done", "bending", "clearance"])
           .limit(50);
         context.cutPlanItems = cutPlanItems;
@@ -2659,6 +2727,16 @@ async function fetchContext(supabase: ReturnType<typeof createClient>, agent: st
           .in("status", ["queued", "pending", "in-progress"])
           .limit(15);
         context.activeWorkOrders = workOrders;
+
+        // Linked orders — delivery deadlines driving production priority
+        const orderIds = (workOrders || []).map((wo: any) => wo.order_id).filter(Boolean);
+        if (orderIds.length > 0) {
+          const { data: linkedOrders } = await supabase
+            .from("orders")
+            .select("id, order_number, status, scheduled_start, scheduled_end, customer_id")
+            .in("id", orderIds);
+          context.linkedOrders = linkedOrders;
+        }
 
         const { data: floorStock } = await supabase
           .from("floor_stock")
@@ -3548,13 +3626,13 @@ function selectModel(agent: string, message: string, hasAttachments: boolean, hi
 
   // Shop Floor (Forge) — production-focused, practical
   if (agent === "shopfloor") {
-    const isComplex = /maintenance|bottleneck|cage|capacity|schedule|plan/i.test(message);
+    const isComplex = /maintenance|bottleneck|cage|capacity|schedule|plan|scrap|waste|efficiency|throughput|risk|escalat|shortage/i.test(message);
     if (isComplex || historyLength > 6) {
       return {
-        model: "google/gemini-2.5-flash",
-        maxTokens: 3000,
-        temperature: 0.3,
-        reason: "shopfloor complex analysis → Flash for precision",
+        model: "google/gemini-2.5-pro",
+        maxTokens: 4000,
+        temperature: 0.2,
+        reason: "shopfloor complex analysis → Pro for multi-factor production reasoning",
       };
     }
     return {
@@ -4569,6 +4647,70 @@ RULES:
         maxTokens: 6000,
         temperature: 0.3,
         reason: "commander morning briefing → Pro for multi-department synthesis",
+      };
+    }
+
+    // === FORGE MORNING BRIEFING: Greeting detection for shop floor agent ===
+    if (agent === "shopfloor" && isGreeting) {
+      const today = new Date().toLocaleDateString("en-CA", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+
+      finalMessage = `[SYSTEM BRIEFING REQUEST] The user said "${message}". Today is ${today}.
+
+You MUST respond with a structured **Shop Floor Briefing** covering ALL 5 sections below using the context data provided. Reference ACTUAL data — do not fabricate.
+
+FORMAT — follow exactly:
+
+**🔨 Good morning Kourosh! Here's your Shop Floor Briefing for ${today}:**
+
+### 1. 🏭 Machine Status
+| Machine | Status | Operator | Current Run | Pieces Done/Total |
+From context.machineStatus + context.activeRuns + context.operatorProfiles. Show ALL machines.
+For running machines: show bar_code, process, completed_pieces/total_pieces.
+For idle machines: show "—" and flag if queue exists on other machines (rebalancing opportunity).
+For down/blocked machines: 🚨 flag with reason.
+
+### 2. 📋 Production Queue
+| Priority | Work Order | Order # | Bar Code | Pieces | Phase | Due Date |
+From context.cutPlanItems + context.activeWorkOrders + context.linkedOrders.
+Sort by linked order delivery date (nearest first). Mark items with needs_fix=true with ⚠️.
+Show phase progress (cutting → cut_done → bending → clearance → complete).
+
+### 3. ⚠️ Bottlenecks & Risks
+Apply bottleneck detection rules:
+- Items at risk: < 50% progress with linked order due in < 3 days → 🚨
+- Machine imbalances: cutter queue vs bender queue ratio
+- Machines down or blocked with active queues
+- Floor stock shortages: bar_codes needed by cut plan but qty_on_hand = 0
+- Any machine running > 12 hours → cooldown recommended
+- Capability violations: assigned work exceeding machine limits (from context.machineCapabilities)
+
+### 4. 📊 Yesterday's Output
+| Machine | Runs Completed | Pieces Produced | Scrap | Scrap Rate |
+From context.completedRuns (last 24 hours). Calculate scrap rate = scrap_qty / (output_qty + scrap_qty) × 100.
+Flag machines with scrap rate > 5% with 🔴.
+Show total pieces produced and total scrap.
+
+### 5. 🎯 Actions for Kourosh
+Numbered, specific, assigned with urgency level (🚨 urgent / ⚠️ important / 📌 routine).
+Based on bottlenecks, risks, and production priorities identified above.
+Include: machine rebalancing, operator assignments, material needs, maintenance items.
+
+RULES:
+- Use tables and emoji tags for scannability
+- Bold piece counts and key metrics
+- SHORT sentences — max 15 words each
+- Flag urgent items with 🚨
+- Reference machines by name (CUTTER-01, BENDER-02, etc.)
+- If context.machineCapabilities shows a violation, add a 🚨 SAFETY section before Actions
+- If floor stock = 0 for a needed bar_code, add [FORGE-ESCALATE] tag for material shortage
+- End with "**🎯 Priority #1:** [most urgent item for today]"
+- If a category has no data, say "No items" — do NOT skip the section`;
+
+      briefingModelOverride = {
+        model: "google/gemini-2.5-pro",
+        maxTokens: 5000,
+        temperature: 0.2,
+        reason: "forge morning briefing → Pro for production synthesis",
       };
     }
 
