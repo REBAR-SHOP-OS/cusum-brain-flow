@@ -68,7 +68,7 @@ export default function WebsiteManager() {
                 ref={iframeRef}
                 src={`${SITE_ORIGIN}${currentPath}`}
                 className="w-full h-full border-0"
-                title="Website Preview"
+                title="Job Site Preview"
                 sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
               />
             </div>

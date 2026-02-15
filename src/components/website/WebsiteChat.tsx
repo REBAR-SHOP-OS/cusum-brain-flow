@@ -85,7 +85,7 @@ export function WebsiteChat({ currentPagePath, onWriteConfirmed }: WebsiteChatPr
     <div className="flex flex-col h-full bg-background">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-border shrink-0">
-        <h2 className="text-sm font-semibold">AI Website Editor</h2>
+        <h2 className="text-sm font-semibold">AI Job Site Editor</h2>
         {messages.length > 0 && (
           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={clearChat}>
             <Trash2 className="w-3.5 h-3.5" />
@@ -99,7 +99,7 @@ export function WebsiteChat({ currentPagePath, onWriteConfirmed }: WebsiteChatPr
           {messages.length === 0 && (
             <div className="text-center py-8 space-y-3">
               <p className="text-sm text-muted-foreground">
-                Ask me to edit your website
+                Ask me to edit your job site
               </p>
               <div className="flex flex-wrap gap-1.5 justify-center">
                 {QUICK_ACTIONS.map((q) => (
@@ -184,7 +184,7 @@ export function WebsiteChat({ currentPagePath, onWriteConfirmed }: WebsiteChatPr
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Edit the hero heading..."
+            placeholder="Edit your job site..."
             className="flex-1 bg-muted rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground"
             rows={1}
             disabled={isStreaming}
