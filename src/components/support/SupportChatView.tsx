@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Send, User, UserCheck, CheckCircle, MessageSquare, StickyNote } from "lucide-react";
+import { Send, User, UserCheck, CheckCircle, MessageSquare, StickyNote, Sparkles, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
@@ -41,6 +41,7 @@ export function SupportChatView({ conversationId }: Props) {
   const [input, setInput] = useState("");
   const [isNote, setIsNote] = useState(false);
   const [sending, setSending] = useState(false);
+  const [suggesting, setSuggesting] = useState(false);
   const [profileId, setProfileId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -145,6 +146,28 @@ export function SupportChatView({ conversationId }: Props) {
     else {
       toast.success("Assigned to you");
       setConvo((prev) => prev ? { ...prev, assigned_to: profileId, status: "assigned" } : null);
+    }
+  };
+
+  const suggestReply = async () => {
+    if (!conversationId || suggesting) return;
+    setSuggesting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("support-suggest", {
+        body: { conversation_id: conversationId },
+      });
+      if (error) throw error;
+      if (data?.suggestion) {
+        setInput(data.suggestion);
+        setIsNote(false);
+        toast.success("Suggestion loaded — review and send");
+      } else {
+        toast.info("No suggestion generated");
+      }
+    } catch (e: any) {
+      toast.error(e.message || "Failed to get suggestion");
+    } finally {
+      setSuggesting(false);
     }
   };
 
@@ -260,6 +283,18 @@ export function SupportChatView({ conversationId }: Props) {
           >
             <StickyNote className="w-3 h-3" /> Note
           </button>
+          <div className="ml-auto">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={suggestReply}
+              disabled={suggesting}
+              className="text-xs gap-1 h-7 text-primary"
+            >
+              {suggesting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+              {suggesting ? "Thinking…" : "Suggest Reply"}
+            </Button>
+          </div>
         </div>
         <div className="flex gap-2">
           <textarea
