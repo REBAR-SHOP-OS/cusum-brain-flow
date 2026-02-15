@@ -1,6 +1,6 @@
 // forwardRef cache bust
 import React, { useState, useRef, useEffect } from "react";
-import { MessageCircle, X, Send, Loader2, Square, Trash2 } from "lucide-react";
+import { MessageCircle, X, Send, Loader2, Square, Trash2, ShieldAlert, CheckCircle2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAdminChat } from "@/hooks/useAdminChat";
@@ -17,7 +17,7 @@ export const LiveChatWidget = React.forwardRef<HTMLDivElement, {}>(function Live
     return () => window.removeEventListener("toggle-live-chat", handler);
   }, []);
   const [input, setInput] = useState("");
-  const { messages, isStreaming, sendMessage, clearChat, cancelStream } = useAdminChat();
+  const { messages, isStreaming, sendMessage, clearChat, cancelStream, pendingAction, confirmAction, cancelAction } = useAdminChat();
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -36,7 +36,7 @@ export const LiveChatWidget = React.forwardRef<HTMLDivElement, {}>(function Live
   };
 
   const handleSend = () => {
-    if (!input.trim() || isStreaming) return;
+    if (!input.trim() || isStreaming || pendingAction) return;
     sendMessage(input.trim());
     setInput("");
   };
@@ -110,6 +110,27 @@ export const LiveChatWidget = React.forwardRef<HTMLDivElement, {}>(function Live
             </div>
           </ScrollArea>
 
+          {/* Confirmation Card */}
+          {pendingAction && (
+            <div className="px-3 pb-2 shrink-0">
+              <div className="border-l-4 border-l-yellow-500 bg-card rounded-lg p-2.5 space-y-1.5">
+                <div className="flex items-center gap-1.5">
+                  <ShieldAlert className="w-3.5 h-3.5 text-yellow-500 shrink-0" />
+                  <p className="text-[11px] font-semibold">Confirm action</p>
+                </div>
+                <p className="text-[11px] text-muted-foreground truncate">{pendingAction.tool}</p>
+                <div className="flex justify-end gap-1">
+                  <Button variant="outline" size="sm" onClick={cancelAction} disabled={isStreaming} className="h-6 text-[11px] gap-1 px-2">
+                    <XCircle className="w-3 h-3" /> Cancel
+                  </Button>
+                  <Button size="sm" onClick={confirmAction} disabled={isStreaming} className="h-6 text-[11px] gap-1 px-2 bg-yellow-600 hover:bg-yellow-700 text-white">
+                    <CheckCircle2 className="w-3 h-3" /> Approve
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Input */}
           <div className="border-t border-border p-3">
             <div className="flex gap-1.5 items-end">
@@ -118,17 +139,17 @@ export const LiveChatWidget = React.forwardRef<HTMLDivElement, {}>(function Live
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Type a message..."
+                placeholder={pendingAction ? "Approve or cancel above..." : "Type a message..."}
                 className="flex-1 min-h-[36px] max-h-[80px] text-xs resize-none bg-secondary rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary/30"
                 rows={1}
-                disabled={isStreaming}
+                disabled={isStreaming || !!pendingAction}
               />
               {isStreaming ? (
                 <Button size="sm" variant="destructive" className="h-9 w-9 p-0 shrink-0 rounded-lg" onClick={cancelStream}>
                   <Square className="w-3 h-3" />
                 </Button>
               ) : (
-                <Button size="sm" className="h-9 w-9 p-0 shrink-0 rounded-lg" onClick={handleSend} disabled={!input.trim()}>
+                <Button size="sm" className="h-9 w-9 p-0 shrink-0 rounded-lg" onClick={handleSend} disabled={!input.trim() || !!pendingAction}>
                   <Send className="w-3.5 h-3.5" />
                 </Button>
               )}

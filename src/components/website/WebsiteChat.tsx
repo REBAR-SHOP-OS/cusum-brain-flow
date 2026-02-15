@@ -47,7 +47,7 @@ export function WebsiteChat({ currentPagePath, onWriteConfirmed }: WebsiteChatPr
   }, [input]);
 
   const handleSend = useCallback(() => {
-    if (!input.trim() || isStreaming) return;
+    if (!input.trim() || isStreaming || pendingAction) return;
     // Prefix context about the page being viewed
     const contextPrefix = `[Currently viewing: rebar.shop${currentPagePath}]\n`;
     sendMessage(contextPrefix + input.trim());
@@ -184,17 +184,17 @@ export function WebsiteChat({ currentPagePath, onWriteConfirmed }: WebsiteChatPr
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Edit your job site..."
+            placeholder={pendingAction ? "Approve or cancel the action above..." : "Edit your job site..."}
             className="flex-1 bg-muted rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground"
             rows={1}
-            disabled={isStreaming}
+            disabled={isStreaming || !!pendingAction}
           />
           {isStreaming ? (
             <Button size="icon" variant="destructive" className="h-9 w-9 rounded-lg shrink-0" onClick={cancelStream}>
               <Square className="w-4 h-4" />
             </Button>
           ) : (
-            <Button size="icon" className="h-9 w-9 rounded-lg shrink-0" onClick={handleSend} disabled={!input.trim()}>
+            <Button size="icon" className="h-9 w-9 rounded-lg shrink-0" onClick={handleSend} disabled={!input.trim() || !!pendingAction}>
               <Send className="w-4 h-4" />
             </Button>
           )}
