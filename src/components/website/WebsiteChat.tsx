@@ -122,14 +122,14 @@ export function WebsiteChat({ currentPagePath, onWriteConfirmed }: WebsiteChatPr
             <div
               key={msg.id}
               className={cn(
-                "rounded-xl px-3 py-2 text-sm max-w-[95%]",
+                "rounded-xl px-3 py-2 text-sm max-w-[95%] overflow-hidden break-words",
                 msg.role === "user"
                   ? "ml-auto bg-primary text-primary-foreground"
                   : "mr-auto bg-muted text-foreground"
               )}
             >
               {msg.role === "assistant" ? (
-                <RichMarkdown content={msg.content} className="text-sm [&_p]:text-sm" />
+                <RichMarkdown content={msg.content} className="text-sm [&_p]:text-sm [&_pre]:overflow-x-auto [&_code]:break-all [&_p]:break-words" />
               ) : (
                 <p className="whitespace-pre-wrap">
                   {/* Strip the context prefix from display */}
