@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { AlertTriangle, Info, XCircle, Clock, Zap } from "lucide-react";
+import { AlertTriangle, Info, XCircle, Clock, Zap, Wrench, ThumbsDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +30,9 @@ async function resolveCustomerIdFromInvoice(entityId: string): Promise<string | 
   return data?.customer_id ?? null;
 }
 
+const isWebsiteSuggestion = (entityType: string | null) =>
+  entityType?.startsWith("wp_") ?? false;
+
 export const AgentSuggestionCard = React.forwardRef<HTMLDivElement, AgentSuggestionCardProps>(function AgentSuggestionCard({ suggestion, agentName, onAct, onSnooze, onDismiss }, ref) {
   const navigate = useNavigate();
   const [acting, setActing] = useState(false);
@@ -39,7 +42,16 @@ export const AgentSuggestionCard = React.forwardRef<HTMLDivElement, AgentSuggest
   const actions = suggestion.actions as { label: string; action: string; path?: string }[] | null;
   const primaryAction = actions?.[0];
 
+  const isWp = isWebsiteSuggestion(suggestion.entity_type);
+
   const handleAct = async () => {
+    // For website suggestions, navigate to /website with context
+    if (isWp) {
+      onAct(suggestion.id);
+      navigate(`/website?fix=${encodeURIComponent(suggestion.title)}`);
+      return;
+    }
+
     // For invoice suggestions, resolve customer and navigate to customer-action page
     if (suggestion.entity_type === "invoice" && suggestion.entity_id) {
       setActing(true);
@@ -62,6 +74,10 @@ export const AgentSuggestionCard = React.forwardRef<HTMLDivElement, AgentSuggest
       navigate(primaryAction.path);
     }
     onAct(suggestion.id);
+  };
+
+  const handleDecline = () => {
+    onDismiss(suggestion.id);
   };
 
   return (
@@ -95,16 +111,30 @@ export const AgentSuggestionCard = React.forwardRef<HTMLDivElement, AgentSuggest
         )}
 
         <div className="flex items-center gap-2 pt-1">
-          <Button size="sm" variant="default" className="h-7 text-xs gap-1" onClick={handleAct} disabled={acting}>
-            <Zap className="w-3 h-3" />
-            {acting ? "Loading..." : (primaryAction?.label ?? "Act")}
-          </Button>
+          {isWp ? (
+            <>
+              <Button size="sm" className="h-7 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleAct} disabled={acting}>
+                <Wrench className="w-3 h-3" />
+                {acting ? "Loading..." : "Fix"}
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 text-destructive hover:text-destructive" onClick={handleDecline}>
+                <ThumbsDown className="w-3 h-3" /> Decline
+              </Button>
+            </>
+          ) : (
+            <Button size="sm" variant="default" className="h-7 text-xs gap-1" onClick={handleAct} disabled={acting}>
+              <Zap className="w-3 h-3" />
+              {acting ? "Loading..." : (primaryAction?.label ?? "Act")}
+            </Button>
+          )}
           <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => onSnooze(suggestion.id)}>
             <Clock className="w-3 h-3" /> Snooze
           </Button>
-          <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 text-muted-foreground" onClick={() => onDismiss(suggestion.id)}>
-            <XCircle className="w-3 h-3" /> Dismiss
-          </Button>
+          {!isWp && (
+            <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 text-muted-foreground" onClick={() => onDismiss(suggestion.id)}>
+              <XCircle className="w-3 h-3" /> Dismiss
+            </Button>
+          )}
         </div>
       </CardContent>
     </Card>
