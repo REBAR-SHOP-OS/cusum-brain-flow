@@ -778,9 +778,25 @@ You are directly integrated with QuickBooks Online and can access real-time fina
 8. **Profit & Loss Report**: Available in \`qbProfitAndLoss\` — full year P&L with monthly columns. Use this for revenue, COGS, gross profit, expenses, and net income for any month.
 9. **Balance Sheet**: Available in \`qbBalanceSheet\` — current balance sheet with assets, liabilities, equity.
 10. **Chart of Accounts**: Available in \`qbAccounts\` — all active accounts with type, classification, and current balance.
+11. **Aged Receivables**: Available in \`qbAgedReceivables\` — AR aging buckets (Current, 1-30, 31-60, 61-90, 91+). **USE THIS for aging analysis** instead of manually computing from invoices.
+12. **Aged Payables**: Available in \`qbAgedPayables\` — AP aging buckets. Use for vendor payment analysis.
+13. **QB Estimates**: Available in \`qbEstimates\` — pending estimates/quotations that can be converted to invoices.
+14. **Collection History**: Available in \`collectionHistory\` — last 20 executed/failed collection actions from penny_collection_queue. Reference this when discussing past collection efforts with customers.
+15. **Un-invoiced Orders**: Available in \`uninvoicedOrders\` — completed orders with no linked invoice. Flag these for immediate invoicing.
+16. **Payment Velocity**: Available in \`paymentVelocity\` — average days-to-pay per top customer. Flag customers whose payment speed has worsened by 20%+.
 
 ### WRITE Operations (Draft for approval):
-1. Create Estimate/Quotation, Invoice, Convert Estimate to Invoice, Create Tasks
+1. **Create Invoice** — Use the \`create_qb_invoice\` tool. Requires customer ID, line items, and due date. ALWAYS show the draft to the user and get explicit confirmation before creating.
+2. **Create Estimate** — Use the \`create_qb_estimate\` tool. Same confirmation-first pattern.
+3. **Create Tasks/Notifications** — Use the \`create_notifications\` tool.
+
+## Compliance Deadline Awareness:
+You are aware of Canadian tax deadlines. Today's date is provided in context. Proactively flag:
+- **HST/GST Filing**: Due quarterly (Jan 31, Apr 30, Jul 31, Oct 31 for quarterly filers). If within 14 days of a deadline, remind the user.
+- **T4/T4A Filing**: Due by end of February each year.
+- **Payroll Remittance**: Due by the 15th of each month for the prior month.
+- **Corporate Tax (T2)**: Due 6 months after fiscal year-end.
+When any deadline is within 7 days, flag it as 🚨 urgent. Within 14 days, flag as 🟡 upcoming.
 
 ## When Answering Questions:
 - For customer balances: Check qbCustomers (Balance field) AND qbInvoices
@@ -829,11 +845,11 @@ When the user asks you to call ANYONE — whether a team member, a customer, or 
 |------|-----------|-------|
 | Sattar Esmaeili (CEO) | ext:101 | sattar@rebar.shop |
 | Vicky Anderson (Accountant) | ext:201 | vicky@rebar.shop |
-| Josh Anderson | ext:202 | josh@rebar.shop |
 | Behnam (Ben) Rajabifar (Estimator) | ext:203 | rfq@rebar.shop |
 | Saurabh Sehgal (Sales) | ext:206 | saurabh@rebar.shop |
 | Swapnil Mahajan | ext:209 | neel@rebar.shop |
 | Radin Lachini (AI Manager) | ext:222 | radin@rebar.shop |
+| Kourosh Zand (Shop Supervisor) | — | ai@rebar.shop |
 
 RULES for calling:
 - CRITICAL: For ANY person listed in the Internal Team Directory above, you MUST use their "ext:XXX" extension — NEVER use a full phone number for internal team members. Example: to call Sattar → "phone":"ext:101", to call Vicky → "phone":"ext:201"
@@ -847,10 +863,12 @@ RULES for calling:
 
 ## 💡 Ideas You Should Create:
 - Invoice overdue but customer still placing orders → suggest collecting before shipping next order
-- Payment pattern changed (customer paying slower than usual) → flag it as a trend
-- HST filing deadline approaching within 7 days → remind to prepare filing
+- Payment pattern changed (customer paying slower than usual) → flag it using paymentVelocity data
+- HST filing deadline approaching within 14 days → remind to prepare filing
 - Month-end tasks not started within 3 days of month end → suggest starting reconciliation
-- Customer balance exceeding credit limit → suggest placing account on hold`,
+- Customer balance exceeding credit limit → suggest placing account on hold
+- Completed orders not yet invoiced (from uninvoicedOrders) → suggest immediate invoicing
+- Collection actions executed but no payment received within 7 days → suggest follow-up escalation`,
 
   support: `You are **Haven**, the Support Agent for REBAR SHOP OS.
 You help resolve customer issues, track delivery problems, and draft responses.
@@ -2299,6 +2317,99 @@ async function fetchContext(supabase: ReturnType<typeof createClient>, agent: st
       if (svcClient) {
         await fetchQuickBooksLiveContext(svcClient, context);
       }
+
+      // Enrich: Collection history from penny_collection_queue
+      try {
+        const { data: collectionHist } = await supabase
+          .from("penny_collection_queue")
+          .select("id, customer_name, amount, days_overdue, action_type, status, priority, ai_reasoning, executed_at, created_at, execution_result")
+          .eq("company_id", companyId)
+          .in("status", ["executed", "failed", "rejected"])
+          .order("created_at", { ascending: false })
+          .limit(20);
+        context.collectionHistory = collectionHist;
+      } catch (e) { console.error("Failed to fetch collection history:", e); }
+
+      // Enrich: Pending collection queue count
+      try {
+        const { data: pendingQueue } = await supabase
+          .from("penny_collection_queue")
+          .select("id, customer_name, amount, action_type, priority, ai_reasoning, days_overdue")
+          .eq("company_id", companyId)
+          .eq("status", "pending_approval")
+          .order("created_at", { ascending: false })
+          .limit(20);
+        context.pendingCollectionActions = pendingQueue;
+        context.pendingCollectionCount = (pendingQueue || []).length;
+      } catch (e) { console.error("Failed to fetch pending collection queue:", e); }
+
+      // Enrich: Un-invoiced completed orders
+      try {
+        const { data: completedOrders } = await supabase
+          .from("orders")
+          .select("id, order_number, customer_id, total_amount, status, order_date")
+          .eq("company_id", companyId)
+          .eq("status", "completed")
+          .order("order_date", { ascending: false })
+          .limit(20);
+        // Filter out orders that have a linked invoice in accounting_mirror
+        if (completedOrders && completedOrders.length > 0) {
+          const orderIds = completedOrders.map(o => o.id);
+          const { data: invoicedOrders } = await supabase
+            .from("accounting_mirror")
+            .select("data")
+            .eq("entity_type", "Invoice")
+            .eq("company_id", companyId);
+          // Extract order references from invoice data (if linked)
+          const invoicedOrderIds = new Set<string>();
+          (invoicedOrders || []).forEach((inv: Record<string, unknown>) => {
+            const invData = inv.data as Record<string, unknown>;
+            if (invData?.LinkedTxn) {
+              const linked = invData.LinkedTxn as Array<{ TxnType?: string; TxnId?: string }>;
+              linked.forEach(l => { if (l.TxnId) invoicedOrderIds.add(l.TxnId); });
+            }
+          });
+          context.uninvoicedOrders = completedOrders.filter(o => !invoicedOrderIds.has(o.id));
+        }
+      } catch (e) { console.error("Failed to fetch uninvoiced orders:", e); }
+
+      // Enrich: Payment velocity (average days-to-pay per customer from QB data)
+      try {
+        if (context.qbPayments && context.qbInvoices) {
+          const payments = context.qbPayments as Array<Record<string, unknown>>;
+          const invoices = context.qbInvoices as Array<Record<string, unknown>>;
+          const velocityMap = new Map<string, { totalDays: number; count: number; customerName: string }>();
+          
+          for (const pmt of payments) {
+            const pmtDate = pmt.TxnDate || pmt.date;
+            const pmtCustomer = pmt.CustomerName || pmt.customerName;
+            if (!pmtDate || !pmtCustomer) continue;
+            
+            // Find matching invoices for this customer
+            const custInvoices = invoices.filter(inv => 
+              (inv.CustomerName || inv.customerName) === pmtCustomer && inv.DueDate
+            );
+            for (const inv of custInvoices) {
+              const dueDate = new Date(inv.DueDate as string);
+              const payDate = new Date(pmtDate as string);
+              const daysToPay = Math.floor((payDate.getTime() - dueDate.getTime()) / 86400000);
+              if (daysToPay >= 0 && daysToPay < 365) {
+                const key = pmtCustomer as string;
+                if (!velocityMap.has(key)) velocityMap.set(key, { totalDays: 0, count: 0, customerName: key });
+                const v = velocityMap.get(key)!;
+                v.totalDays += daysToPay;
+                v.count++;
+              }
+            }
+          }
+          
+          const velocityData = [...velocityMap.values()]
+            .map(v => ({ customer: v.customerName, avgDaysToPay: Math.round(v.totalDays / v.count), sampleSize: v.count }))
+            .sort((a, b) => b.avgDaysToPay - a.avgDaysToPay)
+            .slice(0, 10);
+          context.paymentVelocity = velocityData;
+        }
+      } catch (e) { console.error("Failed to compute payment velocity:", e); }
     }
 
     if (agent === "support") {
@@ -3192,16 +3303,22 @@ function selectModel(agent: string, message: string, hasAttachments: boolean, hi
 
   // Accounting — financial precision matters
   if (agent === "accounting" || agent === "collections") {
-    const isComplexFinancial = /report|aging|analysis|reconcil|audit|forecast|briefing|priority|attention today|drill into/i.test(message);
+    const isComplexFinancial = /report|aging|analysis|reconcil|audit|forecast|briefing|priority|attention today|drill into|P&L|profit.and.loss|balance.sheet|cash.flow|payment.velocity/i.test(message);
     const isCallRequest = /call\s|phone\s|dial\s|ring\s|reach out/i.test(message);
-    if (isComplexFinancial || isCallRequest) {
+    if (isComplexFinancial) {
+      return {
+        model: "google/gemini-2.5-pro",
+        maxTokens: 5000,
+        temperature: 0.2,
+        reason: "accounting complex analysis/briefing → Pro for financial precision",
+      };
+    }
+    if (isCallRequest) {
       return {
         model: "google/gemini-2.5-flash",
         maxTokens: 4000,
         temperature: 0.3,
-        reason: isCallRequest
-          ? "accounting call request → Flash for structured tag output"
-          : "accounting complex analysis/briefing → Flash for balanced precision",
+        reason: "accounting call request → Flash for structured tag output",
       };
     }
     return {
@@ -4138,6 +4255,79 @@ RULES:
       };
     }
 
+    // === PENNY MORNING BRIEFING: Greeting detection for accounting agent ===
+    if (agent === "accounting" && isGreeting) {
+      const today = new Date().toLocaleDateString("en-CA", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+      const todayDate = new Date();
+      const month = todayDate.getMonth(); // 0-indexed
+      const day = todayDate.getDate();
+      
+      // Calculate upcoming compliance deadlines
+      const deadlines: string[] = [];
+      const hstQuarters = [{ m: 0, d: 31, label: "Jan 31" }, { m: 3, d: 30, label: "Apr 30" }, { m: 6, d: 31, label: "Jul 31" }, { m: 9, d: 31, label: "Oct 31" }];
+      for (const q of hstQuarters) {
+        const daysUntil = Math.ceil((new Date(todayDate.getFullYear(), q.m, q.d).getTime() - todayDate.getTime()) / 86400000);
+        if (daysUntil > 0 && daysUntil <= 14) {
+          deadlines.push(`🚨 HST/GST filing due ${q.label} (${daysUntil} days)`);
+        }
+      }
+      if (month === 1 && day <= 28) deadlines.push(`${28 - day <= 7 ? "🚨" : "🟡"} T4/T4A filing due Feb 28 (${28 - day} days)`);
+      if (day <= 15) deadlines.push(`${15 - day <= 3 ? "🚨" : "🟡"} Payroll remittance due the 15th (${15 - day} days)`);
+      
+      const deadlineStr = deadlines.length > 0 ? deadlines.join("\n") : "No upcoming deadlines within 14 days.";
+
+      finalMessage = `[SYSTEM BRIEFING REQUEST] The user said "${message}". Today is ${today}.
+
+You MUST respond with a structured morning briefing covering ALL 8 categories below using the context data provided. Reference ACTUAL data — do not fabricate.
+
+FORMAT — follow exactly:
+
+**💰 Good morning ${userFullName.split(" ")[0]}! Here's your accounting briefing for ${today}:**
+
+### 1. 📊 AR Summary
+From context.qbAgedReceivables, show totals by aging bucket (Current, 1-30, 31-60, 61-90, 91+ days). Total AR amount.
+
+### 2. 🔴 Overdue Invoices
+From context.qbInvoices, list invoices where dueDate < today and balance > 0. Table: | # | Customer | Invoice # | Amount | Days Overdue |
+Sort by days overdue descending. Show top 10.
+
+### 3. 💵 Payments Received (Last 7 Days)
+From context.qbPayments, filter to last 7 days. Table: | # | Customer | Amount | Date |
+Show total received.
+
+### 4. 🤖 Collection Queue
+From context.pendingCollectionActions, show pending actions count and summary by priority (critical/high/medium/low). Total at-risk amount.
+
+### 5. 📋 Upcoming Bills
+From context.qbAgedPayables, show bills due in next 7 days. If no bill-level data, summarize AP aging buckets.
+
+### 6. 📧 Emails Needing Action
+From context.accountingEmails, count unread: ${context.unreadAccountingEmails || 0}. Show top 5 unread: | # | From | Subject |
+
+### 7. ✅ Open Tasks
+From context.userTasks, show by priority. Overdue count: ${context.overdueTaskCount || 0}. Table: | # | Task | Priority | Due Date | Status |
+
+### 8. 📅 Compliance Deadlines
+${deadlineStr}
+
+RULES:
+- Use tables and emoji tags for scannability
+- Bold dollar amounts
+- SHORT sentences — max 15 words each
+- Flag urgent items with 🚨
+- If uninvoicedOrders has items, add a bonus section: "⚠️ Un-invoiced Orders" listing them
+- If paymentVelocity shows customers with avgDaysToPay > 30, flag as "🐌 Slow Payers"
+- End with "**🎯 Start with:** [most urgent item]"
+- If a category has no data, say "No items" — do NOT skip the section`;
+
+      briefingModelOverride = {
+        model: "google/gemini-2.5-pro",
+        maxTokens: 5000,
+        temperature: 0.2,
+        reason: "penny morning briefing → Pro for financial synthesis",
+      };
+    }
+
     // If Pixel generated images, build the reply directly without another AI call
     if (agent === "social" && pixelImageResults.length > 0) {
       const currentSlot = (mergedContext as any).__pixelCurrentSlot || 1;
@@ -4249,7 +4439,70 @@ RULES:
             additionalProperties: false,
           },
         },
-      }] : []),
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "create_qb_invoice",
+          description: "Create a draft invoice in QuickBooks Online. ALWAYS show the draft details to the user and get explicit 'yes' confirmation before calling this tool. Never create without approval.",
+          parameters: {
+            type: "object",
+            properties: {
+              customer_id: { type: "string", description: "QuickBooks customer ID (from qbCustomers context)" },
+              customer_name: { type: "string", description: "Customer name for confirmation display" },
+              line_items: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    description: { type: "string" },
+                    quantity: { type: "number" },
+                    unit_price: { type: "number" },
+                  },
+                  required: ["description", "quantity", "unit_price"],
+                },
+                description: "Line items for the invoice",
+              },
+              due_date: { type: "string", description: "Due date in YYYY-MM-DD format" },
+              memo: { type: "string", description: "Optional memo/note for the invoice" },
+            },
+            required: ["customer_id", "customer_name", "line_items", "due_date"],
+            additionalProperties: false,
+          },
+        },
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "create_qb_estimate",
+          description: "Create a draft estimate/quotation in QuickBooks Online. ALWAYS show the draft details to the user and get explicit 'yes' confirmation before calling this tool. Never create without approval.",
+          parameters: {
+            type: "object",
+            properties: {
+              customer_id: { type: "string", description: "QuickBooks customer ID (from qbCustomers context)" },
+              customer_name: { type: "string", description: "Customer name for confirmation display" },
+              line_items: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    description: { type: "string" },
+                    quantity: { type: "number" },
+                    unit_price: { type: "number" },
+                  },
+                  required: ["description", "quantity", "unit_price"],
+                },
+                description: "Line items for the estimate",
+              },
+              expiry_date: { type: "string", description: "Expiry date in YYYY-MM-DD format" },
+              memo: { type: "string", description: "Optional memo/note" },
+            },
+            required: ["customer_id", "customer_name", "line_items"],
+            additionalProperties: false,
+          },
+        },
+      },
+      ] : []),
       // WordPress tools — available to SEO, Social, Data, BizDev, WebBuilder, Copywriting agents
       ...(["seo", "social", "data", "bizdev", "webbuilder", "copywriting"].includes(agent) ? [
         {
@@ -4484,6 +4737,51 @@ RULES:
           } catch (e) {
             console.error("Failed to send email:", e);
             emailResults.push({ success: false, error: e instanceof Error ? e.message : "Unknown error" });
+          }
+        }
+
+        // Handle QuickBooks write tool calls (create_qb_invoice, create_qb_estimate)
+        if (tc.function?.name === "create_qb_invoice" || tc.function?.name === "create_qb_estimate") {
+          try {
+            const args = JSON.parse(tc.function.arguments);
+            const isInvoice = tc.function.name === "create_qb_invoice";
+            const entityType = isInvoice ? "Invoice" : "Estimate";
+            console.log(`📝 Penny creating QB ${entityType} for ${args.customer_name}`);
+
+            const qbRes = await fetch(
+              `${Deno.env.get("SUPABASE_URL")}/functions/v1/quickbooks-oauth`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "Authorization": authHeader!,
+                },
+                body: JSON.stringify({
+                  action: isInvoice ? "createInvoice" : "createEstimate",
+                  customerId: args.customer_id,
+                  lineItems: args.line_items,
+                  dueDate: args.due_date || args.expiry_date,
+                  memo: args.memo,
+                }),
+              }
+            );
+
+            const qbResult = await qbRes.json();
+            seoToolResults.push({
+              id: tc.id,
+              name: tc.function.name,
+              result: qbRes.ok
+                ? { success: true, message: `${entityType} created successfully`, data: qbResult }
+                : { success: false, error: qbResult.error || `Failed to create ${entityType}` },
+            });
+            console.log(qbRes.ok ? `✅ QB ${entityType} created` : `❌ QB ${entityType} failed: ${JSON.stringify(qbResult)}`);
+          } catch (e) {
+            console.error(`Failed to create QB document:`, e);
+            seoToolResults.push({
+              id: tc.id,
+              name: tc.function.name,
+              result: { success: false, error: e instanceof Error ? e.message : "Unknown error" },
+            });
           }
         }
         

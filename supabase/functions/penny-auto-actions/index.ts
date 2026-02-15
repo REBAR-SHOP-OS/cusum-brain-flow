@@ -18,6 +18,23 @@ serve(async (req) => {
     if (!profile?.company_id) return json({ error: "No company found" }, 400);
     const companyId = profile.company_id;
 
+    // Load configurable thresholds from comms_config (penny_config JSON field)
+    let thresholds = { email_reminder: 7, call_collection: 14, send_invoice: 30, escalate: 60 };
+    try {
+      const { data: config } = await supabase
+        .from("comms_config")
+        .select("response_thresholds_hours")
+        .eq("company_id", companyId)
+        .single();
+      if (config?.response_thresholds_hours) {
+        const custom = config.response_thresholds_hours as Record<string, unknown>;
+        if (custom.penny_thresholds) {
+          const pt = custom.penny_thresholds as Record<string, number>;
+          thresholds = { ...thresholds, ...pt };
+        }
+      }
+    } catch (_e) { /* use defaults */ }
+
     // Load overdue invoices from accounting_mirror
     const { data: overdueInvoices } = await supabase
       .from("accounting_mirror")
@@ -41,14 +58,17 @@ serve(async (req) => {
       (customers || []).forEach(c => { if (c.name) customerNameMap.set(c.id, c.name); });
     }
 
-    // Load existing pending actions to deduplicate
+    // Load existing pending actions to deduplicate (by invoice_id AND customer_id)
     const { data: existingActions } = await supabase
       .from("penny_collection_queue")
-      .select("invoice_id")
+      .select("invoice_id, customer_name")
       .eq("company_id", companyId)
       .eq("status", "pending_approval");
 
     const existingInvoiceIds = new Set((existingActions || []).map(a => a.invoice_id));
+    
+    // Customer-level dedup: track which customers already have a pending consolidated action
+    const existingCustomerPending = new Set((existingActions || []).map(a => a.customer_name));
 
     // Load customer contacts for email/phone
     const customerIds = [...new Set(overdueInvoices.map(i => i.customer_id).filter(Boolean))];
@@ -64,67 +84,126 @@ serve(async (req) => {
     });
 
     const now = new Date();
-    const actionsToQueue: Record<string, unknown>[] = [];
+
+    // Group overdue invoices by customer_id for consolidated actions
+    const customerInvoiceGroups = new Map<string, {
+      customerName: string;
+      customerId: string | null;
+      invoices: { docNumber: string; quickbooksId: string; balance: number; daysOverdue: number; dueDate: string }[];
+      totalAmount: number;
+      maxDaysOverdue: number;
+    }>();
 
     for (const inv of overdueInvoices) {
       const invData = inv.data as Record<string, unknown>;
       const dueDate = invData?.DueDate ? new Date(invData.DueDate as string) : null;
       if (!dueDate || dueDate >= now) continue;
 
+      const daysOverdue = Math.floor((now.getTime() - dueDate.getTime()) / 86400000);
+      if (daysOverdue < thresholds.email_reminder) continue;
+
       const invoiceRef = inv.quickbooks_id;
       if (existingInvoiceIds.has(invoiceRef)) continue;
 
-      const daysOverdue = Math.floor((now.getTime() - dueDate.getTime()) / 86400000);
       const customerRef = invData?.CustomerRef as { name?: string; value?: string } | undefined;
       const customerName = (inv.customer_id ? customerNameMap.get(inv.customer_id) : undefined) ?? customerRef?.name ?? "Unknown Customer";
-      const contact = inv.customer_id ? contactMap.get(inv.customer_id) : undefined;
+      const groupKey = inv.customer_id || customerName;
+
+      // Skip if this customer already has a pending consolidated action
+      if (existingCustomerPending.has(customerName)) continue;
+
+      if (!customerInvoiceGroups.has(groupKey)) {
+        customerInvoiceGroups.set(groupKey, {
+          customerName,
+          customerId: inv.customer_id,
+          invoices: [],
+          totalAmount: 0,
+          maxDaysOverdue: 0,
+        });
+      }
+      const group = customerInvoiceGroups.get(groupKey)!;
+      group.invoices.push({
+        docNumber: (invData?.DocNumber as string) || invoiceRef,
+        quickbooksId: invoiceRef,
+        balance: inv.balance || 0,
+        daysOverdue,
+        dueDate: (invData?.DueDate as string) || "",
+      });
+      group.totalAmount += inv.balance || 0;
+      group.maxDaysOverdue = Math.max(group.maxDaysOverdue, daysOverdue);
+    }
+
+    // Build ONE consolidated action per customer
+    const actionsToQueue: Record<string, unknown>[] = [];
+
+    for (const [, group] of customerInvoiceGroups) {
+      const { customerName, customerId, invoices, totalAmount, maxDaysOverdue } = group;
+      const contact = customerId ? contactMap.get(customerId) : undefined;
+      const invoiceList = invoices.map(i => `#${i.docNumber} ($${i.balance.toLocaleString()}, ${i.daysOverdue}d)`).join(", ");
 
       let actionType: string;
       let priority: string;
       let reasoning: string;
 
-      if (daysOverdue >= 60) {
+      if (maxDaysOverdue >= thresholds.escalate) {
         actionType = "escalate";
         priority = "critical";
-        reasoning = `Invoice #${invData?.DocNumber || invoiceRef} is ${daysOverdue} days overdue ($${inv.balance}). This requires CEO-level escalation.`;
-      } else if (daysOverdue >= 30) {
+        reasoning = `${customerName} has ${invoices.length} overdue invoice(s) totaling $${totalAmount.toLocaleString()} (oldest: ${maxDaysOverdue} days). Requires escalation. Invoices: ${invoiceList}`;
+      } else if (maxDaysOverdue >= thresholds.send_invoice) {
         actionType = "send_invoice";
         priority = "high";
-        reasoning = `Invoice #${invData?.DocNumber || invoiceRef} is ${daysOverdue} days overdue. Re-sending with a firm payment request.`;
-      } else if (daysOverdue >= 14) {
+        reasoning = `${customerName} has ${invoices.length} overdue invoice(s) totaling $${totalAmount.toLocaleString()} (oldest: ${maxDaysOverdue} days). Re-sending with firm payment request. Invoices: ${invoiceList}`;
+      } else if (maxDaysOverdue >= thresholds.call_collection) {
         actionType = "call_collection";
         priority = "medium";
-        reasoning = `Invoice #${invData?.DocNumber || invoiceRef} is ${daysOverdue} days overdue. A direct phone call is recommended.`;
-      } else if (daysOverdue >= 7) {
+        reasoning = `${customerName} has ${invoices.length} overdue invoice(s) totaling $${totalAmount.toLocaleString()} (oldest: ${maxDaysOverdue} days). A phone call is recommended. Invoices: ${invoiceList}`;
+      } else {
         actionType = "email_reminder";
         priority = "low";
-        reasoning = `Invoice #${invData?.DocNumber || invoiceRef} is ${daysOverdue} days overdue. A friendly email reminder should suffice.`;
-      } else {
-        continue;
+        reasoning = `${customerName} has ${invoices.length} overdue invoice(s) totaling $${totalAmount.toLocaleString()} (oldest: ${maxDaysOverdue} days). A friendly email reminder should suffice. Invoices: ${invoiceList}`;
       }
 
-      // Generate draft content based on action type
-      const emailBody = actionType === "email_reminder" || actionType === "send_invoice"
-        ? generateEmailDraft(customerName, invData?.DocNumber as string, inv.balance || 0, daysOverdue, actionType)
-        : undefined;
+      // Generate AI-powered draft content via Lovable AI gateway
+      let emailBody: string | undefined;
+      let emailSubject: string | undefined;
+      let callScript: string | undefined;
 
-      const callScript = actionType === "call_collection"
-        ? generateCallScript(customerName, invData?.DocNumber as string, inv.balance || 0, daysOverdue)
-        : undefined;
+      if (actionType === "email_reminder" || actionType === "send_invoice") {
+        try {
+          const aiDraft = await generateAIDraft(customerName, invoices, totalAmount, maxDaysOverdue, actionType);
+          emailBody = aiDraft.body;
+          emailSubject = aiDraft.subject;
+        } catch (e) {
+          console.error("AI draft generation failed, using fallback:", e);
+          emailBody = generateEmailDraftFallback(customerName, invoices, totalAmount, maxDaysOverdue, actionType);
+          emailSubject = `Payment ${actionType === "send_invoice" ? "Notice" : "Reminder"}: ${invoices.length === 1 ? `Invoice #${invoices[0].docNumber}` : `${invoices.length} Invoices`}`;
+        }
+      }
+
+      if (actionType === "call_collection") {
+        try {
+          const aiScript = await generateAICallScript(customerName, invoices, totalAmount, maxDaysOverdue);
+          callScript = aiScript;
+        } catch (e) {
+          console.error("AI call script generation failed, using fallback:", e);
+          callScript = generateCallScriptFallback(customerName, invoices, totalAmount, maxDaysOverdue);
+        }
+      }
 
       actionsToQueue.push({
         company_id: companyId,
-        invoice_id: invoiceRef,
+        invoice_id: invoices[0].quickbooksId, // primary invoice
         customer_name: customerName,
         customer_email: contact?.email || null,
         customer_phone: contact?.phone || null,
-        amount: inv.balance || 0,
-        days_overdue: daysOverdue,
+        amount: totalAmount,
+        days_overdue: maxDaysOverdue,
         action_type: actionType,
         action_payload: {
-          invoice_doc_number: invData?.DocNumber,
-          due_date: invData?.DueDate,
-          ...(emailBody ? { email_body: emailBody, email_subject: `Payment Reminder: Invoice #${invData?.DocNumber}` } : {}),
+          consolidated: invoices.length > 1,
+          invoice_count: invoices.length,
+          invoices: invoices.map(i => ({ doc_number: i.docNumber, balance: i.balance, days_overdue: i.daysOverdue, due_date: i.dueDate })),
+          ...(emailBody ? { email_body: emailBody, email_subject: emailSubject } : {}),
           ...(callScript ? { call_script: callScript } : {}),
         },
         status: "pending_approval",
@@ -145,7 +224,7 @@ serve(async (req) => {
       }
     }
 
-    return json({ queued: actionsToQueue.length });
+    return json({ queued: actionsToQueue.length, consolidated_customers: customerInvoiceGroups.size });
   } catch (e) {
     if (e instanceof Response) return e;
     console.error("penny-auto-actions error:", e);
@@ -153,47 +232,138 @@ serve(async (req) => {
   }
 });
 
-function generateEmailDraft(customer: string, docNumber: string, amount: number, days: number, type: string): string {
+// AI-powered email draft generation via Lovable AI Gateway
+async function generateAIDraft(
+  customer: string,
+  invoices: { docNumber: string; balance: number; daysOverdue: number }[],
+  totalAmount: number,
+  maxDays: number,
+  type: string,
+): Promise<{ subject: string; body: string }> {
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_API_KEY) throw new Error("No API key");
+
+  const invoiceDetails = invoices.map(i => `Invoice #${i.docNumber}: $${i.balance.toLocaleString()}, ${i.daysOverdue} days overdue`).join("\n");
+  const tone = type === "send_invoice" ? "firm but professional" : "friendly and polite";
+
+  const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "google/gemini-2.5-flash-lite",
+      messages: [
+        { role: "system", content: `You are an AR collections assistant for a Canadian rebar manufacturing company. Write ${tone} collection emails. Be concise. Output ONLY valid JSON with "subject" and "body" keys. The body should be plain text (no HTML).` },
+        { role: "user", content: `Write a collection email to ${customer} for:\n${invoiceDetails}\n\nTotal outstanding: $${totalAmount.toLocaleString()}\nOldest overdue: ${maxDays} days\n\nSign off as the Accounts Receivable team at Rebar.shop.` },
+      ],
+      temperature: 0.3,
+      max_tokens: 800,
+    }),
+  });
+
+  if (!resp.ok) throw new Error(`AI gateway error: ${resp.status}`);
+  const data = await resp.json();
+  const content = data.choices?.[0]?.message?.content || "";
+  
+  // Parse JSON from response (handle markdown code blocks)
+  const jsonMatch = content.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    const parsed = JSON.parse(jsonMatch[0]);
+    return { subject: parsed.subject, body: parsed.body };
+  }
+  throw new Error("Could not parse AI response");
+}
+
+// AI-powered call script generation
+async function generateAICallScript(
+  customer: string,
+  invoices: { docNumber: string; balance: number; daysOverdue: number }[],
+  totalAmount: number,
+  maxDays: number,
+): Promise<string> {
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_API_KEY) throw new Error("No API key");
+
+  const invoiceDetails = invoices.map(i => `Invoice #${i.docNumber}: $${i.balance.toLocaleString()}, ${i.daysOverdue} days overdue`).join("\n");
+
+  const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "google/gemini-2.5-flash-lite",
+      messages: [
+        { role: "system", content: "You are an AR collections assistant for a Canadian rebar company. Write a brief, professional phone call script for collecting overdue payments. Include opening, key talking points, and voicemail script. Plain text only." },
+        { role: "user", content: `Write a call script for collecting from ${customer}:\n${invoiceDetails}\n\nTotal: $${totalAmount.toLocaleString()}\nOldest overdue: ${maxDays} days` },
+      ],
+      temperature: 0.3,
+      max_tokens: 600,
+    }),
+  });
+
+  if (!resp.ok) throw new Error(`AI gateway error: ${resp.status}`);
+  const data = await resp.json();
+  return data.choices?.[0]?.message?.content || generateCallScriptFallback(customer, invoices, totalAmount, maxDays);
+}
+
+// Fallback templates (used when AI generation fails)
+function generateEmailDraftFallback(
+  customer: string,
+  invoices: { docNumber: string; balance: number; daysOverdue: number }[],
+  totalAmount: number,
+  maxDays: number,
+  type: string,
+): string {
+  const invoiceList = invoices.map(i => `  • Invoice #${i.docNumber} — $${i.balance.toLocaleString()} (${i.daysOverdue} days overdue)`).join("\n");
+
   if (type === "send_invoice") {
     return `Dear ${customer},
 
-This is a follow-up regarding Invoice #${docNumber} for $${amount.toLocaleString()}, which is now ${days} days past due.
+This is a follow-up regarding ${invoices.length === 1 ? `Invoice #${invoices[0].docNumber}` : `${invoices.length} outstanding invoices`} totaling $${totalAmount.toLocaleString()}, now up to ${maxDays} days past due.
+
+${invoiceList}
 
 We kindly request immediate payment to avoid any disruption to your account. If payment has already been sent, please disregard this notice.
 
 Please contact us if you have any questions or need to discuss payment arrangements.
 
-Thank you for your prompt attention to this matter.
-
-Best regards`;
+Best regards,
+Accounts Receivable — Rebar.shop`;
   }
 
   return `Hi ${customer},
 
-This is a friendly reminder that Invoice #${docNumber} for $${amount.toLocaleString()} was due ${days} days ago.
+This is a friendly reminder that you have ${invoices.length === 1 ? `an outstanding invoice` : `${invoices.length} outstanding invoices`} totaling $${totalAmount.toLocaleString()}:
+
+${invoiceList}
 
 If payment has already been sent, please disregard this message. Otherwise, we'd appreciate payment at your earliest convenience.
 
-Please don't hesitate to reach out if you have any questions.
-
-Best regards`;
+Best regards,
+Accounts Receivable — Rebar.shop`;
 }
 
-function generateCallScript(customer: string, docNumber: string, amount: number, days: number): string {
+function generateCallScriptFallback(
+  customer: string,
+  invoices: { docNumber: string; balance: number; daysOverdue: number }[],
+  totalAmount: number,
+  maxDays: number,
+): string {
+  const invoiceList = invoices.map(i => `Invoice #${i.docNumber}: $${i.balance.toLocaleString()} (${i.daysOverdue} days)`).join(", ");
   return `COLLECTION CALL SCRIPT — ${customer}
 
-Opening: "Hi, this is [Your Name] from [Company]. I'm calling regarding Invoice #${docNumber} for $${amount.toLocaleString()}, which is ${days} days past due."
+Opening: "Hi, this is [Your Name] from Rebar.shop. I'm calling regarding ${invoices.length === 1 ? `Invoice #${invoices[0].docNumber}` : `${invoices.length} outstanding invoices`} totaling $${totalAmount.toLocaleString()}, up to ${maxDays} days past due."
+
+Invoices: ${invoiceList}
 
 If they answer:
-• Ask if they received the invoice
-• Confirm the amount and due date
+• Confirm they received the invoice(s)
+• Confirm the total amount: $${totalAmount.toLocaleString()}
 • Ask when payment can be expected
 • Offer payment plan if > 30 days overdue
 • Note the commitment date
 
 If voicemail:
 • Leave a brief message requesting a callback
-• Reference the invoice number and amount
+• Reference the total amount and number of invoices
 
 Follow-up: Log outcome and schedule next action.`;
 }
