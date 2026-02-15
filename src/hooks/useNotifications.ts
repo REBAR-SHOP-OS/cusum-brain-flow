@@ -170,8 +170,12 @@ export function useNotifications() {
 
   useEffect(() => {
     load();
-    requestNotificationPermission();
-    registerPushSubscription();
+    requestNotificationPermission().then(() => {
+      // Only register push if permission was actually granted
+      if ("Notification" in window && Notification.permission === "granted") {
+        registerPushSubscription();
+      }
+    });
   }, [load]);
 
   // Realtime subscription filtered by user_id
