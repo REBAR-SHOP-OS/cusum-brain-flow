@@ -255,3 +255,6 @@ verify_jwt = false
 
 [functions.support-chat]
 verify_jwt = false
+
+[functions.support-suggest]
+verify_jwt = false
