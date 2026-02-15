@@ -587,10 +587,10 @@ async function executeReadTool(supabase: any, toolName: string, args: any): Prom
     case "wp_get_site_health": {
       try {
         const wp = new WPClient();
-        const [posts, pages] = await Promise.all([
-          wp.listPosts({ per_page: "1" }).catch(() => []),
-          wp.listPages({ per_page: "1" }).catch(() => []),
-        ]);
+        let posts: any[] = [];
+        let pages: any[] = [];
+        try { posts = await wp.listPosts({ per_page: "1" }); } catch {}
+        try { pages = await wp.listPages({ per_page: "1" }); } catch {}
         let wooActive = false;
         try { await wp.listProducts({ per_page: "1" }); wooActive = true; } catch {}
         return JSON.stringify({
@@ -771,35 +771,41 @@ async function executeWriteTool(supabase: any, userId: string, companyId: string
 }
 
 async function logAction(supabase: any, userId: string, companyId: string, tool: string, args: any, result: any) {
-  await supabase.from("activity_events").insert({
-    company_id: companyId,
-    entity_type: "jarvis_action",
-    entity_id: args?.machine_id || args?.delivery_id || args?.lead_id || args?.cut_plan_id || args?.entity_id || crypto.randomUUID(),
-    event_type: `jarvis_${tool}`,
-    description: `JARVIS executed: ${tool} → ${result?.message || "done"}`,
-    actor_id: userId,
-    actor_type: "jarvis",
-    metadata: { tool, args, result },
-    source: "system",
-    dedupe_key: `jarvis:${tool}:${JSON.stringify(args)}:${new Date().toISOString().slice(0, 16)}`,
-  }).catch(() => {});
+  try {
+    await supabase.from("activity_events").insert({
+      company_id: companyId,
+      entity_type: "jarvis_action",
+      entity_id: args?.machine_id || args?.delivery_id || args?.lead_id || args?.cut_plan_id || args?.entity_id || crypto.randomUUID(),
+      event_type: `jarvis_${tool}`,
+      description: `JARVIS executed: ${tool} → ${result?.message || "done"}`,
+      actor_id: userId,
+      actor_type: "jarvis",
+      metadata: { tool, args, result },
+      source: "system",
+      dedupe_key: `jarvis:${tool}:${JSON.stringify(args)}:${new Date().toISOString().slice(0, 16)}`,
+    });
+  } catch (_) { /* non-critical logging */ }
 }
 
 async function logWpChange(
   supabase: any, userId: string, endpoint: string, method: string,
   entityType: string, entityId: string, previousState: any, newState: any, errorMsg?: string,
 ) {
-  await supabase.from("wp_change_log").insert({
-    user_id: userId,
-    endpoint,
-    method,
-    entity_type: entityType,
-    entity_id: entityId,
-    previous_state: previousState,
-    new_state: newState,
-    result: errorMsg ? "failed" : "success",
-    error_message: errorMsg || null,
-  }).catch((e: any) => console.error("wp_change_log insert error:", e.message));
+  try {
+    await supabase.from("wp_change_log").insert({
+      user_id: userId,
+      endpoint,
+      method,
+      entity_type: entityType,
+      entity_id: entityId,
+      previous_state: previousState,
+      new_state: newState,
+      result: errorMsg ? "failed" : "success",
+      error_message: errorMsg || null,
+    });
+  } catch (e: any) {
+    console.error("wp_change_log insert error:", e.message);
+  }
 }
 
 // ═══ MAIN HANDLER ═══
