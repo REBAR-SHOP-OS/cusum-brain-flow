@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import type { SeoSection } from "@/pages/SeoModule";
 
 const items: { id: SeoSection; label: string; icon: React.ElementType }[] = [
-  { id: "overview", label: "AI Dashboard", icon: BarChart3 },
+  { id: "overview", label: "Dashboard", icon: BarChart3 },
   { id: "keywords", label: "Keywords", icon: Search },
   { id: "pages", label: "Pages", icon: FileText },
   { id: "tasks", label: "Tasks", icon: CheckSquare },
@@ -19,7 +19,7 @@ export function SeoSidebar({ active, onNavigate }: Props) {
   return (
     <aside className="w-48 shrink-0 border-r border-border bg-card flex flex-col py-4 px-2 gap-1">
       <h2 className="text-xs font-bold tracking-widest text-muted-foreground uppercase px-2 mb-3">
-        Rebar AI SEO
+        SEO Module
       </h2>
       {items.map((item) => (
         <button
