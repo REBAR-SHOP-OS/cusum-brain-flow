@@ -246,3 +246,6 @@ verify_jwt = false
 
 [functions.seo-email-harvest]
 verify_jwt = false
+
+[functions.seo-task-execute]
+verify_jwt = false
