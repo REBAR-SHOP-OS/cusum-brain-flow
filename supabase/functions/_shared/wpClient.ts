@@ -28,6 +28,8 @@ function releaseSlot() {
 export class WPClient {
   private baseUrl: string;
   private authHeader: string;
+  private wcConsumerKey: string | null;
+  private wcConsumerSecret: string | null;
 
   constructor() {
     const url = Deno.env.get("WP_BASE_URL");
@@ -38,6 +40,8 @@ export class WPClient {
     }
     this.baseUrl = url.replace(/\/$/, "");
     this.authHeader = `Basic ${btoa(`${user}:${pass}`)}`;
+    this.wcConsumerKey = Deno.env.get("WC_CONSUMER_KEY") || null;
+    this.wcConsumerSecret = Deno.env.get("WC_CONSUMER_SECRET") || null;
   }
 
   private async request(
@@ -53,9 +57,15 @@ export class WPClient {
         Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
       }
 
-      const headers: Record<string, string> = {
-        Authorization: this.authHeader,
-      };
+      const useWcAuth = endpoint.startsWith("/wc/v3/") && this.wcConsumerKey && this.wcConsumerSecret;
+
+      const headers: Record<string, string> = {};
+      if (useWcAuth) {
+        url.searchParams.set("consumer_key", this.wcConsumerKey!);
+        url.searchParams.set("consumer_secret", this.wcConsumerSecret!);
+      } else {
+        headers.Authorization = this.authHeader;
+      }
       const init: RequestInit = { method, headers };
 
       if (body && (method === "POST" || method === "PUT" || method === "PATCH")) {
