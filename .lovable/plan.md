@@ -1,56 +1,80 @@
 
 
-## Fix: Notification Sound Still Not Playing on Other Devices
+## Fix: Audio Still Not Playing on iPhone 12
 
 ### Root Cause
 
-The current audio unlock pattern in `audioPlayer.ts` has three bugs that cause it to silently fail on many mobile devices:
+On iOS Safari, creating `new Audio()` before an `await` is **not enough**. iOS requires `.play()` itself to be called synchronously within the user gesture. Any `await` (like `fetch`) between the tap and `.play()` breaks the gesture chain, and iOS silently rejects the play call.
 
-1. **`{ once: true }` kills retries**: The unlock listeners fire only on the very first click/touch. If that first interaction happens before the module is loaded, or the AudioContext creation fails for any reason, unlock never happens again.
+The current code does:
+```
+tap -> new Audio() -> await fetch(...) -> audio.play()  // REJECTED by iOS
+```
 
-2. **Premature `unlocked = true`**: The flag is set to `true` immediately after creating the AudioContext, even if `audioCtx.state` is still `"suspended"`. The `resume()` call is fire-and-forget (`catch(() => {})`), so on iOS Safari the context often stays suspended and all subsequent `playNotificationSound()` calls silently fail.
+### Solution
 
-3. **No pre-loading**: Each notification fetches `mockingjay.mp3` from the network via `fetch()` + `decodeAudioData()`. On slow connections or first-time loads, there's a noticeable delay or timeout, and the sound never plays.
+Two-pronged fix:
 
-### Fixes
+**1. "Prime and replay" pattern for user-initiated audio (recordings, TTS)**
 
-**1. Robust unlock in `src/lib/audioPlayer.ts`**
+Instead of just creating the Audio element early, we must also call `.play()` synchronously during the gesture with a tiny silent audio data URI. After the async fetch completes, we pause, swap the src, and play again. iOS now considers the element "user-activated" and allows subsequent plays.
 
-- Remove `{ once: true }` -- keep listening until unlock actually succeeds
-- Only set `unlocked = true` after confirming `audioCtx.state === "running"`
-- After successful unlock, pre-fetch and cache the mockingjay.mp3 AudioBuffer so it's ready instantly
-- Add `await audioCtx.resume()` (not fire-and-forget) inside the unlock function
-- Manually remove listeners only after confirmed unlock
+```
+tap -> audio.src = silentDataURI -> audio.play() -> await fetch(...) -> audio.pause() -> audio.src = realBlob -> audio.play()  // ALLOWED
+```
 
-**2. Cache the decoded audio buffer**
+**2. Improve AudioContext unlock resilience for notification sounds**
 
-- Store the decoded `AudioBuffer` for `/mockingjay.mp3` in a module-level variable after the first successful decode
-- On subsequent plays, skip the `fetch()` + `decodeAudioData()` and play directly from cache
-- This eliminates network latency on repeat notifications
+Add an `"interrupted"` state handler on the AudioContext. iOS Safari suspends the context when switching tabs or after the screen locks. We need to re-resume it before each playback attempt and re-attach unlock listeners if the context gets interrupted.
 
-**3. Add console logging for diagnostics**
+### Changes
 
-- Log `[audioPlayer] unlocked` when the context transitions to running
-- Log `[audioPlayer] playing from cache` vs `[audioPlayer] fetching audio` so failures are visible in console on all devices
+**File: `src/lib/audioPlayer.ts`**
+- Add a tiny silent WAV as a base64 data URI constant
+- Export a new helper `primeMobileAudio()` that returns an Audio element already "primed" with a synchronous `.play()` call on the silent source
+- Add `statechange` listener on AudioContext to detect iOS interruptions and re-unlock
+- On `playNotificationSound`, always try `audioCtx.resume()` first even if `unlocked` is true (handles iOS tab-switch suspensions)
+
+**File: `src/components/inbox/CallDetailView.tsx`**
+- Replace `const audio = new Audio()` with the prime-and-replay pattern:
+  - Synchronously set silent data URI and call `.play()` 
+  - After fetch, pause, set blob URL, and play again
+
+**File: `src/components/inbox/InlineCallSummary.tsx`**
+- Same prime-and-replay pattern
+
+**File: `src/components/teamhub/MessageThread.tsx`**
+- Same prime-and-replay pattern for TTS playback
+
+**File: `src/pages/Phonecalls.tsx`**
+- Same prime-and-replay pattern for recording playback
 
 ### Technical Details
 
-**File: `src/lib/audioPlayer.ts`** (rewrite)
-
-```text
-Changes:
-- unlockAudio(): 
-  - await audioCtx.resume() instead of fire-and-forget
-  - Check audioCtx.state === "running" before setting unlocked = true
-  - If state is not running, don't set unlocked (listener stays active for next interaction)
-  - On success, remove listeners manually and pre-cache mockingjay.mp3
-  
-- audioBufferCache: Map<string, AudioBuffer> for decoded buffer caching
-
-- playNotificationSound(url):
-  - Check cache first, skip fetch if buffer exists
-  - If not cached, fetch + decode + cache
-  - Fallback: try HTMLAudioElement with .play()
+**Silent WAV data URI** (used for priming):
+```typescript
+const SILENT_WAV = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
 ```
 
-No other files need changes -- `notificationSound.ts` and `useNotifications.ts` already call the right functions.
+**Prime pattern** (applied to all 4 playback files):
+```typescript
+const audio = new Audio(SILENT_WAV);
+audio.play(); // Synchronous call during user gesture - primes the element
+// ... await fetch() ...
+audio.pause();
+audio.src = blobUrl;
+await audio.play(); // Now allowed by iOS
+```
+
+**AudioContext interruption recovery** (in audioPlayer.ts):
+```typescript
+audioCtx.addEventListener("statechange", () => {
+  if (audioCtx.state === "suspended") {
+    unlocked = false;
+    // Re-attach gesture listeners to re-unlock on next tap
+    document.addEventListener("click", unlockAudio, true);
+    document.addEventListener("touchstart", unlockAudio, true);
+  }
+});
+```
+
