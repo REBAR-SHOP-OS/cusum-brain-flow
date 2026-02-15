@@ -15,6 +15,10 @@ self.addEventListener("push", (event) => {
     vibrate: [200, 100, 200],
     tag: data.tag || "default",
     renotify: true,
+    silent: false,
+    // Custom sound (supported on Android/some browsers)
+    sound: "/mockingjay.mp3",
+    requireInteraction: true,
   };
 
   event.waitUntil(self.registration.showNotification(data.title, options));

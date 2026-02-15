@@ -89,13 +89,10 @@ export function SupportChatView({ conversationId }: Props) {
       }, (payload) => {
         const msg = payload.new as Message;
         setMessages((prev) => [...prev, msg]);
-        if (msg.sender_type === "visitor") {
+        // Push notifications are now handled server-side via notify-on-message.
+        // Only play local sound if this is a visitor message and the tab is focused.
+        if (msg.sender_type === "visitor" && document.hasFocus()) {
           playMockingjayWhistle();
-          showBrowserNotification(
-            "New support message",
-            msg.content?.slice(0, 100),
-            "/support-inbox"
-          );
         }
       })
       .subscribe();
