@@ -5503,27 +5503,80 @@ export type Database = {
           company_id: string
           created_at: string
           domain: string
+          ga_property_id: string | null
           gsc_verified: boolean
           id: string
           updated_at: string
+          verified_ga: boolean
         }
         Insert: {
           company_id?: string
           created_at?: string
           domain: string
+          ga_property_id?: string | null
           gsc_verified?: boolean
           id?: string
           updated_at?: string
+          verified_ga?: boolean
         }
         Update: {
           company_id?: string
           created_at?: string
           domain?: string
+          ga_property_id?: string | null
           gsc_verified?: boolean
           id?: string
           updated_at?: string
+          verified_ga?: boolean
         }
         Relationships: []
+      }
+      seo_insight: {
+        Row: {
+          ai_payload_json: Json | null
+          company_id: string
+          confidence_score: number | null
+          created_at: string
+          domain_id: string
+          entity_id: string | null
+          entity_type: string
+          explanation_text: string
+          id: string
+          insight_type: string
+        }
+        Insert: {
+          ai_payload_json?: Json | null
+          company_id: string
+          confidence_score?: number | null
+          created_at?: string
+          domain_id: string
+          entity_id?: string | null
+          entity_type: string
+          explanation_text: string
+          id?: string
+          insight_type: string
+        }
+        Update: {
+          ai_payload_json?: Json | null
+          company_id?: string
+          confidence_score?: number | null
+          created_at?: string
+          domain_id?: string
+          entity_id?: string | null
+          entity_type?: string
+          explanation_text?: string
+          id?: string
+          insight_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "seo_insight_domain_id_fkey"
+            columns: ["domain_id"]
+            isOneToOne: false
+            referencedRelation: "seo_domains"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       seo_issues: {
         Row: {
@@ -5579,6 +5632,71 @@ export type Database = {
           },
         ]
       }
+      seo_keyword_ai: {
+        Row: {
+          avg_position: number | null
+          clicks_28d: number | null
+          company_id: string
+          created_at: string
+          ctr: number | null
+          domain_id: string
+          id: string
+          impressions_28d: number | null
+          intent: string | null
+          keyword: string
+          last_analyzed_at: string | null
+          opportunity_score: number | null
+          status: string | null
+          top_page: string | null
+          topic_cluster: string | null
+          trend_score: number | null
+        }
+        Insert: {
+          avg_position?: number | null
+          clicks_28d?: number | null
+          company_id: string
+          created_at?: string
+          ctr?: number | null
+          domain_id: string
+          id?: string
+          impressions_28d?: number | null
+          intent?: string | null
+          keyword: string
+          last_analyzed_at?: string | null
+          opportunity_score?: number | null
+          status?: string | null
+          top_page?: string | null
+          topic_cluster?: string | null
+          trend_score?: number | null
+        }
+        Update: {
+          avg_position?: number | null
+          clicks_28d?: number | null
+          company_id?: string
+          created_at?: string
+          ctr?: number | null
+          domain_id?: string
+          id?: string
+          impressions_28d?: number | null
+          intent?: string | null
+          keyword?: string
+          last_analyzed_at?: string | null
+          opportunity_score?: number | null
+          status?: string | null
+          top_page?: string | null
+          topic_cluster?: string | null
+          trend_score?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "seo_keyword_ai_domain_id_fkey"
+            columns: ["domain_id"]
+            isOneToOne: false
+            referencedRelation: "seo_domains"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       seo_keywords: {
         Row: {
           active: boolean
@@ -5622,6 +5740,77 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "seo_keywords_domain_id_fkey"
+            columns: ["domain_id"]
+            isOneToOne: false
+            referencedRelation: "seo_domains"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      seo_page_ai: {
+        Row: {
+          ai_recommendations: Json | null
+          avg_position: number | null
+          clicks: number | null
+          company_id: string
+          conversions: number | null
+          created_at: string
+          ctr: number | null
+          cwv_status: string | null
+          domain_id: string
+          engagement_rate: number | null
+          id: string
+          impressions: number | null
+          last_analyzed_at: string | null
+          revenue: number | null
+          seo_score: number | null
+          sessions: number | null
+          speed_score: number | null
+          url: string
+        }
+        Insert: {
+          ai_recommendations?: Json | null
+          avg_position?: number | null
+          clicks?: number | null
+          company_id: string
+          conversions?: number | null
+          created_at?: string
+          ctr?: number | null
+          cwv_status?: string | null
+          domain_id: string
+          engagement_rate?: number | null
+          id?: string
+          impressions?: number | null
+          last_analyzed_at?: string | null
+          revenue?: number | null
+          seo_score?: number | null
+          sessions?: number | null
+          speed_score?: number | null
+          url: string
+        }
+        Update: {
+          ai_recommendations?: Json | null
+          avg_position?: number | null
+          clicks?: number | null
+          company_id?: string
+          conversions?: number | null
+          created_at?: string
+          ctr?: number | null
+          cwv_status?: string | null
+          domain_id?: string
+          engagement_rate?: number | null
+          id?: string
+          impressions?: number | null
+          last_analyzed_at?: string | null
+          revenue?: number | null
+          seo_score?: number | null
+          sessions?: number | null
+          speed_score?: number | null
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "seo_page_ai_domain_id_fkey"
             columns: ["domain_id"]
             isOneToOne: false
             referencedRelation: "seo_domains"
@@ -5681,47 +5870,59 @@ export type Database = {
       }
       seo_tasks: {
         Row: {
+          ai_reasoning: string | null
           assigned_to: string | null
           company_id: string
           created_at: string
+          created_by: string
           description: string | null
           domain_id: string | null
           entity_type: string | null
           entity_url: string | null
+          expected_impact: string | null
           id: string
           linked_issue_id: string | null
           priority: string
           status: string
+          task_type: string | null
           title: string
           updated_at: string
         }
         Insert: {
+          ai_reasoning?: string | null
           assigned_to?: string | null
           company_id?: string
           created_at?: string
+          created_by?: string
           description?: string | null
           domain_id?: string | null
           entity_type?: string | null
           entity_url?: string | null
+          expected_impact?: string | null
           id?: string
           linked_issue_id?: string | null
           priority?: string
           status?: string
+          task_type?: string | null
           title: string
           updated_at?: string
         }
         Update: {
+          ai_reasoning?: string | null
           assigned_to?: string | null
           company_id?: string
           created_at?: string
+          created_by?: string
           description?: string | null
           domain_id?: string | null
           entity_type?: string | null
           entity_url?: string | null
+          expected_impact?: string | null
           id?: string
           linked_issue_id?: string | null
           priority?: string
           status?: string
+          task_type?: string | null
           title?: string
           updated_at?: string
         }

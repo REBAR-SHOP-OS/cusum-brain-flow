@@ -1,12 +1,13 @@
-import { BarChart3, Search, Bug, CheckSquare } from "lucide-react";
+import { BarChart3, Search, FileText, CheckSquare, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SeoSection } from "@/pages/SeoModule";
 
 const items: { id: SeoSection; label: string; icon: React.ElementType }[] = [
-  { id: "overview", label: "Overview", icon: BarChart3 },
+  { id: "overview", label: "AI Dashboard", icon: BarChart3 },
   { id: "keywords", label: "Keywords", icon: Search },
-  { id: "audit", label: "Site Audit", icon: Bug },
-  { id: "tasks", label: "SEO Tasks", icon: CheckSquare },
+  { id: "pages", label: "Pages", icon: FileText },
+  { id: "tasks", label: "Tasks", icon: CheckSquare },
+  { id: "copilot", label: "Copilot", icon: MessageSquare },
 ];
 
 interface Props {
@@ -18,7 +19,7 @@ export function SeoSidebar({ active, onNavigate }: Props) {
   return (
     <aside className="w-48 shrink-0 border-r border-border bg-card flex flex-col py-4 px-2 gap-1">
       <h2 className="text-xs font-bold tracking-widest text-muted-foreground uppercase px-2 mb-3">
-        Rebar SEO
+        Rebar AI SEO
       </h2>
       {items.map((item) => (
         <button

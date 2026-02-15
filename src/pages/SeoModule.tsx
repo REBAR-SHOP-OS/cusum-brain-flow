@@ -2,10 +2,11 @@ import { useState } from "react";
 import { SeoSidebar } from "@/components/seo/SeoSidebar";
 import { SeoOverview } from "@/components/seo/SeoOverview";
 import { SeoKeywords } from "@/components/seo/SeoKeywords";
-import { SeoAudit } from "@/components/seo/SeoAudit";
+import { SeoPages } from "@/components/seo/SeoPages";
 import { SeoTasks } from "@/components/seo/SeoTasks";
+import { SeoCopilot } from "@/components/seo/SeoCopilot";
 
-export type SeoSection = "overview" | "keywords" | "audit" | "tasks";
+export type SeoSection = "overview" | "keywords" | "pages" | "tasks" | "copilot";
 
 export default function SeoModule() {
   const [section, setSection] = useState<SeoSection>("overview");
@@ -16,8 +17,9 @@ export default function SeoModule() {
       <div className="flex-1 overflow-y-auto p-6">
         {section === "overview" && <SeoOverview />}
         {section === "keywords" && <SeoKeywords />}
-        {section === "audit" && <SeoAudit />}
+        {section === "pages" && <SeoPages />}
         {section === "tasks" && <SeoTasks />}
+        {section === "copilot" && <SeoCopilot />}
       </div>
     </div>
   );
