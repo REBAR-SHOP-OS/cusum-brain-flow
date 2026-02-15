@@ -572,6 +572,53 @@ serve(async (req) => {
       }
     }
 
+    // ========== WEBSITE HEALTH CHECK ==========
+    try {
+      const healthRes = await fetch(
+        `${Deno.env.get("SUPABASE_URL")}/functions/v1/website-health-check`,
+        { method: "POST", headers: { "Content-Type": "application/json" } }
+      );
+      if (healthRes.ok) {
+        const healthData = await healthRes.json();
+        const agentCodeMap: Record<string, string> = {
+          seo: "seo", copywriting: "copywriting", webbuilder: "webbuilder",
+          social: "social", data: "data", bizdev: "bizdev",
+        };
+        if (healthData.issues && Array.isArray(healthData.issues)) {
+          for (const issue of healthData.issues) {
+            const assignedAgentCode = issue.assigned_agent;
+            const agentId = agentMap[assignedAgentCode];
+            if (!agentId) continue;
+
+            // Get company_id from first available source
+            const companyId = suggestions[0]?.company_id || "a0000000-0000-0000-0000-000000000001";
+            const dedupeKey = `wp:${issue.issue_type}:${issue.entity_id}`;
+            if (isDuplicate(issue.entity_type, issue.entity_id, issue.issue_type)) continue;
+
+            const row = {
+              company_id: companyId,
+              agent_id: agentId,
+              suggestion_type: "action",
+              category: issue.issue_type,
+              title: issue.title,
+              description: issue.description,
+              severity: issue.severity,
+              reason: issue.reason,
+              impact: issue.impact,
+              entity_type: issue.entity_type,
+              entity_id: issue.entity_id,
+              status: "open",
+              actions: [{ label: "View Website", action: "navigate", path: "/website" }],
+            };
+            pushDual(row, dedupeKey, agentId);
+          }
+        }
+        console.log(`🌐 Website health: ${healthData.issues_found || 0} issues added to suggestions`);
+      }
+    } catch (wpErr) {
+      console.error("Website health check failed (non-fatal):", wpErr);
+    }
+
     // Batch insert suggestions (backward compat)
     if (suggestions.length > 0) {
       const { error: insertError } = await supabase.from("suggestions").insert(suggestions);

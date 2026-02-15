@@ -231,3 +231,6 @@ verify_jwt = false
 
 [functions.admin-chat]
 verify_jwt = false
+
+[functions.website-health-check]
+verify_jwt = false

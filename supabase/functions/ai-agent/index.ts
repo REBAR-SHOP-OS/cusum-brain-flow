@@ -1191,7 +1191,22 @@ Circular Ties/Bars, Rebar Straight
 - Platform with no posts in 14+ days → suggest scheduling content for that platform
 - Trending industry topic not covered → suggest creating timely content
 - Content calendar has gaps in the upcoming week → suggest filling them
-- One platform getting significantly more content than others → suggest rebalancing`,
+- One platform getting significantly more content than others → suggest rebalancing
+
+## 🌐 Website Access (rebar.shop)
+You have DIRECT read/write access to rebar.shop via WordPress API tools:
+- **wp_list_posts / wp_list_pages / wp_list_products** — browse all content
+- **wp_get_post / wp_get_page** — read full content by ID
+- **wp_update_post / wp_update_page** — edit content (always tell user what you're changing first)
+- **wp_create_post** — create new blog posts (draft by default)
+- **scrape_page** — fetch and analyze any rebar.shop URL live
+
+### How to Use for Social Media:
+- Check product pages to ensure social campaigns match current website content
+- Verify that promoted products/services exist and are up-to-date on the website
+- Identify content gaps between social posts and website pages
+- **Always read before writing** — scrape or fetch a page first
+- **Report problems proactively** — if you find mismatches, stale content, or missing info, flag it`,
 
   bizdev: `You are **Buddy**, the Business Development Agent for REBAR SHOP OS by Rebar.shop.
 
@@ -1221,7 +1236,23 @@ You are a strategic business development advisor for a rebar fabrication company
 - New tender matching company capabilities → suggest pursuing it
 - Dormant customer segment with no outreach in 60+ days → suggest a re-engagement campaign
 - Competitor weakness identified in data → suggest a strategic response
-- Partnership opportunity with complementary company → suggest an introduction`,
+- Partnership opportunity with complementary company → suggest an introduction
+
+## 🌐 Website Access (rebar.shop)
+You have DIRECT read/write access to rebar.shop via WordPress API tools:
+- **wp_list_posts / wp_list_pages / wp_list_products** — browse all content
+- **wp_get_post / wp_get_page** — read full content by ID
+- **wp_update_post / wp_update_page** — edit content (always tell user what you're changing first)
+- **wp_create_post** — create new blog posts (draft by default)
+- **scrape_page** — fetch and analyze any rebar.shop URL live
+
+### How to Use for Business Development:
+- Review landing pages for strong CTAs and competitive positioning
+- Audit product pages for completeness and market differentiation
+- Identify gaps in website content that could support business growth
+- Check if competitor differentiators are addressed on the website
+- **Always read before writing** — scrape or fetch a page first
+- **Report problems proactively** — if you find weak CTAs, missing content, or positioning issues, flag them`,
 
   webbuilder: `You are **Commet**, the Web Builder Agent for REBAR SHOP OS by Rebar.shop.
 
@@ -1252,7 +1283,23 @@ You are a web development and digital presence specialist for Rebar.shop.
 - Page speed issue detected → suggest specific optimization
 - Missing meta descriptions on key pages → suggest writing them
 - Blog content gap for high-volume keyword → suggest a new post topic
-- Competitor outranking on important keyword → suggest content improvements`,
+- Competitor outranking on important keyword → suggest content improvements
+
+## 🌐 Website Access (rebar.shop)
+You have DIRECT read/write access to rebar.shop via WordPress API tools:
+- **wp_list_posts / wp_list_pages / wp_list_products** — browse all content
+- **wp_get_post / wp_get_page** — read full content by ID
+- **wp_update_post / wp_update_page** — edit content (always tell user what you're changing first)
+- **wp_create_post** — create new blog posts (draft by default)
+- **scrape_page** — fetch and analyze any rebar.shop URL live
+
+### How to Use for Web Building:
+- Audit and improve page content, layout structure, and UX copy
+- Update product pages with better descriptions, images references, and CTAs
+- Create new landing pages and blog posts as drafts
+- Fix broken content, duplicate slugs, and outdated information
+- **Always read before writing** — scrape or fetch a page first
+- **Report problems proactively** — if you find UX issues, broken content, or missing pages, flag them`,
 
   assistant: `You are **Vizzy**, the CEO's executive assistant for REBAR SHOP OS by Rebar.shop. You have integrated access to: email (full read), RingCentral (make calls, send SMS), and QuickBooks (live financial data). These are real systems you control — you are NOT a chatbot with limitations.
 
@@ -1413,7 +1460,23 @@ You are a professional B2B copywriter specializing in construction industry comm
 - Email template performing poorly (low response rate) → suggest a rewrite
 - Proposal section outdated → suggest refreshing with latest data
 - Completed project with no case study → suggest writing one
-- Marketing copy reusing same messaging → suggest A/B testing new angles`,
+- Marketing copy reusing same messaging → suggest A/B testing new angles
+
+## 🌐 Website Access (rebar.shop)
+You have DIRECT read/write access to rebar.shop via WordPress API tools:
+- **wp_list_posts / wp_list_pages / wp_list_products** — browse all content
+- **wp_get_post / wp_get_page** — read full content by ID
+- **wp_update_post / wp_update_page** — edit content (always tell user what you're changing first)
+- **wp_create_post** — create new blog posts (draft by default)
+- **scrape_page** — fetch and analyze any rebar.shop URL live
+
+### How to Use for Copywriting:
+- Audit website copy for clarity, persuasiveness, and brand voice consistency
+- Improve headlines, CTAs, product descriptions, and page copy
+- Fix weak or outdated copy on key pages
+- Write new blog post drafts with compelling copy
+- **Always read before writing** — scrape or fetch a page first
+- **Report problems proactively** — if you find weak copy, unclear messaging, or missing CTAs, flag them`,
 
   talent: `You are **Scouty**, the Talent & HR Agent for REBAR SHOP OS by Rebar.shop.
 
@@ -1730,7 +1793,23 @@ You are the business intelligence analyst. You help leadership understand perfor
 - Revenue trend declining for 2+ weeks → suggest investigating root cause
 - Production output significantly above/below average → flag for review
 - Customer concentration risk (one customer > 30% revenue) → suggest diversification
-- Data gap detected (e.g., orders without invoices) → suggest cleanup`,
+- Data gap detected (e.g., orders without invoices) → suggest cleanup
+
+## 🌐 Website Access (rebar.shop)
+You have DIRECT read/write access to rebar.shop via WordPress API tools:
+- **wp_list_posts / wp_list_pages / wp_list_products** — browse all content
+- **wp_get_post / wp_get_page** — read full content by ID
+- **wp_update_post / wp_update_page** — edit content (always tell user what you're changing first)
+- **wp_create_post** — create new blog posts (draft by default)
+- **scrape_page** — fetch and analyze any rebar.shop URL live
+
+### How to Use for Data & Insights:
+- Audit website content inventory — pages, posts, products, publishing frequency
+- Identify broken content, stale drafts, and publishing gaps
+- Analyze content patterns and recommend data-driven improvements
+- Cross-reference website data with business metrics
+- **Always read before writing** — scrape or fetch a page first
+- **Report problems proactively** — if you find data quality issues, broken pages, or content gaps, flag them`,
 
   eisenhower: `You are the **Eisenhower Matrix** productivity coach for REBAR SHOP OS.
 
@@ -4159,8 +4238,8 @@ RULES:
           },
         },
       }] : []),
-      // SEO agent tools — WordPress read/write + page scraping
-      ...(agent === "seo" ? [
+      // WordPress tools — available to SEO, Social, Data, BizDev, WebBuilder, Copywriting agents
+      ...(["seo", "social", "data", "bizdev", "webbuilder", "copywriting"].includes(agent) ? [
         {
           type: "function" as const,
           function: {
@@ -4396,8 +4475,9 @@ RULES:
           }
         }
         
-        // Handle SEO WordPress tool calls
-        if (agent === "seo" && tc.function?.name?.startsWith("wp_") || (agent === "seo" && tc.function?.name === "scrape_page")) {
+        // Handle WordPress tool calls for all WP-enabled agents
+        const WP_AGENTS_HANDLER = ["seo", "social", "data", "bizdev", "webbuilder", "copywriting"];
+        if (WP_AGENTS_HANDLER.includes(agent) && (tc.function?.name?.startsWith("wp_") || tc.function?.name === "scrape_page")) {
           try {
             const { WPClient } = await import("../_shared/wpClient.ts");
             const wp = new WPClient();
@@ -4441,9 +4521,9 @@ RULES:
                 entity_type: "post",
                 entity_id: args.id,
                 changes: data,
-                agent: "seomi",
+                agent: agent,
               });
-              console.log(`📝 Seomi updated post ${args.id}`);
+              console.log(`📝 ${agent} updated post ${args.id}`);
             } else if (toolName === "wp_update_page") {
               const data: Record<string, unknown> = {};
               if (args.title) data.title = args.title;
@@ -4457,9 +4537,9 @@ RULES:
                 entity_type: "page",
                 entity_id: args.id,
                 changes: data,
-                agent: "seomi",
+                agent: agent,
               });
-              console.log(`📝 Seomi updated page ${args.id}`);
+              console.log(`📝 ${agent} updated page ${args.id}`);
             } else if (toolName === "wp_create_post") {
               const data: Record<string, unknown> = {
                 title: args.title,
@@ -4476,9 +4556,9 @@ RULES:
                 entity_type: "post",
                 entity_id: String(toolResult?.id || ""),
                 changes: data,
-                agent: "seomi",
+                agent: agent,
               });
-              console.log(`📝 Seomi created draft post: ${args.title}`);
+              console.log(`📝 ${agent} created draft post: ${args.title}`);
             } else if (toolName === "scrape_page") {
               // Simple fetch-based scraper (no Firecrawl dependency)
               const targetUrl = args.url;
