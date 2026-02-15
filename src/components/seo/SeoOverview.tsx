@@ -64,6 +64,17 @@ export function SeoOverview() {
     }
   };
 
+  const reconnectGoogle = async () => {
+    try {
+      await supabase.functions.invoke("google-oauth", {
+        body: { action: "disconnect", integration: "google-search-console" },
+      });
+      await connectGoogle();
+    } catch (e: any) {
+      toast.error(e.message || "Failed to reconnect Google");
+    }
+  };
+
   const { data: domain } = useQuery({
     queryKey: ["seo-domain"],
     queryFn: async () => {
@@ -289,6 +300,9 @@ export function SeoOverview() {
                   <>
                     <CheckCircle className="w-4 h-4 text-green-500" />
                     <span className="text-sm">Google connected as <strong>{googleEmail}</strong> — GSC & GA4 data active</span>
+                    <Button size="sm" variant="ghost" className="ml-2 text-xs" onClick={reconnectGoogle}>
+                      <Link2 className="w-3 h-3 mr-1" /> Reconnect
+                    </Button>
                   </>
                 ) : googleStatus === "checking" ? (
                   <>
