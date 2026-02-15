@@ -230,14 +230,14 @@ export function WebsiteChat({ currentPagePath, onWriteConfirmed }: WebsiteChatPr
             <div
               key={msg.id}
               className={cn(
-                "rounded-xl px-3 py-2 text-sm max-w-[95%] overflow-hidden break-words min-w-0 [overflow-wrap:anywhere] [word-break:break-all]",
+                "rounded-xl px-3 py-2 text-sm max-w-[85%] overflow-hidden min-w-0 [overflow-wrap:anywhere] [word-break:break-word]",
                 msg.role === "user"
                   ? "ml-auto bg-primary text-primary-foreground"
                   : "mr-auto bg-muted text-foreground"
               )}
             >
               {msg.role === "assistant" ? (
-                <RichMarkdown content={msg.content} className="text-sm [&_p]:text-sm [&_pre]:overflow-x-auto [&_code]:break-all [&_p]:break-words [&_*]:max-w-full" />
+                <RichMarkdown content={msg.content} className="text-sm [&_p]:text-sm [&_pre]:overflow-x-auto [&_pre]:max-w-full [&_code]:break-all [&_p]:[overflow-wrap:anywhere] [&_*]:max-w-full [&_a]:break-all" />
               ) : (
                 <p className="whitespace-pre-wrap break-all [overflow-wrap:anywhere]">
                   {/* Strip the context prefix from display */}
