@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus, FolderOpen, FileText, Pencil, Trash2, Eye, EyeOff, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
+import { KBImportDialog } from "./KBImportDialog";
 
 type Category = {
   id: string;
@@ -265,7 +266,10 @@ export function KnowledgeBase() {
       {/* Articles */}
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">Articles ({articles.length})</h2>
-        <Button size="sm" onClick={() => openEditor()}><Plus className="w-4 h-4 mr-1" /> Article</Button>
+        <div className="flex gap-2">
+          {companyId && <KBImportDialog companyId={companyId} />}
+          <Button size="sm" onClick={() => openEditor()}><Plus className="w-4 h-4 mr-1" /> Article</Button>
+        </div>
       </div>
       <div className="grid gap-3">
         {articles.map((a) => {
