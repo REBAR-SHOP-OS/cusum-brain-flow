@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-chat`;
@@ -38,10 +38,32 @@ const TOOL_LABELS: Record<string, string> = {
 };
 
 export function useAdminChat(currentPage?: string) {
-  const [messages, setMessages] = useState<AdminChatEntry[]>([]);
+  const storageKey = useMemo(() => `admin-chat-${currentPage || "default"}`, [currentPage]);
+
+  const [messages, setMessages] = useState<AdminChatEntry[]>(() => {
+    try {
+      const stored = localStorage.getItem(storageKey);
+      if (!stored) return [];
+      const parsed = JSON.parse(stored) as any[];
+      return parsed.map((m) => ({ ...m, timestamp: new Date(m.timestamp) }));
+    } catch {
+      return [];
+    }
+  });
   const [isStreaming, setIsStreaming] = useState(false);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    try {
+      const capped = messages.slice(-50);
+      if (capped.length === 0) {
+        localStorage.removeItem(storageKey);
+      } else {
+        localStorage.setItem(storageKey, JSON.stringify(capped));
+      }
+    } catch { /* storage full or unavailable */ }
+  }, [messages, storageKey]);
 
   const parseSSEStream = useCallback(async (resp: Response, assistantId: string) => {
     if (!resp.body) return;
@@ -313,7 +335,8 @@ export function useAdminChat(currentPage?: string) {
   const clearChat = useCallback(() => {
     setMessages([]);
     setPendingAction(null);
-  }, []);
+    localStorage.removeItem(storageKey);
+  }, [storageKey]);
 
   const cancelStream = useCallback(() => {
     abortRef.current?.abort();
