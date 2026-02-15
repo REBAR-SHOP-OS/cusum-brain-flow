@@ -1,4 +1,4 @@
-import { BarChart3, Search, FileText, CheckSquare, MessageSquare } from "lucide-react";
+import { BarChart3, Search, FileText, CheckSquare, MessageSquare, Link2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SeoSection } from "@/pages/SeoModule";
 
@@ -7,6 +7,7 @@ const items: { id: SeoSection; label: string; icon: React.ElementType }[] = [
   { id: "keywords", label: "Keywords", icon: Search },
   { id: "pages", label: "Pages", icon: FileText },
   { id: "tasks", label: "Tasks", icon: CheckSquare },
+  { id: "links", label: "Links", icon: Link2 },
   { id: "copilot", label: "Copilot", icon: MessageSquare },
 ];
 

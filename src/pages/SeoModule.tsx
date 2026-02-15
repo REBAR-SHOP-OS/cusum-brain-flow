@@ -4,9 +4,10 @@ import { SeoOverview } from "@/components/seo/SeoOverview";
 import { SeoKeywords } from "@/components/seo/SeoKeywords";
 import { SeoPages } from "@/components/seo/SeoPages";
 import { SeoTasks } from "@/components/seo/SeoTasks";
+import { SeoLinks } from "@/components/seo/SeoLinks";
 import { SeoCopilot } from "@/components/seo/SeoCopilot";
 
-export type SeoSection = "overview" | "keywords" | "pages" | "tasks" | "copilot";
+export type SeoSection = "overview" | "keywords" | "pages" | "tasks" | "links" | "copilot";
 
 export default function SeoModule() {
   const [section, setSection] = useState<SeoSection>("overview");
@@ -19,6 +20,7 @@ export default function SeoModule() {
         {section === "keywords" && <SeoKeywords />}
         {section === "pages" && <SeoPages />}
         {section === "tasks" && <SeoTasks />}
+        {section === "links" && <SeoLinks />}
         {section === "copilot" && <SeoCopilot />}
       </div>
     </div>
