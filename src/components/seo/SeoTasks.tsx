@@ -1,9 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Sparkles, Bot, User } from "lucide-react";
 import { toast } from "sonner";
 
 const columns = ["open", "in_progress", "done"] as const;
@@ -13,6 +13,11 @@ const priorityColors: Record<string, string> = {
   high: "bg-orange-500/10 text-orange-600",
   medium: "bg-yellow-500/10 text-yellow-600",
   low: "bg-blue-500/10 text-blue-500",
+};
+const taskTypeColors: Record<string, string> = {
+  content: "bg-purple-500/10 text-purple-600",
+  technical: "bg-orange-500/10 text-orange-600",
+  internal_link: "bg-blue-500/10 text-blue-600",
 };
 
 export function SeoTasks() {
@@ -51,7 +56,7 @@ export function SeoTasks() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">SEO Tasks</h1>
-        <p className="text-sm text-muted-foreground">Track and manage SEO fixes from audit issues</p>
+        <p className="text-sm text-muted-foreground">AI-generated and manual SEO tasks</p>
       </div>
 
       {isLoading ? (
@@ -73,13 +78,48 @@ export function SeoTasks() {
                       <CardContent className="p-3 space-y-2">
                         <div className="flex items-start justify-between gap-1">
                           <p className="text-sm font-medium leading-tight">{task.title}</p>
-                          <Badge className={`text-[10px] shrink-0 ${priorityColors[task.priority] || ""}`}>
-                            {task.priority}
-                          </Badge>
+                          <div className="flex items-center gap-1 shrink-0">
+                            {task.created_by === "ai" && (
+                              <Bot className="w-3 h-3 text-primary" />
+                            )}
+                            <Badge className={`text-[10px] ${priorityColors[task.priority] || ""}`}>
+                              {task.priority}
+                            </Badge>
+                          </div>
                         </div>
                         {task.description && (
                           <p className="text-xs text-muted-foreground line-clamp-2">{task.description}</p>
                         )}
+                        {/* AI reasoning */}
+                        {task.ai_reasoning && (
+                          <div className="bg-primary/5 rounded p-2 border border-primary/10">
+                            <p className="text-[10px] text-primary font-medium flex items-center gap-1">
+                              <Sparkles className="w-3 h-3" /> AI Reasoning
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{task.ai_reasoning}</p>
+                          </div>
+                        )}
+                        {/* Expected impact */}
+                        {task.expected_impact && (
+                          <p className="text-[10px] text-muted-foreground">
+                            <span className="font-medium">Impact:</span> {task.expected_impact}
+                          </p>
+                        )}
+                        {/* Task type + creator badges */}
+                        <div className="flex items-center gap-1 flex-wrap">
+                          {task.task_type && (
+                            <Badge className={`text-[10px] ${taskTypeColors[task.task_type] || ""}`}>
+                              {task.task_type}
+                            </Badge>
+                          )}
+                          <Badge variant="outline" className="text-[10px]">
+                            {task.created_by === "ai" ? (
+                              <span className="flex items-center gap-0.5"><Bot className="w-2.5 h-2.5" /> AI</span>
+                            ) : (
+                              <span className="flex items-center gap-0.5"><User className="w-2.5 h-2.5" /> Manual</span>
+                            )}
+                          </Badge>
+                        </div>
                         {task.entity_url && (
                           <a href={task.entity_url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-primary flex items-center gap-0.5 hover:underline">
                             <ExternalLink className="w-3 h-3" /> {task.entity_url.substring(0, 50)}
