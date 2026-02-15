@@ -231,7 +231,7 @@ export function SeoOverview() {
           <p className="text-sm text-muted-foreground">AI-curated insights from GSC + Analytics + ERP Sources</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => syncGsc.mutate()} disabled={syncGsc.isPending || !domain}>
+          <Button variant="outline" size="sm" onClick={() => syncGsc.mutate()} disabled={syncGsc.isPending || !domain || googleStatus !== "connected"}>
             {syncGsc.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Search className="w-4 h-4 mr-1" />}
             Sync GSC
           </Button>
