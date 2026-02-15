@@ -1,113 +1,115 @@
 
 
-# Update SEO Module with New SEMrush Data
+# AI Task Execution System for SEO Module
 
 ## Overview
 
-Import three new SEMrush data sources into the existing SEO module:
-1. **Ideas XLSX** (updated version) -- same format as before, re-import with latest data
-2. **Mega Export XLSX** -- site audit with ~100 issue categories per page URL (broken links, missing titles, etc.)
-3. **Position Tracking PDF** -- keyword rankings, visibility (72.62%), avg position (6.99), top 3/10 counts, SERP features
+Add an "Execute" button to each SEO task card. When clicked, an AI agent analyzes the task to determine if it can be auto-executed (e.g., updating WordPress meta titles, descriptions, content). If yes, it shows a confirmation dialog with the proposed plan. If no, it shows manual instructions for the human operator. On confirmation, it executes via the existing WordPress API tools and marks the task as "Done".
 
-The traffic summary screenshot is the same as before (Jan 2026: 1.2K visits, 57.55% bounce rate).
+## User Flow
+
+```text
+User clicks [Execute] on a task card
+        |
+        v
+  AI analyzes the task (loading spinner)
+        |
+        +---> CAN auto-execute
+        |       Show dialog: plan summary + action list
+        |       [Confirm] --> Execute actions --> Toast success --> Task moves to Done
+        |       [Cancel] --> Close dialog
+        |
+        +---> CANNOT auto-execute
+                Show dialog: step-by-step human instructions
+                [Move to In Progress] --> Updates status
+                [Close] --> Do nothing
+```
 
 ## Changes
 
 ### 1. Database Migration
 
-Add new columns to `seo_domains` for position tracking metrics:
+Add execution tracking columns to `seo_tasks`:
 
 | Column | Type | Purpose |
 |--------|------|---------|
-| `visibility_pct` | numeric | 72.62% |
-| `estimated_traffic_pct` | numeric | 0.16% |
-| `avg_position` | numeric | 6.99 |
-| `top3_keywords` | integer | 17 |
-| `top10_keywords` | integer | 19 |
-| `total_tracked_keywords` | integer | 20 |
-| `position_tracking_date` | text | "2026-02-15" |
+| `execution_log` | jsonb | Full audit trail of what AI did |
+| `executed_at` | timestamptz | When execution completed |
+| `executed_by` | text | 'ai' or user ID |
 
-Add `issues_json` column to `seo_page_ai` (missing -- the edge function was trying to write to it):
+### 2. New Edge Function: `seo-task-execute`
 
-| Column | Type | Purpose |
-|--------|------|---------|
-| `issues_json` | jsonb | Stores per-page audit issues from mega export |
+Two-phase function using the Lovable AI gateway for task analysis and the existing `WPClient` for WordPress actions.
 
-### 2. Update Edge Function `seo-semrush-import`
+**Phase "analyze":**
+- Fetches the task from the database
+- Validates status is "open" or "in_progress"
+- Sends task details to AI with a structured tool-calling schema
+- AI determines if the task is automatable and returns either:
+  - `{ can_execute: true, plan_summary, actions: [...] }` with predefined action types
+  - `{ can_execute: false, human_steps: "..." }` with manual instructions
 
-Extend to accept two additional data sections:
+**Phase "execute":**
+- Re-fetches and re-validates the task (never trusts client-side plan)
+- Re-runs analysis to get fresh actions
+- Executes each action via `WPClient` (update meta, update content, add internal links)
+- Updates the task: status to "done", sets `execution_log`, `executed_at`, `executed_by`
+- Returns results
 
-- **`audit_pages`** -- Array of `{ url, issues: { broken_internal_links: 2, missing_h1: 1, ... } }` parsed from the mega export. Upserts into `seo_page_ai` with the `issues_json` column and computes `seo_score` based on total issue count.
-- **`position_tracking`** -- Object with visibility, avg position, top 3/10 counts. Updates the new `seo_domains` columns.
+**Allowed action types (safety whitelist):**
+- `wp_update_meta` -- Update page/post meta description or title tag
+- `wp_update_content` -- Update page/post content HTML
+- `wp_update_title` -- Update page/post title
+- `wp_add_internal_link` -- Add internal link to page content
 
-### 3. Update Frontend `SeoOverview.tsx`
+**Blocked:** DNS changes, billing, GSC verification, user management, product deletion.
 
-- **Enhance the import button** to accept multiple files at once (ideas XLSX + mega export XLSX).
-- **Parse mega export** client-side: extract page URLs and count non-zero issues per page, send as `audit_pages` array.
-- **Hard-code position tracking data** from the PDF into the import payload (visibility: 72.62%, avg position: 6.99, top3: 17, top10: 19, total: 20).
-- **Add Position Tracking card** below the Traffic Summary card showing visibility, avg position, top 3/10 keyword counts.
-- **Update traffic data** to match the screenshot (same as before -- already hard-coded).
+### 3. Frontend Update: `SeoTasks.tsx`
 
-### 4. Trigger the import
-
-After code changes, the user clicks "Import SEMrush" and selects both XLSX files. The system will:
-- Detect which file is the ideas report vs the mega export by checking column headers
-- Parse both and send combined payload to the edge function
-- Display success toast with counts
+- Add "Execute" button (Zap icon) on task cards with status "open" or "in_progress"
+- Add AlertDialog for the two-step confirmation flow
+- Loading state while AI analyzes
+- On confirm: call execute phase, show toast, refresh task list
+- On "can't execute": show human instructions with option to move to "In Progress"
 
 ## Technical Details
 
 ### Database Migration SQL
 
 ```sql
-ALTER TABLE public.seo_domains
-  ADD COLUMN IF NOT EXISTS visibility_pct numeric,
-  ADD COLUMN IF NOT EXISTS estimated_traffic_pct numeric,
-  ADD COLUMN IF NOT EXISTS avg_position numeric,
-  ADD COLUMN IF NOT EXISTS top3_keywords integer,
-  ADD COLUMN IF NOT EXISTS top10_keywords integer,
-  ADD COLUMN IF NOT EXISTS total_tracked_keywords integer,
-  ADD COLUMN IF NOT EXISTS position_tracking_date text;
-
-ALTER TABLE public.seo_page_ai
-  ADD COLUMN IF NOT EXISTS issues_json jsonb;
+ALTER TABLE public.seo_tasks
+  ADD COLUMN IF NOT EXISTS execution_log jsonb,
+  ADD COLUMN IF NOT EXISTS executed_at timestamptz,
+  ADD COLUMN IF NOT EXISTS executed_by text;
 ```
 
-### Edge Function Changes
+### Edge Function: `seo-task-execute/index.ts`
 
-Accept new body fields:
-```json
-{
-  "domain_id": "uuid",
-  "ideas": [...],
-  "traffic": {...},
-  "audit_pages": [
-    { "url": "https://rebar.shop/about/", "issues": { "missing_h1": 1, "broken_internal_links": 2 }, "total_issues": 3 }
-  ],
-  "position_tracking": {
-    "visibility_pct": 72.62,
-    "estimated_traffic_pct": 0.16,
-    "avg_position": 6.99,
-    "top3_keywords": 17,
-    "top10_keywords": 19,
-    "total_tracked_keywords": 20,
-    "date": "2026-02-15"
-  }
-}
+- Uses `createClient` from supabase-js for DB access
+- Uses `WPClient` from `../_shared/wpClient.ts` for WordPress operations
+- Uses Lovable AI gateway (`LOVABLE_API_KEY`) with tool calling for structured output
+- Action types are whitelisted -- unknown types are rejected
+- Full execution log stored as JSONB for audit
+
+### Config Addition
+
+```toml
+[functions.seo-task-execute]
+verify_jwt = false
 ```
 
-### Files Modified
+### Frontend Component Changes
+
+- Import `AlertDialog` components, `Zap`, `Loader2`, `CheckCircle`, `AlertTriangle` icons
+- Add state: `executingTaskId`, `analyzeResult`, `isAnalyzing`, `isExecuting`, `showDialog`
+- Execute button appears only on "open" and "in_progress" cards
+- Dialog content switches between "can execute" (with confirm) and "cannot execute" (with human steps)
+
+### Files Modified/Created
 
 | File | Change |
 |------|--------|
-| `supabase/functions/seo-semrush-import/index.ts` | Add audit_pages and position_tracking processing |
-| `src/components/seo/SeoOverview.tsx` | Multi-file upload, mega export parsing, position tracking card, hard-coded PDF data |
-
-### Frontend Mega Export Parsing Logic
-
-The mega export has ~100 issue columns. Client-side parsing will:
-1. Read column headers from row 1
-2. For each page URL row, count columns with non-zero values
-3. Build an issues object with only non-zero issue types
-4. Filter out pages with zero total issues to reduce payload size
+| Database migration | Add 3 columns to `seo_tasks` |
+| `supabase/functions/seo-task-execute/index.ts` | New edge function |
+| `src/components/seo/SeoTasks.tsx` | Add Execute button + dialog |
 
