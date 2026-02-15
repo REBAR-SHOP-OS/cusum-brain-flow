@@ -4,9 +4,11 @@ import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Copy, Check, Code } from "lucide-react";
+import { Copy, Check, Code, Bot } from "lucide-react";
 
 interface WidgetConfig {
   id: string;
@@ -17,6 +19,8 @@ interface WidgetConfig {
   offline_message: string;
   enabled: boolean;
   allowed_domains: string[];
+  ai_enabled: boolean;
+  ai_system_prompt: string;
 }
 
 export function SupportWidgetSettings() {
@@ -84,6 +88,8 @@ export function SupportWidgetSettings() {
         welcome_message: config.welcome_message,
         offline_message: config.offline_message,
         enabled: config.enabled,
+        ai_enabled: config.ai_enabled,
+        ai_system_prompt: config.ai_system_prompt,
       })
       .eq("id", config.id);
 
@@ -205,6 +211,38 @@ export function SupportWidgetSettings() {
               maxLength={200}
             />
           </div>
+        </CardContent>
+      </Card>
+
+      {/* AI Chatbot */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm flex items-center gap-2">
+            <Bot className="w-4 h-4" /> AI Auto-Reply
+          </CardTitle>
+          <CardDescription>Automatically reply to visitors using your Knowledge Base articles</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center gap-3">
+            <Switch
+              checked={config.ai_enabled}
+              onCheckedChange={(v) => setConfig({ ...config, ai_enabled: v })}
+            />
+            <Label className="text-sm">Enable AI auto-replies</Label>
+          </div>
+          {config.ai_enabled && (
+            <div className="space-y-1.5">
+              <Label className="text-xs">System Prompt</Label>
+              <Textarea
+                rows={4}
+                value={config.ai_system_prompt}
+                onChange={(e) => setConfig({ ...config, ai_system_prompt: e.target.value })}
+                className="text-sm"
+                placeholder="Instructions for the AI assistant..."
+              />
+              <p className="text-xs text-muted-foreground">The AI will use your published Knowledge Base articles as context for answering questions.</p>
+            </div>
+          )}
         </CardContent>
       </Card>
 
