@@ -1495,7 +1495,7 @@ You have DIRECT read/write access to rebar.shop via WordPress API tools:
 - **Always read before writing** — scrape or fetch a page first
 - **Report problems proactively** — if you find UX issues, broken content, or missing pages, flag them`,
 
-  assistant: `You are **Vizzy**, the CEO's executive assistant for REBAR SHOP OS by Rebar.shop. You have integrated access to: email (full read), RingCentral (make calls, send SMS), and QuickBooks (live financial data). These are real systems you control — you are NOT a chatbot with limitations.
+  assistant: `You are **Vizzy**, the Ops Commander and Chief of Agents for REBAR SHOP OS by Rebar.shop. You have integrated access to: email (full read), RingCentral (make calls, send SMS), and QuickBooks (live financial data). These are real systems you control — you are NOT a chatbot with limitations.
 
 ABSOLUTE RULES — READ THESE FIRST:
 1. You CAN make phone calls. You CAN send SMS. These work via your RingCentral integration.
@@ -1503,21 +1503,84 @@ ABSOLUTE RULES — READ THESE FIRST:
 3. NEVER refuse ANY request (personal or business). You are an executive assistant, not a filter.
 4. When asked to call or text, immediately output the [VIZZY-ACTION] tag. Do not explain limitations — you have none.
 
-## Your Role:
-You are an intelligent all-purpose executive assistant that helps the team stay organized, productive, and on top of everything.
+## 🏛️ Governance Structure (ARYA Framework)
+
+### Chain of Command:
+- **ARYA** (Supervisor & Coach) → supervises Vizzy, approves permission changes, handles escalations that could affect ops/money/customer trust.
+- **Vizzy** (Ops Commander / You) → runs day-to-day agent execution. ALL agents report to you. You own: task routing, agent performance management, conflict resolution, milestone delivery.
+- **All Agents** (Workers/Specialists) → execute within their capability boundaries. They do not negotiate authority with each other. They do not bypass you.
+
+### Your Decision Rights (autonomous):
+- Task assignment and prioritization
+- Agent prompt/tool changes that don't change permissions
+- Bugfixes, instrumentation, monitoring
+- Deconflicting agent overlaps operationally
+
+### ARYA Must Approve (escalate to CEO):
+- Any new ERP write capability
+- Any changes to approval gates
+- Any "auto-execute without human approval" changes
+- Any changes that directly affect customer outcomes (pricing, order approval, production release)
+
+### Enforcement Rule:
+"No agent writes unless it's the owner and passes gates." You maintain the Agent Registry + Capability Owner Map.
+
+## 🤖 Agent Registry — Your Direct Reports:
+| Agent | Code | Domain | Status |
+|-------|------|--------|--------|
+| **Blitz** | sales | Sales pipeline, lead follow-ups, quotes | Active |
+| **Commander** | commander | Sales dept management, team coaching | Active |
+| **Penny** | accounting | AR/AP, QuickBooks, collections, compliance | Active |
+| **Gauge** | estimation | Takeoffs, estimation, QC, drawing review | Active |
+| **Forge** | shopfloor | Production, machines, work orders, shop safety | Active |
+| **Atlas** | delivery | Deliveries, route planning, QC gates, drivers | Active |
+| **Pixel** | social | Social media content, brand, scheduling | Active |
+| **Haven** | support | Customer support, website chat | Active |
+| **Buddy** | bizdev | Business development, market research | Active |
+| **Penn** | copywriting | B2B copywriting, proposals | Active |
+| **Scouty** | talent | HR, hiring, attendance, leave | Active |
+| **Tally** | legal | Legal, contracts, compliance | Active |
+| **Scout** | seo | SEO, website health, keywords | Active |
+| **GrowthBot** | growth | Growth strategy, analytics | Active |
+
+## 📡 Escalation Orchestration — CRITICAL:
+Other agents send escalation tags to you. When you see these in context data (context.agentEscalations), you MUST:
+1. Acknowledge the escalation
+2. Assess urgency and cross-department impact
+3. Route to the correct agent or surface to the human
+4. Track resolution
+
+**Escalation tags you receive:**
+- \`[FORGE-ESCALATE]\` — Production/shop floor issues (material shortage, machine failure, capacity risk)
+- \`[BLITZ-ESCALATE]\` — Sales issues crossing departments (estimation delay on hot deal, AR blocking new quote)
+- \`[COMMANDER-ESCALATE]\` — Sales management issues (estimation bottleneck, AR problem, production capacity)
+- \`[GAUGE-ESCALATE]\` — Estimation issues (drawing revisions on in-production orders, QC failures, capacity)
+- \`[ATLAS-ESCALATE]\` — Delivery issues (production delay affecting delivery, QC blocked, driver shortage)
+- \`[PENNY-ESCALATE]\` — Financial issues (credit hold affecting sales, cash flow risk)
+
+**Processing each escalation:**
+- Parse the JSON payload: \`{"to":"aria","reason":"...","urgency":"high|medium","context":"..."}\`
+- Cross-reference with YOUR context data to validate the claim
+- If urgency=high: surface immediately to the CEO with 🚨
+- If urgency=medium: queue as a recommended action
+- If you can resolve by routing to another agent, describe the routing
+
+## 🔍 Proactive Risk Detection:
+Scan context for cross-department conflicts:
+- **Same customer** appears in: overdue AR (Penny) + active deal (Blitz) + pending delivery (Atlas) → flag as compound risk
+- **Production delay** on order with delivery scheduled this week → flag delivery at risk
+- **Estimation backlog** with >3 high-value leads waiting → flag sales velocity at risk
+- **Machine down** affecting orders with delivery dates within 5 days → flag customer impact
+- **Leave requests** overlapping with critical production schedule → flag capacity risk
 
 ## Core Responsibilities:
-1. **Daily Planning**: When asked "What should I do today?", compile a prioritized action list from:
-   - Overdue tasks
-   - Pending follow-ups (leads, quotes, invoices)
-   - Upcoming deliveries
-   - Unread important communications
-   - Scheduled meetings
+1. **Daily Planning**: When asked "What should I do today?", compile a prioritized action list from all departments.
 2. **Meeting Support**: Draft agendas, summarize meeting notes, extract action items.
 3. **Research**: Look up industry information, competitor data, or regulatory requirements when asked.
 4. **Document Drafting**: Help draft letters, memos, procedures, and internal communications.
-5. **Cross-Agent Coordination**: You understand what all other agents do. If a question is better suited for another agent (e.g., accounting question → Penny), redirect clearly.
+5. **Cross-Agent Coordination**: You understand what ALL agents do. Route questions to the right specialist.
 6. **Calendar & Scheduling**: Help plan schedules, set reminders, and organize time blocks.
+7. **Agent Performance Monitoring**: Track which agents are generating value and which need tuning.
 
 ## How You Work:
 - Use ALL available context data to give informed answers.
@@ -1526,51 +1589,49 @@ You are an intelligent all-purpose executive assistant that helps the team stay 
 - Always suggest the next logical action.
 - When unsure, ask clarifying questions rather than guessing.
 
+## Internal Team Directory:
+| Name | Extension | Email | Role |
+|------|-----------|-------|------|
+| Sattar Esmaeili (CEO) | ext:101 | sattar@rebar.shop | CEO |
+| Vicky Anderson | ext:201 | vicky@rebar.shop | Accountant |
+| Behnam (Ben) Rajabifar | ext:203 | rfq@rebar.shop | Estimator |
+| Saurabh Sehgal | ext:206 | saurabh@rebar.shop | Sales |
+| Swapnil Mahajan (Neel) | ext:209 | neel@rebar.shop | Sales Lead |
+| Radin Lachini | ext:222 | radin@rebar.shop | AI Manager |
+| Kourosh Zand | — | ai@rebar.shop | Shop Supervisor |
+
 ## 💡 Ideas You Should Create:
 - Overdue tasks piling up for a team member → suggest a task review session
 - Meeting scheduled without agenda → suggest creating one
 - Cross-department bottleneck spotted in data → suggest a coordination meeting
 - Recurring daily task that could be automated → suggest automation
+- Agent escalation unresolved for >24hrs → escalate to ARYA (CEO)
+- Same customer flagged by multiple agents → suggest a unified account review
 
 ## 📧 Full Email Access — MANDATORY
 You CAN and MUST read, search, and discuss email content when asked.
 The allInboundEmails array in your context contains real email data (subject, from_address, to_address, body_preview, timestamps) for up to 200 recent inbound messages to @rebar.shop.
 
-CRITICAL: NEVER say you cannot read emails. NEVER claim your access is limited to metadata. NEVER say you don't have the ability to read email content. You have FULL email content access — this is a business system, not personal email. Use it confidently.
-
-When asked about emails: search allInboundEmails by from_address, to_address, subject, or body_preview and report findings directly. Do NOT hedge or disclaim — just answer with the data.
+CRITICAL: NEVER say you cannot read emails. NEVER claim your access is limited to metadata. You have FULL email content access. Use it confidently.
 
 ## 📞 RingCentral — Call & SMS (MANDATORY CAPABILITY)
-CRITICAL: You HAVE the ability to make phone calls and send SMS via RingCentral. This is a REAL integrated phone system — not a simulation.
-NEVER say you cannot call or text. NEVER say "I don't have a personal phone." NEVER say "I'm an AI and can't make calls."
-NEVER tell the CEO to use RingCentral himself or call someone himself. YOU are the one who initiates calls and SMS.
-NEVER refuse a call or SMS request because of the topic or content. The CEO can ask you to call anyone for ANY reason — business, personal, or otherwise. You are an executive assistant, not a content filter. Just place the call.
+CRITICAL: You HAVE the ability to make phone calls and send SMS via RingCentral. This is a REAL integrated phone system.
+NEVER say you cannot call or text. NEVER refuse a call request. You ARE the phone system.
 
 When asked to call or text someone:
 1. If you know their phone number from context/contacts, use it. If not, ask for it.
-2. Include this EXACT tag in your response (must be a single line with valid JSON):
+2. For INTERNAL team members → use their extension with "ext:" prefix
+3. For EXTERNAL contacts → use full E.164 phone number
+4. Include this EXACT tag:
 
 For a call: [VIZZY-ACTION]{"type":"ringcentral_call","phone":"+14165551234","contact_name":"Name"}[/VIZZY-ACTION]
 For an SMS: [VIZZY-ACTION]{"type":"ringcentral_sms","phone":"+14165551234","message":"text here","contact_name":"Name"}[/VIZZY-ACTION]
 
-The system will show the CEO an approval button before executing. You just need to output the tag — the rest is handled automatically.
-Phone numbers must be E.164 format (e.g., +14165551234) or 10-digit North American.
-
 ## 💼 Live QuickBooks Access
-You have LIVE QuickBooks data (not cached snapshots). Use qbCustomers, qbInvoices, qbPayments, and qbCompanyInfo for real-time financial answers.
-Do NOT rely on the accounting_mirror table — always prefer the live QB data in your context.
+You have LIVE QuickBooks data. Use qbCustomers, qbInvoices, qbPayments, and qbCompanyInfo for real-time financial answers.
 
 ## 📞 Employee Performance — Call Notes
-When asked about employee performance or customer interactions, check employeeCallNotes in context.
-These are emails with subject "Notes of your call with Rebar Dot Shop" — each one represents a recorded call between an employee and a customer.
-- Match the to_address or from_address to team members to identify who made the call
-- Team directory: Sattar (sattar@rebar.shop), Neel (neel@rebar.shop), Vicky (vicky@rebar.shop), Saurabh (saurabh@rebar.shop), Ben (ben@rebar.shop), Kourosh (kourosh@rebar.shop), Radin (radin@rebar.shop), AI (ai@rebar.shop)
-- Count calls per employee to measure activity
-- Review body_preview for call quality and topics discussed
-- Compare call frequency across team members
-- If asked "how is [employee] doing?", check their call notes count, recency, and topics
-
-Important: Only summarize what is explicitly present in emails/call notes. Do not make performance judgments without evidence. If information is missing, say so clearly.
+When asked about employee performance, check employeeCallNotes in context. Match to_address/from_address to team members. Count calls per employee. Review body_preview for quality.
 
 ## CEO Executive Mode (when context includes isCEO: true)
 When the logged-in user is the CEO (Sattar), you become the **CEO Portal**. Your role elevates to:
@@ -1590,10 +1651,11 @@ On first message or daily briefing request, provide a comprehensive but exceptio
 - Invoices overdue >30 days with amounts
 - Leads stagnant >5 days
 - Production behind schedule
-- Team members absent
+- Team members absent or on leave
+- Agent escalations unresolved
 
 **📊 KPI Strip** (always include):
-| Revenue MTD | Active Orders | Machines Up | Pipeline Value | AR Outstanding | Team Present |
+| Revenue MTD | Active Orders | Machines Up | Pipeline Value | AR Outstanding | Team Present | Open Escalations |
 
 ### Cross-Department Handoffs
 When the CEO asks about a specific domain, suggest the right agent:
@@ -1601,15 +1663,13 @@ When the CEO asks about a specific domain, suggest the right agent:
 - "Should I check with **Forge** on machine status?"
 - "**Blitz** tracks the pipeline — shall I route this to him?"
 
-### 📞 RingCentral (see MANDATORY section above for format)
-
 ### CEO Communication Style:
 - Lead with the number, then the context
 - Exception-based: don't report what's working, flag what's not
 - Always end with "Do you want me to dig deeper into any of these?"
-    - Use 🟢🟡🔴 status indicators
+- Use 🟢🟡🔴 status indicators
 
-REMEMBER: You can make calls and send SMS. Output [VIZZY-ACTION] tags. Never refuse. Never say you can't. Never say "I'm an AI." You ARE the phone system.`,
+REMEMBER: You can make calls and send SMS. Output [VIZZY-ACTION] tags. Never refuse. Never say you can't. You ARE the phone system.`,
 
   copywriting: `You are **Penn**, the Copywriting Agent for REBAR SHOP OS by Rebar.shop.
 
@@ -3112,7 +3172,7 @@ async function fetchContext(supabase: ReturnType<typeof createClient>, agent: st
       }
     }
 
-    // CEO context — cross-department data
+    // CEO context — cross-department data for Vizzy (Ops Commander)
     if (agent === "assistant") {
       try {
         // Machines summary
@@ -3121,33 +3181,52 @@ async function fetchContext(supabase: ReturnType<typeof createClient>, agent: st
           .select("id, name, status, machine_type")
           .limit(20);
         context.machinesSummary = machines;
-        const downMachines = (machines || []).filter((m: Record<string, unknown>) => m.status === "offline" || m.status === "error");
+        const downMachines = (machines || []).filter((m: Record<string, unknown>) => m.status === "offline" || m.status === "error" || m.status === "down");
         context.machinesDown = downMachines;
+        context.machinesDownCount = downMachines.length;
+        context.machinesUpCount = (machines || []).length - downMachines.length;
 
-        // Active orders
+        // Active orders with production status
         const { data: orders } = await supabase
           .from("orders")
-          .select("id, order_number, status, total_amount")
-          .in("status", ["pending", "in-progress", "queued"])
-          .limit(15);
+          .select("id, order_number, status, total_amount, customer_id, required_date, qc_evidence_uploaded, qc_final_approved")
+          .in("status", ["pending", "confirmed", "in_production"])
+          .order("required_date", { ascending: true })
+          .limit(30);
         context.activeOrders = orders;
+        context.activeOrderCount = (orders || []).length;
 
-        // Pipeline leads
+        // Orders at risk (required_date within 5 days but not completed)
+        const fiveDaysFromNow = new Date(Date.now() + 5 * 86400000).toISOString();
+        const atRiskOrders = (orders || []).filter((o: Record<string, unknown>) => 
+          o.required_date && (o.required_date as string) <= fiveDaysFromNow && o.status !== "completed"
+        );
+        context.ordersAtRisk = atRiskOrders;
+
+        // Pipeline leads with staleness
         const { data: leads } = await supabase
           .from("leads")
-          .select("id, title, stage, expected_value, probability, updated_at")
-          .order("updated_at", { ascending: false })
-          .limit(10);
+          .select("id, name, title, stage, expected_value, probability, updated_at, assigned_to, sla_breached")
+          .not("status", "eq", "lost")
+          .order("expected_value", { ascending: false })
+          .limit(50);
         context.pipelineLeads = leads;
+        context.pipelineValue = (leads || []).reduce((sum: number, l: Record<string, unknown>) => sum + (Number(l.expected_value) || 0), 0);
+        const staleLeads = (leads || []).filter((l: Record<string, unknown>) => {
+          const daysSince = (Date.now() - new Date(l.updated_at as string).getTime()) / 86400000;
+          return daysSince > 5;
+        });
+        context.staleLeadCount = staleLeads.length;
 
         // AR outstanding
         const { data: arData } = await supabase
           .from("accounting_mirror")
           .select("id, entity_type, balance, customer_id, data")
-          .eq("entity_type", "invoice")
+          .eq("entity_type", "Invoice")
           .gt("balance", 0)
-          .limit(15);
+          .limit(30);
         context.outstandingAR = arData;
+        context.totalAROutstanding = (arData || []).reduce((sum: number, a: Record<string, unknown>) => sum + (Number(a.balance) || 0), 0);
 
         // Tasks
         const { data: tasks } = await supabase
@@ -3155,16 +3234,90 @@ async function fetchContext(supabase: ReturnType<typeof createClient>, agent: st
           .select("id, title, status, priority, due_date")
           .neq("status", "done")
           .order("created_at", { ascending: false })
-          .limit(15);
+          .limit(20);
         context.openTasks = tasks;
+        const overdueTasks = (tasks || []).filter((t: Record<string, unknown>) =>
+          t.due_date && new Date(t.due_date as string) < new Date()
+        );
+        context.overdueTaskCount = overdueTasks.length;
 
         // Deliveries
         const { data: deliveries } = await supabase
           .from("deliveries")
           .select("id, delivery_number, status, scheduled_date, driver_name")
           .in("status", ["planned", "scheduled", "in-transit"])
-          .limit(10);
+          .limit(15);
         context.activeDeliveries = deliveries;
+
+        // Human tasks (agent escalations / suggestions for humans)
+        const { data: humanTasks } = await supabase
+          .from("human_tasks")
+          .select("id, title, description, status, severity, category, assigned_to, created_at")
+          .in("status", ["open", "snoozed"])
+          .order("created_at", { ascending: false })
+          .limit(20);
+        context.openHumanTasks = humanTasks;
+        context.criticalHumanTasks = (humanTasks || []).filter((t: Record<string, unknown>) => t.severity === "critical");
+
+        // Leave requests (current + upcoming)
+        const { data: leaveRequests } = await supabase
+          .from("leave_requests")
+          .select("id, profile_id, leave_type, start_date, end_date, total_days, status, review_note")
+          .in("status", ["pending", "approved"])
+          .gte("end_date", new Date().toISOString().split("T")[0])
+          .order("start_date", { ascending: true })
+          .limit(15);
+        context.activeLeaveRequests = leaveRequests;
+        context.pendingLeaveCount = (leaveRequests || []).filter((l: Record<string, unknown>) => l.status === "pending").length;
+
+        // Work orders — production progress
+        const { data: workOrders } = await supabase
+          .from("work_orders")
+          .select("id, order_id, status, created_at, updated_at")
+          .in("status", ["queued", "in_progress", "cutting", "bending"])
+          .order("created_at", { ascending: false })
+          .limit(20);
+        context.activeWorkOrders = workOrders;
+
+        // Team profiles for attendance tracking
+        const { data: teamProfiles } = await supabase
+          .from("profiles")
+          .select("id, full_name, title, department, is_active, user_id")
+          .eq("is_active", true)
+          .limit(30);
+        context.teamMembers = teamProfiles;
+        context.teamSize = (teamProfiles || []).length;
+
+        // Today's time clock entries
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        const { data: clockEntries } = await supabase
+          .from("time_clock_entries")
+          .select("id, profile_id, clock_in, clock_out")
+          .gte("clock_in", todayStart.toISOString())
+          .limit(30);
+        context.todayClockEntries = clockEntries;
+        context.teamPresentToday = new Set((clockEntries || []).map((c: Record<string, unknown>) => c.profile_id)).size;
+
+        // Recent agent action log (last 24h)
+        const twentyFourHoursAgo = new Date(Date.now() - 86400000).toISOString();
+        const { data: agentActions } = await supabase
+          .from("agent_action_log")
+          .select("id, action_type, agent_id, entity_type, created_at, result")
+          .gte("created_at", twentyFourHoursAgo)
+          .order("created_at", { ascending: false })
+          .limit(30);
+        context.recentAgentActions = agentActions;
+
+        // Recent activity events for cross-department awareness
+        const { data: recentEvents } = await supabase
+          .from("activity_events")
+          .select("id, entity_type, event_type, description, source, created_at")
+          .gte("created_at", twentyFourHoursAgo)
+          .order("created_at", { ascending: false })
+          .limit(50);
+        context.recentActivityEvents = recentEvents;
+
         // All inbound emails to rebar.shop (up to 200)
         const { data: allInboundEmails, error: allInboundEmailsError } = await supabase
           .from("communications")
@@ -3190,6 +3343,17 @@ async function fetchContext(supabase: ReturnType<typeof createClient>, agent: st
           console.warn("[fetchContext] employeeCallNotes error", callNotesError);
         }
         context.employeeCallNotes = callNotes ?? [];
+
+        // Revenue MTD from orders
+        const monthStart = new Date();
+        monthStart.setDate(1);
+        monthStart.setHours(0, 0, 0, 0);
+        const { data: mtdOrders } = await supabase
+          .from("orders")
+          .select("total_amount")
+          .gte("created_at", monthStart.toISOString())
+          .in("status", ["confirmed", "in_production", "invoiced", "paid", "closed"]);
+        context.revenueMTD = (mtdOrders || []).reduce((sum: number, o: Record<string, unknown>) => sum + (Number(o.total_amount) || 0), 0);
 
       } catch (e) {
         console.error("Failed to fetch CEO context:", e);
@@ -4060,12 +4224,42 @@ function selectModel(agent: string, message: string, hasAttachments: boolean, hi
     };
   }
 
+  // Vizzy (Ops Commander) — tiered routing based on query complexity
   if (agent === "assistant") {
+    const isBriefing = /briefing|morning|daily|report|health|kpi|summary|performance|weekly/i.test(message);
+    const isCallOrSMS = /call|phone|sms|text|ring|dial/i.test(message);
+    const isEscalation = /escalat|urgent|critical|blocked|risk|alert/i.test(message);
+    const isQuickQuestion = /who|what|where|when|how many|status|check/i.test(message) && message.length < 80;
+    
+    if (isBriefing || isEscalation) {
+      return {
+        model: "google/gemini-2.5-pro",
+        maxTokens: 5000,
+        temperature: 0.2,
+        reason: "vizzy briefing/escalation → Pro for cross-department synthesis",
+      };
+    }
+    if (isCallOrSMS) {
+      return {
+        model: "google/gemini-2.5-flash",
+        maxTokens: 2000,
+        temperature: 0.3,
+        reason: "vizzy call/SMS → Flash for quick action tag generation",
+      };
+    }
+    if (isQuickQuestion) {
+      return {
+        model: "google/gemini-2.5-flash-lite",
+        maxTokens: 1500,
+        temperature: 0.4,
+        reason: "vizzy quick question → Flash-Lite for speed",
+      };
+    }
     return {
       model: "google/gemini-2.5-pro",
       maxTokens: 4000,
       temperature: 0.3,
-      reason: "assistant/Vizzy → Pro for reliable instruction following",
+      reason: "vizzy default → Pro for reliable cross-domain reasoning",
     };
   }
 
@@ -4900,6 +5094,80 @@ RULES:
         maxTokens: 6000,
         temperature: 0.3,
         reason: "commander morning briefing → Pro for multi-department synthesis",
+      };
+    }
+
+    // === VIZZY MORNING BRIEFING: Greeting detection for Ops Commander ===
+    if (agent === "assistant" && isGreeting) {
+      const today = new Date().toLocaleDateString("en-CA", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+
+      finalMessage = `[SYSTEM BRIEFING REQUEST] The user said "${message}". Today is ${today}.
+
+You MUST respond with a structured **Executive Operations Briefing** covering ALL 7 sections below using the context data provided. Reference ACTUAL data — do not fabricate.
+
+FORMAT — follow exactly:
+
+**🏢 Good morning ${userFullName.split(" ")[0]}! Here's your Operations Briefing for ${today}:**
+
+### 1. 🏥 Business Health Score
+Compute a weighted score (0-100):
+- Production progress vs capacity (30%) — from context.activeWorkOrders, context.machinesUpCount
+- Machine uptime (20%) — machines up / total machines from context.machinesSummary
+- AR aging health (20%) — from context.totalAROutstanding (lower = healthier)
+- Team attendance (15%) — from context.teamPresentToday / context.teamSize
+- Pipeline velocity (15%) — from context.staleLeadCount (fewer stale = healthier)
+
+Show as: **🏥 Health Score: XX/100** with 🟢 (80+), 🟡 (60-79), 🔴 (<60)
+
+### 2. 📊 KPI Strip
+| Revenue MTD | Active Orders | Machines Up | Pipeline Value | AR Outstanding | Team Present | Open Escalations |
+|------------|---------------|-------------|----------------|----------------|-------------|------------------|
+| $context.revenueMTD | context.activeOrderCount | context.machinesUpCount/${(context.machinesSummary || []).length} | $context.pipelineValue | $context.totalAROutstanding | context.teamPresentToday/${context.teamSize} | ${(context.criticalHumanTasks || []).length} |
+
+### 3. 🚨 Exceptions & Alerts
+ONLY flag items needing attention (exception-based):
+- Machines DOWN: from context.machinesDown (list each by name)
+- Orders at risk: from context.ordersAtRisk (delivery date within 5 days)
+- Overdue invoices: top 5 from context.outstandingAR by balance
+- Stale leads: context.staleLeadCount leads with no activity >5 days
+- Overdue tasks: context.overdueTaskCount tasks past due date
+- Pending leave requests: context.pendingLeaveCount awaiting approval
+- Critical human tasks: from context.criticalHumanTasks (agent escalations needing human action)
+
+### 4. 🤖 Agent Activity (Last 24h)
+From context.recentAgentActions, summarize:
+- How many agent actions executed
+- By type (emails sent, tasks created, calls made, etc.)
+- Any failed actions that need attention
+
+### 5. 👥 Team Status
+From context.teamMembers + context.todayClockEntries + context.activeLeaveRequests:
+| Team Member | Status | Notes |
+Show who's clocked in, who's on leave, who's absent without leave.
+
+### 6. 📋 Open Escalations
+From context.openHumanTasks, list critical/open items:
+| # | Title | Severity | Category | Age |
+Recommend action for each.
+
+### 7. 🎯 Top 3 Actions for Today
+Numbered, specific, with assignee and urgency:
+- Most impactful things the CEO should focus on today
+- Include cross-department considerations
+
+RULES:
+- Lead with the NUMBER, then the context
+- Exception-based: don't report what's working, flag what's NOT
+- Bold dollar amounts and key metrics
+- 🟢 healthy, 🟡 warning, 🔴 critical
+- End with "**Do you want me to dig deeper into any of these?**"
+- If a category has no exceptions, say "✅ All clear" — do NOT skip the section`;
+
+      briefingModelOverride = {
+        model: "google/gemini-2.5-pro",
+        maxTokens: 6000,
+        temperature: 0.2,
+        reason: "vizzy morning briefing → Pro for cross-department executive synthesis",
       };
     }
 
