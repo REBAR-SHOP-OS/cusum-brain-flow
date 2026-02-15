@@ -5500,34 +5500,58 @@ export type Database = {
       }
       seo_domains: {
         Row: {
+          avg_visit_duration_seconds: number | null
+          bounce_rate: number | null
           company_id: string
           created_at: string
           domain: string
           ga_property_id: string | null
           gsc_verified: boolean
           id: string
+          pages_per_visit: number | null
+          traffic_snapshot_month: string | null
+          unique_visitors_monthly: number | null
           updated_at: string
           verified_ga: boolean
+          visitors_change_pct: number | null
+          visits_change_pct: number | null
+          visits_monthly: number | null
         }
         Insert: {
+          avg_visit_duration_seconds?: number | null
+          bounce_rate?: number | null
           company_id?: string
           created_at?: string
           domain: string
           ga_property_id?: string | null
           gsc_verified?: boolean
           id?: string
+          pages_per_visit?: number | null
+          traffic_snapshot_month?: string | null
+          unique_visitors_monthly?: number | null
           updated_at?: string
           verified_ga?: boolean
+          visitors_change_pct?: number | null
+          visits_change_pct?: number | null
+          visits_monthly?: number | null
         }
         Update: {
+          avg_visit_duration_seconds?: number | null
+          bounce_rate?: number | null
           company_id?: string
           created_at?: string
           domain?: string
           ga_property_id?: string | null
           gsc_verified?: boolean
           id?: string
+          pages_per_visit?: number | null
+          traffic_snapshot_month?: string | null
+          unique_visitors_monthly?: number | null
           updated_at?: string
           verified_ga?: boolean
+          visitors_change_pct?: number | null
+          visits_change_pct?: number | null
+          visits_monthly?: number | null
         }
         Relationships: []
       }
