@@ -234,3 +234,6 @@ verify_jwt = false
 
 [functions.website-health-check]
 verify_jwt = false
+
+[functions.website-speed-audit]
+verify_jwt = false
