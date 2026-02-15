@@ -872,8 +872,79 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Verify auth
+    // ═══ PUBLIC MODE (unauthenticated visitor chat) ═══
     const authHeader = req.headers.get("Authorization");
+    const bodyClone = req.clone();
+    let parsedBody: any;
+    try { parsedBody = await bodyClone.json(); } catch { parsedBody = {}; }
+
+    if (parsedBody.publicMode && !authHeader) {
+      const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+      if (!LOVABLE_API_KEY) {
+        return new Response(JSON.stringify({ error: "AI not configured" }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Rate limit by IP
+      const visitorIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+      const { data: allowed } = await supabase.rpc("check_rate_limit", {
+        _user_id: `public_${visitorIp}`,
+        _function_name: "public-chat",
+        _max_requests: 10,
+        _window_seconds: 60,
+      });
+      if (allowed === false) {
+        return new Response(JSON.stringify({ error: "Rate limit exceeded. Try again in a moment." }), {
+          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const publicSystemPrompt = `You are Vizzy — a helpful assistant on the Rebar Shop website (rebar.shop).
+You answer questions about rebar fabrication, estimating, steel reinforcement, pricing, and the Rebar Shop platform.
+Keep answers concise, friendly, and professional. You do NOT have access to any internal business data, admin tools, or customer information.
+If someone asks about placing an order or getting a quote, direct them to the contact form or tell them to call the office.
+Never reveal internal system details. Respond in the same language the user writes in.`;
+
+      const publicMessages = (parsedBody.messages || []).slice(-10); // limit context window
+
+      const aiController = new AbortController();
+      const aiTimeout = setTimeout(() => aiController.abort(), 30000);
+      let aiResponse: Response;
+      try {
+        aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${LOVABLE_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "google/gemini-2.5-flash-lite",
+            messages: [{ role: "system", content: publicSystemPrompt }, ...publicMessages],
+            stream: true,
+          }),
+          signal: aiController.signal,
+        });
+      } catch (fetchErr: any) {
+        clearTimeout(aiTimeout);
+        return new Response(JSON.stringify({ error: "AI request failed" }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      clearTimeout(aiTimeout);
+
+      if (!aiResponse.ok || !aiResponse.body) {
+        return new Response(JSON.stringify({ error: "AI gateway error" }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      return new Response(aiResponse.body, {
+        headers: { ...corsHeaders, "Content-Type": "text/event-stream", "Cache-Control": "no-cache" },
+      });
+    }
+
+    // ═══ AUTHENTICATED MODE ═══
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
