@@ -1,47 +1,88 @@
 
-# Add WooCommerce API Key Authentication
+# Add Live Chat to rebar.shop
 
-Currently all WooCommerce API calls go through WordPress Basic Auth (username + app password). This works but WooCommerce has its own dedicated consumer key/secret authentication which is more secure and gives granular WooCommerce-specific permissions. The screenshot shows the WooCommerce REST API keys that need to be stored.
+Embed an AI-powered chat widget on rebar.shop so website visitors can ask questions about rebar fabrication, get quotes, and learn about your services -- without needing to log in.
 
-## What Changes
+## How It Works
 
-1. **Store two new secrets**: `WC_CONSUMER_KEY` and `WC_CONSUMER_SECRET`
-2. **Update `WPClient`** to use WooCommerce OAuth/query-param authentication for all `/wc/v3/` endpoints instead of WordPress Basic Auth
-
-## How WooCommerce Auth Works
-
-WooCommerce REST API over HTTPS uses query parameter authentication:
-```
-https://rebar.shop/wp-json/wc/v3/products?consumer_key=ck_xxx&consumer_secret=cs_xxx
-```
-
-This is separate from WordPress credentials and gives WooCommerce-specific access control.
-
-## Files to Edit
-
-### 1. Add Secrets (2 new secrets)
-
-- `WC_CONSUMER_KEY` -- the consumer key starting with `ck_`
-- `WC_CONSUMER_SECRET` -- the consumer secret starting with `cs_`
-
-### 2. `supabase/functions/_shared/wpClient.ts`
-
-- Add optional WooCommerce credentials in the constructor: read `WC_CONSUMER_KEY` and `WC_CONSUMER_SECRET` from env
-- Modify the `request` method: when the endpoint starts with `/wc/v3/`, use query-param auth (`consumer_key` and `consumer_secret`) instead of Basic Auth header
-- Fall back to existing Basic Auth if WC keys are not set (backward compatible)
-
-### Technical Detail
-
-In the `request` method, before making the fetch call:
+A single script tag is added to WordPress. It loads a floating chat bubble (bottom-right corner) that connects to your backend AI. Visitors type questions, the AI responds using your business knowledge.
 
 ```text
-if endpoint starts with "/wc/v3/" AND WC keys exist:
-  - append consumer_key and consumer_secret as URL query params
-  - do NOT send Authorization header
-else:
-  - use existing Basic Auth header (WordPress endpoints)
+rebar.shop visitor clicks chat bubble
+        |
+        v
+Chat widget (injected via script tag)
+        |
+        v
+website-chat edge function (no auth required)
+        |
+        v
+Lovable AI (Gemini Flash) with rebar.shop context
 ```
 
-This keeps WordPress post/page operations on Basic Auth while routing all WooCommerce calls through proper WC authentication.
+## What You'll See
 
-No database changes, no new edge functions, no frontend changes needed.
+- A floating chat bubble on every page of rebar.shop
+- Visitors can ask about products, pricing, services, delivery areas
+- AI responds with knowledge about your rebar fabrication business
+- Styled to match rebar.shop branding (dark theme, your accent color)
+
+## What Gets Built
+
+### 1. New Edge Function: `website-chat`
+
+A public (no auth) chat endpoint tailored for website visitors. Similar to `app-help-chat` but with a system prompt focused on:
+- Rebar products and services
+- Pricing inquiries (directing to quote requests)
+- Delivery and service areas
+- Company info and capabilities
+- Encouraging visitors to call or request a quote
+
+Includes IP-based rate limiting (simple in-memory) to prevent abuse since there's no authentication.
+
+### 2. New Edge Function: `website-chat-widget`
+
+Serves a self-contained JavaScript file that:
+- Injects a floating chat bubble (bottom-right)
+- Opens a chat panel on click
+- Handles SSE streaming responses
+- Styled with inline CSS (no external dependencies)
+- Fully self-contained -- no React, no build tools needed
+
+### 3. WordPress Integration
+
+Add one line to your WordPress site (via theme header or plugin):
+
+```html
+<script src="https://uavzziigfnqpfdkczbdo.supabase.co/functions/v1/website-chat-widget" defer></script>
+```
+
+This can be added via:
+- WordPress Appearance > Theme Editor > header.php
+- Or a "Header Scripts" plugin
+- Or Seomi can inject it via the WordPress API
+
+## Technical Details
+
+### `supabase/functions/website-chat/index.ts`
+- No authentication required (public endpoint)
+- System prompt with rebar.shop business context (products, services, contact info)
+- Uses `LOVABLE_API_KEY` with `google/gemini-3-flash-preview` (same as app-help-chat)
+- In-memory rate limit: max 10 messages per IP per minute
+- Streams SSE responses back to the widget
+- Max 10 messages per conversation (enforced server-side)
+
+### `supabase/functions/website-chat-widget/index.ts`
+- Returns `Content-Type: application/javascript`
+- Self-contained JS that creates the chat UI via DOM manipulation
+- Floating bubble: 56px circle, your brand color (#E97F0F orange)
+- Chat panel: 380px wide, dark themed to match rebar.shop
+- Handles Enter to send, streaming text display, loading states
+- Mobile responsive (full-width on small screens)
+
+### `supabase/config.toml`
+- Add both functions with `verify_jwt = false`
+
+### No database changes needed
+- No new tables or migrations
+- No RLS policies needed (stateless chat, no data stored)
