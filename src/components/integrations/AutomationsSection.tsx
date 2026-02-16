@@ -3,7 +3,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Bot, Mail, FileText, MessageCircle, Sparkles, Send, Globe } from "lucide-react";
+import { Bot, Mail, FileText, MessageCircle, Sparkles, Send, Globe, Code, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface Automation {
@@ -11,8 +11,8 @@ export interface Automation {
   name: string;
   description: string;
   enabled: boolean;
-  color: "purple" | "blue" | "gold" | "teal";
-  icon: "social" | "inbox" | "summary" | "comment" | "email" | "website";
+  color: "purple" | "blue" | "gold" | "teal" | "red";
+  icon: "social" | "inbox" | "summary" | "comment" | "email" | "website" | "code" | "search";
   beta?: boolean;
   route?: string;
 }
@@ -72,6 +72,24 @@ const defaultAutomations: Automation[] = [
     icon: "website",
     route: "/website",
   },
+  {
+    id: "app-builder",
+    name: "App Builder",
+    description: "Venture architect with ERP & Odoo data",
+    enabled: true,
+    color: "red",
+    icon: "code",
+    route: "/empire",
+  },
+  {
+    id: "seo-manager",
+    name: "SEO Manager",
+    description: "AI-driven SEO audits for rebar.shop",
+    enabled: true,
+    color: "teal",
+    icon: "search",
+    route: "/seo",
+  },
 ];
 
 const colorGradients = {
@@ -79,6 +97,7 @@ const colorGradients = {
   blue: "bg-gradient-to-br from-blue-600 via-blue-500 to-cyan-500",
   gold: "bg-gradient-to-br from-amber-500 via-yellow-500 to-orange-400",
   teal: "bg-gradient-to-br from-teal-500 via-emerald-500 to-green-400",
+  red: "bg-gradient-to-br from-red-500 via-orange-500 to-amber-500",
 };
 
 const iconComponents = {
@@ -88,6 +107,8 @@ const iconComponents = {
   comment: MessageCircle,
   email: Send,
   website: Globe,
+  code: Code,
+  search: Search,
 };
 
 interface AutomationCardProps {

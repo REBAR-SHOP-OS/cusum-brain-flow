@@ -258,3 +258,6 @@ verify_jwt = false
 
 [functions.support-suggest]
 verify_jwt = false
+
+[functions.empire-architect]
+verify_jwt = false

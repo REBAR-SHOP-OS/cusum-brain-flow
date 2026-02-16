@@ -7198,6 +7198,81 @@ export type Database = {
         }
         Relationships: []
       }
+      ventures: {
+        Row: {
+          ai_analysis: Json | null
+          company_id: string | null
+          competitive_notes: string | null
+          created_at: string
+          created_by: string
+          distribution_plan: string | null
+          id: string
+          linked_lead_id: string | null
+          linked_order_ids: string[] | null
+          metrics: Json | null
+          mvp_scope: string | null
+          name: string
+          notes: string | null
+          odoo_context: Json | null
+          phase: string
+          problem_statement: string | null
+          revenue_model: string | null
+          status: string
+          target_customer: string | null
+          updated_at: string
+          value_multiplier: string | null
+          vertical: string | null
+        }
+        Insert: {
+          ai_analysis?: Json | null
+          company_id?: string | null
+          competitive_notes?: string | null
+          created_at?: string
+          created_by: string
+          distribution_plan?: string | null
+          id?: string
+          linked_lead_id?: string | null
+          linked_order_ids?: string[] | null
+          metrics?: Json | null
+          mvp_scope?: string | null
+          name: string
+          notes?: string | null
+          odoo_context?: Json | null
+          phase?: string
+          problem_statement?: string | null
+          revenue_model?: string | null
+          status?: string
+          target_customer?: string | null
+          updated_at?: string
+          value_multiplier?: string | null
+          vertical?: string | null
+        }
+        Update: {
+          ai_analysis?: Json | null
+          company_id?: string | null
+          competitive_notes?: string | null
+          created_at?: string
+          created_by?: string
+          distribution_plan?: string | null
+          id?: string
+          linked_lead_id?: string | null
+          linked_order_ids?: string[] | null
+          metrics?: Json | null
+          mvp_scope?: string | null
+          name?: string
+          notes?: string | null
+          odoo_context?: Json | null
+          phase?: string
+          problem_statement?: string | null
+          revenue_model?: string | null
+          status?: string
+          target_customer?: string | null
+          updated_at?: string
+          value_multiplier?: string | null
+          vertical?: string | null
+        }
+        Relationships: []
+      }
       vizzy_fix_requests: {
         Row: {
           affected_area: string | null
