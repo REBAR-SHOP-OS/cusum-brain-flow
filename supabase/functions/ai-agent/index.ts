@@ -54,7 +54,12 @@ async function fetchFileAsBase64(url: string): Promise<{ base64: string; mimeTyp
     
     const contentType = response.headers.get("content-type") || "application/octet-stream";
     const arrayBuffer = await response.arrayBuffer();
-    const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+    const bytes = new Uint8Array(arrayBuffer);
+    let binary = "";
+    for (let i = 0; i < bytes.length; i += 8192) {
+      binary += String.fromCharCode(...bytes.slice(i, i + 8192));
+    }
+    const base64 = btoa(binary);
     
     return { base64, mimeType: contentType };
   } catch (error) {
