@@ -1,106 +1,97 @@
 
-# Proactive AI Greeting, Sales Notifications, and Assign-to-All-Users
+
+# Redesign Website Chat Widget for a Unique Customer Experience
 
 ## Overview
 
-Three upgrades to the support chat system:
+Transform the external rebar.shop chat widget from a basic dark-themed panel into a premium, branded experience with smooth animations, smart quick-action chips, online agent indicators, a subtle notification badge, and a warm personality -- making every visitor feel welcomed and valued.
 
-1. **Proactive AI greeting**: When a visitor lands on the website and opens the chat, the AI automatically sends a contextual welcome message based on the page they are viewing (e.g., "I see you're looking at N16 Deformed Bar -- would you like a quote?"). This replaces the static welcome text.
+## Visual Redesign
 
-2. **Sales team notifications**: When a new visitor starts a chat, all sales team members receive a push notification ("New visitor on rebar.shop from Sydney -- viewing N16 Deformed Bar"). This ensures someone picks up the conversation quickly.
+### Chat Bubble
+- Larger, more inviting bubble with a subtle pulse animation when no chat is active (draws attention)
+- Branded gradient: warm orange-to-amber matching Rebar Shop identity
+- Unread message badge (orange dot) when AI has responded and panel is closed
+- Smooth morph transition when toggling between chat and close icons
 
-3. **Assign to any user**: The "Assign to me" button is replaced with a dropdown that lists all team members so you can assign conversations to anyone, not just yourself.
+### Chat Panel
+- Modern glassmorphism-inspired design with warm dark theme (#111827 base)
+- Branded header with Rebar Shop logo area, "Online" status indicator with green pulsing dot, and tagline "We typically reply in seconds"
+- Rounded message bubbles with tails (user: orange gradient, bot: subtle glass card)
+- Smooth slide-up + fade animation on open, slide-down on close
+- Sound effect option: subtle "pop" on new bot message (optional, off by default)
+- Powered-by footer with Rebar Shop branding
 
-## What Changes
+### Quick Action Chips (shown on empty state)
+- Styled pill buttons that visitors can tap to start common conversations:
+  - "Get a Quote"
+  - "Check Stock"
+  - "Delivery Areas"
+  - "Talk to Sales"
+- Chips disappear once first message is sent
 
-### 1. Proactive AI Welcome (Both Widgets)
+### Typing Indicator
+- Animated dots with a subtle wave effect (more polished than current bounce)
+- Shows "Rebar Shop is typing..." text alongside dots
 
-**support-chat edge function** (`handleStart`):
-- After creating the conversation, fire off an AI greeting using the same `triggerAiReply` logic but with a special "proactive greeting" prompt
-- The AI sees the visitor's `current_page` and crafts a personalised welcome (e.g., "I see you're browsing our mesh products -- need help choosing the right size?")
-- If the visitor is on a product page, the AI references that product specifically
-- This message appears as a `bot` message immediately after "Conversation started"
+### Message Enhancements
+- Timestamps on messages (e.g., "2:34 PM")
+- Bot messages show a small Rebar Shop avatar icon
+- Links in bot messages are styled as orange underlined text
+- Smooth fade-in animation for each new message
 
-**website-chat-widget** (`website-agent`):
-- Update the widget JS so when the chat panel opens for the first time (no messages yet), it automatically sends a silent "init" message with the current page
-- The website-agent responds with a contextual greeting instead of the generic welcome text
+## Notification & Engagement Features
 
-### 2. Notify Sales Team on New Visitor
+### Proactive Teaser Bubble
+- After 5 seconds on the page (if chat hasn't been opened), show a small speech bubble above the chat button: "Need help with rebar? We're online!"
+- Auto-dismisses after 8 seconds or on click
+- Only shows once per session (tracked via sessionStorage)
 
-**support-chat edge function** (`handleStart`):
-- After creating the conversation, insert a notification into the `notifications` table for each sales-relevant team member
-- The notification title: "New Website Visitor"
-- The description includes visitor name, city, and current page
-- The `link_to` points to `/support-inbox` so they can jump straight in
-- This triggers the existing `push-on-notify` edge function which sends browser push alerts with sound
+### Unread Badge
+- When AI responds while panel is closed, show a red "1" badge on the bubble
+- Clears when panel is opened
 
-**Who gets notified**: All profiles with a matching `company_id` (the entire team gets the alert so whoever is available can respond)
-
-### 3. Assign Dropdown with All Users
-
-**SupportChatView.tsx**:
-- Replace the "Assign to me" button with a dropdown (`Select`) listing all team members from `profiles`
-- Show each person's name in the dropdown
-- When selected, update `assigned_to` on the conversation
-- The current assignee is shown as the selected value
-
-### 4. AI Handoff to Human
-
-When the AI detects the visitor wants to talk to a real person, it should:
-- Respond warmly: "Let me connect you with one of our team members"
-- The system already supports this since agents can jump in at any time
-- Update the system prompt to instruct the AI: "If the visitor asks to speak with a person, let them know a team member will be with them shortly and that you've notified the sales team"
+## Mobile Optimisations
+- Full-width panel on mobile (< 480px) with larger touch targets
+- Bottom sheet style with drag-to-close hint
+- Input area stays above mobile keyboard
 
 ## Technical Details
 
-### Files Modified
+### File Modified
 
 | File | Change |
 |------|--------|
-| `supabase/functions/support-chat/index.ts` | Add proactive AI greeting in `handleStart`, add sales team notifications, update AI prompt for handoff |
-| `supabase/functions/website-chat-widget/index.ts` | Auto-send init message on panel open for contextual AI greeting |
-| `supabase/functions/website-agent/index.ts` | Handle init/greeting message, update system prompt for handoff behaviour |
-| `src/components/support/SupportChatView.tsx` | Replace "Assign to me" with full team member dropdown |
+| `supabase/functions/website-chat-widget/index.ts` | Complete CSS and JS redesign of the injected widget |
 
-### Proactive Greeting Flow (support-chat widget)
+### Key CSS Changes
+- Replace flat `#1a1a2e` background with modern gradient dark theme
+- Add `@keyframes` for: bubble pulse, slide-up panel, fade-in messages, wave typing dots, teaser bubble pop-in
+- Message bubbles with `border-radius` tails (CSS triangle or asymmetric radius)
+- Glassmorphism on bot messages: `backdrop-filter: blur(8px); background: rgba(255,255,255,0.06)`
+- Smooth transitions on all interactive elements
+- Orange gradient for user messages: `linear-gradient(135deg, #E97F0F, #F59E0B)`
 
-```text
-Visitor opens widget --> enters name --> clicks "Start Chat"
-  --> handleStart creates conversation
-  --> Inserts "Conversation started" system message
-  --> Fires proactive AI greeting (bot sees current_page, crafts welcome)
-  --> Inserts notification for all team members
-  --> Bot greeting appears in widget within 2-3 seconds
-```
+### Key JS Changes
+- Add `sessionStorage` tracking for teaser bubble (show once per session)
+- Add unread badge counter (increment on bot message when closed, clear on open)
+- Add timestamp rendering on each message
+- Add quick action chips that call `sendMessage()` with preset text
+- Add bot avatar (inline SVG) next to assistant messages
+- Proactive teaser: `setTimeout` at 5s, auto-dismiss at 13s, hide on bubble click
+- Auto-resize panel height based on content (min 300px, max 500px)
 
-### Proactive Greeting Flow (website-agent widget / rebar.shop)
+### No Backend Changes
+This is purely a frontend widget redesign. The chat still connects to the same `website-agent` endpoint. All changes are in the injected JavaScript/CSS served by the edge function.
 
-```text
-Visitor clicks chat bubble (no pre-chat form)
-  --> Widget auto-sends { messages: [{role:"user", content:"[INIT]"}], current_page: "..." }
-  --> website-agent detects [INIT], responds with page-contextual greeting
-  --> Greeting streams into widget immediately
-```
+### Animations Summary
 
-### Notification Insert (in handleStart)
+| Element | Animation |
+|---------|-----------|
+| Bubble | Subtle pulse glow every 3s when idle |
+| Panel | Slide up + fade in 250ms ease-out |
+| Messages | Fade in + slight slide from bottom, 150ms |
+| Typing dots | Smooth wave (translateY) with staggered delays |
+| Teaser | Pop in from right with bounce, auto-dismiss fade out |
+| Quick chips | Scale up on hover, fade out when first message sent |
 
-```sql
-INSERT INTO notifications (user_id, type, title, description, link_to, agent_name, agent_color, status)
-SELECT user_id, 'support_visitor', 'New Website Visitor', 
-       'Visitor from Sydney viewing /product/n16-deformed-bar',
-       '/support-inbox', 'Support', '#10b981', 'pending'
-FROM profiles WHERE company_id = '{company_id}'
-```
-
-This triggers the existing `push-on-notify` function which sends browser push notifications with the mockingjay sound.
-
-### Team Member Dropdown (SupportChatView.tsx)
-
-- Fetch all profiles for the company on mount
-- Render a `Select` dropdown with "Unassigned" as default + all team members
-- On change, update `support_conversations.assigned_to` and set status to "assigned"
-- Show current assignee's name
-
-### No Database Migrations Required
-
-All tables (`notifications`, `profiles`, `support_conversations`, `support_messages`) already have the necessary columns. No schema changes needed.
