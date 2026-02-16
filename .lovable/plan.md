@@ -1,127 +1,126 @@
 
-
-# Quotation, Invoice, Packing Slip Generation + Smart File Handling in Live Chat
+# Add App Builder and SEO Manager Cards -- Integrated with rebar.shop, ERP, and Odoo
 
 ## Overview
 
-Three major enhancements:
+Add two new automation cards to the homepage Automations grid, fully wired into the existing ecosystem:
 
-1. **Document Generation**: Add tools to the `website-agent` so the AI can generate branded Quotation, Invoice, and Packing Slip documents directly in the live chat -- rendered as beautiful HTML that visitors can print/save as PDF.
+1. **App Builder** -- Routes to `/empire`, a new venture-building workspace integrated with ERP data (pipeline leads, Odoo CRM stages, order metrics) to ground venture planning in real business data.
+2. **SEO Manager** -- Routes to the existing `/seo` module, which is already integrated with rebar.shop (WordPress API) and Google Search Console.
 
-2. **Drawing Upload --> New Lead**: When a visitor uploads a structural drawing (PDF/image), the AI detects it and automatically creates a new lead in the pipeline with the file attached, so the sales team can follow up.
+## What Changes
 
-3. **Barlist Upload --> Instant Quote**: When a visitor uploads a bar bending schedule (barlist), the AI extracts the rebar items using the existing `extract-manifest` edge function and generates an instant rough quotation with pricing estimates, right in the chat.
+### 1. AutomationsSection.tsx -- Two New Cards
 
-## What the Customer Will Experience
+Add `Code` and `Search` icons from lucide-react. Expand the `color` type to include `"red"`. Expand the `icon` type to include `"code"` and `"search"`. Add two new entries to `defaultAutomations`:
 
-### Quotation in Chat
-- Visitor asks for a quote and provides items/details
-- AI collects info, then generates a formatted quotation matching the existing Rebar.Shop branded template (same layout as the PDF you shared: logo, line items, inclusions, totals with HST 13%, signature area, footer)
-- Quotation is rendered as styled HTML inside a chat message -- visitor can print or save as PDF directly from browser
+- **App Builder**: red/orange gradient, Code icon, routes to `/empire`
+- **SEO Manager**: teal gradient, Search icon, routes to `/seo`
 
-### Drawing Upload
-- Visitor attaches a PDF or image of a structural drawing
-- AI recognizes it as a drawing (not a barlist) based on content analysis
-- AI creates a new lead in the pipeline with source "website_chat" and attaches the file
-- AI responds: "I've forwarded your drawing to our estimating team. They'll prepare a detailed quote and reach out shortly."
+### 2. New Page: `src/pages/EmpireBuilder.tsx`
 
-### Barlist Upload --> Instant Pricing
-- Visitor attaches a bar bending schedule (PDF/image/spreadsheet)
-- AI recognizes it as a barlist and calls the `extract-manifest` endpoint to parse items
-- Using the extracted items (bar codes, quantities, lengths), AI generates an instant rough quotation with estimated pricing
-- AI presents the quotation in the branded template format and notes it's an estimate pending formal review
+A venture workspace with sections that pull live data from the ERP and Odoo:
 
-## Technical Details
+- **Pipeline Integration**: Fetches active leads from `leads` table to show real deal flow alongside venture ideas. Ventures can be linked to pipeline stages.
+- **Odoo CRM Data**: Reads from `odoo_leads` to show the current Odoo pipeline state (lead counts, stage distribution, revenue in pipeline) as context for market validation.
+- **rebar.shop Metrics**: Pulls website performance from `seo_keywords_ai` and `seo_pages_ai` tables to inform the "Market Feedback" phase with real traffic/conversion data.
+- **Order/Revenue Context**: Reads from `orders` table to show revenue trends, helping validate "Scale Engine" phase decisions with actual financial data.
 
-### Files Modified
+The page has a Kanban board with 5 phases (Target Selection, Weapon Build, Market Feedback, Scale Engine, Empire Expansion) and an AI Architect button that sends venture data plus live ERP context to an edge function for analysis.
 
-| File | Change |
+### 3. Database: `ventures` Table
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | uuid PK | default gen_random_uuid() |
+| created_by | uuid | references auth.users, not null |
+| company_id | uuid | references companies, ties to ERP |
+| name | text | Venture name |
+| vertical | text | Industry |
+| phase | text | target_selection, weapon_build, market_feedback, scale_engine, empire_expansion |
+| problem_statement | text | |
+| target_customer | text | |
+| value_multiplier | text | |
+| competitive_notes | text | |
+| mvp_scope | text | |
+| distribution_plan | text | |
+| metrics | jsonb | Activation, retention, WTP |
+| revenue_model | text | |
+| ai_analysis | jsonb | Latest AI stress-test |
+| linked_lead_id | uuid | Optional FK to leads table -- links venture to a real pipeline deal |
+| linked_order_ids | uuid[] | Optional array of order IDs for revenue tracking |
+| odoo_context | jsonb | Snapshot of relevant Odoo pipeline data |
+| status | text | active, paused, killed, won |
+| notes | text | |
+| created_at | timestamptz | default now() |
+| updated_at | timestamptz | default now() |
+
+RLS: `created_by = auth.uid()` for all operations. Admin can see all.
+
+### 4. Edge Function: `empire-architect`
+
+Uses Lovable AI (google/gemini-3-flash-preview) to analyze ventures with real context:
+
+- Accepts venture data plus optional ERP snapshots (pipeline summary, order revenue, SEO metrics, Odoo stage counts)
+- Returns structured JSON: viability score, problem clarity, market size estimate, risks, next 3 actions, kill/continue recommendation
+- Grounds the AI analysis in actual business data rather than abstract theory
+
+### 5. Route in App.tsx
+
+Add:
+```
+import EmpireBuilder from "./pages/EmpireBuilder";
+// ...
+<Route path="/empire" element={<P><EmpireBuilder /></P>} />
+```
+
+### 6. SEO Manager -- Already Integrated
+
+The `/seo` route already exists and connects to:
+- **rebar.shop**: Via WordPress API (WP_BASE_URL, WP_APP_PASSWORD) for content audits, meta tag updates, link fixes
+- **Google Search Console**: Via GSC credentials for search performance data
+- **ERP**: SEO tasks stored in `seo_tasks`, keywords in `seo_keywords_ai`, pages in `seo_pages_ai`
+
+No changes needed for SEO -- just adding the automation card to make it visible on the home page.
+
+## Integration Summary
+
+```text
++------------------+     +------------------+     +------------------+
+|   App Builder    |     |   SEO Manager    |     |  Job Site Mgr    |
+|   (/empire)      |     |   (/seo)         |     |  (/website)      |
++--------+---------+     +--------+---------+     +--------+---------+
+         |                        |                        |
+         v                        v                        v
++--------+---------+     +--------+---------+     +--------+---------+
+| leads, orders,   |     | seo_keywords_ai, |     | WordPress API,   |
+| odoo_leads,      |     | seo_pages_ai,    |     | WooCommerce,     |
+| ventures (new)   |     | seo_tasks        |     | wp_change_log    |
++--------+---------+     +--------+---------+     +--------+---------+
+         |                        |                        |
+         +------------------------+------------------------+
+                                  |
+                         +--------+---------+
+                         |   rebar.shop     |
+                         |   (WordPress)    |
+                         +------------------+
+```
+
+## Files to Create/Modify
+
+| File | Action |
 |------|--------|
-| `supabase/functions/website-agent/index.ts` | Add 3 new tools: `generate_quotation`, `create_lead_from_drawing`, `process_barlist_quote`. Update system prompt with file handling instructions |
-| `supabase/functions/support-chat/index.ts` | Update AI prompt to handle file uploads similarly (drawing detection, barlist detection) and instruct visitors to use the main widget for document features |
+| `src/components/integrations/AutomationsSection.tsx` | Add 2 cards, new icons, new color |
+| `src/pages/EmpireBuilder.tsx` | New page with Kanban + ERP data hooks |
+| `src/components/empire/EmpireBoard.tsx` | Kanban board component |
+| `src/components/empire/VentureCard.tsx` | Draggable venture card |
+| `src/components/empire/VentureDetail.tsx` | Detail panel with ERP context sections |
+| `src/components/empire/NewVentureDialog.tsx` | Create venture dialog |
+| `src/components/empire/AIStressTest.tsx` | AI analysis display |
+| `supabase/functions/empire-architect/index.ts` | AI analysis edge function |
+| `src/App.tsx` | Add `/empire` route |
+| Database migration | Create `ventures` table with RLS |
 
-### New Tools for `website-agent`
+## No External Dependencies
 
-**1. `generate_quotation`**
-- Input: customer_name, customer_email, project_name, items (array of description/qty/unit_price), inclusions, exclusions, notes
-- Output: Branded HTML quotation matching the existing InvoiceTemplate/QuotationTemplate style
-- Also creates a `quote_requests` record in the database
-- Returns the HTML so the AI can embed it in the chat message
-
-**2. `create_lead_from_drawing`**
-- Input: customer_name, customer_email, project_name, file_description, notes
-- Creates a new lead in `leads` table with stage "new", source "website_chat"
-- Creates a `quote_requests` record linked to it
-- Returns confirmation with quote number
-
-**3. `process_barlist_quote`**
-- Input: barlist_text (the extracted/OCR'd content from the uploaded file), customer_name, customer_email, project_name
-- Calls the AI to parse rebar items from the text
-- Calculates rough pricing using standard rates (per kg based on bar size)
-- Returns a formatted quotation HTML with estimated pricing
-- Notes clearly that this is an estimate pending formal review
-
-### System Prompt Updates
-
-Add to the `website-agent` system prompt:
-
-```
-## File Upload Handling
-When a visitor uploads a file:
-
-1. DRAWING DETECTION: If the file appears to be a structural/engineering drawing 
-   (mentions footings, beams, columns, slabs, structural details, has drawing numbers):
-   - Collect visitor name and email if not already known
-   - Use create_lead_from_drawing to create a pipeline lead
-   - Let them know the estimating team will prepare a detailed quote
-
-2. BARLIST DETECTION: If the file appears to be a bar bending schedule / barlist / 
-   rebar schedule (has columns like Mark, Bar Size, Shape, Length, Qty):
-   - Use process_barlist_quote to extract items and generate instant pricing
-   - Present the rough quotation in the chat
-   - Note that formal pricing will follow from the team
-
-3. QUOTATION GENERATION: When you have enough info to create a quote:
-   - Use generate_quotation to produce a branded quote document
-   - Always include HST 13% tax
-   - Include standard terms and delivery notes
-```
-
-### Quotation HTML Template
-
-The generated HTML will match the existing brand style from `QuotationTemplate.tsx`:
-- Rebar.Shop Inc header with logo placeholder and address (9 Cedar Ave, Thornhill L3T 3W1)
-- Customer info section
-- Line items table (Description, Qty, Unit Price, Amount)
-- Inclusions/Exclusions checklist
-- Subtotal, HST 13%, Total
-- Footer with phone, email, HST number
-- Print-friendly CSS included inline
-
-### Standard Pricing for Instant Barlist Quotes
-
-Rough pricing table used for instant estimates (per kg):
-- N12: $2.20/kg (0.888 kg/m)
-- N16: $2.10/kg (1.58 kg/m)  
-- N20: $2.00/kg (2.47 kg/m)
-- N24: $1.95/kg (3.55 kg/m)
-- N28: $1.90/kg (4.83 kg/m)
-- N32: $1.85/kg (6.31 kg/m)
-- N36: $1.80/kg (7.99 kg/m)
-- Fabrication surcharge: +$0.30/kg for bends
-- These are estimate prices -- clearly marked as "Budget Estimate, Subject to Formal Quote"
-
-### Support Chat Integration
-
-Update `support-chat/index.ts` AI prompt to add:
-- When a visitor describes uploading a drawing or barlist, guide them to send the file
-- The support chat doesn't have tool-calling, so it should collect details and create a `quote_requests` record directly via the conversation flow
-- The AI should ask for details and let them know the team will follow up
-
-### No Database Changes
-
-All data flows into existing tables:
-- `quote_requests` for quotations
-- `leads` for drawing-based leads
-- `activity_events` for logging
-
+Uses existing UI components, Lovable AI gateway, and current database tables. No new packages needed.
