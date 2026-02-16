@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Send, User, UserCheck, CheckCircle, MessageSquare, StickyNote, Sparkles, Loader2 } from "lucide-react";
+import { Send, User, UserCheck, CheckCircle, MessageSquare, StickyNote, Sparkles, Loader2, MapPin, Globe, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { playMockingjayWhistle } from "@/lib/notificationSound";
@@ -194,36 +194,69 @@ export function SupportChatView({ conversationId }: Props) {
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Header */}
       {convo && (
-        <div className="border-b border-border px-4 py-3 flex items-center justify-between bg-muted/20">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-              <User className="w-4 h-4 text-primary" />
+        <div className="border-b border-border px-4 py-3 flex flex-col gap-2 bg-muted/20">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                  <User className="w-4 h-4 text-primary" />
+                </div>
+                {(() => {
+                  const lastSeen = convo.metadata?.last_seen_at;
+                  if (!lastSeen) return null;
+                  const diffSec = (Date.now() - new Date(lastSeen).getTime()) / 1000;
+                  const color = diffSec < 60 ? "bg-green-500" : diffSec < 300 ? "bg-yellow-500" : "bg-muted-foreground/30";
+                  return <div className={cn("absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-background", color)} />;
+                })()}
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium">{convo.visitor_name || "Visitor"}</p>
+                  {convo.metadata?.city && (
+                    <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
+                      <MapPin className="w-3 h-3" />
+                      {convo.metadata.city}{convo.metadata.country ? `, ${convo.metadata.country}` : ""}
+                    </span>
+                  )}
+                </div>
+                {convo.visitor_email && <p className="text-xs text-muted-foreground">{convo.visitor_email}</p>}
+              </div>
+              <Badge variant="outline" className="text-[10px]">{convo.status}</Badge>
             </div>
-            <div>
-              <p className="text-sm font-medium">{convo.visitor_name || "Visitor"}</p>
-              {convo.visitor_email && <p className="text-xs text-muted-foreground">{convo.visitor_email}</p>}
+            <div className="flex items-center gap-2">
+              {!convo.assigned_to && (
+                <Button variant="outline" size="sm" onClick={assignToMe} className="text-xs gap-1">
+                  <UserCheck className="w-3 h-3" /> Assign to me
+                </Button>
+              )}
+              <Select value={convo.status} onValueChange={updateStatus}>
+                <SelectTrigger className="w-28 h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="open">Open</SelectItem>
+                  <SelectItem value="assigned">Assigned</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="resolved">Resolved</SelectItem>
+                  <SelectItem value="closed">Closed</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-            <Badge variant="outline" className="text-[10px]">{convo.status}</Badge>
           </div>
-          <div className="flex items-center gap-2">
-            {!convo.assigned_to && (
-              <Button variant="outline" size="sm" onClick={assignToMe} className="text-xs gap-1">
-                <UserCheck className="w-3 h-3" /> Assign to me
-              </Button>
-            )}
-            <Select value={convo.status} onValueChange={updateStatus}>
-              <SelectTrigger className="w-28 h-8 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="open">Open</SelectItem>
-                <SelectItem value="assigned">Assigned</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="resolved">Resolved</SelectItem>
-                <SelectItem value="closed">Closed</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          {convo.metadata?.current_page && (
+            <div className="flex items-center gap-1.5 pl-11">
+              <Globe className="w-3 h-3 text-muted-foreground/60" />
+              <a
+                href={convo.metadata.current_page}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[11px] text-primary/80 hover:text-primary truncate max-w-[300px] flex items-center gap-1"
+              >
+                {convo.metadata.current_page.replace(/^https?:\/\//, "")}
+                <ExternalLink className="w-2.5 h-2.5 shrink-0" />
+              </a>
+            </div>
+          )}
         </div>
       )}
 

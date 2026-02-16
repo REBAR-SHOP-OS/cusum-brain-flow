@@ -12,6 +12,9 @@ const widgetJS = `
   var isOpen = false;
   var isStreaming = false;
 
+  // Track current page
+  function getCurrentPage() { return window.location.href; }
+
   // --- Styles ---
   var style = document.createElement('style');
   style.textContent = \`
@@ -196,7 +199,7 @@ const widgetJS = `
       var resp = await fetch(CHAT_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: messages })
+        body: JSON.stringify({ messages: messages, current_page: getCurrentPage() })
       });
 
       if (!resp.ok || !resp.body) {
