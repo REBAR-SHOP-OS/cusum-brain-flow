@@ -1,5 +1,5 @@
 import React, { Component, ErrorInfo } from "react";
-import { AlertTriangle, RefreshCw, Home, Bug, ChevronDown, ChevronUp } from "lucide-react";
+import { AlertTriangle, RefreshCw, Home, Bug, ChevronDown, ChevronUp, Sparkles } from "lucide-react";
 import { reportToVizzy } from "@/lib/vizzyAutoReport";
 
 interface ErrorLogEntry {
@@ -215,6 +215,20 @@ export class SmartErrorBoundary extends Component<Props, State> {
               <Home className="w-4 h-4" />
               Home
             </button>
+            {retryCount >= maxRetries && (
+              <button
+                onClick={() => {
+                  const errorSummary = `${error?.name || "Error"}: ${error?.message || "Unknown"}`;
+                  const stack = errorInfo?.componentStack?.trim().slice(0, 300) || "";
+                  const payload = encodeURIComponent(`${errorSummary}\n\nComponent Stack:\n${stack}\n\nPage: ${window.location.pathname}`);
+                  window.location.href = `/empire?autofix=${payload}`;
+                }}
+                className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-gradient-to-r from-orange-500 to-red-500 text-white text-sm font-medium hover:opacity-90 transition-all shadow-sm"
+              >
+                <Sparkles className="w-4 h-4" />
+                Fix with ARIA
+              </button>
+            )}
           </div>
 
           {/* Expandable details */}
