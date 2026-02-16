@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Loader2, Square, Trash2, ShieldAlert, CheckCircle2, XCircle, Paperclip, X, Image as ImageIcon, Maximize2, Minimize2, Minus, Eye } from "lucide-react";
+import { Send, Loader2, Square, Trash2, ShieldAlert, CheckCircle2, XCircle, Paperclip, X, Image as ImageIcon, Maximize2, Minimize2, Minus, Eye, Archive } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -8,6 +8,7 @@ import { RichMarkdown } from "@/components/chat/RichMarkdown";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { analyzeZip } from "@/lib/zipAnalyzer";
 
 const TOOL_LABELS: Record<string, string> = {
   wp_update_post: "Update WordPress Post",
@@ -68,7 +69,7 @@ export function WebsiteChat({ currentPagePath, onWriteConfirmed, chatMode = "nor
 
   const addFiles = useCallback((files: FileList | File[]) => {
     const newAttachments: Attachment[] = Array.from(files)
-      .filter((f) => f.type.startsWith("image/") || f.type === "application/pdf")
+      .filter((f) => f.type.startsWith("image/") || f.type === "application/pdf" || f.type === "application/zip" || f.type === "application/x-zip-compressed" || f.name.endsWith(".zip"))
       .slice(0, 5)
       .map((file) => ({
         file,
@@ -76,7 +77,7 @@ export function WebsiteChat({ currentPagePath, onWriteConfirmed, chatMode = "nor
         uploading: false,
       }));
     if (newAttachments.length === 0) {
-      toast.error("Only images and PDFs are supported");
+      toast.error("Only images, PDFs, and ZIP files are supported");
       return;
     }
     setAttachments((prev) => [...prev, ...newAttachments].slice(0, 5));
@@ -112,15 +113,30 @@ export function WebsiteChat({ currentPagePath, onWriteConfirmed, chatMode = "nor
     if (attachments.length > 0) {
       setAttachments((prev) => prev.map((a) => ({ ...a, uploading: true })));
       for (const att of attachments) {
-        const url = await uploadFile(att.file);
-        if (url) {
-          if (att.file.type.startsWith("image/")) {
-            imageUrls.push(url);
-          } else {
-            // Non-image files still get appended as links
+        const isZip = att.file.type === "application/zip" || att.file.type === "application/x-zip-compressed" || att.file.name.endsWith(".zip");
+        if (isZip) {
+          try {
+            const result = await analyzeZip(att.file);
             messageText = messageText
-              ? `${messageText}\n\n[Attached file](${url})`
-              : `[Attached file](${url})`;
+              ? `${messageText}\n\n${result.summary}`
+              : result.summary;
+            imageUrls.push(...result.imageUrls);
+          } catch (err) {
+            console.error("ZIP analysis failed:", err);
+            messageText = messageText
+              ? `${messageText}\n\n[Failed to analyze ZIP: ${att.file.name}]`
+              : `[Failed to analyze ZIP: ${att.file.name}]`;
+          }
+        } else {
+          const url = await uploadFile(att.file);
+          if (url) {
+            if (att.file.type.startsWith("image/")) {
+              imageUrls.push(url);
+            } else {
+              messageText = messageText
+                ? `${messageText}\n\n[Attached file](${url})`
+                : `[Attached file](${url})`;
+            }
           }
         }
       }
@@ -128,7 +144,7 @@ export function WebsiteChat({ currentPagePath, onWriteConfirmed, chatMode = "nor
       attachments.forEach((a) => URL.revokeObjectURL(a.previewUrl));
       setAttachments([]);
 
-      // Add image note to display text (but actual analysis goes via imageUrls)
+      // Add image note to display text
       if (imageUrls.length > 0 && !messageText) {
         messageText = "Analyze this image";
       }
@@ -318,6 +334,11 @@ export function WebsiteChat({ currentPagePath, onWriteConfirmed, chatMode = "nor
             <div key={i} className="relative group w-14 h-14 rounded-lg overflow-hidden border border-border bg-muted">
               {att.file.type.startsWith("image/") ? (
                 <img src={att.previewUrl} alt="attachment" className="w-full h-full object-cover" />
+              ) : att.file.name.endsWith(".zip") || att.file.type === "application/zip" || att.file.type === "application/x-zip-compressed" ? (
+                <div className="w-full h-full flex flex-col items-center justify-center gap-0.5">
+                  <Archive className="w-5 h-5 text-muted-foreground" />
+                  <span className="text-[8px] text-muted-foreground truncate w-full text-center px-0.5">{att.file.name}</span>
+                </div>
               ) : (
                 <div className="w-full h-full flex items-center justify-center">
                   <ImageIcon className="w-5 h-5 text-muted-foreground" />
@@ -346,7 +367,7 @@ export function WebsiteChat({ currentPagePath, onWriteConfirmed, chatMode = "nor
         <input
           ref={fileRef}
           type="file"
-          accept="image/*,application/pdf"
+          accept="image/*,application/pdf,.zip,application/zip"
           multiple
           className="hidden"
           onChange={handleFileChange}
