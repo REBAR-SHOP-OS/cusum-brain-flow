@@ -6187,23 +6187,29 @@ RULES:
       }
     }
 
-    const aiResponse = await fetch(aiUrl, {
-      method: "POST",
-      headers: {
-        "Authorization": aiAuthHeader,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: aiModel,
-        messages,
-        max_tokens: modelConfig.maxTokens,
-        temperature: modelConfig.temperature,
-        tools,
-        tool_choice: "auto",
-      }),
+    const aiRequestBody = JSON.stringify({
+      model: aiModel,
+      messages,
+      max_tokens: modelConfig.maxTokens,
+      temperature: modelConfig.temperature,
+      tools,
+      tool_choice: "auto",
     });
 
-    if (!aiResponse.ok) {
+    let aiResponse: Response | null = null;
+    const maxRetries = 2;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      aiResponse = await fetch(aiUrl, {
+        method: "POST",
+        headers: {
+          "Authorization": aiAuthHeader,
+          "Content-Type": "application/json",
+        },
+        body: aiRequestBody,
+      });
+
+      if (aiResponse.ok) break;
+
       if (aiResponse.status === 429) {
         return new Response(
           JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }),
@@ -6216,9 +6222,22 @@ RULES:
           { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
+
+      // Retry on 500/503 (transient server errors)
+      if ((aiResponse.status === 500 || aiResponse.status === 503) && attempt < maxRetries) {
+        const errorText = await aiResponse.text();
+        console.warn(`AI Gateway error (attempt ${attempt + 1}/${maxRetries + 1}): ${aiResponse.status} - retrying in ${(attempt + 1) * 2}s...`);
+        await new Promise(r => setTimeout(r, (attempt + 1) * 2000));
+        continue;
+      }
+
       const errorText = await aiResponse.text();
       console.error("AI Gateway error:", aiResponse.status, errorText);
       throw new Error("AI service temporarily unavailable");
+    }
+
+    if (!aiResponse || !aiResponse.ok) {
+      throw new Error("AI service temporarily unavailable after retries");
     }
 
     const aiData = await aiResponse.json();
