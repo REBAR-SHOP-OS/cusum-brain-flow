@@ -1,7 +1,7 @@
 import React from "react";
 import { Badge } from "@/components/ui/badge";
 import { formatDistanceToNow } from "date-fns";
-import type { Venture } from "@/pages/EmpireBuilder";
+import type { Venture } from "@/types/venture";
 
 const statusColors: Record<string, string> = {
   active: "bg-emerald-500/20 text-emerald-400",

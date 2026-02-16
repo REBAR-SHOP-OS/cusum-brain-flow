@@ -2,7 +2,7 @@ import React from "react";
 import { VentureCard } from "./VentureCard";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { Venture } from "@/pages/EmpireBuilder";
+import type { Venture } from "@/types/venture";
 
 interface Props {
   ventures: Venture[];

@@ -7,8 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AIStressTest } from "./AIStressTest";
-import { PHASES } from "@/pages/EmpireBuilder";
-import type { Venture } from "@/pages/EmpireBuilder";
+import { PHASES } from "@/types/venture";
+import type { Venture } from "@/types/venture";
 
 interface Props {
   venture: Venture;
