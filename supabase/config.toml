@@ -261,3 +261,6 @@ verify_jwt = false
 
 [functions.empire-architect]
 verify_jwt = false
+
+[functions.friday-ideas]
+verify_jwt = false
