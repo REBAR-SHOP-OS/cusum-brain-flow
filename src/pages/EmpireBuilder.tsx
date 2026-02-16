@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { Plus, ArrowUp, X, FileText, Image as ImageIcon, Archive, Sparkles } from "lucide-react";
+import { Plus, ArrowUp, X, FileText, Image as ImageIcon, Archive, Globe, Boxes, Activity, Brain } from "lucide-react";
 import { Message } from "@/components/chat/ChatMessage";
 import { sendAgentMessage, ChatMessage as AgentChatMessage, AttachedFile } from "@/lib/agent";
 import { useChatSessions } from "@/hooks/useChatSessions";
@@ -13,8 +13,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { analyzeZip } from "@/lib/zipAnalyzer";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { EmpireSidebar } from "@/components/empire/EmpireSidebar";
 import { EmpireTopbar } from "@/components/empire/EmpireTopbar";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 const config = agentConfigs.empire;
 
@@ -27,10 +30,31 @@ const SUGGESTIONS = [
   "What problems need my attention right now?",
 ];
 
+interface EmpireProject {
+  name: string;
+  icon: React.ElementType;
+  color: string;
+  status: "active" | "paused";
+  prompt: string;
+}
+
+const DEFAULT_PROJECTS: EmpireProject[] = [
+  { name: "rebar.shop", icon: Globe, color: "from-cyan-400 to-blue-500", status: "active", prompt: "Run a diagnostic on rebar.shop" },
+  { name: "ERP", icon: Boxes, color: "from-purple-400 to-indigo-500", status: "active", prompt: "Check ERP system status" },
+  { name: "ODOO", icon: Activity, color: "from-orange-400 to-red-500", status: "active", prompt: "Check Odoo CRM sync status" },
+];
+
 interface PendingFile {
   file: File;
   preview?: string;
   type: "image" | "pdf" | "zip" | "other";
+}
+
+interface MemoryEntry {
+  id: string;
+  category: string;
+  content: string;
+  created_at: string;
 }
 
 export default function EmpireBuilder() {
@@ -48,8 +72,26 @@ export default function EmpireBuilder() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const autofixTriggered = useRef(false);
 
+  // Projects state
+  const [projects, setProjects] = useState<EmpireProject[]>(DEFAULT_PROJECTS);
+  const [addProjectOpen, setAddProjectOpen] = useState(false);
+  const [newProjectName, setNewProjectName] = useState("");
+
+  // Memory state
+  const [memories, setMemories] = useState<MemoryEntry[]>([]);
+
   const { createSession, addMessage } = useChatSessions();
   const hasConversation = messages.length > 0;
+
+  // Fetch memories
+  useEffect(() => {
+    supabase
+      .from("vizzy_memory")
+      .select("id, category, content, created_at")
+      .order("created_at", { ascending: false })
+      .limit(5)
+      .then(({ data }) => { if (data) setMemories(data as MemoryEntry[]); });
+  }, []);
 
   // Auto-resize textareas
   useEffect(() => {
@@ -176,6 +218,20 @@ export default function EmpireBuilder() {
     return <FileText className="w-3.5 h-3.5" />;
   };
 
+  const handleAddProject = () => {
+    if (!newProjectName.trim()) return;
+    setProjects((prev) => [...prev, {
+      name: newProjectName.trim(),
+      icon: Globe,
+      color: "from-emerald-400 to-teal-500",
+      status: "active",
+      prompt: `Check status of ${newProjectName.trim()}`,
+    }]);
+    setNewProjectName("");
+    setAddProjectOpen(false);
+    toast.success(`Project "${newProjectName.trim()}" added`);
+  };
+
   const InputBox = ({ large = false }: { large?: boolean }) => (
     <div
       onDragOver={handleDragOver}
@@ -237,130 +293,201 @@ export default function EmpireBuilder() {
   );
 
   return (
-    <div className="min-h-screen w-full bg-[#070A12] text-white">
-      <div className="flex min-h-screen">
-        <EmpireSidebar />
-        <main className="flex-1 flex flex-col min-h-0">
-          <EmpireTopbar />
+    <div className="min-h-screen w-full bg-[#070A12] text-white flex flex-col">
+      <EmpireTopbar />
 
-          {!hasConversation ? (
-            <section className="relative flex-1 overflow-hidden">
-              {/* Background gradient */}
-              <div className="absolute inset-0 bg-[radial-gradient(1200px_circle_at_20%_20%,rgba(60,184,183,0.18),transparent_45%),radial-gradient(900px_circle_at_70%_70%,rgba(255,122,0,0.18),transparent_45%),linear-gradient(135deg,#0A0F25_0%,#141B3A_35%,#221B3B_70%,#301D2E_100%)]" />
-              <div className="absolute inset-0 bg-black/10" />
+      {!hasConversation ? (
+        <section className="relative flex-1 overflow-y-auto">
+          {/* Background gradient */}
+          <div className="absolute inset-0 bg-[radial-gradient(1200px_circle_at_20%_20%,rgba(60,184,183,0.18),transparent_45%),radial-gradient(900px_circle_at_70%_70%,rgba(255,122,0,0.18),transparent_45%),linear-gradient(135deg,#0A0F25_0%,#141B3A_35%,#221B3B_70%,#301D2E_100%)]" />
+          <div className="absolute inset-0 bg-black/10" />
 
-              {/* Floating avatar bubble */}
-              <div className="absolute right-10 top-16 hidden lg:block">
-                <div className="h-20 w-20 rounded-full bg-white/10 backdrop-blur border border-white/10 flex items-center justify-center">
-                  <div className="h-14 w-14 rounded-full bg-gradient-to-br from-cyan-300/60 to-purple-400/60" />
-                </div>
-              </div>
-
-              {/* Center hero */}
-              <div className="relative mx-auto flex max-w-4xl flex-col items-center px-6 pt-24 text-center">
-                <h1 className="text-5xl sm:text-6xl font-extrabold tracking-tight animate-fade-in">
-                  Build something{" "}
-                  <span className="text-[#FF7A18]">great</span>
-                </h1>
-                <p className="mt-3 max-w-xl text-sm text-white/70 animate-fade-in" style={{ animationDelay: "100ms" }}>
-                  Describe your venture idea and let AI structure, validate, and execute the plan.
-                </p>
-
-                <div className="mt-10 w-full max-w-2xl animate-fade-in" style={{ animationDelay: "150ms" }}>
-                  <InputBox large />
-                </div>
-
-                <div className="mt-8 flex flex-wrap justify-center gap-3 animate-fade-in" style={{ animationDelay: "250ms" }}>
-                  {SUGGESTIONS.map((s) => (
+          <div className="relative mx-auto flex max-w-4xl flex-col items-center px-6 pt-12 text-center">
+            {/* Projects Section */}
+            <div className="w-full max-w-2xl mb-8 animate-fade-in">
+              <h2 className="text-xs font-semibold uppercase tracking-widest text-white/50 mb-4">Projects</h2>
+              <div className="flex flex-wrap justify-center gap-3">
+                {projects.map((project) => {
+                  const Icon = project.icon;
+                  return (
                     <button
-                      key={s}
-                      onClick={() => handleSend(s)}
-                      className="rounded-full border border-white/10 bg-white/5 px-4 py-2.5 text-xs text-white/80 hover:bg-white/10 hover:text-white transition-all"
+                      key={project.name}
+                      onClick={() => handleSend(project.prompt)}
+                      className="group flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 backdrop-blur px-5 py-3.5 hover:bg-white/10 hover:border-white/20 transition-all"
                     >
-                      {s}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </section>
-          ) : (
-            <div className="flex-1 flex flex-col relative min-h-0">
-              {/* Background gradient for chat */}
-              <div className="absolute inset-0 bg-[radial-gradient(1200px_circle_at_20%_20%,rgba(60,184,183,0.10),transparent_45%),radial-gradient(900px_circle_at_70%_70%,rgba(255,122,0,0.10),transparent_45%),linear-gradient(135deg,#0A0F25_0%,#141B3A_35%,#221B3B_70%,#301D2E_100%)] pointer-events-none" />
-
-              <div className="flex-1 overflow-y-auto scrollbar-thin px-4 py-6 relative z-10">
-                <div className="max-w-3xl mx-auto space-y-6">
-                  {messages.map((message) => {
-                    const isUser = message.role === "user";
-                    return (
-                      <div key={message.id} className={cn("flex gap-3 animate-fade-in", isUser ? "justify-end" : "justify-start")}>
-                        {!isUser && (
-                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-400 to-teal-500 flex items-center justify-center flex-shrink-0 shadow-sm mt-0.5">
-                            <span className="text-black text-xs font-bold">A</span>
-                          </div>
-                        )}
-                        <div className="max-w-[80%] min-w-0">
-                          <div className={cn(
-                            "rounded-2xl px-4 py-3 text-sm leading-relaxed min-w-0 [overflow-wrap:anywhere]",
-                            isUser
-                              ? "bg-[#35E6E6] text-black rounded-br-md"
-                              : "bg-white/5 backdrop-blur border border-white/10 text-white rounded-bl-md"
-                          )}>
-                            {isUser ? (
-                              <p className="whitespace-pre-wrap">{message.content}</p>
-                            ) : (
-                              <>
-                                <RichMarkdown content={message.content || ""} />
-                                {(() => {
-                                  const patches: { id: string; file: string; target: string; description?: string; content: string }[] = [];
-                                  const artifactRegex = /\{"type"\s*:\s*"patch"[^}]*"id"\s*:\s*"([^"]+)"[^}]*"file"\s*:\s*"([^"]+)"[^}]*"target"\s*:\s*"([^"]+)"[^}]*"content"\s*:\s*"((?:[^"\\]|\\.)*)"/g;
-                                  let match;
-                                  const text = message.content || "";
-                                  while ((match = artifactRegex.exec(text)) !== null) {
-                                    patches.push({ id: match[1], file: match[2], target: match[3], content: match[4].replace(/\\n/g, "\n").replace(/\\"/g, '"') });
-                                  }
-                                  const patchBlockRegex = /<!--\s*PATCH:(\w+):([^:]+):([^:]+):(\S+)\s*-->\n```[\w]*\n([\s\S]*?)```/g;
-                                  while ((match = patchBlockRegex.exec(text)) !== null) {
-                                    patches.push({ id: match[1], target: match[2], file: match[3], description: match[4].replace(/_/g, " "), content: match[5].trim() });
-                                  }
-                                  return patches.map((p) => (
-                                    <PatchReview key={p.id} patchId={p.id} filePath={p.file} targetSystem={p.target} description={p.description || ""} content={p.content} />
-                                  ));
-                                })()}
-                              </>
-                            )}
-                          </div>
-                          {!isUser && message.content && <MessageActions content={message.content} messageId={message.id} />}
+                      <div className={cn("h-9 w-9 rounded-lg bg-gradient-to-br flex items-center justify-center", project.color)}>
+                        <Icon className="h-4.5 w-4.5 text-white" />
+                      </div>
+                      <div className="text-left">
+                        <span className="text-sm font-medium text-white group-hover:text-white/90">{project.name}</span>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className={cn("h-1.5 w-1.5 rounded-full", project.status === "active" ? "bg-emerald-400" : "bg-yellow-400")} />
+                          <span className="text-[10px] text-white/40 capitalize">{project.status}</span>
                         </div>
                       </div>
-                    );
-                  })}
-
-                  {isLoading && (
-                    <div className="flex gap-3 animate-fade-in">
-                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-400 to-teal-500 flex items-center justify-center flex-shrink-0 shadow-sm">
-                        <span className="text-black text-xs font-bold">A</span>
-                      </div>
-                      <div className="bg-white/5 backdrop-blur border border-white/10 rounded-2xl rounded-bl-md px-4 py-3 flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-white/40 animate-bounce [animation-delay:0ms]" />
-                        <span className="w-2 h-2 rounded-full bg-white/40 animate-bounce [animation-delay:150ms]" />
-                        <span className="w-2 h-2 rounded-full bg-white/40 animate-bounce [animation-delay:300ms]" />
-                      </div>
-                    </div>
-                  )}
-                  <div ref={bottomRef} />
-                </div>
-              </div>
-
-              <div className="border-t border-white/10 bg-black/30 backdrop-blur-xl px-4 py-3 relative z-10">
-                <div className="max-w-3xl mx-auto">
-                  <InputBox />
-                </div>
+                    </button>
+                  );
+                })}
+                <button
+                  onClick={() => setAddProjectOpen(true)}
+                  className="flex items-center gap-2 rounded-xl border border-dashed border-white/15 bg-white/[0.02] px-5 py-3.5 hover:bg-white/5 hover:border-white/25 transition-all text-white/40 hover:text-white/60"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span className="text-sm">Add Project</span>
+                </button>
               </div>
             </div>
-          )}
-        </main>
-      </div>
+
+            {/* Memory Section */}
+            <div className="w-full max-w-2xl mb-8 animate-fade-in" style={{ animationDelay: "80ms" }}>
+              <div className="flex items-center justify-center gap-2 mb-3">
+                <Brain className="h-3.5 w-3.5 text-white/50" />
+                <h2 className="text-xs font-semibold uppercase tracking-widest text-white/50">Memory</h2>
+                {memories.length > 0 && (
+                  <span className="text-[10px] bg-white/10 text-white/60 rounded-full px-2 py-0.5">{memories.length}</span>
+                )}
+              </div>
+              {memories.length > 0 ? (
+                <div className="flex flex-wrap justify-center gap-2">
+                  {memories.map((mem) => (
+                    <div
+                      key={mem.id}
+                      className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs"
+                    >
+                      <span className="text-white/50 font-medium">{mem.category}</span>
+                      <span className="text-white/30">·</span>
+                      <span className="text-white/60 max-w-[180px] truncate">{mem.content}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-white/30">No memories yet</p>
+              )}
+            </div>
+
+            {/* Hero heading */}
+            <h1 className="text-5xl sm:text-6xl font-extrabold tracking-tight animate-fade-in" style={{ animationDelay: "120ms" }}>
+              Build something{" "}
+              <span className="text-[#FF7A18]">great</span>
+            </h1>
+            <p className="mt-3 max-w-xl text-sm text-white/70 animate-fade-in" style={{ animationDelay: "160ms" }}>
+              Describe your venture idea and let AI structure, validate, and execute the plan.
+            </p>
+
+            <div className="mt-10 w-full max-w-2xl animate-fade-in" style={{ animationDelay: "200ms" }}>
+              <InputBox large />
+            </div>
+
+            <div className="mt-8 pb-12 flex flex-wrap justify-center gap-3 animate-fade-in" style={{ animationDelay: "280ms" }}>
+              {SUGGESTIONS.map((s) => (
+                <button
+                  key={s}
+                  onClick={() => handleSend(s)}
+                  className="rounded-full border border-white/10 bg-white/5 px-4 py-2.5 text-xs text-white/80 hover:bg-white/10 hover:text-white transition-all"
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>
+      ) : (
+        <div className="flex-1 flex flex-col relative min-h-0">
+          {/* Background gradient for chat */}
+          <div className="absolute inset-0 bg-[radial-gradient(1200px_circle_at_20%_20%,rgba(60,184,183,0.10),transparent_45%),radial-gradient(900px_circle_at_70%_70%,rgba(255,122,0,0.10),transparent_45%),linear-gradient(135deg,#0A0F25_0%,#141B3A_35%,#221B3B_70%,#301D2E_100%)] pointer-events-none" />
+
+          <div className="flex-1 overflow-y-auto scrollbar-thin px-4 py-6 relative z-10">
+            <div className="max-w-3xl mx-auto space-y-6">
+              {messages.map((message) => {
+                const isUser = message.role === "user";
+                return (
+                  <div key={message.id} className={cn("flex gap-3 animate-fade-in", isUser ? "justify-end" : "justify-start")}>
+                    {!isUser && (
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-400 to-teal-500 flex items-center justify-center flex-shrink-0 shadow-sm mt-0.5">
+                        <span className="text-black text-xs font-bold">A</span>
+                      </div>
+                    )}
+                    <div className="max-w-[80%] min-w-0">
+                      <div className={cn(
+                        "rounded-2xl px-4 py-3 text-sm leading-relaxed min-w-0 [overflow-wrap:anywhere]",
+                        isUser
+                          ? "bg-[#35E6E6] text-black rounded-br-md"
+                          : "bg-white/5 backdrop-blur border border-white/10 text-white rounded-bl-md"
+                      )}>
+                        {isUser ? (
+                          <p className="whitespace-pre-wrap">{message.content}</p>
+                        ) : (
+                          <>
+                            <RichMarkdown content={message.content || ""} />
+                            {(() => {
+                              const patches: { id: string; file: string; target: string; description?: string; content: string }[] = [];
+                              const artifactRegex = /\{"type"\s*:\s*"patch"[^}]*"id"\s*:\s*"([^"]+)"[^}]*"file"\s*:\s*"([^"]+)"[^}]*"target"\s*:\s*"([^"]+)"[^}]*"content"\s*:\s*"((?:[^"\\]|\\.)*)"/g;
+                              let match;
+                              const text = message.content || "";
+                              while ((match = artifactRegex.exec(text)) !== null) {
+                                patches.push({ id: match[1], file: match[2], target: match[3], content: match[4].replace(/\\n/g, "\n").replace(/\\"/g, '"') });
+                              }
+                              const patchBlockRegex = /<!--\s*PATCH:(\w+):([^:]+):([^:]+):(\S+)\s*-->\n```[\w]*\n([\s\S]*?)```/g;
+                              while ((match = patchBlockRegex.exec(text)) !== null) {
+                                patches.push({ id: match[1], target: match[2], file: match[3], description: match[4].replace(/_/g, " "), content: match[5].trim() });
+                              }
+                              return patches.map((p) => (
+                                <PatchReview key={p.id} patchId={p.id} filePath={p.file} targetSystem={p.target} description={p.description || ""} content={p.content} />
+                              ));
+                            })()}
+                          </>
+                        )}
+                      </div>
+                      {!isUser && message.content && <MessageActions content={message.content} messageId={message.id} />}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {isLoading && (
+                <div className="flex gap-3 animate-fade-in">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-400 to-teal-500 flex items-center justify-center flex-shrink-0 shadow-sm">
+                    <span className="text-black text-xs font-bold">A</span>
+                  </div>
+                  <div className="bg-white/5 backdrop-blur border border-white/10 rounded-2xl rounded-bl-md px-4 py-3 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-white/40 animate-bounce [animation-delay:0ms]" />
+                    <span className="w-2 h-2 rounded-full bg-white/40 animate-bounce [animation-delay:150ms]" />
+                    <span className="w-2 h-2 rounded-full bg-white/40 animate-bounce [animation-delay:300ms]" />
+                  </div>
+                </div>
+              )}
+              <div ref={bottomRef} />
+            </div>
+          </div>
+
+          <div className="border-t border-white/10 bg-black/30 backdrop-blur-xl px-4 py-3 relative z-10">
+            <div className="max-w-3xl mx-auto">
+              <InputBox />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Project Dialog */}
+      <Dialog open={addProjectOpen} onOpenChange={setAddProjectOpen}>
+        <DialogContent className="bg-[#141B3A] border-white/10 text-white">
+          <DialogHeader>
+            <DialogTitle>Add New Project</DialogTitle>
+          </DialogHeader>
+          <input
+            value={newProjectName}
+            onChange={(e) => setNewProjectName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") handleAddProject(); }}
+            placeholder="Project name..."
+            className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder:text-white/40 focus:outline-none focus:border-white/20"
+            autoFocus
+          />
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setAddProjectOpen(false)} className="text-white/60">Cancel</Button>
+            <Button onClick={handleAddProject} disabled={!newProjectName.trim()} className="bg-[#35E6E6] text-black hover:bg-[#35E6E6]/80">Add</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
