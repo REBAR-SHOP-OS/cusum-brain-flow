@@ -1,68 +1,52 @@
 
 
-# Customer Presence, City Tracking, Page-Aware AI Guide, and Add-to-Cart
+# Connect Website Agent to Live ERP Data (No Financials)
 
-## Overview
+## Summary
 
-Upgrade both chat widget systems so agents can see:
-- Whether a customer is **online** (green dot) or offline
-- Which **city** they are from (via IP geolocation)
-- Which **page** they are currently browsing
-
-The AI will also gain the ability to **guide customers through the website** and **add products to their WooCommerce cart** via direct links.
+Enrich the website-agent and support-chat AI with live ERP data from the knowledge base, delivery areas, and company info so the AI can answer deeper questions about rebar.shop — while explicitly blocking all financial data (invoices, bills, AR/AP, bank accounts, margins, payroll).
 
 ## What Changes
 
-### 1. Visitor Presence and City Detection (Backend)
+### 1. New Tool: `search_knowledge_base` (website-agent)
 
-**support-chat edge function** (`supabase/functions/support-chat/index.ts`):
-- On `handleStart`: capture visitor IP from request headers, call a free geolocation API (ip-api.com) to resolve city/country, and store in `metadata` as `{ city, country, current_page, last_seen_at }`
-- On `handleSend`: update `metadata.last_seen_at` timestamp and `metadata.current_page` on every message so agents always know when the visitor was last active
+Add a tool that queries the `knowledge` table for public-safe categories only:
+- Allowed categories: `webpage`, `company-playbook`, `document`, `research`
+- Excluded categories: `meetings`, `memory`, `agent-strategy`, `agent-response`, `social-strategy`
+- Returns title + truncated content (max 500 chars per entry, max 5 results)
+- This lets the AI answer questions about Australian rebar standards (ASA bend chart), machine specs (GMS brochures), company processes, and the price list
 
-**New heartbeat action**: Add `action=heartbeat` endpoint that the widget calls every 30 seconds with `conversation_id`, `visitor_token`, and `current_page`. This updates `metadata.last_seen_at` and `metadata.current_page` so agents see real-time presence.
+### 2. New Tool: `get_delivery_info` (website-agent)
 
-### 2. Widget JS Updates (Page Tracking + Heartbeat)
+Add a tool that returns hardcoded delivery coverage areas (since no `delivery_zones` table exists):
+- Greater Sydney, Central Coast, Blue Mountains, Wollongong, Newcastle
+- Standard lead times and minimum order info
+- This lets the AI answer "Do you deliver to my area?" questions accurately
 
-**Support chat widget** (generated JS in `support-chat/index.ts` `generateWidgetJs`):
-- Capture `window.location.href` and send it with the start request
-- After conversation starts, send a heartbeat every 30 seconds with current page URL
-- Listen for URL changes (popstate + polling) to keep current page fresh
+### 3. Enrich System Prompt with Company Context
 
-**External rebar.shop widget** (`website-chat-widget/index.ts`):
-- Send `window.location.href` alongside messages in the POST body to `website-agent`
-- The website-agent will inject "Visitor is currently on: {url}" into the system prompt
+Update `buildSystemPrompt` in website-agent to include:
+- Rebar standards context (Australian AS/NZS 4671)
+- Common bar sizes with basic specs inline (so AI doesn't always need tool calls for simple questions)
+- Fabrication capabilities (cutting, bending, scheduling)
+- Service areas with suburbs
+- Operating hours
+- Contact details (phone, email from public website)
 
-### 3. Website Agent -- Page-Aware AI + Add to Cart
+### 4. Support-Chat AI: Add Knowledge Base Context
 
-**System prompt update** (`website-agent/index.ts`):
-- Add instructions: "You can see which page the visitor is on. Reference it when helping them navigate."
-- Add guidance for add-to-cart: "When a customer wants to buy, provide a direct add-to-cart link."
+Update `triggerAiReply` in `support-chat/index.ts` to also query the `knowledge` table (public-safe categories) alongside `kb_articles`, giving the support chat bot access to the same ERP knowledge without financials.
 
-**New tool -- `add_to_cart`**:
-- Takes `product_id` and `quantity`
-- Returns a WooCommerce cart URL: `https://rebar.shop/?add-to-cart={product_id}&quantity={qty}`
-- The AI presents it as "Click here to add to your cart: [link]"
+### 5. Explicit Data Firewall
 
-**New tool -- `navigate_to`**:
-- Takes a page description (e.g. "products", "contact", "mesh")
-- Returns the appropriate rebar.shop URL so the AI can guide the visitor
+Add a clear block in the website-agent system prompt:
+```
+NEVER share: financial data, invoices, bills, bank balances, AR/AP, 
+profit margins, employee salaries, internal meeting notes, or 
+strategic plans. If asked about pricing, always direct to a formal quote.
+```
 
-**Request body change**: Accept `current_page` from widget and inject into system prompt context.
-
-### 4. Agent Inbox UI -- Online Status, City, and Current Page
-
-**SupportConversationList.tsx**:
-- Show a green/grey dot next to visitor name (green = `last_seen_at` within last 60 seconds)
-- Show city below visitor name (from `metadata.city`)
-
-**SupportChatView.tsx**:
-- Display a badge in the conversation header showing: online/offline status, city, and current page (clickable link)
-- Subscribe to realtime changes on `support_conversations` metadata to auto-refresh presence
-
-### 5. Support Chat AI -- Page Context in Auto-Replies
-
-Update `triggerAiReply` in `support-chat/index.ts`:
-- Include `metadata.current_page` in the AI system prompt so the bot knows what page the visitor is on and can provide contextual help
+This ensures even if tools return adjacent data, the AI knows not to expose it.
 
 ## Technical Details
 
@@ -70,53 +54,40 @@ Update `triggerAiReply` in `support-chat/index.ts`:
 
 | File | Change |
 |------|--------|
-| `supabase/functions/support-chat/index.ts` | Add heartbeat action, IP geolocation on start, page/presence tracking in metadata, page context in AI prompt |
-| `supabase/functions/website-chat-widget/index.ts` | Send `current_page` with messages |
-| `supabase/functions/website-agent/index.ts` | Accept `current_page`, add `add_to_cart` and `navigate_to` tools, update system prompt |
-| `src/components/support/SupportConversationList.tsx` | Add online dot + city display |
-| `src/components/support/SupportChatView.tsx` | Add current page badge + online indicator in header |
+| `supabase/functions/website-agent/index.ts` | Add `search_knowledge_base` and `get_delivery_info` tools, enrich system prompt with company data and data firewall, add tool execution logic |
+| `supabase/functions/support-chat/index.ts` | Add knowledge table query alongside kb_articles in `triggerAiReply` |
 
-### No Database Migrations Required
+### Data Access Rules (Firewall)
 
-The `metadata` JSONB column already exists on `support_conversations`. We store:
-```json
-{
-  "city": "Sydney",
-  "country": "AU",
-  "current_page": "https://rebar.shop/product/n16-deformed-bar/",
-  "last_seen_at": "2026-02-16T12:34:56Z"
-}
+**Allowed for website visitors:**
+- Product catalog (WooCommerce via WP API)
+- Rebar specifications (`rebar_sizes` table)
+- Stock availability (`floor_stock` table -- quantities only, no costs)
+- Knowledge base (public categories only)
+- Delivery areas (hardcoded)
+- Quote request creation
+
+**Blocked from website visitors:**
+- `accounting_mirror` (invoices, bills, balances)
+- `orders` (internal order data)
+- `profiles` / `user_roles` (employee data)
+- `communications` (internal emails)
+- `leads` (pipeline data)
+- `employee_salaries`, `leave_requests`
+- Any financial KPIs, margins, or cost data
+- Meeting notes, agent strategies, social strategies
+
+### Knowledge Base Tool Query
+
+```sql
+SELECT title, LEFT(content, 500) as content, category
+FROM knowledge
+WHERE category IN ('webpage', 'company-playbook', 'document', 'research')
+  AND content ILIKE '%search_term%'
+ORDER BY created_at DESC
+LIMIT 5
 ```
 
-### IP Geolocation
+### No Database Changes Required
 
-Using the free ip-api.com endpoint (no API key needed, 45 req/min limit):
-```
-GET http://ip-api.com/json/{ip}?fields=city,country,countryCode
-```
-This runs once on conversation start only, so rate limits are not a concern.
-
-### Online/Offline Logic
-
-- **Online**: `metadata.last_seen_at` is within the last 60 seconds
-- **Away**: `last_seen_at` is 1-5 minutes ago
-- **Offline**: `last_seen_at` is older than 5 minutes or missing
-
-### WooCommerce Add-to-Cart URLs
-
-WooCommerce natively supports:
-```
-https://rebar.shop/?add-to-cart=PRODUCT_ID&quantity=QTY
-```
-The `add_to_cart` tool validates the product exists via WP API first, then returns the formatted URL for the AI to share as a clickable link in chat.
-
-### Heartbeat Flow
-
-```text
-Widget (every 30s) --> support-chat?action=heartbeat
-  { conversation_id, visitor_token, current_page }
-    --> UPDATE support_conversations SET metadata = metadata || { last_seen_at, current_page }
-
-Agent Inbox (realtime subscription)
-  --> sees updated metadata --> renders online dot + page
-```
+All data sources already exist. We're just adding new read-only tools to the website-agent that query existing tables with restricted access.
