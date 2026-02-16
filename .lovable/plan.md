@@ -1,93 +1,94 @@
 
+# CEO Business Heartbeat Dashboard
 
-# Connect Website Agent to Live ERP Data (No Financials)
+## Overview
 
-## Summary
+Create a new dedicated "Business Heartbeat" page within the CEO Portal that consolidates everything into a single real-time command center: online visitors, team presence, customer origins, spending breakdown, productivity metrics, and live website activity.
 
-Enrich the website-agent and support-chat AI with live ERP data from the knowledge base, delivery areas, and company info so the AI can answer deeper questions about rebar.shop — while explicitly blocking all financial data (invoices, bills, AR/AP, bank accounts, margins, payroll).
+## What You'll See
 
-## What Changes
+### Section 1: Live Pulse Strip (Top)
+- **Website Visitors Now**: Count of active support chat visitors (online within 60s) with green pulsing dot
+- **Team On Clock**: Staff currently clocked in vs total, with percentage
+- **Machines Running**: Live count with status breakdown
+- **Open Conversations**: Active support chats happening right now
+- **Orders Today**: New orders created today
+- **Leads Today**: New leads captured today
 
-### 1. New Tool: `search_knowledge_base` (website-agent)
+### Section 2: Customer Origins Map
+- A visual card showing where website visitors and leads come from:
+  - **Live Visitors by City**: Pulled from `support_conversations.metadata` (city/country from IP geolocation we just built)
+  - **Lead Sources**: Breakdown of lead sources (website, email, AI prospecting, referral) as a horizontal bar chart
+  - Shows city names with visitor counts and country flags
 
-Add a tool that queries the `knowledge` table for public-safe categories only:
-- Allowed categories: `webpage`, `company-playbook`, `document`, `research`
-- Excluded categories: `meetings`, `memory`, `agent-strategy`, `agent-response`, `social-strategy`
-- Returns title + truncated content (max 500 chars per entry, max 5 results)
-- This lets the AI answer questions about Australian rebar standards (ASA bend chart), machine specs (GMS brochures), company processes, and the price list
+### Section 3: Online/Offline Status Board
+- **Team Presence**: Each team member with green (clocked in) / grey (off) dot, clock-in time, and role
+- **Machine Fleet**: Each machine with status dot (running/idle/blocked/down) and current job
+- **Website Widget**: Active visitor sessions with their current page and city
 
-### 2. New Tool: `get_delivery_info` (website-agent)
+### Section 4: Where Money Is Going (Spending Breakdown)
+- **Outstanding Payables**: Total vendor bills from `accounting_mirror` (entity_type = 'Vendor')
+- **Outstanding Receivables**: Invoice totals with aging buckets (already computed)
+- **Pipeline by Stage**: Funnel visualization of leads from new to won
+- **Revenue Concentration**: Top 5 customers by order value
 
-Add a tool that returns hardcoded delivery coverage areas (since no `delivery_zones` table exists):
-- Greater Sydney, Central Coast, Blue Mountains, Wollongong, Newcastle
-- Standard lead times and minimum order info
-- This lets the AI answer "Do you deliver to my area?" questions accurately
+### Section 5: Productivity Metrics
+- **Production Throughput**: Pieces completed today vs target, with 7-day trend sparkline
+- **Machine Utilization**: OEE-style gauge per machine
+- **Quote Turnaround**: Average time from lead creation to quote sent
+- **Team Productivity**: Clock hours today, pieces per labor hour
 
-### 3. Enrich System Prompt with Company Context
-
-Update `buildSystemPrompt` in website-agent to include:
-- Rebar standards context (Australian AS/NZS 4671)
-- Common bar sizes with basic specs inline (so AI doesn't always need tool calls for simple questions)
-- Fabrication capabilities (cutting, bending, scheduling)
-- Service areas with suburbs
-- Operating hours
-- Contact details (phone, email from public website)
-
-### 4. Support-Chat AI: Add Knowledge Base Context
-
-Update `triggerAiReply` in `support-chat/index.ts` to also query the `knowledge` table (public-safe categories) alongside `kb_articles`, giving the support chat bot access to the same ERP knowledge without financials.
-
-### 5. Explicit Data Firewall
-
-Add a clear block in the website-agent system prompt:
-```
-NEVER share: financial data, invoices, bills, bank balances, AR/AP, 
-profit margins, employee salaries, internal meeting notes, or 
-strategic plans. If asked about pricing, always direct to a formal quote.
-```
-
-This ensures even if tools return adjacent data, the AI knows not to expose it.
+### Section 6: Activity Feed
+- Live scrolling feed of recent `activity_events` (last 24h) showing what's happening across the business: new leads, orders, chat sessions, machine runs, deliveries
 
 ## Technical Details
 
-### Files Modified
+### New Files
+| File | Purpose |
+|------|---------|
+| `src/components/ceo/BusinessHeartbeat.tsx` | Main heartbeat dashboard component |
+| `src/hooks/useBusinessHeartbeat.ts` | Data hook querying all live data sources |
 
+### Modified Files
 | File | Change |
 |------|--------|
-| `supabase/functions/website-agent/index.ts` | Add `search_knowledge_base` and `get_delivery_info` tools, enrich system prompt with company data and data firewall, add tool execution logic |
-| `supabase/functions/support-chat/index.ts` | Add knowledge table query alongside kb_articles in `triggerAiReply` |
+| `src/pages/CEOPortal.tsx` | Add BusinessHeartbeat as a tab or top section |
 
-### Data Access Rules (Firewall)
+### Data Sources (all existing tables, no migrations needed)
 
-**Allowed for website visitors:**
-- Product catalog (WooCommerce via WP API)
-- Rebar specifications (`rebar_sizes` table)
-- Stock availability (`floor_stock` table -- quantities only, no costs)
-- Knowledge base (public categories only)
-- Delivery areas (hardcoded)
-- Quote request creation
+- `support_conversations` -- live visitor sessions with metadata (city, current_page, last_seen_at)
+- `time_clock_entries` -- team clock in/out
+- `machines` + `machine_runs` -- equipment status and utilization
+- `leads` -- pipeline stages, sources, counts
+- `orders` -- revenue, recent orders
+- `accounting_mirror` -- AR/AP totals (Invoice + Vendor entity types)
+- `profiles` + `user_roles` -- team member info
+- `activity_events` -- live event feed
+- `customers` -- customer base metrics
+- `cut_plan_items` -- production progress
 
-**Blocked from website visitors:**
-- `accounting_mirror` (invoices, bills, balances)
-- `orders` (internal order data)
-- `profiles` / `user_roles` (employee data)
-- `communications` (internal emails)
-- `leads` (pipeline data)
-- `employee_salaries`, `leave_requests`
-- Any financial KPIs, margins, or cost data
-- Meeting notes, agent strategies, social strategies
+### Hook Design (`useBusinessHeartbeat`)
 
-### Knowledge Base Tool Query
+Single `useQuery` that fetches all data in parallel:
+1. Active visitors: `support_conversations` where `metadata->last_seen_at` is within 5 minutes
+2. Team presence: `time_clock_entries` joined with `profiles` for today, checking who has `clock_out IS NULL`
+3. Machine status: `machines` table
+4. Lead sources: `leads` grouped by `source`
+5. Lead pipeline: `leads` grouped by `stage`
+6. Spending: `accounting_mirror` grouped by `entity_type`
+7. Recent activity: `activity_events` last 24h, limit 20
+8. Today's production: `machine_runs` and `cut_plan_items` for today
 
-```sql
-SELECT title, LEFT(content, 500) as content, category
-FROM knowledge
-WHERE category IN ('webpage', 'company-playbook', 'document', 'research')
-  AND content ILIKE '%search_term%'
-ORDER BY created_at DESC
-LIMIT 5
-```
+Auto-refresh every 30 seconds using `refetchInterval: 30000`.
 
-### No Database Changes Required
+### Online Visitor Detection
 
-All data sources already exist. We're just adding new read-only tools to the website-agent that query existing tables with restricted access.
+Uses the heartbeat system we just built:
+- Query `support_conversations` where `metadata->>'last_seen_at'` is within the last 60 seconds = Online
+- 1-5 minutes = Away
+- Older = Offline
+- Display city from `metadata->>'city'`
+
+### No Database Migrations Required
+
+All data sources already exist. This is purely a frontend dashboard with a new data hook.
