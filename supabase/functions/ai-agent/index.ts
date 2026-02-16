@@ -5921,6 +5921,70 @@ RULES:
             additionalProperties: false,
           },
         },
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "autopilot_execute_run",
+          description: "Execute an approved autopilot run. Processes actions sequentially, enforces server-side risk policy, handles rollbacks on failure. Returns execution metrics.",
+          parameters: {
+            type: "object",
+            properties: {
+              run_id: { type: "string", description: "The autopilot run ID to execute" },
+              dry_run: { type: "boolean", description: "If true, simulate execution without making changes (default false)" },
+            },
+            required: ["run_id"],
+            additionalProperties: false,
+          },
+        },
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "autopilot_simulate_action",
+          description: "Simulate a single autopilot action to preview risk, effects, and warnings before committing. Returns risk_level, requires_approval, preview, and warnings.",
+          parameters: {
+            type: "object",
+            properties: {
+              tool_name: { type: "string", description: "The tool to simulate (e.g. odoo_write, generate_patch)" },
+              tool_params: { type: "object", description: "Parameters that would be passed to the tool" },
+            },
+            required: ["tool_name", "tool_params"],
+            additionalProperties: false,
+          },
+        },
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "autopilot_approve_run",
+          description: "Approve an autopilot run for execution. Requires admin role. Records approval audit trail.",
+          parameters: {
+            type: "object",
+            properties: {
+              run_id: { type: "string", description: "The autopilot run ID to approve" },
+              approval_note: { type: "string", description: "Optional note explaining approval rationale" },
+            },
+            required: ["run_id"],
+            additionalProperties: false,
+          },
+        },
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "autopilot_reject_run",
+          description: "Reject an autopilot run. Records rejection with optional note.",
+          parameters: {
+            type: "object",
+            properties: {
+              run_id: { type: "string", description: "The autopilot run ID to reject" },
+              note: { type: "string", description: "Reason for rejection" },
+            },
+            required: ["run_id"],
+            additionalProperties: false,
+          },
+        },
       }] : []),
       // WordPress tools — available to SEO, Social, Data, BizDev, WebBuilder, Copywriting, AND Empire agents
       ...(["seo", "social", "data", "bizdev", "webbuilder", "copywriting", "empire"].includes(agent) ? [
@@ -6742,6 +6806,74 @@ RULES:
             seoToolResults.push({ id: tc.id, name: "autopilot_list_runs", result: error ? { error: error.message } : { success: true, runs: data, count: (data || []).length } });
           } catch (e) {
             seoToolResults.push({ id: tc.id, name: "autopilot_list_runs", result: { error: e instanceof Error ? e.message : "Failed" } });
+          }
+        }
+
+        // Empire — autopilot_execute_run handler
+        if (tc.function?.name === "autopilot_execute_run") {
+          try {
+            const args = JSON.parse(tc.function.arguments || "{}");
+            const engineUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/autopilot-engine`;
+            const engineRes = await fetch(engineUrl, {
+              method: "POST",
+              headers: { "Authorization": authHeader, "Content-Type": "application/json", "apikey": Deno.env.get("SUPABASE_ANON_KEY")! },
+              body: JSON.stringify({ action: "execute_run", run_id: args.run_id, dry_run: args.dry_run ?? false }),
+            });
+            const result = await engineRes.json();
+            seoToolResults.push({ id: tc.id, name: "autopilot_execute_run", result: engineRes.ok ? result : { error: result.error || `Engine returned ${engineRes.status}` } });
+          } catch (e) {
+            seoToolResults.push({ id: tc.id, name: "autopilot_execute_run", result: { error: e instanceof Error ? e.message : "autopilot_execute_run failed" } });
+          }
+        }
+
+        // Empire — autopilot_simulate_action handler
+        if (tc.function?.name === "autopilot_simulate_action") {
+          try {
+            const args = JSON.parse(tc.function.arguments || "{}");
+            const engineUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/autopilot-engine`;
+            const engineRes = await fetch(engineUrl, {
+              method: "POST",
+              headers: { "Authorization": authHeader, "Content-Type": "application/json", "apikey": Deno.env.get("SUPABASE_ANON_KEY")! },
+              body: JSON.stringify({ action: "simulate_action", tool_name: args.tool_name, tool_params: args.tool_params }),
+            });
+            const result = await engineRes.json();
+            seoToolResults.push({ id: tc.id, name: "autopilot_simulate_action", result: engineRes.ok ? result : { error: result.error || `Engine returned ${engineRes.status}` } });
+          } catch (e) {
+            seoToolResults.push({ id: tc.id, name: "autopilot_simulate_action", result: { error: e instanceof Error ? e.message : "autopilot_simulate_action failed" } });
+          }
+        }
+
+        // Empire — autopilot_approve_run handler
+        if (tc.function?.name === "autopilot_approve_run") {
+          try {
+            const args = JSON.parse(tc.function.arguments || "{}");
+            const engineUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/autopilot-engine`;
+            const engineRes = await fetch(engineUrl, {
+              method: "POST",
+              headers: { "Authorization": authHeader, "Content-Type": "application/json", "apikey": Deno.env.get("SUPABASE_ANON_KEY")! },
+              body: JSON.stringify({ action: "approve_run", run_id: args.run_id, approval_note: args.approval_note }),
+            });
+            const result = await engineRes.json();
+            seoToolResults.push({ id: tc.id, name: "autopilot_approve_run", result: engineRes.ok ? result : { error: result.error || `Engine returned ${engineRes.status}` } });
+          } catch (e) {
+            seoToolResults.push({ id: tc.id, name: "autopilot_approve_run", result: { error: e instanceof Error ? e.message : "autopilot_approve_run failed" } });
+          }
+        }
+
+        // Empire — autopilot_reject_run handler
+        if (tc.function?.name === "autopilot_reject_run") {
+          try {
+            const args = JSON.parse(tc.function.arguments || "{}");
+            const engineUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/autopilot-engine`;
+            const engineRes = await fetch(engineUrl, {
+              method: "POST",
+              headers: { "Authorization": authHeader, "Content-Type": "application/json", "apikey": Deno.env.get("SUPABASE_ANON_KEY")! },
+              body: JSON.stringify({ action: "reject_run", run_id: args.run_id, note: args.note }),
+            });
+            const result = await engineRes.json();
+            seoToolResults.push({ id: tc.id, name: "autopilot_reject_run", result: engineRes.ok ? result : { error: result.error || `Engine returned ${engineRes.status}` } });
+          } catch (e) {
+            seoToolResults.push({ id: tc.id, name: "autopilot_reject_run", result: { error: e instanceof Error ? e.message : "autopilot_reject_run failed" } });
           }
         }
 

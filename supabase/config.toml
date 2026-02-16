@@ -264,3 +264,6 @@ verify_jwt = false
 
 [functions.friday-ideas]
 verify_jwt = false
+
+[functions.autopilot-engine]
+verify_jwt = false
