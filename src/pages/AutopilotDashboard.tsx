@@ -7,10 +7,11 @@ import { toast } from "sonner";
 import {
   Play, Pause, CheckCircle, XCircle, Clock, AlertTriangle,
   ChevronDown, ChevronRight, RotateCcw, Loader2, Bot, Shield,
-  Zap, Eye, FileCode, ArrowRight, Rocket
+  Zap, Eye, FileCode, ArrowRight, Rocket, Lock, RefreshCw
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { format } from "date-fns";
 
 const PHASE_STEPS = [
@@ -82,6 +83,8 @@ interface AutopilotRun {
   approval_note: string | null;
   error_log: unknown[];
   metrics: Record<string, unknown>;
+  execution_lock_uuid: string | null;
+  execution_started_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -258,8 +261,8 @@ export default function AutopilotDashboard() {
                     onRejectRun={() => {}}
                     onApproveAction={() => {}}
                     onRejectAction={() => {}}
-                    onExecuteRun={() => {}}
-                    isExecuting={false}
+                    onExecuteRun={() => executeRun.mutate(run.id)}
+                    isExecuting={executeRun.isPending}
                     getPhaseIndex={getPhaseIndex}
                   />
                 ))}
@@ -293,16 +296,22 @@ function RunCard({
   const currentPhaseIdx = getPhaseIndex(run.phase);
   const isAwaitingApproval = run.status === "awaiting_approval";
   const isApproved = run.status === "approved";
+  const isFailed = run.status === "failed";
   const isTerminal = ["completed", "failed", "cancelled", "rolled_back"].includes(run.status);
   const metrics = run.metrics as Record<string, number> | null;
   const simResult = run.simulation_result as Record<string, unknown> | null;
+
+  // Lock detection
+  const isLocked = !!run.execution_lock_uuid && run.status === "executing";
+  const canResume = isFailed;
 
   return (
     <div className={cn(
       "rounded-xl border bg-card/80 backdrop-blur-sm transition-all",
       isAwaitingApproval ? "border-amber-500/40 shadow-amber-500/10 shadow-lg" : 
-      isApproved ? "border-green-500/40 shadow-green-500/10 shadow-lg" : "border-border/50",
-      isTerminal && "opacity-80"
+      isApproved ? "border-green-500/40 shadow-green-500/10 shadow-lg" :
+      isLocked ? "border-blue-500/40 shadow-blue-500/10 shadow-lg" : "border-border/50",
+      isTerminal && !isFailed && "opacity-80"
     )}>
       {/* Run Header */}
       <button onClick={onToggle} className="w-full flex items-center gap-3 px-4 py-3 text-left">
@@ -316,6 +325,24 @@ function RunCard({
             <Badge variant="outline" className="text-[10px] px-1.5 py-0">
               {run.trigger_type}
             </Badge>
+            {isLocked && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex items-center gap-1 text-[10px] text-blue-400">
+                      <Lock className="w-3 h-3" />
+                      Locked
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Execution in progress by another session</p>
+                    {run.execution_started_at && (
+                      <p className="text-xs text-muted-foreground">Started: {format(new Date(run.execution_started_at), "HH:mm:ss")}</p>
+                    )}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
           </div>
           {run.description && (
             <p className="text-xs text-muted-foreground mt-0.5 truncate">{run.description}</p>
@@ -333,17 +360,17 @@ function RunCard({
             const Icon = step.icon;
             const isPast = i < currentPhaseIdx;
             const isCurrent = i === currentPhaseIdx;
-            const isFailed = run.status === "failed" && isCurrent;
+            const isFailedPhase = run.status === "failed" && isCurrent;
             return (
               <div key={step.key} className="flex items-center gap-1 flex-1">
                 <div className={cn(
                   "flex items-center justify-center w-6 h-6 rounded-full border transition-all",
                   isPast && "bg-green-600/20 border-green-600/40 text-green-500",
-                  isCurrent && !isFailed && "bg-blue-500/20 border-blue-500/40 text-blue-400 ring-2 ring-blue-500/20",
-                  isFailed && "bg-destructive/20 border-destructive/40 text-destructive",
+                  isCurrent && !isFailedPhase && "bg-blue-500/20 border-blue-500/40 text-blue-400 ring-2 ring-blue-500/20",
+                  isFailedPhase && "bg-destructive/20 border-destructive/40 text-destructive",
                   !isPast && !isCurrent && "border-border/40 text-muted-foreground/30",
                 )}>
-                  {isPast ? <CheckCircle className="w-3 h-3" /> : isFailed ? <XCircle className="w-3 h-3" /> : <Icon className="w-3 h-3" />}
+                  {isPast ? <CheckCircle className="w-3 h-3" /> : isFailedPhase ? <XCircle className="w-3 h-3" /> : <Icon className="w-3 h-3" />}
                 </div>
                 {i < PHASE_STEPS.length - 1 && (
                   <div className={cn("flex-1 h-0.5 rounded-full", isPast ? "bg-green-600/40" : "bg-border/30")} />
@@ -375,7 +402,7 @@ function RunCard({
         </div>
       )}
 
-      {/* Metrics (for completed runs) */}
+      {/* Metrics (for completed/failed runs) */}
       {expanded && metrics && isTerminal && (
         <div className="px-4 pb-3">
           <div className="rounded-lg bg-muted/30 border border-border/30 p-3 text-xs space-y-1">
@@ -391,7 +418,7 @@ function RunCard({
       )}
 
       {/* Action Buttons */}
-      {(isAwaitingApproval || isApproved) && (
+      {(isAwaitingApproval || isApproved || canResume) && (
         <div className="flex items-center gap-2 px-4 pb-3">
           {isAwaitingApproval && (
             <>
@@ -407,11 +434,22 @@ function RunCard({
             <Button
               size="sm"
               onClick={onExecuteRun}
-              disabled={isExecuting}
+              disabled={isExecuting || isLocked}
               className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
             >
-              {isExecuting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Rocket className="w-3.5 h-3.5" />}
-              {isExecuting ? "Executing…" : "Execute Run"}
+              {isExecuting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : isLocked ? <Lock className="w-3.5 h-3.5" /> : <Rocket className="w-3.5 h-3.5" />}
+              {isExecuting ? "Executing…" : isLocked ? "Locked" : "Execute Run"}
+            </Button>
+          )}
+          {canResume && (
+            <Button
+              size="sm"
+              onClick={onExecuteRun}
+              disabled={isExecuting}
+              className="gap-1.5 bg-amber-600 hover:bg-amber-700 text-white"
+            >
+              {isExecuting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+              {isExecuting ? "Resuming…" : "Resume Run"}
             </Button>
           )}
         </div>
@@ -441,7 +479,10 @@ function RunCard({
                   {JSON.stringify(action.tool_params).length > 300 && "..."}
                 </pre>
                 {action.error_message && (
-                  <p className="text-xs text-destructive mt-1">❌ {action.error_message}</p>
+                  <p className="text-xs text-destructive mt-1 flex items-center gap-1">
+                    <AlertTriangle className="w-3 h-3 flex-shrink-0" />
+                    {action.error_message}
+                  </p>
                 )}
                 {action.result && (
                   <p className="text-xs text-green-500 mt-1">✅ Completed{action.executed_at ? ` at ${format(new Date(action.executed_at), "HH:mm:ss")}` : ""}</p>

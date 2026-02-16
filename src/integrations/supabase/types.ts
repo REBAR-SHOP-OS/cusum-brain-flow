@@ -251,6 +251,66 @@ export type Database = {
           },
         ]
       }
+      autopilot_protected_models: {
+        Row: {
+          created_at: string
+          id: string
+          model: string
+          notes: string | null
+          risk_level: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          model: string
+          notes?: string | null
+          risk_level?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          model?: string
+          notes?: string | null
+          risk_level?: string
+        }
+        Relationships: []
+      }
+      autopilot_risk_policies: {
+        Row: {
+          company_id: string | null
+          created_at: string
+          field: string | null
+          id: string
+          model: string | null
+          notes: string | null
+          risk_level: string
+          tool_name: string
+          updated_at: string
+        }
+        Insert: {
+          company_id?: string | null
+          created_at?: string
+          field?: string | null
+          id?: string
+          model?: string | null
+          notes?: string | null
+          risk_level: string
+          tool_name: string
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string | null
+          created_at?: string
+          field?: string | null
+          id?: string
+          model?: string | null
+          notes?: string | null
+          risk_level?: string
+          tool_name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       autopilot_runs: {
         Row: {
           approval_note: string | null
@@ -263,6 +323,8 @@ export type Database = {
           created_by: string | null
           description: string | null
           error_log: Json | null
+          execution_lock_uuid: string | null
+          execution_started_at: string | null
           id: string
           metadata: Json | null
           metrics: Json | null
@@ -286,6 +348,8 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           error_log?: Json | null
+          execution_lock_uuid?: string | null
+          execution_started_at?: string | null
           id?: string
           metadata?: Json | null
           metrics?: Json | null
@@ -309,6 +373,8 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           error_log?: Json | null
+          execution_lock_uuid?: string | null
+          execution_started_at?: string | null
           id?: string
           metadata?: Json | null
           metrics?: Json | null
