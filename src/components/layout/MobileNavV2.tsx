@@ -26,8 +26,6 @@ const moreItems = [
   { name: "Team Hub", href: "/team-hub", icon: MessageSquare },
   { name: "Time Clock", href: "/timeclock", icon: Clock },
   { name: "Social", href: "/social", icon: Share2, roles: ["admin", "office"] },
-  { name: "Job Site", href: "/website", icon: Globe, roles: ["admin", "office"] },
-  { name: "SEO", href: "/seo", icon: Search, roles: ["admin", "office"] },
   { name: "Support", href: "/support-inbox", icon: Headset, roles: ["admin", "office"] },
   { name: "Summarizer", href: "/daily-summarizer", icon: FileText, roles: ["admin", "sales", "office"] },
   { name: "Admin", href: "/admin", icon: Shield, roles: ["admin"] },

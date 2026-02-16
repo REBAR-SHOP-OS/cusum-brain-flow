@@ -144,8 +144,8 @@ export const agentConfigs: Record<string, AgentConfig> = {
     image: webbuilderHelper,
     agentType: "webbuilder",
     greeting: "Hi! I'm Commet, your Web Builder agent.",
-    placeholder: "Ask about job site updates, landing pages, SEO...",
-    capabilities: ["Job site content updates", "Landing page copy", "Technical SEO fixes", "Performance optimization"],
+    placeholder: "Ask about website updates, landing pages, SEO...",
+    capabilities: ["Website content updates", "Landing page copy", "Technical SEO fixes", "Performance optimization"],
   },
   assistant: {
     name: "Vizzy",

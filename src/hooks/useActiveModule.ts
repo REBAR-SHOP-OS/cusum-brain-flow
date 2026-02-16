@@ -21,7 +21,7 @@ const ROUTE_MAP: Record<string, { module: string; moduleRoute: string; page?: st
   "/tasks": { module: "Messaging", moduleRoute: "/inbox", page: "Tasks" },
   "/brain": { module: "Knowledge", moduleRoute: "/brain" },
   "/phonecalls": { module: "Communications", moduleRoute: "/phonecalls", page: "Phone Calls" },
-  "/website": { module: "Job Site", moduleRoute: "/website" },
+  "/website": { module: "Website", moduleRoute: "/website" },
   "/seo": { module: "SEO", moduleRoute: "/seo" },
 };
 
