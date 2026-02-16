@@ -1,39 +1,120 @@
 
-# Security Hardening: Autopilot Engine Auth Verification
+# Two Final Hardening Improvements
 
-## Current State (Already Secure)
+## 1. Fix `computeRiskFromDb` — Proper `matchedPolicy` Tracking
 
-The `autopilot-engine` function is **already properly protected**:
+**Problem**: The current code uses `warnings.length === 0` to decide whether to fall back to hardcoded logic. This is fragile because a policy might match but produce no warning text (e.g., `notes` is null).
 
-- `requireAuth(req)` is called on **every non-OPTIONS request** (line 294)
-- This validates the JWT via `getClaims()`, which verifies the token signature, expiration, and extracts the `sub` claim
-- Missing or invalid tokens throw a 401 response immediately
-- `verify_jwt = false` in config.toml is **intentional and correct** -- the project uses Supabase signing-keys, which are incompatible with gateway-level JWT verification. All 80+ functions in this project follow the same pattern.
+**Fix** (lines 24-69 of `autopilot-engine/index.ts`):
+- Add a `let matchedPolicy = false` boolean
+- Set `matchedPolicy = true` when a protected model row is found
+- Set `matchedPolicy = true` when any risk policy row matches (modelMatch + fieldMatch)
+- Change the fallback condition from `if (warnings.length === 0)` to `if (!matchedPolicy)`
 
-**Setting `verify_jwt = true` would break the function** because the signing-keys system doesn't support gateway verification. The in-code validation via `getClaims()` is the project's standard and is documented in the Knowledge Book.
+## 2. Atomic Lock Acquisition via Conditional Update
 
-## What Needs to Be Done
+**Problem**: The current lock logic does a read-then-write (lines 478-494), which has a race window — two concurrent requests could both read the lock as null and both acquire it.
 
-Only one item: **Add a security test** to codify the 401 behavior as a regression guard.
+**Fix** (lines 477-494 of `autopilot-engine/index.ts`):
+- Replace the separate read + write with a single conditional update:
 
-### Test File: `supabase/functions/autopilot-engine/index.test.ts`
+```text
+UPDATE autopilot_runs
+SET execution_lock_uuid = <uuid>,
+    execution_started_at = now(),
+    status = 'executing',
+    phase = 'execution',
+    started_at = COALESCE(started_at, now())
+WHERE id = run_id
+  AND company_id = companyId
+  AND (execution_lock_uuid IS NULL
+       OR execution_started_at < now() - interval '5 minutes')
+```
 
-Three test cases:
+- Use an RPC function (`acquire_autopilot_lock`) to perform this atomically and return affected row count
+- If `affectedRows === 0`, return HTTP 423 with "Run is locked by another execution"
+- Remove the old manual lock check + separate update
+- This requires a new DB function via migration
 
-1. **No Authorization header** -- call the function without any auth header, assert 401 response
-2. **Invalid token** -- call with `Authorization: Bearer invalid-garbage-token`, assert 401 response
-3. **Malformed header** -- call with `Authorization: Basic xyz`, assert 401 response
+## 3. Lock Race Safety Test
 
-All tests use `fetch()` against the deployed function URL and consume the response body to avoid Deno resource leaks.
+Add a fourth test case to the existing `index.test.ts`:
+- Call `execute_run` twice rapidly with the same `run_id` (needs a valid auth token, so this will be a lightweight log-based verification)
+- Since we cannot easily create authenticated test runs, add `console.log` breadcrumbs in the lock acquisition path:
+  - Log `"LOCK_ACQUIRED"` with the lock UUID on success
+  - Log `"LOCK_REJECTED"` on 423 response
+- These can be verified via edge function logs
 
-### Files to Create
+## Files to Change
 
 | File | Change |
 |---|---|
-| `supabase/functions/autopilot-engine/index.test.ts` | New test file with 3 auth rejection test cases |
+| New migration SQL | Create `acquire_autopilot_lock` RPC function |
+| `supabase/functions/autopilot-engine/index.ts` | Fix `computeRiskFromDb` matchedPolicy tracking; replace lock logic with RPC call; add lock logging |
 
-### No Changes Needed
+## Technical Details
 
-- `config.toml` -- `verify_jwt = false` must stay (signing-keys requirement)
-- `autopilot-engine/index.ts` -- already validates JWT via `requireAuth()`
-- No other files affected
+### DB Function: `acquire_autopilot_lock`
+
+```text
+CREATE OR REPLACE FUNCTION public.acquire_autopilot_lock(
+  _run_id uuid,
+  _company_id uuid,
+  _lock_uuid uuid
+)
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+DECLARE
+  _affected integer;
+BEGIN
+  UPDATE autopilot_runs
+  SET execution_lock_uuid = _lock_uuid,
+      execution_started_at = now(),
+      status = 'executing',
+      phase = 'execution',
+      started_at = COALESCE(started_at, now())
+  WHERE id = _run_id
+    AND company_id = _company_id
+    AND status IN ('approved', 'failed')
+    AND (execution_lock_uuid IS NULL
+         OR execution_started_at < now() - interval '5 minutes');
+  GET DIAGNOSTICS _affected = ROW_COUNT;
+  RETURN _affected;
+END;
+$$;
+```
+
+### computeRiskFromDb changes (simplified diff)
+
+```text
+  let matchedPolicy = false;
+  // ... after protectedRow found:
+  matchedPolicy = true;
+  // ... after policy match in loop:
+  matchedPolicy = true;
+  // ... fallback condition:
+  if (!matchedPolicy) {
+    return computeRiskFallback(toolName, toolParams);
+  }
+```
+
+### execute_run lock replacement
+
+```text
+  const lockUuid = crypto.randomUUID();
+  const { data: lockResult } = await svcClient.rpc("acquire_autopilot_lock", {
+    _run_id: run_id,
+    _company_id: companyId,
+    _lock_uuid: lockUuid,
+  });
+  if (!lockResult || lockResult === 0) {
+    console.log("LOCK_REJECTED", { run_id, attempted_lock: lockUuid });
+    return json({ error: "Run is locked by another execution" }, 423);
+  }
+  console.log("LOCK_ACQUIRED", { run_id, lock_uuid: lockUuid });
+```
+
+This also removes the old manual lock check (lines 478-494) and the separate update (lines 488-494), replacing them with the single atomic RPC call.
