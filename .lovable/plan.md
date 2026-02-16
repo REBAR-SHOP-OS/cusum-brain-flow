@@ -1,35 +1,35 @@
 
 
-# Skip Pre-Chat Form: Help First, Collect Info Later
+# Quotation, Invoice, Packing Slip Generation + Smart File Handling in Live Chat
 
 ## Overview
 
-Remove the name/email form that currently blocks visitors from chatting. Instead, the chat opens directly into a conversation with the AI assistant. Visitor details (name, email) are only collected later when the visitor is ready to get a quote or place an order -- the AI naturally asks for this information at the right moment.
+Three major enhancements:
 
-## What Changes
+1. **Document Generation**: Add tools to the `website-agent` so the AI can generate branded Quotation, Invoice, and Packing Slip documents directly in the live chat -- rendered as beautiful HTML that visitors can print/save as PDF.
 
-### 1. Remove Pre-Chat Form from Widget (support-chat widget.js)
+2. **Drawing Upload --> New Lead**: When a visitor uploads a structural drawing (PDF/image), the AI detects it and automatically creates a new lead in the pipeline with the file attached, so the sales team can follow up.
 
-The generated widget JS currently shows a "Your name / Email / Start Chat" form before any conversation begins. This will be replaced with:
+3. **Barlist Upload --> Instant Quote**: When a visitor uploads a bar bending schedule (barlist), the AI extracts the rebar items using the existing `extract-manifest` edge function and generates an instant rough quotation with pricing estimates, right in the chat.
 
-- Widget opens directly into the message view (no form)
-- A conversation is auto-started on first open (visitor_name defaults to "Visitor")
-- The AI proactive greeting fires immediately, welcoming them based on their current page
-- Quick action chips are not affected (they remain in the website-chat-widget, which is separate)
+## What the Customer Will Experience
 
-### 2. Update AI System Prompt for Info Collection
+### Quotation in Chat
+- Visitor asks for a quote and provides items/details
+- AI collects info, then generates a formatted quotation matching the existing Rebar.Shop branded template (same layout as the PDF you shared: logo, line items, inclusions, totals with HST 13%, signature area, footer)
+- Quotation is rendered as styled HTML inside a chat message -- visitor can print or save as PDF directly from browser
 
-Update the AI prompt in `triggerAiReply` to include instructions like:
+### Drawing Upload
+- Visitor attaches a PDF or image of a structural drawing
+- AI recognizes it as a drawing (not a barlist) based on content analysis
+- AI creates a new lead in the pipeline with source "website_chat" and attaches the file
+- AI responds: "I've forwarded your drawing to our estimating team. They'll prepare a detailed quote and reach out shortly."
 
-- "When the visitor is ready to get a quote, place an order, or requests delivery, ask for their name and email so the team can follow up"
-- "Do NOT ask for personal info upfront -- help them first, build trust, then collect details when relevant"
-
-### 3. Store Collected Info via AI Tool or Message Parsing
-
-When the visitor provides their name/email during conversation, the agent can update the conversation record. Add a simple approach:
-
-- In `handleSend`, after inserting the visitor message, check if the conversation still has "Visitor" as the name
-- The AI will be prompted to ask for details at the right time -- the agent in the support inbox can manually update the visitor name from the conversation
+### Barlist Upload --> Instant Pricing
+- Visitor attaches a bar bending schedule (PDF/image/spreadsheet)
+- AI recognizes it as a barlist and calls the `extract-manifest` endpoint to parse items
+- Using the extracted items (bar codes, quantities, lengths), AI generates an instant rough quotation with estimated pricing
+- AI presents the quotation in the branded template format and notes it's an estimate pending formal review
 
 ## Technical Details
 
@@ -37,36 +37,91 @@ When the visitor provides their name/email during conversation, the agent can up
 
 | File | Change |
 |------|--------|
-| `supabase/functions/support-chat/index.ts` | Remove pre-chat form from `generateWidgetJs`, auto-start conversation on widget open, update AI prompt for delayed info collection |
+| `supabase/functions/website-agent/index.ts` | Add 3 new tools: `generate_quotation`, `create_lead_from_drawing`, `process_barlist_quote`. Update system prompt with file handling instructions |
+| `supabase/functions/support-chat/index.ts` | Update AI prompt to handle file uploads similarly (drawing detection, barlist detection) and instruct visitors to use the main widget for document features |
 
-### Widget JS Changes (inside `generateWidgetJs`)
+### New Tools for `website-agent`
 
-1. Remove the `#sw-pre-chat` div entirely (no name/email inputs, no "Start Chat" button)
-2. Show `#sw-messages` and `#sw-input-area` immediately
-3. On first panel open (bubble click), auto-call `handleStart` with `visitor_name: "Visitor"` and no email
-4. The proactive AI greeting fires as before, giving the visitor an immediate welcome
+**1. `generate_quotation`**
+- Input: customer_name, customer_email, project_name, items (array of description/qty/unit_price), inclusions, exclusions, notes
+- Output: Branded HTML quotation matching the existing InvoiceTemplate/QuotationTemplate style
+- Also creates a `quote_requests` record in the database
+- Returns the HTML so the AI can embed it in the chat message
 
-### Updated Conversation Flow
+**2. `create_lead_from_drawing`**
+- Input: customer_name, customer_email, project_name, file_description, notes
+- Creates a new lead in `leads` table with stage "new", source "website_chat"
+- Creates a `quote_requests` record linked to it
+- Returns confirmation with quote number
 
-```text
-Visitor clicks chat bubble
-  --> Panel opens (no form)
-  --> Auto-starts conversation (name: "Visitor", no email)
-  --> AI greeting appears within 2-3 seconds based on current page
-  --> Visitor chats freely
-  --> When visitor wants a quote, AI asks: "Happy to help! Could I grab your name and email so we can send that quote over?"
-  --> Visitor provides info naturally in conversation
-  --> Agent sees details in support inbox and can update the record
+**3. `process_barlist_quote`**
+- Input: barlist_text (the extracted/OCR'd content from the uploaded file), customer_name, customer_email, project_name
+- Calls the AI to parse rebar items from the text
+- Calculates rough pricing using standard rates (per kg based on bar size)
+- Returns a formatted quotation HTML with estimated pricing
+- Notes clearly that this is an estimate pending formal review
+
+### System Prompt Updates
+
+Add to the `website-agent` system prompt:
+
+```
+## File Upload Handling
+When a visitor uploads a file:
+
+1. DRAWING DETECTION: If the file appears to be a structural/engineering drawing 
+   (mentions footings, beams, columns, slabs, structural details, has drawing numbers):
+   - Collect visitor name and email if not already known
+   - Use create_lead_from_drawing to create a pipeline lead
+   - Let them know the estimating team will prepare a detailed quote
+
+2. BARLIST DETECTION: If the file appears to be a bar bending schedule / barlist / 
+   rebar schedule (has columns like Mark, Bar Size, Shape, Length, Qty):
+   - Use process_barlist_quote to extract items and generate instant pricing
+   - Present the rough quotation in the chat
+   - Note that formal pricing will follow from the team
+
+3. QUOTATION GENERATION: When you have enough info to create a quote:
+   - Use generate_quotation to produce a branded quote document
+   - Always include HST 13% tax
+   - Include standard terms and delivery notes
 ```
 
-### AI Prompt Addition (in `triggerAiReply`)
+### Quotation HTML Template
 
-Add to the system prompt:
-- "Do NOT ask for the visitor's name or contact details upfront. Help them first with their questions about rebar, pricing, stock, and delivery."
-- "When the visitor expresses intent to get a quote, place an order, or arrange delivery, THEN naturally ask for their name and email so the team can follow up."
-- "Keep it conversational -- e.g. 'Happy to put that quote together! Could I grab your name and the best email to send it to?'"
+The generated HTML will match the existing brand style from `QuotationTemplate.tsx`:
+- Rebar.Shop Inc header with logo placeholder and address (9 Cedar Ave, Thornhill L3T 3W1)
+- Customer info section
+- Line items table (Description, Qty, Unit Price, Amount)
+- Inclusions/Exclusions checklist
+- Subtotal, HST 13%, Total
+- Footer with phone, email, HST number
+- Print-friendly CSS included inline
+
+### Standard Pricing for Instant Barlist Quotes
+
+Rough pricing table used for instant estimates (per kg):
+- N12: $2.20/kg (0.888 kg/m)
+- N16: $2.10/kg (1.58 kg/m)  
+- N20: $2.00/kg (2.47 kg/m)
+- N24: $1.95/kg (3.55 kg/m)
+- N28: $1.90/kg (4.83 kg/m)
+- N32: $1.85/kg (6.31 kg/m)
+- N36: $1.80/kg (7.99 kg/m)
+- Fabrication surcharge: +$0.30/kg for bends
+- These are estimate prices -- clearly marked as "Budget Estimate, Subject to Formal Quote"
+
+### Support Chat Integration
+
+Update `support-chat/index.ts` AI prompt to add:
+- When a visitor describes uploading a drawing or barlist, guide them to send the file
+- The support chat doesn't have tool-calling, so it should collect details and create a `quote_requests` record directly via the conversation flow
+- The AI should ask for details and let them know the team will follow up
 
 ### No Database Changes
 
-No migrations needed. The `visitor_name` column already defaults and "Visitor" is an acceptable value.
+All data flows into existing tables:
+- `quote_requests` for quotations
+- `leads` for drawing-based leads
+- `activity_events` for logging
 
