@@ -1,94 +1,106 @@
 
-# CEO Business Heartbeat Dashboard
+# Proactive AI Greeting, Sales Notifications, and Assign-to-All-Users
 
 ## Overview
 
-Create a new dedicated "Business Heartbeat" page within the CEO Portal that consolidates everything into a single real-time command center: online visitors, team presence, customer origins, spending breakdown, productivity metrics, and live website activity.
+Three upgrades to the support chat system:
 
-## What You'll See
+1. **Proactive AI greeting**: When a visitor lands on the website and opens the chat, the AI automatically sends a contextual welcome message based on the page they are viewing (e.g., "I see you're looking at N16 Deformed Bar -- would you like a quote?"). This replaces the static welcome text.
 
-### Section 1: Live Pulse Strip (Top)
-- **Website Visitors Now**: Count of active support chat visitors (online within 60s) with green pulsing dot
-- **Team On Clock**: Staff currently clocked in vs total, with percentage
-- **Machines Running**: Live count with status breakdown
-- **Open Conversations**: Active support chats happening right now
-- **Orders Today**: New orders created today
-- **Leads Today**: New leads captured today
+2. **Sales team notifications**: When a new visitor starts a chat, all sales team members receive a push notification ("New visitor on rebar.shop from Sydney -- viewing N16 Deformed Bar"). This ensures someone picks up the conversation quickly.
 
-### Section 2: Customer Origins Map
-- A visual card showing where website visitors and leads come from:
-  - **Live Visitors by City**: Pulled from `support_conversations.metadata` (city/country from IP geolocation we just built)
-  - **Lead Sources**: Breakdown of lead sources (website, email, AI prospecting, referral) as a horizontal bar chart
-  - Shows city names with visitor counts and country flags
+3. **Assign to any user**: The "Assign to me" button is replaced with a dropdown that lists all team members so you can assign conversations to anyone, not just yourself.
 
-### Section 3: Online/Offline Status Board
-- **Team Presence**: Each team member with green (clocked in) / grey (off) dot, clock-in time, and role
-- **Machine Fleet**: Each machine with status dot (running/idle/blocked/down) and current job
-- **Website Widget**: Active visitor sessions with their current page and city
+## What Changes
 
-### Section 4: Where Money Is Going (Spending Breakdown)
-- **Outstanding Payables**: Total vendor bills from `accounting_mirror` (entity_type = 'Vendor')
-- **Outstanding Receivables**: Invoice totals with aging buckets (already computed)
-- **Pipeline by Stage**: Funnel visualization of leads from new to won
-- **Revenue Concentration**: Top 5 customers by order value
+### 1. Proactive AI Welcome (Both Widgets)
 
-### Section 5: Productivity Metrics
-- **Production Throughput**: Pieces completed today vs target, with 7-day trend sparkline
-- **Machine Utilization**: OEE-style gauge per machine
-- **Quote Turnaround**: Average time from lead creation to quote sent
-- **Team Productivity**: Clock hours today, pieces per labor hour
+**support-chat edge function** (`handleStart`):
+- After creating the conversation, fire off an AI greeting using the same `triggerAiReply` logic but with a special "proactive greeting" prompt
+- The AI sees the visitor's `current_page` and crafts a personalised welcome (e.g., "I see you're browsing our mesh products -- need help choosing the right size?")
+- If the visitor is on a product page, the AI references that product specifically
+- This message appears as a `bot` message immediately after "Conversation started"
 
-### Section 6: Activity Feed
-- Live scrolling feed of recent `activity_events` (last 24h) showing what's happening across the business: new leads, orders, chat sessions, machine runs, deliveries
+**website-chat-widget** (`website-agent`):
+- Update the widget JS so when the chat panel opens for the first time (no messages yet), it automatically sends a silent "init" message with the current page
+- The website-agent responds with a contextual greeting instead of the generic welcome text
+
+### 2. Notify Sales Team on New Visitor
+
+**support-chat edge function** (`handleStart`):
+- After creating the conversation, insert a notification into the `notifications` table for each sales-relevant team member
+- The notification title: "New Website Visitor"
+- The description includes visitor name, city, and current page
+- The `link_to` points to `/support-inbox` so they can jump straight in
+- This triggers the existing `push-on-notify` edge function which sends browser push alerts with sound
+
+**Who gets notified**: All profiles with a matching `company_id` (the entire team gets the alert so whoever is available can respond)
+
+### 3. Assign Dropdown with All Users
+
+**SupportChatView.tsx**:
+- Replace the "Assign to me" button with a dropdown (`Select`) listing all team members from `profiles`
+- Show each person's name in the dropdown
+- When selected, update `assigned_to` on the conversation
+- The current assignee is shown as the selected value
+
+### 4. AI Handoff to Human
+
+When the AI detects the visitor wants to talk to a real person, it should:
+- Respond warmly: "Let me connect you with one of our team members"
+- The system already supports this since agents can jump in at any time
+- Update the system prompt to instruct the AI: "If the visitor asks to speak with a person, let them know a team member will be with them shortly and that you've notified the sales team"
 
 ## Technical Details
 
-### New Files
-| File | Purpose |
-|------|---------|
-| `src/components/ceo/BusinessHeartbeat.tsx` | Main heartbeat dashboard component |
-| `src/hooks/useBusinessHeartbeat.ts` | Data hook querying all live data sources |
+### Files Modified
 
-### Modified Files
 | File | Change |
 |------|--------|
-| `src/pages/CEOPortal.tsx` | Add BusinessHeartbeat as a tab or top section |
+| `supabase/functions/support-chat/index.ts` | Add proactive AI greeting in `handleStart`, add sales team notifications, update AI prompt for handoff |
+| `supabase/functions/website-chat-widget/index.ts` | Auto-send init message on panel open for contextual AI greeting |
+| `supabase/functions/website-agent/index.ts` | Handle init/greeting message, update system prompt for handoff behaviour |
+| `src/components/support/SupportChatView.tsx` | Replace "Assign to me" with full team member dropdown |
 
-### Data Sources (all existing tables, no migrations needed)
+### Proactive Greeting Flow (support-chat widget)
 
-- `support_conversations` -- live visitor sessions with metadata (city, current_page, last_seen_at)
-- `time_clock_entries` -- team clock in/out
-- `machines` + `machine_runs` -- equipment status and utilization
-- `leads` -- pipeline stages, sources, counts
-- `orders` -- revenue, recent orders
-- `accounting_mirror` -- AR/AP totals (Invoice + Vendor entity types)
-- `profiles` + `user_roles` -- team member info
-- `activity_events` -- live event feed
-- `customers` -- customer base metrics
-- `cut_plan_items` -- production progress
+```text
+Visitor opens widget --> enters name --> clicks "Start Chat"
+  --> handleStart creates conversation
+  --> Inserts "Conversation started" system message
+  --> Fires proactive AI greeting (bot sees current_page, crafts welcome)
+  --> Inserts notification for all team members
+  --> Bot greeting appears in widget within 2-3 seconds
+```
 
-### Hook Design (`useBusinessHeartbeat`)
+### Proactive Greeting Flow (website-agent widget / rebar.shop)
 
-Single `useQuery` that fetches all data in parallel:
-1. Active visitors: `support_conversations` where `metadata->last_seen_at` is within 5 minutes
-2. Team presence: `time_clock_entries` joined with `profiles` for today, checking who has `clock_out IS NULL`
-3. Machine status: `machines` table
-4. Lead sources: `leads` grouped by `source`
-5. Lead pipeline: `leads` grouped by `stage`
-6. Spending: `accounting_mirror` grouped by `entity_type`
-7. Recent activity: `activity_events` last 24h, limit 20
-8. Today's production: `machine_runs` and `cut_plan_items` for today
+```text
+Visitor clicks chat bubble (no pre-chat form)
+  --> Widget auto-sends { messages: [{role:"user", content:"[INIT]"}], current_page: "..." }
+  --> website-agent detects [INIT], responds with page-contextual greeting
+  --> Greeting streams into widget immediately
+```
 
-Auto-refresh every 30 seconds using `refetchInterval: 30000`.
+### Notification Insert (in handleStart)
 
-### Online Visitor Detection
+```sql
+INSERT INTO notifications (user_id, type, title, description, link_to, agent_name, agent_color, status)
+SELECT user_id, 'support_visitor', 'New Website Visitor', 
+       'Visitor from Sydney viewing /product/n16-deformed-bar',
+       '/support-inbox', 'Support', '#10b981', 'pending'
+FROM profiles WHERE company_id = '{company_id}'
+```
 
-Uses the heartbeat system we just built:
-- Query `support_conversations` where `metadata->>'last_seen_at'` is within the last 60 seconds = Online
-- 1-5 minutes = Away
-- Older = Offline
-- Display city from `metadata->>'city'`
+This triggers the existing `push-on-notify` function which sends browser push notifications with the mockingjay sound.
+
+### Team Member Dropdown (SupportChatView.tsx)
+
+- Fetch all profiles for the company on mount
+- Render a `Select` dropdown with "Unassigned" as default + all team members
+- On change, update `support_conversations.assigned_to` and set status to "assigned"
+- Show current assignee's name
 
 ### No Database Migrations Required
 
-All data sources already exist. This is purely a frontend dashboard with a new data hook.
+All tables (`notifications`, `profiles`, `support_conversations`, `support_messages`) already have the necessary columns. No schema changes needed.
