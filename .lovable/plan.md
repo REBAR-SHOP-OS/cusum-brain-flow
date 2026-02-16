@@ -1,120 +1,66 @@
 
-# Two Final Hardening Improvements
+# Restyle /empire — Dark Cyberpunk Dashboard
 
-## 1. Fix `computeRiskFromDb` — Proper `matchedPolicy` Tracking
+## Overview
 
-**Problem**: The current code uses `warnings.length === 0` to decide whether to fall back to hardcoded logic. This is fragile because a policy might match but produce no warning text (e.g., `notes` is null).
+Replace the current light-themed EmpireBuilder page with the dark cyberpunk dashboard UI provided. The page keeps all existing chat/agent logic but gets a completely new visual shell with sidebar, top bar, and dark gradient canvas.
 
-**Fix** (lines 24-69 of `autopilot-engine/index.ts`):
-- Add a `let matchedPolicy = false` boolean
-- Set `matchedPolicy = true` when a protected model row is found
-- Set `matchedPolicy = true` when any risk policy row matches (modelMatch + fieldMatch)
-- Change the fallback condition from `if (warnings.length === 0)` to `if (!matchedPolicy)`
+## Approach
 
-## 2. Atomic Lock Acquisition via Conditional Update
+Create two new components and update EmpireBuilder to use them. All chat logic (state, handlers, file upload, agent calls) stays untouched in EmpireBuilder.
 
-**Problem**: The current lock logic does a read-then-write (lines 478-494), which has a race window — two concurrent requests could both read the lock as null and both acquire it.
+### New Files
 
-**Fix** (lines 477-494 of `autopilot-engine/index.ts`):
-- Replace the separate read + write with a single conditional update:
+| File | Purpose |
+|---|---|
+| `src/components/empire/EmpireSidebar.tsx` | 72px icon-only sidebar with dark glass styling, nav items, help button |
+| `src/components/empire/EmpireTopbar.tsx` | Cyan `#35E6E6` header bar with Dashboard label, search input, bell icon, avatar with user initials |
 
-```text
-UPDATE autopilot_runs
-SET execution_lock_uuid = <uuid>,
-    execution_started_at = now(),
-    status = 'executing',
-    phase = 'execution',
-    started_at = COALESCE(started_at, now())
-WHERE id = run_id
-  AND company_id = companyId
-  AND (execution_lock_uuid IS NULL
-       OR execution_started_at < now() - interval '5 minutes')
-```
-
-- Use an RPC function (`acquire_autopilot_lock`) to perform this atomically and return affected row count
-- If `affectedRows === 0`, return HTTP 423 with "Run is locked by another execution"
-- Remove the old manual lock check + separate update
-- This requires a new DB function via migration
-
-## 3. Lock Race Safety Test
-
-Add a fourth test case to the existing `index.test.ts`:
-- Call `execute_run` twice rapidly with the same `run_id` (needs a valid auth token, so this will be a lightweight log-based verification)
-- Since we cannot easily create authenticated test runs, add `console.log` breadcrumbs in the lock acquisition path:
-  - Log `"LOCK_ACQUIRED"` with the lock UUID on success
-  - Log `"LOCK_REJECTED"` on 423 response
-- These can be verified via edge function logs
-
-## Files to Change
+### Modified File
 
 | File | Change |
 |---|---|
-| New migration SQL | Create `acquire_autopilot_lock` RPC function |
-| `supabase/functions/autopilot-engine/index.ts` | Fix `computeRiskFromDb` matchedPolicy tracking; replace lock logic with RPC call; add lock logging |
+| `src/pages/EmpireBuilder.tsx` | Wrap entire return in the dark app shell layout (sidebar + topbar + gradient canvas). Restyle InputBox, suggestion pills, chat bubbles, and loading indicator to dark theme colors. |
 
-## Technical Details
+## Component Details
 
-### DB Function: `acquire_autopilot_lock`
+### EmpireSidebar
+- 72px wide, `bg-black/30 backdrop-blur border-r border-white/10`
+- Top: gradient logo square (fuchsia-to-indigo)
+- Nav: 11 icon buttons (Home, BarChart2, Globe, Search, Users, DollarSign, FileText, Boxes, Activity, Settings, Shield) with `hover:bg-white/10` rounded-xl
+- Bottom: HelpCircle icon
 
-```text
-CREATE OR REPLACE FUNCTION public.acquire_autopilot_lock(
-  _run_id uuid,
-  _company_id uuid,
-  _lock_uuid uuid
-)
-RETURNS integer
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
-AS $$
-DECLARE
-  _affected integer;
-BEGIN
-  UPDATE autopilot_runs
-  SET execution_lock_uuid = _lock_uuid,
-      execution_started_at = now(),
-      status = 'executing',
-      phase = 'execution',
-      started_at = COALESCE(started_at, now())
-  WHERE id = _run_id
-    AND company_id = _company_id
-    AND status IN ('approved', 'failed')
-    AND (execution_lock_uuid IS NULL
-         OR execution_started_at < now() - interval '5 minutes');
-  GET DIAGNOSTICS _affected = ROW_COUNT;
-  RETURN _affected;
-END;
-$$;
-```
+### EmpireTopbar
+- `bg-[#35E6E6] text-black h-14 border-b border-black/30`
+- Left: LayoutGrid icon + "Dashboard" label
+- Center-right: search pill (`bg-black/10 rounded-xl`, hidden on mobile)
+- Right: Bell icon button, circular avatar with user initials (falls back to "SA")
 
-### computeRiskFromDb changes (simplified diff)
+### EmpireBuilder Changes
 
-```text
-  let matchedPolicy = false;
-  // ... after protectedRow found:
-  matchedPolicy = true;
-  // ... after policy match in loop:
-  matchedPolicy = true;
-  // ... fallback condition:
-  if (!matchedPolicy) {
-    return computeRiskFallback(toolName, toolParams);
-  }
-```
+**Outer wrapper**: Replace the current `flex flex-col h-full` with `min-h-screen w-full bg-[#070A12] text-white` containing a flex row of sidebar + main content.
 
-### execute_run lock replacement
+**Background gradient**: Replace the light gradient with the dark radial gradient:
+`bg-[radial-gradient(...cyan...),radial-gradient(...orange...),linear-gradient(135deg,#0A0F25,#141B3A,#221B3B,#301D2E)]`
 
-```text
-  const lockUuid = crypto.randomUUID();
-  const { data: lockResult } = await svcClient.rpc("acquire_autopilot_lock", {
-    _run_id: run_id,
-    _company_id: companyId,
-    _lock_uuid: lockUuid,
-  });
-  if (!lockResult || lockResult === 0) {
-    console.log("LOCK_REJECTED", { run_id, attempted_lock: lockUuid });
-    return json({ error: "Run is locked by another execution" }, 423);
-  }
-  console.log("LOCK_ACQUIRED", { run_id, lock_uuid: lockUuid });
-```
+Plus a floating avatar bubble decoration in the top-right corner.
 
-This also removes the old manual lock check (lines 478-494) and the separate update (lines 488-494), replacing them with the single atomic RPC call.
+**InputBox restyle**:
+- Container: `bg-white/5 backdrop-blur border border-white/10 rounded-2xl`
+- Focus state: `border-white/20`
+- Drag state: `border-cyan-400/60 bg-cyan-500/5`
+- Text/placeholder: `text-white placeholder:text-white/40`
+- Attachment chips: `bg-white/10 border-white/10 text-white/70`
+- Plus button: `bg-white/5 hover:bg-white/10 text-white/80`
+- Send button active: `bg-[#35E6E6] text-black`; inactive: `bg-white/10 text-white/30`
+
+**Suggestion pills**: `bg-white/5 border border-white/10 text-white/80 hover:bg-white/10 hover:text-white rounded-full`
+
+**Chat messages (conversation view)**:
+- User bubbles: `bg-[#35E6E6] text-black rounded-br-md`
+- Agent bubbles: `bg-white/5 backdrop-blur border border-white/10 text-white rounded-bl-md`
+- Agent avatar: gradient `from-cyan-400 to-teal-500` instead of orange
+- Loading dots: `bg-white/40`
+- Bottom input bar: `bg-black/30 backdrop-blur-xl border-t border-white/10`
+
+**Hero text**: H1 white with "great" in `text-[#FF7A18]`, subtitle in `text-white/70`
