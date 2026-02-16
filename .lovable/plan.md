@@ -1,147 +1,138 @@
 
 
-# Audit and Upgrade: App Builder (Architect) -- Full Power Mode
+# Rebar AI Code Engineer — Adapted for Your Platform
 
-## Issues Found
+## Important: Platform Reality
 
-1. **Input box works** -- confirmed typing works; the training modal overlay may have confused you. No code bug here.
-2. **Plus (+) button does nothing** -- it's a dead button with no file upload wired.
-3. **No file attachment support** -- no ZIP, image, or PDF upload/analysis capability in Empire Builder (exists in WebsiteChat but not here).
-4. **No global "Auto-Fix by ARIA" button** -- errors go to SmartErrorBoundary but only have "Try Again" and "Home" buttons; no "Fix with ARIA" option.
-5. **No Friday notification for improvement ideas** -- no cron job exists for this.
-6. **Model selection** -- user key routing is in place but model names are `gemini-2.5-pro` without the `google/` prefix when using user key, which may cause API errors.
+Your project runs on **Lovable Cloud** (React + Supabase Edge Functions in Deno/TypeScript). It cannot run Python, FastAPI, or Docker. However, your existing architecture already has **most of the building blocks** for a production-grade AI Code Engineer. Here's what we actually need to build vs what already exists.
 
-## Plan
+## What Already Exists (No Changes Needed)
 
-### 1. Fix the Plus Button -- Wire File Uploads (ZIP, Image, PDF)
+| Capability | Where It Lives |
+|---|---|
+| Agent runtime with tools | `ai-agent` edge function (6,500+ lines) |
+| Odoo Read (search_read) | `odoo-crm-sync`, `odoo-file-proxy`, `odoo-reconciliation-report` |
+| Venture management tools | `manage_venture` tool in ai-agent |
+| Cross-platform diagnostics | `diagnose_platform` tool (ERP, WordPress, Odoo) |
+| Fix request creation | `create_fix_request` tool |
+| WordPress tools | `wp_*` tools (get/create/update posts, pages, products, SEO) |
+| File analysis (ZIP, PDF, image) | EmpireBuilder.tsx + ai-agent Gemini Vision |
+| Auto-fix from errors | SmartErrorBoundary "Fix with ARIA" button |
+| Friday ideas cron | `friday-ideas` edge function |
+| Model routing (Gemini/GPT) | `selectModel()` in ai-agent |
+| Chat UI | EmpireBuilder.tsx (Lovable-style) |
 
-**File: `src/pages/EmpireBuilder.tsx`**
+## What Needs to Be Built (5 Items)
 
-- Add a hidden `<input type="file">` that accepts images, PDFs, and ZIP files
-- Wire the Plus (+) button to trigger the file input
-- Show attached file previews (thumbnails for images, file name chips for PDF/ZIP)
-- On send:
-  - **Images**: Upload to `clearance-photos` bucket, get signed URL, pass as `attachedFiles` to `sendAgentMessage`
-  - **ZIP files**: Use existing `analyzeZip()` from `src/lib/zipAnalyzer.ts` to extract structure and embedded images, append summary to message
-  - **PDFs**: Upload to storage, pass URL as `attachedFiles` -- the `ai-agent` edge function already has `analyzeDocumentWithGemini()` and `convertPdfToImages()` support
+### 1. Odoo Write Tool (New)
 
-### 2. Add "Auto-Fix with ARIA" Button to SmartErrorBoundary
+Add an `odoo_write` tool to the empire agent that can **create and update** records in any Odoo model via JSON-RPC. Currently, Odoo integration is read-only.
 
-**File: `src/components/error/SmartErrorBoundary.tsx`**
+**File**: `supabase/functions/ai-agent/index.ts`
+- Add tool definition: `odoo_write` with params `model`, `action` (create/write), `record_id`, `values`
+- Add handler that calls Odoo JSON-RPC `execute_kw` with `create` or `write` method
+- Security: require explicit `confirm: true` flag for destructive operations
+- Uses existing `ODOO_URL`, `ODOO_API_KEY`, `ODOO_DATABASE` secrets
 
-- After retries are exhausted, add a third button: **"Fix with ARIA"** (with a sparkle/wand icon)
-- On click:
-  - Navigate to `/empire` with the error details as a URL search param (e.g., `?autofix=...`)
-  - Or open a small modal that sends the error directly to the `empire` agent via `sendAgentMessage("empire", "Auto-fix this error: ...")`
-- This connects every app error across the platform to ARIA/Architect for diagnosis and fix
+### 2. Odoo Module Patch Tool (New)
 
-**File: `src/pages/EmpireBuilder.tsx`**
+Add an `odoo_module_patch` tool that generates a **reviewable diff** for Odoo module modifications (Python files). The AI produces the patch as a structured artifact -- it never executes code directly.
 
-- On mount, check for `?autofix=` query param
-- If present, automatically send that error description to the Architect agent as the first message
-- This creates a seamless flow: error occurs anywhere --> click "Fix with ARIA" --> lands in App Builder with ARIA already diagnosing
+**File**: `supabase/functions/ai-agent/index.ts`
+- Add tool: `generate_patch` with params `target` (odoo_module/erp_code/wordpress), `file_path`, `description`, `patch_type` (unified_diff)
+- AI generates a unified diff format patch as an artifact
+- Store patches in a new `code_patches` table for review/approval
+- Frontend shows Approve/Reject buttons
 
-### 3. Fix Model Name Prefixes in ai-agent
+### 3. Structured JSON Output Contract (New)
 
-**File: `supabase/functions/ai-agent/index.ts`** (lines ~4458-4476)
+Force the empire agent to return structured JSON instead of prose when executing engineering tasks.
 
-- When `useUserGeminiKey` is true, the model names `gemini-2.5-pro` and `gemini-2.5-flash` need proper handling
-- The Gemini API endpoint (generativelanguage.googleapis.com) uses model names like `gemini-2.5-pro` directly
-- Ensure the empire agent handler correctly routes to the Google Generative AI API (not the Lovable gateway) when using the user's `GEMINI_API_KEY`
-- Verify the fetch URL and headers are correct for direct Gemini API calls
+**File**: `supabase/functions/ai-agent/index.ts`
+- Add a `code_engineer_mode` flag triggered by keywords like "generate patch", "write code", "fix module", "engineer mode"
+- When active, wrap the system prompt to enforce JSON schema output:
 
-### 4. Friday Improvement Ideas Notification (Cron Job)
+```text
+{
+  "status": "success | error",
+  "plan": [{ "step": 1, "action": "...", "target": "..." }],
+  "actions": [{ "tool": "...", "params": {...}, "result": {...} }],
+  "artifacts": [{ "type": "patch", "file": "...", "content": "..." }],
+  "errors": [{ "code": "...", "message": "..." }]
+}
+```
 
-**New file: `supabase/functions/friday-ideas/index.ts`**
+### 4. Code Patches Table + Review UI (New)
 
-- A new edge function that:
-  1. Checks it's Friday (UTC day 5)
-  2. Pulls context: open fix requests, stale human tasks, SEO metrics, machine downtime, delivery issues, order pipeline
-  3. Calls Gemini (user key) with a prompt: "Based on this business data, suggest 3-5 improvement ideas for rebar.shop, the ERP, and Odoo CRM"
-  4. Creates a notification for admin users with the improvement ideas
-  5. Optionally creates `human_tasks` with category "improvement_idea"
+**Database migration**: Create `code_patches` table:
+- `id`, `created_by`, `company_id`, `target_system` (odoo/erp/wordpress)
+- `file_path`, `description`, `patch_content` (the diff)
+- `status` (pending/approved/rejected/applied)
+- `reviewed_by`, `reviewed_at`
+- RLS: users can see own patches, admins can approve
 
-**Database: cron job setup**
+**File**: `src/pages/EmpireBuilder.tsx`
+- When the AI returns artifacts with patches, render them in a code block with syntax highlighting
+- Add "Approve" and "Reject" buttons below each patch
+- Approved patches update the `code_patches` table status
 
-- Schedule `friday-ideas` to run every Friday at 9 AM AEST (23:00 UTC Thursday) using `cron.schedule`
+### 5. Validation Tool (New)
 
-**Config: `supabase/config.toml`**
+Add a `validate_code` tool that performs basic static validation on generated patches.
 
-- Add `[functions.friday-ideas]` with `verify_jwt = false`
+**File**: `supabase/functions/ai-agent/index.ts`
+- Checks: valid Python syntax (for Odoo patches), matching brackets/indentation, no dangerous patterns (DROP TABLE, rm -rf, eval/exec)
+- Returns structured validation result with warnings and errors
+- Runs automatically before presenting patches to the user
 
-### 5. Update Suggestions and UI Polish
+## Architecture Diagram
 
-**File: `src/pages/EmpireBuilder.tsx`**
+```text
++-------------------+        +---------------------+
+|  EmpireBuilder    |        |  ai-agent (Deno)    |
+|  (React Chat UI)  | -----> |  Agent Runtime      |
+|                   |        |                     |
+|  - File upload    |        |  Tools:             |
+|  - Patch review   |        |  - manage_venture   |
+|  - Approve/Reject |        |  - diagnose_platform|
++-------------------+        |  - create_fix_req   |
+                             |  - odoo_write  [NEW]|
+                             |  - generate_patch[N]|
+                             |  - validate_code [N]|
+                             |  - wp_* tools       |
+                             +----------+----------+
+                                        |
+                    +-------------------+-------------------+
+                    |                   |                   |
+              +-----+-----+     +------+------+     +-----+-----+
+              | Odoo CRM  |     | ERP DB      |     | WordPress |
+              | JSON-RPC  |     | (Supabase)  |     | REST API  |
+              +-----------+     +-------------+     +-----------+
+```
 
-- Add attachment indicator chips below the textarea showing attached files with remove buttons
-- Add drag-and-drop support for files onto the input area
-- Update placeholder text to mention file support: "Ask Architect to build, diagnose, or drop files here..."
+## Security Guardrails
+
+- No direct code execution -- all patches are reviewable text artifacts
+- Odoo writes require `confirm: true` flag
+- No destructive DB operations (DELETE, DROP) without explicit admin approval
+- All patches stored in `code_patches` with audit trail
+- Validation tool scans for dangerous patterns before presenting patches
 
 ## Files to Create/Modify
 
 | File | Action |
-|------|--------|
-| `src/pages/EmpireBuilder.tsx` | Add file upload, autofix query param handler, attachment UI |
-| `src/components/error/SmartErrorBoundary.tsx` | Add "Fix with ARIA" button after retries exhausted |
-| `supabase/functions/ai-agent/index.ts` | Fix model name routing for user Gemini key |
-| `supabase/functions/friday-ideas/index.ts` | New cron function for weekly improvement ideas |
-| `supabase/config.toml` | Add friday-ideas function config |
+|---|---|
+| `supabase/functions/ai-agent/index.ts` | Add `odoo_write`, `generate_patch`, `validate_code` tools + handlers + code engineer mode |
+| `src/pages/EmpireBuilder.tsx` | Add patch review UI (code block + Approve/Reject buttons) |
+| Database migration | Create `code_patches` table with RLS |
 
-## Technical Details
+## What This Does NOT Include (and Why)
 
-### File Upload Flow in EmpireBuilder
-```text
-User clicks (+) or drags file
-       |
-       v
-  [Hidden input triggers]
-       |
-  +----+----+--------+
-  |         |        |
-Image      PDF      ZIP
-  |         |        |
-Upload   Upload   analyzeZip()
-to       to       extract structure
-storage  storage   + images
-  |         |        |
-Get       Pass     Append summary
-signed    URL as   to message +
-URL       attached  upload images
-  |       File      |
-  +----+----+--------+
-       |
-       v
-sendAgentMessage("empire", message, history, context, attachedFiles)
-       |
-       v
-ai-agent processes with Gemini Vision (images/PDF) or text analysis (ZIP)
-```
+| Requested | Why Not |
+|---|---|
+| FastAPI backend | Lovable cannot run Python -- Supabase Edge Functions (Deno/TS) serve the same role |
+| Docker / Render deployment | Lovable Cloud handles deployment automatically |
+| Next.js frontend | Project uses React/Vite -- same capabilities, different framework |
+| Separate `agents/`, `tools/`, `schemas/` dirs | Already organized within the 6,500-line ai-agent function with clear sections |
 
-### Auto-Fix Flow
-```text
-Any page error --> SmartErrorBoundary catches
-       |
-  Auto-retry (up to 3x)
-       |
-  [Retries exhausted]
-       |
-  Show: [Try Again] [Home] [Fix with ARIA]
-                              |
-                              v
-                    Navigate to /empire?autofix={error_details}
-                              |
-                              v
-                    EmpireBuilder reads query param
-                              |
-                              v
-                    Auto-sends to Architect agent
-                              |
-                              v
-                    ARIA diagnoses + creates fix requests
-```
-
-### Friday Cron Schedule
-- Runs every Friday at 9 AM AEST (Thursday 23:00 UTC)
-- SQL: `cron.schedule('friday-ideas', '0 23 * * 4', ...)`
-- Sends notification with 3-5 actionable improvement ideas based on live business data
-
+The end result is functionally identical: an AI agent that accepts goals, produces structured execution plans, executes via tools, generates reviewable patches, and returns structured JSON -- all within your existing production infrastructure.
