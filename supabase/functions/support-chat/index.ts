@@ -19,24 +19,20 @@ Deno.serve(async (req) => {
     const url = new URL(req.url);
     const action = url.searchParams.get("action") || "send";
 
-    // ── Widget JS embed endpoint ──
     if (action === "widget.js") {
       return handleWidgetJs(url, supabase, supabaseUrl);
     }
-
-    // ── Start conversation ──
     if (action === "start") {
       return handleStart(req, supabase);
     }
-
-    // ── Send message (visitor) ──
     if (action === "send") {
       return handleSend(req, supabase);
     }
-
-    // ── Poll messages (visitor) ──
     if (action === "poll") {
       return handlePoll(url, supabase);
+    }
+    if (action === "heartbeat") {
+      return handleHeartbeat(req, supabase);
     }
 
     return new Response(JSON.stringify({ error: "Unknown action" }), {
@@ -51,6 +47,24 @@ Deno.serve(async (req) => {
     });
   }
 });
+
+// ── IP Geolocation (called once on start) ──
+async function resolveGeo(ip: string): Promise<{ city: string; country: string } | null> {
+  if (!ip || ip === "unknown" || ip === "127.0.0.1") return null;
+  try {
+    const res = await fetch(`http://ip-api.com/json/${ip}?fields=city,country,countryCode`, { signal: AbortSignal.timeout(3000) });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.city ? { city: data.city, country: data.countryCode || data.country } : null;
+  } catch {
+    return null;
+  }
+}
+
+function getClientIp(req: Request): string {
+  return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    req.headers.get("cf-connecting-ip") || "unknown";
+}
 
 // ── Widget JS ──
 async function handleWidgetJs(url: URL, supabase: any, supabaseUrl: string) {
@@ -81,7 +95,7 @@ async function handleWidgetJs(url: URL, supabase: any, supabaseUrl: string) {
 
 // ── Start Conversation ──
 async function handleStart(req: Request, supabase: any) {
-  const { widget_key, visitor_name, visitor_email } = await req.json();
+  const { widget_key, visitor_name, visitor_email, current_page } = await req.json();
 
   const { data: config } = await supabase
     .from("support_widget_configs")
@@ -97,6 +111,19 @@ async function handleStart(req: Request, supabase: any) {
     });
   }
 
+  // Resolve geolocation from IP
+  const ip = getClientIp(req);
+  const geo = await resolveGeo(ip);
+
+  const metadata: Record<string, any> = {
+    current_page: current_page || null,
+    last_seen_at: new Date().toISOString(),
+  };
+  if (geo) {
+    metadata.city = geo.city;
+    metadata.country = geo.country;
+  }
+
   const { data: convo, error } = await supabase
     .from("support_conversations")
     .insert({
@@ -105,6 +132,7 @@ async function handleStart(req: Request, supabase: any) {
       visitor_name: visitor_name?.slice(0, 100) || "Visitor",
       visitor_email: visitor_email?.slice(0, 255) || null,
       status: "open",
+      metadata,
     })
     .select("id, visitor_token")
     .single();
@@ -123,9 +151,52 @@ async function handleStart(req: Request, supabase: any) {
   });
 }
 
+// ── Heartbeat (presence + page tracking) ──
+async function handleHeartbeat(req: Request, supabase: any) {
+  const { conversation_id, visitor_token, current_page } = await req.json();
+
+  if (!conversation_id || !visitor_token) {
+    return new Response(JSON.stringify({ error: "Missing fields" }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  // Verify visitor owns this conversation
+  const { data: convo } = await supabase
+    .from("support_conversations")
+    .select("id, metadata")
+    .eq("id", conversation_id)
+    .eq("visitor_token", visitor_token)
+    .single();
+
+  if (!convo) {
+    return new Response(JSON.stringify({ error: "Invalid" }), {
+      status: 403,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  const existingMeta = (convo.metadata && typeof convo.metadata === "object") ? convo.metadata : {};
+  const updatedMeta = {
+    ...existingMeta,
+    current_page: current_page || existingMeta.current_page,
+    last_seen_at: new Date().toISOString(),
+  };
+
+  await supabase
+    .from("support_conversations")
+    .update({ metadata: updatedMeta })
+    .eq("id", conversation_id);
+
+  return new Response(JSON.stringify({ ok: true }), {
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
 // ── Send Message (visitor) ──
 async function handleSend(req: Request, supabase: any) {
-  const { conversation_id, content, visitor_token } = await req.json();
+  const { conversation_id, content, visitor_token, current_page } = await req.json();
 
   if (!conversation_id || !content || !visitor_token) {
     return new Response(JSON.stringify({ error: "Missing fields" }), {
@@ -136,7 +207,7 @@ async function handleSend(req: Request, supabase: any) {
 
   const { data: convo } = await supabase
     .from("support_conversations")
-    .select("id, status, company_id, widget_config_id")
+    .select("id, status, company_id, widget_config_id, metadata")
     .eq("id", conversation_id)
     .eq("visitor_token", visitor_token)
     .single();
@@ -168,13 +239,21 @@ async function handleSend(req: Request, supabase: any) {
 
   if (error) throw error;
 
+  // Update last_message_at + metadata (page + presence)
+  const existingMeta = (convo.metadata && typeof convo.metadata === "object") ? convo.metadata : {};
+  const updatedMeta = {
+    ...existingMeta,
+    current_page: current_page || existingMeta.current_page,
+    last_seen_at: new Date().toISOString(),
+  };
+
   await supabase
     .from("support_conversations")
-    .update({ last_message_at: new Date().toISOString() })
+    .update({ last_message_at: new Date().toISOString(), metadata: updatedMeta })
     .eq("id", conversation_id);
 
   // Fire-and-forget AI auto-reply
-  triggerAiReply(supabase, convo, sanitizedContent).catch((e) =>
+  triggerAiReply(supabase, convo, sanitizedContent, updatedMeta).catch((e) =>
     console.error("AI reply error:", e)
   );
 
@@ -225,8 +304,7 @@ async function handlePoll(url: URL, supabase: any) {
 }
 
 // ── AI Auto-Reply ──
-async function triggerAiReply(supabase: any, convo: any, visitorMessage: string) {
-  // Check if AI is enabled for this widget
+async function triggerAiReply(supabase: any, convo: any, visitorMessage: string, metadata?: any) {
   const { data: widgetConfig } = await supabase
     .from("support_widget_configs")
     .select("ai_enabled, ai_system_prompt, company_id")
@@ -235,7 +313,6 @@ async function triggerAiReply(supabase: any, convo: any, visitorMessage: string)
 
   if (!widgetConfig?.ai_enabled) return;
 
-  // Fetch published KB articles for context
   const { data: articles } = await supabase
     .from("kb_articles")
     .select("title, content, excerpt")
@@ -247,7 +324,6 @@ async function triggerAiReply(supabase: any, convo: any, visitorMessage: string)
     .map((a: any) => `## ${a.title}\n${a.excerpt || ""}\n${a.content}`)
     .join("\n\n---\n\n");
 
-  // Fetch recent conversation history
   const { data: history } = await supabase
     .from("support_messages")
     .select("sender_type, content")
@@ -257,10 +333,14 @@ async function triggerAiReply(supabase: any, convo: any, visitorMessage: string)
     .order("created_at", { ascending: true })
     .limit(20);
 
+  // Build page context
+  const currentPage = metadata?.current_page;
+  const pageContext = currentPage ? `\n\n[Visitor is currently viewing: ${currentPage}]` : "";
+
   const messages = [
     {
       role: "system",
-      content: `${widgetConfig.ai_system_prompt || "You are a helpful support assistant."}\n\n## Knowledge Base Articles:\n${kbContext || "No articles available."}`,
+      content: `${widgetConfig.ai_system_prompt || "You are a helpful support assistant."}\n\n## Knowledge Base Articles:\n${kbContext || "No articles available."}${pageContext}`,
     },
     ...(history || []).map((m: any) => ({
       role: m.sender_type === "visitor" ? "user" : "assistant",
@@ -298,7 +378,6 @@ async function triggerAiReply(supabase: any, convo: any, visitorMessage: string)
 
   if (!reply) return;
 
-  // Insert bot message
   await supabase.from("support_messages").insert({
     conversation_id: convo.id,
     sender_type: "bot",
@@ -322,7 +401,12 @@ function generateWidgetJs(config: any, supabaseUrl: string): string {
     chatUrl,
   })};
 
-  var state = { open: false, convoId: null, visitorToken: null, messages: [], lastTs: null, polling: null };
+  var state = { open: false, convoId: null, visitorToken: null, messages: [], lastTs: null, polling: null, heartbeat: null, currentPage: window.location.href };
+
+  // Track page changes
+  function getCurrentPage() { return window.location.href; }
+  setInterval(function(){ state.currentPage = getCurrentPage(); }, 2000);
+  window.addEventListener('popstate', function(){ state.currentPage = getCurrentPage(); });
 
   // Create styles
   var style = document.createElement('style');
@@ -378,7 +462,7 @@ function generateWidgetJs(config: any, supabaseUrl: string): string {
     var email = document.getElementById('sw-email').value.trim();
     this.disabled = true; this.textContent = 'Connecting...';
     try {
-      var r = await fetch(cfg.chatUrl+'?action=start', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({widget_key:cfg.widgetKey, visitor_name:name, visitor_email:email||null}) });
+      var r = await fetch(cfg.chatUrl+'?action=start', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({widget_key:cfg.widgetKey, visitor_name:name, visitor_email:email||null, current_page:state.currentPage}) });
       var d = await r.json();
       if(d.conversation_id) {
         state.convoId = d.conversation_id;
@@ -387,6 +471,7 @@ function generateWidgetJs(config: any, supabaseUrl: string): string {
         document.getElementById('sw-messages').style.display='block';
         document.getElementById('sw-input-area').style.display='flex';
         startPolling();
+        startHeartbeat();
       }
     } catch(e){ this.disabled=false; this.textContent='Start Chat'; }
   };
@@ -402,7 +487,7 @@ function generateWidgetJs(config: any, supabaseUrl: string): string {
     inp.value=''; document.getElementById('sw-send').disabled=true;
     addMsg('visitor', txt);
     try {
-      await fetch(cfg.chatUrl+'?action=send', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({conversation_id:state.convoId, visitor_token:state.visitorToken, content:txt}) });
+      await fetch(cfg.chatUrl+'?action=send', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({conversation_id:state.convoId, visitor_token:state.visitorToken, content:txt, current_page:state.currentPage}) });
     } catch(e){}
   }
 
@@ -432,6 +517,15 @@ function generateWidgetJs(config: any, supabaseUrl: string): string {
         }
       } catch(e){}
     }, 3000);
+  }
+
+  function startHeartbeat(){
+    state.heartbeat = setInterval(async function(){
+      if(!state.convoId) return;
+      try {
+        await fetch(cfg.chatUrl+'?action=heartbeat', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({conversation_id:state.convoId, visitor_token:state.visitorToken, current_page:getCurrentPage()}) });
+      } catch(e){}
+    }, 30000);
   }
 
   function esc(s){ var d=document.createElement('div'); d.textContent=s; return d.innerHTML; }

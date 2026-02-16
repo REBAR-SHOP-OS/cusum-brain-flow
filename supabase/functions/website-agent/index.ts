@@ -35,10 +35,15 @@ setInterval(() => {
   }
 }, 300_000);
 
-// ─── System Prompt ───
-const SYSTEM_PROMPT = `You are the intelligent AI sales assistant for **Rebar Shop** — a rebar fabrication company based in Sydney, Australia.
+// ─── System Prompt (page-aware) ───
+function buildSystemPrompt(currentPage?: string): string {
+  const pageContext = currentPage
+    ? `\n\n## Current Visitor Context\nThe visitor is currently viewing: ${currentPage}\nUse this to provide contextual help. If they're on a product page, reference that product. If they're on the homepage, help them navigate.`
+    : "";
 
-You have access to LIVE tools that let you search our product catalog, look up rebar specifications, check stock, and create quote requests. USE THESE TOOLS proactively whenever a customer asks about products, prices, sizes, or wants a quote.
+  return `You are the intelligent AI sales assistant for **Rebar Shop** — a rebar fabrication company based in Sydney, Australia.
+
+You have access to LIVE tools that let you search our product catalog, look up rebar specifications, check stock, create quote requests, add items to the visitor's cart, and guide them to pages on the website. USE THESE TOOLS proactively whenever a customer asks about products, prices, sizes, wants a quote, or needs help navigating.
 
 ## About Rebar Shop
 - Rebar fabrication shop specialising in cutting, bending, and delivering reinforcing steel
@@ -58,6 +63,13 @@ You have access to LIVE tools that let you search our product catalog, look up r
 - When they mention a bar size (e.g. N16, N20) → use lookup_rebar_specs to give precise specs
 - When they ask about stock → use check_availability
 - When they want a quote → collect their name, email, project details, and items, then use create_quote_request
+- When they want to buy/add to cart → use add_to_cart with the product ID and quantity
+- When they need help finding a page → use navigate_to with the relevant path
+
+## Cart & Navigation
+- You can add products directly to the customer's cart using add_to_cart
+- You can guide customers to any page on rebar.shop using navigate_to
+- Always provide clickable links so customers can easily navigate or add items
 
 ## Quote Flow
 1. Customer expresses interest in specific products/quantities
@@ -72,7 +84,9 @@ You have access to LIVE tools that let you search our product catalog, look up r
 - Be warm, professional, and proactive
 - For pricing, encourage getting a formal quote — don't guess prices
 - If asked about things outside rebar/construction, politely redirect
-- ALWAYS use tools when relevant — don't guess about products or specs`;
+- ALWAYS use tools when relevant — don't guess about products or specs
+- Reference the visitor's current page when it's relevant to their question${pageContext}`;
+}
 
 // ─── Tool Definitions ───
 const tools = [
@@ -171,6 +185,38 @@ const tools = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "add_to_cart",
+      description: "Generate a WooCommerce add-to-cart URL for a product. Returns a direct link the customer can click to add the item to their cart.",
+      parameters: {
+        type: "object",
+        properties: {
+          product_id: { type: "string", description: "WooCommerce product ID to add to cart" },
+          quantity: { type: "number", description: "Number of items to add (default 1)" },
+        },
+        required: ["product_id"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "navigate_to",
+      description: "Generate a link to a specific page on rebar.shop. Use this to guide customers to product pages, categories, contact, or any other page.",
+      parameters: {
+        type: "object",
+        properties: {
+          path: { type: "string", description: "Page path or description, e.g. '/shop', '/product/n16-deformed-bar', '/contact', '/product-category/mesh'" },
+          label: { type: "string", description: "Display label for the link, e.g. 'View our mesh products'" },
+        },
+        required: ["path"],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 // ─── Tool Execution ───
@@ -261,12 +307,10 @@ async function executeTool(
           return JSON.stringify({ error: "Customer name and email are required" });
         }
 
-        // Generate quote number
         const { data: seqData } = await supabase.rpc("nextval_quote_request_seq");
         const year = new Date().getFullYear();
         let seqNum = 1;
         
-        // Fallback: count existing rows if sequence RPC doesn't exist
         if (seqData != null) {
           seqNum = Number(seqData);
         } else {
@@ -294,6 +338,46 @@ async function executeTool(
           success: true,
           quote_number: data.quote_number,
           message: `Quote request ${data.quote_number} created successfully. Our team will review and send a formal quote.`,
+        });
+      }
+
+      case "add_to_cart": {
+        const productId = String(args.product_id || "");
+        const quantity = Math.max(1, Math.min(100, Number(args.quantity) || 1));
+        if (!productId || !/^\d+$/.test(productId)) {
+          return JSON.stringify({ error: "Invalid product ID" });
+        }
+
+        // Validate product exists via WP
+        let productName = `Product #${productId}`;
+        if (wp) {
+          try {
+            const p = await wp.getProduct(productId);
+            productName = p.name || productName;
+          } catch {
+            // Product might still work, proceed with URL
+          }
+        }
+
+        const cartUrl = `https://rebar.shop/?add-to-cart=${productId}&quantity=${quantity}`;
+        return JSON.stringify({
+          success: true,
+          cart_url: cartUrl,
+          product_name: productName,
+          quantity,
+          message: `Click here to add ${quantity}x ${productName} to your cart: ${cartUrl}`,
+        });
+      }
+
+      case "navigate_to": {
+        const path = String(args.path || "/shop").slice(0, 500);
+        const label = String(args.label || "Visit page").slice(0, 200);
+        const fullUrl = path.startsWith("http") ? path : `https://rebar.shop${path.startsWith("/") ? "" : "/"}${path}`;
+        return JSON.stringify({
+          success: true,
+          url: fullUrl,
+          label,
+          message: `${label}: ${fullUrl}`,
         });
       }
 
@@ -369,7 +453,6 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    // Rate limit
     const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
                req.headers.get("cf-connecting-ip") || "unknown";
     if (isRateLimited(ip)) {
@@ -379,7 +462,7 @@ serve(async (req) => {
       });
     }
 
-    const { messages } = await req.json();
+    const { messages, current_page } = await req.json();
     if (!Array.isArray(messages) || messages.length === 0) {
       return new Response(JSON.stringify({ error: "Messages required" }), {
         status: 400,
@@ -388,6 +471,7 @@ serve(async (req) => {
     }
 
     const trimmed = messages.slice(-MAX_CONVERSATION_MESSAGES);
+    const systemPrompt = buildSystemPrompt(current_page);
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
@@ -397,7 +481,7 @@ serve(async (req) => {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     let wp: WPClient | null = null;
-    try { wp = new WPClient(); } catch { /* WP not configured, tools will gracefully fail */ }
+    try { wp = new WPClient(); } catch { /* WP not configured */ }
 
     // ─── First AI Call (with tools) ───
     const firstResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -408,7 +492,7 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         model: "google/gemini-3-flash-preview",
-        messages: [{ role: "system", content: SYSTEM_PROMPT }, ...trimmed],
+        messages: [{ role: "system", content: systemPrompt }, ...trimmed],
         tools,
         stream: true,
       }),
@@ -432,12 +516,10 @@ serve(async (req) => {
       });
     }
 
-    // Buffer the first response to check for tool calls
     const firstResult = await bufferStreamForToolCalls(firstResponse);
 
-    // ─── No tool calls → stream the content directly ───
+    // ─── No tool calls → stream directly ───
     if (firstResult.toolCalls.length === 0) {
-      // Re-do the call without tools to get a clean stream for the client
       const streamResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -446,7 +528,7 @@ serve(async (req) => {
         },
         body: JSON.stringify({
           model: "google/gemini-3-flash-preview",
-          messages: [{ role: "system", content: SYSTEM_PROMPT }, ...trimmed],
+          messages: [{ role: "system", content: systemPrompt }, ...trimmed],
           stream: true,
         }),
       });
@@ -468,9 +550,9 @@ serve(async (req) => {
       }),
     );
 
-    // ─── Second AI Call with tool results (streamed to client) ───
+    // ─── Second AI Call with tool results ───
     const followUpMessages = [
-      { role: "system", content: SYSTEM_PROMPT },
+      { role: "system", content: systemPrompt },
       ...trimmed,
       {
         role: "assistant",
@@ -499,7 +581,6 @@ serve(async (req) => {
 
     if (!finalResponse.ok) {
       console.error("Final AI call error:", finalResponse.status);
-      // Fallback: return a basic response
       const fallback = `data: ${JSON.stringify({ choices: [{ delta: { content: firstResult.content || "I found some information for you but had trouble formatting the response. Please try again." } }] })}\n\ndata: [DONE]\n\n`;
       return new Response(fallback, {
         headers: { ...corsHeaders, "Content-Type": "text/event-stream" },

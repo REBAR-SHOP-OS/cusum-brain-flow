@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import { User, Clock } from "lucide-react";
+import { User, Clock, MapPin } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
 interface Conversation {
@@ -14,11 +14,22 @@ interface Conversation {
   created_at: string;
   assigned_to: string | null;
   tags: string[];
+  metadata: any;
 }
 
 interface Props {
   selectedId: string | null;
   onSelect: (id: string) => void;
+}
+
+function getPresenceStatus(metadata: any): "online" | "away" | "offline" {
+  if (!metadata?.last_seen_at) return "offline";
+  const lastSeen = new Date(metadata.last_seen_at).getTime();
+  const now = Date.now();
+  const diffSec = (now - lastSeen) / 1000;
+  if (diffSec < 60) return "online";
+  if (diffSec < 300) return "away";
+  return "offline";
 }
 
 export function SupportConversationList({ selectedId, onSelect }: Props) {
@@ -29,7 +40,7 @@ export function SupportConversationList({ selectedId, onSelect }: Props) {
   const fetchConversations = async () => {
     let query = supabase
       .from("support_conversations")
-      .select("id, visitor_name, visitor_email, status, last_message_at, created_at, assigned_to, tags")
+      .select("id, visitor_name, visitor_email, status, last_message_at, created_at, assigned_to, tags, metadata")
       .order("last_message_at", { ascending: false })
       .limit(100);
 
@@ -57,6 +68,12 @@ export function SupportConversationList({ selectedId, onSelect }: Props) {
     return () => { supabase.removeChannel(channel); };
   }, [filter]);
 
+  // Refresh presence every 30s
+  useEffect(() => {
+    const interval = setInterval(fetchConversations, 30000);
+    return () => clearInterval(interval);
+  }, [filter]);
+
   const statusColor = (s: string) => {
     switch (s) {
       case "open": return "bg-green-500/10 text-green-600 border-green-500/20";
@@ -65,6 +82,14 @@ export function SupportConversationList({ selectedId, onSelect }: Props) {
       case "resolved": return "bg-muted text-muted-foreground";
       case "closed": return "bg-muted text-muted-foreground";
       default: return "";
+    }
+  };
+
+  const presenceDotColor = (status: "online" | "away" | "offline") => {
+    switch (status) {
+      case "online": return "bg-green-500";
+      case "away": return "bg-yellow-500";
+      case "offline": return "bg-muted-foreground/30";
     }
   };
 
@@ -97,32 +122,49 @@ export function SupportConversationList({ selectedId, onSelect }: Props) {
             <p className="text-xs text-muted-foreground/60 mt-1">Install the widget to start receiving chats</p>
           </div>
         ) : (
-          conversations.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => onSelect(c.id)}
-              className={cn(
-                "w-full text-left px-4 py-3 border-b border-border/50 hover:bg-muted/50 transition-colors",
-                selectedId === c.id && "bg-muted"
-              )}
-            >
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-sm font-medium truncate">{c.visitor_name || "Visitor"}</span>
-                <Badge variant="outline" className={cn("text-[10px] px-1.5 py-0", statusColor(c.status))}>
-                  {c.status}
-                </Badge>
-              </div>
-              {c.visitor_email && (
-                <p className="text-xs text-muted-foreground truncate">{c.visitor_email}</p>
-              )}
-              <div className="flex items-center gap-1 mt-1 text-[10px] text-muted-foreground/60">
-                <Clock className="w-3 h-3" />
-                {c.last_message_at
-                  ? formatDistanceToNow(new Date(c.last_message_at), { addSuffix: true })
-                  : formatDistanceToNow(new Date(c.created_at), { addSuffix: true })}
-              </div>
-            </button>
-          ))
+          conversations.map((c) => {
+            const presence = getPresenceStatus(c.metadata);
+            const city = c.metadata?.city;
+            return (
+              <button
+                key={c.id}
+                onClick={() => onSelect(c.id)}
+                className={cn(
+                  "w-full text-left px-4 py-3 border-b border-border/50 hover:bg-muted/50 transition-colors",
+                  selectedId === c.id && "bg-muted"
+                )}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2">
+                    <div className="relative">
+                      <div className={cn("w-2 h-2 rounded-full", presenceDotColor(presence))} />
+                    </div>
+                    <span className="text-sm font-medium truncate">{c.visitor_name || "Visitor"}</span>
+                  </div>
+                  <Badge variant="outline" className={cn("text-[10px] px-1.5 py-0", statusColor(c.status))}>
+                    {c.status}
+                  </Badge>
+                </div>
+                {c.visitor_email && (
+                  <p className="text-xs text-muted-foreground truncate pl-4">{c.visitor_email}</p>
+                )}
+                <div className="flex items-center gap-2 mt-1 pl-4">
+                  {city && (
+                    <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground/70">
+                      <MapPin className="w-2.5 h-2.5" />
+                      {city}
+                    </span>
+                  )}
+                  <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground/60">
+                    <Clock className="w-3 h-3" />
+                    {c.last_message_at
+                      ? formatDistanceToNow(new Date(c.last_message_at), { addSuffix: true })
+                      : formatDistanceToNow(new Date(c.created_at), { addSuffix: true })}
+                  </span>
+                </div>
+              </button>
+            );
+          })
         )}
       </div>
     </div>
