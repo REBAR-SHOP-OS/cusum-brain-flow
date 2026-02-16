@@ -57,7 +57,7 @@ export const agentSuggestions: Record<string, AgentSuggestion[]> = {
     { title: "Draft a business growth plan", category: "Growth" },
   ],
   webbuilder: [
-    { title: "Audit our job site for SEO issues", category: "SEO" },
+    { title: "Audit our website for SEO issues", category: "SEO" },
     { title: "Suggest landing page improvements", category: "Web" },
     { title: "Write homepage copy for rebar.shop", category: "Content" },
   ],

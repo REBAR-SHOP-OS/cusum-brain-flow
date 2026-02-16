@@ -109,8 +109,6 @@ export function AppSidebar() {
       items: [
         { name: "Dashboard", href: "/home", icon: Home, tourId: "nav-dashboard" },
         { name: "CEO Portal", href: "/ceo", icon: BarChart3, roles: ["admin"], lockReason: "Requires Admin role", tourId: "nav-ceo" },
-        { name: "Job Site", href: "/website", icon: Globe, roles: ["admin", "office"], lockReason: "Requires Admin or Office role", tourId: "nav-website" },
-        { name: "SEO", href: "/seo", icon: Search, roles: ["admin", "office"], lockReason: "Requires Admin or Office role", tourId: "nav-seo" },
         { name: "Support", href: "/support-inbox", icon: Headset, roles: ["admin", "office"], lockReason: "Requires Admin or Office role", tourId: "nav-support" },
         { name: "Pipeline", href: "/pipeline", icon: Kanban, roles: ["admin", "sales", "office", "accounting"], lockReason: "Requires Sales or Office role", tourId: "nav-pipeline" },
         { name: "Customers", href: "/customers", icon: Users, tourId: "nav-customers" },
