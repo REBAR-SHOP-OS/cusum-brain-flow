@@ -232,66 +232,6 @@ export default function EmpireBuilder() {
     toast.success(`Project "${newProjectName.trim()}" added`);
   };
 
-  const InputBox = ({ large = false }: { large?: boolean }) => (
-    <div
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-      className={cn(
-        "backdrop-blur rounded-2xl border shadow-sm transition-all",
-        "bg-white/5 border-white/10",
-        "focus-within:shadow-lg focus-within:border-white/20",
-        large && "shadow-lg",
-        isDragging && "border-cyan-400/60 bg-cyan-500/5 shadow-lg"
-      )}
-    >
-      {pendingFiles.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 px-4 pt-3">
-          {pendingFiles.map((pf, i) => (
-            <div key={i} className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/10 border border-white/10 text-xs text-white/70">
-              {pf.preview ? <img src={pf.preview} alt="" className="w-5 h-5 rounded object-cover" /> : fileIcon(pf.type)}
-              <span className="max-w-[120px] truncate">{pf.file.name}</span>
-              <button onClick={() => removeFile(i)} className="hover:text-red-400 transition-colors"><X className="w-3 h-3" /></button>
-            </div>
-          ))}
-        </div>
-      )}
-      <div className={cn("px-5 pb-1", large ? "pt-4" : "pt-3", pendingFiles.length > 0 && "pt-2")}>
-        <textarea
-          ref={large ? textareaRef : bottomInputRef}
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={large ? "Ask Architect to build, diagnose, or drop files here..." : "Message Architect..."}
-          rows={large ? 2 : 1}
-          disabled={isLoading}
-          className="w-full bg-transparent resize-none text-sm leading-relaxed text-white placeholder:text-white/40 focus:outline-none disabled:opacity-50"
-        />
-      </div>
-      <div className="flex items-center px-4 pb-3">
-        <input ref={fileInputRef} type="file" multiple accept="image/*,.pdf,.zip" onChange={(e) => { if (e.target.files) addFiles(e.target.files); e.target.value = ""; }} className="hidden" />
-        <button type="button" onClick={() => fileInputRef.current?.click()} className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 text-white/80 transition" title="Attach file">
-          <Plus className="w-5 h-5" />
-        </button>
-        <div className="flex-1" />
-        <button
-          type="button"
-          onClick={handleSubmit}
-          disabled={!value.trim() && pendingFiles.length === 0 || isLoading}
-          className={cn(
-            "rounded-full flex items-center justify-center transition-all",
-            large ? "w-9 h-9" : "w-8 h-8",
-            (value.trim() || pendingFiles.length > 0) && !isLoading
-              ? "bg-[#35E6E6] text-black hover:opacity-80 shadow-sm"
-              : "bg-white/10 text-white/30 cursor-not-allowed"
-          )}
-        >
-          <ArrowUp className={large ? "w-4 h-4" : "w-3.5 h-3.5"} />
-        </button>
-      </div>
-    </div>
-  );
-
   return (
     <div className="min-h-screen w-full bg-[#070A12] text-white flex flex-col">
       <EmpireTopbar />
@@ -375,7 +315,61 @@ export default function EmpireBuilder() {
             </p>
 
             <div className="mt-10 w-full max-w-2xl animate-fade-in" style={{ animationDelay: "200ms" }}>
-              <InputBox large />
+              <div
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                className={cn(
+                  "backdrop-blur rounded-2xl border shadow-lg transition-all",
+                  "bg-white/5 border-white/10",
+                  "focus-within:shadow-lg focus-within:border-white/20",
+                  isDragging && "border-cyan-400/60 bg-cyan-500/5 shadow-lg"
+                )}
+              >
+                {pendingFiles.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 px-4 pt-3">
+                    {pendingFiles.map((pf, i) => (
+                      <div key={i} className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/10 border border-white/10 text-xs text-white/70">
+                        {pf.preview ? <img src={pf.preview} alt="" className="w-5 h-5 rounded object-cover" /> : fileIcon(pf.type)}
+                        <span className="max-w-[120px] truncate">{pf.file.name}</span>
+                        <button onClick={() => removeFile(i)} className="hover:text-red-400 transition-colors"><X className="w-3 h-3" /></button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className={cn("px-5 pb-1 pt-4", pendingFiles.length > 0 && "pt-2")}>
+                  <textarea
+                    ref={textareaRef}
+                    value={value}
+                    onChange={(e) => setValue(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder="Ask Architect to build, diagnose, or drop files here..."
+                    rows={2}
+                    disabled={isLoading}
+                    className="w-full bg-transparent resize-none text-sm leading-relaxed text-white placeholder:text-white/40 focus:outline-none disabled:opacity-50"
+                  />
+                </div>
+                <div className="flex items-center px-4 pb-3">
+                  <input ref={fileInputRef} type="file" multiple accept="image/*,.pdf,.zip" onChange={(e) => { if (e.target.files) addFiles(e.target.files); e.target.value = ""; }} className="hidden" />
+                  <button type="button" onClick={() => fileInputRef.current?.click()} className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 text-white/80 transition" title="Attach file">
+                    <Plus className="w-5 h-5" />
+                  </button>
+                  <div className="flex-1" />
+                  <button
+                    type="button"
+                    onClick={handleSubmit}
+                    disabled={!value.trim() && pendingFiles.length === 0 || isLoading}
+                    className={cn(
+                      "rounded-full w-9 h-9 flex items-center justify-center transition-all",
+                      (value.trim() || pendingFiles.length > 0) && !isLoading
+                        ? "bg-[#35E6E6] text-black hover:opacity-80 shadow-sm"
+                        : "bg-white/10 text-white/30 cursor-not-allowed"
+                    )}
+                  >
+                    <ArrowUp className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
             </div>
 
             <div className="mt-8 pb-12 flex flex-wrap justify-center gap-3 animate-fade-in" style={{ animationDelay: "280ms" }}>
@@ -462,7 +456,61 @@ export default function EmpireBuilder() {
 
           <div className="border-t border-white/10 bg-black/30 backdrop-blur-xl px-4 py-3 relative z-10">
             <div className="max-w-3xl mx-auto">
-              <InputBox />
+              <div
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                className={cn(
+                  "backdrop-blur rounded-2xl border shadow-sm transition-all",
+                  "bg-white/5 border-white/10",
+                  "focus-within:shadow-lg focus-within:border-white/20",
+                  isDragging && "border-cyan-400/60 bg-cyan-500/5 shadow-lg"
+                )}
+              >
+                {pendingFiles.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 px-4 pt-3">
+                    {pendingFiles.map((pf, i) => (
+                      <div key={i} className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/10 border border-white/10 text-xs text-white/70">
+                        {pf.preview ? <img src={pf.preview} alt="" className="w-5 h-5 rounded object-cover" /> : fileIcon(pf.type)}
+                        <span className="max-w-[120px] truncate">{pf.file.name}</span>
+                        <button onClick={() => removeFile(i)} className="hover:text-red-400 transition-colors"><X className="w-3 h-3" /></button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className={cn("px-5 pb-1 pt-3", pendingFiles.length > 0 && "pt-2")}>
+                  <textarea
+                    ref={bottomInputRef}
+                    value={value}
+                    onChange={(e) => setValue(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder="Message Architect..."
+                    rows={1}
+                    disabled={isLoading}
+                    className="w-full bg-transparent resize-none text-sm leading-relaxed text-white placeholder:text-white/40 focus:outline-none disabled:opacity-50"
+                  />
+                </div>
+                <div className="flex items-center px-4 pb-3">
+                  <input ref={fileInputRef} type="file" multiple accept="image/*,.pdf,.zip" onChange={(e) => { if (e.target.files) addFiles(e.target.files); e.target.value = ""; }} className="hidden" />
+                  <button type="button" onClick={() => fileInputRef.current?.click()} className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 text-white/80 transition" title="Attach file">
+                    <Plus className="w-5 h-5" />
+                  </button>
+                  <div className="flex-1" />
+                  <button
+                    type="button"
+                    onClick={handleSubmit}
+                    disabled={!value.trim() && pendingFiles.length === 0 || isLoading}
+                    className={cn(
+                      "rounded-full w-8 h-8 flex items-center justify-center transition-all",
+                      (value.trim() || pendingFiles.length > 0) && !isLoading
+                        ? "bg-[#35E6E6] text-black hover:opacity-80 shadow-sm"
+                        : "bg-white/10 text-white/30 cursor-not-allowed"
+                    )}
+                  >
+                    <ArrowUp className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

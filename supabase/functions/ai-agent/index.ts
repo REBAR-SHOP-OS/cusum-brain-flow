@@ -4653,6 +4653,31 @@ serve(async (req) => {
       }
     }
 
+    // For empire agent, analyze attached files (images/PDFs)
+    if (agent === "empire" && attachedFiles.length > 0) {
+      console.log(`[Empire] Processing ${attachedFiles.length} files for analysis...`);
+      let fileAnalysisText = "";
+      for (const file of attachedFiles) {
+        const isImage = /\.(jpg|jpeg|png|gif|bmp|webp|tiff?)$/i.test(file.name);
+        const isPdf = /\.pdf$/i.test(file.name);
+        if (isImage || isPdf) {
+          const prompt = isImage
+            ? "Describe everything you see in this image in detail. Include any text, numbers, diagrams, charts, labels, UI elements, errors, or other relevant information."
+            : "Extract and describe all content from this document in detail. Include text, tables, figures, and any other relevant information.";
+          console.log(`[Empire] Analyzing ${isPdf ? 'PDF' : 'image'}: ${file.name}`);
+          const result = await analyzeDocumentWithGemini(file.url, file.name, prompt);
+          if (result.text) {
+            fileAnalysisText += `\n\n--- Analysis of ${file.name} ---\n${result.text}`;
+          } else if (result.error) {
+            fileAnalysisText += `\n\n--- ${file.name}: Analysis failed: ${result.error} ---`;
+          }
+        }
+      }
+      if (fileAnalysisText) {
+        message = message + "\n\n[Attached File Analysis]" + fileAnalysisText;
+      }
+    }
+
     // Fetch available employees for activity assignment
     const { data: employees } = await svcClient
       .from("profiles")
