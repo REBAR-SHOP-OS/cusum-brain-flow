@@ -1,67 +1,72 @@
 
 
-# ZIP File Upload and Analysis for Website Chat
+# Skip Pre-Chat Form: Help First, Collect Info Later
 
 ## Overview
 
-Add the ability to upload ZIP files in the Job Site chat. When a ZIP is uploaded, the system will extract and list its contents (file names, sizes, types), then send that analysis to the AI so it can provide intelligent feedback about the archive contents -- whether it's a WordPress plugin, theme, backup, image batch, or drawing package.
+Remove the name/email form that currently blocks visitors from chatting. Instead, the chat opens directly into a conversation with the AI assistant. Visitor details (name, email) are only collected later when the visitor is ready to get a quote or place an order -- the AI naturally asks for this information at the right moment.
 
-## What You'll See
+## What Changes
 
-- The file attachment button now accepts ZIP files in addition to images and PDFs
-- When you attach a ZIP, a preview card shows with a folder/archive icon and file name
-- On send, the ZIP is extracted client-side using zip.js (already installed), producing a structured file listing
-- The file listing (name, size, type for each entry) is appended to your message and sent to the AI
-- The AI can then advise on the contents: identify plugins, flag missing files, suggest next steps, etc.
-- Individual images inside the ZIP are extracted, uploaded, and sent as image attachments for visual analysis
+### 1. Remove Pre-Chat Form from Widget (support-chat widget.js)
+
+The generated widget JS currently shows a "Your name / Email / Start Chat" form before any conversation begins. This will be replaced with:
+
+- Widget opens directly into the message view (no form)
+- A conversation is auto-started on first open (visitor_name defaults to "Visitor")
+- The AI proactive greeting fires immediately, welcoming them based on their current page
+- Quick action chips are not affected (they remain in the website-chat-widget, which is separate)
+
+### 2. Update AI System Prompt for Info Collection
+
+Update the AI prompt in `triggerAiReply` to include instructions like:
+
+- "When the visitor is ready to get a quote, place an order, or requests delivery, ask for their name and email so the team can follow up"
+- "Do NOT ask for personal info upfront -- help them first, build trust, then collect details when relevant"
+
+### 3. Store Collected Info via AI Tool or Message Parsing
+
+When the visitor provides their name/email during conversation, the agent can update the conversation record. Add a simple approach:
+
+- In `handleSend`, after inserting the visitor message, check if the conversation still has "Visitor" as the name
+- The AI will be prompted to ask for details at the right time -- the agent in the support inbox can manually update the visitor name from the conversation
 
 ## Technical Details
 
-### Modified Files
+### Files Modified
 
 | File | Change |
-|------|---------|
-| `src/components/website/WebsiteChat.tsx` | Accept .zip files, extract contents client-side, send structured listing to AI, upload embedded images |
+|------|--------|
+| `supabase/functions/support-chat/index.ts` | Remove pre-chat form from `generateWidgetJs`, auto-start conversation on widget open, update AI prompt for delayed info collection |
 
-### Changes to WebsiteChat.tsx
+### Widget JS Changes (inside `generateWidgetJs`)
 
-1. **File filter update**: Change the `addFiles` filter from `image/* + PDF only` to also accept `application/zip`, `application/x-zip-compressed`, and files ending in `.zip`
+1. Remove the `#sw-pre-chat` div entirely (no name/email inputs, no "Start Chat" button)
+2. Show `#sw-messages` and `#sw-input-area` immediately
+3. On first panel open (bubble click), auto-call `handleStart` with `visitor_name: "Visitor"` and no email
+4. The proactive AI greeting fires as before, giving the visitor an immediate welcome
 
-2. **File input accept**: Update the hidden `<input>` from `accept="image/*,application/pdf"` to `accept="image/*,application/pdf,.zip,application/zip"`
+### Updated Conversation Flow
 
-3. **ZIP analysis function**: Add an `analyzeZip` helper that uses `ZipReader` from `@zip.js/zip.js` to:
-   - Read all entries in the ZIP
-   - Build a structured summary: total files, total size, file tree with names/sizes/types
-   - Extract up to 3 image files (jpg/png/webp) for visual preview and upload them
-   - Return the text summary + extracted image URLs
-
-4. **Updated handleSend**: Before sending, check if any attachment is a ZIP. If so, run `analyzeZip`, append the structured file listing to the message text, and include any extracted images as `imageUrls`
-
-5. **Preview card for ZIP**: Show a file archive icon with the ZIP filename instead of trying to render an image preview
-
-### ZIP Analysis Output Format (sent to AI)
-
-```
-[ZIP Analysis: theme-starter.zip]
-Total files: 47 | Total size: 2.3 MB
-
-Directory structure:
-- style.css (12 KB)
-- functions.php (8 KB)
-- header.php (3 KB)
-- assets/
-  - assets/logo.png (45 KB)
-  - assets/banner.jpg (320 KB)
-- templates/
-  - templates/home.php (5 KB)
-  - templates/archive.php (4 KB)
-...
+```text
+Visitor clicks chat bubble
+  --> Panel opens (no form)
+  --> Auto-starts conversation (name: "Visitor", no email)
+  --> AI greeting appears within 2-3 seconds based on current page
+  --> Visitor chats freely
+  --> When visitor wants a quote, AI asks: "Happy to help! Could I grab your name and email so we can send that quote over?"
+  --> Visitor provides info naturally in conversation
+  --> Agent sees details in support inbox and can update the record
 ```
 
-### No Backend Changes
+### AI Prompt Addition (in `triggerAiReply`)
 
-All ZIP extraction happens client-side using the already-installed `@zip.js/zip.js` library. The extracted text summary goes to the existing AI chat endpoint. No edge function changes needed.
+Add to the system prompt:
+- "Do NOT ask for the visitor's name or contact details upfront. Help them first with their questions about rebar, pricing, stock, and delivery."
+- "When the visitor expresses intent to get a quote, place an order, or arrange delivery, THEN naturally ask for their name and email so the team can follow up."
+- "Keep it conversational -- e.g. 'Happy to put that quote together! Could I grab your name and the best email to send it to?'"
 
 ### No Database Changes
 
-No migrations required.
+No migrations needed. The `visitor_name` column already defaults and "Visitor" is an acceptable value.
+
