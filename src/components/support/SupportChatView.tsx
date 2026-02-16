@@ -45,13 +45,20 @@ export function SupportChatView({ conversationId }: Props) {
   const [sending, setSending] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
   const [profileId, setProfileId] = useState<string | null>(null);
+  const [teamMembers, setTeamMembers] = useState<{ id: string; full_name: string }[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // Get profile ID
+  // Get profile ID + team members
   useEffect(() => {
     if (!user) return;
-    supabase.from("profiles").select("id").eq("user_id", user.id).single().then(({ data }) => {
-      if (data) setProfileId(data.id);
+    supabase.from("profiles").select("id, company_id").eq("user_id", user.id).single().then(({ data }) => {
+      if (data) {
+        setProfileId(data.id);
+        // Fetch all team members for this company
+        supabase.from("profiles").select("id, full_name").eq("company_id", data.company_id).order("full_name").then(({ data: members }) => {
+          if (members) setTeamMembers(members);
+        });
+      }
     });
   }, [user]);
 
@@ -224,11 +231,35 @@ export function SupportChatView({ conversationId }: Props) {
               <Badge variant="outline" className="text-[10px]">{convo.status}</Badge>
             </div>
             <div className="flex items-center gap-2">
-              {!convo.assigned_to && (
-                <Button variant="outline" size="sm" onClick={assignToMe} className="text-xs gap-1">
-                  <UserCheck className="w-3 h-3" /> Assign to me
-                </Button>
-              )}
+              <Select
+                value={convo.assigned_to || "__unassigned__"}
+                onValueChange={async (val) => {
+                  const assignee = val === "__unassigned__" ? null : val;
+                  const { error } = await supabase
+                    .from("support_conversations")
+                    .update({ assigned_to: assignee, status: assignee ? "assigned" : "open" })
+                    .eq("id", conversationId);
+                  if (error) toast.error("Failed to assign");
+                  else {
+                    const name = teamMembers.find((m) => m.id === assignee)?.full_name || "Unassigned";
+                    toast.success(assignee ? `Assigned to ${name}` : "Unassigned");
+                    setConvo((prev) => prev ? { ...prev, assigned_to: assignee, status: assignee ? "assigned" : "open" } : null);
+                  }
+                }}
+              >
+                <SelectTrigger className="w-36 h-8 text-xs">
+                  <div className="flex items-center gap-1">
+                    <UserCheck className="w-3 h-3" />
+                    <SelectValue placeholder="Assign to..." />
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__unassigned__">Unassigned</SelectItem>
+                  {teamMembers.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>{m.full_name || "Unknown"}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <Select value={convo.status} onValueChange={updateStatus}>
                 <SelectTrigger className="w-28 h-8 text-xs">
                   <SelectValue />
