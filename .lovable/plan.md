@@ -1,82 +1,122 @@
 
-# Complete ERP Autopilot Execution System -- Remaining Gaps
+# Harden ERP Autopilot for Production Safety
 
-## Current State
+## Overview
 
-The core autopilot-engine edge function and dashboard are already built and functional. Two gaps remain that prevent full production operation.
+This upgrade adds four critical safety layers to the autopilot execution engine: explicit write flags, preflight rollback capture, table-driven risk policies, and idempotent/resumable execution with run-level locking.
 
-## Gap 1: Missing config.toml Entry
+## 1. Database Changes (Migration)
 
-The `autopilot-engine` edge function is not registered in `supabase/config.toml`. Without this, the function may fail to deploy or reject requests due to JWT verification defaults.
+### New Tables
 
-**File**: `supabase/config.toml`
-- Add `[functions.autopilot-engine]` with `verify_jwt = false`
+**`autopilot_risk_policies`** -- Table-driven risk rules per tool/model/field combination:
+- `id` (uuid, PK)
+- `tool_name` (text, not null)
+- `model` (text) -- nullable, for tool-wide rules
+- `field` (text) -- nullable, for model-wide rules
+- `risk_level` (text, not null) -- low/medium/high/critical
+- `notes` (text)
+- `company_id` (uuid, FK to companies)
+- `created_at`, `updated_at`
 
-## Gap 2: AI Agent Cannot Invoke Execution Tools
+**`autopilot_protected_models`** -- Registry of protected Odoo models:
+- `id` (uuid, PK)
+- `model` (text, not null, unique)
+- `risk_level` (text, not null, default 'critical')
+- `notes` (text)
+- `created_at`
 
-The `ai-agent` has tools for `autopilot_create_run` and `autopilot_list_runs`, but lacks tools to:
-- Execute a run (`autopilot_execute_run`)
-- Simulate an action (`autopilot_simulate_action`)
-- Approve/reject a run or action (`autopilot_approve_run`, `autopilot_reject_run`)
+### Seed Data for `autopilot_protected_models`
 
-Without these, the AI cannot orchestrate autopilot flows end-to-end in conversation -- users must manually navigate to `/autopilot` for every approval and execution.
+Pre-populate with: `account.move`, `account.payment`, `account.bank.statement`, `hr.payslip`, `hr.employee`, `res.users`, `res.partner`, `stock.quant`, `product.template`, `ir.config_parameter`, `ir.rule`, `ir.model.access`
 
-**File**: `supabase/functions/ai-agent/index.ts`
-- Add 4 tool definitions that proxy to the `autopilot-engine` edge function
-- Add corresponding handlers in the tool-call processing section
-- The handlers will call `autopilot-engine` using the user's auth token (internal fetch)
+### Seed Data for `autopilot_risk_policies`
 
-### New Tools in ai-agent
+- `odoo_write` + `account.move` -> critical
+- `odoo_write` + `hr.*` models -> high
+- `odoo_write` + `ir.*` models -> critical
+- `odoo_write` + any + field `state` -> high
+- `odoo_write` + any + field `stage_id` -> high
+- `generate_patch` + any -> high
+- `validate_code` + any -> low
 
-| Tool Name | Proxies To | Purpose |
-|---|---|---|
-| `autopilot_execute_run` | `execute_run` | Execute an approved run (with optional `dry_run`) |
-| `autopilot_simulate_action` | `simulate_action` | Preview risk and effects before committing |
-| `autopilot_approve_run` | `approve_run` | Approve a run (admin only, records audit trail) |
-| `autopilot_reject_run` | `reject_run` | Reject a run with optional note |
+### Schema Changes to Existing Tables
 
-## Technical Details
+**`autopilot_runs`** -- Add lock columns:
+- `execution_lock_uuid` (uuid, nullable)
+- `execution_started_at` (timestamptz, nullable)
 
-### config.toml addition
+### RLS Policies
 
-```toml
-[functions.autopilot-engine]
-verify_jwt = false
-```
+- `autopilot_risk_policies`: Admin read/write, scoped to company
+- `autopilot_protected_models`: Admin read-only (service_role manages inserts)
 
-### ai-agent tool definitions (added to Empire tools array)
+### Validation Triggers
 
-Each tool definition follows the existing pattern (`type: "function"`, with `name`, `description`, `parameters`). The handlers will:
+- `autopilot_risk_policies`: validate `risk_level` in (low, medium, high, critical)
+- `autopilot_protected_models`: validate `risk_level` in (low, medium, high, critical)
 
-1. Extract the user's auth token from the existing request context
-2. Make an internal `fetch()` call to the autopilot-engine function URL
-3. Return the engine's response as the tool result
+## 2. Backend Changes (`autopilot-engine/index.ts`)
 
-### Handler pattern (for each tool)
+### A) Explicit Write Flag
 
-```text
-if (tc.function?.name === "autopilot_execute_run") {
-  const args = JSON.parse(tc.function.arguments);
-  const engineRes = await fetch(autopilotEngineUrl, {
-    method: "POST",
-    headers: { Authorization: authHeader, "Content-Type": "application/json", apikey: anonKey },
-    body: JSON.stringify({ action: "execute_run", run_id: args.run_id, dry_run: args.dry_run })
-  });
-  const result = await engineRes.json();
-  // push to tool results
-}
-```
+In `executeTool()`, before any `odoo_write` execution:
+- Check `toolParams.allow_write === true`
+- If missing/false, return `{ success: false, error: "allow_write flag required" }`
+
+### B) Preflight Rollback Capture
+
+Before executing `odoo_write` with action `"write"`:
+1. Authenticate to Odoo
+2. Call `read` on the target record for the fields being changed
+3. Store the current values into `autopilot_actions.rollback_metadata` as `{ model, record_id, original_values }`
+4. Only then proceed with the write
+
+### C) Table-Driven Risk Policy
+
+Replace the hardcoded `PROTECTED_ODOO_MODELS` array and `computeRisk()` logic:
+
+1. New async function `computeRiskFromDb(svcClient, toolName, toolParams)`:
+   - Query `autopilot_protected_models` to check if the model is protected
+   - Query `autopilot_risk_policies` for matching tool/model/field rules
+   - Pick the highest risk level found
+   - Fall back to current hardcoded defaults if no DB policies match
+2. Update all call sites from `computeRisk()` to `computeRiskFromDb()`
+
+### D) Idempotent and Resumable Execution
+
+In `execute_run` handler:
+
+1. **Run-level lock**: Before execution, attempt to set `execution_lock_uuid` and `execution_started_at` on the run. If already locked and started less than 5 minutes ago, return error "Run is locked by another execution".
+2. **Skip completed actions**: In the action loop, skip actions with `status === "completed"`.
+3. **Timeout stale executing actions**: If `action.status === "executing"` and `executed_at` is null and the action has been in that state for more than 5 minutes, mark it as `failed` with error "Execution timeout".
+4. **Release lock** on completion (set `execution_lock_uuid = null`).
+5. Allow re-execution of a `failed` run (not just `approved`) to support resumability.
+
+## 3. Frontend Changes (`AutopilotDashboard.tsx`)
+
+### Allow-write Error Display
+
+Already handled -- action errors display via `action.error_message`. The new "allow_write flag required" error will surface automatically.
+
+### Execution Lock Indicator
+
+- Update `AutopilotRun` interface to include `execution_lock_uuid` and `execution_started_at`
+- When a run has `execution_lock_uuid` set and `status === "executing"`:
+  - Show a lock icon with tooltip "Execution in progress by another session"
+  - Disable the "Execute Run" button
+- When `status === "failed"`, show a "Resume Run" button (calls `execute_run` which will skip completed actions)
 
 ## Files to Modify
 
 | File | Change |
 |---|---|
-| `supabase/config.toml` | Add `autopilot-engine` entry |
-| `supabase/functions/ai-agent/index.ts` | Add 4 tool definitions + 4 handlers that proxy to autopilot-engine |
+| New migration SQL | Create 2 tables, add 2 columns, seed data, RLS, triggers |
+| `supabase/functions/autopilot-engine/index.ts` | All 4 hardening features (A-D) |
+| `src/pages/AutopilotDashboard.tsx` | Lock indicator, resume button |
 
 ## What This Does NOT Touch
 
-- No database changes (columns and indexes already exist)
-- No changes to `autopilot-engine/index.ts` (fully functional)
-- No changes to `AutopilotDashboard.tsx` (already wired to the engine)
-- No removal of existing functionality
+- No changes to `ai-agent/index.ts` (proxy tools remain as-is)
+- No removal of existing features
+- Audit trail preserved and enhanced
