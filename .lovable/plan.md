@@ -1,123 +1,36 @@
 
 
-# App Builder: Remove Sidebar, Add Projects and Memory
+# Fix Typing Bug and Enable File Analysis in App Builder
 
-## Overview
+## Issue 1: Typing Stops After 1 Character (Critical)
 
-Remove the duplicate 72px icon sidebar from the `/empire` page, and replace the hero welcome screen with a useful left-side panel showing **Projects** (rebar.shop, ERP, ODOO + add new) and **Memory** (from `vizzy_memory` table), while keeping the chat input and conversation flow.
+**Root cause**: `InputBox` is defined as a function component *inside* the `EmpireBuilder` render body (line 235). Every keystroke calls `setValue`, which re-renders `EmpireBuilder`, which creates a brand-new `InputBox` function. React sees it as a different component type, so it unmounts the old textarea and mounts a new one -- destroying focus and cursor position.
 
-## Layout After Changes
+**Fix**: Convert `InputBox` from an inline component to a regular `<div>` block rendered directly in the JSX. Instead of `<InputBox large />` and `<InputBox />`, inline the markup at both usage sites (lines 378 and 465). The textarea, file chips, and buttons stay exactly the same -- they just stop being wrapped in a component function that gets recreated every render.
 
-```text
-+--------------------------------------------------+
-|  Cyan Topbar (Dashboard + Search + Avatar)        |
-+--------------------------------------------------+
-|                                                    |
-|  [Projects Section]                                |
-|  +-----------+ +-----------+ +-----------+ [+Add] |
-|  | rebar.shop| |   ERP     | |   ODOO    |        |
-|  +-----------+ +-----------+ +-----------+         |
-|                                                    |
-|  [Memory Section]                                  |
-|  Recent memories from vizzy_memory...              |
-|                                                    |
-|  "Build something great"                           |
-|  [Input Box]                                       |
-|  [Suggestion pills]                                |
-|                                                    |
-+--------------------------------------------------+
-```
+Alternatively, extract `InputBox` to a separate file or use `useMemo`, but the simplest and cleanest fix is inlining the JSX since it already references parent state directly.
 
-When a conversation starts, the projects/memory sections scroll away above the chat messages.
+**File**: `src/pages/EmpireBuilder.tsx`
+- Remove the `InputBox` function definition (lines 235-293)
+- Replace `<InputBox large />` (line 378) with the inline JSX (with `large` variants applied)
+- Replace `<InputBox />` (line 465) with the inline JSX (with non-large variants applied)
 
-## Changes
+## Issue 2: Uploaded Photos/PDFs Are Not Analyzed (Critical)
 
-### 1. Delete EmpireSidebar
+**Root cause**: In `supabase/functions/ai-agent/index.ts`, file processing is gated behind `agent === "estimation"` (line 4618). The `empire` agent receives `attachedFiles` but never processes them, so the AI only sees the text "Analyze these files" with no actual file content.
 
-**File: `src/components/empire/EmpireSidebar.tsx`** -- Delete this file entirely.
+**Fix**: Add a file-processing block for the `empire` agent right after the estimation block (after line 4654). When `agent === "empire" && attachedFiles.length > 0`:
+- Loop through attached files
+- For images: call `analyzeDocumentWithGemini` with a general analysis prompt ("Describe everything you see in this image in detail")
+- For PDFs: call `analyzeDocumentWithGemini` with a document analysis prompt
+- Append all extracted text/analysis to the `message` variable so the AI model sees the file contents
 
-**File: `src/pages/EmpireBuilder.tsx`** -- Remove the `EmpireSidebar` import and its usage from the JSX. The layout becomes just `<main>` filling the full width (no sidebar wrapper needed).
+This reuses the existing `analyzeDocumentWithGemini` helper already defined in the file (line 67).
 
-### 2. Add Projects Section to Hero Screen
+## Files to Modify
 
-**File: `src/pages/EmpireBuilder.tsx`** -- Add a projects grid above the hero heading in the welcome (no-conversation) view:
-
-- Three hardcoded project cards: **rebar.shop** (Globe icon), **ERP** (Boxes icon), **ODOO** (Activity icon)
-- Each card is a dark glass pill (`bg-white/5 border border-white/10 rounded-xl`) showing the project name and a status dot
-- A "+ Add Project" button at the end that shows a simple dialog or toast placeholder for future expansion
-- Cards are clickable and will pre-fill the chat input with a project-scoped prompt (e.g., "Check status of rebar.shop")
-
-### 3. Add Memory Section
-
-**File: `src/pages/EmpireBuilder.tsx`** -- Add a memory section between the projects and the hero heading:
-
-- Query `vizzy_memory` table for recent entries (limit 5)
-- Display as compact pills/chips showing the memory category and a truncated content preview
-- Show a memory count badge (like LiveChat already does with the Brain icon)
-- If no memories exist, show a subtle "No memories yet" text
-- Uses the existing `supabase` client -- no new hooks needed, just a simple `useEffect` + `useState`
-
-### 4. Update Layout Structure
-
-**File: `src/pages/EmpireBuilder.tsx`**:
-
-Current structure:
-```
-div (min-h-screen flex)
-  EmpireSidebar      <-- REMOVE
-  main (flex-1)
-    EmpireTopbar
-    section (hero or chat)
-```
-
-New structure:
-```
-div (min-h-screen flex flex-col)
-  EmpireTopbar
-  main (flex-1, overflow-y-auto)
-    section (hero with projects + memory + input)
-    -- or --
-    section (chat messages + bottom input)
-```
-
-## Technical Details
-
-### Projects Data
-Hardcoded array (not from the `projects` table, which stores rebar construction projects):
-```typescript
-const EMPIRE_PROJECTS = [
-  { name: "rebar.shop", icon: Globe, color: "from-cyan-400 to-blue-500", status: "active" },
-  { name: "ERP", icon: Boxes, color: "from-purple-400 to-indigo-500", status: "active" },
-  { name: "ODOO", icon: Activity, color: "from-orange-400 to-red-500", status: "active" },
-];
-```
-
-### Memory Query
-```typescript
-const [memories, setMemories] = useState([]);
-useEffect(() => {
-  supabase
-    .from("vizzy_memory")
-    .select("id, category, content, created_at")
-    .order("created_at", { ascending: false })
-    .limit(5)
-    .then(({ data }) => { if (data) setMemories(data); });
-}, []);
-```
-
-### Project Card Click Behavior
-Clicking a project card pre-fills the chat with a context-aware prompt:
-- "rebar.shop" -> sends "Run a diagnostic on rebar.shop"
-- "ERP" -> sends "Check ERP system status"
-- "ODOO" -> sends "Check Odoo CRM sync status"
-
-### Add Project Button
-Opens a simple dialog (using existing Dialog component) with a text input for the project name. For now, it can add to local state only; database persistence can be added later.
-
-## Files Summary
-
-| File | Action |
+| File | Change |
 |---|---|
-| `src/components/empire/EmpireSidebar.tsx` | Delete |
-| `src/pages/EmpireBuilder.tsx` | Modify: remove sidebar, add projects grid, add memory section, restructure layout |
+| `src/pages/EmpireBuilder.tsx` | Inline the `InputBox` JSX to fix the typing/focus bug |
+| `supabase/functions/ai-agent/index.ts` | Add file processing block for `empire` agent after the estimation block |
 
