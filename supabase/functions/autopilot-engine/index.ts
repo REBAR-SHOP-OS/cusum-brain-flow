@@ -1,38 +1,94 @@
 import { corsHeaders, requireAuth, json } from "../_shared/auth.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// ── Protected Odoo models that bump risk to "critical" ──
-const PROTECTED_ODOO_MODELS = [
+// ── Risk level hierarchy for comparison ──
+const RISK_HIERARCHY: Record<string, number> = { low: 0, medium: 1, high: 2, critical: 3 };
+
+function higherRisk(a: string, b: string): string {
+  return (RISK_HIERARCHY[a] ?? 1) >= (RISK_HIERARCHY[b] ?? 1) ? a : b;
+}
+
+// ── Hardcoded fallback for protected models (used if DB query fails) ──
+const FALLBACK_PROTECTED_MODELS = [
   "account.move", "account.payment", "account.bank.statement",
   "hr.payslip", "hr.employee", "res.users", "res.partner",
   "stock.quant", "product.template",
 ];
 
-// ── Server-side risk computation (never trust AI-provided risk) ──
-function computeRisk(toolName: string, toolParams: Record<string, unknown>): {
-  risk_level: string;
-  requires_approval: boolean;
-  warnings: string[];
-} {
+// ── Table-driven risk computation ──
+async function computeRiskFromDb(
+  svcClient: ReturnType<typeof createClient>,
+  toolName: string,
+  toolParams: Record<string, unknown>,
+): Promise<{ risk_level: string; requires_approval: boolean; warnings: string[] }> {
   const warnings: string[] = [];
   let risk = "medium";
 
+  const model = (toolParams.model as string) || "";
+  const fields = Object.keys((toolParams.values as Record<string, unknown>) || {});
+
+  try {
+    // 1) Check protected models table
+    if (model) {
+      const { data: protectedRow } = await svcClient
+        .from("autopilot_protected_models")
+        .select("risk_level")
+        .eq("model", model)
+        .maybeSingle();
+      if (protectedRow) {
+        risk = higherRisk(risk, protectedRow.risk_level);
+        warnings.push(`Protected model: ${model} (${protectedRow.risk_level})`);
+      }
+    }
+
+    // 2) Query risk policies — match by tool, optionally model, optionally field
+    const { data: policies } = await svcClient
+      .from("autopilot_risk_policies")
+      .select("risk_level, model, field, notes")
+      .eq("tool_name", toolName);
+
+    if (policies && policies.length > 0) {
+      for (const p of policies) {
+        const modelMatch = !p.model || p.model === model;
+        const fieldMatch = !p.field || fields.includes(p.field);
+        if (modelMatch && fieldMatch) {
+          risk = higherRisk(risk, p.risk_level);
+          if (p.notes) warnings.push(p.notes);
+        }
+      }
+    }
+  } catch (e) {
+    // Fallback to hardcoded if DB query fails
+    console.error("Risk policy DB query failed, using fallback:", e);
+    return computeRiskFallback(toolName, toolParams);
+  }
+
+  // If no policies matched at all, use fallback logic
+  if (warnings.length === 0) {
+    return computeRiskFallback(toolName, toolParams);
+  }
+
+  return { risk_level: risk, requires_approval: risk !== "low", warnings };
+}
+
+// ── Fallback risk computation (original hardcoded logic) ──
+function computeRiskFallback(toolName: string, toolParams: Record<string, unknown>): {
+  risk_level: string; requires_approval: boolean; warnings: string[];
+} {
+  const warnings: string[] = [];
+  let risk = "medium";
   if (toolName === "odoo_write") {
     const model = (toolParams.model as string) || "";
     const action = (toolParams.action as string) || "write";
-
-    if (PROTECTED_ODOO_MODELS.includes(model)) {
+    if (FALLBACK_PROTECTED_MODELS.includes(model)) {
       risk = "critical";
       warnings.push(`Protected model: ${model}`);
     }
-    if (action === "create") {
-      if (risk !== "critical") risk = "medium";
-      warnings.push("Creates new record");
-    }
+    if (action === "create") { warnings.push("Creates new record"); }
     if (action === "write") {
       const fields = Object.keys((toolParams.values as Record<string, unknown>) || {});
       if (fields.includes("state") || fields.includes("stage_id")) {
-        risk = risk === "critical" ? "critical" : "high";
+        risk = higherRisk(risk, "high");
         warnings.push("Modifies state/stage field");
       }
     }
@@ -42,25 +98,17 @@ function computeRisk(toolName: string, toolParams: Record<string, unknown>): {
   } else if (toolName === "validate_code") {
     risk = "low";
   } else {
-    risk = "medium";
     warnings.push(`Unknown tool: ${toolName}`);
   }
-
-  return {
-    risk_level: risk,
-    requires_approval: risk !== "low",
-    warnings,
-  };
+  return { risk_level: risk, requires_approval: risk !== "low", warnings };
 }
 
 // ── Simulate action preview ──
 function simulateAction(toolName: string, toolParams: Record<string, unknown>): {
-  preview: Record<string, unknown>;
-  warnings: string[];
+  preview: Record<string, unknown>; warnings: string[];
 } {
   const warnings: string[] = [];
   const preview: Record<string, unknown> = { tool: toolName };
-
   if (toolName === "odoo_write") {
     const model = (toolParams.model as string) || "unknown";
     const action = (toolParams.action as string) || "write";
@@ -69,8 +117,8 @@ function simulateAction(toolName: string, toolParams: Record<string, unknown>): 
     preview.operation = action;
     preview.fields_affected = Object.keys(values);
     preview.record_id = toolParams.record_id || null;
-    preview.touches_protected_model = PROTECTED_ODOO_MODELS.includes(model);
-    if (preview.touches_protected_model) warnings.push(`⚠️ Touches protected model: ${model}`);
+    preview.allow_write = toolParams.allow_write === true;
+    if (!preview.allow_write) warnings.push("⚠️ allow_write flag not set — execution will be blocked");
     if (Object.keys(values).length === 0) warnings.push("No fields specified in values");
   } else if (toolName === "generate_patch") {
     preview.file_path = toolParams.file_path;
@@ -81,8 +129,58 @@ function simulateAction(toolName: string, toolParams: Record<string, unknown>): 
   } else {
     preview.params = toolParams;
   }
-
   return { preview, warnings };
+}
+
+// ── Odoo authentication helper ──
+async function odooAuth(): Promise<{ uid: number; url: string; db: string; apiKey: string } | null> {
+  const odooUrl = Deno.env.get("ODOO_URL");
+  const odooDb = Deno.env.get("ODOO_DATABASE");
+  const odooApiKey = Deno.env.get("ODOO_API_KEY");
+  const odooUsername = Deno.env.get("ODOO_USERNAME");
+  if (!odooUrl || !odooDb || !odooApiKey || !odooUsername) return null;
+
+  const authRes = await fetch(`${odooUrl}/jsonrpc`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0", method: "call", id: 1,
+      params: { service: "common", method: "login", args: [odooDb, odooUsername, odooApiKey] },
+    }),
+  });
+  const authData = await authRes.json();
+  const uid = authData.result;
+  if (!uid) return null;
+  return { uid, url: odooUrl, db: odooDb, apiKey: odooApiKey };
+}
+
+// ── Preflight: read current values before writing ──
+async function preflightRead(
+  odoo: { uid: number; url: string; db: string; apiKey: string },
+  model: string,
+  recordId: number,
+  fields: string[],
+): Promise<Record<string, unknown> | null> {
+  try {
+    const res = await fetch(`${odoo.url}/jsonrpc`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0", method: "call", id: 99,
+        params: {
+          service: "object", method: "execute_kw",
+          args: [odoo.db, odoo.uid, odoo.apiKey, model, "read", [[recordId]], { fields }],
+        },
+      }),
+    });
+    const data = await res.json();
+    if (data.result && Array.isArray(data.result) && data.result.length > 0) {
+      return data.result[0];
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 // ── Execute a single tool ──
@@ -92,37 +190,42 @@ async function executeTool(
   svcClient: ReturnType<typeof createClient>,
   userId: string,
   companyId: string,
+  actionId?: string,
 ): Promise<{ success: boolean; result?: unknown; error?: string }> {
   if (toolName === "odoo_write") {
-    const odooUrl = Deno.env.get("ODOO_URL");
-    const odooDb = Deno.env.get("ODOO_DATABASE");
-    const odooApiKey = Deno.env.get("ODOO_API_KEY");
-    const odooUsername = Deno.env.get("ODOO_USERNAME");
-    if (!odooUrl || !odooDb || !odooApiKey || !odooUsername) {
-      return { success: false, error: "Odoo credentials not configured" };
+    // A) Enforce explicit write flag
+    if (toolParams.allow_write !== true) {
+      return { success: false, error: "allow_write flag required — set allow_write: true in tool_params to confirm write intent" };
     }
-    const authRes = await fetch(`${odooUrl}/jsonrpc`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0", method: "call", id: 1,
-        params: { service: "common", method: "login", args: [odooDb, odooUsername, odooApiKey] },
-      }),
-    });
-    const authData = await authRes.json();
-    const uid = authData.result;
-    if (!uid) return { success: false, error: "Odoo auth failed" };
+
+    const odoo = await odooAuth();
+    if (!odoo) return { success: false, error: "Odoo credentials not configured" };
 
     const method = toolParams.action === "create" ? "create" : "write";
+    const model = (toolParams.model as string) || "";
+    const values = (toolParams.values as Record<string, unknown>) || {};
+    const recordId = toolParams.record_id as number;
+
+    // B) Preflight rollback capture for writes
+    if (method === "write" && recordId && actionId) {
+      const fieldsToChange = Object.keys(values);
+      const originalValues = await preflightRead(odoo, model, recordId, fieldsToChange);
+      if (originalValues) {
+        await svcClient.from("autopilot_actions").update({
+          rollback_metadata: { model, record_id: recordId, original_values: originalValues },
+        }).eq("id", actionId);
+      }
+    }
+
     const rpcArgs = method === "create"
-      ? [toolParams.values]
-      : [[toolParams.record_id], toolParams.values];
-    const rpcRes = await fetch(`${odooUrl}/jsonrpc`, {
+      ? [values]
+      : [[recordId], values];
+    const rpcRes = await fetch(`${odoo.url}/jsonrpc`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         jsonrpc: "2.0", method: "call", id: 2,
-        params: { service: "object", method: "execute_kw", args: [odooDb, uid, odooApiKey, toolParams.model, method, rpcArgs] },
+        params: { service: "object", method: "execute_kw", args: [odoo.db, odoo.uid, odoo.apiKey, model, method, rpcArgs] },
       }),
     });
     const rpcData = await rpcRes.json();
@@ -156,31 +259,16 @@ async function attemptRollback(
 ): Promise<boolean> {
   try {
     if (toolName === "odoo_write" && rollbackMeta.original_values) {
-      const odooUrl = Deno.env.get("ODOO_URL");
-      const odooDb = Deno.env.get("ODOO_DATABASE");
-      const odooApiKey = Deno.env.get("ODOO_API_KEY");
-      const odooUsername = Deno.env.get("ODOO_USERNAME");
-      if (!odooUrl || !odooDb || !odooApiKey || !odooUsername) return false;
-
-      const authRes = await fetch(`${odooUrl}/jsonrpc`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          jsonrpc: "2.0", method: "call", id: 1,
-          params: { service: "common", method: "login", args: [odooDb, odooUsername, odooApiKey] },
-        }),
-      });
-      const uid = (await authRes.json()).result;
-      if (!uid) return false;
-
-      await fetch(`${odooUrl}/jsonrpc`, {
+      const odoo = await odooAuth();
+      if (!odoo) return false;
+      await fetch(`${odoo.url}/jsonrpc`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           jsonrpc: "2.0", method: "call", id: 3,
           params: {
             service: "object", method: "execute_kw",
-            args: [odooDb, uid, odooApiKey, rollbackMeta.model, "write", [[rollbackMeta.record_id], rollbackMeta.original_values]],
+            args: [odoo.db, odoo.uid, odoo.apiKey, rollbackMeta.model, "write", [[rollbackMeta.record_id], rollbackMeta.original_values]],
           },
         }),
       });
@@ -232,7 +320,7 @@ Deno.serve(async (req) => {
     if (action === "simulate_action") {
       const { tool_name, tool_params } = body;
       if (!tool_name) return json({ error: "tool_name required" }, 400);
-      const risk = computeRisk(tool_name, tool_params || {});
+      const risk = await computeRiskFromDb(svcClient, tool_name, tool_params || {});
       const sim = simulateAction(tool_name, tool_params || {});
       return json({
         risk_level: risk.risk_level,
@@ -250,7 +338,6 @@ Deno.serve(async (req) => {
       const { run_id, approval_note } = body;
       if (!run_id) return json({ error: "run_id required" }, 400);
 
-      // Verify run belongs to company
       const { data: run } = await svcClient
         .from("autopilot_runs")
         .select("id, status, company_id")
@@ -260,7 +347,6 @@ Deno.serve(async (req) => {
       if (!run) return json({ error: "Run not found" }, 404);
       if (run.status !== "awaiting_approval") return json({ error: `Cannot approve run in status: ${run.status}` }, 400);
 
-      // Approve the run
       await svcClient.from("autopilot_runs").update({
         status: "approved",
         phase: "execution",
@@ -269,7 +355,6 @@ Deno.serve(async (req) => {
         approval_note: approval_note || null,
       }).eq("id", run_id);
 
-      // Auto-approve all pending actions
       await svcClient.from("autopilot_actions").update({
         status: "approved",
         approved_by: userId,
@@ -301,7 +386,6 @@ Deno.serve(async (req) => {
         approval_note: approval_note || "Rejected by admin",
       }).eq("id", run_id);
 
-      // Reject all pending actions
       await svcClient.from("autopilot_actions").update({ status: "rejected" })
         .eq("run_id", run_id).eq("status", "pending");
 
@@ -316,7 +400,6 @@ Deno.serve(async (req) => {
       const { action_id } = body;
       if (!action_id) return json({ error: "action_id required" }, 400);
 
-      // Verify action belongs to company via run
       const { data: actionRow } = await svcClient
         .from("autopilot_actions")
         .select("id, status, run_id")
@@ -370,7 +453,7 @@ Deno.serve(async (req) => {
     }
 
     // ════════════════════════════════════════════
-    // ACTION: execute_run
+    // ACTION: execute_run (idempotent + resumable + locked)
     // ════════════════════════════════════════════
     if (action === "execute_run") {
       if (!isAdmin) return json({ error: "Admin only" }, 403);
@@ -385,7 +468,30 @@ Deno.serve(async (req) => {
         .eq("company_id", companyId)
         .single();
       if (!run) return json({ error: "Run not found" }, 404);
-      if (run.status !== "approved") return json({ error: `Cannot execute run in status: ${run.status}` }, 400);
+
+      // D) Allow approved OR failed (for resumability)
+      if (!["approved", "failed"].includes(run.status)) {
+        return json({ error: `Cannot execute run in status: ${run.status}` }, 400);
+      }
+
+      // D) Run-level lock check
+      const existingLock = run.execution_lock_uuid;
+      const lockStarted = run.execution_started_at ? new Date(run.execution_started_at).getTime() : 0;
+      const fiveMinAgo = Date.now() - 5 * 60 * 1000;
+
+      if (existingLock && lockStarted > fiveMinAgo) {
+        return json({ error: "Run is locked by another execution", lock_uuid: existingLock }, 423);
+      }
+
+      // Acquire lock
+      const lockUuid = crypto.randomUUID();
+      await svcClient.from("autopilot_runs").update({
+        execution_lock_uuid: lockUuid,
+        execution_started_at: new Date().toISOString(),
+        phase: "execution",
+        status: "executing",
+        started_at: run.started_at || new Date().toISOString(),
+      }).eq("id", run_id);
 
       // Load actions ordered by step_order
       const { data: actions } = await svcClient
@@ -395,39 +501,59 @@ Deno.serve(async (req) => {
         .order("step_order", { ascending: true });
 
       if (!actions || actions.length === 0) {
+        // Release lock
+        await svcClient.from("autopilot_runs").update({ execution_lock_uuid: null }).eq("id", run_id);
         return json({ error: "No actions found for this run" }, 400);
       }
-
-      // Mark run as executing
-      await svcClient.from("autopilot_runs").update({
-        phase: "execution",
-        status: "executing",
-        started_at: new Date().toISOString(),
-      }).eq("id", run_id);
 
       const startTime = Date.now();
       let executedCount = 0;
       let failedCount = 0;
+      let skippedCount = 0;
       const results: Array<{ action_id: string; status: string; tool: string }> = [];
 
       for (const act of actions) {
-        // Only execute approved actions (or non-approval-required ones that are approved)
-        const canExecute = act.status === "approved" || (!act.requires_approval && act.status !== "rejected");
-        if (!canExecute) {
-          results.push({ action_id: act.id, status: "skipped", tool: act.tool_name });
-          if (act.status === "pending") {
-            await svcClient.from("autopilot_actions").update({ status: "skipped" }).eq("id", act.id);
-          }
+        // D) Skip already completed actions (idempotent)
+        if (act.status === "completed") {
+          results.push({ action_id: act.id, status: "already_completed", tool: act.tool_name });
+          skippedCount++;
           continue;
         }
 
-        // Re-compute risk server-side — never trust stored risk
-        const serverRisk = computeRisk(act.tool_name, act.tool_params as Record<string, unknown>);
+        // D) Timeout stale executing actions
+        if (act.status === "executing" && !act.executed_at) {
+          const actionAge = Date.now() - new Date(act.updated_at || act.created_at).getTime();
+          if (actionAge > 5 * 60 * 1000) {
+            await svcClient.from("autopilot_actions").update({
+              status: "failed",
+              error_message: "Execution timeout (>5 minutes stale)",
+              executed_at: new Date().toISOString(),
+            }).eq("id", act.id);
+            failedCount++;
+            results.push({ action_id: act.id, status: "timeout", tool: act.tool_name });
+            continue;
+          }
+        }
+
+        // Only execute approved actions
+        const canExecute = act.status === "approved" || (!act.requires_approval && act.status !== "rejected");
+        if (!canExecute) {
+          if (act.status === "pending") {
+            await svcClient.from("autopilot_actions").update({ status: "skipped" }).eq("id", act.id);
+          }
+          skippedCount++;
+          results.push({ action_id: act.id, status: "skipped", tool: act.tool_name });
+          continue;
+        }
+
+        // C) Re-compute risk server-side from DB
+        const serverRisk = await computeRiskFromDb(svcClient, act.tool_name, act.tool_params as Record<string, unknown>);
         if (serverRisk.requires_approval && act.status !== "approved") {
           await svcClient.from("autopilot_actions").update({
             status: "skipped",
             error_message: `Server-side risk escalated to ${serverRisk.risk_level} — approval required`,
           }).eq("id", act.id);
+          skippedCount++;
           results.push({ action_id: act.id, status: "risk_escalated", tool: act.tool_name });
           continue;
         }
@@ -446,6 +572,7 @@ Deno.serve(async (req) => {
           svcClient,
           userId,
           companyId,
+          act.id,
         );
 
         if (toolResult.success) {
@@ -466,7 +593,7 @@ Deno.serve(async (req) => {
 
           // Attempt rollback if metadata exists
           const rollbackMeta = (act.rollback_metadata || {}) as Record<string, unknown>;
-          if (Object.keys(rollbackMeta).length > 0) {
+          if (Object.keys(rollbackMeta).length > 0 && rollbackMeta.original_values) {
             const rolledBack = await attemptRollback(act.tool_name, rollbackMeta, svcClient);
             if (rolledBack) {
               await svcClient.from("autopilot_actions").update({ rollback_executed: true }).eq("id", act.id);
@@ -481,14 +608,16 @@ Deno.serve(async (req) => {
       const finalStatus = failedCount > 0 ? "failed" : "completed";
       const finalPhase = "observation";
 
+      // Release lock and finalize
       await svcClient.from("autopilot_runs").update({
         phase: finalPhase,
         status: finalStatus,
         completed_at: new Date().toISOString(),
+        execution_lock_uuid: null,
         metrics: {
           executed_actions: executedCount,
           failed_actions: failedCount,
-          skipped_actions: actions.length - executedCount - failedCount,
+          skipped_actions: skippedCount,
           total_actions: actions.length,
           duration_ms: durationMs,
         },
@@ -499,7 +628,7 @@ Deno.serve(async (req) => {
         run_id,
         status: finalStatus,
         dry_run,
-        metrics: { executed_actions: executedCount, failed_actions: failedCount, duration_ms: durationMs },
+        metrics: { executed_actions: executedCount, failed_actions: failedCount, skipped_actions: skippedCount, duration_ms: durationMs },
         results,
       });
     }
