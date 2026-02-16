@@ -61,6 +61,7 @@ import TranscribeWatch from "./pages/TranscribeWatch";
 import WebsiteManager from "./pages/WebsiteManager";
 import SeoModule from "./pages/SeoModule";
 import EmpireBuilder from "./pages/EmpireBuilder";
+import AutopilotDashboard from "./pages/AutopilotDashboard";
 import SupportInbox from "./pages/SupportInbox";
 import KnowledgeBasePublic from "./pages/KnowledgeBasePublic";
 
@@ -115,6 +116,7 @@ const App = () => (
                     <Route path="/website" element={<P><WebsiteManager /></P>} />
                     <Route path="/seo" element={<P><SeoModule /></P>} />
                     <Route path="/empire" element={<P><EmpireBuilder /></P>} />
+                    <Route path="/autopilot" element={<P><AutopilotDashboard /></P>} />
                     <Route path="/support-inbox" element={<P><SupportInbox /></P>} />
 
                     {/* Sales */}

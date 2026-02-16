@@ -183,6 +183,146 @@ export type Database = {
         }
         Relationships: []
       }
+      autopilot_actions: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          created_at: string
+          error_message: string | null
+          executed_at: string | null
+          id: string
+          requires_approval: boolean
+          result: Json | null
+          risk_level: string
+          rollback_executed: boolean | null
+          rollback_metadata: Json | null
+          run_id: string
+          status: string
+          step_order: number
+          tool_name: string
+          tool_params: Json
+          updated_at: string
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          error_message?: string | null
+          executed_at?: string | null
+          id?: string
+          requires_approval?: boolean
+          result?: Json | null
+          risk_level?: string
+          rollback_executed?: boolean | null
+          rollback_metadata?: Json | null
+          run_id: string
+          status?: string
+          step_order?: number
+          tool_name: string
+          tool_params?: Json
+          updated_at?: string
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          error_message?: string | null
+          executed_at?: string | null
+          id?: string
+          requires_approval?: boolean
+          result?: Json | null
+          risk_level?: string
+          rollback_executed?: boolean | null
+          rollback_metadata?: Json | null
+          run_id?: string
+          status?: string
+          step_order?: number
+          tool_name?: string
+          tool_params?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "autopilot_actions_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "autopilot_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      autopilot_runs: {
+        Row: {
+          approval_note: string | null
+          approved_at: string | null
+          approved_by: string | null
+          company_id: string
+          completed_at: string | null
+          context_snapshot: Json | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          error_log: Json | null
+          id: string
+          metadata: Json | null
+          metrics: Json | null
+          phase: string
+          plan: Json | null
+          simulation_result: Json | null
+          started_at: string | null
+          status: string
+          title: string
+          trigger_type: string
+          updated_at: string
+        }
+        Insert: {
+          approval_note?: string | null
+          approved_at?: string | null
+          approved_by?: string | null
+          company_id: string
+          completed_at?: string | null
+          context_snapshot?: Json | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          error_log?: Json | null
+          id?: string
+          metadata?: Json | null
+          metrics?: Json | null
+          phase?: string
+          plan?: Json | null
+          simulation_result?: Json | null
+          started_at?: string | null
+          status?: string
+          title: string
+          trigger_type?: string
+          updated_at?: string
+        }
+        Update: {
+          approval_note?: string | null
+          approved_at?: string | null
+          approved_by?: string | null
+          company_id?: string
+          completed_at?: string | null
+          context_snapshot?: Json | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          error_log?: Json | null
+          id?: string
+          metadata?: Json | null
+          metrics?: Json | null
+          phase?: string
+          plan?: Json | null
+          simulation_result?: Json | null
+          started_at?: string | null
+          status?: string
+          title?: string
+          trigger_type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       barlist_items: {
         Row: {
           bar_code: string | null
