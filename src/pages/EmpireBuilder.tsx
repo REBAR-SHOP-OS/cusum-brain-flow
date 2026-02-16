@@ -8,6 +8,7 @@ import { agentConfigs } from "@/components/agent/agentConfigs";
 import { cn } from "@/lib/utils";
 import { RichMarkdown } from "@/components/chat/RichMarkdown";
 import { MessageActions } from "@/components/chat/MessageActions";
+import { PatchReview } from "@/components/chat/PatchReview";
 import { supabase } from "@/integrations/supabase/client";
 import { analyzeZip } from "@/lib/zipAnalyzer";
 import { useSearchParams } from "react-router-dom";
@@ -356,7 +357,34 @@ export default function EmpireBuilder() {
                         {isUser ? (
                           <p className="whitespace-pre-wrap">{message.content}</p>
                         ) : (
-                          <RichMarkdown content={message.content || ""} />
+                          <>
+                            <RichMarkdown content={message.content || ""} />
+                            {/* Render inline patch reviews from artifacts */}
+                            {(() => {
+                              const patches: { id: string; file: string; target: string; description?: string; content: string }[] = [];
+                              const artifactRegex = /\{"type"\s*:\s*"patch"[^}]*"id"\s*:\s*"([^"]+)"[^}]*"file"\s*:\s*"([^"]+)"[^}]*"target"\s*:\s*"([^"]+)"[^}]*"content"\s*:\s*"((?:[^"\\]|\\.)*)"/g;
+                              let match;
+                              const text = message.content || "";
+                              while ((match = artifactRegex.exec(text)) !== null) {
+                                patches.push({ id: match[1], file: match[2], target: match[3], content: match[4].replace(/\\n/g, "\n").replace(/\\"/g, '"') });
+                              }
+                              // Also check for code blocks with patch markers
+                              const patchBlockRegex = /<!--\s*PATCH:(\w+):([^:]+):([^:]+):(\S+)\s*-->\n```[\w]*\n([\s\S]*?)```/g;
+                              while ((match = patchBlockRegex.exec(text)) !== null) {
+                                patches.push({ id: match[1], target: match[2], file: match[3], description: match[4].replace(/_/g, " "), content: match[5].trim() });
+                              }
+                              return patches.map((p) => (
+                                <PatchReview
+                                  key={p.id}
+                                  patchId={p.id}
+                                  filePath={p.file}
+                                  targetSystem={p.target}
+                                  description={p.description || ""}
+                                  content={p.content}
+                                />
+                              ));
+                            })()}
+                          </>
                         )}
                       </div>
                       {!isUser && message.content && (

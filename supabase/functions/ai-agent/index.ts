@@ -2305,7 +2305,21 @@ You can manage ventures via \`manage_venture\` tool and diagnose/fix issues via 
 - \`machineStatus\`: Current machine health
 - \`deliveryStatus\`: Active deliveries
 
-Use this real data to ground your analysis — never fabricate numbers.`,
+Use this real data to ground your analysis — never fabricate numbers.
+
+## Code Engineer Mode:
+When the user asks you to "generate patch", "write code", "fix module", "engineer mode", "create patch", or similar engineering tasks, you MUST:
+1. Use the \`generate_patch\` tool to produce reviewable code diffs
+2. Use the \`validate_code\` tool to check patches before presenting
+3. Use \`odoo_write\` tool for Odoo record creation/updates
+4. Return results using strict JSON output — never prose for engineering tasks
+
+## New Tools Available:
+- \`odoo_write\`: Create or update records in any Odoo model (requires confirm:true for writes)
+- \`generate_patch\`: Generate reviewable unified diffs for Odoo modules, ERP code, or WordPress
+- \`validate_code\`: Run static validation on generated patches (syntax, dangerous patterns)
+
+When generating patches, ALWAYS validate them first, then store via generate_patch tool.`,
 };
 
 // Fetch rebar standards from database
@@ -5796,6 +5810,61 @@ RULES:
             additionalProperties: false,
           },
         },
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "odoo_write",
+          description: "Create or update records in any Odoo model via JSON-RPC. Requires confirm:true for write operations.",
+          parameters: {
+            type: "object",
+            properties: {
+              model: { type: "string", description: "Odoo model name (e.g. res.partner, crm.lead, sale.order)" },
+              action: { type: "string", enum: ["create", "write"], description: "create = new record, write = update existing" },
+              record_id: { type: "number", description: "Record ID (required for write action)" },
+              values: { type: "object", description: "Field values to set on the record" },
+              confirm: { type: "boolean", description: "Must be true to execute write operations. Safety flag." },
+            },
+            required: ["model", "action", "values", "confirm"],
+            additionalProperties: false,
+          },
+        },
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "generate_patch",
+          description: "Generate a reviewable code patch (unified diff) for Odoo modules, ERP code, or WordPress. Patches are stored for human review before application.",
+          parameters: {
+            type: "object",
+            properties: {
+              target_system: { type: "string", enum: ["odoo", "erp", "wordpress", "other"], description: "Which system the patch targets" },
+              file_path: { type: "string", description: "File path being modified (e.g. addons/custom_module/models/sale.py)" },
+              description: { type: "string", description: "Human-readable description of what this patch does" },
+              patch_content: { type: "string", description: "The unified diff content of the patch" },
+              patch_type: { type: "string", enum: ["unified_diff", "full_file", "snippet"], description: "Format of the patch" },
+            },
+            required: ["target_system", "file_path", "description", "patch_content"],
+            additionalProperties: false,
+          },
+        },
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "validate_code",
+          description: "Run static validation on generated code/patches. Checks syntax, dangerous patterns, and basic correctness.",
+          parameters: {
+            type: "object",
+            properties: {
+              code: { type: "string", description: "The code or patch content to validate" },
+              language: { type: "string", enum: ["python", "javascript", "typescript", "php", "xml", "html"], description: "Programming language of the code" },
+              check_dangerous: { type: "boolean", description: "Whether to check for dangerous patterns (DROP TABLE, rm -rf, eval, exec)" },
+            },
+            required: ["code", "language"],
+            additionalProperties: false,
+          },
+        },
       }] : []),
       // WordPress tools — available to SEO, Social, Data, BizDev, WebBuilder, Copywriting, AND Empire agents
       ...(["seo", "social", "data", "bizdev", "webbuilder", "copywriting", "empire"].includes(agent) ? [
@@ -6385,6 +6454,133 @@ RULES:
           } catch (e) {
             console.error("diagnose_platform error:", e);
             seoToolResults.push({ id: tc.id, name: "diagnose_platform", result: { error: e instanceof Error ? e.message : "Diagnostics failed" } });
+          }
+        }
+
+        // Empire — odoo_write handler
+        if (tc.function?.name === "odoo_write") {
+          try {
+            const args = JSON.parse(tc.function.arguments || "{}");
+            if (!args.confirm) {
+              seoToolResults.push({ id: tc.id, name: "odoo_write", result: { error: "Safety: confirm must be true to execute Odoo writes" } });
+            } else {
+              const odooUrl = Deno.env.get("ODOO_URL");
+              const odooDb = Deno.env.get("ODOO_DATABASE");
+              const odooApiKey = Deno.env.get("ODOO_API_KEY");
+              const odooUsername = Deno.env.get("ODOO_USERNAME");
+              if (!odooUrl || !odooDb || !odooApiKey || !odooUsername) {
+                seoToolResults.push({ id: tc.id, name: "odoo_write", result: { error: "Odoo credentials not configured" } });
+              } else {
+                // Authenticate to get uid
+                const authRes = await fetch(`${odooUrl}/jsonrpc`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ jsonrpc: "2.0", method: "call", id: 1, params: { service: "common", method: "login", args: [odooDb, odooUsername, odooApiKey] } }),
+                });
+                const authData = await authRes.json();
+                const uid = authData.result;
+                if (!uid) {
+                  seoToolResults.push({ id: tc.id, name: "odoo_write", result: { error: "Odoo authentication failed" } });
+                } else {
+                  const method = args.action === "create" ? "create" : "write";
+                  const rpcArgs = method === "create"
+                    ? [args.values]
+                    : [[args.record_id], args.values];
+                  const rpcRes = await fetch(`${odooUrl}/jsonrpc`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ jsonrpc: "2.0", method: "call", id: 2, params: { service: "object", method: "execute_kw", args: [odooDb, uid, odooApiKey, args.model, method, rpcArgs] } }),
+                  });
+                  const rpcData = await rpcRes.json();
+                  if (rpcData.error) {
+                    seoToolResults.push({ id: tc.id, name: "odoo_write", result: { error: rpcData.error.message || "Odoo RPC error" } });
+                  } else {
+                    seoToolResults.push({ id: tc.id, name: "odoo_write", result: { success: true, result: rpcData.result, message: `Odoo ${method} on ${args.model} completed` } });
+                  }
+                }
+              }
+            }
+          } catch (e) {
+            seoToolResults.push({ id: tc.id, name: "odoo_write", result: { error: e instanceof Error ? e.message : "odoo_write failed" } });
+          }
+        }
+
+        // Empire — generate_patch handler
+        if (tc.function?.name === "generate_patch") {
+          try {
+            const args = JSON.parse(tc.function.arguments || "{}");
+            const { data: patch, error } = await svcClient.from("code_patches").insert({
+              created_by: user.id,
+              company_id: companyId,
+              target_system: args.target_system || "odoo",
+              file_path: args.file_path,
+              description: args.description || "",
+              patch_content: args.patch_content,
+              patch_type: args.patch_type || "unified_diff",
+              status: "pending",
+            }).select().single();
+            seoToolResults.push({ id: tc.id, name: "generate_patch", result: error
+              ? { error: error.message }
+              : { success: true, patch_id: patch.id, message: `Patch created for ${args.file_path} — awaiting review`, artifact: { type: "patch", file: args.file_path, target: args.target_system, content: args.patch_content, id: patch.id } }
+            });
+          } catch (e) {
+            seoToolResults.push({ id: tc.id, name: "generate_patch", result: { error: e instanceof Error ? e.message : "generate_patch failed" } });
+          }
+        }
+
+        // Empire — validate_code handler
+        if (tc.function?.name === "validate_code") {
+          try {
+            const args = JSON.parse(tc.function.arguments || "{}");
+            const code = args.code || "";
+            const warnings: string[] = [];
+            const errors: string[] = [];
+
+            // Check dangerous patterns
+            const dangerousPatterns = [
+              { pattern: /DROP\s+TABLE/gi, msg: "DROP TABLE detected" },
+              { pattern: /DROP\s+DATABASE/gi, msg: "DROP DATABASE detected" },
+              { pattern: /rm\s+-rf/gi, msg: "rm -rf detected" },
+              { pattern: /\beval\s*\(/g, msg: "eval() usage detected" },
+              { pattern: /\bexec\s*\(/g, msg: "exec() usage detected" },
+              { pattern: /os\.system\s*\(/g, msg: "os.system() usage detected" },
+              { pattern: /subprocess\.(call|run|Popen)\s*\(/g, msg: "subprocess execution detected" },
+              { pattern: /DELETE\s+FROM\s+\w+\s*;?\s*$/gim, msg: "Unbounded DELETE detected (no WHERE clause)" },
+              { pattern: /__import__\s*\(/g, msg: "__import__() usage detected" },
+            ];
+
+            if (args.check_dangerous !== false) {
+              for (const dp of dangerousPatterns) {
+                if (dp.pattern.test(code)) errors.push(`🔴 DANGEROUS: ${dp.msg}`);
+              }
+            }
+
+            // Basic syntax checks by language
+            if (args.language === "python") {
+              const openParens = (code.match(/\(/g) || []).length;
+              const closeParens = (code.match(/\)/g) || []).length;
+              if (openParens !== closeParens) errors.push(`Mismatched parentheses: ${openParens} open, ${closeParens} close`);
+              const openBrackets = (code.match(/\[/g) || []).length;
+              const closeBrackets = (code.match(/\]/g) || []).length;
+              if (openBrackets !== closeBrackets) warnings.push(`Mismatched brackets: ${openBrackets} open, ${closeBrackets} close`);
+              if (/\ttab/g.test(code) && /    /g.test(code)) warnings.push("Mixed tabs and spaces detected");
+            }
+
+            if (["javascript", "typescript", "php"].includes(args.language)) {
+              const openBraces = (code.match(/\{/g) || []).length;
+              const closeBraces = (code.match(/\}/g) || []).length;
+              if (openBraces !== closeBraces) errors.push(`Mismatched braces: ${openBraces} open, ${closeBraces} close`);
+            }
+
+            const isValid = errors.length === 0;
+            seoToolResults.push({ id: tc.id, name: "validate_code", result: {
+              valid: isValid,
+              errors,
+              warnings,
+              summary: isValid ? `✅ Code validation passed${warnings.length ? ` with ${warnings.length} warning(s)` : ""}` : `❌ ${errors.length} error(s) found`,
+            }});
+          } catch (e) {
+            seoToolResults.push({ id: tc.id, name: "validate_code", result: { error: e instanceof Error ? e.message : "validate_code failed" } });
           }
         }
 

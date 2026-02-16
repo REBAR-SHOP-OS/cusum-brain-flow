@@ -584,6 +584,60 @@ export type Database = {
           },
         ]
       }
+      code_patches: {
+        Row: {
+          company_id: string
+          created_at: string
+          created_by: string | null
+          description: string
+          file_path: string
+          id: string
+          metadata: Json | null
+          patch_content: string
+          patch_type: string
+          review_note: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          target_system: string
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          description?: string
+          file_path: string
+          id?: string
+          metadata?: Json | null
+          patch_content: string
+          patch_type?: string
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          target_system?: string
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          description?: string
+          file_path?: string
+          id?: string
+          metadata?: Json | null
+          patch_content?: string
+          patch_type?: string
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          target_system?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       command_log: {
         Row: {
           created_at: string
