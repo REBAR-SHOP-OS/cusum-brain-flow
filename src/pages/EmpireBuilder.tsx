@@ -12,10 +12,12 @@ import { MessageActions } from "@/components/chat/MessageActions";
 const config = agentConfigs.empire;
 
 const SUGGESTIONS = [
+  "Run a full health check on all my apps",
+  "Diagnose and fix any WordPress issues on rebar.shop",
+  "Check Odoo CRM sync status",
   "I have a SaaS idea for contractor scheduling",
-  "Analyze my rebar business for new verticals",
-  "Run a stress test on my latest venture",
-  "What should I build next based on my data?",
+  "Stress test my latest venture",
+  "What problems need my attention right now?",
 ];
 
 export default function EmpireBuilder() {

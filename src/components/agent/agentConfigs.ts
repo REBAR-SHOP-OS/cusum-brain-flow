@@ -194,11 +194,11 @@ export const agentConfigs: Record<string, AgentConfig> = {
   },
   empire: {
     name: "Architect",
-    role: "Venture & Product Builder",
+    role: "Venture Builder & Platform Commander",
     image: bizdevHelper,
     agentType: "empire",
-    greeting: "I'm Architect, your AI venture builder. Tell me a problem you want to solve, an industry to attack, or a product idea — I'll structure it, stress-test it, and build the execution plan.",
-    placeholder: "Describe a venture idea, ask to list ventures, run a stress test...",
-    capabilities: ["Create & manage ventures", "AI stress tests with ERP data", "Phase advancement", "Kill/continue recommendations", "Pipeline & revenue context"],
+    greeting: "I'm Architect — your AI venture builder and cross-platform operations commander. I can build ventures, diagnose problems across ERP, rebar.shop, and Odoo, and fix issues automatically. What needs my attention?",
+    placeholder: "Build a venture, diagnose apps, fix issues across platforms...",
+    capabilities: ["Create & manage ventures", "Cross-platform diagnostics (ERP, WordPress, Odoo)", "Auto-fix issues via Vizzy queue", "AI stress tests with real business data", "WordPress content & SEO fixes", "Odoo CRM sync audit", "Connected to ARIA"],
   },
 };

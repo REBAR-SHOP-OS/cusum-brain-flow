@@ -2230,63 +2230,70 @@ Tasks that provide little value and should be removed or postponed indefinitely.
 - Delegation patterns not being used → suggest delegating more Q3 tasks
 - Tasks consistently carried over from day to day → suggest breaking them down or deprioritizing`,
 
-  empire: `You are **Architect**, the AI Venture Builder for REBAR SHOP OS — a rebar fabrication ERP run by Rebar.shop in Ontario.
+  empire: `You are **Architect**, the AI Venture Builder & Cross-Platform Operations Commander for REBAR SHOP OS.
 
 ## Your Role:
-You are a ruthless, data-driven startup advisor and venture architect. You help the CEO build new business ventures using the "Empire Loop" methodology, grounded in REAL business data from the ERP.
+You are the most powerful AI agent in the system — a ruthless, data-driven startup advisor, venture architect, AND cross-platform diagnostics engine. You serve as ARIA's executive arm for fixing problems across ALL apps.
+
+## Apps You Manage:
+1. **ERP (REBAR SHOP OS)** — This Lovable app. Modules: Pipeline, Shop Floor, Deliveries, Customers, Inbox, Office Portal, Admin, Brain.
+2. **rebar.shop (WordPress/WooCommerce)** — The public website. You can read/write posts, pages, products, and run SEO audits.
+3. **Odoo CRM** — External CRM synced via odoo-crm-sync. You can diagnose sync issues and data mismatches.
+
+## ARIA Connection:
+You report to ARIA (Platform Supervisor). When ARIA or the CEO asks you to fix something, you:
+1. Diagnose the issue across all platforms
+2. Use your tools to fix it directly (create fix requests, update WP content, flag Odoo sync issues)
+3. Report back with what was fixed and what needs manual intervention
+
+## Cross-Platform Fix Capabilities:
+
+### ERP Fixes:
+- Create fix requests in \`vizzy_fix_requests\` for bugs and issues
+- Create notifications and tasks for team members
+- Check machine status, production queues, delivery status
+- Audit human_tasks for stale/unresolved items
+
+### WordPress/rebar.shop Fixes:
+- Use WordPress tools (wp_list_posts, wp_update_post, wp_create_post, wp_list_pages, wp_update_page, wp_list_products, scrape_page) to fix content, SEO, and product issues
+- Run live SEO audits on any rebar.shop page
+- Fix broken content, missing meta descriptions, thin content
+
+### Odoo CRM Fixes:
+- Use \`diagnose_odoo_sync\` to check for missing leads, duplicate contacts, out-of-sync stages
+- Flag reconciliation issues for manual review
 
 ## Empire Loop — 5 Phases:
 1. **Target Selection** 🎯 — Identify a problem worth solving. Define the target customer, value multiplier, and competitive landscape.
-2. **Weapon Build** ⚔️ — Define the MVP scope, distribution plan, and revenue model. Build the minimum viable product.
-3. **Market Feedback** 📊 — Launch to early users. Collect activation rates, retention metrics, and willingness-to-pay signals.
-4. **Scale Engine** 🚀 — Optimize unit economics. Build repeatable sales/marketing engine. Track revenue growth.
-5. **Empire Expansion** 🏛️ — Expand to adjacent markets, add product lines, acquire competitors.
+2. **Weapon Build** ⚔️ — Define the MVP scope, distribution plan, and revenue model.
+3. **Market Feedback** 📊 — Launch to early users. Collect activation rates, retention metrics.
+4. **Scale Engine** 🚀 — Optimize unit economics. Build repeatable sales/marketing engine.
+5. **Empire Expansion** 🏛️ — Expand to adjacent markets, add product lines.
 
 ## Your Capabilities:
-You can manage ventures in the database through tool calls. Use the \`manage_venture\` tool for ALL venture operations:
+You can manage ventures via \`manage_venture\` tool and diagnose/fix issues via \`diagnose_platform\` tool.
 
-### Creating a venture:
-When a user describes a business idea, extract structured data and create it:
-\`\`\`json
-{"action":"create","name":"...","vertical":"...","problem_statement":"...","target_customer":"...","phase":"target_selection"}
-\`\`\`
+### Venture Management:
+- Create, update, list, stress-test, kill/pause ventures
 
-### Updating a venture:
-\`\`\`json
-{"action":"update","venture_id":"...","updates":{"mvp_scope":"...","distribution_plan":"...","phase":"weapon_build"}}
-\`\`\`
-
-### Listing ventures:
-\`\`\`json
-{"action":"list"}
-\`\`\`
-
-### Running a stress test:
-\`\`\`json
-{"action":"stress_test","venture_id":"..."}
-\`\`\`
-
-### Killing or pausing a venture:
-\`\`\`json
-{"action":"update","venture_id":"...","updates":{"status":"killed"}}
-\`\`\`
+### Platform Diagnostics:
+- \`diagnose_platform\` with targets: "erp", "wordpress", "odoo", "all"
+- Auto-create fix requests for detected issues
+- Run comprehensive health checks across all systems
 
 ## How You Work:
-1. When someone describes an idea, IMMEDIATELY create a venture and start filling fields through conversation
-2. Ask probing questions: Who is the customer? What's the 10× value multiplier? Who are competitors?
-3. When enough data is gathered, offer to run a stress test
-4. Be brutally honest — if an idea is weak, say so with data
-5. Reference ERP data when available (pipeline leads, orders, SEO metrics, Odoo data)
-6. Track phase transitions and celebrate milestones
-7. Always show venture status in your responses
+1. When someone describes an idea, create a venture and start structured analysis
+2. When asked to fix something, diagnose across ALL platforms and fix what you can
+3. Reference ERP data, WordPress metrics, and Odoo pipeline for grounded analysis
+4. Be brutally honest — if something is broken, say what and why
+5. Always report: what was fixed ✅, what needs manual attention ⚠️, what's healthy ✅
 
 ## Communication Style:
 - Decisive and direct — no fluff
 - Use data and frameworks, not opinions
 - Challenge assumptions aggressively
-- Present recommendations as "continue" or "kill" with evidence
-- Use markdown tables for venture summaries
-- Be encouraging when warranted, ruthless when needed
+- Present venture recommendations as "continue" or "kill" with evidence
+- Present diagnostic results with severity badges (🔴 Critical, 🟡 Warning, 🟢 Healthy)
 
 ## Context Data You May Receive:
 - \`ventures\`: Current user's ventures
@@ -2294,13 +2301,11 @@ When a user describes a business idea, extract structured data and create it:
 - \`orderRevenue\`: Recent order data
 - \`seoMetrics\`: Website traffic from rebar.shop
 - \`odooLeads\`: Odoo CRM pipeline data
+- \`fixRequests\`: Open fix requests from vizzy_fix_requests
+- \`machineStatus\`: Current machine health
+- \`deliveryStatus\`: Active deliveries
 
-Use this real data to ground your analysis — never fabricate numbers.
-
-## 💡 Ideas You Should Create:
-- Venture stuck in same phase >14 days → suggest phase review or kill decision
-- New pipeline lead aligns with a venture's target market → suggest connection
-- Revenue data shows declining trend in venture's vertical → flag risk`,
+Use this real data to ground your analysis — never fabricate numbers.`,
 };
 
 // Fetch rebar standards from database
@@ -3242,7 +3247,7 @@ async function fetchContext(supabase: ReturnType<typeof createClient>, agent: st
       }
     }
 
-    // Architect — Empire Builder (dedicated context)
+    // Architect — Empire Builder + Cross-Platform Diagnostics (dedicated context)
     if (agent === "empire") {
       try {
         // User's ventures
@@ -3271,6 +3276,36 @@ async function fetchContext(supabase: ReturnType<typeof createClient>, agent: st
           .limit(15);
         context.orderRevenue = orders;
 
+        // Open fix requests
+        try {
+          const { data: fixReqs } = await svcClient
+            .from("vizzy_fix_requests" as any)
+            .select("id, description, affected_area, status, created_at")
+            .eq("status", "open")
+            .order("created_at", { ascending: false })
+            .limit(10);
+          context.fixRequests = fixReqs;
+        } catch (_) { /* table may not exist */ }
+
+        // Machine status
+        try {
+          const { data: machines } = await svcClient
+            .from("machines")
+            .select("id, name, type, status, current_operator_id")
+            .limit(20);
+          context.machineStatus = machines;
+        } catch (_) {}
+
+        // Active deliveries
+        try {
+          const { data: deliveries } = await svcClient
+            .from("deliveries")
+            .select("id, delivery_number, status, scheduled_date, driver_name")
+            .in("status", ["planned", "loading", "in_transit"])
+            .limit(10);
+          context.deliveryStatus = deliveries;
+        } catch (_) {}
+
         // Odoo leads if available
         try {
           const { data: odooLeads } = await svcClient
@@ -3290,6 +3325,17 @@ async function fetchContext(supabase: ReturnType<typeof createClient>, agent: st
             .limit(10);
           context.seoMetrics = seoPages;
         } catch (_) { /* SEO tables may not exist */ }
+
+        // Stale human tasks
+        try {
+          const { data: staleTasks } = await svcClient
+            .from("human_tasks")
+            .select("id, title, status, severity, category, created_at")
+            .eq("status", "open")
+            .order("created_at", { ascending: true })
+            .limit(10);
+          context.staleHumanTasks = staleTasks;
+        } catch (_) {}
       } catch (e) {
         console.error("Failed to fetch empire context:", e);
       }
@@ -4034,6 +4080,7 @@ function selectModel(agent: string, message: string, hasAttachments: boolean, hi
   maxTokens: number;
   temperature: number;
   reason: string;
+  useUserGeminiKey?: boolean;
 } {
   // Estimation with documents → Pro (best vision + reasoning for structural drawings)
   if (agent === "estimation" && hasAttachments) {
@@ -4404,6 +4451,28 @@ function selectModel(agent: string, message: string, hasAttachments: boolean, hi
       maxTokens: 4000,
       temperature: 0.3,
       reason: "vizzy default → Pro for reliable cross-domain reasoning",
+    };
+  }
+
+  // Empire (Architect) — uses user's Gemini API key by default, Pro-level for cross-platform diagnostics
+  if (agent === "empire") {
+    const isDiagnostic = /fix|diagnose|audit|problem|error|broken|issue|health|check|scan|sync|reconcil/i.test(message);
+    const isStressTest = /stress|test|viability|kill|continue|analyze/i.test(message);
+    if (isDiagnostic || isStressTest || historyLength > 6) {
+      return {
+        model: "gemini-2.5-pro",
+        maxTokens: 8000,
+        temperature: 0.2,
+        reason: "empire diagnostics/stress-test → Gemini Pro (user key) for deep cross-platform analysis",
+        useUserGeminiKey: true,
+      };
+    }
+    return {
+      model: "gemini-2.5-flash",
+      maxTokens: 4000,
+      temperature: 0.3,
+      reason: "empire → Gemini Flash (user key) for venture building",
+      useUserGeminiKey: true,
     };
   }
 
@@ -5694,9 +5763,42 @@ RULES:
             additionalProperties: false,
           },
         },
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "diagnose_platform",
+          description: "Run cross-platform diagnostics on ERP, WordPress (rebar.shop), or Odoo. Creates fix requests for detected issues.",
+          parameters: {
+            type: "object",
+            properties: {
+              target: { type: "string", enum: ["erp", "wordpress", "odoo", "all"], description: "Which platform to diagnose" },
+              specific_issue: { type: "string", description: "Optional: specific issue to investigate" },
+            },
+            required: ["target"],
+            additionalProperties: false,
+          },
+        },
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "create_fix_request",
+          description: "Create a fix request in the Vizzy fix queue for an issue that needs attention.",
+          parameters: {
+            type: "object",
+            properties: {
+              description: { type: "string", description: "Description of the issue" },
+              affected_area: { type: "string", description: "Which module/area is affected" },
+              severity: { type: "string", enum: ["low", "medium", "high", "critical"], description: "Issue severity" },
+            },
+            required: ["description", "affected_area"],
+            additionalProperties: false,
+          },
+        },
       }] : []),
-      // WordPress tools — available to SEO, Social, Data, BizDev, WebBuilder, Copywriting agents
-      ...(["seo", "social", "data", "bizdev", "webbuilder", "copywriting"].includes(agent) ? [
+      // WordPress tools — available to SEO, Social, Data, BizDev, WebBuilder, Copywriting, AND Empire agents
+      ...(["seo", "social", "data", "bizdev", "webbuilder", "copywriting", "empire"].includes(agent) ? [
         {
           type: "function" as const,
           function: {
@@ -5848,14 +5950,32 @@ RULES:
       ] : []),
     ];
 
-    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    // Route to user's Gemini API key or Lovable AI gateway
+    let aiUrl = "https://ai.gateway.lovable.dev/v1/chat/completions";
+    let aiAuthHeader = `Bearer ${LOVABLE_API_KEY}`;
+    let aiModel = modelConfig.model;
+
+    if ((modelConfig as any).useUserGeminiKey) {
+      const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+      if (GEMINI_API_KEY) {
+        aiUrl = `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions`;
+        aiAuthHeader = `Bearer ${GEMINI_API_KEY}`;
+        console.log(`🔑 Empire using user Gemini API key → ${aiModel}`);
+      } else {
+        // Fallback to Lovable AI gateway
+        aiModel = `google/${aiModel}`;
+        console.log(`⚠️ GEMINI_API_KEY not found, falling back to Lovable AI gateway → ${aiModel}`);
+      }
+    }
+
+    const aiResponse = await fetch(aiUrl, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
+        "Authorization": aiAuthHeader,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: modelConfig.model,
+        model: aiModel,
         messages,
         max_tokens: modelConfig.maxTokens,
         temperature: modelConfig.temperature,
@@ -5978,7 +6098,7 @@ RULES:
         }
         
         // Handle WordPress tool calls for all WP-enabled agents
-        const WP_AGENTS_HANDLER = ["seo", "social", "data", "bizdev", "webbuilder", "copywriting"];
+        const WP_AGENTS_HANDLER = ["seo", "social", "data", "bizdev", "webbuilder", "copywriting", "empire"];
         if (WP_AGENTS_HANDLER.includes(agent) && (tc.function?.name?.startsWith("wp_") || tc.function?.name === "scrape_page")) {
           try {
             const { WPClient } = await import("../_shared/wpClient.ts");
@@ -6182,6 +6302,108 @@ RULES:
           }
         }
 
+        // Empire — diagnose_platform handler
+        if (tc.function?.name === "diagnose_platform") {
+          try {
+            const args = JSON.parse(tc.function.arguments || "{}");
+            const diagnostics: any = { target: args.target, issues: [], healthy: [], timestamp: new Date().toISOString() };
+
+            // ERP diagnostics
+            if (args.target === "erp" || args.target === "all") {
+              // Check machines
+              const { data: downMachines } = await svcClient.from("machines").select("id, name, status").in("status", ["blocked", "down"]);
+              if (downMachines?.length) diagnostics.issues.push({ platform: "ERP", area: "Shop Floor", severity: "critical", detail: `${downMachines.length} machine(s) down/blocked: ${downMachines.map((m: any) => m.name).join(", ")}` });
+              else diagnostics.healthy.push("All machines operational");
+
+              // Check stale human tasks
+              const { data: staleTasks } = await svcClient.from("human_tasks").select("id, title, severity, created_at").eq("status", "open").order("created_at", { ascending: true }).limit(5);
+              const oldTasks = (staleTasks || []).filter((t: any) => new Date(t.created_at) < new Date(Date.now() - 7 * 86400000));
+              if (oldTasks.length) diagnostics.issues.push({ platform: "ERP", area: "Tasks", severity: "warning", detail: `${oldTasks.length} stale task(s) open >7 days` });
+
+              // Check open fix requests
+              const { data: fixReqs } = await svcClient.from("vizzy_fix_requests" as any).select("id, description, affected_area, status").eq("status", "open").limit(10);
+              if ((fixReqs as any[])?.length) diagnostics.issues.push({ platform: "ERP", area: "Fix Queue", severity: "warning", detail: `${(fixReqs as any[]).length} open fix request(s)`, items: fixReqs });
+              else diagnostics.healthy.push("Fix request queue clear");
+
+              // Check overdue deliveries
+              const { data: overdueDeliveries } = await svcClient.from("deliveries").select("id, delivery_number, scheduled_date, status").eq("status", "planned").lt("scheduled_date", new Date().toISOString().split("T")[0]).limit(5);
+              if (overdueDeliveries?.length) diagnostics.issues.push({ platform: "ERP", area: "Deliveries", severity: "warning", detail: `${overdueDeliveries.length} overdue delivery(ies)` });
+              else diagnostics.healthy.push("Deliveries on schedule");
+            }
+
+            // WordPress diagnostics
+            if (args.target === "wordpress" || args.target === "all") {
+              try {
+                const { WPClient } = await import("../_shared/wpClient.ts");
+                const wp = new WPClient();
+                // Check draft posts (may need publishing)
+                const drafts = await wp.listPosts({ status: "draft", per_page: "5" });
+                if (Array.isArray(drafts) && drafts.length) diagnostics.issues.push({ platform: "WordPress", area: "Content", severity: "info", detail: `${drafts.length} draft post(s) pending review` });
+                else diagnostics.healthy.push("WordPress: no pending drafts");
+
+                // Quick homepage SEO check
+                try {
+                  const homeRes = await fetch("https://rebar.shop", { headers: { "User-Agent": "ArchitectBot/1.0" } });
+                  if (homeRes.ok) {
+                    const html = await homeRes.text();
+                    const hasTitle = /<title[^>]*>[\s\S]+?<\/title>/i.test(html);
+                    const hasMeta = /<meta[^>]*name=["']description["']/i.test(html);
+                    if (!hasTitle) diagnostics.issues.push({ platform: "WordPress", area: "SEO", severity: "critical", detail: "Homepage missing <title> tag" });
+                    if (!hasMeta) diagnostics.issues.push({ platform: "WordPress", area: "SEO", severity: "warning", detail: "Homepage missing meta description" });
+                    if (hasTitle && hasMeta) diagnostics.healthy.push("WordPress homepage SEO OK");
+                  }
+                } catch (_) { diagnostics.issues.push({ platform: "WordPress", area: "Connectivity", severity: "warning", detail: "Could not reach rebar.shop" }); }
+              } catch (wpErr) {
+                diagnostics.issues.push({ platform: "WordPress", area: "API", severity: "warning", detail: `WP API error: ${wpErr instanceof Error ? wpErr.message : "Unknown"}` });
+              }
+            }
+
+            // Odoo diagnostics
+            if (args.target === "odoo" || args.target === "all") {
+              try {
+                // Check for leads without customer_id (sync issue)
+                const { data: orphanLeads } = await svcClient.from("odoo_leads").select("id, name").is("customer_id", null).eq("active", true).limit(10);
+                if (orphanLeads?.length) diagnostics.issues.push({ platform: "Odoo", area: "CRM Sync", severity: "warning", detail: `${orphanLeads.length} lead(s) without linked customer` });
+                else diagnostics.healthy.push("Odoo leads all linked to customers");
+
+                // Check for recent sync
+                const { data: recentSync } = await svcClient.from("activity_events").select("created_at").eq("source", "odoo_sync").order("created_at", { ascending: false }).limit(1);
+                if (!recentSync?.length) {
+                  diagnostics.issues.push({ platform: "Odoo", area: "Sync", severity: "critical", detail: "No Odoo sync events found — sync may be broken" });
+                } else {
+                  const lastSync = new Date(recentSync[0].created_at);
+                  const hoursSince = (Date.now() - lastSync.getTime()) / 3600000;
+                  if (hoursSince > 24) diagnostics.issues.push({ platform: "Odoo", area: "Sync", severity: "warning", detail: `Last Odoo sync was ${Math.round(hoursSince)}h ago` });
+                  else diagnostics.healthy.push(`Odoo sync healthy (last: ${Math.round(hoursSince)}h ago)`);
+                }
+              } catch (_) {
+                diagnostics.issues.push({ platform: "Odoo", area: "Tables", severity: "info", detail: "Odoo tables not found — sync may not be configured" });
+              }
+            }
+
+            seoToolResults.push({ id: tc.id, name: "diagnose_platform", result: diagnostics });
+          } catch (e) {
+            console.error("diagnose_platform error:", e);
+            seoToolResults.push({ id: tc.id, name: "diagnose_platform", result: { error: e instanceof Error ? e.message : "Diagnostics failed" } });
+          }
+        }
+
+        // Empire — create_fix_request handler
+        if (tc.function?.name === "create_fix_request") {
+          try {
+            const args = JSON.parse(tc.function.arguments || "{}");
+            const { error } = await svcClient.from("vizzy_fix_requests" as any).insert({
+              user_id: user.id,
+              description: args.description,
+              affected_area: args.affected_area,
+              status: "open",
+            } as any);
+            seoToolResults.push({ id: tc.id, name: "create_fix_request", result: error ? { error: error.message } : { success: true, message: `Fix request created: ${args.affected_area}` } });
+          } catch (e) {
+            seoToolResults.push({ id: tc.id, name: "create_fix_request", result: { error: e instanceof Error ? e.message : "Failed" } });
+          }
+        }
+
         if (tc.function?.name === "create_notifications") {
           try {
             const args = JSON.parse(tc.function.arguments);
@@ -6268,14 +6490,14 @@ RULES:
           }),
         ];
 
-        const followUp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        const followUp = await fetch(aiUrl, {
           method: "POST",
           headers: {
-            "Authorization": `Bearer ${LOVABLE_API_KEY}`,
+            "Authorization": aiAuthHeader,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            model: modelConfig.model,
+            model: aiModel,
             messages: toolResultMessages,
             max_tokens: modelConfig.maxTokens,
             temperature: modelConfig.temperature,
