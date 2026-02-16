@@ -1,15 +1,19 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { optionalAuth, corsHeaders } from "../_shared/auth.ts";
 
+interface VisionRequest {
+  imageUrl?: string;
+  imageBase64?: string;
+  features?: string[];
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    // Auth check — allow internal calls (from other edge functions) and authenticated users
     const userId = await optionalAuth(req);
-    // Internal calls from edge functions use service anon key; external calls must have auth
     const isInternalCall = req.headers.get("apikey") === Deno.env.get("SUPABASE_ANON_KEY");
     if (!userId && !isInternalCall) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -17,30 +21,7 @@ serve(async (req) => {
       });
     }
 
-    let credentialsJson = Deno.env.get("GOOGLE_VISION_CREDENTIALS");
-    if (!credentialsJson) {
-      throw new Error("GOOGLE_VISION_CREDENTIALS not configured");
-    }
-
-    // Clean up potential formatting issues with the secret
-    credentialsJson = credentialsJson.trim();
-    // Remove BOM or invisible chars
-    if (credentialsJson.charCodeAt(0) === 0xFEFF) {
-      credentialsJson = credentialsJson.slice(1);
-    }
-    // If wrapped in extra quotes, unwrap
-    if (credentialsJson.startsWith('"') && credentialsJson.endsWith('"')) {
-      credentialsJson = JSON.parse(credentialsJson);
-    }
-    
-    console.log("Credentials first 20 chars:", credentialsJson.substring(0, 20));
-    
-    const credentials = JSON.parse(credentialsJson);
-    
-    // Get access token using service account
-    const accessToken = await getAccessToken(credentials);
-    
-    const { imageUrl, imageBase64, features = ["TEXT_DETECTION"] }: VisionRequest = await req.json();
+    const { imageUrl, imageBase64 }: VisionRequest = await req.json();
 
     if (!imageUrl && !imageBase64) {
       return new Response(
@@ -49,58 +30,53 @@ serve(async (req) => {
       );
     }
 
-    // Build image source
-    const imageSource = imageUrl 
-      ? { source: { imageUri: imageUrl } }
-      : { content: imageBase64 };
-
-    // Build feature requests
-    const featureRequests = features.map(type => ({ type, maxResults: 50 }));
-
-    // Call Google Vision API
-    const visionResponse = await fetch(
-      "https://vision.googleapis.com/v1/images:annotate",
-      {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          requests: [
-            {
-              image: imageSource,
-              features: featureRequests,
-            },
-          ],
-        }),
-      }
-    );
-
-    if (!visionResponse.ok) {
-      const errorText = await visionResponse.text();
-      console.error("Vision API error:", errorText);
-      throw new Error(`Vision API error: ${visionResponse.status}`);
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) {
+      throw new Error("LOVABLE_API_KEY not configured");
     }
 
-    const visionData = await visionResponse.json();
-    const response = visionData.responses?.[0] || {};
+    // Build image content for Gemini vision
+    const imageContent = imageUrl
+      ? { type: "image_url" as const, image_url: { url: imageUrl } }
+      : { type: "image_url" as const, image_url: { url: `data:image/jpeg;base64,${imageBase64}` } };
 
-    // Extract text annotations
-    const textAnnotations = response.textAnnotations || [];
-    const fullText = textAnnotations[0]?.description || "";
-    
-    // Extract individual text blocks with bounding boxes
-    const textBlocks = textAnnotations.slice(1).map((annotation: any) => ({
-      text: annotation.description,
-      boundingPoly: annotation.boundingPoly,
-    }));
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: "Extract ALL text from this image exactly as it appears, preserving layout and structure. Return only the extracted text, nothing else.",
+              },
+              imageContent,
+            ],
+          },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Gemini API error:", response.status, errorText);
+      throw new Error(`Gemini API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const fullText = data.choices?.[0]?.message?.content || "";
 
     return new Response(
       JSON.stringify({
         fullText,
-        textBlocks,
-        rawResponse: response,
+        textBlocks: [],
+        rawResponse: data,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
@@ -113,108 +89,3 @@ serve(async (req) => {
     );
   }
 });
-
-// Get access token from service account credentials
-async function getAccessToken(credentials: any): Promise<string> {
-  const now = Math.floor(Date.now() / 1000);
-  const expiry = now + 3600; // 1 hour
-
-  // Create JWT header and payload
-  const header = {
-    alg: "RS256",
-    typ: "JWT",
-  };
-
-  const payload = {
-    iss: credentials.client_email,
-    scope: "https://www.googleapis.com/auth/cloud-vision",
-    aud: credentials.token_uri,
-    iat: now,
-    exp: expiry,
-  };
-
-  // Sign JWT
-  const jwt = await signJwt(header, payload, credentials.private_key);
-
-  // Exchange JWT for access token
-  const tokenResponse = await fetch(credentials.token_uri, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: new URLSearchParams({
-      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-      assertion: jwt,
-    }),
-  });
-
-  if (!tokenResponse.ok) {
-    const errorText = await tokenResponse.text();
-    console.error("Token exchange error:", errorText);
-    throw new Error(`Failed to get access token: ${tokenResponse.status}`);
-  }
-
-  const tokenData = await tokenResponse.json();
-  return tokenData.access_token;
-}
-
-// Sign JWT using RS256
-async function signJwt(header: any, payload: any, privateKeyPem: string): Promise<string> {
-  const encoder = new TextEncoder();
-  
-  // Base64URL encode header and payload
-  const headerB64 = base64UrlEncode(JSON.stringify(header));
-  const payloadB64 = base64UrlEncode(JSON.stringify(payload));
-  const signatureInput = `${headerB64}.${payloadB64}`;
-
-  // Import private key
-  const privateKey = await importPrivateKey(privateKeyPem);
-
-  // Sign
-  const signature = await crypto.subtle.sign(
-    { name: "RSASSA-PKCS1-v1_5" },
-    privateKey,
-    encoder.encode(signatureInput)
-  );
-
-  const signatureB64 = base64UrlEncode(new Uint8Array(signature));
-  return `${signatureInput}.${signatureB64}`;
-}
-
-// Import PEM private key
-async function importPrivateKey(pem: string): Promise<CryptoKey> {
-  // Remove PEM headers and convert to binary
-  const pemContents = pem
-    .replace("-----BEGIN PRIVATE KEY-----", "")
-    .replace("-----END PRIVATE KEY-----", "")
-    .replace(/\s/g, "");
-  
-  const binaryDer = Uint8Array.from(atob(pemContents), c => c.charCodeAt(0));
-
-  return await crypto.subtle.importKey(
-    "pkcs8",
-    binaryDer,
-    {
-      name: "RSASSA-PKCS1-v1_5",
-      hash: "SHA-256",
-    },
-    false,
-    ["sign"]
-  );
-}
-
-// Base64URL encode
-function base64UrlEncode(input: string | Uint8Array): string {
-  let base64: string;
-  
-  if (typeof input === "string") {
-    base64 = btoa(input);
-  } else {
-    base64 = btoa(String.fromCharCode(...input));
-  }
-  
-  return base64
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/, "");
-}
