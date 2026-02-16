@@ -4658,28 +4658,58 @@ serve(async (req) => {
       }
     }
 
-    // For empire agent, analyze attached files (images/PDFs)
+    // For empire agent, analyze attached files using Google Vision API (OCR) for images
     if (agent === "empire" && attachedFiles.length > 0) {
-      console.log(`[Empire] Processing ${attachedFiles.length} files for analysis...`);
+      console.log(`[Empire] Processing ${attachedFiles.length} files with Google Vision API...`);
       let fileAnalysisText = "";
       for (const file of attachedFiles) {
         const isImage = /\.(jpg|jpeg|png|gif|bmp|webp|tiff?)$/i.test(file.name);
         const isPdf = /\.pdf$/i.test(file.name);
-        if (isImage || isPdf) {
-          const prompt = isImage
-            ? "Describe everything you see in this image in detail. Include any text, numbers, diagrams, charts, labels, UI elements, errors, or other relevant information."
-            : "Extract and describe all content from this document in detail. Include text, tables, figures, and any other relevant information.";
-          console.log(`[Empire] Analyzing ${isPdf ? 'PDF' : 'image'}: ${file.name}`);
-          const result = await analyzeDocumentWithGemini(file.url, file.name, prompt);
-          if (result.text) {
-            fileAnalysisText += `\n\n--- Analysis of ${file.name} ---\n${result.text}`;
-          } else if (result.error) {
-            fileAnalysisText += `\n\n--- ${file.name}: Analysis failed: ${result.error} ---`;
+        if (isImage) {
+          // Use Google Vision API for image OCR + analysis
+          console.log(`[Empire] Running Google Vision OCR on image: ${file.name}`);
+          const ocrResult = await performOCR(file.url);
+          if (ocrResult.fullText) {
+            fileAnalysisText += `\n\n--- Google Vision OCR of ${file.name} ---\n${ocrResult.fullText}`;
+            if (ocrResult.textBlocks.length > 0) {
+              fileAnalysisText += `\n\n[Detected ${ocrResult.textBlocks.length} text regions]`;
+            }
+          } else if (ocrResult.error) {
+            // Fallback to Gemini if Vision API fails
+            console.log(`[Empire] Vision API failed for ${file.name}, falling back to Gemini...`);
+            const result = await analyzeDocumentWithGemini(file.url, file.name, 
+              "Describe everything you see in this image in detail. Include any text, numbers, diagrams, charts, labels, UI elements, errors, or other relevant information.");
+            if (result.text) {
+              fileAnalysisText += `\n\n--- Analysis of ${file.name} (Gemini fallback) ---\n${result.text}`;
+            } else {
+              fileAnalysisText += `\n\n--- ${file.name}: Analysis failed: ${ocrResult.error} ---`;
+            }
+          }
+        } else if (isPdf) {
+          // For PDFs, convert to images then OCR each page with Google Vision
+          console.log(`[Empire] Converting PDF to images for Vision OCR: ${file.name}`);
+          const pdfResult = await convertPdfToImages(file.url, 10);
+          if (pdfResult.pages.length > 0) {
+            fileAnalysisText += `\n\n--- Google Vision OCR of ${file.name} (${pdfResult.pageCount} pages) ---`;
+            for (let pi = 0; pi < pdfResult.pages.length; pi++) {
+              const pageOcr = await performOCROnBase64(pdfResult.pages[pi]);
+              if (pageOcr.fullText) {
+                fileAnalysisText += `\n\n[Page ${pi + 1}]\n${pageOcr.fullText}`;
+              }
+            }
+          } else {
+            // Fallback to Gemini for PDFs if conversion fails
+            console.log(`[Empire] PDF conversion failed, falling back to Gemini for ${file.name}`);
+            const result = await analyzeDocumentWithGemini(file.url, file.name, 
+              "Extract and describe all content from this document in detail. Include text, tables, figures, and any other relevant information.");
+            if (result.text) {
+              fileAnalysisText += `\n\n--- Analysis of ${file.name} (Gemini fallback) ---\n${result.text}`;
+            }
           }
         }
       }
       if (fileAnalysisText) {
-        message = message + "\n\n[Attached File Analysis]" + fileAnalysisText;
+        message = message + "\n\n[Attached File Analysis — Google Vision]" + fileAnalysisText;
       }
     }
 
