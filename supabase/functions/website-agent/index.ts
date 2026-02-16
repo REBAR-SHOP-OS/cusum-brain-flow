@@ -98,6 +98,24 @@ You have access to LIVE tools that let you search our product catalog, look up r
 ## DATA FIREWALL — STRICTLY ENFORCED
 NEVER share: financial data, invoices, bills, bank balances, AR/AP, profit margins, employee salaries, internal meeting notes, strategic plans, lead pipeline data, or internal communications. If asked about pricing, always direct customers to get a formal quote — do not guess or reveal internal cost structures.
 
+## File Upload Handling
+When a visitor uploads or describes a file:
+
+1. DRAWING DETECTION: If the file appears to be a structural/engineering drawing (mentions footings, beams, columns, slabs, structural details, has drawing numbers):
+   - Collect visitor name and email if not already known
+   - Use create_lead_from_drawing to create a pipeline lead
+   - Let them know the estimating team will prepare a detailed quote
+
+2. BARLIST DETECTION: If the file appears to be a bar bending schedule / barlist / rebar schedule (has columns like Mark, Bar Size, Shape, Length, Qty):
+   - Use process_barlist_quote to extract items and generate instant pricing
+   - Present the rough quotation in the chat
+   - Note that formal pricing will follow from the team
+
+3. QUOTATION GENERATION: When you have enough info to create a quote:
+   - Use generate_quotation to produce a branded quote document
+   - Always include HST 13% tax
+   - Include standard terms and delivery notes
+
 ## Guidelines
 - Keep responses concise (2-4 sentences when possible)
 - Use Australian English spelling
@@ -262,6 +280,92 @@ const tools = [
         type: "object",
         properties: {},
         required: [],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "generate_quotation",
+      description: "Generate a branded quotation document with line items, taxes, and totals. Returns formatted HTML the visitor can print/save as PDF.",
+      parameters: {
+        type: "object",
+        properties: {
+          customer_name: { type: "string", description: "Customer's full name" },
+          customer_email: { type: "string", description: "Customer's email address" },
+          project_name: { type: "string", description: "Project name or address" },
+          items: {
+            type: "array",
+            description: "Line items for the quotation",
+            items: {
+              type: "object",
+              properties: {
+                description: { type: "string" },
+                quantity: { type: "number" },
+                unit_price: { type: "number" },
+              },
+              required: ["description", "quantity", "unit_price"],
+              additionalProperties: false,
+            },
+          },
+          inclusions: { type: "array", items: { type: "string" }, description: "What's included" },
+          exclusions: { type: "array", items: { type: "string" }, description: "What's excluded" },
+          notes: { type: "string", description: "Additional notes" },
+        },
+        required: ["customer_name", "customer_email", "items"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "create_lead_from_drawing",
+      description: "Create a new sales lead when a visitor uploads a structural drawing. The estimating team will follow up.",
+      parameters: {
+        type: "object",
+        properties: {
+          customer_name: { type: "string", description: "Customer's name" },
+          customer_email: { type: "string", description: "Customer's email" },
+          project_name: { type: "string", description: "Project name or description" },
+          file_description: { type: "string", description: "Description of the uploaded drawing" },
+          notes: { type: "string", description: "Additional context" },
+        },
+        required: ["customer_name", "customer_email"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "process_barlist_quote",
+      description: "Process a bar bending schedule / barlist and generate an instant rough quotation with estimated pricing. Use when visitor uploads or pastes barlist data.",
+      parameters: {
+        type: "object",
+        properties: {
+          customer_name: { type: "string", description: "Customer's name" },
+          customer_email: { type: "string", description: "Customer's email" },
+          project_name: { type: "string", description: "Project name" },
+          barlist_items: {
+            type: "array",
+            description: "Parsed barlist items",
+            items: {
+              type: "object",
+              properties: {
+                mark: { type: "string" },
+                bar_code: { type: "string", description: "e.g. N12, N16, N20" },
+                quantity: { type: "number" },
+                length_mm: { type: "number", description: "Cut length in mm" },
+                shape_type: { type: "string", description: "Shape code or 'straight'" },
+              },
+              required: ["bar_code", "quantity", "length_mm"],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ["customer_name", "customer_email", "barlist_items"],
         additionalProperties: false,
       },
     },
@@ -462,6 +566,299 @@ async function executeTool(
           minimum_order: "No strict minimum, but delivery fees may apply for small orders",
           delivery_hours: "Monday–Friday 6:00 AM – 4:00 PM",
           notes: "Same-day delivery available for urgent orders placed before 10 AM (Sydney metro only). Contact sales@rebar.shop or call (02) 8188 3312 for special arrangements.",
+        });
+      }
+
+      case "generate_quotation": {
+        const customerName = String(args.customer_name || "").slice(0, 200);
+        const customerEmail = String(args.customer_email || "").slice(0, 200);
+        const projectName = String(args.project_name || "").slice(0, 300);
+        const items = Array.isArray(args.items) ? args.items.slice(0, 30) : [];
+        const inclusions = Array.isArray(args.inclusions) ? args.inclusions.slice(0, 10) : [];
+        const exclusions = Array.isArray(args.exclusions) ? args.exclusions.slice(0, 10) : [];
+        const notes = String(args.notes || "").slice(0, 1000);
+
+        if (!customerName || !customerEmail || items.length === 0) {
+          return JSON.stringify({ error: "Customer name, email, and at least one item are required" });
+        }
+
+        // Generate quote number
+        const { data: seqData } = await supabase.rpc("nextval_quote_request_seq");
+        const year = new Date().getFullYear();
+        let seqNum = Number(seqData) || 1;
+        if (!seqData) {
+          const { count } = await supabase.from("quote_requests").select("id", { count: "exact", head: true });
+          seqNum = (count || 0) + 1;
+        }
+        const quoteNumber = `QR-${year}-${String(seqNum).padStart(4, "0")}`;
+
+        // Calculate totals
+        const lineItems = items.map((item: any) => {
+          const qty = Number(item.quantity) || 0;
+          const price = Number(item.unit_price) || 0;
+          return { description: String(item.description || ""), quantity: qty, unit_price: price, amount: qty * price };
+        });
+        const subtotal = lineItems.reduce((s: number, i: any) => s + i.amount, 0);
+        const taxRate = 0.13;
+        const taxAmount = subtotal * taxRate;
+        const total = subtotal + taxAmount;
+        const today = new Date();
+        const quoteDate = today.toLocaleDateString("en-CA");
+        const expiryDate = new Date(today.getTime() + 30 * 86400000).toLocaleDateString("en-CA");
+
+        // Save to DB
+        await supabase.from("quote_requests").insert({
+          quote_number: quoteNumber,
+          customer_name: customerName,
+          customer_email: customerEmail,
+          project_name: projectName || null,
+          items: lineItems,
+          notes: notes || null,
+          status: "new",
+          source: "website_chat",
+        });
+
+        // Build branded HTML
+        const fmt = (n: number) => "$" + n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+        const inclusionHtml = inclusions.length > 0 ? `<div style="margin-bottom:12px"><p style="font-weight:bold;font-size:13px;margin-bottom:4px">Inclusions:</p><ul style="font-size:12px;color:#555;margin:0;padding-left:16px">${inclusions.map((i: string) => `<li>✅ ${i}</li>`).join("")}</ul></div>` : "";
+        const exclusionHtml = exclusions.length > 0 ? `<div style="margin-bottom:12px"><p style="font-weight:bold;font-size:13px;margin-bottom:4px">Exclusions:</p><ul style="font-size:12px;color:#555;margin:0;padding-left:16px">${exclusions.map((e: string) => `<li>➖ ${e}</li>`).join("")}</ul></div>` : "";
+
+        const quotationHtml = `
+<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:700px;margin:0 auto;padding:24px;background:#fff;color:#222">
+  <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:20px">
+    <div>
+      <h1 style="font-size:18px;font-weight:bold;margin:0">Rebar.Shop Inc</h1>
+      <p style="font-size:11px;color:#888;margin:2px 0">9 Cedar Ave, Thornhill L3T 3W1, Canada</p>
+    </div>
+    <div style="text-align:right">
+      <h2 style="font-size:20px;font-weight:900;margin:0">Quotation ${quoteNumber}</h2>
+      <p style="font-size:12px;color:#888;margin:2px 0">Date: ${quoteDate}</p>
+      <p style="font-size:12px;color:#888;margin:2px 0">Valid Until: ${expiryDate}</p>
+    </div>
+  </div>
+  <div style="background:#f8f8f8;padding:12px;border-radius:8px;margin-bottom:16px">
+    <p style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#999;margin:0 0 4px">Customer</p>
+    <p style="font-size:14px;font-weight:600;margin:0">${customerName}</p>
+    <p style="font-size:12px;color:#666;margin:2px 0">${customerEmail}</p>
+    ${projectName ? `<p style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#999;margin:8px 0 4px">Project</p><p style="font-size:14px;font-weight:600;margin:0">${projectName}</p>` : ""}
+  </div>
+  <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px">
+    <thead><tr style="border-bottom:2px solid #222">
+      <th style="text-align:left;padding:6px 0;font-weight:bold">Description</th>
+      <th style="text-align:right;padding:6px 0;font-weight:bold;width:60px">Qty</th>
+      <th style="text-align:right;padding:6px 0;font-weight:bold;width:80px">Unit Price</th>
+      <th style="text-align:right;padding:6px 0;font-weight:bold;width:90px">Amount</th>
+    </tr></thead>
+    <tbody>${lineItems.map((li: any) => `<tr style="border-bottom:1px solid #eee"><td style="padding:8px 4px 8px 0;color:#555;font-size:12px">${li.description}</td><td style="padding:8px 0;text-align:right">${li.quantity.toFixed(2)}</td><td style="padding:8px 0;text-align:right">${fmt(li.unit_price)}</td><td style="padding:8px 0;text-align:right;font-weight:600">${fmt(li.amount)}</td></tr>`).join("")}</tbody>
+  </table>
+  ${inclusionHtml}${exclusionHtml}
+  <div style="display:flex;justify-content:flex-end">
+    <div style="width:220px;font-size:13px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:#888">Subtotal:</span><span>${fmt(subtotal)}</span></div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:#888">HST 13%:</span><span>${fmt(taxAmount)}</span></div>
+      <div style="display:flex;justify-content:space-between;font-weight:bold;font-size:16px;border-top:2px solid #222;padding-top:8px;margin-top:4px"><span>Total:</span><span>${fmt(total)}</span></div>
+    </div>
+  </div>
+  <div style="margin-top:24px;text-align:center;font-size:10px;color:#aaa;border-top:1px solid #eee;padding-top:8px">
+    <p>☎ 6472609403 · ✉ accounting@rebar.shop · http://www.rebar.shop</p>
+    <p>761487149RT0001</p>
+    <p style="margin-top:4px;font-style:italic">⚠️ Budget Estimate — Subject to Formal Quote</p>
+  </div>
+</div>`;
+
+        return JSON.stringify({
+          success: true,
+          quote_number: quoteNumber,
+          quotation_html: quotationHtml,
+          subtotal, tax_amount: taxAmount, total,
+          message: `Quotation ${quoteNumber} generated. Total: ${fmt(total)} (incl. HST 13%).`,
+        });
+      }
+
+      case "create_lead_from_drawing": {
+        const customerName = String(args.customer_name || "").slice(0, 200);
+        const customerEmail = String(args.customer_email || "").slice(0, 200);
+        const projectName = String(args.project_name || "").slice(0, 300);
+        const fileDesc = String(args.file_description || "Drawing upload").slice(0, 500);
+        const notes = String(args.notes || "").slice(0, 1000);
+
+        if (!customerName || !customerEmail) {
+          return JSON.stringify({ error: "Customer name and email are required" });
+        }
+
+        // Create lead
+        const { data: lead, error: leadErr } = await supabase.from("leads").insert({
+          title: `Drawing: ${projectName || customerName}`,
+          company_id: "a0000000-0000-0000-0000-000000000001",
+          stage: "new",
+          source: "website_chat",
+          expected_value: 0,
+          probability: 50,
+          notes: `Drawing uploaded via website chat.\nCustomer: ${customerName} (${customerEmail})\nFile: ${fileDesc}\n${notes}`,
+        }).select("id").single();
+
+        if (leadErr) return JSON.stringify({ error: "Failed to create lead: " + leadErr.message });
+
+        // Create quote request linked to lead
+        const { data: seqData2 } = await supabase.rpc("nextval_quote_request_seq");
+        const yr = new Date().getFullYear();
+        let sn = Number(seqData2) || 1;
+        if (!seqData2) {
+          const { count } = await supabase.from("quote_requests").select("id", { count: "exact", head: true });
+          sn = (count || 0) + 1;
+        }
+        const qn = `QR-${yr}-${String(sn).padStart(4, "0")}`;
+
+        await supabase.from("quote_requests").insert({
+          quote_number: qn,
+          customer_name: customerName,
+          customer_email: customerEmail,
+          project_name: projectName || null,
+          items: [{ description: fileDesc, bar_code: "", quantity: "1", unit: "drawing" }],
+          notes: notes || null,
+          status: "new",
+          source: "website_chat",
+        });
+
+        // Log activity
+        await supabase.from("activity_events").insert({
+          company_id: "a0000000-0000-0000-0000-000000000001",
+          entity_type: "lead",
+          entity_id: lead.id,
+          event_type: "lead_created",
+          description: `Website chat drawing upload from ${customerName}`,
+          actor_type: "system",
+          source: "website_chat",
+        });
+
+        return JSON.stringify({
+          success: true,
+          lead_id: lead.id,
+          quote_number: qn,
+          message: `Lead created and drawing forwarded to the estimating team. Quote reference: ${qn}. They'll prepare a detailed quote and reach out to ${customerEmail}.`,
+        });
+      }
+
+      case "process_barlist_quote": {
+        const customerName = String(args.customer_name || "").slice(0, 200);
+        const customerEmail = String(args.customer_email || "").slice(0, 200);
+        const projectName = String(args.project_name || "").slice(0, 300);
+        const barlistItems = Array.isArray(args.barlist_items) ? args.barlist_items.slice(0, 200) : [];
+
+        if (!customerName || !customerEmail || barlistItems.length === 0) {
+          return JSON.stringify({ error: "Customer name, email, and barlist items are required" });
+        }
+
+        // Standard pricing per kg by bar code
+        const pricePerKg: Record<string, number> = {
+          "N12": 2.20, "N16": 2.10, "N20": 2.00, "N24": 1.95, "N28": 1.90, "N32": 1.85, "N36": 1.80,
+          "10M": 2.20, "15M": 2.10, "20M": 2.00, "25M": 1.95, "30M": 1.90, "35M": 1.85,
+        };
+        const massPerM: Record<string, number> = {
+          "N12": 0.888, "N16": 1.58, "N20": 2.47, "N24": 3.55, "N28": 4.83, "N32": 6.31, "N36": 7.99,
+          "10M": 0.785, "15M": 1.570, "20M": 2.466, "25M": 3.925, "30M": 5.495, "35M": 7.850,
+        };
+        const fabSurcharge = 0.30; // per kg for bends
+
+        const quoteItems = barlistItems.map((item: any) => {
+          const bc = String(item.bar_code || "").toUpperCase();
+          const qty = Number(item.quantity) || 0;
+          const lengthMm = Number(item.length_mm) || 0;
+          const lengthM = lengthMm / 1000;
+          const mass = massPerM[bc] || 2.0;
+          const weightKg = qty * lengthM * mass;
+          const isBend = item.shape_type && item.shape_type !== "" && item.shape_type !== "straight" && item.shape_type !== "1";
+          const rate = (pricePerKg[bc] || 2.00) + (isBend ? fabSurcharge : 0);
+          const amount = weightKg * rate;
+          return {
+            description: `${bc} ${item.mark ? "Mark " + item.mark + " " : ""}x${qty} @ ${lengthMm}mm${isBend ? " (bent)" : ""}`,
+            quantity: weightKg,
+            unit_price: rate,
+            amount,
+            bar_code: bc,
+            weight_kg: weightKg,
+          };
+        });
+
+        const subtotal = quoteItems.reduce((s: number, i: any) => s + i.amount, 0);
+        const taxAmount = subtotal * 0.13;
+        const total = subtotal + taxAmount;
+        const fmt = (n: number) => "$" + n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+
+        // Generate quote number + save
+        const { data: seqData3 } = await supabase.rpc("nextval_quote_request_seq");
+        const yr3 = new Date().getFullYear();
+        let sn3 = Number(seqData3) || 1;
+        if (!seqData3) {
+          const { count } = await supabase.from("quote_requests").select("id", { count: "exact", head: true });
+          sn3 = (count || 0) + 1;
+        }
+        const qn3 = `QR-${yr3}-${String(sn3).padStart(4, "0")}`;
+        const today3 = new Date();
+        const quoteDate3 = today3.toLocaleDateString("en-CA");
+        const expiryDate3 = new Date(today3.getTime() + 30 * 86400000).toLocaleDateString("en-CA");
+
+        await supabase.from("quote_requests").insert({
+          quote_number: qn3,
+          customer_name: customerName,
+          customer_email: customerEmail,
+          project_name: projectName || null,
+          items: quoteItems,
+          notes: "Auto-generated from barlist upload. Budget estimate — subject to formal review.",
+          status: "new",
+          source: "website_chat",
+        });
+
+        const quotationHtml = `
+<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:700px;margin:0 auto;padding:24px;background:#fff;color:#222">
+  <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:20px">
+    <div>
+      <h1 style="font-size:18px;font-weight:bold;margin:0">Rebar.Shop Inc</h1>
+      <p style="font-size:11px;color:#888;margin:2px 0">9 Cedar Ave, Thornhill L3T 3W1, Canada</p>
+    </div>
+    <div style="text-align:right">
+      <h2 style="font-size:20px;font-weight:900;margin:0">Budget Estimate ${qn3}</h2>
+      <p style="font-size:12px;color:#888;margin:2px 0">Date: ${quoteDate3}</p>
+      <p style="font-size:12px;color:#888;margin:2px 0">Valid Until: ${expiryDate3}</p>
+    </div>
+  </div>
+  <div style="background:#f8f8f8;padding:12px;border-radius:8px;margin-bottom:16px">
+    <p style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#999;margin:0 0 4px">Customer</p>
+    <p style="font-size:14px;font-weight:600;margin:0">${customerName}</p>
+    <p style="font-size:12px;color:#666;margin:2px 0">${customerEmail}</p>
+    ${projectName ? `<p style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#999;margin:8px 0 4px">Project</p><p style="font-size:14px;font-weight:600;margin:0">${projectName}</p>` : ""}
+  </div>
+  <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px">
+    <thead><tr style="border-bottom:2px solid #222">
+      <th style="text-align:left;padding:6px 0;font-weight:bold">Description</th>
+      <th style="text-align:right;padding:6px 0;font-weight:bold;width:70px">Weight (kg)</th>
+      <th style="text-align:right;padding:6px 0;font-weight:bold;width:70px">Rate/kg</th>
+      <th style="text-align:right;padding:6px 0;font-weight:bold;width:90px">Amount</th>
+    </tr></thead>
+    <tbody>${quoteItems.map((li: any) => `<tr style="border-bottom:1px solid #eee"><td style="padding:8px 4px 8px 0;color:#555;font-size:12px">${li.description}</td><td style="padding:8px 0;text-align:right">${li.weight_kg.toFixed(1)}</td><td style="padding:8px 0;text-align:right">${fmt(li.unit_price)}</td><td style="padding:8px 0;text-align:right;font-weight:600">${fmt(li.amount)}</td></tr>`).join("")}</tbody>
+  </table>
+  <div style="display:flex;justify-content:flex-end">
+    <div style="width:220px;font-size:13px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:#888">Subtotal:</span><span>${fmt(subtotal)}</span></div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:#888">HST 13%:</span><span>${fmt(taxAmount)}</span></div>
+      <div style="display:flex;justify-content:space-between;font-weight:bold;font-size:16px;border-top:2px solid #222;padding-top:8px;margin-top:4px"><span>Total:</span><span>${fmt(total)}</span></div>
+    </div>
+  </div>
+  <div style="margin-top:24px;text-align:center;font-size:10px;color:#aaa;border-top:1px solid #eee;padding-top:8px">
+    <p>☎ 6472609403 · ✉ accounting@rebar.shop · http://www.rebar.shop</p>
+    <p>761487149RT0001</p>
+    <p style="margin-top:4px;font-style:italic;color:#c00">⚠️ BUDGET ESTIMATE ONLY — Subject to Formal Quote after review</p>
+  </div>
+</div>`;
+
+        return JSON.stringify({
+          success: true,
+          quote_number: qn3,
+          quotation_html: quotationHtml,
+          total_weight_kg: quoteItems.reduce((s: number, i: any) => s + i.weight_kg, 0),
+          subtotal, tax_amount: taxAmount, total,
+          item_count: quoteItems.length,
+          message: `Budget estimate ${qn3} generated from ${quoteItems.length} barlist items. Total: ${fmt(total)} (incl. HST 13%). This is an estimate — our team will review and send a formal quote.`,
         });
       }
 
