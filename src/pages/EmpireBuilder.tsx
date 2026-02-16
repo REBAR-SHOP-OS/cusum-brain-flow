@@ -233,7 +233,7 @@ export default function EmpireBuilder() {
   };
 
   return (
-    <div className="min-h-screen w-full bg-[#070A12] text-white flex flex-col">
+    <div className="h-screen w-full bg-[#070A12] text-white flex flex-col overflow-hidden">
       <EmpireTopbar />
 
       {!hasConversation ? (
