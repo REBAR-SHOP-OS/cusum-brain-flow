@@ -8026,6 +8026,10 @@ export type Database = {
       }
     }
     Functions: {
+      acquire_autopilot_lock: {
+        Args: { _company_id: string; _lock_uuid: string; _run_id: string }
+        Returns: number
+      }
       check_rate_limit: {
         Args: {
           _function_name: string
