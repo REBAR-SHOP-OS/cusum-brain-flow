@@ -105,7 +105,8 @@ NEVER share: financial data, invoices, bills, bank balances, AR/AP, profit margi
 - For pricing, encourage getting a formal quote — don't guess prices
 - If asked about things outside rebar/construction, politely redirect
 - ALWAYS use tools when relevant — don't guess about products or specs
-- Reference the visitor's current page when it's relevant to their question${pageContext}`;
+- Reference the visitor's current page when it's relevant to their question
+- If the visitor asks to speak with a real person or human agent, respond warmly: "Let me connect you with one of our team members — they'll be with you shortly! Our sales team has been notified." Continue to help while they wait.${pageContext}`;
 }
 
 // ─── Tool Definitions ───
@@ -553,7 +554,19 @@ serve(async (req) => {
       });
     }
 
-    const trimmed = messages.slice(-MAX_CONVERSATION_MESSAGES);
+    // Handle [INIT] message — auto-greeting on panel open
+    const lastMsg = messages[messages.length - 1];
+    const isInit = lastMsg?.role === "user" && lastMsg?.content?.trim() === "[INIT]";
+    
+    let trimmed = messages.slice(-MAX_CONVERSATION_MESSAGES);
+    if (isInit) {
+      // Replace [INIT] with a greeting prompt
+      trimmed = [{
+        role: "user",
+        content: `I just opened the chat widget. I'm currently viewing: ${current_page || "the homepage"}. Please greet me with a warm, contextual welcome message based on the page I'm viewing. Be specific — if I'm on a product page, mention that product. Keep it to 2-3 sentences. Don't be generic.`,
+      }];
+    }
+
     const systemPrompt = buildSystemPrompt(current_page);
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");

@@ -146,6 +146,16 @@ async function handleStart(req: Request, supabase: any) {
     content_type: "system",
   });
 
+  // Fire-and-forget: proactive AI greeting
+  triggerProactiveGreeting(supabase, convo.id, config.company_id, config.id, metadata).catch((e) =>
+    console.error("Proactive greeting error:", e)
+  );
+
+  // Fire-and-forget: notify all team members
+  notifySalesTeam(supabase, config.company_id, visitor_name || "Visitor", metadata).catch((e) =>
+    console.error("Sales notification error:", e)
+  );
+
   return new Response(JSON.stringify({ conversation_id: convo.id, visitor_token: convo.visitor_token }), {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
@@ -355,7 +365,7 @@ async function triggerAiReply(supabase: any, convo: any, visitorMessage: string,
   const messages = [
     {
       role: "system",
-      content: `${widgetConfig.ai_system_prompt || "You are a helpful support assistant."}\n\nDATA FIREWALL: NEVER share financial data, invoices, bills, bank balances, AR/AP, profit margins, employee salaries, internal meeting notes, or strategic plans.\n\n## Knowledge Base Articles:\n${kbContext || "No articles available."}\n\n## Company Knowledge:\n${knowledgeContext || "No entries."}${pageContext}`,
+      content: `${widgetConfig.ai_system_prompt || "You are a helpful support assistant."}\n\nDATA FIREWALL: NEVER share financial data, invoices, bills, bank balances, AR/AP, profit margins, employee salaries, internal meeting notes, or strategic plans.\n\nIMPORTANT: If the visitor asks to speak with a real person or a human agent, respond warmly: "Let me connect you with one of our team members — they'll be with you shortly! Our sales team has been notified." The team can jump in at any time.\n\n## Knowledge Base Articles:\n${kbContext || "No articles available."}\n\n## Company Knowledge:\n${knowledgeContext || "No entries."}${pageContext}`,
     },
     ...(history || []).map((m: any) => ({
       role: m.sender_type === "visitor" ? "user" : "assistant",
@@ -398,6 +408,82 @@ async function triggerAiReply(supabase: any, convo: any, visitorMessage: string,
     sender_type: "bot",
     content: reply.slice(0, 5000),
   });
+}
+
+// ── Proactive AI Greeting ──
+async function triggerProactiveGreeting(supabase: any, conversationId: string, companyId: string, widgetConfigId: string, metadata: any) {
+  const { data: widgetConfig } = await supabase
+    .from("support_widget_configs")
+    .select("ai_enabled, ai_system_prompt")
+    .eq("id", widgetConfigId)
+    .single();
+
+  if (!widgetConfig?.ai_enabled) return;
+
+  const currentPage = metadata?.current_page || "";
+  const city = metadata?.city || "";
+
+  const greetingPrompt = `You are a friendly support assistant. A new visitor just opened the chat widget.${currentPage ? ` They are currently viewing: ${currentPage}` : ""}${city ? ` They appear to be from ${city}.` : ""}
+
+Generate a warm, contextual welcome message (2-3 sentences max). If they're on a product page, reference that product and offer to help with pricing or a quote. If they're on the homepage, welcome them and ask how you can help. Be natural and conversational, not robotic. Do NOT use generic greetings like "How can I help you today?" — be specific based on their page context.
+
+If the visitor asks to speak to a real person at any point, let them know a team member will be with them shortly and that the sales team has been notified.`;
+
+  const apiKey = Deno.env.get("LOVABLE_API_KEY");
+  if (!apiKey) return;
+
+  const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "google/gemini-3-flash-preview",
+      messages: [{ role: "user", content: greetingPrompt }],
+      stream: false,
+    }),
+  });
+
+  if (!aiResponse.ok) return;
+
+  const aiData = await aiResponse.json();
+  const reply = aiData.choices?.[0]?.message?.content;
+  if (!reply) return;
+
+  await supabase.from("support_messages").insert({
+    conversation_id: conversationId,
+    sender_type: "bot",
+    content: reply.slice(0, 2000),
+  });
+}
+
+// ── Notify Sales Team ──
+async function notifySalesTeam(supabase: any, companyId: string, visitorName: string, metadata: any) {
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("user_id")
+    .eq("company_id", companyId);
+
+  if (!profiles || profiles.length === 0) return;
+
+  const city = metadata?.city || "Unknown location";
+  const page = metadata?.current_page || "homepage";
+  const pageName = page.replace(/^https?:\/\/[^/]+/, "").replace(/\/$/, "") || "/";
+
+  const notifications = profiles.map((p: any) => ({
+    user_id: p.user_id,
+    type: "notification",
+    title: "🟢 New Website Visitor",
+    description: `${visitorName} from ${city} viewing ${pageName}`,
+    link_to: "/support-inbox",
+    agent_name: "Support",
+    status: "unread",
+    priority: "high",
+    metadata: { conversation_type: "support_visitor" },
+  }));
+
+  await supabase.from("notifications").insert(notifications);
 }
 
 // ── Widget JS Generator ──

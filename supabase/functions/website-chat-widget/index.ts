@@ -129,6 +129,8 @@ const widgetJS = `
   var input = document.getElementById('rebar-chat-input');
   var sendBtn = document.getElementById('rebar-chat-send');
 
+  var hasGreeted = false;
+
   // --- Toggle ---
   bubble.addEventListener('click', function() {
     isOpen = !isOpen;
@@ -136,8 +138,78 @@ const widgetJS = `
     bubble.innerHTML = isOpen
       ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
       : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
-    if (isOpen) input.focus();
+    if (isOpen) {
+      input.focus();
+      // Auto-send [INIT] on first open to get contextual greeting
+      if (!hasGreeted && messages.length === 0) {
+        hasGreeted = true;
+        sendInitGreeting();
+      }
+    }
   });
+
+  async function sendInitGreeting() {
+    isStreaming = true;
+    sendBtn.disabled = true;
+    var welcome = msgContainer.querySelector('.rc-welcome');
+    if (welcome) welcome.remove();
+    var typing = showTyping();
+    var assistantContent = '';
+    var assistantDiv = null;
+    try {
+      var resp = await fetch(CHAT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: [{ role: 'user', content: '[INIT]' }], current_page: getCurrentPage() })
+      });
+      if (!resp.ok || !resp.body) {
+        typing.remove();
+        addMessage('assistant', 'G\\'day! How can I help you with rebar today?');
+        messages.push({ role: 'assistant', content: 'G\\'day! How can I help you with rebar today?' });
+        isStreaming = false;
+        return;
+      }
+      var reader = resp.body.getReader();
+      var decoder = new TextDecoder();
+      var buffer = '';
+      while (true) {
+        var result = await reader.read();
+        if (result.done) break;
+        buffer += decoder.decode(result.value, { stream: true });
+        var idx;
+        while ((idx = buffer.indexOf('\\n')) !== -1) {
+          var line = buffer.slice(0, idx);
+          buffer = buffer.slice(idx + 1);
+          if (line.endsWith('\\r')) line = line.slice(0, -1);
+          if (!line.startsWith('data: ')) continue;
+          var json = line.slice(6).trim();
+          if (json === '[DONE]') break;
+          try {
+            var parsed = JSON.parse(json);
+            var chunk = parsed.choices && parsed.choices[0] && parsed.choices[0].delta && parsed.choices[0].delta.content;
+            if (chunk) {
+              if (!assistantDiv) { typing.remove(); assistantDiv = addMessage('assistant', ''); }
+              assistantContent += chunk;
+              assistantDiv.textContent = assistantContent;
+              msgContainer.scrollTop = msgContainer.scrollHeight;
+            }
+          } catch(e) { break; }
+        }
+      }
+      if (!assistantContent) {
+        typing.remove();
+        assistantDiv = addMessage('assistant', 'G\\'day! How can I help you with rebar today?');
+        assistantContent = 'G\\'day! How can I help you with rebar today?';
+      }
+      messages.push({ role: 'assistant', content: assistantContent });
+    } catch(e) {
+      typing.remove();
+      addMessage('assistant', 'G\\'day! How can I help you with rebar today?');
+    } finally {
+      isStreaming = false;
+      sendBtn.disabled = !input.value.trim();
+    }
+  }
 
   document.getElementById('rebar-chat-close').addEventListener('click', function() {
     isOpen = false;
