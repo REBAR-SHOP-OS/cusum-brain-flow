@@ -365,7 +365,7 @@ async function triggerAiReply(supabase: any, convo: any, visitorMessage: string,
   const messages = [
     {
       role: "system",
-      content: `${widgetConfig.ai_system_prompt || "You are a helpful support assistant."}\n\nDATA FIREWALL: NEVER share financial data, invoices, bills, bank balances, AR/AP, profit margins, employee salaries, internal meeting notes, or strategic plans.\n\nIMPORTANT: If the visitor asks to speak with a real person or a human agent, respond warmly: "Let me connect you with one of our team members — they'll be with you shortly! Our sales team has been notified." The team can jump in at any time.\n\n## Knowledge Base Articles:\n${kbContext || "No articles available."}\n\n## Company Knowledge:\n${knowledgeContext || "No entries."}${pageContext}`,
+      content: `${widgetConfig.ai_system_prompt || "You are a helpful support assistant."}\n\nDATA FIREWALL: NEVER share financial data, invoices, bills, bank balances, AR/AP, profit margins, employee salaries, internal meeting notes, or strategic plans.\n\nIMPORTANT: If the visitor asks to speak with a real person or a human agent, respond warmly: "Let me connect you with one of our team members — they'll be with you shortly! Our sales team has been notified." The team can jump in at any time.\n\nCRITICAL - CONTACT INFO COLLECTION:\n- Do NOT ask for the visitor's name or contact details upfront. Help them first with their questions about rebar, pricing, stock, and delivery.\n- When the visitor expresses intent to get a quote, place an order, or arrange delivery, THEN naturally ask for their name and email so the team can follow up.\n- Keep it conversational -- e.g. "Happy to put that quote together! Could I grab your name and the best email to send it to?"\n- Never pressure for contact info. Build trust first by being helpful.\n\n## Knowledge Base Articles:\n${kbContext || "No articles available."}\n\n## Company Knowledge:\n${knowledgeContext || "No entries."}${pageContext}`,
     },
     ...(history || []).map((m: any) => ({
       role: m.sender_type === "visitor" ? "user" : "assistant",
@@ -530,9 +530,7 @@ function generateWidgetJs(config: any, supabaseUrl: string): string {
     #sw-input:focus { border-color:\${cfg.brandColor}; }
     #sw-send { background:\${cfg.brandColor}; color:#fff; border:none; border-radius:8px; padding:8px 14px; cursor:pointer; font-size:13px; font-weight:500; }
     #sw-send:disabled { opacity:0.5; cursor:not-allowed; }
-    #sw-pre-chat { padding:20px; }
-    #sw-pre-chat input { width:100%; padding:8px 12px; border:1px solid #ddd; border-radius:8px; font-size:13px; margin-bottom:8px; outline:none; box-sizing:border-box; }
-    #sw-pre-chat button { width:100%; padding:10px; background:\${cfg.brandColor}; color:#fff; border:none; border-radius:8px; cursor:pointer; font-size:14px; font-weight:500; }
+    
     @media(max-width:420px){ #sw-panel{ width:calc(100vw - 24px); right:12px; bottom:80px; } }
   \`;
   document.head.appendChild(style);
@@ -548,33 +546,27 @@ function generateWidgetJs(config: any, supabaseUrl: string): string {
   var panel = document.createElement('div');
   panel.id = 'sw-panel';
   panel.innerHTML = '<div id="sw-header"><h3>'+esc(cfg.brandName)+'</h3><button onclick="document.getElementById(\\'sw-panel\\').classList.remove(\\'open\\')">&times;</button></div>'
-    + '<div id="sw-pre-chat"><p style="margin:0 0 12px;font-size:14px;color:#333;">'+esc(cfg.welcomeMessage)+'</p>'
-    + '<input id="sw-name" placeholder="Your name" maxlength="100"/>'
-    + '<input id="sw-email" placeholder="Email (optional)" type="email" maxlength="255"/>'
-    + '<button id="sw-start-btn">Start Chat</button></div>'
-    + '<div id="sw-messages" style="display:none;"></div>'
-    + '<div id="sw-input-area" style="display:none;"><textarea id="sw-input" rows="1" placeholder="Type a message..."></textarea><button id="sw-send" disabled>Send</button></div>';
+    + '<div id="sw-messages"></div>'
+    + '<div id="sw-input-area"><textarea id="sw-input" rows="1" placeholder="Type a message..."></textarea><button id="sw-send" disabled>Send</button></div>';
   document.body.appendChild(panel);
 
-  bubble.onclick = function(){ panel.classList.toggle('open'); };
-
-  document.getElementById('sw-start-btn').onclick = async function(){
-    var name = document.getElementById('sw-name').value.trim() || 'Visitor';
-    var email = document.getElementById('sw-email').value.trim();
-    this.disabled = true; this.textContent = 'Connecting...';
-    try {
-      var r = await fetch(cfg.chatUrl+'?action=start', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({widget_key:cfg.widgetKey, visitor_name:name, visitor_email:email||null, current_page:state.currentPage}) });
-      var d = await r.json();
-      if(d.conversation_id) {
-        state.convoId = d.conversation_id;
-        state.visitorToken = d.visitor_token;
-        document.getElementById('sw-pre-chat').style.display='none';
-        document.getElementById('sw-messages').style.display='block';
-        document.getElementById('sw-input-area').style.display='flex';
-        startPolling();
-        startHeartbeat();
-      }
-    } catch(e){ this.disabled=false; this.textContent='Start Chat'; }
+  var started = false;
+  bubble.onclick = async function(){
+    var wasOpen = panel.classList.contains('open');
+    panel.classList.toggle('open');
+    if(!wasOpen && !started){
+      started = true;
+      try {
+        var r = await fetch(cfg.chatUrl+'?action=start', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({widget_key:cfg.widgetKey, visitor_name:'Visitor', visitor_email:null, current_page:state.currentPage}) });
+        var d = await r.json();
+        if(d.conversation_id) {
+          state.convoId = d.conversation_id;
+          state.visitorToken = d.visitor_token;
+          startPolling();
+          startHeartbeat();
+        }
+      } catch(e){ started=false; }
+    }
   };
 
   document.getElementById('sw-send').onclick = sendMsg;
