@@ -86,4 +86,10 @@ export const agentSuggestions: Record<string, AgentSuggestion[]> = {
     { title: "How can I improve my productivity?", category: "Productivity" },
     { title: "Create a learning plan for my team", category: "Development" },
   ],
+  empire: [
+    { title: "I have a new business idea", category: "Create" },
+    { title: "Show me all my ventures", category: "List" },
+    { title: "Run a stress test on my latest venture", category: "Analyze" },
+    { title: "What should I build next?", category: "Strategy" },
+  ],
 };

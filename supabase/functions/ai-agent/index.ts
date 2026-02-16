@@ -12,7 +12,7 @@ interface ChatMessage {
 }
 
 interface AgentRequest {
-  agent: "sales" | "accounting" | "support" | "collections" | "estimation" | "social" | "eisenhower" | "bizdev" | "webbuilder" | "assistant" | "copywriting" | "talent" | "seo" | "growth" | "legal" | "shopfloor" | "delivery" | "email" | "data" | "commander";
+  agent: "sales" | "accounting" | "support" | "collections" | "estimation" | "social" | "eisenhower" | "bizdev" | "webbuilder" | "assistant" | "copywriting" | "talent" | "seo" | "growth" | "legal" | "shopfloor" | "delivery" | "email" | "data" | "commander" | "empire";
   message: string;
   history?: ChatMessage[];
   context?: Record<string, unknown>;
@@ -2229,6 +2229,78 @@ Tasks that provide little value and should be removed or postponed indefinitely.
 - Repeated Q4 tasks that should be eliminated → suggest removing them from routine
 - Delegation patterns not being used → suggest delegating more Q3 tasks
 - Tasks consistently carried over from day to day → suggest breaking them down or deprioritizing`,
+
+  empire: `You are **Architect**, the AI Venture Builder for REBAR SHOP OS — a rebar fabrication ERP run by Rebar.shop in Ontario.
+
+## Your Role:
+You are a ruthless, data-driven startup advisor and venture architect. You help the CEO build new business ventures using the "Empire Loop" methodology, grounded in REAL business data from the ERP.
+
+## Empire Loop — 5 Phases:
+1. **Target Selection** 🎯 — Identify a problem worth solving. Define the target customer, value multiplier, and competitive landscape.
+2. **Weapon Build** ⚔️ — Define the MVP scope, distribution plan, and revenue model. Build the minimum viable product.
+3. **Market Feedback** 📊 — Launch to early users. Collect activation rates, retention metrics, and willingness-to-pay signals.
+4. **Scale Engine** 🚀 — Optimize unit economics. Build repeatable sales/marketing engine. Track revenue growth.
+5. **Empire Expansion** 🏛️ — Expand to adjacent markets, add product lines, acquire competitors.
+
+## Your Capabilities:
+You can manage ventures in the database through tool calls. Use the \`manage_venture\` tool for ALL venture operations:
+
+### Creating a venture:
+When a user describes a business idea, extract structured data and create it:
+\`\`\`json
+{"action":"create","name":"...","vertical":"...","problem_statement":"...","target_customer":"...","phase":"target_selection"}
+\`\`\`
+
+### Updating a venture:
+\`\`\`json
+{"action":"update","venture_id":"...","updates":{"mvp_scope":"...","distribution_plan":"...","phase":"weapon_build"}}
+\`\`\`
+
+### Listing ventures:
+\`\`\`json
+{"action":"list"}
+\`\`\`
+
+### Running a stress test:
+\`\`\`json
+{"action":"stress_test","venture_id":"..."}
+\`\`\`
+
+### Killing or pausing a venture:
+\`\`\`json
+{"action":"update","venture_id":"...","updates":{"status":"killed"}}
+\`\`\`
+
+## How You Work:
+1. When someone describes an idea, IMMEDIATELY create a venture and start filling fields through conversation
+2. Ask probing questions: Who is the customer? What's the 10× value multiplier? Who are competitors?
+3. When enough data is gathered, offer to run a stress test
+4. Be brutally honest — if an idea is weak, say so with data
+5. Reference ERP data when available (pipeline leads, orders, SEO metrics, Odoo data)
+6. Track phase transitions and celebrate milestones
+7. Always show venture status in your responses
+
+## Communication Style:
+- Decisive and direct — no fluff
+- Use data and frameworks, not opinions
+- Challenge assumptions aggressively
+- Present recommendations as "continue" or "kill" with evidence
+- Use markdown tables for venture summaries
+- Be encouraging when warranted, ruthless when needed
+
+## Context Data You May Receive:
+- \`ventures\`: Current user's ventures
+- \`pipelineSnapshot\`: Active leads from ERP
+- \`orderRevenue\`: Recent order data
+- \`seoMetrics\`: Website traffic from rebar.shop
+- \`odooLeads\`: Odoo CRM pipeline data
+
+Use this real data to ground your analysis — never fabricate numbers.
+
+## 💡 Ideas You Should Create:
+- Venture stuck in same phase >14 days → suggest phase review or kill decision
+- New pipeline lead aligns with a venture's target market → suggest connection
+- Revenue data shows declining trend in venture's vertical → flag risk`,
 };
 
 // Fetch rebar standards from database
@@ -3170,7 +3242,60 @@ async function fetchContext(supabase: ReturnType<typeof createClient>, agent: st
       }
     }
 
-    // Scouty — Talent & HR (dedicated context)
+    // Architect — Empire Builder (dedicated context)
+    if (agent === "empire") {
+      try {
+        // User's ventures
+        const { data: ventures } = await svcClient
+          .from("ventures")
+          .select("*")
+          .eq("created_by", userId)
+          .order("updated_at", { ascending: false })
+          .limit(20);
+        context.ventures = ventures;
+
+        // Pipeline snapshot for grounding
+        const { data: leads } = await svcClient
+          .from("leads")
+          .select("id, title, stage, expected_value, probability, updated_at")
+          .in("stage", ["new", "hot_enquiries", "qualified", "quotation_priority"])
+          .order("updated_at", { ascending: false })
+          .limit(15);
+        context.pipelineSnapshot = leads;
+
+        // Recent orders for revenue context
+        const { data: orders } = await svcClient
+          .from("orders")
+          .select("id, order_number, total_amount, status, order_date")
+          .order("order_date", { ascending: false })
+          .limit(15);
+        context.orderRevenue = orders;
+
+        // Odoo leads if available
+        try {
+          const { data: odooLeads } = await svcClient
+            .from("odoo_leads")
+            .select("id, name, stage_name, expected_revenue, probability")
+            .order("write_date", { ascending: false })
+            .limit(15);
+          context.odooLeads = odooLeads;
+        } catch (_) { /* Odoo table may not exist */ }
+
+        // SEO metrics from rebar.shop
+        try {
+          const { data: seoPages } = await svcClient
+            .from("seo_pages_ai")
+            .select("url, traffic_estimate, cwv_status")
+            .order("traffic_estimate", { ascending: false })
+            .limit(10);
+          context.seoMetrics = seoPages;
+        } catch (_) { /* SEO tables may not exist */ }
+      } catch (e) {
+        console.error("Failed to fetch empire context:", e);
+      }
+    }
+
+
     if (agent === "talent") {
       try {
         const { data: profiles } = await supabase
@@ -4455,7 +4580,7 @@ serve(async (req) => {
       webbuilder: "Commet", assistant: "Vizzy", copywriting: "Penn", talent: "Scouty",
       seo: "Seomi", growth: "Gigi", legal: "Tally",
       shopfloor: "Forge", delivery: "Atlas", email: "Relay", data: "Prism",
-      commander: "Commander",
+      commander: "Commander", empire: "Architect",
     };
     const agentKnowledgeName = agentNameMap[agent] || "Blitz";
 
@@ -5541,6 +5666,35 @@ RULES:
         },
       },
       ] : []),
+      // Empire (Architect) — venture management tool
+      ...(agent === "empire" ? [{
+        type: "function" as const,
+        function: {
+          name: "manage_venture",
+          description: "Create, update, list, or stress-test ventures. Use this for ALL venture database operations.",
+          parameters: {
+            type: "object",
+            properties: {
+              action: { type: "string", enum: ["create", "update", "list", "stress_test", "delete"], description: "The operation to perform" },
+              venture_id: { type: "string", description: "Venture ID (required for update, stress_test, delete)" },
+              name: { type: "string", description: "Venture name (for create)" },
+              vertical: { type: "string", description: "Industry vertical (for create)" },
+              problem_statement: { type: "string", description: "Problem statement (for create/update)" },
+              target_customer: { type: "string", description: "Target customer (for create/update)" },
+              value_multiplier: { type: "string", description: "Value multiplier (for create/update)" },
+              competitive_notes: { type: "string", description: "Competitive landscape (for create/update)" },
+              mvp_scope: { type: "string", description: "MVP scope (for create/update)" },
+              distribution_plan: { type: "string", description: "Distribution plan (for create/update)" },
+              revenue_model: { type: "string", description: "Revenue model (for create/update)" },
+              phase: { type: "string", enum: ["target_selection", "weapon_build", "market_feedback", "scale_engine", "empire_expansion"], description: "Phase (for create/update)" },
+              status: { type: "string", enum: ["active", "paused", "killed", "won"], description: "Status (for update)" },
+              notes: { type: "string", description: "Notes (for create/update)" },
+            },
+            required: ["action"],
+            additionalProperties: false,
+          },
+        },
+      }] : []),
       // WordPress tools — available to SEO, Social, Data, BizDev, WebBuilder, Copywriting agents
       ...(["seo", "social", "data", "bizdev", "webbuilder", "copywriting"].includes(agent) ? [
         {
@@ -5960,6 +6114,74 @@ RULES:
           }
         }
 
+        // Empire (Architect) — venture management tool handler
+        if (tc.function?.name === "manage_venture") {
+          try {
+            const args = JSON.parse(tc.function.arguments || "{}");
+            let ventureResult: any = {};
+
+            if (args.action === "create") {
+              const { data, error } = await svcClient.from("ventures").insert({
+                name: args.name || "Untitled Venture",
+                vertical: args.vertical || null,
+                problem_statement: args.problem_statement || null,
+                target_customer: args.target_customer || null,
+                value_multiplier: args.value_multiplier || null,
+                competitive_notes: args.competitive_notes || null,
+                mvp_scope: args.mvp_scope || null,
+                distribution_plan: args.distribution_plan || null,
+                revenue_model: args.revenue_model || null,
+                phase: args.phase || "target_selection",
+                status: "active",
+                notes: args.notes || null,
+                created_by: user.id,
+                company_id: companyId,
+              }).select().single();
+              ventureResult = error ? { error: error.message } : { success: true, venture: data, message: `Venture "${args.name}" created` };
+            } else if (args.action === "update" && args.venture_id) {
+              const updates: Record<string, unknown> = {};
+              for (const key of ["name", "vertical", "problem_statement", "target_customer", "value_multiplier", "competitive_notes", "mvp_scope", "distribution_plan", "revenue_model", "phase", "status", "notes"]) {
+                if (args[key] !== undefined) updates[key] = args[key];
+              }
+              const { error } = await svcClient.from("ventures").update(updates).eq("id", args.venture_id);
+              ventureResult = error ? { error: error.message } : { success: true, message: `Venture updated` };
+            } else if (args.action === "list") {
+              const { data, error } = await svcClient.from("ventures").select("*").eq("created_by", user.id).order("updated_at", { ascending: false }).limit(20);
+              ventureResult = error ? { error: error.message } : { success: true, ventures: data };
+            } else if (args.action === "stress_test" && args.venture_id) {
+              // Fetch venture then call empire-architect
+              const { data: venture } = await svcClient.from("ventures").select("*").eq("id", args.venture_id).single();
+              if (!venture) {
+                ventureResult = { error: "Venture not found" };
+              } else {
+                try {
+                  const archRes = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/empire-architect`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}` },
+                    body: JSON.stringify({ venture }),
+                  });
+                  const analysis = await archRes.json();
+                  // Save analysis to venture
+                  await svcClient.from("ventures").update({ ai_analysis: analysis }).eq("id", args.venture_id);
+                  ventureResult = { success: true, analysis, message: "Stress test complete" };
+                } catch (stressErr) {
+                  ventureResult = { error: `Stress test failed: ${stressErr instanceof Error ? stressErr.message : "Unknown"}` };
+                }
+              }
+            } else if (args.action === "delete" && args.venture_id) {
+              const { error } = await svcClient.from("ventures").delete().eq("id", args.venture_id);
+              ventureResult = error ? { error: error.message } : { success: true, message: "Venture deleted" };
+            } else {
+              ventureResult = { error: "Invalid action or missing venture_id" };
+            }
+
+            seoToolResults.push({ id: tc.id, name: "manage_venture", result: ventureResult });
+          } catch (e) {
+            console.error("manage_venture tool error:", e);
+            seoToolResults.push({ id: tc.id, name: "manage_venture", result: { error: e instanceof Error ? e.message : "Tool failed" } });
+          }
+        }
+
         if (tc.function?.name === "create_notifications") {
           try {
             const args = JSON.parse(tc.function.arguments);
@@ -5986,7 +6208,7 @@ RULES:
                 bizdev: "bg-amber-500", webbuilder: "bg-cyan-500", assistant: "bg-indigo-500",
                 copywriting: "bg-violet-500", talent: "bg-teal-500", seo: "bg-lime-500", growth: "bg-sky-500",
                 shopfloor: "bg-yellow-600", delivery: "bg-blue-600", email: "bg-rose-500", data: "bg-emerald-600",
-                legal: "bg-slate-600", eisenhower: "bg-amber-600",
+                legal: "bg-slate-600", eisenhower: "bg-amber-600", empire: "bg-red-500",
               };
 
               const { error: insertErr } = await svcClient.from("notifications").insert({

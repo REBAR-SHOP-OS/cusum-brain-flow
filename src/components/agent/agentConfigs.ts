@@ -192,4 +192,13 @@ export const agentConfigs: Record<string, AgentConfig> = {
     placeholder: "Ask about goals, habits, productivity, learning...",
     capabilities: ["Goal setting & tracking", "Productivity tips", "Skill development plans", "Work-life balance"],
   },
+  empire: {
+    name: "Architect",
+    role: "Venture & Product Builder",
+    image: bizdevHelper,
+    agentType: "empire",
+    greeting: "I'm Architect, your AI venture builder. Tell me a problem you want to solve, an industry to attack, or a product idea — I'll structure it, stress-test it, and build the execution plan.",
+    placeholder: "Describe a venture idea, ask to list ventures, run a stress test...",
+    capabilities: ["Create & manage ventures", "AI stress tests with ERP data", "Phase advancement", "Kill/continue recommendations", "Pipeline & revenue context"],
+  },
 };
