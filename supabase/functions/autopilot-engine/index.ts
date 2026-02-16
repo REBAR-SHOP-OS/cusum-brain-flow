@@ -23,6 +23,7 @@ async function computeRiskFromDb(
 ): Promise<{ risk_level: string; requires_approval: boolean; warnings: string[] }> {
   const warnings: string[] = [];
   let risk = "medium";
+  let matchedPolicy = false;
 
   const model = (toolParams.model as string) || "";
   const fields = Object.keys((toolParams.values as Record<string, unknown>) || {});
@@ -36,6 +37,7 @@ async function computeRiskFromDb(
         .eq("model", model)
         .maybeSingle();
       if (protectedRow) {
+        matchedPolicy = true;
         risk = higherRisk(risk, protectedRow.risk_level);
         warnings.push(`Protected model: ${model} (${protectedRow.risk_level})`);
       }
@@ -52,6 +54,7 @@ async function computeRiskFromDb(
         const modelMatch = !p.model || p.model === model;
         const fieldMatch = !p.field || fields.includes(p.field);
         if (modelMatch && fieldMatch) {
+          matchedPolicy = true;
           risk = higherRisk(risk, p.risk_level);
           if (p.notes) warnings.push(p.notes);
         }
@@ -63,8 +66,8 @@ async function computeRiskFromDb(
     return computeRiskFallback(toolName, toolParams);
   }
 
-  // If no policies matched at all, use fallback logic
-  if (warnings.length === 0) {
+  // If no policy or protected model matched, use fallback logic
+  if (!matchedPolicy) {
     return computeRiskFallback(toolName, toolParams);
   }
 
@@ -474,24 +477,18 @@ Deno.serve(async (req) => {
         return json({ error: `Cannot execute run in status: ${run.status}` }, 400);
       }
 
-      // D) Run-level lock check
-      const existingLock = run.execution_lock_uuid;
-      const lockStarted = run.execution_started_at ? new Date(run.execution_started_at).getTime() : 0;
-      const fiveMinAgo = Date.now() - 5 * 60 * 1000;
-
-      if (existingLock && lockStarted > fiveMinAgo) {
-        return json({ error: "Run is locked by another execution", lock_uuid: existingLock }, 423);
-      }
-
-      // Acquire lock
+      // D) Atomic lock acquisition via RPC
       const lockUuid = crypto.randomUUID();
-      await svcClient.from("autopilot_runs").update({
-        execution_lock_uuid: lockUuid,
-        execution_started_at: new Date().toISOString(),
-        phase: "execution",
-        status: "executing",
-        started_at: run.started_at || new Date().toISOString(),
-      }).eq("id", run_id);
+      const { data: lockResult, error: lockError } = await svcClient.rpc("acquire_autopilot_lock", {
+        _run_id: run_id,
+        _company_id: companyId,
+        _lock_uuid: lockUuid,
+      });
+      if (lockError || !lockResult || lockResult === 0) {
+        console.log("LOCK_REJECTED", { run_id, attempted_lock: lockUuid, error: lockError?.message });
+        return json({ error: "Run is locked by another execution" }, 423);
+      }
+      console.log("LOCK_ACQUIRED", { run_id, lock_uuid: lockUuid });
 
       // Load actions ordered by step_order
       const { data: actions } = await svcClient
