@@ -17,11 +17,24 @@ serve(async (req) => {
       });
     }
 
-    const credentialsJson = Deno.env.get("GOOGLE_VISION_CREDENTIALS");
+    let credentialsJson = Deno.env.get("GOOGLE_VISION_CREDENTIALS");
     if (!credentialsJson) {
       throw new Error("GOOGLE_VISION_CREDENTIALS not configured");
     }
 
+    // Clean up potential formatting issues with the secret
+    credentialsJson = credentialsJson.trim();
+    // Remove BOM or invisible chars
+    if (credentialsJson.charCodeAt(0) === 0xFEFF) {
+      credentialsJson = credentialsJson.slice(1);
+    }
+    // If wrapped in extra quotes, unwrap
+    if (credentialsJson.startsWith('"') && credentialsJson.endsWith('"')) {
+      credentialsJson = JSON.parse(credentialsJson);
+    }
+    
+    console.log("Credentials first 20 chars:", credentialsJson.substring(0, 20));
+    
     const credentials = JSON.parse(credentialsJson);
     
     // Get access token using service account
