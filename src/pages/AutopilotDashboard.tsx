@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import {
   Play, Pause, CheckCircle, XCircle, Clock, AlertTriangle,
   ChevronDown, ChevronRight, RotateCcw, Loader2, Bot, Shield,
-  Zap, Eye, FileCode, ArrowRight
+  Zap, Eye, FileCode, ArrowRight, Rocket
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -86,6 +86,29 @@ interface AutopilotRun {
   updated_at: string;
 }
 
+// ── Edge function caller ──
+async function callAutopilotEngine(action: string, payload: Record<string, unknown> = {}) {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) throw new Error("Not authenticated");
+
+  const res = await fetch(
+    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/autopilot-engine`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+        apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+      },
+      body: JSON.stringify({ action, ...payload }),
+    }
+  );
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Request failed");
+  return data;
+}
+
 export default function AutopilotDashboard() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -120,50 +143,43 @@ export default function AutopilotDashboard() {
     enabled: !!expandedRun,
   });
 
+  const invalidateAll = () => {
+    queryClient.invalidateQueries({ queryKey: ["autopilot-runs"] });
+    queryClient.invalidateQueries({ queryKey: ["autopilot-actions"] });
+  };
+
   const approveRun = useMutation({
-    mutationFn: async (runId: string) => {
-      const { error } = await supabase
-        .from("autopilot_runs" as any)
-        .update({ status: "approved", phase: "execution", approved_at: new Date().toISOString() } as any)
-        .eq("id", runId);
-      if (error) throw error;
-    },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["autopilot-runs"] }); toast.success("Run approved"); },
-    onError: () => toast.error("Failed to approve run"),
+    mutationFn: (runId: string) => callAutopilotEngine("approve_run", { run_id: runId }),
+    onSuccess: () => { invalidateAll(); toast.success("Run approved"); },
+    onError: (e: Error) => toast.error(e.message),
   });
 
   const rejectRun = useMutation({
-    mutationFn: async (runId: string) => {
-      const { error } = await supabase
-        .from("autopilot_runs" as any)
-        .update({ status: "cancelled", phase: "cancelled" } as any)
-        .eq("id", runId);
-      if (error) throw error;
-    },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["autopilot-runs"] }); toast.success("Run cancelled"); },
-    onError: () => toast.error("Failed to cancel run"),
+    mutationFn: (runId: string) => callAutopilotEngine("reject_run", { run_id: runId }),
+    onSuccess: () => { invalidateAll(); toast.success("Run rejected"); },
+    onError: (e: Error) => toast.error(e.message),
   });
 
   const approveAction = useMutation({
-    mutationFn: async (actionId: string) => {
-      const { error } = await supabase
-        .from("autopilot_actions" as any)
-        .update({ status: "approved", approved_at: new Date().toISOString() } as any)
-        .eq("id", actionId);
-      if (error) throw error;
-    },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["autopilot-actions"] }); toast.success("Action approved"); },
+    mutationFn: (actionId: string) => callAutopilotEngine("approve_action", { action_id: actionId }),
+    onSuccess: () => { invalidateAll(); toast.success("Action approved"); },
+    onError: (e: Error) => toast.error(e.message),
   });
 
   const rejectAction = useMutation({
-    mutationFn: async (actionId: string) => {
-      const { error } = await supabase
-        .from("autopilot_actions" as any)
-        .update({ status: "rejected" } as any)
-        .eq("id", actionId);
-      if (error) throw error;
+    mutationFn: (actionId: string) => callAutopilotEngine("reject_action", { action_id: actionId }),
+    onSuccess: () => { invalidateAll(); toast.success("Action rejected"); },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const executeRun = useMutation({
+    mutationFn: (runId: string) => callAutopilotEngine("execute_run", { run_id: runId }),
+    onSuccess: (data) => {
+      invalidateAll();
+      const m = data.metrics;
+      toast.success(`Run executed: ${m.executed_actions} done, ${m.failed_actions} failed (${m.duration_ms}ms)`);
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["autopilot-actions"] }); toast.success("Action rejected"); },
+    onError: (e: Error) => toast.error(e.message),
   });
 
   const getPhaseIndex = (phase: string) => PHASE_STEPS.findIndex((p) => p.key === phase);
@@ -203,7 +219,6 @@ export default function AutopilotDashboard() {
         </div>
       ) : (
         <>
-          {/* Active Runs */}
           {activeRuns.length > 0 && (
             <section>
               <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">Active Runs</h2>
@@ -219,6 +234,8 @@ export default function AutopilotDashboard() {
                     onRejectRun={() => rejectRun.mutate(run.id)}
                     onApproveAction={(id) => approveAction.mutate(id)}
                     onRejectAction={(id) => rejectAction.mutate(id)}
+                    onExecuteRun={() => executeRun.mutate(run.id)}
+                    isExecuting={executeRun.isPending}
                     getPhaseIndex={getPhaseIndex}
                   />
                 ))}
@@ -226,7 +243,6 @@ export default function AutopilotDashboard() {
             </section>
           )}
 
-          {/* Completed Runs */}
           {completedRuns.length > 0 && (
             <section>
               <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">History</h2>
@@ -242,6 +258,8 @@ export default function AutopilotDashboard() {
                     onRejectRun={() => {}}
                     onApproveAction={() => {}}
                     onRejectAction={() => {}}
+                    onExecuteRun={() => {}}
+                    isExecuting={false}
                     getPhaseIndex={getPhaseIndex}
                   />
                 ))}
@@ -263,18 +281,27 @@ interface RunCardProps {
   onRejectRun: () => void;
   onApproveAction: (id: string) => void;
   onRejectAction: (id: string) => void;
+  onExecuteRun: () => void;
+  isExecuting: boolean;
   getPhaseIndex: (phase: string) => number;
 }
 
-function RunCard({ run, actions, expanded, onToggle, onApproveRun, onRejectRun, onApproveAction, onRejectAction, getPhaseIndex }: RunCardProps) {
+function RunCard({
+  run, actions, expanded, onToggle, onApproveRun, onRejectRun,
+  onApproveAction, onRejectAction, onExecuteRun, isExecuting, getPhaseIndex,
+}: RunCardProps) {
   const currentPhaseIdx = getPhaseIndex(run.phase);
   const isAwaitingApproval = run.status === "awaiting_approval";
+  const isApproved = run.status === "approved";
   const isTerminal = ["completed", "failed", "cancelled", "rolled_back"].includes(run.status);
+  const metrics = run.metrics as Record<string, number> | null;
+  const simResult = run.simulation_result as Record<string, unknown> | null;
 
   return (
     <div className={cn(
       "rounded-xl border bg-card/80 backdrop-blur-sm transition-all",
-      isAwaitingApproval ? "border-amber-500/40 shadow-amber-500/10 shadow-lg" : "border-border/50",
+      isAwaitingApproval ? "border-amber-500/40 shadow-amber-500/10 shadow-lg" : 
+      isApproved ? "border-green-500/40 shadow-green-500/10 shadow-lg" : "border-border/50",
       isTerminal && "opacity-80"
     )}>
       {/* Run Header */}
@@ -332,15 +359,61 @@ function RunCard({ run, actions, expanded, onToggle, onApproveRun, onRejectRun, 
         </div>
       </div>
 
-      {/* Approval Actions */}
-      {isAwaitingApproval && (
+      {/* Simulation Preview */}
+      {expanded && simResult && (
+        <div className="px-4 pb-3">
+          <div className="rounded-lg bg-muted/30 border border-border/30 p-3 text-xs space-y-1">
+            <h4 className="font-semibold text-muted-foreground uppercase tracking-wider text-[10px] mb-1">Simulation Summary</h4>
+            <div className="flex gap-4 flex-wrap">
+              <span>Total: <strong>{simResult.total_actions as number}</strong></span>
+              {(simResult.low_risk as number) > 0 && <span className="text-green-500">Low: {simResult.low_risk as number}</span>}
+              {(simResult.medium_risk as number) > 0 && <span className="text-amber-400">Med: {simResult.medium_risk as number}</span>}
+              {(simResult.high_risk as number) > 0 && <span className="text-orange-400">High: {simResult.high_risk as number}</span>}
+              {(simResult.critical_risk as number) > 0 && <span className="text-destructive">Critical: {simResult.critical_risk as number}</span>}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Metrics (for completed runs) */}
+      {expanded && metrics && isTerminal && (
+        <div className="px-4 pb-3">
+          <div className="rounded-lg bg-muted/30 border border-border/30 p-3 text-xs space-y-1">
+            <h4 className="font-semibold text-muted-foreground uppercase tracking-wider text-[10px] mb-1">Execution Metrics</h4>
+            <div className="flex gap-4 flex-wrap">
+              <span>Executed: <strong className="text-green-500">{metrics.executed_actions}</strong></span>
+              <span>Failed: <strong className="text-destructive">{metrics.failed_actions}</strong></span>
+              {metrics.skipped_actions != null && <span>Skipped: <strong>{metrics.skipped_actions}</strong></span>}
+              <span>Duration: <strong>{metrics.duration_ms}ms</strong></span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Action Buttons */}
+      {(isAwaitingApproval || isApproved) && (
         <div className="flex items-center gap-2 px-4 pb-3">
-          <Button size="sm" onClick={onApproveRun} className="gap-1.5 bg-green-600 hover:bg-green-700 text-white">
-            <CheckCircle className="w-3.5 h-3.5" /> Approve Run
-          </Button>
-          <Button size="sm" variant="outline" onClick={onRejectRun} className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10">
-            <XCircle className="w-3.5 h-3.5" /> Reject
-          </Button>
+          {isAwaitingApproval && (
+            <>
+              <Button size="sm" onClick={onApproveRun} className="gap-1.5 bg-green-600 hover:bg-green-700 text-white">
+                <CheckCircle className="w-3.5 h-3.5" /> Approve Run
+              </Button>
+              <Button size="sm" variant="outline" onClick={onRejectRun} className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10">
+                <XCircle className="w-3.5 h-3.5" /> Reject
+              </Button>
+            </>
+          )}
+          {isApproved && (
+            <Button
+              size="sm"
+              onClick={onExecuteRun}
+              disabled={isExecuting}
+              className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              {isExecuting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Rocket className="w-3.5 h-3.5" />}
+              {isExecuting ? "Executing…" : "Execute Run"}
+            </Button>
+          )}
         </div>
       )}
 
