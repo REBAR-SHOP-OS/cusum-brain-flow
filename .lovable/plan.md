@@ -1,66 +1,45 @@
 
-# Restyle /empire — Dark Cyberpunk Dashboard
 
-## Overview
+# Rename "Job Site" back to "Website" and Move to Home Page Only
 
-Replace the current light-themed EmpireBuilder page with the dark cyberpunk dashboard UI provided. The page keeps all existing chat/agent logic but gets a completely new visual shell with sidebar, top bar, and dark gradient canvas.
+## What Changes
 
-## Approach
+1. **Rename all "Job Site" labels back to "Website"** across the app UI
+2. **Remove "Website" and "SEO" from the sidebar and mobile nav** -- they will no longer appear as navigation items
+3. **Add "Website" and "SEO" as workspace cards on the Home page** so users can still access them
 
-Create two new components and update EmpireBuilder to use them. All chat logic (state, handlers, file upload, agent calls) stays untouched in EmpireBuilder.
+## Detailed Changes
 
-### New Files
+### 1. Sidebar — Remove Website and SEO entries
+**File: `src/components/layout/AppSidebar.tsx`** (lines 112-113)
+- Remove the "Job Site" nav item (`{ name: "Job Site", href: "/website", ... }`)
+- Remove the "SEO" nav item (`{ name: "SEO", href: "/seo", ... }`)
 
-| File | Purpose |
-|---|---|
-| `src/components/empire/EmpireSidebar.tsx` | 72px icon-only sidebar with dark glass styling, nav items, help button |
-| `src/components/empire/EmpireTopbar.tsx` | Cyan `#35E6E6` header bar with Dashboard label, search input, bell icon, avatar with user initials |
+### 2. Mobile Nav — Remove Website and SEO entries
+**File: `src/components/layout/MobileNavV2.tsx`** (lines 29-30)
+- Remove `{ name: "Job Site", href: "/website", ... }`
+- Remove `{ name: "SEO", href: "/seo", ... }`
 
-### Modified File
+### 3. Home Page — Add Website and SEO workspace cards
+**File: `src/pages/Home.tsx`** (lines 173-177)
+- Add two new cards to the Workspaces grid:
+  - "Website" with a Globe icon, linking to `/website`
+  - "SEO" with a Search icon, linking to `/seo`
 
-| File | Change |
-|---|---|
-| `src/pages/EmpireBuilder.tsx` | Wrap entire return in the dark app shell layout (sidebar + topbar + gradient canvas). Restyle InputBox, suggestion pills, chat bubbles, and loading indicator to dark theme colors. |
+### 4. Rename "Job Site" to "Website" in remaining UI labels
+- **`src/components/website/WebsiteChat.tsx`**: "AI Job Site Editor" to "AI Website Editor", "edit your job site" to "edit your website"
+- **`src/pages/WebsiteManager.tsx`**: iframe title "Job Site Preview" to "Website Preview"
+- **`src/hooks/useActiveModule.ts`**: Module name "Job Site" to "Website"
+- **`src/components/integrations/AutomationsSection.tsx`**: "Job Site Manager" to "Website Manager"
+- **`src/components/agent/agentConfigs.ts`**: Placeholder and capabilities referencing "job site" to "website"
+- **`src/components/agent/agentSuggestionsData.ts`**: "job site" to "website" in suggestion text
 
-## Component Details
+### 5. Page map update
+**File: `supabase/functions/_shared/pageMap.ts`** (line for /office)
+- The /website entry description already says "AI-powered WordPress/WooCommerce editor" which is fine; no change needed there
 
-### EmpireSidebar
-- 72px wide, `bg-black/30 backdrop-blur border-r border-white/10`
-- Top: gradient logo square (fuchsia-to-indigo)
-- Nav: 11 icon buttons (Home, BarChart2, Globe, Search, Users, DollarSign, FileText, Boxes, Activity, Settings, Shield) with `hover:bg-white/10` rounded-xl
-- Bottom: HelpCircle icon
-
-### EmpireTopbar
-- `bg-[#35E6E6] text-black h-14 border-b border-black/30`
-- Left: LayoutGrid icon + "Dashboard" label
-- Center-right: search pill (`bg-black/10 rounded-xl`, hidden on mobile)
-- Right: Bell icon button, circular avatar with user initials (falls back to "SA")
-
-### EmpireBuilder Changes
-
-**Outer wrapper**: Replace the current `flex flex-col h-full` with `min-h-screen w-full bg-[#070A12] text-white` containing a flex row of sidebar + main content.
-
-**Background gradient**: Replace the light gradient with the dark radial gradient:
-`bg-[radial-gradient(...cyan...),radial-gradient(...orange...),linear-gradient(135deg,#0A0F25,#141B3A,#221B3B,#301D2E)]`
-
-Plus a floating avatar bubble decoration in the top-right corner.
-
-**InputBox restyle**:
-- Container: `bg-white/5 backdrop-blur border border-white/10 rounded-2xl`
-- Focus state: `border-white/20`
-- Drag state: `border-cyan-400/60 bg-cyan-500/5`
-- Text/placeholder: `text-white placeholder:text-white/40`
-- Attachment chips: `bg-white/10 border-white/10 text-white/70`
-- Plus button: `bg-white/5 hover:bg-white/10 text-white/80`
-- Send button active: `bg-[#35E6E6] text-black`; inactive: `bg-white/10 text-white/30`
-
-**Suggestion pills**: `bg-white/5 border border-white/10 text-white/80 hover:bg-white/10 hover:text-white rounded-full`
-
-**Chat messages (conversation view)**:
-- User bubbles: `bg-[#35E6E6] text-black rounded-br-md`
-- Agent bubbles: `bg-white/5 backdrop-blur border border-white/10 text-white rounded-bl-md`
-- Agent avatar: gradient `from-cyan-400 to-teal-500` instead of orange
-- Loading dots: `bg-white/40`
-- Bottom input bar: `bg-black/30 backdrop-blur-xl border-t border-white/10`
-
-**Hero text**: H1 white with "great" in `text-[#FF7A18]`, subtitle in `text-white/70`
+## What stays the same
+- All routes remain unchanged (`/website`, `/seo`)
+- All file names stay the same
+- All backend/edge function names stay the same
+- The SEO and Web Builder agent helpers on the home page remain as-is (they link to agent chat pages, not the manager pages)
