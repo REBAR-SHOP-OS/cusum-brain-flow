@@ -313,6 +313,7 @@ async function triggerAiReply(supabase: any, convo: any, visitorMessage: string,
 
   if (!widgetConfig?.ai_enabled) return;
 
+  // Fetch KB articles
   const { data: articles } = await supabase
     .from("kb_articles")
     .select("title, content, excerpt")
@@ -320,8 +321,22 @@ async function triggerAiReply(supabase: any, convo: any, visitorMessage: string,
     .eq("is_published", true)
     .limit(20);
 
+  // Fetch knowledge base (public-safe categories only)
+  const allowedKbCategories = ["webpage", "company-playbook", "document", "research"];
+  const { data: knowledgeEntries } = await supabase
+    .from("knowledge")
+    .select("title, content, category")
+    .eq("company_id", widgetConfig.company_id)
+    .in("category", allowedKbCategories)
+    .order("updated_at", { ascending: false })
+    .limit(10);
+
   const kbContext = (articles || [])
     .map((a: any) => `## ${a.title}\n${a.excerpt || ""}\n${a.content}`)
+    .join("\n\n---\n\n");
+
+  const knowledgeContext = (knowledgeEntries || [])
+    .map((k: any) => `## ${k.title} [${k.category}]\n${(k.content || "").slice(0, 500)}`)
     .join("\n\n---\n\n");
 
   const { data: history } = await supabase
@@ -340,7 +355,7 @@ async function triggerAiReply(supabase: any, convo: any, visitorMessage: string,
   const messages = [
     {
       role: "system",
-      content: `${widgetConfig.ai_system_prompt || "You are a helpful support assistant."}\n\n## Knowledge Base Articles:\n${kbContext || "No articles available."}${pageContext}`,
+      content: `${widgetConfig.ai_system_prompt || "You are a helpful support assistant."}\n\nDATA FIREWALL: NEVER share financial data, invoices, bills, bank balances, AR/AP, profit margins, employee salaries, internal meeting notes, or strategic plans.\n\n## Knowledge Base Articles:\n${kbContext || "No articles available."}\n\n## Company Knowledge:\n${knowledgeContext || "No entries."}${pageContext}`,
     },
     ...(history || []).map((m: any) => ({
       role: m.sender_type === "visitor" ? "user" : "assistant",
