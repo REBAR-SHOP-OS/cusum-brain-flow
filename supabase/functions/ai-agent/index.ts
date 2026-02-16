@@ -2319,6 +2319,15 @@ When the user asks you to "generate patch", "write code", "fix module", "enginee
 - \`generate_patch\`: Generate reviewable unified diffs for Odoo modules, ERP code, or WordPress
 - \`validate_code\`: Run static validation on generated patches (syntax, dangerous patterns)
 
+## ERP Autopilot Mode:
+When the user asks for multi-step operations, bulk fixes, or says "autopilot", "run autopilot", "fix all", "batch fix":
+1. Use \`autopilot_create_run\` to create a structured run with all proposed actions
+2. Each action must specify risk_level and rollback_metadata
+3. Low-risk actions can auto-execute; medium+ require explicit approval
+4. Use \`autopilot_list_runs\` to show existing runs
+5. The run goes through phases: context_capture → planning → simulation → approval → execution → observation
+6. Always include rollback metadata so actions can be reversed
+
 When generating patches, ALWAYS validate them first, then store via generate_patch tool.`,
 };
 
@@ -5865,6 +5874,53 @@ RULES:
             additionalProperties: false,
           },
         },
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "autopilot_create_run",
+          description: "Create a new ERP Autopilot run. Captures context snapshot, generates a structured plan, simulates proposed actions, and queues them for approval. No action executes without explicit approval unless flagged low-risk.",
+          parameters: {
+            type: "object",
+            properties: {
+              title: { type: "string", description: "Title for the autopilot run (e.g. 'Fix stale deliveries')" },
+              description: { type: "string", description: "What this run aims to accomplish" },
+              trigger_type: { type: "string", enum: ["manual", "scheduled", "event", "auto_fix"], description: "How this run was triggered" },
+              actions: {
+                type: "array",
+                description: "List of proposed actions to execute",
+                items: {
+                  type: "object",
+                  properties: {
+                    tool_name: { type: "string", description: "Tool to use (odoo_write, generate_patch, validate_code, create_fix_request, wp_update_post, etc.)" },
+                    tool_params: { type: "object", description: "Parameters for the tool" },
+                    risk_level: { type: "string", enum: ["low", "medium", "high", "critical"] },
+                    description: { type: "string", description: "What this action does" },
+                    rollback_metadata: { type: "object", description: "Data needed to reverse this action" },
+                  },
+                  required: ["tool_name", "tool_params", "risk_level"],
+                },
+              },
+            },
+            required: ["title", "actions"],
+            additionalProperties: false,
+          },
+        },
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "autopilot_list_runs",
+          description: "List recent autopilot runs with their status and phase.",
+          parameters: {
+            type: "object",
+            properties: {
+              status: { type: "string", description: "Filter by status (pending, awaiting_approval, executing, completed, failed)" },
+              limit: { type: "number", description: "Max runs to return (default 10)" },
+            },
+            additionalProperties: false,
+          },
+        },
       }] : []),
       // WordPress tools — available to SEO, Social, Data, BizDev, WebBuilder, Copywriting, AND Empire agents
       ...(["seo", "social", "data", "bizdev", "webbuilder", "copywriting", "empire"].includes(agent) ? [
@@ -6581,6 +6637,111 @@ RULES:
             }});
           } catch (e) {
             seoToolResults.push({ id: tc.id, name: "validate_code", result: { error: e instanceof Error ? e.message : "validate_code failed" } });
+          }
+        }
+
+        // Empire — autopilot_create_run handler
+        if (tc.function?.name === "autopilot_create_run") {
+          try {
+            const args = JSON.parse(tc.function.arguments || "{}");
+
+            // Phase 1: Context capture — snapshot current ERP state
+            const contextSnapshot: Record<string, unknown> = {};
+            try {
+              const [machinesRes, ordersRes, deliveriesRes, tasksRes] = await Promise.all([
+                svcClient.from("machines").select("id, name, status, type").limit(20),
+                svcClient.from("orders").select("id, order_number, status, total_amount").in("status", ["pending", "confirmed", "in_production"]).limit(20),
+                svcClient.from("deliveries").select("id, delivery_number, status, scheduled_date").in("status", ["planned", "loading", "in_transit"]).limit(10),
+                svcClient.from("human_tasks").select("id, title, status, severity").eq("status", "open").limit(10),
+              ]);
+              contextSnapshot.machines = machinesRes.data;
+              contextSnapshot.orders = ordersRes.data;
+              contextSnapshot.deliveries = deliveriesRes.data;
+              contextSnapshot.openTasks = tasksRes.data;
+              contextSnapshot.capturedAt = new Date().toISOString();
+            } catch (_) { /* non-fatal */ }
+
+            // Phase 2: Planning — structure the plan from AI-provided actions
+            const plan = (args.actions || []).map((a: any, i: number) => ({
+              step: i + 1,
+              tool: a.tool_name,
+              risk: a.risk_level,
+              description: a.description || `Execute ${a.tool_name}`,
+            }));
+
+            // Phase 3: Simulation — generate simulation result (dry-run metadata)
+            const simulationResult = {
+              total_actions: (args.actions || []).length,
+              low_risk: (args.actions || []).filter((a: any) => a.risk_level === "low").length,
+              medium_risk: (args.actions || []).filter((a: any) => a.risk_level === "medium").length,
+              high_risk: (args.actions || []).filter((a: any) => a.risk_level === "high").length,
+              critical_risk: (args.actions || []).filter((a: any) => a.risk_level === "critical").length,
+              auto_executable: (args.actions || []).filter((a: any) => a.risk_level === "low").length,
+              requires_approval: (args.actions || []).filter((a: any) => a.risk_level !== "low").length,
+              simulated_at: new Date().toISOString(),
+            };
+
+            // Create the run
+            const { data: run, error: runError } = await svcClient.from("autopilot_runs").insert({
+              company_id: companyId,
+              created_by: user.id,
+              title: args.title || "Untitled Run",
+              description: args.description || "",
+              trigger_type: args.trigger_type || "manual",
+              phase: simulationResult.requires_approval > 0 ? "approval" : "execution",
+              status: simulationResult.requires_approval > 0 ? "awaiting_approval" : "approved",
+              context_snapshot: contextSnapshot,
+              plan,
+              simulation_result: simulationResult,
+              started_at: new Date().toISOString(),
+            }).select().single();
+
+            if (runError) {
+              seoToolResults.push({ id: tc.id, name: "autopilot_create_run", result: { error: runError.message } });
+            } else {
+              // Create individual actions
+              const actionInserts = (args.actions || []).map((a: any, i: number) => ({
+                run_id: run.id,
+                step_order: i,
+                tool_name: a.tool_name,
+                tool_params: a.tool_params || {},
+                risk_level: a.risk_level || "medium",
+                status: a.risk_level === "low" ? "approved" : "pending",
+                requires_approval: a.risk_level !== "low",
+                rollback_metadata: a.rollback_metadata || {},
+              }));
+
+              if (actionInserts.length > 0) {
+                await svcClient.from("autopilot_actions").insert(actionInserts);
+              }
+
+              seoToolResults.push({ id: tc.id, name: "autopilot_create_run", result: {
+                success: true,
+                run_id: run.id,
+                title: args.title,
+                phase: run.phase,
+                status: run.status,
+                simulation: simulationResult,
+                message: simulationResult.requires_approval > 0
+                  ? `Autopilot run created with ${simulationResult.total_actions} actions. ${simulationResult.requires_approval} action(s) require approval. View at /autopilot`
+                  : `Autopilot run created with ${simulationResult.total_actions} low-risk actions — auto-approved for execution.`,
+              }});
+            }
+          } catch (e) {
+            seoToolResults.push({ id: tc.id, name: "autopilot_create_run", result: { error: e instanceof Error ? e.message : "autopilot_create_run failed" } });
+          }
+        }
+
+        // Empire — autopilot_list_runs handler
+        if (tc.function?.name === "autopilot_list_runs") {
+          try {
+            const args = JSON.parse(tc.function.arguments || "{}");
+            let query = svcClient.from("autopilot_runs").select("id, title, trigger_type, phase, status, created_at, updated_at, metrics").eq("company_id", companyId).order("created_at", { ascending: false }).limit(args.limit || 10);
+            if (args.status) query = query.eq("status", args.status);
+            const { data, error } = await query;
+            seoToolResults.push({ id: tc.id, name: "autopilot_list_runs", result: error ? { error: error.message } : { success: true, runs: data, count: (data || []).length } });
+          } catch (e) {
+            seoToolResults.push({ id: tc.id, name: "autopilot_list_runs", result: { error: e instanceof Error ? e.message : "Failed" } });
           }
         }
 
