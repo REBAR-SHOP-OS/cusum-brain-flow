@@ -5,10 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Landmark, Search, FileBarChart, Plus } from "lucide-react";
+import { Landmark, Search, FileBarChart, Plus, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { AccountQuickReportDrawer } from "./AccountQuickReportDrawer";
 import { NewAccountDrawer } from "./NewAccountDrawer";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
 import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
 
 interface Props {
@@ -33,8 +35,16 @@ interface AccountNode {
   depth: number;
 }
 
+// Canonical QB type ordering
+const TYPE_ORDER = [
+  "Bank", "Accounts Receivable", "Other Current Asset", "Fixed Asset", "Other Asset",
+  "Credit Card", "Accounts Payable", "Other Current Liability", "Long Term Liability",
+  "Equity",
+  "Income", "Other Income",
+  "Cost of Goods Sold", "Expense", "Other Expense",
+];
+
 function buildAccountTree(accounts: ReturnType<typeof useQuickBooksData>["accounts"]): AccountNode[] {
-  // Extract raw_json fields if available
   const rawAccounts = accounts.map((a) => {
     const raw = a as unknown as Record<string, unknown>;
     return {
@@ -53,7 +63,6 @@ function buildAccountTree(accounts: ReturnType<typeof useQuickBooksData>["accoun
     };
   });
 
-  // Build depth map
   const idMap = new Map(rawAccounts.map((a) => [a.Id, a]));
 
   function getDepth(a: AccountNode): number {
@@ -63,13 +72,20 @@ function buildAccountTree(accounts: ReturnType<typeof useQuickBooksData>["accoun
     return 1 + getDepth(parent);
   }
 
-  rawAccounts.forEach((a) => {
-    a.depth = getDepth(a);
-  });
+  rawAccounts.forEach((a) => { a.depth = getDepth(a); });
 
-  // Sort: parents first, then children alphabetically under parent
+  // Sort by canonical type order, then alphabetically within type, with children under parents
   const sorted: AccountNode[] = [];
-  const topLevel = rawAccounts.filter((a) => !a.SubAccount).sort((a, b) => a.Name.localeCompare(b.Name, undefined, { sensitivity: "base" }));
+  const topLevel = rawAccounts
+    .filter((a) => !a.SubAccount)
+    .sort((a, b) => {
+      const typeA = TYPE_ORDER.indexOf(a.AccountType);
+      const typeB = TYPE_ORDER.indexOf(b.AccountType);
+      const orderA = typeA >= 0 ? typeA : 999;
+      const orderB = typeB >= 0 ? typeB : 999;
+      if (orderA !== orderB) return orderA - orderB;
+      return a.Name.localeCompare(b.Name, undefined, { sensitivity: "base" });
+    });
 
   function addWithChildren(parent: AccountNode) {
     sorted.push(parent);
@@ -81,12 +97,20 @@ function buildAccountTree(accounts: ReturnType<typeof useQuickBooksData>["accoun
 
   topLevel.forEach(addWithChildren);
 
-  // Add any orphans
   const inSorted = new Set(sorted.map((a) => a.Id));
   rawAccounts.filter((a) => !inSorted.has(a.Id)).forEach((a) => sorted.push(a));
 
   return sorted;
 }
+
+// Group account types into categories for the filter
+const TYPE_CATEGORIES: Record<string, string[]> = {
+  "Asset": ["Bank", "Accounts Receivable", "Other Current Asset", "Fixed Asset", "Other Asset"],
+  "Liability": ["Credit Card", "Accounts Payable", "Other Current Liability", "Long Term Liability"],
+  "Equity": ["Equity"],
+  "Income": ["Income", "Other Income"],
+  "Expense": ["Cost of Goods Sold", "Expense", "Other Expense"],
+};
 
 export function AccountingAccounts({ data }: Props) {
   const { accounts, estimates } = data;
@@ -94,12 +118,16 @@ export function AccountingAccounts({ data }: Props) {
   const [selectedAccount, setSelectedAccount] = useState<{ Id: string; Name: string; CurrentBalance: number } | null>(null);
   const [subTab, setSubTab] = useState("accounts");
   const [typeFilter, setTypeFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("active");
+  const [detailTypeFilter, setDetailTypeFilter] = useState("all");
   const [newAccountOpen, setNewAccountOpen] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   const accountTree = useMemo(() => buildAccountTree(accounts), [accounts]);
 
-  const accountTypes = useMemo(() => {
-    const types = new Set(accounts.map((a) => a.AccountType));
+  // Unique detail types from data
+  const detailTypes = useMemo(() => {
+    const types = new Set(accounts.map((a) => a.AccountSubType).filter(Boolean));
     return Array.from(types).sort();
   }, [accounts]);
 
@@ -108,11 +136,37 @@ export function AccountingAccounts({ data }: Props) {
       const matchesSearch =
         a.Name.toLowerCase().includes(search.toLowerCase()) ||
         a.AccountType.toLowerCase().includes(search.toLowerCase()) ||
-        (a.AcctNum || "").toLowerCase().includes(search.toLowerCase());
-      const matchesType = typeFilter === "all" || a.AccountType === typeFilter;
-      return matchesSearch && matchesType;
+        (a.AcctNum || "").toLowerCase().includes(search.toLowerCase()) ||
+        (a.AccountSubType || "").toLowerCase().includes(search.toLowerCase());
+      
+      // Type filter: can be "all", a category like "Asset", or a specific type like "Bank"
+      let matchesType = true;
+      if (typeFilter !== "all") {
+        const categoryTypes = TYPE_CATEGORIES[typeFilter];
+        if (categoryTypes) {
+          matchesType = categoryTypes.includes(a.AccountType);
+        } else {
+          matchesType = a.AccountType === typeFilter;
+        }
+      }
+
+      const matchesStatus = statusFilter === "all" || 
+        (statusFilter === "active" && a.Active) || 
+        (statusFilter === "inactive" && !a.Active);
+
+      const matchesDetail = detailTypeFilter === "all" || a.AccountSubType === detailTypeFilter;
+
+      return matchesSearch && matchesType && matchesStatus && matchesDetail;
     });
-  }, [accountTree, search, typeFilter]);
+  }, [accountTree, search, typeFilter, statusFilter, detailTypeFilter]);
+
+  // Summary counts
+  const summary = useMemo(() => {
+    const active = accountTree.filter((a) => a.Active).length;
+    const inactive = accountTree.filter((a) => !a.Active).length;
+    const totalBalance = accountTree.reduce((s, a) => s + (a.CurrentBalance || 0), 0);
+    return { active, inactive, totalBalance };
+  }, [accountTree]);
 
   const filteredEstimates = estimates.filter(
     (e) =>
@@ -120,8 +174,73 @@ export function AccountingAccounts({ data }: Props) {
       (e.CustomerRef?.name || "").toLowerCase().includes(search.toLowerCase())
   );
 
+  const syncAccounts = async () => {
+    setSyncing(true);
+    try {
+      const { data: result, error } = await supabase.functions.invoke("qb-sync-engine", {
+        body: { action: "sync-entity", entity_type: "Account" },
+      });
+      if (error) throw error;
+      toast({ title: "Accounts synced", description: `${result?.upserted ?? 0} records updated from QuickBooks` });
+      data.loadAll();
+    } catch (err) {
+      toast({ title: "Sync failed", description: String(err), variant: "destructive" });
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  // Detect type group boundaries for visual separation
+  const getTypeGroupLabel = (index: number): string | null => {
+    const current = filteredAccounts[index];
+    if (!current) return null;
+    const prev = index > 0 ? filteredAccounts[index - 1] : null;
+    if (!prev || prev.AccountType !== current.AccountType) {
+      return current.AccountType;
+    }
+    return null;
+  };
+
   return (
     <div className="space-y-4">
+      {/* Summary bar */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <Card>
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-primary/10">
+              <Landmark className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">{summary.active} Active Accounts</p>
+              <p className="text-xl font-bold">{summary.active}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-muted">
+              <Landmark className="w-5 h-5 text-muted-foreground" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">{summary.inactive} Inactive</p>
+              <p className="text-xl font-bold text-muted-foreground">{summary.inactive}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-success/10">
+              <FileBarChart className="w-5 h-5 text-success" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Total Balance</p>
+              <p className="text-xl font-bold">{fmt(summary.totalBalance)}</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Search + Filters + Actions */}
       <div className="flex gap-2 flex-wrap">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
@@ -133,22 +252,51 @@ export function AccountingAccounts({ data }: Props) {
           />
         </div>
         {subTab === "accounts" && (
-          <Select value={typeFilter} onValueChange={setTypeFilter}>
-            <SelectTrigger className="h-12 w-[200px]">
-              <SelectValue placeholder="All Types" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Types</SelectItem>
-              {accountTypes.map((t) => (
-                <SelectItem key={t} value={t}>{t}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-        {subTab === "accounts" && (
-          <Button onClick={() => setNewAccountOpen(true)} className="h-12 gap-2">
-            <Plus className="w-4 h-4" /> New
-          </Button>
+          <>
+            <Select value={typeFilter} onValueChange={setTypeFilter}>
+              <SelectTrigger className="h-12 w-[180px]">
+                <SelectValue placeholder="All Types" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                {Object.entries(TYPE_CATEGORIES).map(([cat, types]) => (
+                  <SelectItem key={cat} value={cat} className="font-semibold">{cat} ({types.length})</SelectItem>
+                ))}
+                <SelectItem disabled value="---" className="border-t">── Specific Types ──</SelectItem>
+                {TYPE_ORDER.map((t) => (
+                  <SelectItem key={t} value={t} className="pl-6 text-sm">{t}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={detailTypeFilter} onValueChange={setDetailTypeFilter}>
+              <SelectTrigger className="h-12 w-[180px]">
+                <SelectValue placeholder="All Detail Types" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Detail Types</SelectItem>
+                {detailTypes.map((d) => (
+                  <SelectItem key={d} value={d}>{d.replace(/([A-Z])/g, " $1").trim()}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="h-12 w-[140px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="inactive">Inactive</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button onClick={() => setNewAccountOpen(true)} className="h-12 gap-2">
+              <Plus className="w-4 h-4" /> New
+            </Button>
+            <Button variant="outline" onClick={syncAccounts} disabled={syncing} className="h-12 gap-2">
+              <RefreshCw className={`w-4 h-4 ${syncing ? "animate-spin" : ""}`} />
+              {syncing ? "Syncing..." : "Sync"}
+            </Button>
+          </>
         )}
       </div>
 
@@ -181,36 +329,48 @@ export function AccountingAccounts({ data }: Props) {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredAccounts.map((a) => (
-                      <TableRow key={a.Id} className="text-sm">
-                        <TableCell>
-                          <div style={{ paddingLeft: `${a.depth * 24}px` }} className="flex items-center gap-2">
-                            {a.AcctNum && <span className="text-xs text-muted-foreground font-mono">{a.AcctNum}</span>}
-                            <span className={`font-medium ${a.depth === 0 ? "" : "text-muted-foreground"}`}>
-                              {a.Name}
-                            </span>
-                            {!a.Active && (
-                              <Badge variant="outline" className="text-xs ml-1">Inactive</Badge>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">{a.AccountType}</TableCell>
-                        <TableCell className="text-muted-foreground">{a.AccountSubType || "—"}</TableCell>
-                        <TableCell className="text-muted-foreground text-xs">{(a as any).TaxCodeRef || "—"}</TableCell>
-                        <TableCell className="text-right font-semibold">{fmt(a.CurrentBalance || 0)}</TableCell>
-                        <TableCell className="text-right text-muted-foreground">
-                          {a.BankBalance != null ? fmt(a.BankBalance) : "—"}
-                        </TableCell>
-                        <TableCell>
-                          <button
-                            className="text-primary text-sm hover:underline cursor-pointer"
-                            onClick={() => setSelectedAccount({ Id: a.Id, Name: a.Name, CurrentBalance: a.CurrentBalance || 0 })}
-                          >
-                            View register
-                          </button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {filteredAccounts.map((a, idx) => {
+                      const groupLabel = getTypeGroupLabel(idx);
+                      return (
+                        <>
+                          {groupLabel && (
+                            <TableRow key={`group-${a.AccountType}-${idx}`} className="bg-muted/30 hover:bg-muted/30">
+                              <TableCell colSpan={7} className="py-2 px-4">
+                                <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">{groupLabel}</span>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                          <TableRow key={a.Id} className="text-sm">
+                            <TableCell>
+                              <div style={{ paddingLeft: `${a.depth * 24}px` }} className="flex items-center gap-2">
+                                {a.AcctNum && <span className="text-xs text-muted-foreground font-mono">{a.AcctNum}</span>}
+                                <span className={`font-medium ${a.depth === 0 ? "" : "text-muted-foreground"}`}>
+                                  {a.Name}
+                                </span>
+                                {!a.Active && (
+                                  <Badge variant="outline" className="text-xs ml-1">Inactive</Badge>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">{a.AccountType}</TableCell>
+                            <TableCell className="text-muted-foreground">{a.AccountSubType || "—"}</TableCell>
+                            <TableCell className="text-muted-foreground text-xs">{a.TaxCodeRef || "—"}</TableCell>
+                            <TableCell className="text-right font-semibold">{fmt(a.CurrentBalance || 0)}</TableCell>
+                            <TableCell className="text-right text-muted-foreground">
+                              {a.BankBalance != null ? fmt(a.BankBalance) : "—"}
+                            </TableCell>
+                            <TableCell>
+                              <button
+                                className="text-primary text-sm hover:underline cursor-pointer"
+                                onClick={() => setSelectedAccount({ Id: a.Id, Name: a.Name, CurrentBalance: a.CurrentBalance || 0 })}
+                              >
+                                View register
+                              </button>
+                            </TableCell>
+                          </TableRow>
+                        </>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               )}
