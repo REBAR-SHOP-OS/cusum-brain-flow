@@ -1,47 +1,71 @@
 
 
-# Three Surgical Fixes
+# Add Missing QuickBooks Invoice Fields to InvoiceEditor
 
-## 1. Product Picker in Create Transaction Dialog
+## What's Missing (from the screenshot)
 
-The "Description" field in line items (circled in the screenshot) is currently a plain text input. It needs to become a searchable dropdown that lists all products from the `qb_items` table.
+The current InvoiceEditor only has: Customer, Invoice Date, Due Date, Description/Qty/Rate/Amount line items, Memo, and Totals. The QuickBooks UI (circled in the screenshot) shows additional fields that need to be added.
 
-**File: `src/components/customers/CreateTransactionDialog.tsx`**
+## Changes -- Single File: `src/components/accounting/InvoiceEditor.tsx`
 
-- Import `useQuickBooksData` or query `qb_items` directly via a small `useQuery` hook inside the component
-- Filter items to `type = 'Service'` (skip Categories) and `is_deleted = false`
-- Replace the Description `<Input>` with a Combobox (using `cmdk` which is already installed) that:
-  - Shows all products in a searchable dropdown
-  - On selection, auto-fills `description` with the item name and `unitPrice` with the item's `unit_price`
-  - Still allows free-text typing for custom line items
-- Guard: if `qb_items` query fails or returns empty, fall back to the current plain text input
+### 1. New Header Fields Section (between Bill To and Line Items)
 
-## 2. Chat Layers on Top (Except Screenshot)
+Add a grid of editable metadata fields that mirror QuickBooks:
 
-The DockChatBar, DockChatBox, and GlobalChatPanel all use `z-50`, which puts them at the same level as dialogs and other overlays. The screenshot button is at `z-[9999]`.
+- **Billing Address** (textarea, left column) -- read from `invoice.BillAddr` (QuickBooks stores this as `BillAddr.Line1`, `City`, etc.), editable in edit mode
+- **Shipping Address** (textarea, below billing) -- read from `invoice.ShipAddr`
+- **Terms** (dropdown) -- read from `invoice.SalesTermRef`, options: Net 15, Net 30, Net 60, Due Upon Receipt
+- **Ship Via** (text input) -- read from `invoice.ShipMethodRef`
+- **Shipping Date** (date input) -- read from `invoice.ShipDate`
+- **Tracking No.** (text input) -- read from `invoice.TrackingNum`
+- **PO Number** (text input) -- read from `invoice.PONumber` (custom field on the raw invoice)
+- **Sales Rep** (text input) -- read from `invoice.SalesRep` or custom field
 
-**Files to change (class only -- `z-50` to `z-[9998]`):**
+All fields are **read-only in view mode** and become editable inputs when the user clicks Edit. In view mode, empty fields are hidden to keep the invoice clean.
 
-- `src/components/chat/DockChatBar.tsx` (line 95) -- launcher pill
-- `src/components/chat/DockChatBox.tsx` (lines 85, 105) -- minimized and expanded states
-- `src/components/layout/GlobalChatPanel.tsx` (lines 102, 210) -- both views
+### 2. Product/Service Dropdown in Line Items
 
-This ensures chat sits above all dialogs/toasts but below the screenshot button.
+Replace the plain Description `<Input>` with a two-part cell:
 
-## 3. File Attachments with Drag-and-Drop in Dock Chat
+- A `<Select>` dropdown populated from the `items` prop (already passed in) filtered to `Active === true`
+- When a product is selected, auto-fill `Description` with `item.Description || item.Name` and `UnitPrice` with `item.UnitPrice`
+- The Description input remains below/beside for custom text override
+- Guard: if `items` array is empty, fall back to the current plain text input
 
-The DockChatBox currently has no file attachment support. The full Team Hub MessageThread already has file upload to the `team-chat-files` bucket, so we replicate that pattern.
+### 3. Service Date Column
 
-**File: `src/components/chat/DockChatBox.tsx`**
+Add a "Service Date" column to the line items table (only visible in edit mode, or when data exists in view mode). This maps to `SalesItemLineDetail.ServiceDate` in QuickBooks.
 
-- Add a file input (hidden) triggered by a Paperclip icon button next to the send button
-- Add drag-and-drop zone on the chat box container (`onDragOver`, `onDrop` handlers)
-- On file drop/select:
-  - Upload to `team-chat-files` bucket via `supabase.storage`
-  - Build `ChatAttachment[]` array with name, url (signed URL), type, size
-  - Pass attachments to `sendMutation.mutateAsync`
-- Add visual drop indicator (border highlight) when dragging over the chat box
-- Guards: max file size 10MB, throttle upload (disable send while uploading), type-safe attachment serialization
-- Show attached file names as removable chips above the input before sending
+### 4. Save Logic Update
 
-No new dependencies, no schema changes, no new tables.
+The `handleSave` function's `updates` object will include the new fields:
+
+- `BillAddr`, `ShipAddr`, `SalesTermRef`, `ShipMethodRef`, `ShipDate`, `TrackingNum`, `CustomField` (for PO Number)
+- Line items will include `ServiceDate` and `ItemRef` when a product is selected
+- Guards: only include fields in the payload that have actually changed (sparse update)
+- Throttle: the existing `saving` state already prevents double-submission
+
+### 5. No Schema Changes, No New Files, No New Dependencies
+
+- All data comes from the existing `invoice` object (raw QuickBooks data) and the `items` prop
+- The `cmdk` package is already installed but using a simple `<Select>` from Radix is cleaner and consistent with the existing pattern
+- No database migration needed -- these fields already exist in QuickBooks and flow through the existing sync
+
+## Visual Layout (View Mode)
+
+```text
++----------------------------------+----------------------------+
+| Bill To                          | Payment History            |
+| Customer Name                    | PAID / PARTIAL / OPEN      |
++----------------------------------+----------------------------+
+| Billing Address  | Terms: Net 30   | Inv Date  | Due Date     |
+| 123 Main St...   | Ship Via: UPS   | Ship Date | Tracking #   |
+| Shipping Address | PO#: 12345      | Sales Rep: John          |
++----------------------------------+----------------------------+
+| # | Service Date | Product/Service | Description | Qty | Rate | Amount |
+|---|-------------|-----------------|-------------|-----|------|--------|
+| 1 | 2026-02-17  | Rebar 10M       | Fabrication | 100 | 2.50 | 250.00 |
++------------------------------------------------------------------+
+```
+
+Empty fields are hidden in view mode to keep the invoice clean.
