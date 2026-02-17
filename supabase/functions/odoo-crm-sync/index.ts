@@ -8,22 +8,29 @@ const STAGE_MAP: Record<string, string> = {
   "Addendums": "addendums",
   "Estimation-Ben": "estimation_ben",
   "Estimation-Karthick(Mavericks)": "estimation_karthick",
+  "Estimation-Others": "estimation_others",
+  "Estimation Partha": "estimation_partha",
   "QC - Ben": "qc_ben",
   "Hot Enquiries": "hot_enquiries",
   "Quotation Priority": "quotation_priority",
   "Quotation Bids": "quotation_bids",
   "Shop Drawing": "shop_drawing",
   "Shop Drawing Sent for Approval": "shop_drawing_approval",
-  "Fabrication In Shop": "shop_drawing",
-  "Delivered/Pickup Done": "won",
-  "Ready To Dispatch/Pickup": "won",
+  "Fabrication In Shop": "fabrication_in_shop",
+  "Ready To Dispatch/Pickup": "ready_to_dispatch",
+  "Delivered/Pickup Done": "delivered_pickup_done",
+  "Out for Delivery": "out_for_delivery",
   "Won": "won",
-  "Loss": "lost",
-  "Merged": "lost",
-  "No rebars(Our of Scope)": "lost",
+  "Loss": "loss",
+  "Merged": "merged",
+  "No rebars(Our of Scope)": "no_rebars_out_of_scope",
+  "Temp: IR/VAM": "temp_ir_vam",
+  "Migration-Others": "migration_others",
+  "Dreamers": "dreamers",
 };
 
-const ACTIVE_STAGES = new Set(Object.values(STAGE_MAP).filter(s => s !== "won" && s !== "lost"));
+const TERMINAL_STAGES = new Set(["won", "lost", "loss", "merged", "no_rebars_out_of_scope", "delivered_pickup_done"]);
+const ACTIVE_STAGES = new Set(Object.values(STAGE_MAP).filter(s => !TERMINAL_STAGES.has(s)));
 
 const FIELDS = [
   "id", "name", "stage_id", "email_from", "phone", "contact_name",
