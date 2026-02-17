@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useTimeClock } from "@/hooks/useTimeClock";
 import { useLeaveManagement } from "@/hooks/useLeaveManagement";
 import { useFaceRecognition } from "@/hooks/useFaceRecognition";
+import { useUserRole } from "@/hooks/useUserRole";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { Card, CardContent } from "@/components/ui/card";
@@ -35,6 +36,7 @@ function formatDuration(mins: number) {
 export default function TimeClock() {
   const { allEntries, activeEntry, loading, clockIn, clockOut, myProfile, profiles } = useTimeClock();
   const leave = useLeaveManagement();
+  const { isAdmin } = useUserRole();
   const { user } = useAuth();
   const face = useFaceRecognition();
 
@@ -361,6 +363,7 @@ export default function TimeClock() {
             <MyLeaveTab
               balance={leave.balance}
               requests={leave.myRequests}
+              profiles={leave.profiles}
               onSubmit={leave.submitRequest}
               onCancel={leave.cancelRequest}
             />
@@ -371,6 +374,8 @@ export default function TimeClock() {
               requests={leave.allRequests}
               profiles={leave.profiles}
               onReview={leave.reviewRequest}
+              currentProfileId={leave.myProfile?.id}
+              isAdmin={isAdmin}
             />
           </TabsContent>
         </Tabs>

@@ -3501,6 +3501,8 @@ export type Database = {
       }
       leave_requests: {
         Row: {
+          approval_routing: string | null
+          assigned_approver_id: string | null
           company_id: string
           created_at: string
           end_date: string
@@ -3517,6 +3519,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          approval_routing?: string | null
+          assigned_approver_id?: string | null
           company_id: string
           created_at?: string
           end_date: string
@@ -3533,6 +3537,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          approval_routing?: string | null
+          assigned_approver_id?: string | null
           company_id?: string
           created_at?: string
           end_date?: string
@@ -3549,6 +3555,20 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "leave_requests_assigned_approver_id_fkey"
+            columns: ["assigned_approver_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leave_requests_assigned_approver_id_fkey"
+            columns: ["assigned_approver_id"]
+            isOneToOne: false
+            referencedRelation: "profiles_safe"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "leave_requests_profile_id_fkey"
             columns: ["profile_id"]
@@ -5017,6 +5037,7 @@ export type Database = {
           full_name: string
           id: string
           is_active: boolean | null
+          manager_id: string | null
           phone: string | null
           preferred_language: string
           preferred_voice_id: string | null
@@ -5036,6 +5057,7 @@ export type Database = {
           full_name: string
           id?: string
           is_active?: boolean | null
+          manager_id?: string | null
           phone?: string | null
           preferred_language?: string
           preferred_voice_id?: string | null
@@ -5055,6 +5077,7 @@ export type Database = {
           full_name?: string
           id?: string
           is_active?: boolean | null
+          manager_id?: string | null
           phone?: string | null
           preferred_language?: string
           preferred_voice_id?: string | null
@@ -5063,7 +5086,22 @@ export type Database = {
           user_id?: string | null
           voice_enabled?: boolean
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_manager_id_fkey"
+            columns: ["manager_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_manager_id_fkey"
+            columns: ["manager_id"]
+            isOneToOne: false
+            referencedRelation: "profiles_safe"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       projects: {
         Row: {

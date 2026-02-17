@@ -69,6 +69,7 @@ import KnowledgeBasePublic from "./pages/KnowledgeBasePublic";
 import LiveChat from "./pages/LiveChat";
 import EmailMarketing from "./pages/EmailMarketing";
 import Unsubscribe from "./pages/Unsubscribe";
+import OrgChart from "./pages/OrgChart";
 const queryClient = new QueryClient();
 
 /** Helper to wrap protected routes with layout + page-level error boundary */
@@ -152,6 +153,7 @@ const App = () => (
                     <Route path="/office" element={<ProtectedRoute><SmartErrorBoundary level="page"><OfficePortal /></SmartErrorBoundary></ProtectedRoute>} />
 
                     {/* System */}
+                    <Route path="/org-chart" element={<P><OrgChart /></P>} />
                     <Route path="/brain" element={<P><Brain /></P>} />
                     <Route path="/integrations" element={<P><Integrations /></P>} />
                     <Route path="/integrations/callback" element={<IntegrationCallback />} />

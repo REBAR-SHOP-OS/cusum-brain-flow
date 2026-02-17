@@ -19,6 +19,8 @@ interface Props {
   requests: LeaveRequest[];
   profiles: Profile[];
   onReview: (id: string, status: "approved" | "denied", note?: string) => void;
+  currentProfileId?: string;
+  isAdmin?: boolean;
 }
 
 function getInitials(name: string) {
@@ -36,7 +38,7 @@ const statusColors: Record<string, string> = {
   cancelled: "bg-muted text-muted-foreground",
 };
 
-export function TeamCalendarTab({ requests, profiles, onReview }: Props) {
+export function TeamCalendarTab({ requests, profiles, onReview, currentProfileId, isAdmin }: Props) {
   const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
   const today = new Date();
 
@@ -113,6 +115,11 @@ export function TeamCalendarTab({ requests, profiles, onReview }: Props) {
                         {typeLabels[req.leave_type]} · {format(parseISO(req.start_date), "MMM d")} – {format(parseISO(req.end_date), "MMM d")}
                         {" · "}{req.total_days} day{req.total_days !== 1 ? "s" : ""}
                       </p>
+                      {req.assigned_approver_id && (
+                        <p className="text-xs text-muted-foreground">
+                          Assigned Approver: <span className="font-medium">{getProfile(req.assigned_approver_id)?.full_name || "Unknown"}</span>
+                        </p>
+                      )}
                       {req.reason && <p className="text-xs text-muted-foreground truncate">{req.reason}</p>}
                     </div>
                   </div>
@@ -123,23 +130,28 @@ export function TeamCalendarTab({ requests, profiles, onReview }: Props) {
                     onChange={(e) => setReviewNotes((prev) => ({ ...prev, [req.id]: e.target.value }))}
                     className="text-xs"
                   />
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      className="flex-1 gap-1 bg-green-600 hover:bg-green-700"
-                      onClick={() => { onReview(req.id, "approved", reviewNotes[req.id]); setReviewNotes((p) => { const n = { ...p }; delete n[req.id]; return n; }); }}
-                    >
-                      <Check className="w-3.5 h-3.5" /> Approve
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      className="flex-1 gap-1"
-                      onClick={() => { onReview(req.id, "denied", reviewNotes[req.id]); setReviewNotes((p) => { const n = { ...p }; delete n[req.id]; return n; }); }}
-                    >
-                      <X className="w-3.5 h-3.5" /> Deny
-                    </Button>
-                  </div>
+                  {(isAdmin || currentProfileId === req.assigned_approver_id) && (
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        className="flex-1 gap-1 bg-green-600 hover:bg-green-700"
+                        onClick={() => { onReview(req.id, "approved", reviewNotes[req.id]); setReviewNotes((p) => { const n = { ...p }; delete n[req.id]; return n; }); }}
+                      >
+                        <Check className="w-3.5 h-3.5" /> Approve
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        className="flex-1 gap-1"
+                        onClick={() => { onReview(req.id, "denied", reviewNotes[req.id]); setReviewNotes((p) => { const n = { ...p }; delete n[req.id]; return n; }); }}
+                      >
+                        <X className="w-3.5 h-3.5" /> Deny
+                      </Button>
+                    </div>
+                  )}
+                  {!isAdmin && currentProfileId !== req.assigned_approver_id && (
+                    <p className="text-xs text-muted-foreground italic">Awaiting assigned approver</p>
+                  )}
                 </CardContent>
               </Card>
             );
@@ -165,6 +177,9 @@ export function TeamCalendarTab({ requests, profiles, onReview }: Props) {
                     <p className="text-xs text-muted-foreground">
                       {typeLabels[req.leave_type]} · {format(parseISO(req.start_date), "MMM d")} – {format(parseISO(req.end_date), "MMM d")}
                     </p>
+                    {req.approval_routing && (
+                      <p className="text-[10px] text-muted-foreground italic">{req.approval_routing}</p>
+                    )}
                   </div>
                   <Badge variant="outline" className={statusColors[req.status]}>{req.status}</Badge>
                 </CardContent>
