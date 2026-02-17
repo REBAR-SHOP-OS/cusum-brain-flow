@@ -246,8 +246,12 @@ export default function Pipeline() {
         .sort((a, b) => {
           const getStars = (l: LeadWithCustomer) => {
             const meta = l.metadata as Record<string, unknown> | null;
-            const op = meta?.priority as string || meta?.odoo_priority as string | undefined;
-            if (op) return Math.min(parseInt(op) || 0, 3);
+            const hasOdooId = !!meta?.odoo_id;
+            const odooPriority = meta?.odoo_priority as string | undefined;
+            if (odooPriority !== undefined && odooPriority !== null) {
+              return Math.min(parseInt(odooPriority) || 0, 3);
+            }
+            if (hasOdooId) return 0;
             if (l.priority === "high") return 3;
             if (l.priority === "medium") return 2;
             return 0;
