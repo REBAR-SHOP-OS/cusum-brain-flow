@@ -229,9 +229,9 @@ export default function Customers() {
     deleteMutation.mutate(id);
   };
 
-  const handleFormClose = () => {
-    setIsFormOpen(false);
-    setEditingCustomer(null);
+  const handleFormClose = (open: boolean) => {
+    setIsFormOpen(open);
+    if (!open) setEditingCustomer(null);
   };
 
   const handleSort = (field: SortField) => {
