@@ -30,6 +30,8 @@ export interface LeaveRequest {
   reviewed_by: string | null;
   reviewed_at: string | null;
   review_note: string | null;
+  assigned_approver_id: string | null;
+  approval_routing: string | null;
   company_id: string;
   created_at: string;
 }
@@ -114,6 +116,13 @@ export function useLeaveManagement() {
 
   const reviewRequest = async (requestId: string, status: "approved" | "denied", note?: string) => {
     if (!myProfile) return;
+
+    // Client-side self-approval guard (backend trigger is the real enforcement)
+    const request = allRequests.find((r) => r.id === requestId);
+    if (request && request.profile_id === myProfile.id) {
+      toast.error("Self-approval is not allowed");
+      return;
+    }
 
     const { error } = await supabase
       .from("leave_requests")

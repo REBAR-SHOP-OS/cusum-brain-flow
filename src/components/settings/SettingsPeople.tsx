@@ -90,6 +90,7 @@ export function SettingsPeople() {
       avatar_url: null,
       is_active: true,
       preferred_language: "en",
+      manager_id: null,
     }, {
       onSuccess: () => {
         setNewMember({ full_name: "", email: "", title: "", department: "office" });

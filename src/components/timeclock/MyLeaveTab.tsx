@@ -8,9 +8,15 @@ import { LeaveBalanceCards } from "./LeaveBalanceCards";
 import { LeaveRequestDialog } from "./LeaveRequestDialog";
 import type { LeaveBalance, LeaveRequest } from "@/hooks/useLeaveManagement";
 
+interface Profile {
+  id: string;
+  full_name: string;
+}
+
 interface Props {
   balance: LeaveBalance | null;
   requests: LeaveRequest[];
+  profiles: Profile[];
   onSubmit: (data: { leave_type: string; start_date: string; end_date: string; total_days: number; reason?: string }) => Promise<boolean>;
   onCancel: (id: string) => void;
 }
@@ -30,7 +36,11 @@ const typeLabels: Record<string, string> = {
   unpaid: "Unpaid",
 };
 
-export function MyLeaveTab({ balance, requests, onSubmit, onCancel }: Props) {
+export function MyLeaveTab({ balance, requests, profiles, onSubmit, onCancel }: Props) {
+  const getApproverName = (id: string | null) => {
+    if (!id) return null;
+    return profiles.find((p) => p.id === id)?.full_name || "Unknown";
+  };
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -60,6 +70,11 @@ export function MyLeaveTab({ balance, requests, onSubmit, onCancel }: Props) {
                     {format(new Date(req.start_date), "MMM d")} – {format(new Date(req.end_date), "MMM d, yyyy")}
                     {" · "}{req.total_days} day{req.total_days !== 1 ? "s" : ""}
                   </p>
+                  {req.assigned_approver_id && (
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Approver: <span className="font-medium">{getApproverName(req.assigned_approver_id)}</span>
+                    </p>
+                  )}
                   {req.reason && <p className="text-xs text-muted-foreground mt-0.5 truncate">{req.reason}</p>}
                   {req.review_note && (
                     <p className="text-xs text-muted-foreground mt-0.5 italic">Note: {req.review_note}</p>

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -132,6 +133,7 @@ function MyProfileTab() {
   const { user } = useAuth();
   const { profiles, updateProfile } = useProfiles();
   const { uploading, uploadSingle } = useAvatarUpload();
+  const navigate = useNavigate();
   const fileRef = useRef<HTMLInputElement>(null);
   const myProfile = profiles.find((p) => p.user_id === user?.id);
 
@@ -227,6 +229,9 @@ function MyProfileTab() {
           <Button className="w-full" onClick={handleSave} disabled={updateProfile.isPending}>
             {updateProfile.isPending ? "Saving..." : "Save Changes"}
           </Button>
+          <Button variant="outline" className="w-full gap-2" onClick={() => navigate("/org-chart")}>
+            <Users className="w-4 h-4" /> View in Org Chart
+          </Button>
         </CardContent>
       </Card>
     </div>
@@ -257,6 +262,7 @@ function TeamAccessTab() {
       avatar_url: null,
       is_active: true,
       preferred_language: newMember.preferred_language,
+      manager_id: null,
     }, {
       onSuccess: () => {
         setNewMember({ full_name: "", email: "", title: "", department: "office", preferred_language: "en" });
