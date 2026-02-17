@@ -1,9 +1,13 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Users, Search } from "lucide-react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import { Users, Search, Loader2 } from "lucide-react";
+import { CustomerDetail } from "@/components/customers/CustomerDetail";
 import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
 
 interface Props {
@@ -16,6 +20,22 @@ const fmt = (n: number) =>
 export function AccountingCustomers({ data }: Props) {
   const { customers, invoices } = data;
   const [search, setSearch] = useState("");
+  const [selectedQbId, setSelectedQbId] = useState<string | null>(null);
+
+  // Look up local customer by quickbooks_id when a row is selected
+  const { data: localCustomer, isLoading: localLoading } = useQuery({
+    queryKey: ["local_customer_by_qb", selectedQbId],
+    enabled: !!selectedQbId,
+    queryFn: async () => {
+      const { data: c, error } = await supabase
+        .from("customers")
+        .select("*")
+        .eq("quickbooks_id", selectedQbId!)
+        .maybeSingle();
+      if (error) throw error;
+      return c;
+    },
+  });
 
   const filtered = customers.filter(
     (c) =>
@@ -70,7 +90,11 @@ export function AccountingCustomers({ data }: Props) {
               </TableHeader>
               <TableBody>
                 {enriched.map((c) => (
-                  <TableRow key={c.Id} className="text-base">
+                  <TableRow
+                    key={c.Id}
+                    className="text-base cursor-pointer hover:bg-muted/50 transition-colors"
+                    onClick={() => setSelectedQbId(c.Id)}
+                  >
                     <TableCell className="font-semibold">{c.DisplayName}</TableCell>
                     <TableCell>{c.CompanyName || "—"}</TableCell>
                     <TableCell className="text-center">{c.invoiceCount}</TableCell>
@@ -96,6 +120,37 @@ export function AccountingCustomers({ data }: Props) {
           )}
         </CardContent>
       </Card>
+
+      {/* Customer Detail Sheet */}
+      <Sheet open={!!selectedQbId} onOpenChange={(open) => { if (!open) setSelectedQbId(null); }}>
+        <SheetContent side="right" className="w-full sm:max-w-2xl lg:max-w-3xl p-0 overflow-hidden">
+          <SheetHeader className="sr-only">
+            <SheetTitle>Customer Details</SheetTitle>
+            <SheetDescription>View and edit customer details</SheetDescription>
+          </SheetHeader>
+          {selectedQbId && localLoading && (
+            <div className="flex items-center justify-center h-full">
+              <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            </div>
+          )}
+          {selectedQbId && !localLoading && localCustomer && (
+            <CustomerDetail
+              customer={localCustomer}
+              onEdit={() => {}}
+              onDelete={() => {}}
+            />
+          )}
+          {selectedQbId && !localLoading && !localCustomer && (
+            <div className="p-8 text-center space-y-3">
+              <p className="text-lg font-semibold">QB-Only Customer</p>
+              <p className="text-muted-foreground">
+                This customer exists in QuickBooks but hasn't been synced to your local database yet.
+                Run a sync to view full details.
+              </p>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
