@@ -1,66 +1,56 @@
 
+
 # Make Invoices Editable (Like QuickBooks)
 
-## Problem
-
-Currently, clicking an invoice opens a **read-only print template** (InvoiceTemplate). In QuickBooks, clicking an invoice opens an **editable form** where you can modify customer, dates, terms, line items, etc. Our app has no edit capability.
-
-## Solution
-
-Build an editable invoice detail view that mirrors QuickBooks' invoice editor, and add an `update-invoice` action to the backend.
+## Overview
+Currently clicking an invoice opens a read-only print template. This plan adds full edit capability so invoices work like they do in QuickBooks -- click to view, then edit fields inline and save back to QB.
 
 ## Changes
 
-### 1. Backend: Add `update-invoice` action to `quickbooks-oauth` edge function
+### 1. Backend: Add `update-invoice` action
+**File: `supabase/functions/quickbooks-oauth/index.ts`**
 
-Add a new `handleUpdateInvoice` function that:
-- Fetches the current invoice from QB to get the latest SyncToken
-- Applies a sparse update with the changed fields (customer, due date, line items, memo, etc.)
-- Posts back to QB via `POST /invoice` with `sparse: true`
-- Returns the updated invoice
+- Add a new `handleUpdateInvoice` function that:
+  - Fetches the current invoice from QB by ID to get the latest SyncToken (prevents conflicts)
+  - Applies a sparse update with changed fields (CustomerRef, DueDate, Line items, CustomerMemo)
+  - Posts to QB via `POST /invoice` with `sparse: true`
+- Wire it into the main switch: `case "update-invoice": return handleUpdateInvoice(...)`
 
-Wire it up in the main switch: `case "update-invoice": return handleUpdateInvoice(...)`
+### 2. Frontend Hook: Add `updateInvoice` wrapper
+**File: `src/hooks/useQuickBooksData.ts`**
 
-### 2. Frontend: Add `updateInvoice` to `useQuickBooksData.ts` hook
+- Add `updateInvoice(invoiceId, updates)` function that calls `qbAction("update-invoice", { invoiceId, ...updates })`
+- Refreshes data after successful update via `loadAll()`
+- Expose in the returned object
 
-Add a new function:
-```
-updateInvoice(invoiceId, syncToken, updates) -> calls qbAction("update-invoice", ...)
-```
+### 3. New Component: Editable Invoice Detail
+**File: `src/components/accounting/InvoiceEditor.tsx`** (new)
 
-Expose it in the returned object alongside `sendInvoice` and `voidInvoice`.
+Full-screen overlay component with two modes:
 
-### 3. New Component: `InvoiceEditor.tsx`
+- **View mode** (default): Displays invoice details in a clean layout similar to InvoiceTemplate, with an "Edit" button
+- **Edit mode**: Switches fields to editable inputs:
+  - Customer: dropdown select from QB customers list
+  - Invoice date & due date: date inputs
+  - Line items: editable table (description, qty, unit price) with add/remove row capability
+  - Memo: text area
+  - Auto-calculated totals (subtotal, tax, total, amount due)
+  - Save / Cancel buttons
 
-Create `src/components/accounting/InvoiceEditor.tsx` -- a full-screen overlay (like InvoiceTemplate) but with editable fields:
+Props: raw QB invoice, customers list, items list, `updateInvoice` function, `onClose`
 
-- **Header**: Invoice number (read-only), Edit/Save/Cancel buttons
-- **Customer**: Dropdown select from QB customers list
-- **Dates**: Invoice date, Due date (date pickers)
-- **Line Items Table**: Editable rows with description, qty, unit price, tax, amount; add/remove rows
-- **Totals**: Auto-calculated untaxed, tax, total, paid, amount due
-- **Memo**: Editable text field
+### 4. Wire Up in Invoice List
+**File: `src/components/accounting/AccountingInvoices.tsx`**
 
-Starts in **view mode** (read-only, styled like current template). Clicking "Edit" switches fields to editable inputs. "Save" calls `updateInvoice`, then refreshes and returns to view mode.
+- Import `InvoiceEditor` instead of `InvoiceTemplate`
+- Pass `customers`, `items`, and `updateInvoice` from the data hook
+- Replace the `InvoiceTemplate` render with `InvoiceEditor`
 
-### 4. Update `AccountingInvoices.tsx`
+## Technical Notes
 
-Replace the `InvoiceTemplate` render with `InvoiceEditor`:
-- Pass the raw QB invoice data + customers list + `updateInvoice` function
-- The editor handles both viewing and editing
-
-## Technical Details
-
-| File | Change |
-|---|---|
-| `supabase/functions/quickbooks-oauth/index.ts` | Add `handleUpdateInvoice` + wire in switch statement |
-| `src/hooks/useQuickBooksData.ts` | Add `updateInvoice` wrapper function |
-| `src/components/accounting/InvoiceEditor.tsx` | New editable invoice detail component |
-| `src/components/accounting/AccountingInvoices.tsx` | Replace InvoiceTemplate with InvoiceEditor |
-
-## Important Constraints
-
-- QuickBooks is the authority -- all edits go through the QB API (no local-only saves)
-- Sparse updates require the current SyncToken to prevent conflicts
-- After save, the invoice list is refreshed from the mirror to stay in sync
-- No other parts of the app are modified
+- QuickBooks sparse updates require a valid SyncToken; the backend fetches the latest before updating to prevent conflicts
+- The existing `handleUpdateEmployee` pattern (fetch current -> merge -> POST sparse) is reused for invoices
+- All edits go through the QB API -- no local-only saves
+- After save, `loadAll()` refreshes the mirror to keep data in sync
+- The trial balance hard-stop still applies to updates (enforced via the existing `postingBlocked` check)
+- No other files or features are modified
