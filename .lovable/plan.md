@@ -1,94 +1,96 @@
 
 
-# Fix: Priority Stars and Activity Icons to Match Odoo
+# Fix: Activity Status Bar, Sorting, and Clickable Filtering
 
-## Problems Identified
+## Current Problem
+The column header bar currently shows **priority distribution** (green=3 stars, orange=2 stars, red=0-1 stars). Odoo shows **activity status distribution** instead:
+- **Green**: Planned activities (future deadline)
+- **Yellow/Orange**: Due today
+- **Red**: Overdue (past deadline)
+- **Grey**: No activity scheduled
 
-### 1. Duplicate leads inflating priority
-There are duplicate leads with the same `odoo_id` -- one from Odoo sync (correct: `odoo_priority: 0`, 0 stars) and one from RFQ email scan (wrong: `priority: medium`, showing 2 stars). These duplicates are cluttering the board and showing incorrect star ratings.
+Additionally, leads are sorted by priority stars only. Odoo sorts by activity urgency first.
 
-Example: `odoo_id 5200` exists twice:
-- Odoo-synced: "FW: Bid Invite: Credit Valley Hospital..." (0 stars, correct)
-- Email-sourced: "S01535, FW: Bid Invite: Credit Valley Hospital..." (2 stars, wrong)
+## What Changes
 
-### 2. Priority fallback shows wrong stars
-When a lead has an `odoo_id` but no `odoo_priority` (email-sourced duplicates), it falls back to `lead.priority = "medium"` which shows 2 stars. Odoo shows 0 stars for these leads.
+### 1. Column header bar: Priority to Activity (`PipelineColumn.tsx`)
+Replace the priority-based bar segments with activity-based segments:
+- Count leads by activity status (overdue / today / planned / none)
+- Render 4 color segments: green, yellow, red, grey -- in that exact Odoo order (green first, grey last)
+- Each segment is a clickable `button` -- clicking filters the column to show only leads with that activity status
+- Clicking the same segment again clears the filter
 
-### 3. Activity icon style doesn't match Odoo
-ERP uses a Clock icon for activity status. Odoo uses horizontal bar icons for activity status indicators.
+### 2. Sort leads by activity urgency (`Pipeline.tsx`)
+Update the `leadsByStage` sorting to sort by activity status first (overdue > today > planned > none), then by priority stars, then by `updated_at`.
 
-## Solution
-
-### 1. Fix priority display (`src/components/pipeline/LeadCard.tsx`)
-If a lead has an `odoo_id` in metadata, only use `odoo_priority` for stars -- never fall back to `lead.priority`. This ensures Odoo-synced data is the source of truth.
-
-### 2. Fix priority display in column header (`src/components/pipeline/PipelineColumn.tsx`)
-Same logic fix for the priority distribution bar in column headers.
-
-### 3. Fix priority sorting (`src/pages/Pipeline.tsx`)
-Same logic fix in the `leadsByStage` sorting function so sort order matches Odoo.
-
-### 4. Change activity icon to match Odoo
-Replace the `Clock` icon with a horizontal bars icon (using `AlignJustify` or similar from lucide-react) to visually match Odoo's activity status indicators.
-
-### 5. Clean up duplicate leads (data fix)
-Remove the email-sourced duplicate leads that share an `odoo_id` with an Odoo-synced lead, keeping only the Odoo-synced version.
+### 3. Column-level activity filter state (`PipelineColumn.tsx`)
+Add local state for the active activity filter within each column. When a color segment is clicked, only leads matching that activity status are shown in the card list.
 
 ## Technical Details
 
-### Priority logic change (all 3 files)
+### Activity status helper (shared logic)
+Extract the `getActivityStatus` function to a shared utility or duplicate in PipelineColumn:
 
-Current:
 ```typescript
-function getPriorityStars(lead: Lead): number {
-  const meta = lead.metadata as Record<string, unknown> | null;
-  const odooPriority = meta?.odoo_priority as string | undefined;
-  if (odooPriority) return Math.min(parseInt(odooPriority) || 0, 3);
-  if (lead.priority === "high") return 3;
-  if (lead.priority === "medium") return 2;
-  return 0;
+type ActivityStatus = "overdue" | "today" | "planned" | "none";
+
+function getActivityStatus(lead: Lead): ActivityStatus {
+  if (lead.stage === "won" || lead.stage === "lost") return "none";
+  if (!lead.expected_close_date) return "none";
+  const diff = differenceInDays(new Date(lead.expected_close_date), new Date());
+  if (diff < 0) return "overdue";
+  if (diff === 0) return "today";
+  return "planned";
 }
 ```
 
-Fixed:
+### Bar rendering (PipelineColumn.tsx)
+Replace priority bar with clickable activity bar:
+
 ```typescript
-function getPriorityStars(lead: Lead): number {
-  const meta = lead.metadata as Record<string, unknown> | null;
-  // If lead has an odoo_id, only use odoo_priority (source of truth)
-  const hasOdooId = !!meta?.odoo_id;
-  const odooPriority = meta?.odoo_priority as string | undefined;
-  if (odooPriority !== undefined && odooPriority !== null) {
-    return Math.min(parseInt(odooPriority) || 0, 3);
-  }
-  if (hasOdooId) return 0; // Odoo lead without priority data = 0 stars
-  if (lead.priority === "high") return 3;
-  if (lead.priority === "medium") return 2;
-  return 0;
-}
+const [activityFilter, setActivityFilter] = useState<ActivityStatus | null>(null);
+
+const planned = leads.filter(l => getActivityStatus(l) === "planned").length;
+const today = leads.filter(l => getActivityStatus(l) === "today").length;
+const overdue = leads.filter(l => getActivityStatus(l) === "overdue").length;
+const none = total - planned - today - overdue;
+
+// Filter displayed leads
+const displayedLeads = activityFilter
+  ? leads.filter(l => getActivityStatus(l) === activityFilter)
+  : leads;
 ```
 
-### Activity icon change (`src/components/pipeline/LeadCard.tsx`)
-Replace `Clock` import with `AlignJustify` (horizontal bars) to match Odoo's visual style for activity indicators.
+Bar segments are clickable buttons with colors:
+- Green (#21b632) for planned
+- Yellow (#f0ad4e) for today  
+- Red (#d9534f) for overdue
+- Grey (muted) for none
 
-### Duplicate cleanup (SQL)
-Delete email-sourced duplicate leads that share an `odoo_id` with a properly synced lead:
+### Sorting update (Pipeline.tsx)
+In the `leadsByStage` sort function, add activity urgency as the primary sort key:
 
-```sql
-DELETE FROM leads
-WHERE id IN (
-  SELECT l1.id FROM leads l1
-  JOIN leads l2 ON (l1.metadata->>'odoo_id') = (l2.metadata->>'odoo_id')
-  WHERE l1.id != l2.id
-  AND l1.title LIKE 'S0%,%'
-  AND l2.title NOT LIKE 'S0%,%'
-)
+```typescript
+.sort((a, b) => {
+  // Activity urgency first: overdue(0) > today(1) > planned(2) > none(3)
+  const activityOrder = { overdue: 0, today: 1, planned: 2, none: 3 };
+  const aActivity = activityOrder[getActivityStatus(a)];
+  const bActivity = activityOrder[getActivityStatus(b)];
+  if (aActivity !== bActivity) return aActivity - bActivity;
+  
+  // Then priority stars
+  const starDiff = getStars(b) - getStars(a);
+  if (starDiff !== 0) return starDiff;
+  
+  // Then recency
+  return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+});
 ```
 
 ## Files Modified
 
 | File | Change |
 |---|---|
-| `src/components/pipeline/LeadCard.tsx` | Fix priority logic; change Clock to horizontal bars icon |
-| `src/components/pipeline/PipelineColumn.tsx` | Fix priority logic in header bar |
-| `src/pages/Pipeline.tsx` | Fix priority logic in sort function |
+| `src/components/pipeline/PipelineColumn.tsx` | Replace priority bar with clickable activity status bar; add local filter state |
+| `src/pages/Pipeline.tsx` | Add activity-first sorting in `leadsByStage` |
 
