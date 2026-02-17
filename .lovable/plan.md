@@ -1,39 +1,40 @@
 
-# Fix: Quotations Limited to 1,000 Records + Improvements
+# Audit & Fix: Customer Detail -- Edit Not Wired, Delete Unsafe
 
-## Problem
-The database contains **2,586 archived quotations** but only **1,000** are displayed. This is caused by the default row limit in database queries. The current hook fetches all records in a single unbounded `SELECT *` call, which silently caps at 1,000.
+## Problems Found
 
-Additionally, loading 2,586 records into memory at once is unnecessary -- the UI should paginate and allow filtering.
+### 1. Edit button not wired in Accounting Customers
+In `AccountingCustomers.tsx` (line 147), the `onEdit` handler is `() => {}` -- clicking Edit does nothing.
 
-## Status Breakdown (all 2,586 records)
-| Status | Count |
-|--------|-------|
-| Quotation Sent | 1,480 |
-| Sales Order | 969 |
-| Draft Quotation | 85 |
-| Cancelled | 52 |
+### 2. Delete button not wired in Accounting Customers
+In `AccountingCustomers.tsx` (line 148), the `onDelete` handler is `() => {}` -- clicking Delete does nothing.
+
+### 3. Delete button is unsafe everywhere
+In `CustomerDetail.tsx` (line 386), the Delete button directly calls `onDelete()` with no confirmation dialog. The confirmation in `Customers.tsx` uses a basic `window.confirm()` which is not a proper UI pattern. Delete should use an `AlertDialog` for safe confirmation.
 
 ---
 
-## What Will Be Fixed
+## Fix Plan
 
-### 1. Paginated Data Fetching in `useArchivedQuotations`
-- Replace the single unbounded query with a **paginated hook** that accepts `page`, `pageSize`, `search`, and `statusFilter` parameters
-- Use `.range(from, to)` to fetch only the current page
-- Return `totalCount` using `{ count: "exact", head: false }` so the UI knows total pages
-- Default page size: 50
+### 1. Move delete confirmation INTO CustomerDetail using AlertDialog
+Instead of relying on parent components to add confirmation, add an `AlertDialog` directly inside `CustomerDetail.tsx` wrapping the delete button. This ensures delete is always safe regardless of which parent renders it.
 
-### 2. Add Search, Filters, and Pagination UI to `AccountingDocuments`
-- Add a **search bar** (filters by quote number or customer name)
-- Add a **status filter dropdown** (All, Draft Quotation, Quotation Sent, Sales Order, Cancelled)
-- Add **pagination controls** (Previous / Next with page indicator like "Page 1 of 52")
-- Show total count in the tab badge accurately (from count query, not array length)
+**File: `src/components/customers/CustomerDetail.tsx`**
+- Import `AlertDialog`, `AlertDialogAction`, `AlertDialogCancel`, `AlertDialogContent`, `AlertDialogDescription`, `AlertDialogFooter`, `AlertDialogHeader`, `AlertDialogTitle`, `AlertDialogTrigger`
+- Wrap the existing delete button in `AlertDialogTrigger`
+- Show confirmation dialog: "Are you sure? This will permanently delete this customer."
+- Only call `onDelete()` when user confirms
 
-### 3. Server-Side Filtering
-- Search uses `.or()` with `ilike` on `quote_number` and metadata customer name
-- Status filter uses `.eq("odoo_status", status)` when not "all"
-- Both filters are applied server-side so pagination counts remain accurate
+### 2. Wire Edit and Delete in AccountingCustomers
+**File: `src/components/accounting/AccountingCustomers.tsx`**
+- Add `editingCustomer` state and `useMutation` for delete (same pattern as `Customers.tsx`)
+- Wire `onEdit` to open `CustomerFormModal` with the selected customer
+- Wire `onDelete` to execute the delete mutation, close the sheet, and invalidate queries
+- Pass the editing customer to `CustomerFormModal` (currently always passes `null`)
+
+### 3. Remove redundant confirm() from Customers.tsx
+**File: `src/pages/Customers.tsx`**
+- Remove the `window.confirm()` from `handleDelete` since confirmation is now built into `CustomerDetail`
 
 ---
 
@@ -41,29 +42,6 @@ Additionally, loading 2,586 records into memory at once is unnecessary -- the UI
 
 | File | Change |
 |------|--------|
-| `src/hooks/useArchivedQuotations.ts` | Rewrite to accept pagination/filter params, use `.range()` and `count: "exact"` |
-| `src/components/accounting/AccountingDocuments.tsx` | Add search bar, status filter dropdown, pagination controls for quotations tab |
-
-## Technical Details
-
-**Hook signature change:**
-```typescript
-useArchivedQuotations({ page, pageSize, search, status })
-// Returns: { quotations, isLoading, totalCount, totalPages }
-```
-
-**Key query fix:**
-```typescript
-let query = supabase
-  .from("quotes")
-  .select("*", { count: "exact" })
-  .eq("source", "odoo_sync");
-
-if (search) query = query.or(`quote_number.ilike.%${search}%,salesperson.ilike.%${search}%`);
-if (status !== "all") query = query.eq("odoo_status", status);
-
-query = query.order("created_at", { ascending: false })
-  .range(from, to);
-```
-
-This ensures all 2,586 quotations are accessible with fast, paginated loading.
+| `src/components/customers/CustomerDetail.tsx` | Replace bare delete button with AlertDialog confirmation |
+| `src/components/accounting/AccountingCustomers.tsx` | Wire onEdit to open form modal, wire onDelete with mutation |
+| `src/pages/Customers.tsx` | Remove redundant window.confirm() from handleDelete |
