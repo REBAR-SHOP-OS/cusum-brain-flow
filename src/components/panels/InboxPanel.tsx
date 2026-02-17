@@ -10,8 +10,14 @@ import { formatDistanceToNow } from "date-fns";
 import { motion, AnimatePresence } from "framer-motion";
 
 function normalizeRoute(linkTo: string): string {
+  if (/^\/hr(\/|$)/.test(linkTo)) return "/timeclock";
+  if (/^\/estimation(\/|$)/.test(linkTo)) return "/pipeline";
   if (/^\/(bills|invoicing)(\/|$)/.test(linkTo)) return "/accounting";
+  if (/^\/invoices(\/|$)/.test(linkTo)) return "/accounting";
   if (/^\/accounting\/(bills|invoices)(\/|$)/.test(linkTo)) return "/accounting";
+  if (/^\/intelligence(\/|$)/.test(linkTo)) return "/brain";
+  if (/^\/inventory(\/|$)/.test(linkTo)) return "/shop-floor";
+  if (/^\/emails(\/|$)/.test(linkTo)) return "/inbox";
   if (/^\/inbox\/[a-f0-9-]+$/i.test(linkTo)) return "/inbox";
   return linkTo;
 }
