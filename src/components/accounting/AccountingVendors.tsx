@@ -240,7 +240,7 @@ export function AccountingVendors({ data }: Props) {
 
       {/* Vendor Detail Sheet */}
       <Sheet open={!!selectedVendor} onOpenChange={(open) => !open && setSelectedVendor(null)}>
-        <SheetContent className="w-full sm:max-w-xl p-0 overflow-hidden">
+        <SheetContent className="w-full sm:max-w-2xl lg:max-w-4xl p-0 overflow-y-auto">
           <SheetHeader className="sr-only">
             <SheetTitle>{selectedVendor?.DisplayName}</SheetTitle>
           </SheetHeader>
