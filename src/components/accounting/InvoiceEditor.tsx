@@ -6,7 +6,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { X, Printer, Pencil, Save, Plus, Trash2, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import brandLogo from "@/assets/brand-logo.png";
-import type { QBInvoice, QBCustomer, QBItem } from "@/hooks/useQuickBooksData";
+import { Badge } from "@/components/ui/badge";
+import type { QBInvoice, QBCustomer, QBItem, QBPayment } from "@/hooks/useQuickBooksData";
 
 interface LineItem {
   Description: string;
@@ -20,6 +21,7 @@ interface Props {
   invoice: QBInvoice;
   customers: QBCustomer[];
   items: QBItem[];
+  payments: QBPayment[];
   onUpdate: (invoiceId: string, updates: Record<string, unknown>) => Promise<unknown>;
   onClose: () => void;
 }
@@ -46,7 +48,7 @@ function parseLineItems(invoice: QBInvoice): LineItem[] {
     });
 }
 
-export function InvoiceEditor({ invoice, customers, items, onUpdate, onClose }: Props) {
+export function InvoiceEditor({ invoice, customers, items, payments, onUpdate, onClose }: Props) {
   const { toast } = useToast();
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -68,6 +70,31 @@ export function InvoiceEditor({ invoice, customers, items, onUpdate, onClose }: 
   const total = subtotal + taxAmount;
   const paid = invoice.TotalAmt - invoice.Balance;
   const amountDue = total - paid;
+
+  // Extract payments linked to this invoice
+  const linkedPayments = useMemo(() => {
+    const results: { date: string; amount: number }[] = [];
+    for (const pmt of payments) {
+      const raw = pmt as unknown as Record<string, unknown>;
+      const lines = raw.Line as Array<Record<string, unknown>> | undefined;
+      if (!lines) continue;
+      for (const line of lines) {
+        const linkedTxns = line.LinkedTxn as Array<{ TxnId: string; TxnType: string }> | undefined;
+        if (!linkedTxns) continue;
+        for (const txn of linkedTxns) {
+          if (txn.TxnType === "Invoice" && txn.TxnId === invoice.Id) {
+            results.push({
+              date: (raw.TxnDate as string) || "",
+              amount: (line.Amount as number) || 0,
+            });
+          }
+        }
+      }
+    }
+    return results.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  }, [payments, invoice.Id]);
+
+  const paymentStatus = invoice.Balance === 0 ? "PAID" : linkedPayments.length > 0 ? "PARTIAL" : "OPEN";
 
   const updateLineItem = (idx: number, field: keyof LineItem, value: string | number) => {
     setLineItems((prev) => {
@@ -310,12 +337,57 @@ export function InvoiceEditor({ invoice, customers, items, onUpdate, onClose }: 
               <span>Total:</span>
               <span className="tabular-nums">{fmt(total)}</span>
             </div>
-            {paid > 0 && (
+            {paid > 0 && !linkedPayments.length && (
               <div className="flex justify-between text-green-700">
                 <span>Paid:</span>
                 <span className="tabular-nums">{fmt(paid)}</span>
               </div>
             )}
+          </div>
+        </div>
+
+        {/* Payment History */}
+        {linkedPayments.length > 0 && (
+          <div className="mt-6 mb-2">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-[10px] uppercase tracking-widest text-gray-400 font-bold">Payment History</p>
+              <Badge
+                className={`border-0 text-xs ${
+                  paymentStatus === "PAID"
+                    ? "bg-green-100 text-green-800"
+                    : paymentStatus === "PARTIAL"
+                    ? "bg-amber-100 text-amber-800"
+                    : "bg-gray-100 text-gray-600"
+                }`}
+              >
+                {paymentStatus}
+              </Badge>
+            </div>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-300">
+                  <th className="text-left py-1.5 font-semibold text-gray-600 text-xs">Date</th>
+                  <th className="text-right py-1.5 font-semibold text-gray-600 text-xs">Amount Applied</th>
+                </tr>
+              </thead>
+              <tbody>
+                {linkedPayments.map((p, i) => (
+                  <tr key={i} className="border-b border-gray-100">
+                    <td className="py-1.5 text-gray-700">{p.date ? new Date(p.date).toLocaleDateString() : "—"}</td>
+                    <td className="py-1.5 text-right tabular-nums font-medium text-green-700">{fmt(p.amount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="text-xs text-gray-400 mt-2">
+              {linkedPayments.length} payment{linkedPayments.length !== 1 ? "s" : ""}
+            </p>
+          </div>
+        )}
+
+        {/* Amount Due */}
+        <div className="flex justify-end">
+          <div className="w-64">
             <div className="flex justify-between font-bold text-lg border-t-2 border-gray-900 pt-2 mt-1">
               <span>Amount Due:</span>
               <span className="tabular-nums">{fmt(amountDue)}</span>
