@@ -7276,6 +7276,48 @@ export type Database = {
           },
         ]
       }
+      trial_balance_checks: {
+        Row: {
+          ap_diff: number | null
+          ar_diff: number | null
+          checked_at: string
+          company_id: string
+          created_at: string
+          details: Json | null
+          erp_total: number
+          id: string
+          is_balanced: boolean
+          qb_total: number
+          total_diff: number
+        }
+        Insert: {
+          ap_diff?: number | null
+          ar_diff?: number | null
+          checked_at?: string
+          company_id: string
+          created_at?: string
+          details?: Json | null
+          erp_total?: number
+          id?: string
+          is_balanced?: boolean
+          qb_total?: number
+          total_diff?: number
+        }
+        Update: {
+          ap_diff?: number | null
+          ar_diff?: number | null
+          checked_at?: string
+          company_id?: string
+          created_at?: string
+          details?: Json | null
+          erp_total?: number
+          id?: string
+          is_balanced?: boolean
+          qb_total?: number
+          total_diff?: number
+        }
+        Relationships: []
+      }
       user_agents: {
         Row: {
           agent_id: string
