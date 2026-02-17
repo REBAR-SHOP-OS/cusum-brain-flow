@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +10,11 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "
 import { Users, Search, Loader2, Plus } from "lucide-react";
 import { CustomerDetail } from "@/components/customers/CustomerDetail";
 import { CustomerFormModal } from "@/components/customers/CustomerFormModal";
+import { useToast } from "@/hooks/use-toast";
 import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
+import type { Tables } from "@/integrations/supabase/types";
+
+type Customer = Tables<"customers">;
 
 interface Props {
   data: ReturnType<typeof useQuickBooksData>;
@@ -24,6 +28,26 @@ export function AccountingCustomers({ data }: Props) {
   const [search, setSearch] = useState("");
   const [selectedQbId, setSelectedQbId] = useState<string | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  // Delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("customers").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["customers"] });
+      queryClient.invalidateQueries({ queryKey: ["qb_customers"] });
+      setSelectedQbId(null);
+      toast({ title: "Customer deleted" });
+    },
+    onError: (error) => {
+      toast({ title: "Error deleting customer", description: error.message, variant: "destructive" });
+    },
+  });
 
   // Look up local customer by quickbooks_id when a row is selected
   const { data: localCustomer, isLoading: localLoading } = useQuery({
@@ -144,8 +168,11 @@ export function AccountingCustomers({ data }: Props) {
           {selectedQbId && !localLoading && localCustomer && (
             <CustomerDetail
               customer={localCustomer}
-              onEdit={() => {}}
-              onDelete={() => {}}
+              onEdit={() => {
+                setEditingCustomer(localCustomer);
+                setIsFormOpen(true);
+              }}
+              onDelete={() => deleteMutation.mutate(localCustomer.id)}
             />
           )}
           {selectedQbId && !localLoading && !localCustomer && (
@@ -160,7 +187,7 @@ export function AccountingCustomers({ data }: Props) {
         </SheetContent>
       </Sheet>
 
-      <CustomerFormModal open={isFormOpen} onOpenChange={setIsFormOpen} customer={null} />
+      <CustomerFormModal open={isFormOpen} onOpenChange={(open) => { setIsFormOpen(open); if (!open) setEditingCustomer(null); }} customer={editingCustomer} />
     </div>
   );
 }

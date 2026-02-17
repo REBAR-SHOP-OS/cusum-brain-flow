@@ -226,9 +226,7 @@ export default function Customers() {
   };
 
   const handleDelete = (id: string) => {
-    if (confirm("Are you sure you want to delete this customer?")) {
-      deleteMutation.mutate(id);
-    }
+    deleteMutation.mutate(id);
   };
 
   const handleFormClose = () => {
