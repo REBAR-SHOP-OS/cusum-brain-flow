@@ -8,8 +8,12 @@ type LeadWithCustomer = Lead & { customers: { name: string; company_name: string
 
 function getPriorityStars(lead: Lead): number {
   const meta = lead.metadata as Record<string, unknown> | null;
+  const hasOdooId = !!meta?.odoo_id;
   const odooPriority = meta?.odoo_priority as string | undefined;
-  if (odooPriority) return Math.min(parseInt(odooPriority) || 0, 3);
+  if (odooPriority !== undefined && odooPriority !== null) {
+    return Math.min(parseInt(odooPriority) || 0, 3);
+  }
+  if (hasOdooId) return 0;
   if (lead.priority === "high") return 3;
   if (lead.priority === "medium") return 2;
   return 0;
