@@ -1265,46 +1265,118 @@ export type Database = {
       }
       customers: {
         Row: {
+          billing_city: string | null
+          billing_country: string | null
+          billing_postal_code: string | null
+          billing_province: string | null
+          billing_street1: string | null
+          billing_street2: string | null
           company_id: string | null
           company_name: string | null
           created_at: string
           credit_limit: number | null
           customer_type: string | null
+          email: string | null
+          fax: string | null
+          first_name: string | null
           id: string
+          last_name: string | null
+          middle_name: string | null
+          mobile: string | null
           name: string
           notes: string | null
+          other_phone: string | null
           payment_terms: string | null
+          phone: string | null
+          print_on_check_name: string | null
           quickbooks_id: string | null
+          shipping_city: string | null
+          shipping_country: string | null
+          shipping_postal_code: string | null
+          shipping_province: string | null
+          shipping_street1: string | null
+          shipping_street2: string | null
           status: string | null
+          suffix: string | null
+          title: string | null
           updated_at: string
+          website: string | null
         }
         Insert: {
+          billing_city?: string | null
+          billing_country?: string | null
+          billing_postal_code?: string | null
+          billing_province?: string | null
+          billing_street1?: string | null
+          billing_street2?: string | null
           company_id?: string | null
           company_name?: string | null
           created_at?: string
           credit_limit?: number | null
           customer_type?: string | null
+          email?: string | null
+          fax?: string | null
+          first_name?: string | null
           id?: string
+          last_name?: string | null
+          middle_name?: string | null
+          mobile?: string | null
           name: string
           notes?: string | null
+          other_phone?: string | null
           payment_terms?: string | null
+          phone?: string | null
+          print_on_check_name?: string | null
           quickbooks_id?: string | null
+          shipping_city?: string | null
+          shipping_country?: string | null
+          shipping_postal_code?: string | null
+          shipping_province?: string | null
+          shipping_street1?: string | null
+          shipping_street2?: string | null
           status?: string | null
+          suffix?: string | null
+          title?: string | null
           updated_at?: string
+          website?: string | null
         }
         Update: {
+          billing_city?: string | null
+          billing_country?: string | null
+          billing_postal_code?: string | null
+          billing_province?: string | null
+          billing_street1?: string | null
+          billing_street2?: string | null
           company_id?: string | null
           company_name?: string | null
           created_at?: string
           credit_limit?: number | null
           customer_type?: string | null
+          email?: string | null
+          fax?: string | null
+          first_name?: string | null
           id?: string
+          last_name?: string | null
+          middle_name?: string | null
+          mobile?: string | null
           name?: string
           notes?: string | null
+          other_phone?: string | null
           payment_terms?: string | null
+          phone?: string | null
+          print_on_check_name?: string | null
           quickbooks_id?: string | null
+          shipping_city?: string | null
+          shipping_country?: string | null
+          shipping_postal_code?: string | null
+          shipping_province?: string | null
+          shipping_street1?: string | null
+          shipping_street2?: string | null
           status?: string | null
+          suffix?: string | null
+          title?: string | null
           updated_at?: string
+          website?: string | null
         }
         Relationships: []
       }
