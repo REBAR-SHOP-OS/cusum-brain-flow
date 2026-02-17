@@ -16,8 +16,10 @@ export function ChatPanelProvider({ children }: { children: ReactNode }) {
   const [pendingChannelId, setPendingChannelId] = useState<string | null>(null);
 
   const openChatToChannel = useCallback((channelId: string) => {
-    setPendingChannelId(channelId);
-    setChatOpen(true);
+    // Dispatch a custom event that DockChatBar will pick up
+    window.dispatchEvent(
+      new CustomEvent("dock-chat-open", { detail: { channelId } })
+    );
   }, []);
 
   const clearPendingChannel = useCallback(() => {
