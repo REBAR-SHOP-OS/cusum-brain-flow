@@ -32,6 +32,10 @@ import { useUserRole } from "@/hooks/useUserRole";
 import { useWebPhone } from "@/hooks/useWebPhone";
 import accountingHelper from "@/assets/helpers/accounting-helper.png";
 
+/* ── Constants ── */
+const QB_LAST_LOAD_KEY = "qb-last-load-date";
+const QB_LAST_LOAD_TIME_KEY = "qb-last-load-time";
+
 /* ── Draggable Penny FAB ── */
 const PENNY_STORAGE_KEY = "penny-btn-pos";
 const FAB_SIZE = 56;
@@ -122,6 +126,9 @@ export default function AccountingWorkspace() {
   const { startOAuth } = useIntegrations();
   const { isAdmin, hasRole, isLoading: rolesLoading } = useUserRole();
   const [webPhoneState, webPhoneActions] = useWebPhone();
+  const [lastRefreshTime, setLastRefreshTime] = useState<string | null>(() => {
+    try { return localStorage.getItem(QB_LAST_LOAD_TIME_KEY); } catch { return null; }
+  });
 
   const hasAccess = isAdmin || hasRole("accounting");
 
@@ -133,14 +140,34 @@ export default function AccountingWorkspace() {
   const webPhoneStatusRef = useRef(webPhoneState.status);
   webPhoneStatusRef.current = webPhoneState.status;
 
+  const updateRefreshTimestamp = useCallback(() => {
+    const now = new Date();
+    const time = now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+    setLastRefreshTime(time);
+    localStorage.setItem(QB_LAST_LOAD_TIME_KEY, time);
+    localStorage.setItem(QB_LAST_LOAD_KEY, now.toLocaleDateString("en-CA"));
+  }, []);
+
+  const handleManualRefresh = useCallback(() => {
+    qb.loadAll();
+    updateRefreshTimestamp();
+  }, [qb.loadAll, updateRefreshTimestamp]);
+
   useEffect(() => {
-    if (hasAccess) {
+    if (!hasAccess) return;
+
+    const today = new Date().toLocaleDateString("en-CA");
+    const lastLoad = localStorage.getItem(QB_LAST_LOAD_KEY);
+
+    if (lastLoad !== today) {
       loadAllRef.current();
-      if (webPhoneStatusRef.current === "idle") {
-        webPhoneActionsRef.current.initialize();
-      }
+      updateRefreshTimestamp();
     }
-  }, [hasAccess]);
+
+    if (webPhoneStatusRef.current === "idle") {
+      webPhoneActionsRef.current.initialize();
+    }
+  }, [hasAccess, updateRefreshTimestamp]);
 
   if (rolesLoading) {
     return (
@@ -245,11 +272,16 @@ export default function AccountingWorkspace() {
             <AccountingNavMenus activeTab={activeTab} onNavigate={setActiveTab} pendingCount={pendingCount} />
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            {lastRefreshTime && (
+              <span className="text-xs text-muted-foreground hidden sm:inline">
+                Last updated: {lastRefreshTime}
+              </span>
+            )}
             <Button
               variant="outline"
               size="sm"
               className="gap-2"
-              onClick={() => qb.loadAll()}
+              onClick={handleManualRefresh}
               disabled={qb.loading}
             >
               <RefreshCw className={`w-4 h-4 ${qb.loading ? "animate-spin" : ""}`} />
