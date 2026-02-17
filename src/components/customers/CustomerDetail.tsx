@@ -55,7 +55,7 @@ import {
   Lightbulb,
   X,
 } from "lucide-react";
-import { format, differenceInDays } from "date-fns";
+import { format, differenceInDays, startOfDay, startOfWeek, startOfMonth, startOfYear, endOfDay, subDays, subMonths, subYears } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { CreateTransactionDialog, type TransactionType } from "./CreateTransactionDialog";
 import type { Tables } from "@/integrations/supabase/types";
@@ -85,6 +85,7 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
   const { companyId } = useCompanyId();
   const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [dateFilter, setDateFilter] = useState("all");
   const [notesValue, setNotesValue] = useState(customer.notes || "");
   const [isEditingNotes, setIsEditingNotes] = useState(false);
 
@@ -303,9 +304,38 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
     return { openBalance, overdueBalance };
   }, [transactions]);
 
+  // ── Date range helper ──
+  function getDateRange(preset: string): { start: string; end: string } | null {
+    if (preset === "all") return null;
+    const now = new Date();
+    const fmt = (d: Date) => format(d, "yyyy-MM-dd");
+    const todayStr = fmt(now);
+    const endStr = fmt(endOfDay(now));
+    switch (preset) {
+      case "today": return { start: todayStr, end: todayStr };
+      case "yesterday": { const y = subDays(now, 1); return { start: fmt(y), end: fmt(y) }; }
+      case "this_week": return { start: fmt(startOfWeek(now, { weekStartsOn: 0 })), end: endStr };
+      case "last_week": { const s = subDays(startOfWeek(now, { weekStartsOn: 0 }), 7); return { start: fmt(s), end: fmt(subDays(startOfWeek(now, { weekStartsOn: 0 }), 1)) }; }
+      case "this_month": return { start: fmt(startOfMonth(now)), end: endStr };
+      case "last_month": { const s = startOfMonth(subMonths(now, 1)); return { start: fmt(s), end: fmt(subDays(startOfMonth(now), 1)) }; }
+      case "last_30": return { start: fmt(subDays(now, 30)), end: endStr };
+      case "last_3m": return { start: fmt(subMonths(now, 3)), end: endStr };
+      case "last_6m": return { start: fmt(subMonths(now, 6)), end: endStr };
+      case "last_12m": return { start: fmt(subMonths(now, 12)), end: endStr };
+      case "ytd": return { start: fmt(startOfYear(now)), end: endStr };
+      case "this_year": return { start: fmt(startOfYear(now)), end: endStr };
+      case "last_year": { const ly = subYears(now, 1); return { start: fmt(startOfYear(ly)), end: fmt(new Date(ly.getFullYear(), 11, 31)) }; }
+      case "2025": return { start: "2025-01-01", end: "2025-12-31" };
+      case "2024": return { start: "2024-01-01", end: "2024-12-31" };
+      case "2023": return { start: "2023-01-01", end: "2023-12-31" };
+      default: return null;
+    }
+  }
+
   // ── Filtered transactions ──
   const filteredTxns = useMemo(() => {
     const today = new Date().toISOString().split("T")[0];
+    const dateRange = getDateRange(dateFilter);
     return transactions.filter((txn) => {
       if (typeFilter !== "all" && txn.entity_type !== typeFilter) return false;
       if (statusFilter === "open" && (txn.balance ?? 0) <= 0) return false;
@@ -314,9 +344,12 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
         const dueDate = (txn.raw_json as any)?.DueDate;
         if (!dueDate || dueDate >= today || (txn.balance ?? 0) <= 0) return false;
       }
+      if (dateRange && txn.txn_date) {
+        if (txn.txn_date < dateRange.start || txn.txn_date > dateRange.end) return false;
+      }
       return true;
     });
-  }, [transactions, typeFilter, statusFilter]);
+  }, [transactions, typeFilter, statusFilter, dateFilter]);
 
   const getTxnStatus = (txn: (typeof transactions)[0]) => {
     const today = new Date().toISOString().split("T")[0];
@@ -616,6 +649,30 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
                   <SelectItem value="open">Open</SelectItem>
                   <SelectItem value="closed">Closed / Paid</SelectItem>
                   <SelectItem value="overdue">Overdue</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={dateFilter} onValueChange={setDateFilter}>
+                <SelectTrigger className="w-[150px] h-8 text-xs">
+                  <SelectValue placeholder="Date" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All dates</SelectItem>
+                  <SelectItem value="today">Today</SelectItem>
+                  <SelectItem value="yesterday">Yesterday</SelectItem>
+                  <SelectItem value="this_week">This week</SelectItem>
+                  <SelectItem value="last_week">Last week</SelectItem>
+                  <SelectItem value="this_month">This month</SelectItem>
+                  <SelectItem value="last_month">Last month</SelectItem>
+                  <SelectItem value="last_30">Last 30 days</SelectItem>
+                  <SelectItem value="last_3m">Last 3 months</SelectItem>
+                  <SelectItem value="last_6m">Last 6 months</SelectItem>
+                  <SelectItem value="last_12m">Last 12 months</SelectItem>
+                  <SelectItem value="ytd">Year to date</SelectItem>
+                  <SelectItem value="this_year">This year</SelectItem>
+                  <SelectItem value="last_year">Last year</SelectItem>
+                  <SelectItem value="2025">2025</SelectItem>
+                  <SelectItem value="2024">2024</SelectItem>
+                  <SelectItem value="2023">2023</SelectItem>
                 </SelectContent>
               </Select>
               <span className="text-xs text-muted-foreground ml-auto">
