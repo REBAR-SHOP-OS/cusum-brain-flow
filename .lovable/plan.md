@@ -1,79 +1,119 @@
 
-# Fix: Accounting Data Loads Only Once Per Day + Manual Refresh
+# Two Surgical Fixes: Draggable Chat Box + Create Invoice Parity with Edit Invoice
 
-## Problem
+## Fix 1: Make DockChatBox Draggable by Header
 
-Every time the user navigates to the `/accounting` page, `loadAll()` fires -- hitting the mirror database and QuickBooks API. This is disruptive, slow, and wasteful when the user is just switching tabs or returning to the page within the same workday.
+**File: `src/components/chat/DockChatBox.tsx`**
 
-## Solution (Single file: `src/pages/AccountingWorkspace.tsx`)
+Add mouse-based drag support so the chat window can be repositioned by grabbing the header bar.
 
-### How It Works
+### Changes
+- Add `dragOffset` state `{ x: number; y: number }` initialized to `{ x: 0, y: 0 }`
+- Add `isDragging` and `dragStart` refs to track drag state
+- `onMouseDown` on the header div (not the buttons) records start position, attaches global `mousemove` and `mouseup` listeners
+- `mousemove` updates `dragOffset` by calculating delta from start
+- `mouseup` cleans up listeners
+- Apply offset via `transform: translate(${x}px, ${y}px)` merged into the existing `style` prop on the outer container
+- All header action buttons get `onMouseDown={(e) => e.stopPropagation()}` to prevent drag when clicking minimize/close/maximize
+- Header gets `cursor-grab` / `cursor-grabbing` styles
+- Reset `dragOffset` to `{0, 0}` when minimized (snap back to dock position)
+- Guard: `user-select: none` during drag to prevent text selection
 
-1. **First visit of the day**: `loadAll()` fires automatically as it does now
-2. **Subsequent visits same day**: Data is NOT reloaded (already in memory from the hook, and localStorage records the last load date)
-3. **Manual Refresh button**: Always available, bypasses the daily check and calls `loadAll()` immediately
-4. **Last refreshed indicator**: Show a small timestamp next to the Refresh button so the user knows when data was last loaded
+### What does NOT change
+- Message rendering, file attachments, send logic, minimized state behavior -- all untouched
+- The `style` prop from DockChatBar (right offset) -- preserved and combined with drag offset
 
-### Technical Details
+---
 
-**New constants:**
+## Fix 2: Create Invoice Dialog -- Full Parity with Edit Invoice
+
+**File: `src/components/customers/CreateTransactionDialog.tsx`**
+
+The Create Invoice dialog is missing many fields that the Edit Invoice (InvoiceEditor) has. Add them inside a collapsible "Additional Details" section so the dialog stays clean for simple invoices but offers full parity when expanded.
+
+### New State Variables (8 fields + 1 toggle)
 ```
-const QB_LAST_LOAD_KEY = "qb-last-load-date";
+billAddr, shipAddr, termsValue, shipVia, shipDate, trackingNum, poNumber, salesRep
+showDetails (boolean, default false)
 ```
 
-**Modified `useEffect` in AccountingWorkspace:**
+### New Imports
+- `Collapsible, CollapsibleTrigger, CollapsibleContent` from `@/components/ui/collapsible`
+- `ChevronDown` from `lucide-react`
+- `Textarea` is already imported
+
+### LineItem Interface Change
 ```typescript
-useEffect(() => {
-  if (!hasAccess) return;
-  
-  const today = new Date().toLocaleDateString("en-CA"); // "2026-02-17"
-  const lastLoad = localStorage.getItem(QB_LAST_LOAD_KEY);
-  
-  if (lastLoad === today) {
-    // Already loaded today -- skip auto-load
-    // Still init web phone if needed
-    if (webPhoneStatusRef.current === "idle") {
-      webPhoneActionsRef.current.initialize();
-    }
-    return;
-  }
-  
-  // First load of the day
-  loadAllRef.current();
-  localStorage.setItem(QB_LAST_LOAD_KEY, today);
-  
-  if (webPhoneStatusRef.current === "idle") {
-    webPhoneActionsRef.current.initialize();
-  }
-}, [hasAccess]);
+interface LineItem {
+  description: string;
+  qty: number;
+  unitPrice: number;
+  serviceDate?: string;  // NEW
+}
 ```
 
-**Manual Refresh button update:**
-- The existing Refresh button calls `qb.loadAll()` -- this stays unchanged
-- After manual refresh completes, update `localStorage` timestamp
-- Add a small "Last refreshed: 8:32 AM" label next to the button
+### UI Layout Changes
 
-**New state:**
-- `lastRefreshTime: string | null` -- formatted time of last refresh, stored in localStorage alongside the date
+**Between Due Date and Line Items**, add a collapsible section (only for Invoice/Estimate types):
 
-**Guard:** If the hook's state is completely empty (e.g., user cleared browser data), force a load regardless of the daily check.
-
-### What Does NOT Change
-
-- The `useQuickBooksData` hook itself -- no changes
-- The Refresh button -- still works on demand
-- All other tabs, components, and data flow -- untouched
-- Post-action reloads (after creating invoice, syncing, etc.) -- these still call `loadAll()` as they should
-
-### Visual Change
-
-The header refresh area changes from:
 ```
-[Refresh All]
-```
-To:
-```
-Last updated: 8:32 AM    [Refresh All]
+[v Additional Details]  (click to expand)
+  +-------------------------------------------+
+  | Billing Address   | Shipping Address       |
+  | [textarea]        | [textarea]             |
+  |-------------------------------------------|
+  | Terms [dropdown]  | Ship Via [input]       |
+  | Ship Date [date]  | Tracking No. [input]   |
+  | P.O. Number       | Sales Rep              |
+  +-------------------------------------------+
 ```
 
-No new files, no new dependencies, no database changes.
+This uses a 2-column grid matching InvoiceEditor's layout.
+
+**Line Items grid** adds a Service Date column:
+
+Before: `[Product | Description | Qty | Unit Price | Amount | Delete]`
+After:  `[Product | Description | Svc Date | Qty | Unit Price | Amount | Delete]`
+
+Grid template updates from 6 columns to 7 columns when products exist, or 6 columns when no products.
+
+### Save Logic Update (`handleSubmit`)
+
+Add sparse fields to the `body` object (only if non-empty):
+
+```typescript
+if (billAddr) body.billAddr = billAddr;
+if (shipAddr) body.shipAddr = shipAddr;
+if (termsValue) body.terms = termsValue;
+if (shipVia) body.shipVia = shipVia;
+if (shipDate) body.shipDate = shipDate;
+if (trackingNum) body.trackingNum = trackingNum;
+
+const customFields = [];
+if (poNumber) customFields.push({ Name: "P.O. Number", StringValue: poNumber, Type: "StringType" });
+if (salesRep) customFields.push({ Name: "Sales Rep", StringValue: salesRep, Type: "StringType" });
+if (customFields.length) body.customFields = customFields;
+```
+
+Each line item includes `serviceDate` when set:
+```typescript
+body.lineItems = lineItems
+  .filter((li) => li.description.trim())
+  .map((li) => ({
+    description: li.description,
+    quantity: li.qty,
+    unitPrice: li.unitPrice,
+    amount: li.qty * li.unitPrice,
+    ...(li.serviceDate ? { serviceDate: li.serviceDate } : {}),
+  }));
+```
+
+### Reset on Submit
+
+All 8 new fields reset to empty strings on successful submission alongside existing resets.
+
+### Guards
+- All new fields are optional -- empty values excluded from payload via sparse serialization
+- Collapsible section starts collapsed -- no visual clutter for quick invoices
+- Terms dropdown uses same options as InvoiceEditor: `["Net 15", "Net 30", "Net 60", "Due on receipt"]`
+- No new dependencies, no schema changes, no database modifications
