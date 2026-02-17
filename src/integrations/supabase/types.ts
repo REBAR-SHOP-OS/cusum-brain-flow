@@ -3507,6 +3507,57 @@ export type Database = {
           },
         ]
       }
+      loading_checklist: {
+        Row: {
+          company_id: string
+          created_at: string
+          cut_plan_id: string
+          cut_plan_item_id: string
+          id: string
+          loaded: boolean
+          loaded_at: string | null
+          loaded_by: string | null
+          photo_path: string | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          cut_plan_id: string
+          cut_plan_item_id: string
+          id?: string
+          loaded?: boolean
+          loaded_at?: string | null
+          loaded_by?: string | null
+          photo_path?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          cut_plan_id?: string
+          cut_plan_item_id?: string
+          id?: string
+          loaded?: boolean
+          loaded_at?: string | null
+          loaded_by?: string | null
+          photo_path?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "loading_checklist_cut_plan_id_fkey"
+            columns: ["cut_plan_id"]
+            isOneToOne: false
+            referencedRelation: "cut_plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loading_checklist_cut_plan_item_id_fkey"
+            columns: ["cut_plan_item_id"]
+            isOneToOne: false
+            referencedRelation: "cut_plan_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       loading_evidence: {
         Row: {
           captured_by: string | null

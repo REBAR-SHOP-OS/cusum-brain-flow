@@ -44,6 +44,12 @@ const hubCards: HubCard[] = [
     to: "/shopfloor/clearance",
   },
   {
+    label: "LOADING ST.",
+    subtitle: "LOAD & EVIDENCE",
+    icon: <PackageCheck className="w-7 h-7" />,
+    to: "/shopfloor/loading",
+  },
+  {
     label: "DELIVERY",
     subtitle: "DISPATCH & LOADING",
     icon: <Send className="w-7 h-7" />,
