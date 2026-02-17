@@ -7338,6 +7338,48 @@ export type Database = {
           },
         ]
       }
+      transaction_patterns: {
+        Row: {
+          action_payload_template: Json
+          action_type: string
+          auto_suggest: boolean
+          company_id: string
+          created_at: string
+          created_by: string
+          customer_qb_id: string | null
+          id: string
+          times_used: number
+          trigger_condition: Json
+          updated_at: string
+        }
+        Insert: {
+          action_payload_template?: Json
+          action_type: string
+          auto_suggest?: boolean
+          company_id: string
+          created_at?: string
+          created_by: string
+          customer_qb_id?: string | null
+          id?: string
+          times_used?: number
+          trigger_condition?: Json
+          updated_at?: string
+        }
+        Update: {
+          action_payload_template?: Json
+          action_type?: string
+          auto_suggest?: boolean
+          company_id?: string
+          created_at?: string
+          created_by?: string
+          customer_qb_id?: string | null
+          id?: string
+          times_used?: number
+          trigger_condition?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
       transcription_sessions: {
         Row: {
           company_id: string

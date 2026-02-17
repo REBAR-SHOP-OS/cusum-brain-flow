@@ -4,6 +4,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
+import { useCompanyId } from "@/hooks/useCompanyId";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -43,9 +44,12 @@ import {
   Globe,
   Smartphone,
   Printer,
+  Lightbulb,
+  X,
 } from "lucide-react";
 import { format, differenceInDays } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+import { CreateTransactionDialog, type TransactionType } from "./CreateTransactionDialog";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Customer = Tables<"customers">;
@@ -70,10 +74,93 @@ function InfoRow({ label, value }: { label: string; value: string | null | undef
 export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { companyId } = useCompanyId();
   const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [notesValue, setNotesValue] = useState(customer.notes || "");
   const [isEditingNotes, setIsEditingNotes] = useState(false);
+
+  // ── Transaction creation dialog state ──
+  const [txnDialogOpen, setTxnDialogOpen] = useState(false);
+  const [txnDialogType, setTxnDialogType] = useState<TransactionType>("Invoice");
+  const [txnPrefill, setTxnPrefill] = useState<any>(undefined);
+  const [dismissedPatternId, setDismissedPatternId] = useState<string | null>(null);
+
+  const openTxnDialog = (type: TransactionType, prefill?: any) => {
+    setTxnDialogType(type);
+    setTxnPrefill(prefill);
+    setTxnDialogOpen(true);
+  };
+
+  // ── Pattern matching: load suggestions ──
+  const { data: matchingPatterns = [] } = useQuery({
+    queryKey: ["transaction_patterns", customer.quickbooks_id, companyId],
+    enabled: !!customer.quickbooks_id && !!companyId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("transaction_patterns")
+        .select("*")
+        .eq("company_id", companyId!)
+        .eq("auto_suggest", true)
+        .or(`customer_qb_id.eq.${customer.quickbooks_id},customer_qb_id.is.null`);
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  // Record pattern after transaction creation
+  const recordPattern = async (payload: {
+    type: TransactionType;
+    lineItems: any[];
+    memo: string;
+    totalAmount: number;
+  }) => {
+    if (!companyId || !customer.quickbooks_id) return;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Build trigger condition from current customer state
+      const triggerCondition: Record<string, any> = {};
+      if (qbCustomer?.balance && qbCustomer.balance > 0) {
+        triggerCondition.has_open_balance = true;
+        triggerCondition.balance_gt = Math.floor(qbCustomer.balance * 0.5); // threshold at 50% of current
+      }
+
+      // Check if similar pattern exists
+      const { data: existing } = await supabase
+        .from("transaction_patterns")
+        .select("id, times_used")
+        .eq("company_id", companyId)
+        .eq("action_type", payload.type)
+        .eq("customer_qb_id", customer.quickbooks_id!)
+        .maybeSingle();
+
+      if (existing) {
+        await supabase
+          .from("transaction_patterns")
+          .update({ times_used: (existing.times_used || 0) + 1 })
+          .eq("id", existing.id);
+      } else {
+        await supabase.from("transaction_patterns").insert({
+          company_id: companyId,
+          customer_qb_id: customer.quickbooks_id,
+          trigger_condition: triggerCondition,
+          action_type: payload.type,
+          action_payload_template: {
+            lineItems: payload.lineItems,
+            memo: payload.memo,
+          },
+          times_used: 1,
+          auto_suggest: true,
+          created_by: user.id,
+        });
+      }
+      queryClient.invalidateQueries({ queryKey: ["transaction_patterns"] });
+    } catch {
+      // Pattern recording is best-effort, don't block the user
+    }
+  };
 
   // ── QB Customer info ──
   const { data: qbCustomer } = useQuery({
@@ -289,12 +376,11 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem>Invoice</DropdownMenuItem>
-                <DropdownMenuItem>Payment</DropdownMenuItem>
-                <DropdownMenuItem>Estimate</DropdownMenuItem>
-                <DropdownMenuItem>Sales receipt</DropdownMenuItem>
-                <DropdownMenuItem>Credit memo</DropdownMenuItem>
-                <DropdownMenuItem>Statement</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => openTxnDialog("Invoice")}>Invoice</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => openTxnDialog("Payment")}>Payment</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => openTxnDialog("Estimate")}>Estimate</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => openTxnDialog("SalesReceipt")}>Sales receipt</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => openTxnDialog("CreditMemo")}>Credit memo</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
             <Button variant="destructive" size="sm" onClick={onDelete}>
@@ -419,6 +505,46 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
           </Card>
         </div>
       </div>
+
+      {/* ── Smart Suggestion Banner ── */}
+      {matchingPatterns.length > 0 && (() => {
+        const topPattern = matchingPatterns.find((p) => p.id !== dismissedPatternId);
+        if (!topPattern) return null;
+        const tpl = topPattern.action_payload_template as any;
+        const actionLabel = topPattern.action_type || "Transaction";
+        const isAutoFill = (topPattern.times_used || 0) >= 3;
+        return (
+          <div className="mx-6 mt-3 flex items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2.5">
+            <Lightbulb className="w-4 h-4 text-primary shrink-0" />
+            <p className="text-sm flex-1">
+              {isAutoFill
+                ? `Auto-draft ready: Create ${actionLabel} (used ${topPattern.times_used}× before)`
+                : `Suggestion: Create ${actionLabel} for this customer`}
+            </p>
+            <Button
+              size="sm"
+              variant="default"
+              className="text-xs"
+              onClick={() =>
+                openTxnDialog(topPattern.action_type as TransactionType, {
+                  lineItems: tpl?.lineItems,
+                  memo: tpl?.memo,
+                })
+              }
+            >
+              Apply
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7"
+              onClick={() => setDismissedPatternId(topPattern.id)}
+            >
+              <X className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+        );
+      })()}
 
       {/* ── Tabs ── */}
       <Tabs defaultValue="transactions" className="flex-1 flex flex-col overflow-hidden">
@@ -686,6 +812,17 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
           </TabsContent>
         </ScrollArea>
       </Tabs>
+
+      {/* ── Create Transaction Dialog ── */}
+      <CreateTransactionDialog
+        open={txnDialogOpen}
+        onOpenChange={setTxnDialogOpen}
+        type={txnDialogType}
+        customerQbId={customer.quickbooks_id || ""}
+        customerName={customer.name}
+        prefill={txnPrefill}
+        onCreated={recordPattern}
+      />
     </div>
   );
 }
