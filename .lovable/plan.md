@@ -1,56 +1,70 @@
 
 
-# Make Invoices Editable (Like QuickBooks)
+# Add Payment History to Invoice Editor
 
-## Overview
-Currently clicking an invoice opens a read-only print template. This plan adds full edit capability so invoices work like they do in QuickBooks -- click to view, then edit fields inline and save back to QB.
+## What's Missing
+
+The QuickBooks invoice view (as shown in your screenshots) displays a **Payment History** section showing each payment date and amount applied. Our InvoiceEditor currently only shows a single "Paid" total line with no breakdown of individual payments.
+
+## Solution
+
+Extract linked payments from the QuickBooks data and display them in a payment history table inside the InvoiceEditor, matching the QB layout (Date | Amount Applied).
 
 ## Changes
 
-### 1. Backend: Add `update-invoice` action
-**File: `supabase/functions/quickbooks-oauth/index.ts`**
+### 1. `src/components/accounting/AccountingInvoices.tsx`
+- Pass the `payments` array from the data hook to the `InvoiceEditor` component
 
-- Add a new `handleUpdateInvoice` function that:
-  - Fetches the current invoice from QB by ID to get the latest SyncToken (prevents conflicts)
-  - Applies a sparse update with changed fields (CustomerRef, DueDate, Line items, CustomerMemo)
-  - Posts to QB via `POST /invoice` with `sparse: true`
-- Wire it into the main switch: `case "update-invoice": return handleUpdateInvoice(...)`
+### 2. `src/components/accounting/InvoiceEditor.tsx`
+- Accept a new `payments` prop (the full QBPayment array)
+- Add a `getLinkedPayments()` function that:
+  - Iterates through all payments
+  - Checks each payment's `Line[].LinkedTxn[]` for references to this invoice's ID
+  - Extracts the date (`TxnDate`) and amount applied to this specific invoice
+- Render a **Payment History** section between the totals and footer:
+  - Shows "PAYMENT STATUS: PAID / PARTIAL / OPEN" badge (like QB)
+  - Table with columns: **Date** and **Amount Applied**
+  - Summary line: "X payments made on [latest date]"
+  - Only shown when there are linked payments (hidden for unpaid invoices)
 
-### 2. Frontend Hook: Add `updateInvoice` wrapper
-**File: `src/hooks/useQuickBooksData.ts`**
+### 3. `src/hooks/useQuickBooksData.ts`
+- No changes needed -- the `QBPayment` type uses `raw_json` which already contains the full QB payment object including `Line` and `LinkedTxn` arrays
 
-- Add `updateInvoice(invoiceId, updates)` function that calls `qbAction("update-invoice", { invoiceId, ...updates })`
-- Refreshes data after successful update via `loadAll()`
-- Expose in the returned object
+## Visual Layout (matching QB)
 
-### 3. New Component: Editable Invoice Detail
-**File: `src/components/accounting/InvoiceEditor.tsx`** (new)
+```text
++------------------------------------------+
+|  Subtotal:                    $39,750.00  |
+|  Tax (HST):                    $5,167.50  |
+|  ─────────────────────────────────────── |
+|  Total:                       $44,917.50  |
+|                                           |
+|  PAYMENT HISTORY              PAID        |
+|  ┌──────────────┬──────────────────┐     |
+|  │ Date         │ Amount Applied   │     |
+|  ├──────────────┼──────────────────┤     |
+|  │ 03/10/2025   │ $6,192.40        │     |
+|  │ 09/10/2025   │ $22,600.00       │     |
+|  │ 29/10/2025   │ $14,012.00       │     |
+|  │ 21/11/2025   │ $2,565.10        │     |
+|  └──────────────┴──────────────────┘     |
+|  4 payments                               |
+|                                           |
+|  ─────────────────────────────────────── |
+|  Amount Due:                      $0.00   |
++------------------------------------------+
+```
 
-Full-screen overlay component with two modes:
+## Technical Details
 
-- **View mode** (default): Displays invoice details in a clean layout similar to InvoiceTemplate, with an "Edit" button
-- **Edit mode**: Switches fields to editable inputs:
-  - Customer: dropdown select from QB customers list
-  - Invoice date & due date: date inputs
-  - Line items: editable table (description, qty, unit price) with add/remove row capability
-  - Memo: text area
-  - Auto-calculated totals (subtotal, tax, total, amount due)
-  - Save / Cancel buttons
+QuickBooks Payment objects store linked invoices in this structure:
+```json
+{
+  "Line": [{
+    "Amount": 6192.40,
+    "LinkedTxn": [{ "TxnId": "123", "TxnType": "Invoice" }]
+  }]
+}
+```
 
-Props: raw QB invoice, customers list, items list, `updateInvoice` function, `onClose`
-
-### 4. Wire Up in Invoice List
-**File: `src/components/accounting/AccountingInvoices.tsx`**
-
-- Import `InvoiceEditor` instead of `InvoiceTemplate`
-- Pass `customers`, `items`, and `updateInvoice` from the data hook
-- Replace the `InvoiceTemplate` render with `InvoiceEditor`
-
-## Technical Notes
-
-- QuickBooks sparse updates require a valid SyncToken; the backend fetches the latest before updating to prevent conflicts
-- The existing `handleUpdateEmployee` pattern (fetch current -> merge -> POST sparse) is reused for invoices
-- All edits go through the QB API -- no local-only saves
-- After save, `loadAll()` refreshes the mirror to keep data in sync
-- The trial balance hard-stop still applies to updates (enforced via the existing `postingBlocked` check)
-- No other files or features are modified
+The matching logic: for each payment, scan its `Line` array for `LinkedTxn` entries where `TxnType === "Invoice"` and `TxnId` matches the current invoice's `Id`. The `Amount` on that line is the amount applied to this specific invoice.
