@@ -94,12 +94,22 @@ export function AccountingVendorPayments() {
                   <TableHead className="text-base">Vendor</TableHead>
                   <TableHead className="text-base text-right">Amount</TableHead>
                   <TableHead className="text-base">Method</TableHead>
+                  <TableHead className="text-base">Account</TableHead>
+                  <TableHead className="text-base">Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filtered.map((p) => {
-                  const vendorName = (p.raw_json as any)?.VendorRef?.name || "Unknown";
-                  const payMethod = (p.raw_json as any)?.PayType || "—";
+                  const raw = p.raw_json as any;
+                  const vendorName = raw?.VendorRef?.name || "Unknown";
+                  const payMethod = raw?.PayType || "—";
+                  const account = raw?.CheckPayment?.BankAccountRef?.name
+                    || raw?.CreditCardPayment?.CCAccountRef?.name
+                    || raw?.APAccountRef?.name
+                    || "—";
+                  const balance = p.balance ?? 0;
+                  const status = balance <= 0 ? "Paid" : "Partial";
+
                   return (
                     <TableRow key={p.id} className="text-base">
                       <TableCell>{p.txn_date ? format(new Date(p.txn_date), "MMM d, yyyy") : "—"}</TableCell>
@@ -108,6 +118,12 @@ export function AccountingVendorPayments() {
                       <TableCell className="text-right font-semibold">{fmt(p.total_amt ?? 0)}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className="text-xs">{payMethod}</Badge>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{account}</TableCell>
+                      <TableCell>
+                        <Badge variant={status === "Paid" ? "secondary" : "outline"} className="text-xs">
+                          {status}
+                        </Badge>
                       </TableCell>
                     </TableRow>
                   );
