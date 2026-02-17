@@ -1,22 +1,34 @@
 
 
-# Make Team Members Visible in Chat Launcher
+# Add Date Filter to Customer Transaction List
 
-## Problem
+## What Changes
 
-The Chat popover already has a "Team Members" section with all active users, but it's hidden below the Channels and Direct Messages lists. Users have to scroll past all existing conversations to find it, making it practically invisible.
-
-## Solution
-
-Reorganize the Chat launcher popover in `DockChatBar.tsx` to put **Team Members** at the top, above Channels and DMs. This makes it immediately visible when the popover opens. Users can click any team member to instantly start a DM.
+Add a **Date** filter dropdown to the Transaction List tab in the Customer Detail sheet, matching the QuickBooks date filter shown in the screenshots. This dropdown will include presets like "All", "Today", "This week", "This month", "Last 30 days", "Last 3 months", "Last 6 months", "Last 12 months", "Year to date", "This year", "2025", "2024", "2023", etc.
 
 ## Single File Change
 
-### `src/components/chat/DockChatBar.tsx`
+### `src/components/customers/CustomerDetail.tsx`
 
-- Move the "Team Members" block (lines 146-165) to appear **first** inside the ScrollArea, before Channels and DMs
-- Add a "Start a Chat" label instead of "Team Members" to make intent clearer
-- Add a thin separator between sections for visual clarity
+1. **Add state**: `dateFilter` with default `"all"` (line ~87)
+2. **Add Date filter Select** after the Status filter (line ~620), with these options:
+   - All
+   - Today / Yesterday
+   - This week / Last week
+   - This month / Last month
+   - Last 30 days
+   - Last 3 months / Last 6 months / Last 12 months
+   - Year to date
+   - This year / Last year
+   - 2025 / 2024 / 2023
+3. **Update `filteredTxns` memo** (lines 307-319): add date range filtering logic using `txn.txn_date` against computed start/end dates based on the selected preset
+4. **Add `dateFilter` to the `useMemo` dependency array**
 
-No new files, no new dependencies, no database changes. The `useOpenDM` hook and `handleOpenDM` handler already handle DM creation with deduplication (reuses existing DM if one exists).
+## Technical Details
+
+- A helper function `getDateRange(preset: string)` returns `{ start: string; end: string } | null` for each preset, using `date-fns` (already installed) for calculations like `startOfWeek`, `startOfMonth`, `startOfYear`, `subMonths`, `subDays`
+- When `dateFilter` is `"all"`, no date filtering is applied (null range)
+- Transactions are filtered by comparing `txn.txn_date` against the computed range
+- No new files, no new dependencies, no database changes
+- The existing Type and Status filters continue to work unchanged alongside the new Date filter
 
