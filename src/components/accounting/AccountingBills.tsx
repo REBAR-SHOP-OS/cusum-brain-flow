@@ -3,8 +3,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Receipt, Search, Building2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { VendorDetail } from "@/components/accounting/VendorDetail";
 import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
 
 interface Props {
@@ -18,6 +20,7 @@ export function AccountingBills({ data }: Props) {
   const { bills, vendors } = data;
   const [search, setSearch] = useState("");
   const [subTab, setSubTab] = useState("bills");
+  const [selectedVendor, setSelectedVendor] = useState<any | null>(null);
 
   const filteredBills = bills.filter(
     (b) =>
@@ -121,7 +124,11 @@ export function AccountingBills({ data }: Props) {
                   </TableHeader>
                   <TableBody>
                     {filteredVendors.map((v) => (
-                      <TableRow key={v.Id} className="text-base">
+                      <TableRow
+                        key={v.Id}
+                        className="text-base cursor-pointer hover:bg-muted/50 transition-colors"
+                        onClick={() => setSelectedVendor(v)}
+                      >
                         <TableCell className="font-semibold">{v.DisplayName}</TableCell>
                         <TableCell>{v.CompanyName || "—"}</TableCell>
                         <TableCell>{v.PrimaryPhone?.FreeFormNumber || "—"}</TableCell>
@@ -141,6 +148,17 @@ export function AccountingBills({ data }: Props) {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Vendor Detail Sheet */}
+      <Sheet open={!!selectedVendor} onOpenChange={(open) => { if (!open) setSelectedVendor(null); }}>
+        <SheetContent side="right" className="w-full sm:max-w-2xl lg:max-w-3xl p-0 overflow-hidden">
+          <SheetHeader className="sr-only">
+            <SheetTitle>Vendor Details</SheetTitle>
+            <SheetDescription>View vendor details and transactions</SheetDescription>
+          </SheetHeader>
+          {selectedVendor && <VendorDetail vendor={selectedVendor} />}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
