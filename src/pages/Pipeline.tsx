@@ -19,24 +19,25 @@ type Lead = Tables<"leads">;
 type LeadWithCustomer = Lead & { customers: { name: string; company_name: string | null } | null };
 
 // Pipeline stages (originally derived from Odoo, now native to ERP)
+// Odoo-exact order first, then ERP-only stages at the end
 export const PIPELINE_STAGES = [
   { id: "prospecting", label: "Prospecting", color: "bg-indigo-500" },
   { id: "new", label: "New", color: "bg-blue-500" },
   { id: "telephonic_enquiries", label: "Telephonic Enquiries", color: "bg-cyan-500" },
-  { id: "qualified", label: "Qualified", color: "bg-teal-500" },
-  { id: "rfi", label: "RFI", color: "bg-green-500" },
-  { id: "proposal", label: "Proposal", color: "bg-green-600" },
   { id: "qc_ben", label: "QC - Ben", color: "bg-lime-500" },
-  { id: "addendums", label: "Addendums", color: "bg-yellow-500" },
   { id: "estimation_ben", label: "Estimation - Ben", color: "bg-amber-500" },
   { id: "estimation_karthick", label: "Estimation - Karthick", color: "bg-orange-500" },
   { id: "hot_enquiries", label: "Hot Enquiries", color: "bg-red-500" },
-  { id: "quotation_priority", label: "Quotation Priority", color: "bg-rose-500" },
   { id: "quotation_bids", label: "Quotation Bids", color: "bg-pink-500" },
   { id: "won", label: "Won", color: "bg-emerald-500" },
   { id: "lost", label: "Lost", color: "bg-zinc-500" },
   { id: "shop_drawing", label: "Shop Drawing", color: "bg-violet-500" },
   { id: "shop_drawing_approval", label: "Shop Drawing Sent for Approval", color: "bg-purple-500" },
+  // ERP-only stages (not in Odoo) — kept to avoid orphaning existing leads
+  { id: "qualified", label: "Qualified", color: "bg-teal-500" },
+  { id: "rfi", label: "RFI", color: "bg-green-500" },
+  { id: "addendums", label: "Addendums", color: "bg-yellow-500" },
+  { id: "quotation_priority", label: "Quotation Priority", color: "bg-rose-500" },
 ];
 
 function getDateCutoff(rangeId: string): Date | null {

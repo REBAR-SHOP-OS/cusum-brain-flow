@@ -1,5 +1,4 @@
-import { useRef, useState } from "react";
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { useState } from "react";
 import { PipelineColumn } from "./PipelineColumn";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -72,7 +71,7 @@ export function PipelineBoard({
   }
 
   return (
-    <ScrollArea className="h-full">
+    <div className="h-full overflow-x-auto overflow-y-hidden">
       <div className="flex gap-4 p-4 sm:p-6 min-w-max h-full">
         {stages.map((stage) => (
           <PipelineColumn
@@ -91,7 +90,6 @@ export function PipelineBoard({
           />
         ))}
       </div>
-      <ScrollBar orientation="horizontal" />
-    </ScrollArea>
+    </div>
   );
 }
