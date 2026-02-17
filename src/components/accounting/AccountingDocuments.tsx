@@ -3,7 +3,15 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { FileText, Package, Calculator, ClipboardList, Eye, Loader2, ArrowRight } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { FileText, Package, Calculator, ClipboardList, Eye, Loader2, ArrowRight, ChevronLeft, ChevronRight, Search } from "lucide-react";
 import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
 import { InvoiceTemplate } from "./documents/InvoiceTemplate";
 import { PackingSlipTemplate } from "./documents/PackingSlipTemplate";
@@ -28,12 +36,43 @@ const STATUS_BADGE_COLORS: Record<string, string> = {
   "Cancelled": "bg-zinc-500/10 text-zinc-500 border-zinc-200",
 };
 
+const QUOTATION_STATUSES = [
+  { value: "all", label: "All Statuses" },
+  { value: "Draft Quotation", label: "Draft Quotation" },
+  { value: "Quotation Sent", label: "Quotation Sent" },
+  { value: "Sales Order", label: "Sales Order" },
+  { value: "Cancelled", label: "Cancelled" },
+];
+
 export function AccountingDocuments({ data }: Props) {
   const [activeDoc, setActiveDoc] = useState<DocType>("quotation");
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [previewType, setPreviewType] = useState<DocType | null>(null);
-  const { quotations, isLoading: quotationsLoading } = useArchivedQuotations();
   const [convertQuote, setConvertQuote] = useState<{ id: string; quote_number: string; total_amount: number | null; customer_name: string } | null>(null);
+
+  // Quotation pagination & filter state
+  const [qPage, setQPage] = useState(1);
+  const [qSearch, setQSearch] = useState("");
+  const [qSearchInput, setQSearchInput] = useState("");
+  const [qStatus, setQStatus] = useState("all");
+
+  const { quotations, isLoading: quotationsLoading, totalCount, totalPages } = useArchivedQuotations({
+    page: qPage,
+    pageSize: 50,
+    search: qSearch,
+    status: qStatus,
+  });
+
+  // Reset page when filters change
+  const handleSearchSubmit = () => {
+    setQSearch(qSearchInput);
+    setQPage(1);
+  };
+
+  const handleStatusChange = (value: string) => {
+    setQStatus(value);
+    setQPage(1);
+  };
 
   const openPreview = (type: DocType, id: string) => {
     setPreviewType(type);
@@ -69,7 +108,6 @@ export function AccountingDocuments({ data }: Props) {
     inclusions: [],
   });
 
-  // Build packing slip from invoice
   const getPackingSlipData = (inv: typeof data.invoices[0]) => ({
     invoiceNumber: inv.DocNumber,
     invoiceDate: new Date(inv.TxnDate).toLocaleDateString(),
@@ -82,7 +120,6 @@ export function AccountingDocuments({ data }: Props) {
     inclusions: [],
   });
 
-  // Build quotation from estimate
   const getQuotationData = (est: typeof data.estimates[0]) => ({
     quoteNumber: est.DocNumber,
     quoteDate: new Date(est.TxnDate).toLocaleDateString(),
@@ -109,7 +146,6 @@ export function AccountingDocuments({ data }: Props) {
     ],
   });
 
-  // Build estimation from estimate (more detailed)
   const getEstimationData = (est: typeof data.estimates[0]) => ({
     estimateNumber: est.DocNumber,
     estimateDate: new Date(est.TxnDate).toLocaleDateString(),
@@ -137,7 +173,7 @@ export function AccountingDocuments({ data }: Props) {
   const docTabs = [
     { id: "invoice" as DocType, label: "Invoices", icon: FileText, count: data.invoices.length },
     { id: "packing-slip" as DocType, label: "Packing Slips", icon: Package, count: data.invoices.length },
-    { id: "quotation" as DocType, label: "Quotations", icon: ClipboardList, count: quotations.length || data.estimates.length },
+    { id: "quotation" as DocType, label: "Quotations", icon: ClipboardList, count: totalCount || data.estimates.length },
     { id: "estimation" as DocType, label: "Estimations", icon: Calculator, count: data.estimates.length },
   ];
 
@@ -160,17 +196,38 @@ export function AccountingDocuments({ data }: Props) {
         ))}
       </div>
 
-      {/* Archived quotations info */}
-      {activeDoc === "quotation" && quotations.length > 0 && (
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className="text-xs">Archived</Badge>
-          <span className="text-xs text-muted-foreground">{quotations.length} historical quotations</span>
-          {quotationsLoading && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+      {/* Quotation filters & search */}
+      {activeDoc === "quotation" && (
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative flex-1 min-w-[200px] max-w-sm">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search quote # or salesperson…"
+              value={qSearchInput}
+              onChange={(e) => setQSearchInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSearchSubmit()}
+              className="pl-9 h-9"
+            />
+          </div>
+          <Select value={qStatus} onValueChange={handleStatusChange}>
+            <SelectTrigger className="w-[180px] h-9">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {QUOTATION_STATUSES.map((s) => (
+                <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <span className="text-xs text-muted-foreground">
+            {totalCount.toLocaleString()} quotations
+            {quotationsLoading && <Loader2 className="inline w-3 h-3 ml-1 animate-spin" />}
+          </span>
         </div>
       )}
 
       {/* Document list */}
-      <ScrollArea className="h-[calc(100vh-280px)]">
+      <ScrollArea className="h-[calc(100vh-320px)]">
         <div className="space-y-2">
           {(activeDoc === "invoice" || activeDoc === "packing-slip") && data.invoices.map((inv) => (
             <Card key={`${activeDoc}-${inv.Id}`} className="hover:ring-2 hover:ring-primary/20 transition-all">
@@ -245,7 +302,7 @@ export function AccountingDocuments({ data }: Props) {
             );
           })}
 
-          {activeDoc === "quotation" && quotations.length === 0 && data.estimates.map((est) => (
+          {activeDoc === "quotation" && quotations.length === 0 && !quotationsLoading && data.estimates.map((est) => (
             <Card key={`quotation-${est.Id}`} className="hover:ring-2 hover:ring-primary/20 transition-all">
               <CardContent className="p-4 flex items-center justify-between">
                 <div className="flex items-center gap-4">
@@ -292,7 +349,7 @@ export function AccountingDocuments({ data }: Props) {
           {((activeDoc === "invoice" || activeDoc === "packing-slip") && data.invoices.length === 0) && (
             <p className="text-center text-muted-foreground py-12">No invoices found. Sync from QuickBooks first.</p>
           )}
-          {activeDoc === "quotation" && quotations.length === 0 && data.estimates.length === 0 && (
+          {activeDoc === "quotation" && quotations.length === 0 && !quotationsLoading && totalCount === 0 && data.estimates.length === 0 && (
             <p className="text-center text-muted-foreground py-12">No quotations found.</p>
           )}
           {activeDoc === "estimation" && data.estimates.length === 0 && (
@@ -300,6 +357,33 @@ export function AccountingDocuments({ data }: Props) {
           )}
         </div>
       </ScrollArea>
+
+      {/* Quotation pagination controls */}
+      {activeDoc === "quotation" && totalPages > 1 && (
+        <div className="flex items-center justify-between pt-2 border-t">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={qPage <= 1}
+            onClick={() => setQPage((p) => Math.max(1, p - 1))}
+            className="gap-1"
+          >
+            <ChevronLeft className="w-4 h-4" /> Previous
+          </Button>
+          <span className="text-sm text-muted-foreground">
+            Page {qPage} of {totalPages}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={qPage >= totalPages}
+            onClick={() => setQPage((p) => Math.min(totalPages, p + 1))}
+            className="gap-1"
+          >
+            Next <ChevronRight className="w-4 h-4" />
+          </Button>
+        </div>
+      )}
 
       {/* Preview overlays */}
       {previewType === "invoice" && previewId && (() => {
