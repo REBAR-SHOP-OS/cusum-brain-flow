@@ -1,96 +1,49 @@
 
 
-# Fix: Activity Status Bar, Sorting, and Clickable Filtering
+# Fix: Make Activity Status Bar Visible and Match Odoo
 
-## Current Problem
-The column header bar currently shows **priority distribution** (green=3 stars, orange=2 stars, red=0-1 stars). Odoo shows **activity status distribution** instead:
-- **Green**: Planned activities (future deadline)
-- **Yellow/Orange**: Due today
-- **Red**: Overdue (past deadline)
-- **Grey**: No activity scheduled
+## Problem Diagnosed
+The activity status bar IS implemented and working correctly, but it appears invisible because:
 
-Additionally, leads are sorted by priority stars only. Odoo sorts by activity urgency first.
+1. **Data issue**: Most leads in columns like Prospecting, New, QC-Ben, Estimation-Ben, etc. have NO `expected_close_date` set, so they all show as "none" (grey status)
+2. **Grey-on-grey**: The grey "none" segment color uses `hsl(var(--muted))` which is nearly identical to the bar's background color, making the bar invisible
+3. **Bar is too thin**: At `h-1.5` (6px), it's much thinner than Odoo's bar which is about 4-6px tall and more prominent
 
 ## What Changes
 
-### 1. Column header bar: Priority to Activity (`PipelineColumn.tsx`)
-Replace the priority-based bar segments with activity-based segments:
-- Count leads by activity status (overdue / today / planned / none)
-- Render 4 color segments: green, yellow, red, grey -- in that exact Odoo order (green first, grey last)
-- Each segment is a clickable `button` -- clicking filters the column to show only leads with that activity status
-- Clicking the same segment again clears the filter
+### 1. Make the bar always visible (`PipelineColumn.tsx`)
+- Increase bar height from `h-1.5` to `h-2` (8px) to match Odoo's thicker bar
+- Change the "none" segment color to a more visible grey (e.g., `#d1d5db` / grey-300) so it contrasts with the muted background
+- Ensure the bar always renders even when all leads have the same status (so users can still see the bar)
 
-### 2. Sort leads by activity urgency (`Pipeline.tsx`)
-Update the `leadsByStage` sorting to sort by activity status first (overdue > today > planned > none), then by priority stars, then by `updated_at`.
-
-### 3. Column-level activity filter state (`PipelineColumn.tsx`)
-Add local state for the active activity filter within each column. When a color segment is clicked, only leads matching that activity status are shown in the card list.
+### 2. Make bar background darker for contrast
+- Change the bar container background to a slightly darker shade so the grey segments are distinguishable
 
 ## Technical Details
 
-### Activity status helper (shared logic)
-Extract the `getActivityStatus` function to a shared utility or duplicate in PipelineColumn:
+### Color and size changes (`PipelineColumn.tsx`)
 
 ```typescript
-type ActivityStatus = "overdue" | "today" | "planned" | "none";
-
-function getActivityStatus(lead: Lead): ActivityStatus {
-  if (lead.stage === "won" || lead.stage === "lost") return "none";
-  if (!lead.expected_close_date) return "none";
-  const diff = differenceInDays(new Date(lead.expected_close_date), new Date());
-  if (diff < 0) return "overdue";
-  if (diff === 0) return "today";
-  return "planned";
-}
+// Make "none" segment visible against background
+const ACTIVITY_COLORS: Record<ActivityStatus, string> = {
+  planned: "#21b632",
+  today: "#f0ad4e",
+  overdue: "#d9534f",
+  none: "#d1d5db",  // Changed from hsl(var(--muted)) to visible grey
+};
 ```
 
-### Bar rendering (PipelineColumn.tsx)
-Replace priority bar with clickable activity bar:
-
-```typescript
-const [activityFilter, setActivityFilter] = useState<ActivityStatus | null>(null);
-
-const planned = leads.filter(l => getActivityStatus(l) === "planned").length;
-const today = leads.filter(l => getActivityStatus(l) === "today").length;
-const overdue = leads.filter(l => getActivityStatus(l) === "overdue").length;
-const none = total - planned - today - overdue;
-
-// Filter displayed leads
-const displayedLeads = activityFilter
-  ? leads.filter(l => getActivityStatus(l) === activityFilter)
-  : leads;
-```
-
-Bar segments are clickable buttons with colors:
-- Green (#21b632) for planned
-- Yellow (#f0ad4e) for today  
-- Red (#d9534f) for overdue
-- Grey (muted) for none
-
-### Sorting update (Pipeline.tsx)
-In the `leadsByStage` sort function, add activity urgency as the primary sort key:
-
-```typescript
-.sort((a, b) => {
-  // Activity urgency first: overdue(0) > today(1) > planned(2) > none(3)
-  const activityOrder = { overdue: 0, today: 1, planned: 2, none: 3 };
-  const aActivity = activityOrder[getActivityStatus(a)];
-  const bActivity = activityOrder[getActivityStatus(b)];
-  if (aActivity !== bActivity) return aActivity - bActivity;
-  
-  // Then priority stars
-  const starDiff = getStars(b) - getStars(a);
-  if (starDiff !== 0) return starDiff;
-  
-  // Then recency
-  return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
-});
+Bar container: increase height and darken background:
+```tsx
+<div
+  className="mt-1.5 h-2 w-full rounded-full overflow-hidden flex"
+  style={{ backgroundColor: '#e5e7eb' }}  // slightly darker than segment grey
+>
 ```
 
 ## Files Modified
 
 | File | Change |
 |---|---|
-| `src/components/pipeline/PipelineColumn.tsx` | Replace priority bar with clickable activity status bar; add local filter state |
-| `src/pages/Pipeline.tsx` | Add activity-first sorting in `leadsByStage` |
+| `src/components/pipeline/PipelineColumn.tsx` | Increase bar height, fix "none" color contrast |
 
