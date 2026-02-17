@@ -9,8 +9,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Phone, Mail, MapPin, ChevronDown, FileText, DollarSign, List, StickyNote } from "lucide-react";
-import { format, differenceInDays } from "date-fns";
+import { Phone, Mail, MapPin, ChevronDown, FileText, DollarSign, List, StickyNote, AlertTriangle } from "lucide-react";
+import { format } from "date-fns";
 import { CreateVendorTransactionDialog, type VendorTransactionType } from "./CreateVendorTransactionDialog";
 import type { QBVendor } from "@/hooks/useQuickBooksData";
 
@@ -80,17 +80,35 @@ export function VendorDetail({ vendor }: VendorDetailProps) {
   const qbCreated = qbJson?.MetaData?.CreateTime || null;
   const qbUpdated = qbJson?.MetaData?.LastUpdatedTime || null;
   const webAddr = qbJson?.WebAddr?.URI || null;
+  const billPayACH = qbJson?.BillPayACHInfo || qbJson?.ACHInfo || null;
 
   const formatAddr = (addr: any) => {
     if (!addr) return null;
     return [addr.Line1, addr.City, addr.CountrySubDivisionCode, addr.PostalCode].filter(Boolean).join(", ") || null;
   };
 
+  // Extract category from transaction raw_json
+  const getCategory = (txnRaw: any) => {
+    if (!txnRaw?.Line) return "—";
+    for (const line of txnRaw.Line) {
+      const acctName = line?.AccountBasedExpenseLineDetail?.AccountRef?.name;
+      if (acctName) return acctName;
+      const itemName = line?.ItemBasedExpenseLineDetail?.ItemRef?.name;
+      if (itemName) return itemName;
+    }
+    return "—";
+  };
+
+  const getSalesTax = (txnRaw: any) => txnRaw?.TxnTaxDetail?.TotalTax ?? 0;
+
+  const getPayee = (txnRaw: any) => txnRaw?.VendorRef?.name || vendor.DisplayName || "—";
+
   // Financial summary
   const financialSummary = useMemo(() => {
     const today = new Date().toISOString().split("T")[0];
     let openBalance = 0;
     let overdueBalance = 0;
+    let overdueCount = 0;
 
     transactions.forEach((txn) => {
       if (txn.entity_type === "Bill" && (txn.balance ?? 0) > 0) {
@@ -98,11 +116,12 @@ export function VendorDetail({ vendor }: VendorDetailProps) {
         const dueDate = (txn.raw_json as any)?.DueDate;
         if (dueDate && dueDate < today) {
           overdueBalance += txn.balance ?? 0;
+          overdueCount++;
         }
       }
     });
 
-    return { openBalance, overdueBalance };
+    return { openBalance, overdueBalance, overdueCount };
   }, [transactions]);
 
   // Filtered transactions
@@ -152,29 +171,45 @@ export function VendorDetail({ vendor }: VendorDetailProps) {
             {formatAddr(billAddr) && <span className="flex items-center gap-1.5 text-muted-foreground"><MapPin className="w-3.5 h-3.5" />{formatAddr(billAddr)}</span>}
           </div>
 
-          {/* Financial + New transaction */}
-          <div className="flex items-center justify-between">
+          {/* Bill Pay ACH info */}
+          {billPayACH && (
+            <div className="text-sm bg-muted/50 rounded-lg p-2">
+              <p className="text-xs font-medium text-muted-foreground mb-1">Bill Pay ACH Info</p>
+              <p className="text-sm">{typeof billPayACH === "string" ? billPayACH : JSON.stringify(billPayACH)}</p>
+            </div>
+          )}
+
+          {/* Financial Summary Card + New transaction */}
+          <div className="flex items-stretch gap-3">
             <Card className="flex-1">
-              <CardContent className="p-3 flex gap-6">
+              <CardContent className="p-4 flex gap-6 items-center">
                 <div>
-                  <p className="text-xs text-muted-foreground">Open Balance</p>
-                  <p className="text-lg font-bold">{fmt(financialSummary.openBalance)}</p>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Open balance</p>
+                  <p className="text-2xl font-bold">{fmt(financialSummary.openBalance)}</p>
                 </div>
+                <div className="h-10 w-px bg-border" />
                 <div>
-                  <p className="text-xs text-muted-foreground">Overdue</p>
-                  <p className="text-lg font-bold text-destructive">{fmt(financialSummary.overdueBalance)}</p>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                    <AlertTriangle className="w-3 h-3 text-destructive" /> Overdue
+                  </p>
+                  <p className="text-2xl font-bold text-destructive">{fmt(financialSummary.overdueBalance)}</p>
+                  {financialSummary.overdueCount > 0 && (
+                    <p className="text-xs text-destructive">{financialSummary.overdueCount} bill{financialSummary.overdueCount !== 1 ? "s" : ""}</p>
+                  )}
                 </div>
               </CardContent>
             </Card>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button size="sm" className="ml-3 gap-1"><FileText className="w-4 h-4" /> New transaction <ChevronDown className="w-3 h-3" /></Button>
+                <Button size="sm" className="h-auto gap-1"><FileText className="w-4 h-4" /> New transaction <ChevronDown className="w-3 h-3" /></Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={() => openTxnDialog("Bill")}>Bill</DropdownMenuItem>
                 <DropdownMenuItem onClick={() => openTxnDialog("Expense")}>Expense</DropdownMenuItem>
                 <DropdownMenuItem onClick={() => openTxnDialog("Cheque")}>Cheque</DropdownMenuItem>
                 <DropdownMenuItem onClick={() => openTxnDialog("SupplierCredit")}>Supplier Credit</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => openTxnDialog("Bill")}>Pay down credit card</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => openTxnDialog("Bill")}>Import Bills</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -217,37 +252,52 @@ export function VendorDetail({ vendor }: VendorDetailProps) {
             ) : filteredTxns.length === 0 ? (
               <p className="text-sm text-muted-foreground p-4">No transactions found</p>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="text-xs">Date</TableHead>
-                    <TableHead className="text-xs">Type</TableHead>
-                    <TableHead className="text-xs">No.</TableHead>
-                    <TableHead className="text-xs text-right">Total</TableHead>
-                    <TableHead className="text-xs text-right">Balance</TableHead>
-                    <TableHead className="text-xs">Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredTxns.map((txn) => {
-                    const status = deriveStatus(txn);
-                    return (
-                      <TableRow key={txn.id} className="text-sm">
-                        <TableCell>{txn.txn_date ? format(new Date(txn.txn_date), "MMM d, yyyy") : "—"}</TableCell>
-                        <TableCell>{txn.entity_type}</TableCell>
-                        <TableCell>{txn.doc_number || "—"}</TableCell>
-                        <TableCell className="text-right font-medium">{fmt(txn.total_amt ?? 0)}</TableCell>
-                        <TableCell className="text-right">{fmt(txn.balance ?? 0)}</TableCell>
-                        <TableCell>
-                          <Badge variant={status === "Overdue" ? "destructive" : status === "Paid" ? "secondary" : "outline"} className="text-xs">
-                            {status}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-xs">Date</TableHead>
+                      <TableHead className="text-xs">Type</TableHead>
+                      <TableHead className="text-xs">No.</TableHead>
+                      <TableHead className="text-xs">Payee</TableHead>
+                      <TableHead className="text-xs">Category</TableHead>
+                      <TableHead className="text-xs text-right">Before Tax</TableHead>
+                      <TableHead className="text-xs text-right">Sales Tax</TableHead>
+                      <TableHead className="text-xs text-right">Total</TableHead>
+                      <TableHead className="text-xs">Status</TableHead>
+                      <TableHead className="text-xs">Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredTxns.map((txn) => {
+                      const status = deriveStatus(txn);
+                      const txnRaw = txn.raw_json as any;
+                      const salesTax = getSalesTax(txnRaw);
+                      const totalBeforeTax = (txn.total_amt ?? 0) - salesTax;
+                      return (
+                        <TableRow key={txn.id} className="text-sm">
+                          <TableCell className="whitespace-nowrap">{txn.txn_date ? format(new Date(txn.txn_date), "MMM d, yyyy") : "—"}</TableCell>
+                          <TableCell>{txn.entity_type}</TableCell>
+                          <TableCell>{txn.doc_number || "—"}</TableCell>
+                          <TableCell className="max-w-[120px] truncate">{getPayee(txnRaw)}</TableCell>
+                          <TableCell className="max-w-[120px] truncate">{getCategory(txnRaw)}</TableCell>
+                          <TableCell className="text-right">{fmt(totalBeforeTax)}</TableCell>
+                          <TableCell className="text-right">{salesTax > 0 ? fmt(salesTax) : "—"}</TableCell>
+                          <TableCell className="text-right font-medium">{fmt(txn.total_amt ?? 0)}</TableCell>
+                          <TableCell>
+                            <Badge variant={status === "Overdue" ? "destructive" : status === "Paid" ? "secondary" : "outline"} className="text-xs">
+                              {status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Button variant="link" size="sm" className="h-auto p-0 text-xs text-primary">View/Edit</Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
             )}
           </TabsContent>
 
@@ -261,6 +311,7 @@ export function VendorDetail({ vendor }: VendorDetailProps) {
               <InfoRow label="Website" value={webAddr} />
               <InfoRow label="Account No." value={acctNum} />
               <InfoRow label="Billing Address" value={formatAddr(billAddr)} />
+              <InfoRow label="Bill Pay ACH Info" value={billPayACH ? (typeof billPayACH === "string" ? billPayACH : "Configured") : null} />
               <InfoRow label="Payment Terms" value={terms} />
               <InfoRow label="Tax ID" value={taxId} />
               <InfoRow label="Currency" value={currencyName} />

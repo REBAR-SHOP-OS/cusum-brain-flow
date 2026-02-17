@@ -5,7 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Store, Search, AlertTriangle, FileText, DollarSign } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Store, Search, AlertTriangle, FileText, DollarSign, ChevronDown } from "lucide-react";
 import type { useQuickBooksData, QBVendor, QBBill } from "@/hooks/useQuickBooksData";
 import { VendorDetail } from "./VendorDetail";
 
@@ -21,6 +22,7 @@ interface EnrichedVendor extends QBVendor {
   overdue: number;
   billCount: number;
   paidLast30: number;
+  paidLast30Count: number;
 }
 
 export function AccountingVendors({ data }: Props) {
@@ -42,27 +44,41 @@ export function AccountingVendors({ data }: Props) {
       const vendorBills = bills.filter((b) => b.VendorRef?.value === v.Id);
       const openBalance = vendorBills.reduce((sum, b) => sum + (b.Balance || 0), 0);
       const overdue = vendorBills.filter((b) => b.Balance > 0 && new Date(b.DueDate) < now).length;
-      const paidLast30 = vendorBills
-        .filter((b) => b.Balance <= 0 && new Date(b.TxnDate) >= thirtyDaysAgo)
-        .reduce((sum, b) => sum + (b.TotalAmt || 0), 0);
-      return { ...v, openBalance, overdue, billCount: vendorBills.length, paidLast30 };
+      const paidBills = vendorBills.filter((b) => b.Balance <= 0 && new Date(b.TxnDate) >= thirtyDaysAgo);
+      const paidLast30 = paidBills.reduce((sum, b) => sum + (b.TotalAmt || 0), 0);
+      return { ...v, openBalance, overdue, billCount: vendorBills.length, paidLast30, paidLast30Count: paidBills.length };
     }).sort((a, b) => (a.DisplayName || "").localeCompare(b.DisplayName || "", undefined, { sensitivity: 'base' }));
   }, [filtered, bills]);
 
   // Summary stats
   const stats = useMemo(() => {
-    const totalOverdue = enriched.reduce((s, v) => {
-      const overdueBills = bills.filter((b) => b.VendorRef?.value === v.Id && b.Balance > 0 && new Date(b.DueDate) < new Date());
-      return s + overdueBills.reduce((a, b) => a + b.Balance, 0);
-    }, 0);
-    const totalOpen = enriched.reduce((s, v) => s + v.openBalance, 0);
-    const totalPaid30 = enriched.reduce((s, v) => s + v.paidLast30, 0);
-    return { totalOverdue, totalOpen, totalPaid30 };
+    const now = new Date();
+    let overdueCount = 0;
+    let totalOverdue = 0;
+    let openBillCount = 0;
+    let totalOpen = 0;
+    let paidCount = 0;
+    let totalPaid30 = 0;
+
+    enriched.forEach((v) => {
+      const overdueBills = bills.filter((b) => b.VendorRef?.value === v.Id && b.Balance > 0 && new Date(b.DueDate) < now);
+      overdueCount += overdueBills.length;
+      totalOverdue += overdueBills.reduce((a, b) => a + b.Balance, 0);
+
+      const openBills = bills.filter((b) => b.VendorRef?.value === v.Id && b.Balance > 0);
+      openBillCount += openBills.length;
+      totalOpen += v.openBalance;
+
+      paidCount += v.paidLast30Count;
+      totalPaid30 += v.paidLast30;
+    });
+
+    return { overdueCount, totalOverdue, openBillCount, totalOpen, paidCount, totalPaid30 };
   }, [enriched, bills]);
 
   return (
     <div className="space-y-4">
-      {/* Summary bar */}
+      {/* Summary bar with counts */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <Card>
           <CardContent className="p-4 flex items-center gap-3">
@@ -70,7 +86,7 @@ export function AccountingVendors({ data }: Props) {
               <AlertTriangle className="w-5 h-5 text-destructive" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Overdue</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">{stats.overdueCount} Overdue</p>
               <p className="text-xl font-bold text-destructive">{fmt(stats.totalOverdue)}</p>
             </div>
           </CardContent>
@@ -81,7 +97,7 @@ export function AccountingVendors({ data }: Props) {
               <FileText className="w-5 h-5 text-muted-foreground" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Open Bills</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">{stats.openBillCount} Open Bills</p>
               <p className="text-xl font-bold">{fmt(stats.totalOpen)}</p>
             </div>
           </CardContent>
@@ -92,7 +108,7 @@ export function AccountingVendors({ data }: Props) {
               <DollarSign className="w-5 h-5 text-success" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Paid Last 30 Days</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">{stats.paidCount} Paid Last 30 Days</p>
               <p className="text-xl font-bold text-success">{fmt(stats.totalPaid30)}</p>
             </div>
           </CardContent>
@@ -133,6 +149,7 @@ export function AccountingVendors({ data }: Props) {
                   <TableHead className="text-base text-right">Open Balance</TableHead>
                   <TableHead className="text-base text-center">Overdue</TableHead>
                   <TableHead className="text-base">Status</TableHead>
+                  <TableHead className="text-base">Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -161,6 +178,21 @@ export function AccountingVendors({ data }: Props) {
                       <Badge className={`border-0 text-sm ${v.Active ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"}`}>
                         {v.Active ? "Active" : "Inactive"}
                       </Badge>
+                    </TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="outline" size="sm" className="h-7 gap-1 text-xs">
+                            {v.openBalance > 0 ? "Make payment" : "Create bill"}
+                            <ChevronDown className="w-3 h-3" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem>Create bill</DropdownMenuItem>
+                          <DropdownMenuItem>Make payment</DropdownMenuItem>
+                          <DropdownMenuItem>Create expense</DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TableCell>
                   </TableRow>
                 ))}
