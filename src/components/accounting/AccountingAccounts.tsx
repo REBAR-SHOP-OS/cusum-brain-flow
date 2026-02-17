@@ -1,16 +1,19 @@
-import { useState, useMemo, Fragment } from "react";
+import { useState, useMemo, Fragment, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Landmark, Search, FileBarChart, Plus, RefreshCw } from "lucide-react";
+import { Landmark, Search, FileBarChart, Plus, RefreshCw, Pencil, Check, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { AccountQuickReportDrawer } from "./AccountQuickReportDrawer";
 import { NewAccountDrawer } from "./NewAccountDrawer";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { useBankFeedBalances } from "@/hooks/useBankFeedBalances";
+import { formatDistanceToNow } from "date-fns";
 import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
 
 interface Props {
@@ -122,6 +125,10 @@ export function AccountingAccounts({ data }: Props) {
   const [detailTypeFilter, setDetailTypeFilter] = useState("all");
   const [newAccountOpen, setNewAccountOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const editInputRef = useRef<HTMLInputElement>(null);
+  const { getBalance, upsertBalance } = useBankFeedBalances();
 
   const accountTree = useMemo(() => buildAccountTree(accounts), [accounts]);
 
@@ -356,8 +363,80 @@ export function AccountingAccounts({ data }: Props) {
                             <TableCell className="text-muted-foreground">{a.AccountSubType || "—"}</TableCell>
                             <TableCell className="text-muted-foreground text-xs">{a.TaxCodeRef || "—"}</TableCell>
                             <TableCell className="text-right font-semibold">{fmt(a.CurrentBalance || 0)}</TableCell>
-                            <TableCell className="text-right text-muted-foreground">
-                              {a.BankBalance != null ? fmt(a.BankBalance) : "—"}
+                            <TableCell className="text-right">
+                              {a.AccountType === "Bank" ? (
+                                editingAccountId === a.Id ? (
+                                  <div className="flex items-center justify-end gap-1">
+                                    <Input
+                                      ref={editInputRef}
+                                      type="number"
+                                      step="0.01"
+                                      value={editValue}
+                                      onChange={(e) => setEditValue(e.target.value)}
+                                      className="h-7 w-28 text-right text-sm"
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter") {
+                                          const val = parseFloat(editValue);
+                                          if (!isNaN(val)) {
+                                            upsertBalance(a.Id, a.Name, val);
+                                            toast({ title: "Bank balance saved" });
+                                          }
+                                          setEditingAccountId(null);
+                                        } else if (e.key === "Escape") {
+                                          setEditingAccountId(null);
+                                        }
+                                      }}
+                                    />
+                                    <button
+                                      className="text-primary hover:text-primary/80"
+                                      onClick={() => {
+                                        const val = parseFloat(editValue);
+                                        if (!isNaN(val)) {
+                                          upsertBalance(a.Id, a.Name, val);
+                                          toast({ title: "Bank balance saved" });
+                                        }
+                                        setEditingAccountId(null);
+                                      }}
+                                    >
+                                      <Check className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button className="text-muted-foreground hover:text-destructive" onClick={() => setEditingAccountId(null)}>
+                                      <X className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                ) : (() => {
+                                  const bankBal = getBalance(a.Id);
+                                  return (
+                                    <TooltipProvider>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <button
+                                            className="inline-flex items-center gap-1 hover:text-primary transition-colors group"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setEditingAccountId(a.Id);
+                                              setEditValue(bankBal ? String(bankBal.bank_balance) : "");
+                                              setTimeout(() => editInputRef.current?.focus(), 50);
+                                            }}
+                                          >
+                                            <span className={bankBal ? "font-semibold" : "text-muted-foreground"}>
+                                              {bankBal ? fmt(bankBal.bank_balance) : "—"}
+                                            </span>
+                                            <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-100 text-muted-foreground transition-opacity" />
+                                          </button>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="left">
+                                          {bankBal
+                                            ? `Updated ${formatDistanceToNow(new Date(bankBal.last_updated), { addSuffix: true })}`
+                                            : "Click to enter bank balance"}
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
+                                  );
+                                })()
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
                             </TableCell>
                             <TableCell>
                               <button

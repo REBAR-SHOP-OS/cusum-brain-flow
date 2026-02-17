@@ -389,6 +389,36 @@ export type Database = {
         }
         Relationships: []
       }
+      bank_feed_balances: {
+        Row: {
+          account_id: string
+          account_name: string
+          bank_balance: number
+          company_id: string
+          id: string
+          last_updated: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          account_id: string
+          account_name: string
+          bank_balance: number
+          company_id: string
+          id?: string
+          last_updated?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          account_id?: string
+          account_name?: string
+          bank_balance?: number
+          company_id?: string
+          id?: string
+          last_updated?: string | null
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       barlist_items: {
         Row: {
           bar_code: string | null
