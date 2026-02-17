@@ -1,22 +1,22 @@
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { LeadCard } from "./LeadCard";
+import { differenceInCalendarDays } from "date-fns";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Lead = Tables<"leads">;
 type LeadWithCustomer = Lead & { customers: { name: string; company_name: string | null } | null };
 
-function getPriorityStars(lead: Lead): number {
-  const meta = lead.metadata as Record<string, unknown> | null;
-  const hasOdooId = !!meta?.odoo_id;
-  const odooPriority = meta?.odoo_priority as string | undefined;
-  if (odooPriority !== undefined && odooPriority !== null) {
-    return Math.min(parseInt(odooPriority) || 0, 3);
-  }
-  if (hasOdooId) return 0;
-  if (lead.priority === "high") return 3;
-  if (lead.priority === "medium") return 2;
-  return 0;
+type ActivityStatus = "overdue" | "today" | "planned" | "none";
+
+function getActivityStatus(lead: Lead): ActivityStatus {
+  if (lead.stage === "won" || lead.stage === "lost") return "none";
+  if (!lead.expected_close_date) return "none";
+  const diff = differenceInCalendarDays(new Date(lead.expected_close_date), new Date());
+  if (diff < 0) return "overdue";
+  if (diff === 0) return "today";
+  return "planned";
 }
 
 interface Stage {
@@ -39,6 +39,15 @@ interface PipelineColumnProps {
   onLeadClick: (lead: LeadWithCustomer) => void;
 }
 
+const ACTIVITY_COLORS: Record<ActivityStatus, string> = {
+  planned: "#21b632",
+  today: "#f0ad4e",
+  overdue: "#d9534f",
+  none: "hsl(var(--muted))",
+};
+
+const ACTIVITY_ORDER: ActivityStatus[] = ["planned", "today", "overdue", "none"];
+
 export function PipelineColumn({
   stage,
   leads,
@@ -52,16 +61,27 @@ export function PipelineColumn({
   onDelete,
   onLeadClick,
 }: PipelineColumnProps) {
+  const [activityFilter, setActivityFilter] = useState<ActivityStatus | null>(null);
+
   const totalValue = leads.reduce((sum, lead) => {
     const meta = lead.metadata as Record<string, unknown> | null;
     return sum + ((meta?.odoo_revenue as number) || lead.expected_value || 0);
   }, 0);
 
-  // Priority distribution for Odoo-style bar
   const total = leads.length;
-  const high = leads.filter((l) => getPriorityStars(l) === 3).length;
-  const medium = leads.filter((l) => getPriorityStars(l) === 2).length;
-  const low = total - high - medium;
+
+  // Count leads per activity status
+  const counts: Record<ActivityStatus, number> = { planned: 0, today: 0, overdue: 0, none: 0 };
+  leads.forEach((l) => { counts[getActivityStatus(l)]++; });
+
+  // Filter displayed leads when a segment is clicked
+  const displayedLeads = activityFilter
+    ? leads.filter((l) => getActivityStatus(l) === activityFilter)
+    : leads;
+
+  const handleSegmentClick = (status: ActivityStatus) => {
+    setActivityFilter((prev) => (prev === status ? null : status));
+  };
 
   return (
     <div
@@ -73,7 +93,7 @@ export function PipelineColumn({
       onDragLeave={onDragLeave}
       onDrop={onDrop}
     >
-      {/* Column Header — Odoo style: stage name, full currency, count */}
+      {/* Column Header */}
       <div className="px-3 pt-3 pb-2">
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-sm truncate flex-1">{stage.label}</h3>
@@ -84,36 +104,43 @@ export function PipelineColumn({
               </span>
             )}
             <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 min-w-[20px] justify-center">
-              {leads.length}
+              {activityFilter ? displayedLeads.length : leads.length}
             </Badge>
           </div>
         </div>
-        {/* Priority distribution bar */}
-        <div className="mt-1.5 h-1 w-full rounded-full overflow-hidden flex" style={{ backgroundColor: 'hsl(var(--muted))' }}>
-          {total > 0 ? (
-            <>
-              {high > 0 && (
-                <div className="h-full" style={{ width: `${(high / total) * 100}%`, backgroundColor: '#21b632' }} />
-              )}
-              {medium > 0 && (
-                <div className="h-full" style={{ width: `${(medium / total) * 100}%`, backgroundColor: '#f0ad4e' }} />
-              )}
-              {low > 0 && (
-                <div className="h-full" style={{ width: `${(low / total) * 100}%`, backgroundColor: '#d9534f' }} />
-              )}
-            </>
-          ) : null}
+        {/* Activity status distribution bar — clickable segments */}
+        <div className="mt-1.5 h-1.5 w-full rounded-full overflow-hidden flex" style={{ backgroundColor: 'hsl(var(--muted))' }}>
+          {total > 0 && ACTIVITY_ORDER.map((status) => {
+            const count = counts[status];
+            if (count === 0) return null;
+            return (
+              <button
+                key={status}
+                type="button"
+                className={cn(
+                  "h-full transition-opacity",
+                  activityFilter && activityFilter !== status ? "opacity-30" : "opacity-100"
+                )}
+                style={{
+                  width: `${(count / total) * 100}%`,
+                  backgroundColor: ACTIVITY_COLORS[status],
+                }}
+                onClick={() => handleSegmentClick(status)}
+                title={`${status}: ${count} lead${count !== 1 ? "s" : ""}`}
+              />
+            );
+          })}
         </div>
       </div>
 
       {/* Cards */}
       <div className="px-2 pb-2 space-y-2 min-h-[120px] flex-1 overflow-y-auto">
-        {leads.length === 0 ? (
+        {displayedLeads.length === 0 ? (
           <p className="text-xs text-muted-foreground text-center py-8 opacity-50">
-            Drop leads here
+            {activityFilter ? "No leads with this activity" : "Drop leads here"}
           </p>
         ) : (
-          leads.map((lead) => (
+          displayedLeads.map((lead) => (
             <LeadCard
               key={lead.id}
               lead={lead}

@@ -12,7 +12,7 @@ import { PipelineFilters, DEFAULT_FILTERS, type PipelineFilterState, type GroupB
 import { PipelineAISheet } from "@/components/pipeline/PipelineAISheet";
 import { useToast } from "@/hooks/use-toast";
 import type { Tables } from "@/integrations/supabase/types";
-import { startOfDay, startOfWeek, startOfMonth, startOfQuarter, startOfYear, subDays } from "date-fns";
+import { startOfDay, startOfWeek, startOfMonth, startOfQuarter, startOfYear, subDays, differenceInCalendarDays } from "date-fns";
 import { parseSmartSearch, type SmartSearchResult } from "@/lib/smartSearchParser";
 
 type Lead = Tables<"leads">;
@@ -239,11 +239,26 @@ export default function Pipeline() {
   }, [leads, pipelineFilters, smartResult]);
 
   const leadsByStage = useMemo(() => {
+    const activityOrder: Record<string, number> = { overdue: 0, today: 1, planned: 2, none: 3 };
+    const getActivityStatus = (l: LeadWithCustomer) => {
+      if (l.stage === "won" || l.stage === "lost") return "none";
+      if (!l.expected_close_date) return "none";
+      const diff = differenceInCalendarDays(new Date(l.expected_close_date), new Date());
+      if (diff < 0) return "overdue";
+      if (diff === 0) return "today";
+      return "planned";
+    };
+
     const grouped: Record<string, LeadWithCustomer[]> = {};
     PIPELINE_STAGES.forEach((stage) => {
       grouped[stage.id] = filteredLeads
         .filter((lead) => lead.stage === stage.id)
         .sort((a, b) => {
+          // Activity urgency first
+          const actDiff = activityOrder[getActivityStatus(a)] - activityOrder[getActivityStatus(b)];
+          if (actDiff !== 0) return actDiff;
+
+          // Then priority stars
           const getStars = (l: LeadWithCustomer) => {
             const meta = l.metadata as Record<string, unknown> | null;
             const hasOdooId = !!meta?.odoo_id;
@@ -256,8 +271,10 @@ export default function Pipeline() {
             if (l.priority === "medium") return 2;
             return 0;
           };
-          const diff = getStars(b) - getStars(a);
-          if (diff !== 0) return diff;
+          const starDiff = getStars(b) - getStars(a);
+          if (starDiff !== 0) return starDiff;
+
+          // Then recency
           return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
         });
     });
