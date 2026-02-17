@@ -14,6 +14,7 @@ interface LineItem {
   Amount: number;
   Qty: number;
   UnitPrice: number;
+  ServiceDate?: string;
   ItemRef?: { value: string; name: string };
 }
 
@@ -30,8 +31,22 @@ interface Props {
 const fmt = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
 
+const TERMS_OPTIONS = ["Net 15", "Net 30", "Net 60", "Due on receipt"];
+
+// Safe accessor for raw QB fields
+function rawField(invoice: QBInvoice, key: string): unknown {
+  return (invoice as unknown as Record<string, unknown>)[key];
+}
+
+function formatAddr(addr: Record<string, unknown> | undefined): string {
+  if (!addr) return "";
+  return [addr.Line1, addr.Line2, addr.Line3, addr.Line4, addr.City, addr.CountrySubDivisionCode, addr.PostalCode]
+    .filter(Boolean)
+    .join("\n");
+}
+
 function parseLineItems(invoice: QBInvoice): LineItem[] {
-  const raw = (invoice as unknown as Record<string, unknown>).Line as Array<Record<string, unknown>> | undefined;
+  const raw = rawField(invoice, "Line") as Array<Record<string, unknown>> | undefined;
   if (!raw) {
     return [{ Description: "Rebar Fabrication & Supply", Qty: 1, UnitPrice: invoice.TotalAmt, Amount: invoice.TotalAmt }];
   }
@@ -44,6 +59,7 @@ function parseLineItems(invoice: QBInvoice): LineItem[] {
         Amount: (l.Amount as number) || 0,
         Qty: (detail?.Qty as number) || 1,
         UnitPrice: (detail?.UnitPrice as number) || 0,
+        ServiceDate: (detail?.ServiceDate as string) || "",
         ItemRef: detail?.ItemRef as { value: string; name: string } | undefined,
       };
     });
@@ -60,13 +76,29 @@ export function InvoiceEditor({ invoice, customers, items, payments, onUpdate, o
   const [txnDate, setTxnDate] = useState(invoice.TxnDate?.split("T")[0] || "");
   const [dueDate, setDueDate] = useState(invoice.DueDate?.split("T")[0] || "");
   const [memo, setMemo] = useState(
-    ((invoice as unknown as Record<string, unknown>).CustomerMemo as { value: string } | undefined)?.value || ""
+    (rawField(invoice, "CustomerMemo") as { value: string } | undefined)?.value || ""
   );
   const [lineItems, setLineItems] = useState<LineItem[]>(() => parseLineItems(invoice));
 
-  // Tax rate: initialize from invoice or default 13%
+  // New QB header fields
+  const [billAddr, setBillAddr] = useState(() => formatAddr(rawField(invoice, "BillAddr") as Record<string, unknown> | undefined));
+  const [shipAddr, setShipAddr] = useState(() => formatAddr(rawField(invoice, "ShipAddr") as Record<string, unknown> | undefined));
+  const [terms, setTerms] = useState(() => (rawField(invoice, "SalesTermRef") as { name?: string } | undefined)?.name || "");
+  const [shipVia, setShipVia] = useState(() => (rawField(invoice, "ShipMethodRef") as { name?: string } | undefined)?.name || "");
+  const [shipDate, setShipDate] = useState(() => ((rawField(invoice, "ShipDate") as string) || "").split("T")[0]);
+  const [trackingNum, setTrackingNum] = useState(() => (rawField(invoice, "TrackingNum") as string) || "");
+  const [poNumber, setPoNumber] = useState(() => {
+    const customs = rawField(invoice, "CustomField") as Array<{ Name?: string; StringValue?: string }> | undefined;
+    return customs?.find((c) => c.Name?.toLowerCase().includes("po"))?.StringValue || "";
+  });
+  const [salesRep, setSalesRep] = useState(() => {
+    const customs = rawField(invoice, "CustomField") as Array<{ Name?: string; StringValue?: string }> | undefined;
+    return customs?.find((c) => c.Name?.toLowerCase().includes("rep"))?.StringValue || "";
+  });
+
+  // Tax rate
   const initTaxRate = useMemo(() => {
-    const raw = (invoice as unknown as Record<string, unknown>).TxnTaxDetail as Record<string, unknown> | undefined;
+    const raw = rawField(invoice, "TxnTaxDetail") as Record<string, unknown> | undefined;
     const qbTotalTax = raw?.TotalTax as number | undefined;
     const initSubtotal = parseLineItems(invoice).reduce((s, l) => s + l.Amount, 0);
     if (qbTotalTax != null && initSubtotal > 0) return (qbTotalTax / initSubtotal) * 100;
@@ -78,14 +110,14 @@ export function InvoiceEditor({ invoice, customers, items, payments, onUpdate, o
   const safeTaxRate = Math.max(0, Math.min(100, taxRatePercent));
   const taxAmount = useMemo(() => {
     if (editing) return subtotal * (safeTaxRate / 100);
-    const raw = (invoice as unknown as Record<string, unknown>).TxnTaxDetail as Record<string, unknown> | undefined;
+    const raw = rawField(invoice, "TxnTaxDetail") as Record<string, unknown> | undefined;
     return (raw?.TotalTax as number) || subtotal * 0.13;
   }, [invoice, subtotal, editing, safeTaxRate]);
   const total = subtotal + taxAmount;
   const paid = invoice.TotalAmt - invoice.Balance;
   const amountDue = total - paid;
 
-  // Extract payments linked to this invoice
+  // Linked payments
   const linkedPayments = useMemo(() => {
     const results: { date: string; amount: number }[] = [];
     for (const pmt of payments) {
@@ -97,10 +129,7 @@ export function InvoiceEditor({ invoice, customers, items, payments, onUpdate, o
         if (!linkedTxns) continue;
         for (const txn of linkedTxns) {
           if (txn.TxnType === "Invoice" && txn.TxnId === invoice.Id) {
-            results.push({
-              date: (raw.TxnDate as string) || "",
-              amount: (line.Amount as number) || 0,
-            });
+            results.push({ date: (raw.TxnDate as string) || "", amount: (line.Amount as number) || 0 });
           }
         }
       }
@@ -109,6 +138,9 @@ export function InvoiceEditor({ invoice, customers, items, payments, onUpdate, o
   }, [payments, invoice.Id]);
 
   const paymentStatus = invoice.Balance === 0 ? "PAID" : linkedPayments.length > 0 ? "PARTIAL" : "OPEN";
+
+  // Active items for dropdown
+  const activeItems = useMemo(() => items.filter((i) => (i as unknown as Record<string, unknown>).Active !== false), [items]);
 
   const updateLineItem = (idx: number, field: keyof LineItem, value: string | number) => {
     setLineItems((prev) => {
@@ -121,6 +153,22 @@ export function InvoiceEditor({ invoice, customers, items, payments, onUpdate, o
         (item as Record<string, unknown>)[field] = value;
       }
       updated[idx] = item;
+      return updated;
+    });
+  };
+
+  const selectProduct = (idx: number, itemId: string) => {
+    const found = items.find((i) => i.Id === itemId);
+    if (!found) return;
+    setLineItems((prev) => {
+      const updated = [...prev];
+      const line = { ...updated[idx] };
+      const raw = found as unknown as Record<string, unknown>;
+      line.ItemRef = { value: found.Id, name: found.Name };
+      line.Description = (raw.Description as string) || found.Name;
+      line.UnitPrice = (raw.UnitPrice as number) || line.UnitPrice;
+      line.Amount = line.Qty * line.UnitPrice;
+      updated[idx] = line;
       return updated;
     });
   };
@@ -151,15 +199,26 @@ export function InvoiceEditor({ invoice, customers, items, payments, onUpdate, o
               Qty: l.Qty,
               UnitPrice: l.UnitPrice,
               ...(l.ItemRef ? { ItemRef: l.ItemRef } : {}),
+              ...(l.ServiceDate ? { ServiceDate: l.ServiceDate } : {}),
             },
           })),
-          // QB requires a SubTotalLine for sparse updates
           { DetailType: "SubTotalLineDetail", Amount: subtotal, SubTotalLineDetail: {} },
         ],
-        TxnTaxDetail: {
-          TotalTax: taxAmount,
-        },
+        TxnTaxDetail: { TotalTax: taxAmount },
       };
+
+      // Sparse: only include new fields if they have values
+      if (billAddr) updates.BillAddr = { Line1: billAddr };
+      if (shipAddr) updates.ShipAddr = { Line1: shipAddr };
+      if (terms) updates.SalesTermRef = { name: terms };
+      if (shipVia) updates.ShipMethodRef = { name: shipVia };
+      if (shipDate) updates.ShipDate = shipDate;
+      if (trackingNum) updates.TrackingNum = trackingNum;
+      // Custom fields (PO#, Sales Rep) via CustomField array
+      const customFields: Array<{ Name: string; StringValue: string; Type: string }> = [];
+      if (poNumber) customFields.push({ Name: "P.O. Number", StringValue: poNumber, Type: "StringType" });
+      if (salesRep) customFields.push({ Name: "Sales Rep", StringValue: salesRep, Type: "StringType" });
+      if (customFields.length) updates.CustomField = customFields;
 
       await onUpdate(invoice.Id, updates);
       setEditing(false);
@@ -171,6 +230,18 @@ export function InvoiceEditor({ invoice, customers, items, payments, onUpdate, o
   };
 
   const handlePrint = () => window.print();
+
+  // Helper: show a field row in view mode only if it has a value
+  const ViewField = ({ label, value }: { label: string; value: string }) =>
+    value ? (
+      <div className="flex gap-2 text-sm">
+        <span className="text-gray-400 min-w-[100px]">{label}:</span>
+        <span className="text-gray-700 whitespace-pre-line">{value}</span>
+      </div>
+    ) : null;
+
+  // Check if any service date exists for view mode column visibility
+  const hasServiceDates = lineItems.some((l) => l.ServiceDate);
 
   return (
     <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-start justify-center overflow-y-auto py-8">
@@ -231,7 +302,6 @@ export function InvoiceEditor({ invoice, customers, items, payments, onUpdate, o
 
         {/* Bill To + Payment History row */}
         <div className="flex gap-6 mb-6">
-          {/* Bill To */}
           <div className="flex-1 p-4 bg-gray-50 rounded-lg">
             <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Bill To</p>
             {editing ? (
@@ -247,9 +317,7 @@ export function InvoiceEditor({ invoice, customers, items, payments, onUpdate, o
                 </SelectTrigger>
                 <SelectContent>
                   {customers.map((c) => (
-                    <SelectItem key={c.Id} value={c.Id}>
-                      {c.DisplayName}
-                    </SelectItem>
+                    <SelectItem key={c.Id} value={c.Id}>{c.DisplayName}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -258,20 +326,11 @@ export function InvoiceEditor({ invoice, customers, items, payments, onUpdate, o
             )}
           </div>
 
-          {/* Payment History - header area */}
           {(linkedPayments.length > 0 || paid > 0) && (
             <div className="w-72 p-4 bg-gray-50 rounded-lg border border-gray-200">
               <div className="flex items-center justify-between mb-2">
                 <p className="text-[10px] uppercase tracking-widest text-gray-400 font-bold">Payment History</p>
-                <Badge
-                  className={`border-0 text-[10px] ${
-                    paymentStatus === "PAID"
-                      ? "bg-green-100 text-green-800"
-                      : paymentStatus === "PARTIAL"
-                      ? "bg-amber-100 text-amber-800"
-                      : "bg-gray-100 text-gray-600"
-                  }`}
-                >
+                <Badge className={`border-0 text-[10px] ${paymentStatus === "PAID" ? "bg-green-100 text-green-800" : paymentStatus === "PARTIAL" ? "bg-amber-100 text-amber-800" : "bg-gray-100 text-gray-600"}`}>
                   {paymentStatus}
                 </Badge>
               </div>
@@ -329,10 +388,71 @@ export function InvoiceEditor({ invoice, customers, items, payments, onUpdate, o
           )}
         </div>
 
+        {/* NEW: Invoice Detail Fields */}
+        {editing ? (
+          <div className="grid grid-cols-3 gap-4 mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <div className="col-span-1 space-y-2">
+              <label className="text-[10px] uppercase tracking-widest text-gray-400">Billing Address</label>
+              <Textarea value={billAddr} onChange={(e) => setBillAddr(e.target.value)} rows={3} className="text-sm bg-white border-gray-300 min-h-0" />
+            </div>
+            <div className="col-span-1 space-y-2">
+              <label className="text-[10px] uppercase tracking-widest text-gray-400">Shipping Address</label>
+              <Textarea value={shipAddr} onChange={(e) => setShipAddr(e.target.value)} rows={3} className="text-sm bg-white border-gray-300 min-h-0" />
+            </div>
+            <div className="col-span-1 space-y-2">
+              <label className="text-[10px] uppercase tracking-widest text-gray-400">Terms</label>
+              <Select value={terms} onValueChange={setTerms}>
+                <SelectTrigger className="h-8 bg-white border-gray-300 text-sm">
+                  <SelectValue placeholder="Select terms..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {TERMS_OPTIONS.map((t) => (
+                    <SelectItem key={t} value={t}>{t}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <label className="text-[10px] uppercase tracking-widest text-gray-400">Ship Via</label>
+              <Input value={shipVia} onChange={(e) => setShipVia(e.target.value)} className="h-8 text-sm bg-white border-gray-300" placeholder="e.g. UPS" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] uppercase tracking-widest text-gray-400">Shipping Date</label>
+              <Input type="date" value={shipDate} onChange={(e) => setShipDate(e.target.value)} className="h-8 text-sm bg-white border-gray-300" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] uppercase tracking-widest text-gray-400">Tracking No.</label>
+              <Input value={trackingNum} onChange={(e) => setTrackingNum(e.target.value)} className="h-8 text-sm bg-white border-gray-300" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] uppercase tracking-widest text-gray-400">P.O. Number</label>
+              <Input value={poNumber} onChange={(e) => setPoNumber(e.target.value)} className="h-8 text-sm bg-white border-gray-300" />
+            </div>
+            <div className="col-span-3 space-y-2">
+              <label className="text-[10px] uppercase tracking-widest text-gray-400">Sales Rep</label>
+              <Input value={salesRep} onChange={(e) => setSalesRep(e.target.value)} className="h-8 text-sm bg-white border-gray-300 max-w-xs" />
+            </div>
+          </div>
+        ) : (
+          /* View mode: only show fields that have values */
+          (billAddr || shipAddr || terms || shipVia || shipDate || trackingNum || poNumber || salesRep) ? (
+            <div className="grid grid-cols-2 gap-x-8 gap-y-1 mb-6 p-4 bg-gray-50 rounded-lg">
+              <ViewField label="Billing Address" value={billAddr} />
+              <ViewField label="Shipping Address" value={shipAddr} />
+              <ViewField label="Terms" value={terms} />
+              <ViewField label="Ship Via" value={shipVia} />
+              <ViewField label="Ship Date" value={shipDate ? new Date(shipDate).toLocaleDateString() : ""} />
+              <ViewField label="Tracking No." value={trackingNum} />
+              <ViewField label="P.O. Number" value={poNumber} />
+              <ViewField label="Sales Rep" value={salesRep} />
+            </div>
+          ) : null
+        )}
+
         {/* Line Items */}
         <table className="w-full text-sm mb-6">
           <thead>
             <tr className="border-b-2 border-gray-900">
+              {(editing || hasServiceDates) && <th className="text-left py-2 font-bold w-28">Service Date</th>}
+              {editing && activeItems.length > 0 && <th className="text-left py-2 font-bold w-40">Product/Service</th>}
               <th className="text-left py-2 font-bold">Description</th>
               <th className="text-right py-2 font-bold w-20">Qty</th>
               <th className="text-right py-2 font-bold w-24">Unit Price</th>
@@ -346,28 +466,30 @@ export function InvoiceEditor({ invoice, customers, items, payments, onUpdate, o
                 {editing ? (
                   <>
                     <td className="py-2 pr-2">
-                      <Input
-                        value={line.Description}
-                        onChange={(e) => updateLineItem(idx, "Description", e.target.value)}
-                        className="h-8 text-sm bg-white border-gray-300"
-                      />
+                      <Input type="date" value={line.ServiceDate || ""} onChange={(e) => updateLineItem(idx, "ServiceDate", e.target.value)} className="h-8 text-sm bg-white border-gray-300 w-28" />
+                    </td>
+                    {activeItems.length > 0 && (
+                      <td className="py-2 pr-2">
+                        <Select value={line.ItemRef?.value || ""} onValueChange={(val) => selectProduct(idx, val)}>
+                          <SelectTrigger className="h-8 text-sm bg-white border-gray-300 w-40">
+                            <span className="truncate text-left">{line.ItemRef?.name || "Select..."}</span>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {activeItems.map((item) => (
+                              <SelectItem key={item.Id} value={item.Id}>{item.Name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </td>
+                    )}
+                    <td className="py-2 pr-2">
+                      <Input value={line.Description} onChange={(e) => updateLineItem(idx, "Description", e.target.value)} className="h-8 text-sm bg-white border-gray-300" />
                     </td>
                     <td className="py-2 px-1">
-                      <Input
-                        type="number"
-                        value={line.Qty}
-                        onChange={(e) => updateLineItem(idx, "Qty", e.target.value)}
-                        className="h-8 text-sm text-right w-20 bg-white border-gray-300"
-                      />
+                      <Input type="number" value={line.Qty} onChange={(e) => updateLineItem(idx, "Qty", e.target.value)} className="h-8 text-sm text-right w-20 bg-white border-gray-300" />
                     </td>
                     <td className="py-2 px-1">
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={line.UnitPrice}
-                        onChange={(e) => updateLineItem(idx, "UnitPrice", e.target.value)}
-                        className="h-8 text-sm text-right w-24 bg-white border-gray-300"
-                      />
+                      <Input type="number" step="0.01" value={line.UnitPrice} onChange={(e) => updateLineItem(idx, "UnitPrice", e.target.value)} className="h-8 text-sm text-right w-24 bg-white border-gray-300" />
                     </td>
                     <td className="py-2 text-right font-semibold tabular-nums">{fmt(line.Amount)}</td>
                     <td className="py-2 pl-1">
@@ -378,6 +500,9 @@ export function InvoiceEditor({ invoice, customers, items, payments, onUpdate, o
                   </>
                 ) : (
                   <>
+                    {hasServiceDates && (
+                      <td className="py-3 pr-2 text-gray-500 text-xs">{line.ServiceDate ? new Date(line.ServiceDate).toLocaleDateString() : ""}</td>
+                    )}
                     <td className="py-3 pr-4 text-gray-700 text-xs leading-relaxed">{line.Description}</td>
                     <td className="py-3 text-right tabular-nums">{line.Qty.toFixed(2)}</td>
                     <td className="py-3 text-right tabular-nums">{fmt(line.UnitPrice)}</td>
@@ -400,12 +525,7 @@ export function InvoiceEditor({ invoice, customers, items, payments, onUpdate, o
           <div className="mb-6">
             <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Memo / Notes</p>
             {editing ? (
-              <Textarea
-                value={memo}
-                onChange={(e) => setMemo(e.target.value)}
-                className="text-sm bg-white border-gray-300"
-                rows={2}
-              />
+              <Textarea value={memo} onChange={(e) => setMemo(e.target.value)} className="text-sm bg-white border-gray-300" rows={2} />
             ) : (
               <p className="text-sm text-gray-700">{memo}</p>
             )}
@@ -424,11 +544,7 @@ export function InvoiceEditor({ invoice, customers, items, payments, onUpdate, o
                 <label className="flex items-center gap-1 text-gray-500">
                   <span>HST (ON)</span>
                   <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    step={0.01}
-                    value={taxRatePercent}
+                    type="number" min={0} max={100} step={0.01} value={taxRatePercent}
                     onChange={(e) => setTaxRatePercent(Math.max(0, Math.min(100, Number(e.target.value))))}
                     className="w-16 h-6 text-xs text-center border border-gray-300 rounded bg-white"
                   />
@@ -451,7 +567,6 @@ export function InvoiceEditor({ invoice, customers, items, payments, onUpdate, o
             )}
           </div>
         </div>
-
 
         {/* Amount Due */}
         <div className="flex justify-end">
