@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useCompletedBundles } from "@/hooks/useCompletedBundles";
+import { useCompletedBundles, type CompletedBundle } from "@/hooks/useCompletedBundles";
 import { useAuth } from "@/lib/auth";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useCompanyId } from "@/hooks/useCompanyId";
@@ -79,6 +79,7 @@ const stopStatusColors: Record<string, string> = {
 export default function Deliveries() {
   const [activeTab, setActiveTab] = useState("today");
   const [selectedDelivery, setSelectedDelivery] = useState<Delivery | null>(null);
+  const [selectedBundle, setSelectedBundle] = useState<CompletedBundle | null>(null);
   const [driverMode, setDriverMode] = useState(false);
   const [podStopId, setPodStopId] = useState<string | null>(null);
   const [issueStopId, setIssueStopId] = useState<string | null>(null);
@@ -195,7 +196,7 @@ export default function Deliveries() {
     <TooltipProvider>
       <div className="flex flex-col md:flex-row h-full">
         {/* Delivery List */}
-        <div className={`${selectedDelivery ? 'hidden md:flex' : 'flex'} flex-1 flex-col border-r border-border`}>
+        <div className={`${(selectedDelivery || selectedBundle) ? 'hidden md:flex' : 'flex'} flex-1 flex-col border-r border-border`}>
           {/* Header */}
           <header className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-border">
             <div>
@@ -259,6 +260,10 @@ export default function Deliveries() {
               <ReadyBundleList
                 bundles={bundles}
                 title="Cleared — Ready for Delivery"
+                onSelect={(bundle) => {
+                  setSelectedBundle(bundle);
+                  setSelectedDelivery(null);
+                }}
               />
             </div>
           )}
@@ -279,7 +284,7 @@ export default function Deliveries() {
                   deliveries={todayDeliveries} 
                   isLoading={isLoading}
                   selectedId={selectedDelivery?.id}
-                  onSelect={setSelectedDelivery}
+                  onSelect={(d) => { setSelectedDelivery(d); setSelectedBundle(null); }}
                   emptyMessage="No deliveries scheduled for today"
                 />
               </TabsContent>
@@ -289,7 +294,7 @@ export default function Deliveries() {
                   deliveries={upcomingDeliveries} 
                   isLoading={isLoading}
                   selectedId={selectedDelivery?.id}
-                  onSelect={setSelectedDelivery}
+                  onSelect={(d) => { setSelectedDelivery(d); setSelectedBundle(null); }}
                   emptyMessage="No upcoming deliveries"
                 />
               </TabsContent>
@@ -299,7 +304,7 @@ export default function Deliveries() {
                   deliveries={filteredDeliveries} 
                   isLoading={isLoading}
                   selectedId={selectedDelivery?.id}
-                  onSelect={setSelectedDelivery}
+                  onSelect={(d) => { setSelectedDelivery(d); setSelectedBundle(null); }}
                   emptyMessage="No deliveries found"
                 />
               </TabsContent>
@@ -308,8 +313,72 @@ export default function Deliveries() {
         </div>
 
         {/* Detail Panel */}
-        <div className={`${selectedDelivery ? 'flex' : 'hidden md:flex'} w-full md:w-96 flex-col bg-muted/20`}>
-          {selectedDelivery ? (
+        <div className={`${(selectedDelivery || selectedBundle) ? 'flex' : 'hidden md:flex'} w-full md:w-96 flex-col bg-muted/20`}>
+          {selectedBundle ? (
+            <>
+              <header className="px-4 sm:px-6 py-4 border-b border-border">
+                <div className="flex items-center gap-2 mb-2">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="md:hidden"
+                    onClick={() => setSelectedBundle(null)}
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                  </Button>
+                  <h2 className="text-lg font-semibold flex-1">{selectedBundle.projectName}</h2>
+                  <Badge className="bg-primary/20 text-primary">Ready</Badge>
+                </div>
+                <div className="text-sm text-muted-foreground space-y-1">
+                  <div className="flex items-center gap-2">
+                    <Truck className="w-4 h-4" />
+                    {selectedBundle.planName}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4" />
+                    {selectedBundle.items.length} items • {selectedBundle.totalPieces} pcs
+                  </div>
+                </div>
+              </header>
+
+              <div className="flex-1 overflow-hidden">
+                <div className="px-4 sm:px-6 py-4">
+                  <h3 className="text-sm font-medium mb-3">Items ({selectedBundle.items.length})</h3>
+                  <ScrollArea className="h-[calc(100vh-320px)]">
+                    <div className="space-y-2 pr-4">
+                      {selectedBundle.items.map((item) => (
+                        <Card key={item.id}>
+                          <CardContent className="p-3">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-sm font-medium">{item.mark_number || "No mark"}</span>
+                              <Badge variant="outline" className="text-xs">{item.bar_code}</Badge>
+                            </div>
+                            <div className="text-xs text-muted-foreground flex gap-3">
+                              <span>{item.cut_length_mm}mm</span>
+                              <span>{item.total_pieces} pcs</span>
+                              {item.asa_shape_code && <span>Shape: {item.asa_shape_code}</span>}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </div>
+              </div>
+
+              <div className="px-4 sm:px-6 py-4 border-t border-border">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button className="w-full gap-2" disabled>
+                      <Plus className="w-4 h-4" />
+                      Create Delivery
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Coming soon</TooltipContent>
+                </Tooltip>
+              </div>
+            </>
+          ) : selectedDelivery ? (
             <>
               <header className="px-4 sm:px-6 py-4 border-b border-border">
                 <div className="flex items-center gap-2 mb-2">
@@ -387,7 +456,7 @@ export default function Deliveries() {
             </>
           ) : (
             <div className="flex items-center justify-center h-full text-muted-foreground">
-              <p>Select a delivery to view details</p>
+              <p>Select a delivery or bundle to view details</p>
             </div>
           )}
         </div>

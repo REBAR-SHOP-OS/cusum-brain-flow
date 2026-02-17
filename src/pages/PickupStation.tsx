@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { usePickupOrders, usePickupOrderItems } from "@/hooks/usePickupOrders";
-import { useCompletedBundles } from "@/hooks/useCompletedBundles";
+import { useCompletedBundles, type CompletedBundle } from "@/hooks/useCompletedBundles";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAuth } from "@/lib/auth";
 import { PickupVerification } from "@/components/shopfloor/PickupVerification";
@@ -27,8 +27,40 @@ export default function PickupStation() {
 
   const { bundles } = useCompletedBundles();
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [selectedBundle, setSelectedBundle] = useState<CompletedBundle | null>(null);
   const selectedOrder = orders.find((o) => o.id === selectedOrderId) || null;
   const { items, toggleVerified } = usePickupOrderItems(selectedOrderId);
+
+  if (selectedBundle) {
+    return (
+      <div className="flex flex-col h-full">
+        <header className="flex items-center gap-3 px-4 sm:px-6 py-4 border-b border-border">
+          <Button variant="ghost" size="icon" onClick={() => setSelectedBundle(null)}>
+            <ArrowLeft className="w-5 h-5" />
+          </Button>
+          <div>
+            <h1 className="text-xl font-bold">{selectedBundle.projectName}</h1>
+            <p className="text-xs text-muted-foreground">{selectedBundle.planName} • {selectedBundle.items.length} items • {selectedBundle.totalPieces} pcs</p>
+          </div>
+        </header>
+        <div className="flex-1 overflow-auto p-4 sm:p-6">
+          <div className="grid gap-3">
+            {selectedBundle.items.map((item) => (
+              <Card key={item.id}>
+                <CardContent className="p-3 flex items-center justify-between">
+                  <div>
+                    <span className="text-sm font-medium">{item.mark_number || "No mark"}</span>
+                    <p className="text-xs text-muted-foreground">{item.cut_length_mm}mm • {item.total_pieces} pcs</p>
+                  </div>
+                  <Badge variant="outline">{item.bar_code}</Badge>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (selectedOrder) {
     return (
@@ -84,6 +116,7 @@ export default function PickupStation() {
         <ReadyBundleList
           bundles={bundles}
           title="Cleared — Ready for Pickup"
+          onSelect={setSelectedBundle}
         />
 
         {loading ? (
