@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { useAgentSuggestions } from "@/hooks/useAgentSuggestions";
-import { Send, Loader2, Minimize2, Maximize2, Shrink, Mail, DollarSign, ListChecks, PhoneOff } from "lucide-react";
+import { Send, Loader2, Minimize2, Maximize2, Shrink, Mail, DollarSign, ListChecks, PhoneOff, Paperclip, X, Image as ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { sendAgentMessage, ChatMessage } from "@/lib/agent";
+import { sendAgentMessage, ChatMessage, AttachedFile } from "@/lib/agent";
+import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { RichMarkdown, type ActionItemCallbacks } from "@/components/chat/RichMarkdown";
@@ -65,6 +66,8 @@ export const AccountingAgent = React.forwardRef<HTMLDivElement, AccountingAgentP
   const [checkingPhase, setCheckingPhase] = useState(0);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [attachments, setAttachments] = useState<{ file: File; previewUrl: string; uploading: boolean }[]>([]);
   const { toast } = useToast();
   const { user } = useAuth();
   const userName = useMemo(() => {
@@ -184,13 +187,56 @@ RULES:
       .finally(() => setIsTyping(false));
   }, [autoGreet, qbSummary]);
 
+  const uploadFile = async (file: File): Promise<{ name: string; url: string } | null> => {
+    const path = `chat-uploads/${Date.now()}-${file.name}`;
+    const { error } = await supabase.storage.from("clearance-photos").upload(path, file);
+    if (error) { console.error("Upload failed:", error); return null; }
+    const { data: urlData } = await supabase.storage.from("clearance-photos").createSignedUrl(path, 3600);
+    return urlData?.signedUrl ? { name: file.name, url: urlData.signedUrl } : null;
+  };
+
+  const addFiles = useCallback((files: FileList | File[]) => {
+    const newAttachments = Array.from(files)
+      .filter(f => f.type.startsWith("image/") || f.type === "application/pdf" || f.type === "application/zip" || f.name.endsWith(".zip"))
+      .slice(0, 5)
+      .map(file => ({ file, previewUrl: URL.createObjectURL(file), uploading: false }));
+    if (newAttachments.length === 0) { toast({ title: "Unsupported file", description: "Only images, PDFs, and ZIP files are supported", variant: "destructive" }); return; }
+    setAttachments(prev => [...prev, ...newAttachments].slice(0, 5));
+  }, [toast]);
+
+  const removeAttachment = useCallback((index: number) => {
+    setAttachments(prev => { const r = prev[index]; if (r) URL.revokeObjectURL(r.previewUrl); return prev.filter((_, i) => i !== index); });
+  }, []);
+
+  const handlePaste = useCallback((e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const imageFiles: File[] = [];
+    for (let i = 0; i < items.length; i++) { if (items[i].type.startsWith("image/")) { const f = items[i].getAsFile(); if (f) imageFiles.push(f); } }
+    if (imageFiles.length > 0) { e.preventDefault(); addFiles(imageFiles); }
+  }, [addFiles]);
+
   const handleSend = useCallback(async () => {
-    if (!inputValue.trim() || isTyping) return;
+    if ((!inputValue.trim() && attachments.length === 0) || isTyping) return;
+
+    // Upload attachments
+    let attachedFiles: AttachedFile[] | undefined;
+    if (attachments.length > 0) {
+      setAttachments(prev => prev.map(a => ({ ...a, uploading: true })));
+      const uploaded: AttachedFile[] = [];
+      for (const att of attachments) {
+        const result = await uploadFile(att.file);
+        if (result) uploaded.push(result);
+      }
+      attachments.forEach(a => URL.revokeObjectURL(a.previewUrl));
+      setAttachments([]);
+      if (uploaded.length > 0) attachedFiles = uploaded;
+    }
 
     const userMsg: Message = {
       id: crypto.randomUUID(),
       role: "user",
-      content: inputValue.trim(),
+      content: inputValue.trim() || (attachedFiles ? `Analyze ${attachedFiles.length} attached file(s)` : ""),
       timestamp: new Date(),
     };
     setMessages((prev) => [...prev, userMsg]);
@@ -229,7 +275,8 @@ RULES:
         "accounting",
         userMsg.content,
         history,
-        qbContext
+        qbContext,
+        attachedFiles
       );
 
       let replyContent = response.reply;
@@ -260,7 +307,7 @@ RULES:
     } finally {
       setIsTyping(false);
     }
-  }, [inputValue, isTyping, messages, toast]);
+  }, [inputValue, isTyping, messages, toast, attachments]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -516,20 +563,52 @@ RULES:
         )}
       </div>
 
+      {/* Attachment Previews */}
+      {attachments.length > 0 && (
+        <div className="px-3 pb-1 shrink-0 flex gap-2 flex-wrap border-t border-border pt-2">
+          {attachments.map((att, i) => (
+            <div key={i} className="relative group w-12 h-12 rounded-lg overflow-hidden border border-border bg-muted">
+              {att.file.type.startsWith("image/") ? (
+                <img src={att.previewUrl} alt="attachment" className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <ImageIcon className="w-4 h-4 text-muted-foreground" />
+                </div>
+              )}
+              {att.uploading && (
+                <div className="absolute inset-0 bg-background/60 flex items-center justify-center">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                </div>
+              )}
+              {!att.uploading && (
+                <button onClick={() => removeAttachment(i)} className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground rounded-full w-4 h-4 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Input */}
       <div className="border-t border-border p-3 shrink-0">
+        <input ref={fileRef} type="file" accept="image/*,application/pdf,.zip,application/zip" multiple className="hidden" onChange={(e) => { if (e.target.files?.length) addFiles(e.target.files); if (fileRef.current) fileRef.current.value = ""; }} />
         <div className="flex items-end gap-2">
+          <Button size="icon" variant="ghost" className="h-9 w-9 shrink-0" onClick={() => fileRef.current?.click()} disabled={isTyping} title="Attach file">
+            <Paperclip className="w-4 h-4" />
+          </Button>
           <textarea
             ref={textareaRef}
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             placeholder="Ask Penny about invoices, emails, tasks..."
             className="flex-1 resize-none bg-muted/50 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary min-h-[36px] max-h-[120px]"
             rows={1}
             disabled={isTyping}
           />
-          <Button size="icon" className="h-9 w-9 shrink-0" onClick={handleSend} disabled={!inputValue.trim() || isTyping}>
+          <Button size="icon" className="h-9 w-9 shrink-0" onClick={handleSend} disabled={(!inputValue.trim() && attachments.length === 0) || isTyping}>
             <Send className="w-4 h-4" />
           </Button>
         </div>
