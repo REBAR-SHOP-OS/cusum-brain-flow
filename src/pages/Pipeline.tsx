@@ -11,6 +11,8 @@ import { LeadDetailDrawer } from "@/components/pipeline/LeadDetailDrawer";
 import { PipelineFilters, DEFAULT_FILTERS, type PipelineFilterState, type GroupByOption } from "@/components/pipeline/PipelineFilters";
 import { PipelineAISheet } from "@/components/pipeline/PipelineAISheet";
 import { useToast } from "@/hooks/use-toast";
+import { useUserRole } from "@/hooks/useUserRole";
+import { usePipelineStageOrder } from "@/hooks/usePipelineStageOrder";
 import type { Tables } from "@/integrations/supabase/types";
 import { startOfDay, startOfWeek, startOfMonth, startOfQuarter, startOfYear, subDays, differenceInCalendarDays } from "date-fns";
 import { parseSmartSearch, type SmartSearchResult } from "@/lib/smartSearchParser";
@@ -80,6 +82,8 @@ export default function Pipeline() {
   const [groupBy, setGroupBy] = useState<GroupByOption>("none");
   const [isAISheetOpen, setIsAISheetOpen] = useState(false);
   const { toast } = useToast();
+  const { isAdmin } = useUserRole();
+  const { orderedStages, saveOrder, canReorder } = usePipelineStageOrder();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
@@ -287,9 +291,11 @@ export default function Pipeline() {
   };
 
   const handleDelete = (id: string) => {
-    if (confirm("Are you sure you want to delete this lead?")) {
-      deleteMutation.mutate(id);
+    if (!isAdmin) {
+      toast({ title: "Permission denied", description: "Only admins can delete leads.", variant: "destructive" });
+      return;
     }
+    deleteMutation.mutate(id);
   };
 
   const handleFormClose = () => {
@@ -427,13 +433,15 @@ export default function Pipeline() {
       {/* Pipeline Board */}
       <div className="flex-1 overflow-hidden">
         <PipelineBoard
-          stages={PIPELINE_STAGES}
+          stages={orderedStages}
           leadsByStage={leadsByStage}
           isLoading={isLoading}
           onStageChange={handleStageChange}
           onEdit={handleEdit}
           onDelete={handleDelete}
           onLeadClick={handleLeadClick}
+          canReorder={canReorder}
+          onReorder={saveOrder}
         />
       </div>
 
