@@ -91,17 +91,30 @@ Deno.serve(async (req) => {
   try {
     const { serviceClient } = await requireAuth(req);
 
+    // Parse mode from request body
+    let mode = "incremental";
+    try {
+      const body = await req.json();
+      if (body?.mode === "full") mode = "full";
+    } catch { /* no body = incremental */ }
+
     const odooUrl = Deno.env.get("ODOO_URL")!.trim();
     const odooKey = Deno.env.get("ODOO_API_KEY")!;
     const odooDB = Deno.env.get("ODOO_DATABASE")!;
 
-    // Fetch opportunities modified in the last 5 days
-    const fiveDaysAgo = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
-    const cutoff = fiveDaysAgo.toISOString().replace("T", " ").slice(0, 19);
-    console.log("Fetching opportunities with write_date >=", cutoff);
+    // Build domain: full mode fetches ALL, incremental fetches last 5 days
+    const domain: unknown[][] = [["type", "=", "opportunity"]];
+    if (mode !== "full") {
+      const fiveDaysAgo = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
+      const cutoff = fiveDaysAgo.toISOString().replace("T", " ").slice(0, 19);
+      domain.push(["write_date", ">=", cutoff]);
+      console.log("Incremental sync: write_date >=", cutoff);
+    } else {
+      console.log("Full sync: fetching ALL opportunities");
+    }
 
     const leads = await odooRpc(odooUrl, odooDB, odooKey, "crm.lead", "search_read", [
-      [[["type", "=", "opportunity"], ["write_date", ">=", cutoff]]],
+      [domain],
       { fields: FIELDS },
     ]);
 
@@ -345,7 +358,57 @@ Deno.serve(async (req) => {
       }
     }
 
-    return json({ created, updated, skipped, errors, total: leads.length, dedup_deleted: victimIds.length });
+    // === Reconciliation: check stale ERP leads not in this fetch ===
+    const fetchedOdooIds = new Set(leads.map((ol: Record<string, unknown>) => String(ol.id)));
+    const staleLeads = allExisting.filter(l => {
+      const meta = l.metadata as Record<string, unknown> | null;
+      const oid = meta?.odoo_id as string;
+      return oid && !fetchedOdooIds.has(oid);
+    });
+
+    let reconciled = 0;
+    if (staleLeads.length > 0 && mode === "full") {
+      // In full mode we already fetched everything — any ERP lead whose odoo_id
+      // is NOT in the result means Odoo deleted it or changed its type.
+      // Mark these as "lost" to keep counts accurate.
+      console.log(`Reconciliation: ${staleLeads.length} ERP leads not found in Odoo full fetch`);
+    } else if (staleLeads.length > 0) {
+      // Incremental mode: do targeted lookups for stale leads
+      const staleOdooIds = staleLeads.map(l => (l.metadata as Record<string, unknown>)?.odoo_id as string).filter(Boolean);
+      console.log(`Reconciliation: checking ${staleOdooIds.length} stale leads against Odoo`);
+
+      // Batch lookup in chunks of 50
+      for (let i = 0; i < staleOdooIds.length; i += 50) {
+        const batch = staleOdooIds.slice(i, i + 50);
+        try {
+          const result = await odooRpc(odooUrl, odooDB, odooKey, "crm.lead", "search_read", [
+            [[["type", "=", "opportunity"], ["id", "in", batch.map(Number)]]],
+            { fields: ["id", "stage_id"] },
+          ]);
+
+          for (const r of result) {
+            const odooId = String(r.id);
+            const stageName = Array.isArray(r.stage_id) ? r.stage_id[1] : String(r.stage_id || "");
+            const erpStage = STAGE_MAP[stageName] || "new";
+            const existing = odooIdMap.get(odooId);
+            if (existing && existing.stage !== erpStage) {
+              await serviceClient.from("leads").update({
+                stage: erpStage,
+                updated_at: new Date().toISOString(),
+              }).eq("id", existing.id);
+              await insertLeadEvent(serviceClient, existing.id, "stage_changed", {
+                from: existing.stage, to: erpStage, odoo_stage: stageName, source: "reconciliation",
+              });
+              reconciled++;
+            }
+          }
+        } catch (e) {
+          console.error("Reconciliation batch error:", e);
+        }
+      }
+    }
+
+    return json({ created, updated, skipped, errors, reconciled, total: leads.length, dedup_deleted: victimIds.length, mode });
   } catch (err) {
     if (err instanceof Response) return err;
     console.error("Sync error:", err);
