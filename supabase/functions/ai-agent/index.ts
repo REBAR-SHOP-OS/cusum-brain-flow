@@ -2253,14 +2253,19 @@ You report to ARIA (Platform Supervisor). When ARIA or the CEO asks you to fix s
 
 ## Cross-Platform Fix Capabilities:
 
-### ERP Fixes:
-- Create fix requests in \`vizzy_fix_requests\` for bugs and issues
+### ERP Fixes (Direct Read + Write):
+- Use \`list_machines\`, \`list_deliveries\`, \`list_orders\`, \`list_leads\`, \`get_stock_levels\` to READ current state
+- Use \`update_machine_status\`, \`update_delivery_status\`, \`update_lead_status\`, \`update_cut_plan_status\` to FIX issues directly
+- Use \`create_event\` to log what you fixed
+- Create fix requests in \`vizzy_fix_requests\` only for issues requiring human/code changes
 - Create notifications and tasks for team members
-- Check machine status, production queues, delivery status
-- Audit human_tasks for stale/unresolved items
 
-### WordPress/rebar.shop Fixes:
+### WordPress/rebar.shop Fixes (Direct Read + Write):
 - Use WordPress tools (wp_list_posts, wp_update_post, wp_create_post, wp_list_pages, wp_update_page, wp_list_products, scrape_page) to fix content, SEO, and product issues
+- Use \`wp_update_product\` to fix product pricing, stock, descriptions
+- Use \`wp_update_order_status\` to update WooCommerce order statuses
+- Use \`wp_create_product\` to create new products, \`wp_delete_product\` to remove them
+- Use \`wp_create_redirect\` to fix broken URLs with 301 redirects
 - Run live SEO audits on any rebar.shop page
 - Fix broken content, missing meta descriptions, thin content
 
@@ -6045,7 +6050,260 @@ RULES:
             additionalProperties: false,
           },
         },
-      }] : []),
+      },
+      // ─── ERP Read Tools ───
+      {
+        type: "function" as const,
+        function: {
+          name: "list_machines",
+          description: "List machines from the ERP with optional status filter.",
+          parameters: {
+            type: "object",
+            properties: {
+              status: { type: "string", enum: ["idle", "running", "blocked", "down"], description: "Filter by machine status" },
+            },
+            additionalProperties: false,
+          },
+        },
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "list_deliveries",
+          description: "List deliveries with optional status filter.",
+          parameters: {
+            type: "object",
+            properties: {
+              status: { type: "string", description: "Filter by delivery status (e.g. scheduled, in_transit, delivered)" },
+              limit: { type: "number", description: "Max results (default 20)" },
+            },
+            additionalProperties: false,
+          },
+        },
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "list_orders",
+          description: "List orders from the ERP with optional status filter.",
+          parameters: {
+            type: "object",
+            properties: {
+              status: { type: "string", description: "Filter by order status" },
+              limit: { type: "number", description: "Max results (default 20)" },
+            },
+            additionalProperties: false,
+          },
+        },
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "list_leads",
+          description: "List leads from the pipeline with optional status/score filter.",
+          parameters: {
+            type: "object",
+            properties: {
+              status: { type: "string", description: "Filter by lead status" },
+              min_score: { type: "number", description: "Minimum lead score" },
+              limit: { type: "number", description: "Max results (default 20)" },
+            },
+            additionalProperties: false,
+          },
+        },
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "get_stock_levels",
+          description: "Get current inventory stock levels for rebar sizes.",
+          parameters: {
+            type: "object",
+            properties: {
+              bar_code: { type: "string", description: "Filter by specific bar code (e.g. N12, N16)" },
+            },
+            additionalProperties: false,
+          },
+        },
+      },
+      // ─── ERP Write Tools ───
+      {
+        type: "function" as const,
+        function: {
+          name: "update_machine_status",
+          description: "Update a machine's status (e.g. fix a blocked/down machine). Requires user confirmation before calling.",
+          parameters: {
+            type: "object",
+            properties: {
+              id: { type: "string", description: "Machine ID" },
+              status: { type: "string", enum: ["idle", "running", "blocked", "down"], description: "New status" },
+            },
+            required: ["id", "status"],
+            additionalProperties: false,
+          },
+        },
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "update_delivery_status",
+          description: "Update a delivery's status. Requires user confirmation before calling.",
+          parameters: {
+            type: "object",
+            properties: {
+              id: { type: "string", description: "Delivery ID" },
+              status: { type: "string", description: "New status" },
+            },
+            required: ["id", "status"],
+            additionalProperties: false,
+          },
+        },
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "update_lead_status",
+          description: "Update a lead's status in the pipeline. Requires user confirmation before calling.",
+          parameters: {
+            type: "object",
+            properties: {
+              id: { type: "string", description: "Lead ID" },
+              status: { type: "string", description: "New status" },
+            },
+            required: ["id", "status"],
+            additionalProperties: false,
+          },
+        },
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "update_cut_plan_status",
+          description: "Update a cut plan's status. Requires user confirmation before calling.",
+          parameters: {
+            type: "object",
+            properties: {
+              id: { type: "string", description: "Cut plan ID" },
+              status: { type: "string", enum: ["draft", "queued", "running", "completed", "canceled"], description: "New status" },
+            },
+            required: ["id", "status"],
+            additionalProperties: false,
+          },
+        },
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "create_event",
+          description: "Log an activity event in the ERP ledger. Use this to record fixes you make.",
+          parameters: {
+            type: "object",
+            properties: {
+              entity_type: { type: "string", description: "Type of entity (e.g. machine, delivery, order)" },
+              entity_id: { type: "string", description: "ID of the entity" },
+              event_type: { type: "string", description: "Event type (e.g. status_change, fix_applied)" },
+              description: { type: "string", description: "Human-readable description of what happened" },
+            },
+            required: ["entity_type", "event_type", "description"],
+            additionalProperties: false,
+          },
+        },
+      },
+      // ─── WooCommerce Write Tools ───
+      {
+        type: "function" as const,
+        function: {
+          name: "wp_update_product",
+          description: "Update a WooCommerce product's name, price, stock, description, etc. Requires user confirmation.",
+          parameters: {
+            type: "object",
+            properties: {
+              id: { type: "string", description: "WooCommerce product ID" },
+              name: { type: "string", description: "Product name" },
+              regular_price: { type: "string", description: "Regular price" },
+              sale_price: { type: "string", description: "Sale price" },
+              description: { type: "string", description: "Full description (HTML)" },
+              short_description: { type: "string", description: "Short description (HTML)" },
+              stock_quantity: { type: "number", description: "Stock quantity" },
+              stock_status: { type: "string", enum: ["instock", "outofstock", "onbackorder"], description: "Stock status" },
+              status: { type: "string", enum: ["publish", "draft", "pending", "private"], description: "Product status" },
+            },
+            required: ["id"],
+            additionalProperties: false,
+          },
+        },
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "wp_update_order_status",
+          description: "Update a WooCommerce order status. Requires user confirmation.",
+          parameters: {
+            type: "object",
+            properties: {
+              id: { type: "string", description: "WooCommerce order ID" },
+              status: { type: "string", enum: ["pending", "processing", "on-hold", "completed", "cancelled", "refunded", "failed"], description: "New order status" },
+              note: { type: "string", description: "Optional order note" },
+            },
+            required: ["id", "status"],
+            additionalProperties: false,
+          },
+        },
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "wp_create_product",
+          description: "Create a new WooCommerce product. Requires user confirmation.",
+          parameters: {
+            type: "object",
+            properties: {
+              name: { type: "string", description: "Product name" },
+              type: { type: "string", enum: ["simple", "variable"], description: "Product type (default: simple)" },
+              regular_price: { type: "string", description: "Regular price" },
+              description: { type: "string", description: "Full description (HTML)" },
+              short_description: { type: "string", description: "Short description" },
+              categories: { type: "array", items: { type: "object", properties: { id: { type: "number" } } }, description: "Category IDs" },
+              status: { type: "string", enum: ["publish", "draft"], description: "Product status (default: draft)" },
+            },
+            required: ["name", "regular_price"],
+            additionalProperties: false,
+          },
+        },
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "wp_delete_product",
+          description: "Delete a WooCommerce product. Requires user confirmation.",
+          parameters: {
+            type: "object",
+            properties: {
+              id: { type: "string", description: "WooCommerce product ID" },
+              force: { type: "boolean", description: "Force permanent delete (default: false, moves to trash)" },
+            },
+            required: ["id"],
+            additionalProperties: false,
+          },
+        },
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "wp_create_redirect",
+          description: "Create a 301 redirect in WordPress (uses Redirection plugin API or .htaccess). Requires user confirmation.",
+          parameters: {
+            type: "object",
+            properties: {
+              source_url: { type: "string", description: "Old URL path (e.g. /old-page)" },
+              target_url: { type: "string", description: "New URL to redirect to" },
+            },
+            required: ["source_url", "target_url"],
+            additionalProperties: false,
+          },
+        },
+      },
+      ] : []),
       // WordPress tools — available to SEO, Social, Data, BizDev, WebBuilder, Copywriting, AND Empire agents
       ...(["seo", "social", "data", "bizdev", "webbuilder", "copywriting", "empire"].includes(agent) ? [
         {
@@ -6701,6 +6959,205 @@ RULES:
             }
           } catch (e) {
             seoToolResults.push({ id: tc.id, name: "odoo_write", result: { error: e instanceof Error ? e.message : "odoo_write failed" } });
+          }
+        }
+
+        // ─── Empire: ERP Read Tool Handlers ───
+        if (tc.function?.name === "list_machines") {
+          try {
+            const args = JSON.parse(tc.function.arguments || "{}");
+            let query = svcClient.from("machines").select("*").eq("company_id", companyId).order("created_at", { ascending: false }).limit(20);
+            if (args.status) query = query.eq("status", args.status);
+            const { data, error } = await query;
+            seoToolResults.push({ id: tc.id, name: "list_machines", result: error ? { error: error.message } : { success: true, machines: data } });
+          } catch (e) {
+            seoToolResults.push({ id: tc.id, name: "list_machines", result: { error: e instanceof Error ? e.message : "Failed" } });
+          }
+        }
+
+        if (tc.function?.name === "list_deliveries") {
+          try {
+            const args = JSON.parse(tc.function.arguments || "{}");
+            let query = svcClient.from("deliveries").select("*").eq("company_id", companyId).order("created_at", { ascending: false }).limit(args.limit || 20);
+            if (args.status) query = query.eq("status", args.status);
+            const { data, error } = await query;
+            seoToolResults.push({ id: tc.id, name: "list_deliveries", result: error ? { error: error.message } : { success: true, deliveries: data } });
+          } catch (e) {
+            seoToolResults.push({ id: tc.id, name: "list_deliveries", result: { error: e instanceof Error ? e.message : "Failed" } });
+          }
+        }
+
+        if (tc.function?.name === "list_orders") {
+          try {
+            const args = JSON.parse(tc.function.arguments || "{}");
+            let query = svcClient.from("orders").select("*").eq("company_id", companyId).order("created_at", { ascending: false }).limit(args.limit || 20);
+            if (args.status) query = query.eq("status", args.status);
+            const { data, error } = await query;
+            seoToolResults.push({ id: tc.id, name: "list_orders", result: error ? { error: error.message } : { success: true, orders: data } });
+          } catch (e) {
+            seoToolResults.push({ id: tc.id, name: "list_orders", result: { error: e instanceof Error ? e.message : "Failed" } });
+          }
+        }
+
+        if (tc.function?.name === "list_leads") {
+          try {
+            const args = JSON.parse(tc.function.arguments || "{}");
+            let query = svcClient.from("leads").select("*").eq("company_id", companyId).order("created_at", { ascending: false }).limit(args.limit || 20);
+            if (args.status) query = query.eq("status", args.status);
+            if (args.min_score) query = query.gte("score", args.min_score);
+            const { data, error } = await query;
+            seoToolResults.push({ id: tc.id, name: "list_leads", result: error ? { error: error.message } : { success: true, leads: data } });
+          } catch (e) {
+            seoToolResults.push({ id: tc.id, name: "list_leads", result: { error: e instanceof Error ? e.message : "Failed" } });
+          }
+        }
+
+        if (tc.function?.name === "get_stock_levels") {
+          try {
+            const args = JSON.parse(tc.function.arguments || "{}");
+            let query = svcClient.from("inventory_stock").select("*").eq("company_id", companyId);
+            if (args.bar_code) query = query.eq("bar_code", args.bar_code);
+            const { data, error } = await query;
+            seoToolResults.push({ id: tc.id, name: "get_stock_levels", result: error ? { error: error.message } : { success: true, stock: data } });
+          } catch (e) {
+            seoToolResults.push({ id: tc.id, name: "get_stock_levels", result: { error: e instanceof Error ? e.message : "Failed" } });
+          }
+        }
+
+        // ─── Empire: ERP Write Tool Handlers ───
+        if (tc.function?.name === "update_machine_status") {
+          try {
+            const args = JSON.parse(tc.function.arguments || "{}");
+            const { data, error } = await svcClient.from("machines").update({ status: args.status }).eq("id", args.id).select().single();
+            seoToolResults.push({ id: tc.id, name: "update_machine_status", result: error ? { error: error.message } : { success: true, message: `Machine status → ${args.status}`, data } });
+          } catch (e) {
+            seoToolResults.push({ id: tc.id, name: "update_machine_status", result: { error: e instanceof Error ? e.message : "Failed" } });
+          }
+        }
+
+        if (tc.function?.name === "update_delivery_status") {
+          try {
+            const args = JSON.parse(tc.function.arguments || "{}");
+            const { data, error } = await svcClient.from("deliveries").update({ status: args.status }).eq("id", args.id).select().single();
+            seoToolResults.push({ id: tc.id, name: "update_delivery_status", result: error ? { error: error.message } : { success: true, message: `Delivery status → ${args.status}`, data } });
+          } catch (e) {
+            seoToolResults.push({ id: tc.id, name: "update_delivery_status", result: { error: e instanceof Error ? e.message : "Failed" } });
+          }
+        }
+
+        if (tc.function?.name === "update_lead_status") {
+          try {
+            const args = JSON.parse(tc.function.arguments || "{}");
+            const { data, error } = await svcClient.from("leads").update({ status: args.status }).eq("id", args.id).select().single();
+            seoToolResults.push({ id: tc.id, name: "update_lead_status", result: error ? { error: error.message } : { success: true, message: `Lead status → ${args.status}`, data } });
+          } catch (e) {
+            seoToolResults.push({ id: tc.id, name: "update_lead_status", result: { error: e instanceof Error ? e.message : "Failed" } });
+          }
+        }
+
+        if (tc.function?.name === "update_cut_plan_status") {
+          try {
+            const args = JSON.parse(tc.function.arguments || "{}");
+            const { data, error } = await svcClient.from("cut_plans").update({ status: args.status }).eq("id", args.id).select().single();
+            seoToolResults.push({ id: tc.id, name: "update_cut_plan_status", result: error ? { error: error.message } : { success: true, message: `Cut plan status → ${args.status}`, data } });
+          } catch (e) {
+            seoToolResults.push({ id: tc.id, name: "update_cut_plan_status", result: { error: e instanceof Error ? e.message : "Failed" } });
+          }
+        }
+
+        if (tc.function?.name === "create_event") {
+          try {
+            const args = JSON.parse(tc.function.arguments || "{}");
+            const { data, error } = await svcClient.from("activity_events").insert({
+              company_id: companyId,
+              entity_type: args.entity_type,
+              entity_id: args.entity_id || crypto.randomUUID(),
+              event_type: args.event_type,
+              description: args.description,
+              actor_id: user.id,
+              actor_type: "architect",
+              source: "system",
+            }).select().single();
+            seoToolResults.push({ id: tc.id, name: "create_event", result: error ? { error: error.message } : { success: true, message: `Event logged: ${args.event_type}`, data } });
+          } catch (e) {
+            seoToolResults.push({ id: tc.id, name: "create_event", result: { error: e instanceof Error ? e.message : "Failed" } });
+          }
+        }
+
+        // ─── Empire: WooCommerce Write Tool Handlers ───
+        if (tc.function?.name === "wp_update_product") {
+          try {
+            const { WPClient } = await import("../_shared/wpClient.ts");
+            const wp = new WPClient();
+            const args = JSON.parse(tc.function.arguments || "{}");
+            const data: Record<string, unknown> = {};
+            for (const key of ["name", "regular_price", "sale_price", "description", "short_description", "stock_quantity", "stock_status", "status"]) {
+              if (args[key] !== undefined) data[key] = args[key];
+            }
+            const result = await wp.updateProduct(args.id, data);
+            await svcClient.from("wp_change_log").insert({ user_id: user.id, company_id: companyId, action: "update_product", entity_type: "product", entity_id: args.id, changes: data, agent: "empire" });
+            seoToolResults.push({ id: tc.id, name: "wp_update_product", result: { success: true, product: result } });
+          } catch (e) {
+            seoToolResults.push({ id: tc.id, name: "wp_update_product", result: { error: e instanceof Error ? e.message : "Failed" } });
+          }
+        }
+
+        if (tc.function?.name === "wp_update_order_status") {
+          try {
+            const { WPClient } = await import("../_shared/wpClient.ts");
+            const wp = new WPClient();
+            const args = JSON.parse(tc.function.arguments || "{}");
+            const data: Record<string, unknown> = { status: args.status };
+            if (args.note) data.customer_note = args.note;
+            const result = await wp.updateOrder(args.id, data);
+            await svcClient.from("wp_change_log").insert({ user_id: user.id, company_id: companyId, action: "update_order_status", entity_type: "order", entity_id: args.id, changes: data, agent: "empire" });
+            seoToolResults.push({ id: tc.id, name: "wp_update_order_status", result: { success: true, order: result } });
+          } catch (e) {
+            seoToolResults.push({ id: tc.id, name: "wp_update_order_status", result: { error: e instanceof Error ? e.message : "Failed" } });
+          }
+        }
+
+        if (tc.function?.name === "wp_create_product") {
+          try {
+            const { WPClient } = await import("../_shared/wpClient.ts");
+            const wp = new WPClient();
+            const args = JSON.parse(tc.function.arguments || "{}");
+            const data: Record<string, unknown> = { name: args.name, regular_price: args.regular_price, type: args.type || "simple", status: args.status || "draft" };
+            if (args.description) data.description = args.description;
+            if (args.short_description) data.short_description = args.short_description;
+            if (args.categories) data.categories = args.categories;
+            const result = await wp.createProduct(data);
+            await svcClient.from("wp_change_log").insert({ user_id: user.id, company_id: companyId, action: "create_product", entity_type: "product", entity_id: String(result?.id || ""), changes: data, agent: "empire" });
+            seoToolResults.push({ id: tc.id, name: "wp_create_product", result: { success: true, product: result } });
+          } catch (e) {
+            seoToolResults.push({ id: tc.id, name: "wp_create_product", result: { error: e instanceof Error ? e.message : "Failed" } });
+          }
+        }
+
+        if (tc.function?.name === "wp_delete_product") {
+          try {
+            const { WPClient } = await import("../_shared/wpClient.ts");
+            const wp = new WPClient();
+            const args = JSON.parse(tc.function.arguments || "{}");
+            const result = await wp.deleteProduct(args.id, args.force === true);
+            await svcClient.from("wp_change_log").insert({ user_id: user.id, company_id: companyId, action: "delete_product", entity_type: "product", entity_id: args.id, changes: { force: args.force }, agent: "empire" });
+            seoToolResults.push({ id: tc.id, name: "wp_delete_product", result: { success: true, message: `Product ${args.id} deleted` } });
+          } catch (e) {
+            seoToolResults.push({ id: tc.id, name: "wp_delete_product", result: { error: e instanceof Error ? e.message : "Failed" } });
+          }
+        }
+
+        if (tc.function?.name === "wp_create_redirect") {
+          try {
+            const { WPClient } = await import("../_shared/wpClient.ts");
+            const wp = new WPClient();
+            const args = JSON.parse(tc.function.arguments || "{}");
+            // Try Redirection plugin API first
+            const result = await wp.post("/redirection/v1/redirect", { url: args.source_url, match_url: args.source_url, action_data: { url: args.target_url }, action_type: "url", group_id: 1 });
+            await svcClient.from("wp_change_log").insert({ user_id: user.id, company_id: companyId, action: "create_redirect", entity_type: "redirect", entity_id: String(result?.id || ""), changes: { source: args.source_url, target: args.target_url }, agent: "empire" });
+            seoToolResults.push({ id: tc.id, name: "wp_create_redirect", result: { success: true, redirect: result } });
+          } catch (e) {
+            seoToolResults.push({ id: tc.id, name: "wp_create_redirect", result: { error: e instanceof Error ? e.message : "Failed" } });
           }
         }
 
