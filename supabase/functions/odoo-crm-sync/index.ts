@@ -36,6 +36,7 @@ const FIELDS = [
   "id", "name", "stage_id", "email_from", "phone", "contact_name",
   "user_id", "probability", "expected_revenue", "type", "partner_name",
   "city", "create_date", "write_date", "priority",
+  "date_deadline",
 ];
 
 async function odooRpc(url: string, db: string, apiKey: string, model: string, method: string, args: unknown[]) {
@@ -216,8 +217,12 @@ Deno.serve(async (req) => {
           odoo_city: ol.city || null,
           odoo_priority: ol.priority || "0",
           odoo_type: ol.type || null,
+          odoo_date_deadline: ol.date_deadline || null,
           synced_at: new Date().toISOString(),
         };
+
+        // Map Odoo date_deadline to expected_close_date for activity color bar
+        const dateDeadline = ol.date_deadline || null;
 
         const existingEntry = odooIdMap.get(odooId);
         const existingId = existingEntry?.id;
@@ -285,6 +290,7 @@ Deno.serve(async (req) => {
             stage: erpStage,
             probability: normalizedProb,
             expected_value: Number(ol.expected_revenue) || 0,
+            expected_close_date: dateDeadline,
             metadata,
             updated_at: new Date().toISOString(),
           };
@@ -331,6 +337,7 @@ Deno.serve(async (req) => {
               stage: erpStage,
               probability: normalizedProb,
               expected_value: Number(ol.expected_revenue) || 0,
+              expected_close_date: dateDeadline,
               source: "odoo_sync",
               customer_id: customerId,
               company_id: companyId,
