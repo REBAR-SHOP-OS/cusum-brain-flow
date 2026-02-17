@@ -9,9 +9,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Phone, Mail, MapPin, ChevronDown, FileText, DollarSign, List, StickyNote, AlertTriangle } from "lucide-react";
+import { Phone, Mail, MapPin, ChevronDown, FileText, DollarSign, List, StickyNote, AlertTriangle, MoreHorizontal } from "lucide-react";
 import { format } from "date-fns";
 import { CreateVendorTransactionDialog, type VendorTransactionType } from "./CreateVendorTransactionDialog";
+import { useToast } from "@/hooks/use-toast";
 import type { QBVendor } from "@/hooks/useQuickBooksData";
 
 const fmt = (n: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
@@ -26,6 +27,7 @@ interface VendorDetailProps {
 }
 
 export function VendorDetail({ vendor }: VendorDetailProps) {
+  const { toast } = useToast();
   const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [txnDialogOpen, setTxnDialogOpen] = useState(false);
@@ -34,6 +36,32 @@ export function VendorDetail({ vendor }: VendorDetailProps) {
   const openTxnDialog = (type: VendorTransactionType) => {
     setTxnDialogType(type);
     setTxnDialogOpen(true);
+  };
+
+  const handleDeleteTxn = async (txn: any) => {
+    const txnRaw = txn.raw_json as any;
+    try {
+      const { error } = await supabase.functions.invoke("quickbooks-oauth", {
+        body: { action: "delete-transaction", entityType: txn.entity_type, entityId: txnRaw?.Id, syncToken: txnRaw?.SyncToken || "0" },
+      });
+      if (error) throw error;
+      toast({ title: "Transaction deleted" });
+    } catch (err) {
+      toast({ title: "Delete failed", description: String(err), variant: "destructive" });
+    }
+  };
+
+  const handleVoidTxn = async (txn: any) => {
+    const txnRaw = txn.raw_json as any;
+    try {
+      const { error } = await supabase.functions.invoke("quickbooks-oauth", {
+        body: { action: "void-transaction", entityType: txn.entity_type, entityId: txnRaw?.Id, syncToken: txnRaw?.SyncToken || "0" },
+      });
+      if (error) throw error;
+      toast({ title: "Transaction voided" });
+    } catch (err) {
+      toast({ title: "Void failed", description: String(err), variant: "destructive" });
+    }
   };
 
   // QB vendor raw data
@@ -290,7 +318,18 @@ export function VendorDetail({ vendor }: VendorDetailProps) {
                             </Badge>
                           </TableCell>
                           <TableCell>
-                            <Button variant="link" size="sm" className="h-auto p-0 text-xs text-primary">View/Edit</Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+                                  <MoreHorizontal className="w-4 h-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem>View/Edit</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleVoidTxn(txn)} className="text-warning">Void</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleDeleteTxn(txn)} className="text-destructive">Delete</DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           </TableCell>
                         </TableRow>
                       );

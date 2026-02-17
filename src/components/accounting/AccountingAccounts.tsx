@@ -1,12 +1,14 @@
 import { useState, useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Landmark, Search, FileBarChart } from "lucide-react";
+import { Landmark, Search, FileBarChart, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { AccountQuickReportDrawer } from "./AccountQuickReportDrawer";
+import { NewAccountDrawer } from "./NewAccountDrawer";
 import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
 
 interface Props {
@@ -27,6 +29,7 @@ interface AccountNode {
   SubAccount?: boolean;
   ParentRef?: { value: string };
   BankBalance?: number;
+  TaxCodeRef?: string;
   depth: number;
 }
 
@@ -45,6 +48,7 @@ function buildAccountTree(accounts: ReturnType<typeof useQuickBooksData>["accoun
       SubAccount: (raw.SubAccount as boolean) || false,
       ParentRef: raw.ParentRef as { value: string } | undefined,
       BankBalance: raw.BankBalance as number | undefined,
+      TaxCodeRef: (raw.TaxCodeRef as any)?.name || (raw.TaxCodeRef as any)?.value || undefined,
       depth: 0,
     };
   });
@@ -90,6 +94,7 @@ export function AccountingAccounts({ data }: Props) {
   const [selectedAccount, setSelectedAccount] = useState<{ Id: string; Name: string; CurrentBalance: number } | null>(null);
   const [subTab, setSubTab] = useState("accounts");
   const [typeFilter, setTypeFilter] = useState("all");
+  const [newAccountOpen, setNewAccountOpen] = useState(false);
 
   const accountTree = useMemo(() => buildAccountTree(accounts), [accounts]);
 
@@ -140,6 +145,11 @@ export function AccountingAccounts({ data }: Props) {
             </SelectContent>
           </Select>
         )}
+        {subTab === "accounts" && (
+          <Button onClick={() => setNewAccountOpen(true)} className="h-12 gap-2">
+            <Plus className="w-4 h-4" /> New
+          </Button>
+        )}
       </div>
 
       <Tabs value={subTab} onValueChange={setSubTab}>
@@ -164,6 +174,7 @@ export function AccountingAccounts({ data }: Props) {
                       <TableHead className="text-sm font-semibold uppercase tracking-wide">Name</TableHead>
                       <TableHead className="text-sm font-semibold uppercase tracking-wide">Type</TableHead>
                       <TableHead className="text-sm font-semibold uppercase tracking-wide">Detail Type</TableHead>
+                      <TableHead className="text-sm font-semibold uppercase tracking-wide">Tax</TableHead>
                       <TableHead className="text-sm font-semibold uppercase tracking-wide text-right">QuickBooks Balance</TableHead>
                       <TableHead className="text-sm font-semibold uppercase tracking-wide text-right">Bank Balance</TableHead>
                       <TableHead className="text-sm font-semibold uppercase tracking-wide">Action</TableHead>
@@ -185,6 +196,7 @@ export function AccountingAccounts({ data }: Props) {
                         </TableCell>
                         <TableCell className="text-muted-foreground">{a.AccountType}</TableCell>
                         <TableCell className="text-muted-foreground">{a.AccountSubType || "—"}</TableCell>
+                        <TableCell className="text-muted-foreground text-xs">{(a as any).TaxCodeRef || "—"}</TableCell>
                         <TableCell className="text-right font-semibold">{fmt(a.CurrentBalance || 0)}</TableCell>
                         <TableCell className="text-right text-muted-foreground">
                           {a.BankBalance != null ? fmt(a.BankBalance) : "—"}
@@ -249,6 +261,12 @@ export function AccountingAccounts({ data }: Props) {
         onClose={() => setSelectedAccount(null)}
         account={selectedAccount}
         qbAction={data.qbAction}
+      />
+
+      <NewAccountDrawer
+        open={newAccountOpen}
+        onOpenChange={setNewAccountOpen}
+        onSuccess={() => data.loadAll()}
       />
     </div>
   );
