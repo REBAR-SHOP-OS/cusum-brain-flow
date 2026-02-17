@@ -18,8 +18,7 @@ import { parseSmartSearch, type SmartSearchResult } from "@/lib/smartSearchParse
 type Lead = Tables<"leads">;
 type LeadWithCustomer = Lead & { customers: { name: string; company_name: string | null } | null };
 
-// Pipeline stages (originally derived from Odoo, now native to ERP)
-// Odoo-exact order first, then ERP-only stages at the end
+// Pipeline stages — 1:1 parity with Odoo, in exact Odoo order
 export const PIPELINE_STAGES = [
   { id: "prospecting", label: "Prospecting", color: "bg-indigo-500" },
   { id: "new", label: "New", color: "bg-blue-500" },
@@ -27,17 +26,28 @@ export const PIPELINE_STAGES = [
   { id: "qc_ben", label: "QC - Ben", color: "bg-lime-500" },
   { id: "estimation_ben", label: "Estimation - Ben", color: "bg-amber-500" },
   { id: "estimation_karthick", label: "Estimation - Karthick", color: "bg-orange-500" },
+  { id: "estimation_others", label: "Estimation - Others", color: "bg-amber-600" },
+  { id: "estimation_partha", label: "Estimation Partha", color: "bg-amber-400" },
   { id: "hot_enquiries", label: "Hot Enquiries", color: "bg-red-500" },
-  { id: "quotation_bids", label: "Quotation Bids", color: "bg-pink-500" },
-  { id: "won", label: "Won", color: "bg-emerald-500" },
-  { id: "lost", label: "Lost", color: "bg-zinc-500" },
-  { id: "shop_drawing", label: "Shop Drawing", color: "bg-violet-500" },
-  { id: "shop_drawing_approval", label: "Shop Drawing Sent for Approval", color: "bg-purple-500" },
-  // ERP-only stages (not in Odoo) — kept to avoid orphaning existing leads
   { id: "qualified", label: "Qualified", color: "bg-teal-500" },
   { id: "rfi", label: "RFI", color: "bg-green-500" },
   { id: "addendums", label: "Addendums", color: "bg-yellow-500" },
   { id: "quotation_priority", label: "Quotation Priority", color: "bg-rose-500" },
+  { id: "quotation_bids", label: "Quotation Bids", color: "bg-pink-500" },
+  { id: "won", label: "Won", color: "bg-emerald-500" },
+  { id: "lost", label: "Lost", color: "bg-zinc-500" },
+  { id: "loss", label: "Loss", color: "bg-zinc-400" },
+  { id: "merged", label: "Merged", color: "bg-zinc-600" },
+  { id: "shop_drawing", label: "Shop Drawing", color: "bg-violet-500" },
+  { id: "shop_drawing_approval", label: "Shop Drawing Sent for Approval", color: "bg-purple-500" },
+  { id: "fabrication_in_shop", label: "Fabrication In Shop", color: "bg-violet-600" },
+  { id: "ready_to_dispatch", label: "Ready To Dispatch/Pickup", color: "bg-emerald-400" },
+  { id: "delivered_pickup_done", label: "Delivered/Pickup Done", color: "bg-emerald-600" },
+  { id: "out_for_delivery", label: "Out for Delivery", color: "bg-sky-500" },
+  { id: "no_rebars_out_of_scope", label: "No rebars (Out of Scope)", color: "bg-stone-500" },
+  { id: "temp_ir_vam", label: "Temp: IR/VAM", color: "bg-fuchsia-500" },
+  { id: "migration_others", label: "Migration-Others", color: "bg-slate-500" },
+  { id: "dreamers", label: "Dreamers", color: "bg-sky-400" },
 ];
 
 function getDateCutoff(rangeId: string): Date | null {
