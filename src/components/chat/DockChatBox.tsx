@@ -56,6 +56,56 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  // --- Drag state ---
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const isDragging = useRef(false);
+  const dragStart = useRef({ mouseX: 0, mouseY: 0, offsetX: 0, offsetY: 0 });
+
+  // Reset drag offset when minimized
+  useEffect(() => {
+    if (minimized) setDragOffset({ x: 0, y: 0 });
+  }, [minimized]);
+
+  const handleHeaderMouseDown = useCallback((e: React.MouseEvent) => {
+    // Only left click
+    if (e.button !== 0) return;
+    e.preventDefault();
+    isDragging.current = true;
+    dragStart.current = {
+      mouseX: e.clientX,
+      mouseY: e.clientY,
+      offsetX: dragOffset.x,
+      offsetY: dragOffset.y,
+    };
+
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!isDragging.current) return;
+      const dx = ev.clientX - dragStart.current.mouseX;
+      const dy = ev.clientY - dragStart.current.mouseY;
+      setDragOffset({
+        x: dragStart.current.offsetX + dx,
+        y: dragStart.current.offsetY + dy,
+      });
+    };
+
+    const onMouseUp = () => {
+      isDragging.current = false;
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+      document.body.style.userSelect = "";
+    };
+
+    document.body.style.userSelect = "none";
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+  }, [dragOffset.x, dragOffset.y]);
+
+  const stopDragPropagation = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+  }, []);
+
+  // --- end drag ---
+
   const myLang = myProfile?.preferred_language || "en";
   const targetLangs = useMemo(() => {
     const langs = new Set<string>();
@@ -165,6 +215,12 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
   const ChannelIcon = channelType === "group" ? Hash : Users;
   const isBusy = uploading || sendMutation.isPending;
 
+  // Merge style prop with drag offset
+  const containerStyle: React.CSSProperties = {
+    ...style,
+    transform: `translate(${dragOffset.x}px, ${dragOffset.y}px)`,
+  };
+
   // Minimized state
   if (minimized) {
     return (
@@ -189,7 +245,7 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
 
   return (
     <div
-      style={style}
+      style={containerStyle}
       className={cn(
         "fixed bottom-0 z-[9998] w-[320px] flex flex-col bg-card border border-border rounded-t-lg shadow-2xl transition-colors",
         dragOver && "ring-2 ring-primary border-primary"
@@ -198,13 +254,20 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      {/* Header */}
-      <div className="flex items-center gap-2 px-3 py-2 bg-primary text-primary-foreground rounded-t-lg">
+      {/* Header — draggable */}
+      <div
+        className={cn(
+          "flex items-center gap-2 px-3 py-2 bg-primary text-primary-foreground rounded-t-lg",
+          isDragging.current ? "cursor-grabbing" : "cursor-grab"
+        )}
+        onMouseDown={handleHeaderMouseDown}
+      >
         <ChannelIcon className="w-3.5 h-3.5 shrink-0" />
         <span className="text-xs font-semibold truncate flex-1">{channelName}</span>
         <button
           className="w-5 h-5 flex items-center justify-center rounded hover:bg-white/20"
           onClick={() => { closeChat(channelId); navigate("/team-hub"); }}
+          onMouseDown={stopDragPropagation}
           title="Open full Team Hub"
         >
           <Maximize2 className="w-3 h-3" />
@@ -212,6 +275,7 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
         <button
           className="w-5 h-5 flex items-center justify-center rounded hover:bg-white/20"
           onClick={() => toggleMinimize(channelId)}
+          onMouseDown={stopDragPropagation}
           title="Minimize"
         >
           <Minus className="w-3 h-3" />
@@ -219,6 +283,7 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
         <button
           className="w-5 h-5 flex items-center justify-center rounded hover:bg-white/20"
           onClick={() => closeChat(channelId)}
+          onMouseDown={stopDragPropagation}
           title="Close"
         >
           <X className="w-3 h-3" />

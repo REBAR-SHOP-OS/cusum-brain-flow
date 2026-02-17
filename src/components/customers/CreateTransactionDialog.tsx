@@ -16,8 +16,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
-import { Plus, Trash2, Loader2 } from "lucide-react";
+import { Plus, Trash2, Loader2, ChevronDown } from "lucide-react";
 
 export type TransactionType =
   | "Invoice"
@@ -30,6 +31,7 @@ interface LineItem {
   description: string;
   qty: number;
   unitPrice: number;
+  serviceDate?: string;
 }
 
 interface CreateTransactionDialogProps {
@@ -67,8 +69,13 @@ const LABELS: Record<TransactionType, string> = {
   CreditMemo: "Credit Memo",
 };
 
+const TERMS_OPTIONS = ["Net 15", "Net 30", "Net 60", "Due on receipt"];
+
 const needsLineItems = (t: TransactionType) =>
   t !== "Payment";
+
+const showDetails = (t: TransactionType) =>
+  t === "Invoice" || t === "Estimate";
 
 export function CreateTransactionDialog({
   open,
@@ -92,6 +99,17 @@ export function CreateTransactionDialog({
   const [submitting, setSubmitting] = useState(false);
   const [taxEnabled, setTaxEnabled] = useState(true);
   const [taxRate, setTaxRate] = useState(13);
+
+  // Additional detail fields (Invoice/Estimate parity with InvoiceEditor)
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [billAddr, setBillAddr] = useState("");
+  const [shipAddr, setShipAddr] = useState("");
+  const [termsValue, setTermsValue] = useState("");
+  const [shipVia, setShipVia] = useState("");
+  const [shipDate, setShipDate] = useState("");
+  const [trackingNum, setTrackingNum] = useState("");
+  const [poNumber, setPoNumber] = useState("");
+  const [salesRep, setSalesRep] = useState("");
 
   // Fetch QB items for product picker
   const { data: qbItems } = useQuery({
@@ -180,6 +198,7 @@ export function CreateTransactionDialog({
             quantity: li.qty,
             unitPrice: li.unitPrice,
             amount: li.qty * li.unitPrice,
+            ...(li.serviceDate ? { serviceDate: li.serviceDate } : {}),
           }));
       }
 
@@ -193,6 +212,19 @@ export function CreateTransactionDialog({
       if (dueDate) {
         body.dueDate = dueDate;
       }
+
+      // Sparse additional detail fields
+      if (billAddr) body.billAddr = billAddr;
+      if (shipAddr) body.shipAddr = shipAddr;
+      if (termsValue) body.terms = termsValue;
+      if (shipVia) body.shipVia = shipVia;
+      if (shipDate) body.shipDate = shipDate;
+      if (trackingNum) body.trackingNum = trackingNum;
+
+      const customFields: Array<{ Name: string; StringValue: string; Type: string }> = [];
+      if (poNumber) customFields.push({ Name: "P.O. Number", StringValue: poNumber, Type: "StringType" });
+      if (salesRep) customFields.push({ Name: "Sales Rep", StringValue: salesRep, Type: "StringType" });
+      if (customFields.length) body.customFields = customFields;
 
       const { data, error } = await supabase.functions.invoke("quickbooks-oauth", {
         body,
@@ -214,12 +246,22 @@ export function CreateTransactionDialog({
       });
 
       onOpenChange(false);
+      // Reset all fields
       setLineItems([{ description: "", qty: 1, unitPrice: 0 }]);
       setMemo("");
       setDueDate("");
       setPaymentAmount(0);
       setTaxEnabled(true);
       setTaxRate(13);
+      setBillAddr("");
+      setShipAddr("");
+      setTermsValue("");
+      setShipVia("");
+      setShipDate("");
+      setTrackingNum("");
+      setPoNumber("");
+      setSalesRep("");
+      setDetailsOpen(false);
     } catch (err: any) {
       toast({
         title: "Failed to create transaction",
@@ -230,6 +272,12 @@ export function CreateTransactionDialog({
       setSubmitting(false);
     }
   };
+
+  const hasProducts = activeProducts.length > 0;
+  // Column layout: Product?(140) | Desc(1fr) | SvcDate(100) | Qty(80) | UnitPrice(100) | Amount(90) | Del(36)
+  const gridCols = hasProducts
+    ? "grid-cols-[140px_1fr_100px_80px_100px_90px_36px]"
+    : "grid-cols-[1fr_100px_80px_100px_90px_36px]";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -267,34 +315,96 @@ export function CreateTransactionDialog({
             </div>
           )}
 
+          {/* Additional Details — collapsible, Invoice/Estimate only */}
+          {showDetails(type) && (
+            <Collapsible open={detailsOpen} onOpenChange={setDetailsOpen}>
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="sm" className="gap-1.5 text-xs px-1 -ml-1 text-muted-foreground hover:text-foreground">
+                  <ChevronDown className={cn("w-3.5 h-3.5 transition-transform", detailsOpen && "rotate-180")} />
+                  Additional Details
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="pt-2">
+                <div className="grid grid-cols-2 gap-3 border border-border rounded-lg p-3 bg-muted/30">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Billing Address</Label>
+                    <Textarea
+                      value={billAddr}
+                      onChange={(e) => setBillAddr(e.target.value)}
+                      rows={2}
+                      className="text-xs min-h-[52px]"
+                      placeholder="Billing address…"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Shipping Address</Label>
+                    <Textarea
+                      value={shipAddr}
+                      onChange={(e) => setShipAddr(e.target.value)}
+                      rows={2}
+                      className="text-xs min-h-[52px]"
+                      placeholder="Shipping address…"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Terms</Label>
+                    <Select value={termsValue} onValueChange={setTermsValue}>
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue placeholder="Select terms…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {TERMS_OPTIONS.map((t) => (
+                          <SelectItem key={t} value={t}>{t}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Ship Via</Label>
+                    <Input className="h-8 text-xs" value={shipVia} onChange={(e) => setShipVia(e.target.value)} placeholder="e.g. FedEx" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Ship Date</Label>
+                    <Input className="h-8 text-xs" type="date" value={shipDate} onChange={(e) => setShipDate(e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Tracking No.</Label>
+                    <Input className="h-8 text-xs" value={trackingNum} onChange={(e) => setTrackingNum(e.target.value)} placeholder="Tracking number" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">P.O. Number</Label>
+                    <Input className="h-8 text-xs" value={poNumber} onChange={(e) => setPoNumber(e.target.value)} placeholder="Purchase order #" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Sales Rep</Label>
+                    <Input className="h-8 text-xs" value={salesRep} onChange={(e) => setSalesRep(e.target.value)} placeholder="Sales representative" />
+                  </div>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          )}
+
           {needsLineItems(type) && (
             <div className="space-y-2">
               <Label>Line Items</Label>
               <div className="border border-border rounded-lg overflow-hidden">
-                <div className={cn(
-                  "grid gap-2 px-3 py-2 bg-muted/50 text-xs font-medium text-muted-foreground",
-                  activeProducts.length > 0
-                    ? "grid-cols-[140px_1fr_80px_100px_90px_36px]"
-                    : "grid-cols-[1fr_80px_100px_90px_36px]"
-                )}>
-                  {activeProducts.length > 0 && <span>Product/Service</span>}
+                {/* Header */}
+                <div className={cn("grid gap-2 px-3 py-2 bg-muted/50 text-xs font-medium text-muted-foreground", gridCols)}>
+                  {hasProducts && <span>Product/Service</span>}
                   <span>Description</span>
+                  <span>Svc Date</span>
                   <span>Qty</span>
                   <span>Unit Price</span>
                   <span className="text-right">Amount</span>
                   <span />
                 </div>
+                {/* Rows */}
                 {lineItems.map((li, idx) => (
                   <div
                     key={idx}
-                    className={cn(
-                      "grid gap-2 px-3 py-1.5 border-t border-border items-center",
-                      activeProducts.length > 0
-                        ? "grid-cols-[140px_1fr_80px_100px_90px_36px]"
-                        : "grid-cols-[1fr_80px_100px_90px_36px]"
-                    )}
+                    className={cn("grid gap-2 px-3 py-1.5 border-t border-border items-center", gridCols)}
                   >
-                    {activeProducts.length > 0 && (
+                    {hasProducts && (
                       <Select onValueChange={(val) => selectProduct(idx, val)}>
                         <SelectTrigger className="h-8 text-xs">
                           <SelectValue placeholder="Select..." />
@@ -313,6 +423,12 @@ export function CreateTransactionDialog({
                       placeholder="Description"
                       value={li.description}
                       onChange={(e) => updateLine(idx, "description", e.target.value)}
+                    />
+                    <Input
+                      className="h-8 text-xs"
+                      type="date"
+                      value={li.serviceDate || ""}
+                      onChange={(e) => updateLine(idx, "serviceDate", e.target.value)}
                     />
                     <Input
                       className="h-8 text-sm"
