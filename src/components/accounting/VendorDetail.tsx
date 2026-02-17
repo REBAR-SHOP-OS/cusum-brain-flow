@@ -1,5 +1,5 @@
-import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Phone, Mail, MapPin, ChevronDown, FileText, DollarSign, List, StickyNote, AlertTriangle, MoreHorizontal } from "lucide-react";
+import { Phone, Mail, MapPin, ChevronDown, FileText, DollarSign, List, StickyNote, AlertTriangle, MoreHorizontal, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 import { CreateVendorTransactionDialog, type VendorTransactionType } from "./CreateVendorTransactionDialog";
 import { useToast } from "@/hooks/use-toast";
@@ -28,10 +28,13 @@ interface VendorDetailProps {
 
 export function VendorDetail({ vendor }: VendorDetailProps) {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [txnDialogOpen, setTxnDialogOpen] = useState(false);
   const [txnDialogType, setTxnDialogType] = useState<VendorTransactionType>("Bill");
+  const [syncing, setSyncing] = useState(false);
+  const autoSyncAttempted = useRef(false);
 
   const openTxnDialog = (type: VendorTransactionType) => {
     setTxnDialogType(type);
@@ -93,6 +96,36 @@ export function VendorDetail({ vendor }: VendorDetailProps) {
       return data || [];
     },
   });
+
+  const VENDOR_TXN_TYPES = ["Bill", "BillPayment", "VendorCredit", "PurchaseOrder"];
+
+  const syncVendorTransactions = useCallback(async () => {
+    setSyncing(true);
+    try {
+      let totalSynced = 0;
+      for (const entityType of VENDOR_TXN_TYPES) {
+        const { data, error } = await supabase.functions.invoke("qb-sync-engine", {
+          body: { action: "sync-entity", entity_type: entityType },
+        });
+        if (error) console.error(`Sync ${entityType} failed:`, error);
+        else totalSynced += data?.upserted ?? 0;
+      }
+      await queryClient.invalidateQueries({ queryKey: ["qb_vendor_transactions", vendor.Id] });
+      toast({ title: "Sync complete", description: `${totalSynced} records synced` });
+    } catch (err) {
+      toast({ title: "Sync failed", description: String(err), variant: "destructive" });
+    } finally {
+      setSyncing(false);
+    }
+  }, [vendor.Id, queryClient, toast]);
+
+  // Auto-sync on first empty load if vendor has a balance
+  useEffect(() => {
+    if (!autoSyncAttempted.current && !txnLoading && transactions.length === 0 && (qbVendor?.balance ?? 0) > 0) {
+      autoSyncAttempted.current = true;
+      syncVendorTransactions();
+    }
+  }, [txnLoading, transactions.length, qbVendor?.balance, syncVendorTransactions]);
 
   const qbJson = qbVendor?.raw_json as Record<string, any> | null;
   const email = qbJson?.PrimaryEmailAddr?.Address || vendor.PrimaryEmailAddr?.Address || null;
@@ -253,7 +286,7 @@ export function VendorDetail({ vendor }: VendorDetailProps) {
 
           {/* Transaction List */}
           <TabsContent value="transactions" className="space-y-3 mt-3">
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
               <Select value={typeFilter} onValueChange={setTypeFilter}>
                 <SelectTrigger className="w-[140px] h-8 text-xs"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -273,10 +306,14 @@ export function VendorDetail({ vendor }: VendorDetailProps) {
                   <SelectItem value="paid">Paid</SelectItem>
                 </SelectContent>
               </Select>
+              <Button variant="outline" size="sm" className="h-8 gap-1 ml-auto text-xs" onClick={syncVendorTransactions} disabled={syncing}>
+                <RefreshCw className={`w-3.5 h-3.5 ${syncing ? "animate-spin" : ""}`} />
+                {syncing ? "Syncing..." : "Sync Transactions"}
+              </Button>
             </div>
 
-            {txnLoading ? (
-              <p className="text-sm text-muted-foreground p-4">Loading transactions...</p>
+            {txnLoading || syncing ? (
+              <p className="text-sm text-muted-foreground p-4">{syncing ? "Syncing vendor transactions from QuickBooks..." : "Loading transactions..."}</p>
             ) : filteredTxns.length === 0 ? (
               <p className="text-sm text-muted-foreground p-4">No transactions found</p>
             ) : (
