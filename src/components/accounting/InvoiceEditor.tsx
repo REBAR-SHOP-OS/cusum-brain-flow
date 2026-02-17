@@ -224,7 +224,7 @@ export function InvoiceEditor({ invoice, customers, items, payments, onUpdate, o
               }}
             >
               <SelectTrigger className="bg-white border-gray-300">
-                <SelectValue />
+                <SelectValue placeholder={customerRef.name || "Select customer..."} />
               </SelectTrigger>
               <SelectContent>
                 {customers.map((c) => (
@@ -347,7 +347,7 @@ export function InvoiceEditor({ invoice, customers, items, payments, onUpdate, o
         </div>
 
         {/* Payment History */}
-        {linkedPayments.length > 0 && (
+        {(linkedPayments.length > 0 || paid > 0) && (
           <div className="mt-6 mb-2">
             <div className="flex items-center justify-between mb-3">
               <p className="text-[10px] uppercase tracking-widest text-gray-400 font-bold">Payment History</p>
@@ -363,25 +363,34 @@ export function InvoiceEditor({ invoice, customers, items, payments, onUpdate, o
                 {paymentStatus}
               </Badge>
             </div>
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-300">
-                  <th className="text-left py-1.5 font-semibold text-gray-600 text-xs">Date</th>
-                  <th className="text-right py-1.5 font-semibold text-gray-600 text-xs">Amount Applied</th>
-                </tr>
-              </thead>
-              <tbody>
-                {linkedPayments.map((p, i) => (
-                  <tr key={i} className="border-b border-gray-100">
-                    <td className="py-1.5 text-gray-700">{p.date ? new Date(p.date).toLocaleDateString() : "—"}</td>
-                    <td className="py-1.5 text-right tabular-nums font-medium text-green-700">{fmt(p.amount)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <p className="text-xs text-gray-400 mt-2">
-              {linkedPayments.length} payment{linkedPayments.length !== 1 ? "s" : ""}
-            </p>
+            {linkedPayments.length > 0 ? (
+              <>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-300">
+                      <th className="text-left py-1.5 font-semibold text-gray-600 text-xs">Date</th>
+                      <th className="text-right py-1.5 font-semibold text-gray-600 text-xs">Amount Applied</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {linkedPayments.map((p, i) => (
+                      <tr key={i} className="border-b border-gray-100">
+                        <td className="py-1.5 text-gray-700">{p.date ? new Date(p.date).toLocaleDateString() : "—"}</td>
+                        <td className="py-1.5 text-right tabular-nums font-medium text-green-700">{fmt(p.amount)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <p className="text-xs text-gray-400 mt-2">
+                  {linkedPayments.length} payment{linkedPayments.length !== 1 ? "s" : ""}
+                </p>
+              </>
+            ) : (
+              <div className="flex justify-between text-sm text-green-700">
+                <span>Paid:</span>
+                <span className="tabular-nums font-medium">{fmt(paid)}</span>
+              </div>
+            )}
           </div>
         )}
 
