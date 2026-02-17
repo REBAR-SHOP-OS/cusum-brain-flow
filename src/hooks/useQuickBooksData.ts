@@ -181,6 +181,17 @@ function mirrorTxnToQBFormat(row: Record<string, unknown>): Record<string, unkno
 
 // ─── Main Hook ─────────────────────────────────────────────────────
 
+export interface TrialBalanceStatus {
+  isBalanced: boolean;
+  totalDiff: number;
+  qbTotal: number;
+  erpTotal: number;
+  arDiff: number;
+  apDiff: number;
+  accountDetails: Array<{ account: string; qb: number; erp: number; diff: number }>;
+  checkedAt: string;
+}
+
 export function useQuickBooksData() {
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState<string | null>(null);
@@ -199,6 +210,8 @@ export function useQuickBooksData() {
   const [employees, setEmployees] = useState<QBEmployee[]>([]);
   const [timeActivities, setTimeActivities] = useState<QBTimeActivity[]>([]);
   const [companyInfo, setCompanyInfo] = useState<Record<string, unknown> | null>(null);
+  const [trialBalanceStatus, setTrialBalanceStatus] = useState<TrialBalanceStatus | null>(null);
+  const [postingBlocked, setPostingBlocked] = useState(false);
   const { toast } = useToast();
   const warmUpFired = useRef(false);
 
@@ -210,7 +223,7 @@ export function useQuickBooksData() {
     return data;
   }, []);
 
-  // Eager token warm-up: fire once on mount, before loadAll is called
+  // Eager token warm-up + load last trial balance check
   useEffect(() => {
     if (warmUpFired.current) return;
     warmUpFired.current = true;
@@ -219,6 +232,30 @@ export function useQuickBooksData() {
         if (data?.status === "connected") setConnected(true);
       })
       .catch(() => { /* silent warm-up */ });
+
+    // Load last trial balance check to enforce hard-stop across page reloads
+    supabase
+      .from("trial_balance_checks")
+      .select("*")
+      .order("checked_at", { ascending: false })
+      .limit(1)
+      .then(({ data: checks }) => {
+        if (checks && checks.length > 0) {
+          const c = checks[0] as Record<string, unknown>;
+          const status: TrialBalanceStatus = {
+            isBalanced: c.is_balanced as boolean,
+            totalDiff: c.total_diff as number,
+            qbTotal: c.qb_total as number,
+            erpTotal: c.erp_total as number,
+            arDiff: (c.ar_diff as number) || 0,
+            apDiff: (c.ap_diff as number) || 0,
+            accountDetails: (c.details as TrialBalanceStatus["accountDetails"]) || [],
+            checkedAt: c.checked_at as string,
+          };
+          setTrialBalanceStatus(status);
+          setPostingBlocked(!status.isBalanced);
+        }
+      });
   }, [qbAction]);
 
   const checkConnection = useCallback(async () => {
@@ -450,11 +487,21 @@ export function useQuickBooksData() {
   }, [qbAction, toast, loadAll]);
 
   const createEntity = useCallback(async (action: string, body: Record<string, unknown>) => {
+    // ⛔ HARD STOP: Block posting if trial balance is mismatched
+    if (postingBlocked && trialBalanceStatus && !trialBalanceStatus.isBalanced) {
+      const details = trialBalanceStatus.accountDetails
+        .map(d => `• ${d.account}: QB $${d.qb.toFixed(2)} vs ERP $${d.erp.toFixed(2)} (Δ $${d.diff.toFixed(2)})`)
+        .join("\n");
+      const msg = `⛔ POSTING BLOCKED — Trial balance mismatch of $${trialBalanceStatus.totalDiff.toFixed(2)}.\n\n${details || "Run reconciliation for details."}`;
+      toast({ title: "⛔ Posting Blocked", description: msg, variant: "destructive" });
+      reportToVizzy(`Posting blocked: trial balance mismatch $${trialBalanceStatus.totalDiff.toFixed(2)}`, "Accounting — createEntity hard-stop");
+      throw new Error(msg);
+    }
     const data = await qbAction(action, body);
     toast({ title: "✅ Created successfully", description: `Doc #${data.docNumber || "N/A"}` });
     await loadAll();
     return data;
-  }, [qbAction, toast, loadAll]);
+  }, [qbAction, toast, loadAll, postingBlocked, trialBalanceStatus]);
 
   const sendInvoice = useCallback(async (invoiceId: string, email?: string) => {
     await qbAction("send-invoice", { invoiceId, email });
@@ -513,9 +560,28 @@ export function useQuickBooksData() {
     try {
       const data = await qbAction("reconcile");
       const diff = data.trial_balance_diff;
+      const isBalanced = data.is_balanced ?? (diff <= 0.01);
+
+      // Persist trial balance status for hard-stop enforcement
+      const status: TrialBalanceStatus = {
+        isBalanced,
+        totalDiff: diff,
+        qbTotal: data.qb || 0,
+        erpTotal: data.erp || 0,
+        arDiff: data.ar_diff || 0,
+        apDiff: data.ap_diff || 0,
+        accountDetails: data.account_details || [],
+        checkedAt: new Date().toISOString(),
+      };
+      setTrialBalanceStatus(status);
+      setPostingBlocked(!isBalanced);
+
       toast({
-        title: diff > 0.01 ? "⚠️ Trial Balance Mismatch" : "✅ Reconciliation complete",
-        description: diff > 0.01 ? `Difference: $${diff.toFixed(2)}` : "QB and ERP match",
+        title: !isBalanced ? "⛔ Trial Balance Mismatch — Posting Blocked" : "✅ Reconciliation complete",
+        description: !isBalanced
+          ? `Difference: $${diff.toFixed(2)}. All accounting posts are BLOCKED until resolved.`
+          : "QB and ERP match. Posting enabled.",
+        variant: !isBalanced ? "destructive" : "default",
       });
       return data;
     } catch (err) {
@@ -532,7 +598,7 @@ export function useQuickBooksData() {
   const overdueBills = bills.filter(b => b.Balance > 0 && new Date(b.DueDate) < new Date());
 
   return {
-    loading, syncing, connected, error,
+    loading, syncing, connected, error, postingBlocked, trialBalanceStatus,
     invoices, bills, payments, vendors, customers, accounts, estimates, items, purchaseOrders, creditMemos, employees, timeActivities, companyInfo,
     totalReceivable, totalPayable, overdueInvoices, overdueBills,
     checkConnection, loadAll, syncEntity, createEntity, sendInvoice, voidInvoice, createPayrollCorrection, qbAction,
