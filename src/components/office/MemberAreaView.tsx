@@ -135,6 +135,25 @@ function MyProfileTab() {
   const fileRef = useRef<HTMLInputElement>(null);
   const myProfile = profiles.find((p) => p.user_id === user?.id);
 
+  const [fullName, setFullName] = useState(myProfile?.full_name || "");
+  const [title, setTitle] = useState(myProfile?.title || "");
+
+  useEffect(() => {
+    if (myProfile) {
+      setFullName(myProfile.full_name);
+      setTitle(myProfile.title || "");
+    }
+  }, [myProfile]);
+
+  const handleSave = () => {
+    if (!myProfile || updateProfile.isPending) return;
+    updateProfile.mutate({
+      id: myProfile.id,
+      full_name: fullName.trim(),
+      title: title.trim() || null,
+    });
+  };
+
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !myProfile) return;
@@ -175,7 +194,7 @@ function MyProfileTab() {
           <div className="space-y-3">
             <div>
               <label className="text-[10px] tracking-widest text-muted-foreground uppercase mb-1 block">Full Name</label>
-              <Input defaultValue={myProfile?.full_name || ""} className="h-10" />
+              <Input value={fullName} onChange={(e) => setFullName(e.target.value)} className="h-10" />
             </div>
             <div>
               <label className="text-[10px] tracking-widest text-muted-foreground uppercase mb-1 block">Email</label>
@@ -183,7 +202,7 @@ function MyProfileTab() {
             </div>
             <div>
               <label className="text-[10px] tracking-widest text-muted-foreground uppercase mb-1 block">Job Title</label>
-              <Input defaultValue={myProfile?.title || ""} className="h-10" />
+              <Input value={title} onChange={(e) => setTitle(e.target.value)} className="h-10" />
             </div>
             <div>
               <label className="text-[10px] tracking-widest text-muted-foreground uppercase mb-1 block">Preferred Language</label>
@@ -205,7 +224,9 @@ function MyProfileTab() {
               <p className="text-[10px] text-muted-foreground mt-1">Team Hub messages will be translated to this language for you.</p>
             </div>
           </div>
-          <Button className="w-full">Save Changes</Button>
+          <Button className="w-full" onClick={handleSave} disabled={updateProfile.isPending}>
+            {updateProfile.isPending ? "Saving..." : "Save Changes"}
+          </Button>
         </CardContent>
       </Card>
     </div>
