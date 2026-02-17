@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, Fragment } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -332,7 +332,7 @@ export function AccountingAccounts({ data }: Props) {
                     {filteredAccounts.map((a, idx) => {
                       const groupLabel = getTypeGroupLabel(idx);
                       return (
-                        <>
+                        <Fragment key={a.Id}>
                           {groupLabel && (
                             <TableRow key={`group-${a.AccountType}-${idx}`} className="bg-muted/30 hover:bg-muted/30">
                               <TableCell colSpan={7} className="py-2 px-4">
@@ -368,7 +368,7 @@ export function AccountingAccounts({ data }: Props) {
                               </button>
                             </TableCell>
                           </TableRow>
-                        </>
+                        </Fragment>
                       );
                     })}
                   </TableBody>

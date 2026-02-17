@@ -16,6 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { QBVendor } from "@/hooks/useQuickBooksData";
 
 const fmt = (n: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
+const VENDOR_TXN_TYPES = ["Bill", "BillPayment", "VendorCredit", "PurchaseOrder"];
 
 function InfoRow({ label, value }: { label: string; value: string | null | undefined }) {
   if (!value) return null;
@@ -49,6 +50,7 @@ export function VendorDetail({ vendor }: VendorDetailProps) {
       });
       if (error) throw error;
       toast({ title: "Transaction deleted" });
+      queryClient.invalidateQueries({ queryKey: ["qb_vendor_transactions", vendor.Id] });
     } catch (err) {
       toast({ title: "Delete failed", description: String(err), variant: "destructive" });
     }
@@ -62,6 +64,7 @@ export function VendorDetail({ vendor }: VendorDetailProps) {
       });
       if (error) throw error;
       toast({ title: "Transaction voided" });
+      queryClient.invalidateQueries({ queryKey: ["qb_vendor_transactions", vendor.Id] });
     } catch (err) {
       toast({ title: "Void failed", description: String(err), variant: "destructive" });
     }
@@ -97,7 +100,7 @@ export function VendorDetail({ vendor }: VendorDetailProps) {
     },
   });
 
-  const VENDOR_TXN_TYPES = ["Bill", "BillPayment", "VendorCredit", "PurchaseOrder"];
+  
 
   const syncVendorTransactions = useCallback(async () => {
     setSyncing(true);

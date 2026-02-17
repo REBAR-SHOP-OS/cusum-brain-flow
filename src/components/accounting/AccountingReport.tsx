@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { BarChart3, ChevronRight, ChevronDown, TrendingUp, TrendingDown, DollarSign, Loader2 } from "lucide-react";
+import { BarChart3, ChevronRight, ChevronDown, Loader2 } from "lucide-react";
 import { format, startOfYear } from "date-fns";
 import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
 
@@ -121,7 +121,7 @@ function CollapsibleSection({ row, depth }: { row: QBReportRow; depth: number })
 }
 
 export function AccountingReport({ data, report }: Props) {
-  const { qbAction, totalReceivable, totalPayable, invoices, bills, payments } = data;
+  const { qbAction, totalReceivable, totalPayable, bills, payments } = data;
 
   const [loading, setLoading] = useState(false);
   const [reportData, setReportData] = useState<QBReportRow[] | null>(null);
