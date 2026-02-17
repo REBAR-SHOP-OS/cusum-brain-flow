@@ -298,8 +298,7 @@ function buildCustomerTree(
     const projectNodes = custProjects.map(buildProjectNode);
     // Only include if there's actual content
     const hasContent = projectNodes.some(pn => pn.barlists.length > 0 || pn.loosePlans.length > 0);
-    const resolvedName = customerMap.get(cid);
-    if (!resolvedName) return; // skip until customer data loads
+    const resolvedName = customerMap.get(cid) || `Unknown Customer (${cid.slice(0, 8)})`;
     if (hasContent || projectNodes.length > 0) {
       result.push({
         customerId: cid,
