@@ -102,6 +102,31 @@ export function DockChatBar() {
           </PopoverTrigger>
           <PopoverContent side="top" align="end" className="w-[300px] p-0 mb-1">
             <ScrollArea className="max-h-[400px]">
+              {/* Team members - top for visibility */}
+              <div className="px-2 pt-2 pb-2">
+                <p className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Start a Chat</p>
+                {profiles
+                  .filter((p) => p.is_active !== false && p.id !== myProfile?.id)
+                  .map((p) => (
+                    <button
+                      key={p.id}
+                      onClick={() => handleOpenDM(p.id, p.full_name)}
+                      className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-muted/60 transition-colors text-left"
+                    >
+                      <Avatar className="w-6 h-6">
+                        <AvatarImage src={p.avatar_url || ""} />
+                        <AvatarFallback className={cn("text-[9px] font-bold text-white", getAvatarColor(p.full_name))}>
+                          {getInitials(p.full_name)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span className="text-sm text-foreground truncate">{p.full_name}</span>
+                    </button>
+                  ))}
+              </div>
+
+              {/* Separator */}
+              {(groupChannels.length > 0 || dmChannels.length > 0) && <div className="mx-3 h-px bg-border" />}
+
               {/* Group channels */}
               {groupChannels.length > 0 && (
                 <div className="px-2 pt-2">
@@ -124,7 +149,7 @@ export function DockChatBar() {
 
               {/* DM channels */}
               {dmChannels.length > 0 && (
-                <div className="px-2 pt-2">
+                <div className="px-2 pt-2 pb-2">
                   <p className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Direct Messages</p>
                   {dmChannels.map((ch) => (
                     <button
@@ -141,28 +166,6 @@ export function DockChatBar() {
                   ))}
                 </div>
               )}
-
-              {/* Team members */}
-              <div className="px-2 pt-2 pb-2">
-                <p className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Team Members</p>
-                {profiles
-                  .filter((p) => p.is_active !== false && p.id !== myProfile?.id)
-                  .map((p) => (
-                    <button
-                      key={p.id}
-                      onClick={() => handleOpenDM(p.id, p.full_name)}
-                      className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-muted/60 transition-colors text-left"
-                    >
-                      <Avatar className="w-6 h-6">
-                        <AvatarImage src={p.avatar_url || ""} />
-                        <AvatarFallback className={cn("text-[9px] font-bold text-white", getAvatarColor(p.full_name))}>
-                          {getInitials(p.full_name)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <span className="text-sm text-foreground truncate">{p.full_name}</span>
-                    </button>
-                  ))}
-              </div>
             </ScrollArea>
           </PopoverContent>
         </Popover>
