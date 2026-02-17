@@ -4,10 +4,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
-import { Users, Search, Loader2 } from "lucide-react";
+import { Users, Search, Loader2, Plus } from "lucide-react";
 import { CustomerDetail } from "@/components/customers/CustomerDetail";
+import { CustomerFormModal } from "@/components/customers/CustomerFormModal";
 import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
 
 interface Props {
@@ -21,6 +23,7 @@ export function AccountingCustomers({ data }: Props) {
   const { customers, invoices } = data;
   const [search, setSearch] = useState("");
   const [selectedQbId, setSelectedQbId] = useState<string | null>(null);
+  const [isFormOpen, setIsFormOpen] = useState(false);
 
   // Look up local customer by quickbooks_id when a row is selected
   const { data: localCustomer, isLoading: localLoading } = useQuery({
@@ -54,14 +57,19 @@ export function AccountingCustomers({ data }: Props) {
 
   return (
     <div className="space-y-4">
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-        <Input
-          placeholder="Search customers..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-10 h-12 text-base"
-        />
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+          <Input
+            placeholder="Search customers..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-10 h-12 text-base"
+          />
+        </div>
+        <Button onClick={() => setIsFormOpen(true)} className="h-12 gap-2">
+          <Plus className="w-4 h-4" /> Add Customer
+        </Button>
       </div>
 
       <Card>
@@ -151,6 +159,8 @@ export function AccountingCustomers({ data }: Props) {
           )}
         </SheetContent>
       </Sheet>
+
+      <CustomerFormModal open={isFormOpen} onOpenChange={setIsFormOpen} customer={null} />
     </div>
   );
 }
