@@ -1,11 +1,16 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
@@ -424,25 +429,7 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
 
           {/* ─── Customer Details ─── */}
           <TabsContent value="details" className="mt-0 px-6 py-4">
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <InfoRow label="Name" value={customer.name} />
-              <InfoRow label="Company" value={customer.company_name} />
-              <InfoRow label="Email" value={email} />
-              <InfoRow label="Phone" value={phone} />
-              <InfoRow label="Status" value={customer.status} />
-              <InfoRow label="Type" value={customer.customer_type} />
-              <InfoRow label="Payment Terms" value={customer.payment_terms} />
-              <InfoRow label="Credit Limit" value={customer.credit_limit ? `$${customer.credit_limit.toLocaleString()}` : null} />
-              <InfoRow label="Billing Address" value={formatAddr(billAddr)} />
-              <InfoRow label="Shipping Address" value={formatAddr(shipAddr)} />
-              <InfoRow label="QuickBooks ID" value={customer.quickbooks_id} />
-              <InfoRow label="Created" value={format(new Date(customer.created_at), "MMM d, yyyy")} />
-            </div>
-            <div className="mt-4">
-              <Button variant="outline" size="sm" onClick={onEdit}>
-                <Pencil className="w-4 h-4 mr-1" /> Edit Customer Details
-              </Button>
-            </div>
+            <CustomerDetailsForm customer={customer} email={email} phone={phone} billAddr={formatAddr(billAddr)} shipAddr={formatAddr(shipAddr)} />
           </TabsContent>
 
           {/* ─── Notes ─── */}
@@ -484,11 +471,193 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
   );
 }
 
-function InfoRow({ label, value }: { label: string; value: string | null | undefined }) {
+const detailsSchema = z.object({
+  name: z.string().trim().min(1, "Name is required").max(100),
+  company_name: z.string().trim().max(100).optional().or(z.literal("")),
+  customer_type: z.enum(["business", "individual"]),
+  status: z.enum(["active", "inactive", "prospect"]),
+  payment_terms: z.enum(["net30", "net60", "net15", "due_on_receipt"]).optional(),
+  credit_limit: z.coerce.number().min(0).optional().or(z.literal("")),
+});
+
+type DetailsFormData = z.infer<typeof detailsSchema>;
+
+function CustomerDetailsForm({
+  customer,
+  email,
+  phone,
+  billAddr,
+  shipAddr,
+}: {
+  customer: Customer;
+  email: string | null;
+  phone: string | null;
+  billAddr: string | null;
+  shipAddr: string | null;
+}) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const form = useForm<DetailsFormData>({
+    resolver: zodResolver(detailsSchema),
+    defaultValues: {
+      name: customer.name,
+      company_name: customer.company_name || "",
+      customer_type: (customer.customer_type as "business" | "individual") || "business",
+      status: (customer.status as "active" | "inactive" | "prospect") || "active",
+      payment_terms: (customer.payment_terms as "net30" | "net60" | "net15" | "due_on_receipt") || "net30",
+      credit_limit: customer.credit_limit ?? "",
+    },
+  });
+
+  useEffect(() => {
+    form.reset({
+      name: customer.name,
+      company_name: customer.company_name || "",
+      customer_type: (customer.customer_type as "business" | "individual") || "business",
+      status: (customer.status as "active" | "inactive" | "prospect") || "active",
+      payment_terms: (customer.payment_terms as "net30" | "net60" | "net15" | "due_on_receipt") || "net30",
+      credit_limit: customer.credit_limit ?? "",
+    });
+  }, [customer, form]);
+
+  const saveMutation = useMutation({
+    mutationFn: async (data: DetailsFormData) => {
+      const { error } = await supabase
+        .from("customers")
+        .update({
+          name: data.name,
+          company_name: data.company_name || null,
+          customer_type: data.customer_type,
+          status: data.status,
+          payment_terms: data.payment_terms || null,
+          credit_limit: data.credit_limit ? Number(data.credit_limit) : null,
+        })
+        .eq("id", customer.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["customers"] });
+      toast({ title: "Customer updated" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
   return (
-    <div>
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="font-medium">{value || "—"}</p>
-    </div>
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit((d) => saveMutation.mutate(d))} className="space-y-4">
+        <div className="grid grid-cols-2 gap-4">
+          <FormField control={form.control} name="name" render={({ field }) => (
+            <FormItem>
+              <FormLabel>Name *</FormLabel>
+              <FormControl><Input {...field} /></FormControl>
+              <FormMessage />
+            </FormItem>
+          )} />
+          <FormField control={form.control} name="company_name" render={({ field }) => (
+            <FormItem>
+              <FormLabel>Company Name</FormLabel>
+              <FormControl><Input {...field} /></FormControl>
+              <FormMessage />
+            </FormItem>
+          )} />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <p className="text-xs font-medium mb-1.5">Email</p>
+            <p className="text-sm text-muted-foreground">{email || "—"}</p>
+            {email && <p className="text-[10px] text-muted-foreground/60 mt-0.5">Synced from QuickBooks</p>}
+          </div>
+          <div>
+            <p className="text-xs font-medium mb-1.5">Phone</p>
+            <p className="text-sm text-muted-foreground">{phone || "—"}</p>
+            {phone && <p className="text-[10px] text-muted-foreground/60 mt-0.5">Synced from QuickBooks</p>}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <FormField control={form.control} name="status" render={({ field }) => (
+            <FormItem>
+              <FormLabel>Status</FormLabel>
+              <Select onValueChange={field.onChange} value={field.value}>
+                <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                <SelectContent>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
+                  <SelectItem value="prospect">Prospect</SelectItem>
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )} />
+          <FormField control={form.control} name="customer_type" render={({ field }) => (
+            <FormItem>
+              <FormLabel>Type</FormLabel>
+              <Select onValueChange={field.onChange} value={field.value}>
+                <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                <SelectContent>
+                  <SelectItem value="business">Business</SelectItem>
+                  <SelectItem value="individual">Individual</SelectItem>
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )} />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <FormField control={form.control} name="payment_terms" render={({ field }) => (
+            <FormItem>
+              <FormLabel>Payment Terms</FormLabel>
+              <Select onValueChange={field.onChange} value={field.value}>
+                <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                <SelectContent>
+                  <SelectItem value="due_on_receipt">Due on Receipt</SelectItem>
+                  <SelectItem value="net15">Net 15</SelectItem>
+                  <SelectItem value="net30">Net 30</SelectItem>
+                  <SelectItem value="net60">Net 60</SelectItem>
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )} />
+          <FormField control={form.control} name="credit_limit" render={({ field }) => (
+            <FormItem>
+              <FormLabel>Credit Limit</FormLabel>
+              <FormControl><Input type="number" placeholder="0" {...field} /></FormControl>
+              <FormMessage />
+            </FormItem>
+          )} />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 text-sm">
+          <div>
+            <p className="text-xs text-muted-foreground">Billing Address</p>
+            <p className="font-medium">{billAddr || "—"}</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Shipping Address</p>
+            <p className="font-medium">{shipAddr || "—"}</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">QuickBooks ID</p>
+            <p className="font-medium">{customer.quickbooks_id || "—"}</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Created</p>
+            <p className="font-medium">{format(new Date(customer.created_at), "MMM d, yyyy")}</p>
+          </div>
+        </div>
+
+        <div className="flex justify-end pt-2">
+          <Button type="submit" disabled={saveMutation.isPending}>
+            {saveMutation.isPending ? "Saving..." : "Save Changes"}
+          </Button>
+        </div>
+      </form>
+    </Form>
   );
 }

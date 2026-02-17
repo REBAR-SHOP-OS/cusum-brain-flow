@@ -21,6 +21,8 @@ interface CustomerRow {
   customer: Customer;
   phone: string | null;
   openBalance: number;
+  invoiceCount: number;
+  overdueCount: number;
 }
 
 interface CustomerTableProps {
@@ -83,6 +85,8 @@ export function CustomerTable({ rows, isLoading, sortField, sortDir, onSort, onR
             <SortableHeader label="COMPANY NAME" field="company_name" current={sortField} dir={sortDir} onSort={onSort} />
           </TableHead>
           <TableHead>PHONE</TableHead>
+          <TableHead className="text-center">INVOICES</TableHead>
+          <TableHead className="text-center">OVERDUE</TableHead>
           <TableHead className="text-right">
             <SortableHeader label="OPEN BALANCE" field="open_balance" current={sortField} dir={sortDir} onSort={onSort} />
           </TableHead>
@@ -92,12 +96,12 @@ export function CustomerTable({ rows, isLoading, sortField, sortDir, onSort, onR
       <TableBody>
         {rows.length === 0 ? (
           <TableRow>
-            <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">
+            <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
               No customers found
             </TableCell>
           </TableRow>
         ) : (
-          rows.map(({ customer, phone, openBalance }) => (
+          rows.map(({ customer, phone, openBalance, invoiceCount, overdueCount }) => (
             <TableRow
               key={customer.id}
               className="cursor-pointer"
@@ -119,6 +123,12 @@ export function CustomerTable({ rows, isLoading, sortField, sortDir, onSort, onR
               </TableCell>
               <TableCell className="text-muted-foreground">{customer.company_name || "—"}</TableCell>
               <TableCell className="text-muted-foreground">{phone || "—"}</TableCell>
+              <TableCell className="text-center text-muted-foreground">{invoiceCount || "—"}</TableCell>
+              <TableCell className="text-center">
+                {overdueCount > 0 ? (
+                  <Badge variant="destructive" className="text-[10px] px-1.5 py-0">{overdueCount}</Badge>
+                ) : "—"}
+              </TableCell>
               <TableCell className="text-right font-medium">
                 {openBalance > 0 ? formatCurrency(openBalance) : "—"}
               </TableCell>
