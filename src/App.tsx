@@ -191,6 +191,17 @@ const App = () => (
                     <Route path="/knowledge-base" element={<KnowledgeBasePublic />} />
                     <Route path="/unsubscribe" element={<Unsubscribe />} />
 
+                    {/* Redirect broken notification paths */}
+                    <Route path="/hr" element={<Navigate to="/timeclock" replace />} />
+                    <Route path="/hr/*" element={<Navigate to="/timeclock" replace />} />
+                    <Route path="/estimation" element={<Navigate to="/pipeline" replace />} />
+                    <Route path="/bills" element={<Navigate to="/accounting" replace />} />
+                    <Route path="/bills/*" element={<Navigate to="/accounting" replace />} />
+                    <Route path="/invoices/*" element={<Navigate to="/accounting" replace />} />
+                    <Route path="/intelligence" element={<Navigate to="/brain" replace />} />
+                    <Route path="/inventory" element={<Navigate to="/shop-floor" replace />} />
+                    <Route path="/emails/*" element={<Navigate to="/inbox" replace />} />
+
                     <Route path="*" element={<NotFound />} />
                   </Routes>
                 </WorkspaceProvider>

@@ -115,7 +115,7 @@ export function useLeaveManagement() {
   };
 
   const reviewRequest = async (requestId: string, status: "approved" | "denied", note?: string) => {
-    if (!myProfile) return;
+    if (!myProfile || !companyId) return;
 
     // Client-side self-approval guard (backend trigger is the real enforcement)
     const request = allRequests.find((r) => r.id === requestId);
@@ -139,6 +139,39 @@ export function useLeaveManagement() {
     } else {
       toast.success(`Request ${status}!`);
       fetchData();
+
+      // Create a human task for the reviewer's task box
+      if (request) {
+        const employeeProfile = profiles.find((p) => p.id === request.profile_id);
+        const employeeName = (employeeProfile as any)?.full_name || "Employee";
+
+        // Look up the HR agent id
+        const { data: agent } = await supabase
+          .from("agents" as any)
+          .select("id")
+          .eq("code", "hr")
+          .maybeSingle();
+
+        const agentId = agent ? (agent as any).id : null;
+
+        if (agentId) {
+          const description = `${employeeName} — ${request.leave_type} leave (${request.start_date} → ${request.end_date}), ${request.total_days} day(s).${note ? ` Note: ${note}` : ""}`;
+
+          await supabase.from("human_tasks" as any).insert({
+            agent_id: agentId,
+            company_id: companyId,
+            title: `Leave ${status}: ${employeeName} - ${request.leave_type}`,
+            description,
+            category: "hr_leave",
+            severity: "info",
+            status: "open",
+            assigned_to: myProfile.id,
+            entity_type: "leave_request",
+            entity_id: requestId,
+            dedupe_key: `leave_review_${requestId}`,
+          });
+        }
+      }
     }
   };
 
