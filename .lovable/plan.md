@@ -1,111 +1,84 @@
 
 
-# Delivery Workflow: Evidence, Packing Slip, Signature, Photo, and Archive
+# Loading Station: Item-by-Item Truck Loading with Evidence
 
-## Overview
+## Problem
 
-Build the complete delivery workflow: select a cleared bundle, create a delivery with a printable packing slip, capture a canvas signature and job site photo at delivery, and archive everything.
+The current workflow jumps directly from "Cleared bundle" to "Create Delivery" without a loading verification step. There is no way for the loader to:
+- Check off each mark number as it's loaded onto the truck
+- Take a photo of each item being loaded (evidence)
+- Track loading progress before creating the delivery and packing slip
 
-## Current State
+The `loading_evidence` table exists in the database but has no dedicated UI -- it's only accessible from the office PackingSlipsView.
 
-- "Create Delivery" button exists but is disabled
-- No link between bundles (cut plans) and deliveries in the database
-- A `PackingSlipTemplate` exists in accounting but is not connected to the delivery flow
-- POD dialog uses a text input for signature instead of the canvas `SignaturePad` already used elsewhere
-- No packing slip archive table
+## Solution
+
+Add a **Loading Station** page between Clearance and Delivery. The operator selects a cleared bundle, then loads items one by one: tap an item to mark it loaded, optionally snap a photo. Once all items are checked, the "Create Delivery" button activates.
+
+## Workflow
+
+```text
+Clearance (complete) --> Loading Station
+  --> Select bundle
+  --> Item list with checkboxes
+  --> Tap item --> mark loaded (+ optional photo evidence)
+  --> Progress bar: 12/23 loaded
+  --> All loaded --> "Create Delivery" button activates
+  --> Creates delivery + packing slip (existing logic)
+  --> Redirects to Deliveries page
+```
 
 ## Changes
 
-### 1. Database Migration
+### 1. Database: New `loading_checklist` table
 
-**Add `cut_plan_id` to `deliveries` table** to link deliveries to their source bundle.
+Track per-item loading status for a delivery preparation session:
 
-**Create `packing_slips` table** to archive generated slips:
-
-```text
-packing_slips
-  id              uuid PK
-  company_id      uuid FK -> companies
-  delivery_id     uuid FK -> deliveries
-  cut_plan_id     uuid FK -> cut_plans
-  slip_number     text
-  customer_name   text
-  ship_to         text
-  items_json      jsonb       (snapshot of items at time of creation)
-  signature_path  text        (storage path to signature image)
-  site_photo_path text        (storage path to job site photo)
-  status          text        (default 'draft', then 'delivered', 'archived')
-  created_at      timestamptz
-  updated_at      timestamptz
-```
+| Column | Type | Description |
+|---|---|---|
+| id | uuid PK | |
+| company_id | uuid FK | RLS scope |
+| cut_plan_id | uuid FK | Which bundle |
+| cut_plan_item_id | uuid FK | Which specific item |
+| loaded | boolean | Checked off |
+| photo_path | text | Optional evidence photo path |
+| loaded_by | uuid | Who loaded it |
+| loaded_at | timestamptz | When |
+| created_at | timestamptz | |
 
 RLS: company_id scoped, same pattern as other tables.
 
-### 2. Enable "Create Delivery" from Bundle (Deliveries page)
+### 2. New Page: `src/pages/LoadingStation.tsx`
 
-When user clicks "Create Delivery" on a selected bundle:
-- Create a new `deliveries` row with `cut_plan_id`, auto-generated delivery number, status "pending"
-- Create one `delivery_stops` row with the project's ship-to address (or blank for user to fill)
-- Generate a packing slip record in `packing_slips` with items snapshot
-- Show the `DeliveryPackingSlip` dialog (printable) immediately
+- Header: "LOADING STATION" with back button to shop floor
+- Shows list of cleared bundles (reuses `useCompletedBundles`)
+- On bundle select: shows item checklist
+- Each item row shows: mark number, bar code, cut length, pieces, and a checkbox + camera button
+- Tapping checkbox marks item as loaded in `loading_checklist`
+- Camera button opens file picker, uploads photo to `clearance-photos` bucket, saves path to `loading_checklist.photo_path`
+- Progress bar at top: "12/23 items loaded"
+- "Create Delivery" button at bottom, disabled until all items checked
+- On "Create Delivery": calls existing `createDeliveryFromBundle`, then navigates to `/deliveries`
 
-### 3. New `DeliveryPackingSlip` Component
+### 3. Route + Navigation
 
-Reuse the visual layout from the existing `PackingSlipTemplate` but adapt it for delivery context:
-- Header: company branding
-- Info grid: customer name, ship-to, delivery number, date
-- Items table: mark number, bar code, cut length, quantity (from the bundle items)
-- Print / PDF button
-- Close button returns to delivery detail
+- Add route `/shopfloor/loading` in `App.tsx`
+- Add "LOADING ST." card back to `ShopFloor.tsx` hub pointing to `/shopfloor/loading` (previously removed because it was a duplicate to `/deliveries` -- now it has its own page)
+- Update the `complete` phase action in `PoolView.tsx` to point to `/shopfloor/loading` instead of `/deliveries`
 
-### 4. Upgrade POD Capture with Canvas Signature
+### 4. Update Deliveries Page
 
-Replace the text `Textarea` in `PODCaptureDialog` with the existing `SignaturePad` canvas component:
-- Import `SignaturePad` from `@/components/shopfloor/SignaturePad`
-- Capture signature as base64 PNG, upload to `clearance-photos` storage bucket
-- Store path in `pod_signature` and also update the related `packing_slips.signature_path`
-
-### 5. Job Site Photo in POD Flow
-
-The photo capture already exists in `PODCaptureDialog`. Ensure:
-- Photo uploads to `clearance-photos` bucket (already does)
-- Update `packing_slips.site_photo_path` with the storage path alongside the stop update
-
-### 6. Packing Slip Archive View
-
-Add a "Packing Slips" tab or section within the Deliveries page (inside the existing Tabs):
-- New tab: "Slips (N)" showing all archived packing slips
-- Each card shows slip number, customer, date, status badge
-- Click to open the printable packing slip view
-- Filter by status (draft / delivered / archived)
+- Remove the bundle selection / "Create Delivery" flow from `Deliveries.tsx` since loading now happens at the Loading Station
+- Keep the delivery list, driver mode, POD capture, and packing slip archive as-is
 
 ## Files
 
 | File | Change |
 |---|---|
-| **Database migration** | Add `cut_plan_id` to deliveries, create `packing_slips` table with RLS |
-| `src/pages/Deliveries.tsx` | Enable "Create Delivery" button, add packing slip tab, wire up new dialogs |
-| `src/components/delivery/DeliveryPackingSlip.tsx` | **New** -- printable packing slip adapted for delivery bundles |
-| `src/components/delivery/PODCaptureDialog.tsx` | Replace text signature with canvas `SignaturePad`, update packing slip record on complete |
-| `src/hooks/useDeliveryActions.ts` | **New** -- hook for creating delivery + packing slip from a bundle |
-
-## Workflow Summary
-
-```text
-Bundle "Ready" --> Click "Create Delivery"
-  --> delivery row created
-  --> packing_slips row created (items snapshot)
-  --> Packing Slip dialog opens (printable for customer)
-
-Driver Mode --> Stop card --> POD button
-  --> Canvas signature + job site photo
-  --> Uploads to storage
-  --> Updates delivery_stops + packing_slips with paths
-  --> Status moves to "delivered"
-
-Packing Slips tab
-  --> Browse all slips
-  --> Click to reprint
-  --> Status: draft / delivered / archived
-```
-
+| Database migration | Create `loading_checklist` table with RLS |
+| `src/pages/LoadingStation.tsx` | **New** -- loading station with item checklist, photo evidence, progress bar |
+| `src/hooks/useLoadingChecklist.ts` | **New** -- hook for reading/writing loading checklist items |
+| `src/App.tsx` | Add route `/shopfloor/loading` |
+| `src/pages/ShopFloor.tsx` | Add "LOADING ST." card pointing to `/shopfloor/loading` |
+| `src/pages/PoolView.tsx` | Update "complete" phase action route from `/deliveries` to `/shopfloor/loading` |
+| `src/pages/Deliveries.tsx` | Remove bundle selection panel (loading now handled upstream) |
