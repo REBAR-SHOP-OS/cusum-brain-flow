@@ -1,37 +1,33 @@
 
-# Fix: "Vault 1" / "JD Sector Vault" Missing from Production Queue
 
-## Root Cause
+# Audit and Fix: Pickup Station and Shop Floor Logic
 
-The project "JD Sector Vault" is linked to customer `52e968f1` ("SECTOR CONTRACTING LTD.") which has `company_id = NULL`. Row Level Security hides this customer, so the Production Queue tree builder skips the entire branch (line 302: `if (!resolvedName) return`).
+## Issues Found
 
-There are 5 duplicate "SECTOR CONTRACTING" customer records. The one the project uses (`52e968f1`) is the only one with NULL company_id.
+### 1. forwardRef Console Warning
+The console shows "Function components cannot be given refs" warnings for both `PickupStation` and `ReadyBundleList`. React is attempting to pass a ref to these components (likely from the router or error boundary). Both need to be wrapped with `React.forwardRef` to suppress the warning and prevent potential rendering issues.
 
-## Fix (Two Parts)
+### 2. Duplicate Navigation: "LOADING ST." and "DELIVERY" Both Go to `/deliveries`
+On the Shop Floor hub, both the "LOADING ST." and "DELIVERY" cards navigate to the exact same `/deliveries` route. They should either be differentiated (e.g., Loading Station gets its own page or opens Deliveries with a specific filter) or consolidated into a single card.
 
-### 1. Data fix -- set company_id on the orphaned customer record
-```sql
-UPDATE customers
-SET company_id = 'a0000000-0000-0000-0000-000000000001'
-WHERE id = '52e968f1-1cf9-4a49-bdf8-e1b3c75d04f3';
-```
+**Fix**: Remove the duplicate "LOADING ST." card since "DELIVERY" already covers dispatch. Replace it with a direct link to the Deliveries page filtered for loading/prep if needed, or simply remove the duplication.
 
-This immediately makes "JD Sector Vault" and "Vault 1" visible in the Production Queue.
+### 3. Bundle Grouping Key Fragility
+In `useCompletedBundles`, bundles are grouped by `project_name` but the `cutPlanId` stored is only from the first plan encountered. If multiple cut plans share a project name, items merge under one `cutPlanId`. This also means the React `key` in `ReadyBundleList` (`bundle.cutPlanId`) could collide. Currently the data doesn't have this collision (each plan has a unique project name), but the logic should be hardened.
 
-### 2. Code hardening -- make the tree builder resilient to missing customers
-Update line 302 in `src/components/office/ProductionQueueView.tsx` so that instead of silently skipping unresolved customers, it falls back to a placeholder name like "Unknown Customer (id)". This prevents items from disappearing if the data issue recurs.
+**Fix**: Use `cutPlanId` as the grouping key instead of `project_name`, so each plan is its own bundle card.
 
-```text
-Before: if (!resolvedName) return;
-After:  const displayName = resolvedName || "Unknown Customer";
-```
+### 4. Plan Name Not Shown in Bundle List
+The `ReadyBundleList` only shows `projectName` and item/piece counts. It doesn't display the `planName`, losing useful context for the operator.
 
-## Files Modified
+**Fix**: Show `planName` in the subtitle when it differs from `projectName`.
 
-| Item | Change |
+## Changes
+
+| File | Change |
 |---|---|
-| Database | Set company_id on customer 52e968f1 |
-| `src/components/office/ProductionQueueView.tsx` | Fallback name for unresolved customers instead of skipping |
+| `src/pages/PickupStation.tsx` | Wrap with `React.forwardRef` to fix ref warning |
+| `src/components/dispatch/ReadyBundleList.tsx` | Wrap with `React.forwardRef`; show plan name in subtitle |
+| `src/pages/ShopFloor.tsx` | Remove duplicate "LOADING ST." card (DELIVERY already covers it) |
+| `src/hooks/useCompletedBundles.ts` | Group by `cutPlanId` instead of `project_name` to prevent merge bugs |
 
-## Expected Result
-"SECTOR CONTRACTING LTD." will appear in the Production Queue with the "JD Sector Vault" project containing both the "Vault 1" and "JD Sector Vault" barlists and their draft manifests.
