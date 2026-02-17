@@ -6,8 +6,31 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ConfirmActionDialog } from "./ConfirmActionDialog";
 import { InvoiceEditor } from "./InvoiceEditor";
-import { FileText, Send, Ban, Search, Eye } from "lucide-react";
+import { FileText, Send, Ban, Search, Eye, ArrowUpDown } from "lucide-react";
 import type { useQuickBooksData, QBInvoice } from "@/hooks/useQuickBooksData";
+
+type SortField = "DocNumber" | "Customer" | "TxnDate" | "DueDate" | "TotalAmt" | "Balance" | "Status";
+type SortDir = "asc" | "desc";
+
+function getStatusRank(inv: { Balance: number; DueDate: string }) {
+  if (inv.Balance === 0) return 0; // Paid
+  if (new Date(inv.DueDate) < new Date()) return 2; // Overdue
+  return 1; // Open
+}
+
+function SortableHead({ label, field, current, dir, onSort, className }: {
+  label: string; field: SortField; current: SortField; dir: SortDir;
+  onSort: (f: SortField) => void; className?: string;
+}) {
+  return (
+    <TableHead className={className}>
+      <button className="flex items-center gap-1 hover:text-foreground transition-colors" onClick={() => onSort(field)}>
+        {label}
+        <ArrowUpDown className={`w-3 h-3 ${current === field ? "text-foreground" : "text-muted-foreground/50"}`} />
+      </button>
+    </TableHead>
+  );
+}
 
 interface Props {
   data: ReturnType<typeof useQuickBooksData>;
@@ -24,12 +47,31 @@ export function AccountingInvoices({ data, initialSearch }: Props) {
   const [voidTarget, setVoidTarget] = useState<{ id: string; doc: string; syncToken: string } | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [previewInvoice, setPreviewInvoice] = useState<QBInvoice | null>(null);
+  const [sortField, setSortField] = useState<SortField>("DocNumber");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+
+  const toggleSort = (field: SortField) => {
+    if (sortField === field) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortField(field); setSortDir("asc"); }
+  };
 
   const filtered = invoices.filter(
     (inv) =>
       (inv.DocNumber || "").toLowerCase().includes(search.toLowerCase()) ||
       (inv.CustomerRef?.name || "").toLowerCase().includes(search.toLowerCase())
-  );
+  ).sort((a, b) => {
+    const m = sortDir === "asc" ? 1 : -1;
+    switch (sortField) {
+      case "DocNumber": return (a.DocNumber || "").localeCompare(b.DocNumber || "", undefined, { numeric: true }) * m;
+      case "Customer": return (a.CustomerRef?.name || "").localeCompare(b.CustomerRef?.name || "") * m;
+      case "TxnDate": return (new Date(a.TxnDate || 0).getTime() - new Date(b.TxnDate || 0).getTime()) * m;
+      case "DueDate": return (new Date(a.DueDate || 0).getTime() - new Date(b.DueDate || 0).getTime()) * m;
+      case "TotalAmt": return (a.TotalAmt - b.TotalAmt) * m;
+      case "Balance": return (a.Balance - b.Balance) * m;
+      case "Status": return (getStatusRank(a) - getStatusRank(b)) * m;
+      default: return 0;
+    }
+  });
 
   const handleSend = async () => {
     if (!sendTarget) return;
@@ -110,13 +152,13 @@ export function AccountingInvoices({ data, initialSearch }: Props) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="text-base">Invoice #</TableHead>
-                  <TableHead className="text-base">Customer</TableHead>
-                  <TableHead className="text-base">Date</TableHead>
-                  <TableHead className="text-base">Due</TableHead>
-                  <TableHead className="text-base text-right">Total</TableHead>
-                  <TableHead className="text-base text-right">Balance</TableHead>
-                  <TableHead className="text-base">Status</TableHead>
+                  <SortableHead label="Invoice #" field="DocNumber" current={sortField} dir={sortDir} onSort={toggleSort} className="text-base" />
+                  <SortableHead label="Customer" field="Customer" current={sortField} dir={sortDir} onSort={toggleSort} className="text-base" />
+                  <SortableHead label="Date" field="TxnDate" current={sortField} dir={sortDir} onSort={toggleSort} className="text-base" />
+                  <SortableHead label="Due" field="DueDate" current={sortField} dir={sortDir} onSort={toggleSort} className="text-base" />
+                  <SortableHead label="Total" field="TotalAmt" current={sortField} dir={sortDir} onSort={toggleSort} className="text-base text-right" />
+                  <SortableHead label="Balance" field="Balance" current={sortField} dir={sortDir} onSort={toggleSort} className="text-base text-right" />
+                  <SortableHead label="Status" field="Status" current={sortField} dir={sortDir} onSort={toggleSort} className="text-base" />
                   <TableHead className="text-base text-center">Actions</TableHead>
                 </TableRow>
               </TableHeader>
