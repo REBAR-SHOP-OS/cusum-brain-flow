@@ -405,7 +405,7 @@ export function InvoiceEditor({ invoice, customers, items, payments, onUpdate, o
               <span className="tabular-nums">{fmt(subtotal)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-500">Tax:</span>
+              <span className="text-gray-500">HST (ON) 13%:</span>
               <span className="tabular-nums">{fmt(taxAmount)}</span>
             </div>
             <div className="flex justify-between font-bold text-base border-t border-gray-900 pt-2 mt-2">

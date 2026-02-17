@@ -664,7 +664,18 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
                           </TableCell>
                           <TableCell className="text-xs">{txn.entity_type}</TableCell>
                           <TableCell className="text-xs font-medium text-primary">
-                            {txn.doc_number || "—"}
+                            {txn.doc_number ? (
+                              <a
+                                href={`/accounting?tab=invoices&search=${encodeURIComponent(txn.doc_number)}`}
+                                className="underline hover:text-primary/80 cursor-pointer"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  window.location.href = `/accounting?tab=invoices&search=${encodeURIComponent(txn.doc_number!)}`;
+                                }}
+                              >
+                                {txn.doc_number}
+                              </a>
+                            ) : "—"}
                           </TableCell>
                           <TableCell className="text-xs text-muted-foreground truncate max-w-[200px]">
                             {memo || "—"}
@@ -913,6 +924,7 @@ function CustomerDetailsForm({ customer }: { customer: Customer }) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["customers"] });
+      queryClient.invalidateQueries({ queryKey: ["local_customer_by_qb"] });
       toast({ title: "Customer updated" });
     },
     onError: (err: Error) => {
