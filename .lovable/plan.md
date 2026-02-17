@@ -1,34 +1,53 @@
 
-# Fix: "Vault 1" Missing from Production Queue
+# Fix: Make "Cleared - Ready for Delivery" Bundles Clickable
 
-## Root Cause
+## Problem
+The cleared bundles listed under "CLEARED -- READY FOR DELIVERY" on the Deliveries page are not interactive. Clicking them does nothing because the `ReadyBundleList` component is rendered without an `onSelect` handler. The component supports it (via the `onSelect` prop), but no callback is wired up.
 
-The customer **SECTOR CONTRACTING LTD.** (linked to the "JD Sector Vault" project that contains the "Vault 1" barlist) has `company_id = NULL` in the database. The security policy on the `customers` table requires `company_id` to match the logged-in user's company. Since `NULL` never matches anything, the customer record is invisible to the app.
+## Solution
+Wire up the `onSelect` prop on the `ReadyBundleList` component in the Deliveries page so that clicking a bundle opens a detail panel showing the bundle contents (items, bar codes, piece counts). This uses the existing right-side detail panel already built into the page.
 
-The Production Queue tree builder skips any customer it cannot resolve by name (line 302: `if (!resolvedName) return`). So the entire SECTOR CONTRACTING branch -- including its project, barlist, and manifest -- is silently dropped from the queue.
+## What Changes
 
-## Fix (Two Parts)
+### 1. Add bundle detail state to Deliveries page (`src/pages/Deliveries.tsx`)
+- Add a `selectedBundle` state variable alongside the existing `selectedDelivery` state
+- When a bundle is clicked, show its details in the right panel (same area used for delivery details)
+- Clicking a bundle clears any selected delivery, and vice versa
 
-### 1. Backfill the missing company_id (data fix)
-Set `company_id` on the 2 customers that currently have `NULL`:
+### 2. Wire up `onSelect` on `ReadyBundleList`
+- Pass an `onSelect` handler that sets the selected bundle and clears any selected delivery
 
-```sql
-UPDATE customers
-SET company_id = 'a0000000-0000-0000-0000-000000000001'
-WHERE company_id IS NULL;
+### 3. Add a Bundle Detail Panel in the right column
+- Show the bundle project name, plan name, total pieces, and item count
+- List each item with mark number, bar code, cut length, and piece count
+- Include a "Create Delivery" button (disabled/coming soon) to eventually convert the bundle into a delivery
+
+### 4. Same fix on PickupStation page (`src/pages/PickupStation.tsx`)
+- Wire up `onSelect` so bundles are also clickable on the Pickup Station page
+
+## Technical Details
+
+### Deliveries.tsx changes
+
+```text
+State additions:
+  selectedBundle: CompletedBundle | null
+
+onSelect handler:
+  Sets selectedBundle, clears selectedDelivery
+
+Right panel:
+  If selectedBundle is set, render a BundleDetailPanel showing:
+    - Project name (header)
+    - Plan name
+    - Item count and total pieces
+    - Scrollable list of items (mark, bar code, length, qty)
+    - "Create Delivery" button (disabled, coming soon)
 ```
 
-This immediately makes SECTOR CONTRACTING visible, and "Vault 1" will appear in the Production Queue under its correct customer and project.
+### Files Modified
 
-### 2. Prevent future orphans (code fix)
-When the AI Extract flow creates a new customer, ensure `company_id` is always populated. I will audit the customer-creation paths (AI Extract, manual creation) and add the logged-in user's `company_id` as a required default so this cannot recur.
-
-## Files Modified
-
-| Item | Change |
+| File | Change |
 |---|---|
-| Database migration | Backfill `company_id` on customers with NULL |
-| Customer creation code paths | Ensure `company_id` is always set on insert |
-
-## Expected Result
-After the migration, "Vault 1" will appear in the Production Queue under **SECTOR CONTRACTING LTD. > JD Sector Vault > Vault 1**, with its DRAFT manifest visible and editable.
+| `src/pages/Deliveries.tsx` | Add `selectedBundle` state, wire `onSelect`, add bundle detail panel in right column |
+| `src/pages/PickupStation.tsx` | Wire `onSelect` to show bundle details (dialog or inline) |
