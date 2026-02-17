@@ -1,87 +1,79 @@
 
+# Fix: Accounting Data Loads Only Once Per Day + Manual Refresh
 
-# Fix: Tasks Page -- Make Tasks Openable + Add "Fix with ARIA" Button
+## Problem
 
-## Problems Identified
+Every time the user navigates to the `/accounting` page, `loadAll()` fires -- hitting the mirror database and QuickBooks API. This is disruptive, slow, and wasteful when the user is just switching tabs or returning to the page within the same workday.
 
-1. **Tasks are NOT opening** -- Each task row in `src/pages/Tasks.tsx` is a plain `<div>` with no click handler and no detail dialog. Clicking a task does nothing.
-2. **No "Fix with ARIA" option** -- There is no way to send a task to the Architect agent for automated fixing/resolution.
+## Solution (Single file: `src/pages/AccountingWorkspace.tsx`)
 
-## Solution (Single file: `src/pages/Tasks.tsx`)
+### How It Works
 
-### 1. Task Detail Dialog
+1. **First visit of the day**: `loadAll()` fires automatically as it does now
+2. **Subsequent visits same day**: Data is NOT reloaded (already in memory from the hook, and localStorage records the last load date)
+3. **Manual Refresh button**: Always available, bypasses the daily check and calls `loadAll()` immediately
+4. **Last refreshed indicator**: Show a small timestamp next to the Refresh button so the user knows when data was last loaded
 
-Add a click handler on each task row that opens a full detail dialog showing:
+### Technical Details
 
-- Title, description, priority, agent type, status, due date, source
-- Attachment URL (if any)
-- Created/completed timestamps
-- Editable status dropdown inside the dialog
-
-The dialog reuses the existing `Dialog` component from Radix. Clicking the task row opens the dialog; clicking the checkbox still toggles completion without opening it (via `e.stopPropagation()`).
-
-### 2. "Fix with ARIA" Button on Every Task
-
-Inside the task detail dialog AND as an inline button on each task row:
-
-- A "Fix with ARIA" button that:
-  - Summarizes the task into a compact payload: `"[Task] Title | Priority: high | Agent: sales | Description: ..."`
-  - Navigates to `/empire?autofix=<encoded_summary>` (same pattern as `SmartErrorBoundary`)
-  - The Architect agent receives the task context and can act on it
-
-This follows the exact same pattern already used in `SmartErrorBoundary.tsx` (line 224):
+**New constants:**
 ```
-window.location.href = `/empire?autofix=${payload}`;
+const QB_LAST_LOAD_KEY = "qb-last-load-date";
 ```
 
-### 3. Visual Changes
+**Modified `useEffect` in AccountingWorkspace:**
+```typescript
+useEffect(() => {
+  if (!hasAccess) return;
+  
+  const today = new Date().toLocaleDateString("en-CA"); // "2026-02-17"
+  const lastLoad = localStorage.getItem(QB_LAST_LOAD_KEY);
+  
+  if (lastLoad === today) {
+    // Already loaded today -- skip auto-load
+    // Still init web phone if needed
+    if (webPhoneStatusRef.current === "idle") {
+      webPhoneActionsRef.current.initialize();
+    }
+    return;
+  }
+  
+  // First load of the day
+  loadAllRef.current();
+  localStorage.setItem(QB_LAST_LOAD_KEY, today);
+  
+  if (webPhoneStatusRef.current === "idle") {
+    webPhoneActionsRef.current.initialize();
+  }
+}, [hasAccess]);
+```
 
-- Task rows get `cursor-pointer` for click affordance
-- "Fix with ARIA" button uses the same orange-to-red gradient style from SmartErrorBoundary
-- The dialog shows the full task detail with all fields
-
-## Technical Details
-
-### File: `src/pages/Tasks.tsx`
+**Manual Refresh button update:**
+- The existing Refresh button calls `qb.loadAll()` -- this stays unchanged
+- After manual refresh completes, update `localStorage` timestamp
+- Add a small "Last refreshed: 8:32 AM" label next to the button
 
 **New state:**
-- `selectedTask: Task | null` -- which task is open in the dialog
-- `dialogOpen: boolean` -- controls dialog visibility
+- `lastRefreshTime: string | null` -- formatted time of last refresh, stored in localStorage alongside the date
 
-**New imports:**
-- `Dialog, DialogContent, DialogHeader, DialogTitle` from `@/components/ui/dialog`
-- `Sparkles` from `lucide-react`
+**Guard:** If the hook's state is completely empty (e.g., user cleared browser data), force a load regardless of the daily check.
 
-**Row click handler:**
+### What Does NOT Change
+
+- The `useQuickBooksData` hook itself -- no changes
+- The Refresh button -- still works on demand
+- All other tabs, components, and data flow -- untouched
+- Post-action reloads (after creating invoice, syncing, etc.) -- these still call `loadAll()` as they should
+
+### Visual Change
+
+The header refresh area changes from:
 ```
-onClick={() => { setSelectedTask(task); setDialogOpen(true); }}
+[Refresh All]
 ```
-
-**Checkbox stopPropagation** -- prevents opening dialog when toggling completion.
-
-**"Fix with ARIA" function:**
-```typescript
-const fixWithAria = (task: Task) => {
-  const summary = [
-    `[Task] ${task.title}`,
-    task.priority ? `Priority: ${task.priority}` : null,
-    task.agent_type ? `Agent: ${task.agent_type}` : null,
-    task.description ? `Description: ${task.description.slice(0, 300)}` : null,
-    task.source ? `Source: ${task.source}` : null,
-    task.due_date ? `Due: ${task.due_date}` : null,
-  ].filter(Boolean).join(" | ");
-  
-  window.location.href = `/empire?autofix=${encodeURIComponent(summary)}`;
-};
+To:
 ```
-
-**Inline button on each task row** (right side, next to status dropdown):
-- Small Sparkles icon button
-- Tooltip: "Fix with ARIA"
-
-**Dialog footer:**
-- Full "Fix with ARIA" button with gradient styling
-- Status change dropdown
-- Close button
+Last updated: 8:32 AM    [Refresh All]
+```
 
 No new files, no new dependencies, no database changes.
