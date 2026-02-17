@@ -357,6 +357,12 @@ serve(async (req) => {
         return handleCreatePurchaseOrder(supabase, userId, body);
       case "create-vendor":
         return handleCreateVendor(supabase, userId, body);
+      case "create-account":
+        return handleCreateAccount(supabase, userId, body);
+      case "delete-transaction":
+        return handleDeleteTransaction(supabase, userId, body);
+      case "void-transaction":
+        return handleVoidTransaction(supabase, userId, body);
       case "create-item":
         return handleCreateItem(supabase, userId, body);
       case "convert-estimate-to-invoice":
@@ -1203,22 +1209,82 @@ async function handleCreatePurchaseOrder(supabase: ReturnType<typeof createClien
 
 async function handleCreateVendor(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
   const config = await getQBConfig(supabase, userId);
-  const { displayName, companyName, email, phone, notes } = body as {
-    displayName: string; companyName?: string; email?: string; phone?: string; notes?: string;
-  };
+  const b = body as Record<string, string | undefined>;
 
-  if (!displayName) throw new Error("Display name is required");
+  if (!b.displayName) throw new Error("Display name is required");
 
   const payload: Record<string, unknown> = {
-    DisplayName: displayName,
-    ...(companyName && { CompanyName: companyName }),
-    ...(email && { PrimaryEmailAddr: { Address: email } }),
-    ...(phone && { PrimaryPhone: { FreeFormNumber: phone } }),
-    ...(notes && { Notes: notes }),
+    DisplayName: b.displayName,
+    ...(b.companyName && { CompanyName: b.companyName }),
+    ...(b.title && { Title: b.title }),
+    ...(b.firstName && { GivenName: b.firstName }),
+    ...(b.middleName && { MiddleName: b.middleName }),
+    ...(b.lastName && { FamilyName: b.lastName }),
+    ...(b.suffix && { Suffix: b.suffix }),
+    ...(b.email && { PrimaryEmailAddr: { Address: b.email } }),
+    ...(b.phone && { PrimaryPhone: { FreeFormNumber: b.phone } }),
+    ...(b.mobile && { Mobile: { FreeFormNumber: b.mobile } }),
+    ...(b.fax && { Fax: { FreeFormNumber: b.fax } }),
+    ...(b.website && { WebAddr: { URI: b.website } }),
+    ...(b.printOnCheckName && { PrintOnCheckName: b.printOnCheckName }),
+    ...(b.notes && { Notes: b.notes }),
   };
+
+  // Build address if any address field provided
+  const addrFields = { Line1: b.street1, Line2: b.street2, City: b.city, CountrySubDivisionCode: b.state, PostalCode: b.postalCode };
+  const hasAddr = Object.values(addrFields).some(Boolean);
+  if (hasAddr) {
+    const addr: Record<string, string> = {};
+    Object.entries(addrFields).forEach(([k, v]) => { if (v) addr[k] = v; });
+    payload.BillAddr = addr;
+  }
 
   const data = await qbFetch(config, "vendor", { method: "POST", body: JSON.stringify(payload) });
   return jsonRes({ success: true, vendor: data.Vendor });
+}
+
+// ─── Create Account ───────────────────────────────────────────────
+
+async function handleCreateAccount(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const { name, accountType, accountSubType } = body as { name: string; accountType: string; accountSubType?: string };
+
+  if (!name || !accountType) throw new Error("Account name and type are required");
+
+  const payload: Record<string, unknown> = { Name: name, AccountType: accountType };
+  if (accountSubType) payload.AccountSubType = accountSubType;
+
+  const data = await qbFetch(config, "account", { method: "POST", body: JSON.stringify(payload) });
+  return jsonRes({ success: true, account: (data as any).Account });
+}
+
+// ─── Delete Transaction ───────────────────────────────────────────
+
+async function handleDeleteTransaction(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const { entityType, entityId, syncToken } = body as { entityType: string; entityId: string; syncToken: string };
+
+  if (!entityType || !entityId) throw new Error("entityType and entityId are required");
+
+  const endpoint = entityType.toLowerCase();
+  const payload = { Id: entityId, SyncToken: syncToken || "0" };
+  const data = await qbFetch(config, `${endpoint}?operation=delete`, { method: "POST", body: JSON.stringify(payload) });
+  return jsonRes({ success: true, deleted: true, data });
+}
+
+// ─── Void Transaction ─────────────────────────────────────────────
+
+async function handleVoidTransaction(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const { entityType, entityId, syncToken } = body as { entityType: string; entityId: string; syncToken: string };
+
+  if (!entityType || !entityId) throw new Error("entityType and entityId are required");
+
+  const endpoint = entityType.toLowerCase();
+  // QB void: sparse update with void=true query param
+  const payload = { Id: entityId, SyncToken: syncToken || "0", sparse: true };
+  const data = await qbFetch(config, `${endpoint}?operation=void`, { method: "POST", body: JSON.stringify(payload) });
+  return jsonRes({ success: true, voided: true, data });
 }
 
 // ─── Create Item (Product/Service) ────────────────────────────────
