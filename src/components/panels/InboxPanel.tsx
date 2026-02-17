@@ -9,6 +9,13 @@ import { useNavigate } from "react-router-dom";
 import { formatDistanceToNow } from "date-fns";
 import { motion, AnimatePresence } from "framer-motion";
 
+function normalizeRoute(linkTo: string): string {
+  if (/^\/(bills|invoicing)(\/|$)/.test(linkTo)) return "/accounting";
+  if (/^\/accounting\/(bills|invoices)(\/|$)/.test(linkTo)) return "/accounting";
+  if (/^\/inbox\/[a-f0-9-]+$/i.test(linkTo)) return "/inbox";
+  return linkTo;
+}
+
 interface InboxPanelProps {
   isOpen: boolean;
   onClose: () => void;
@@ -208,7 +215,7 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
   const handleToggle = (item: Notification) => {
     if (item.status === "unread") markRead(item.id);
     if (item.linkTo) {
-      navigate(item.linkTo);
+      navigate(normalizeRoute(item.linkTo));
       onClose();
     } else {
       setExpandedId((prev) => (prev === item.id ? null : item.id));
