@@ -1,65 +1,77 @@
 
 
-# Add Odoo Priority Bar to Column Headers + Ensure Cross-Column Drag
+# Fix: Add All Missing Odoo Pipeline Stages
 
-## What's Changing
+## Problem
 
-### 1. Priority Distribution Bar on Each Column Header (Odoo-exact)
+The ERP pipeline is missing many columns that exist in Odoo. Currently, several Odoo stages are collapsed into other stages (e.g., "Fabrication In Shop" maps to "shop_drawing", "Delivered/Pickup Done" maps to "won"). The user wants every Odoo stage to appear as its own column, matching Odoo exactly.
 
-Each column in Odoo shows a thin horizontal bar below the stage name that visualizes the priority breakdown of leads in that column:
-- **Green** segment = high priority (3 stars)
-- **Orange/Yellow** segment = medium priority (2 stars)  
-- **Red** segment = low/no priority (0-1 stars)
+## Missing Stages (from Odoo screenshots)
 
-The bar width of each color is proportional to how many leads have that priority level.
+These stages exist in Odoo but are missing from the ERP board:
 
-**File**: `src/components/pipeline/PipelineColumn.tsx`
+- Fabrication In Shop (currently collapsed into Shop Drawing)
+- Ready To Dispatch/Pickup (currently collapsed into Won)
+- Delivered/Pickup Done (currently collapsed into Won)
+- Out for Delivery (missing entirely)
+- No rebars/Out of Scope (currently collapsed into Lost)
+- Loss (currently collapsed into Lost)
+- Merged (currently collapsed into Lost)
+- Temp: IR/VAM (missing entirely)
+- Migration-Others (missing entirely)
+- Estimation-Others (missing entirely)
+- Estimation Partha (missing entirely)
+- Dreamers (missing entirely)
 
-- Compute priority counts from leads in each column (using existing `getPriorityStars` logic)
-- Render a thin segmented bar (green | orange | red) below the stage label, before the cards
-- If a column has 0 leads, show a grey placeholder bar
+Additionally, Qualified, RFI, Addendums, and Quotation Priority were incorrectly labeled as "ERP-only" when they DO exist in Odoo.
 
-### 2. Cross-Column Drag-and-Drop Hardening
+## Changes
 
-The board already uses native HTML5 drag-and-drop with `overflow-x-auto`. To ensure reliability:
+### 1. Update PIPELINE_STAGES in `src/pages/Pipeline.tsx`
 
-**File**: `src/components/pipeline/PipelineBoard.tsx`
-
-- Add `dataTransfer.setData()` in `handleDragStart` so the drag payload persists across scroll boundaries
-- Add auto-scroll behavior: when dragging near the left/right edge of the board container, auto-scroll horizontally so users can reach distant columns
-
----
-
-## Technical Details
-
-### Priority Bar Calculation (PipelineColumn.tsx)
+Add all missing Odoo stages to the board in their correct Odoo order:
 
 ```text
-For each column's leads:
-  high = count where priority stars = 3
-  medium = count where priority stars = 2  
-  low = count where priority stars <= 1
-  total = leads.length
-
-Render bar segments as percentage widths:
-  green width = (high / total) * 100%
-  orange width = (medium / total) * 100%
-  red width = (low / total) * 100%
+Prospecting > New > Telephonic Enquiries > QC - Ben > 
+Estimation - Ben > Estimation - Karthick > Estimation - Others > 
+Estimation Partha > Hot Enquiries > Qualified > RFI > Addendums > 
+Quotation Priority > Quotation Bids > Won > Lost > Loss > Merged > 
+Shop Drawing > Shop Drawing Sent for Approval > Fabrication In Shop > 
+Ready To Dispatch/Pickup > Delivered/Pickup Done > Out for Delivery > 
+No rebars (Out of Scope) > Temp: IR/VAM > Migration-Others > Dreamers
 ```
 
-The bar is 4px tall, rounded, placed directly under the stage name row.
+Remove the "ERP-only" comment since these stages all exist in Odoo.
 
-### Auto-Scroll During Drag (PipelineBoard.tsx)
+### 2. Update STAGE_MAP in `supabase/functions/odoo-crm-sync/index.ts`
 
-- On `dragOver` at the board container level, check if cursor is within 60px of left/right edge
-- If so, scroll the container in that direction at a steady rate
-- Clear the scroll interval on `dragEnd` or `drop`
+Stop collapsing stages -- each Odoo stage gets its own unique ERP stage ID:
 
-### Files Modified
+| Odoo Stage | Current Mapping | New Mapping |
+|---|---|---|
+| Fabrication In Shop | shop_drawing | fabrication_in_shop |
+| Ready To Dispatch/Pickup | won | ready_to_dispatch |
+| Delivered/Pickup Done | won | delivered_pickup_done |
+| Out for Delivery | (missing) | out_for_delivery |
+| No rebars(Our of Scope) | lost | no_rebars_out_of_scope |
+| Loss | lost | loss |
+| Merged | lost | merged |
+| Temp: IR/VAM | (missing) | temp_ir_vam |
+| Migration-Others | (missing) | migration_others |
+| Estimation-Others | (missing) | estimation_others |
+| Estimation Partha | (missing) | estimation_partha |
+| Dreamers | (missing) | dreamers |
+
+### 3. Data Migration
+
+Existing leads that were previously collapsed into wrong stages need to be corrected. On the next full Odoo sync, the reconciliation step will automatically fix them since the STAGE_MAP now maps correctly. No manual SQL migration needed.
+
+## Files Modified
 
 | File | Change |
-|------|--------|
-| `src/components/pipeline/PipelineColumn.tsx` | Add priority distribution bar below header |
-| `src/components/pipeline/PipelineBoard.tsx` | Add drag data payload + auto-scroll on edges |
+|---|---|
+| `src/pages/Pipeline.tsx` | Add all missing stages to PIPELINE_STAGES in Odoo order |
+| `supabase/functions/odoo-crm-sync/index.ts` | Update STAGE_MAP so each Odoo stage has its own unique ID |
 
-No database changes. No edge function changes.
+No database schema changes needed -- the `stage` column is a text field that accepts any value.
+
