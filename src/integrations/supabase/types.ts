@@ -8278,10 +8278,10 @@ export type Database = {
           department: string | null
           duties: string[] | null
           email: string | null
-          employee_type: string | null
           full_name: string | null
           id: string | null
           is_active: boolean | null
+          manager_id: string | null
           preferred_language: string | null
           title: string | null
           updated_at: string | null
@@ -8293,10 +8293,10 @@ export type Database = {
           department?: string | null
           duties?: string[] | null
           email?: string | null
-          employee_type?: string | null
           full_name?: string | null
           id?: string | null
           is_active?: boolean | null
+          manager_id?: string | null
           preferred_language?: string | null
           title?: string | null
           updated_at?: string | null
@@ -8308,16 +8308,31 @@ export type Database = {
           department?: string | null
           duties?: string[] | null
           email?: string | null
-          employee_type?: string | null
           full_name?: string | null
           id?: string | null
           is_active?: boolean | null
+          manager_id?: string | null
           preferred_language?: string | null
           title?: string | null
           updated_at?: string | null
           user_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_manager_id_fkey"
+            columns: ["manager_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_manager_id_fkey"
+            columns: ["manager_id"]
+            isOneToOne: false
+            referencedRelation: "profiles_safe"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_meta_tokens_safe: {
         Row: {
