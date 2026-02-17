@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { X, MessageSquare, Hash, Users, ChevronRight, Maximize2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -9,6 +9,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useTeamChannels, useTeamMessages, useSendMessage, useMyProfile } from "@/hooks/useTeamChat";
 import { useProfiles } from "@/hooks/useProfiles";
 import { useOpenDM } from "@/hooks/useChannelManagement";
+import { useChatPanel } from "@/contexts/ChatPanelContext";
 import { toast } from "sonner";
 
 function getInitials(name: string) {
@@ -38,8 +39,17 @@ export function GlobalChatPanel({ open, onClose }: GlobalChatPanelProps) {
   const myProfile = useMyProfile();
   const openDMMutation = useOpenDM();
   const sendMutation = useSendMessage();
+  const { pendingChannelId, clearPendingChannel } = useChatPanel();
 
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
+
+  // Auto-select channel when opened via notification
+  useEffect(() => {
+    if (open && pendingChannelId) {
+      setSelectedChannelId(pendingChannelId);
+      clearPendingChannel();
+    }
+  }, [open, pendingChannelId, clearPendingChannel]);
   const selectedChannel = channels.find((c) => c.id === selectedChannelId);
   const { messages, isLoading: msgsLoading } = useTeamMessages(selectedChannelId);
 

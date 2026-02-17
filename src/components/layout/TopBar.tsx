@@ -8,13 +8,14 @@ import { GlobalChatPanel } from "./GlobalChatPanel";
 import { HelpPanel } from "@/components/help/HelpPanel";
 import { UserMenu } from "./UserMenu";
 import { CommandBar } from "./CommandBar";
+import { useChatPanel } from "@/contexts/ChatPanelContext";
 
 export function TopBar() {
   const navigate = useNavigate();
   const { module, breadcrumb } = useActiveModule();
   const [commandOpen, setCommandOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
-  const [chatOpen, setChatOpen] = useState(false);
+  const { chatOpen, setChatOpen } = useChatPanel();
   const [helpOpen, setHelpOpen] = useState(false);
   const { unreadCount } = useNotifications();
 
@@ -87,7 +88,7 @@ export function TopBar() {
         {/* Chat */}
         <button
           className="relative w-8 h-8 flex items-center justify-center rounded hover:bg-white/10 transition-colors mr-1"
-          onClick={() => setChatOpen((o) => !o)}
+          onClick={() => setChatOpen(!chatOpen)}
           title="Team Chat"
           aria-label="Team chat"
         >
