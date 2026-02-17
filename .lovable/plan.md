@@ -1,72 +1,41 @@
 
-# Screenshot Feedback Tool -- Global "Report a Change" Button
+# Fix: Accounting Customer Delete/Edit Not Persisting After Refresh
 
-## Overview
+## Root Cause
 
-Add a floating "Screenshot Feedback" button available on every page. When tapped, it captures the current screen, lets the user annotate it (draw/circle with a pen), type what change they need, and sends it as a task to **sattar@rebar.shop** and **radin@rebar.shop** inboxes.
+The Accounting Customers tab displays data from the `qb_customers` mirror table (via `useQuickBooksData` hook), but delete/edit operations target the `customers` table. These are **two different tables**:
 
-## How It Works
+- `qb_customers` -- QuickBooks mirror, source of the list
+- `customers` -- local CRM table, where delete actually runs
 
-1. User clicks a small camera/bug icon (floating, near the Vizzy button)
-2. The app captures the visible page using `html2canvas` (renders DOM to canvas)
-3. A full-screen annotation overlay opens with:
-   - The screenshot as background
-   - Drawing tools (pen, circle) with color picker (red default)
-   - An undo button and clear button
-   - A text area: "Describe the change you need"
-4. User annotates and types, then clicks "Send"
-5. The annotated image is uploaded to `clearance-photos/feedback-screenshots/` storage bucket
-6. Two tasks are created in the `tasks` table -- one assigned to sattar, one assigned to radin
-7. Two notifications are inserted so they see it in their inbox
-8. Toast confirms "Feedback sent!"
+After delete, the row vanishes from the UI because React state updates, but on refresh `qb_customers` reloads the same row since it was never touched. Same issue with edits -- changes go to `customers` but the displayed data comes from `qb_customers`.
 
-## Files to Create
+Additionally, `useQuickBooksData` uses plain `useState` (not react-query), so `queryClient.invalidateQueries` for `["qb_customers"]` does nothing.
 
-### 1. `src/components/feedback/ScreenshotFeedbackButton.tsx`
-- Floating button (camera icon), positioned above the Vizzy button area
-- On click: dynamically imports `html2canvas`, captures `#main-content`, opens the annotation dialog
-- Throttle: disable button for 3 seconds after capture to prevent spam
+## Fix (Single File: `AccountingCustomers.tsx`)
 
-### 2. `src/components/feedback/AnnotationOverlay.tsx`
-- Full-screen dialog with the screenshot as canvas background
-- Drawing layer on top (reuses canvas pattern from existing `SignaturePad`)
-- Tools: Pen (freehand), color toggle (red/blue/yellow), undo stroke, clear all
-- Text input at bottom: "What change do you need?"
-- Send button: uploads annotated canvas as PNG to storage, creates tasks + notifications
-- Cancel button to discard
-- Guards: cannot send without either annotation or description text
+### 1. On Delete -- also soft-delete from `qb_customers`
+When deleting a customer, look up its `quickbooks_id`, then set `is_deleted = true` on the matching `qb_customers` row. Also remove the entry from the in-memory `data.customers` array so the UI updates instantly without needing a full reload.
 
-### 3. No new edge functions needed
-- Uses direct Supabase client for storage upload, task insert, and notification insert
+### 2. On Edit -- update `qb_customers` display fields too
+After the `CustomerFormModal` saves to `customers`, also update the corresponding `qb_customers` row's `display_name` and `company_name` to keep the mirror in sync.
 
-## Database Changes
+### 3. Add optimistic removal from local state
+After a successful delete, filter out the deleted customer from the parent's `data.customers` array. Since `useQuickBooksData` exposes setters or the array is mutable, we will call a callback or filter locally.
 
-### Add `attachment_url` column to `tasks` table
-A nullable text column to hold the screenshot URL:
-```sql
-ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS attachment_url text;
-```
+### 4. Guards and throttle
+- Guard: skip `qb_customers` update if no `quickbooks_id` exists on the local customer
+- Throttle: disable delete button while mutation is in-flight (already handled by `deleteMutation.isPending`)
+- Safe serialization: no raw JSON in payloads, only typed fields
 
-No other schema changes needed.
+## Technical Steps
 
-## Changes to Existing Files
+**In `AccountingCustomers.tsx`:**
 
-### `src/components/layout/AppLayout.tsx`
-- Import and render `<ScreenshotFeedbackButton />` alongside `FloatingVizzyButton`
-- Single line addition, no other changes
+1. Add a `deletedQbIds` local state (`Set<string>`) to track deleted QB IDs for instant UI filtering
+2. Update `deleteMutation` to also run `supabase.from("qb_customers").update({ is_deleted: true }).eq("qb_id", quickbooks_id)` when a `quickbooks_id` exists
+3. On success, add the QB ID to `deletedQbIds` so the row disappears immediately
+4. Filter `enriched` list to exclude IDs in `deletedQbIds`
+5. After edit success in `CustomerFormModal` (already invalidates `["local_customer_by_qb"]`), also update `qb_customers` display fields via an `onSaved` callback
 
-### `package.json`
-- Add `html2canvas` dependency for DOM-to-canvas capture
-
-## Technical Details
-
-- **Capture target**: `document.getElementById('main-content')` -- avoids capturing overlays/modals
-- **Storage path**: `clearance-photos/feedback-screenshots/{companyId}/{timestamp}.png`
-- **Task creation**: Two rows inserted into `tasks` table with `assigned_to` set to the profile IDs of sattar (`ee659c5c-20e1-4bf5-a01d-dedd886a4ad7`) and radin (`5d948a66-619b-4ee1-b5e3-063194db7171`)
-- **Notifications**: Two rows in `notifications` with `link_to: '/tasks'`, `priority: 'high'`, and the screenshot URL in metadata
-- **Throttle guard**: 3-second cooldown on the capture button to prevent duplicate captures
-- **Safe serialization**: Canvas `toDataURL` exports as PNG blob before upload; no base64 in the database -- only the storage URL is saved
-- **Drawing**: Canvas overlay with `globalCompositeOperation: 'source-over'`, red stroke default, 3px line width
-- **Undo**: Stroke history array; each stroke is saved as an `ImageData` snapshot for fast undo
-- **Mobile**: Touch events supported (same pattern as existing `SignaturePad`)
-- **No domino effects**: Completely self-contained new components; no existing components modified except one import line in `AppLayout.tsx`
+No new files, no new dependencies, no schema changes.
