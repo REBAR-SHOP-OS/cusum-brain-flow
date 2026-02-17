@@ -282,7 +282,7 @@ export default function Customers() {
 
       {/* Detail Sheet */}
       <Sheet open={!!selectedCustomer} onOpenChange={(open) => { if (!open) setSelectedCustomerId(null); }}>
-        <SheetContent side="right" className="w-full sm:max-w-lg p-0">
+        <SheetContent side="right" className="w-full sm:max-w-4xl p-0">
           <SheetHeader className="sr-only">
             <SheetTitle>{selectedCustomer?.name ?? "Customer Detail"}</SheetTitle>
             <SheetDescription>Customer details and history</SheetDescription>
