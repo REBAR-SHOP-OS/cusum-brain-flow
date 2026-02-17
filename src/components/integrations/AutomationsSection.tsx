@@ -1,9 +1,10 @@
 // forwardRef cache bust
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Bot, Mail, FileText, MessageCircle, Sparkles, Send, Globe, Code, Search } from "lucide-react";
+import { useUserRole } from "@/hooks/useUserRole";
 import { cn } from "@/lib/utils";
 
 export interface Automation {
@@ -167,9 +168,20 @@ const AutomationCard = React.forwardRef<HTMLDivElement, AutomationCardProps>(fun
 });
 AutomationCard.displayName = "AutomationCard";
 
+const ADMIN_ONLY_IDS = new Set([
+  "social-media-manager", "facebook-commenter", "email-marketing",
+  "website-manager", "app-builder", "seo-manager",
+]);
+
 export const AutomationsSection = React.forwardRef<HTMLElement, {}>(function AutomationsSection(_props, ref) {
   const navigate = useNavigate();
+  const { isAdmin } = useUserRole();
   const [automations, setAutomations] = useState(defaultAutomations);
+
+  const visibleAutomations = useMemo(
+    () => isAdmin ? automations : automations.filter((a) => !ADMIN_ONLY_IDS.has(a.id)),
+    [automations, isAdmin]
+  );
 
   const handleToggle = (id: string, enabled: boolean) => {
     setAutomations((prev) =>
@@ -194,7 +206,7 @@ export const AutomationsSection = React.forwardRef<HTMLElement, {}>(function Aut
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {automations.map((automation) => (
+        {visibleAutomations.map((automation) => (
           <AutomationCard
             key={automation.id}
             automation={automation}

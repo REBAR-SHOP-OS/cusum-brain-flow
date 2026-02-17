@@ -7,6 +7,7 @@ import { ThemeProvider } from "next-themes";
 import { AuthProvider } from "@/lib/auth";
 import { WorkspaceProvider } from "@/contexts/WorkspaceContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
+import { AdminRoute } from "@/components/auth/AdminRoute";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { SmartErrorBoundary } from "@/components/error/SmartErrorBoundary";
 import { useGlobalErrorHandler } from "@/hooks/useGlobalErrorHandler";
@@ -115,9 +116,9 @@ const App = () => (
                     <Route path="/tasks" element={<P><Tasks /></P>} />
                     <Route path="/phonecalls" element={<P><Phonecalls /></P>} />
 
-                    <Route path="/website" element={<P><WebsiteManager /></P>} />
-                    <Route path="/seo" element={<P><SeoModule /></P>} />
-                    <Route path="/empire" element={<P><EmpireBuilder /></P>} />
+                    <Route path="/website" element={<P><AdminRoute><WebsiteManager /></AdminRoute></P>} />
+                    <Route path="/seo" element={<P><AdminRoute><SeoModule /></AdminRoute></P>} />
+                    <Route path="/empire" element={<P><AdminRoute><EmpireBuilder /></AdminRoute></P>} />
                     <Route path="/autopilot" element={<P><AutopilotDashboard /></P>} />
                     <Route path="/support-inbox" element={<P><SupportInbox /></P>} />
 
@@ -160,10 +161,10 @@ const App = () => (
                     <Route path="/settings" element={<P><Settings /></P>} />
 
                     {/* Social / Comms */}
-                    <Route path="/social-media-manager" element={<P><SocialMediaManager /></P>} />
-                    <Route path="/email-marketing" element={<P><EmailMarketing /></P>} />
+                    <Route path="/social-media-manager" element={<P><AdminRoute><SocialMediaManager /></AdminRoute></P>} />
+                    <Route path="/email-marketing" element={<P><AdminRoute><EmailMarketing /></AdminRoute></P>} />
                     <Route path="/daily-summarizer" element={<P><DailySummarizer /></P>} />
-                    <Route path="/facebook-commenter" element={<P><FacebookCommenter /></P>} />
+                    <Route path="/facebook-commenter" element={<P><AdminRoute><FacebookCommenter /></AdminRoute></P>} />
 
                     {/* Admin */}
                     <Route path="/admin" element={<P><AdminPanel /></P>} />
