@@ -197,7 +197,10 @@ export function AccountingInvoices({ data, initialSearch }: Props) {
           onUpdate={updateInvoice}
           onClose={() => setPreviewInvoice(null)}
           onSyncPayments={async () => {
-            await qbAction("sync-entity", { entity_type: "Payment" });
+            const { supabase } = await import("@/integrations/supabase/client");
+            await supabase.functions.invoke("qb-sync-engine", {
+              body: { action: "sync-entity", entity_type: "Payment" },
+            });
             await loadAll();
           }}
         />
