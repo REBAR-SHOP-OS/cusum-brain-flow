@@ -1,27 +1,79 @@
 
 
-# Show Payment History in Invoice Edit Mode (QuickBooks Style)
-
-## What's Happening Now
-
-The payment history section exists at the bottom of the invoice but the data is working correctly -- 1,843 payment records are synced and the `Line.LinkedTxn` matching logic correctly links them to invoices. The issue is **layout and visibility**: payment history needs to be prominently displayed in the header area (like QuickBooks does), especially when editing.
+# Redesign Customers Page to Match QuickBooks Layout
 
 ## What Changes
 
-### `src/components/accounting/InvoiceEditor.tsx`
+Transform the Customers page from the current sidebar list + detail panel layout into a QuickBooks-style full-width table view with summary cards, open balance data, and action dropdowns.
 
-1. **Move payment summary into the header area** -- Add a compact payment history box (Date + Amount Applied table) next to the invoice date fields in the top-right section. This mirrors the QuickBooks layout shown in the reference screenshot where payment details appear in the upper-right corner alongside the PAID badge.
+## Visual Layout
 
-2. **Keep it visible in both view and edit modes** -- The payment history box will always display when there are linked payments or a non-zero paid amount. It should show:
-   - A "PAYMENT STATUS" label with the PAID/PARTIAL/OPEN badge
-   - A small table with Date and Amount Applied columns for each linked payment
-   - A summary line like "4 payments made on [latest date]"
+### 1. Summary Bar (top)
+Five stat cards showing:
+- **Estimates** (count + total from `quotes` table)
+- **Unbilled Income** (placeholder $0.00)
+- **Overdue Invoices** (count + total from `qb_transactions` where Balance > 0 and DueDate < today)
+- **Open Invoices and Credits** (count + total)
+- **Recently Paid** (count + total from invoices where Balance = 0)
 
-3. **Remove the redundant bottom payment section** -- Since payment info will now be in the header, the bottom section becomes redundant. Alternatively, keep a simplified version at the bottom for print layout.
+Below the cards, a colored progress bar visualizing the proportions.
 
-### Technical Details
+### 2. Search + Toolbar
+- Search input (left)
+- Print, Export, Settings icon buttons (right)
 
-- The `linkedPayments` array already contains the correct data (extracted from `payments` prop via `Line[].LinkedTxn[]` matching)
-- The `mirrorTxnToQBFormat` function returns the full `raw_json` for payments, which includes the `Line` array with `LinkedTxn` references
-- No backend changes needed -- all 1,843 payment records are already synced and contain proper `raw_json` with `Line` data
-- The header payment box will use a bordered container with the same styling as the reference (blue date links, right-aligned amounts, green PAID badge)
+### 3. Full-Width Table
+Columns: NAME, COMPANY NAME, PHONE, OPEN BALANCE, ACTION
+
+- **NAME**: Customer name (sortable)
+- **COMPANY NAME**: From `customers.company_name`
+- **PHONE**: From primary contact in `contacts` table (joined)
+- **OPEN BALANCE**: Computed from `qb_transactions` (invoices with Balance > 0), matched via `customers.quickbooks_id`
+- **ACTION**: "Create invoice" button + dropdown with: Create sales receipt, Create estimate, Create charge, Create statement, Make inactive
+
+Clicking a row navigates to / opens the existing `CustomerDetail` view.
+
+## Technical Details
+
+### Files Modified
+
+**`src/pages/Customers.tsx`** -- Major rewrite:
+- Replace sidebar+detail split layout with full-width table
+- Add summary stat queries:
+  - Query `qb_transactions` for invoice balance aggregates grouped by customer QB ID
+  - Query `quotes` for estimate totals
+- Join contacts for phone numbers (use a single query with primary contact join)
+- Add sort state for table columns (name, company, open balance)
+- Keep the existing `CustomerFormModal` and `CustomerDetail` (detail opens as a slide-over or modal on row click)
+
+**`src/components/customers/CustomerList.tsx`** -- Replace with new `CustomerTable.tsx`:
+- Full-width table component using the existing `Table` UI primitives
+- Sortable column headers
+- Per-row action dropdown using `DropdownMenu`
+- Open balance column with currency formatting
+- Checkbox column for bulk selection (future use)
+
+**`src/components/customers/CustomerSummaryBar.tsx`** -- New file:
+- Five stat cards in a row
+- Colored progress/proportion bar beneath
+- Receives aggregated data as props
+
+**`src/components/customers/CustomerDetail.tsx`** -- Minor change:
+- Wrap in a Sheet/Dialog instead of inline panel so it works with table layout
+- No functional changes to the detail content
+
+### Data Strategy
+
+Open balance per customer:
+- Query `qb_transactions` where `entity_type = 'Invoice'` and extract `Balance` and `CustomerRef.value` from `raw_json`
+- Group by QB customer ID, sum balances
+- Match to `customers` table via `customers.quickbooks_id`
+- This is done client-side by fetching both datasets and joining in a `useMemo`
+
+Phone numbers:
+- Already available in `contacts` table (2,528 records with phone)
+- Query contacts with `is_primary = true` and join to customers
+
+### No Database Changes Required
+All data already exists -- just needs different presentation.
+
