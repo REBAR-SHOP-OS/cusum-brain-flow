@@ -365,6 +365,8 @@ serve(async (req) => {
         return handleSendInvoice(supabase, userId, body);
       case "void-invoice":
         return handleVoidInvoice(supabase, userId, body);
+      case "update-invoice":
+        return handleUpdateInvoice(supabase, userId, body);
 
       // ── Payroll ────────────────────────────────────────────────
       case "list-employees":
@@ -1307,6 +1309,29 @@ async function handleGetEmployee(supabase: ReturnType<typeof createClient>, user
 
   const data = await qbFetch(config, `employee/${employeeId}`);
   return jsonRes({ employee: data.Employee });
+}
+
+// ─── Update Invoice (sparse) ──────────────────────────────────────
+
+async function handleUpdateInvoice(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const { invoiceId, updates } = body as { invoiceId: string; updates: Record<string, unknown> };
+  if (!invoiceId) throw new Error("Invoice ID is required");
+
+  // Fetch current invoice to get latest SyncToken
+  const current = await qbFetch(config, `invoice/${invoiceId}`);
+  const invoice = current.Invoice;
+
+  const payload = {
+    ...invoice,
+    ...updates,
+    Id: invoiceId,
+    SyncToken: invoice.SyncToken,
+    sparse: true,
+  };
+
+  const data = await qbFetch(config, "invoice", { method: "POST", body: JSON.stringify(payload) });
+  return jsonRes({ success: true, invoice: data.Invoice, docNumber: data.Invoice?.DocNumber });
 }
 
 // ─── Payroll: Update Employee ─────────────────────────────────────

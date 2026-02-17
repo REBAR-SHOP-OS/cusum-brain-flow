@@ -503,6 +503,18 @@ export function useQuickBooksData() {
     return data;
   }, [qbAction, toast, loadAll, postingBlocked, trialBalanceStatus]);
 
+  const updateInvoice = useCallback(async (invoiceId: string, updates: Record<string, unknown>) => {
+    if (postingBlocked && trialBalanceStatus && !trialBalanceStatus.isBalanced) {
+      const msg = `⛔ POSTING BLOCKED — Trial balance mismatch of $${trialBalanceStatus.totalDiff.toFixed(2)}.`;
+      toast({ title: "⛔ Posting Blocked", description: msg, variant: "destructive" });
+      throw new Error(msg);
+    }
+    const data = await qbAction("update-invoice", { invoiceId, updates });
+    toast({ title: "✅ Invoice updated", description: `Invoice #${data.docNumber || invoiceId} saved` });
+    await loadAll();
+    return data;
+  }, [qbAction, toast, loadAll, postingBlocked, trialBalanceStatus]);
+
   const sendInvoice = useCallback(async (invoiceId: string, email?: string) => {
     await qbAction("send-invoice", { invoiceId, email });
     toast({ title: "📧 Invoice sent", description: `Invoice emailed${email ? ` to ${email}` : ""}` });
@@ -601,7 +613,7 @@ export function useQuickBooksData() {
     loading, syncing, connected, error, postingBlocked, trialBalanceStatus,
     invoices, bills, payments, vendors, customers, accounts, estimates, items, purchaseOrders, creditMemos, employees, timeActivities, companyInfo,
     totalReceivable, totalPayable, overdueInvoices, overdueBills,
-    checkConnection, loadAll, syncEntity, createEntity, sendInvoice, voidInvoice, createPayrollCorrection, qbAction,
+    checkConnection, loadAll, syncEntity, createEntity, sendInvoice, voidInvoice, updateInvoice, createPayrollCorrection, qbAction,
     triggerFullSync, triggerIncrementalSync, triggerReconcile,
   };
 }
