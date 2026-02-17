@@ -1,7 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { LeadCard } from "./LeadCard";
-import { Plus } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Lead = Tables<"leads">;
@@ -45,9 +44,6 @@ export function PipelineColumn({
     return sum + ((meta?.odoo_revenue as number) || lead.expected_value || 0);
   }, 0);
 
-  // Revenue bar: fraction of max possible (cap at $500k for display)
-  const barFraction = Math.min(totalValue / 500_000, 1);
-
   return (
     <div
       className={cn(
@@ -58,33 +54,20 @@ export function PipelineColumn({
       onDragLeave={onDragLeave}
       onDrop={onDrop}
     >
-      {/* Column Header — Odoo style */}
+      {/* Column Header — Odoo style: stage name, full currency, count */}
       <div className="px-3 pt-3 pb-2">
-        <div className="flex items-center justify-between mb-1.5">
+        <div className="flex items-center justify-between">
           <h3 className="font-semibold text-sm truncate flex-1">{stage.label}</h3>
-          <div className="flex items-center gap-1 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0">
             {totalValue > 0 && (
               <span className="text-xs font-medium text-muted-foreground">
-                {totalValue >= 1_000_000
-                  ? `${(totalValue / 1_000_000).toFixed(1)}M`
-                  : totalValue >= 1000
-                    ? `${(totalValue / 1000).toFixed(0)}K`
-                    : totalValue.toLocaleString()
-                }
+                $ {totalValue.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
               </span>
             )}
             <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 min-w-[20px] justify-center">
               {leads.length}
             </Badge>
           </div>
-        </div>
-
-        {/* Revenue progress bar */}
-        <div className="h-1 bg-secondary rounded-full overflow-hidden">
-          <div
-            className={cn("h-full rounded-full transition-all duration-500", stage.color)}
-            style={{ width: `${Math.max(barFraction * 100, leads.length > 0 ? 5 : 0)}%` }}
-          />
         </div>
       </div>
 

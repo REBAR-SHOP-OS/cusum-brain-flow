@@ -15,7 +15,6 @@ import {
   X,
   Layers,
   Search,
-  Sparkles,
 } from "lucide-react";
 import { SearchHints } from "@/components/pipeline/SearchHints";
 import { PIPELINE_STAGES } from "@/pages/Pipeline";
@@ -172,7 +171,7 @@ export function PipelineFilters({
       {/* Odoo-style search bar */}
       <Popover open={isOpen} onOpenChange={setIsOpen}>
         <div className="relative flex items-center border border-border rounded-md bg-background h-9">
-          <Sparkles className="w-3.5 h-3.5 text-primary/60 ml-3 shrink-0" />
+          <Search className="w-3.5 h-3.5 text-muted-foreground ml-3 shrink-0" />
           <input
             type="text"
             placeholder="Search: today, won, hot, stale, over 50k..."

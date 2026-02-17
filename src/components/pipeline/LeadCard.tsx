@@ -1,9 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, Pencil, Trash2, DollarSign, Calendar, Building, AlertTriangle, Clock, Mail, Star, MessageSquare, Sparkles } from "lucide-react";
-import { format, formatDistanceToNow, differenceInDays } from "date-fns";
+import { Star, Clock } from "lucide-react";
+import { differenceInDays } from "date-fns";
 import { cn } from "@/lib/utils";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -19,46 +16,21 @@ interface LeadCardProps {
   onClick: (lead: LeadWithCustomer) => void;
 }
 
-function getCardSignal(lead: Lead): { border: string; dot: string; label: string } {
+// Odoo-style activity status: overdue=red, today=orange, future=green, none=grey
+function getActivityStatus(lead: Lead): { color: string; label: string } | null {
+  if (lead.stage === "won" || lead.stage === "lost") return null;
+  if (!lead.expected_close_date) return null;
   const now = new Date();
-  const daysSinceUpdate = differenceInDays(now, new Date(lead.updated_at));
-
-  if (lead.stage === "won") {
-    return { border: "border-l-emerald-500", dot: "bg-emerald-500", label: "Won" };
-  }
-  if (lead.stage === "lost") {
-    return { border: "border-l-zinc-400", dot: "bg-zinc-400", label: "Lost" };
-  }
-
-  const isOverdue = lead.expected_close_date && new Date(lead.expected_close_date) < now;
-  const isDueSoon = lead.expected_close_date && differenceInDays(new Date(lead.expected_close_date), now) <= 7 && !isOverdue;
-  const daysOverdue = isOverdue ? differenceInDays(now, new Date(lead.expected_close_date!)) : 0;
-
-  if ((isOverdue && daysSinceUpdate >= 7) || daysOverdue >= 30) {
-    return { border: "border-l-red-500", dot: "bg-red-500", label: "Overdue" };
-  }
-  if (isDueSoon || (isOverdue && daysSinceUpdate < 7) || (lead.priority === "high" && daysSinceUpdate >= 5)) {
-    return { border: "border-l-orange-500", dot: "bg-orange-500", label: isDueSoon ? "Due soon" : isOverdue ? "Past due" : "Needs action" };
-  }
-  if (lead.priority === "high" && daysSinceUpdate >= 2) {
-    return { border: "border-l-yellow-500", dot: "bg-yellow-500", label: "High priority" };
-  }
-  if (lead.priority === "medium" && daysSinceUpdate >= 7) {
-    return { border: "border-l-yellow-500", dot: "bg-yellow-500", label: "Needs attention" };
-  }
-  if ((lead.probability !== null && lead.probability >= 70) || (lead.priority === "high" && daysSinceUpdate < 2)) {
-    return { border: "border-l-green-500", dot: "bg-green-500", label: "On track" };
-  }
-  if (daysSinceUpdate < 5) {
-    return { border: "border-l-blue-500", dot: "bg-blue-500", label: "Active" };
-  }
-  return { border: "border-l-muted-foreground/30", dot: "bg-muted-foreground/50", label: "Inactive" };
+  const closeDate = new Date(lead.expected_close_date);
+  const diff = differenceInDays(closeDate, now);
+  if (diff < 0) return { color: "text-red-500", label: "Overdue" };
+  if (diff === 0) return { color: "text-orange-500", label: "Today" };
+  return { color: "text-green-500", label: "Planned" };
 }
 
 // Derive priority stars (0-3) from lead priority
 function getPriorityStars(lead: Lead): number {
   const meta = lead.metadata as Record<string, unknown> | null;
-  // Odoo priority: "0"=normal, "1"=low, "2"=high, "3"=very high
   const odooPriority = meta?.odoo_priority as string | undefined;
   if (odooPriority) return Math.min(parseInt(odooPriority) || 0, 3);
   if (lead.priority === "high") return 3;
@@ -71,7 +43,6 @@ function getSalesperson(lead: Lead): { name: string; initials: string; color: st
   const meta = lead.metadata as Record<string, unknown> | null;
   const name = (meta?.odoo_salesperson as string) || null;
   if (!name) {
-    // Fallback: parse from notes
     const match = lead.notes?.match(/Salesperson:\s*([^|]+)/);
     if (!match) return null;
     const n = match[1].trim();
@@ -97,16 +68,13 @@ function getNameColor(name: string): string {
 }
 
 export function LeadCard({ lead, onDragStart, onDragEnd, onEdit, onDelete, onClick }: LeadCardProps) {
-  const signal = getCardSignal(lead);
   const stars = getPriorityStars(lead);
   const salesperson = getSalesperson(lead);
   const meta = lead.metadata as Record<string, unknown> | null;
-  const hasEmail = !!(meta?.odoo_email || meta?.subject);
   const revenue = (meta?.odoo_revenue as number) || lead.expected_value || 0;
-  const isStale = lead.stage !== "won" && lead.stage !== "lost" && differenceInDays(new Date(), new Date(lead.updated_at)) >= 5;
   const customerName = lead.customers?.company_name || lead.customers?.name || null;
-  // Strip Odoo ref prefix (e.g. "S01411, ") to match Odoo's clean title
   const displayTitle = lead.title.replace(/^S\d+,\s*/, "");
+  const activity = getActivityStatus(lead);
 
   return (
     <Card
@@ -114,50 +82,18 @@ export function LeadCard({ lead, onDragStart, onDragEnd, onEdit, onDelete, onCli
       onDragStart={(e) => onDragStart(e, lead.id)}
       onDragEnd={onDragEnd}
       onClick={() => onClick(lead)}
-      className={cn(
-        "cursor-grab active:cursor-grabbing hover:shadow-md hover:border-primary/30 transition-all border-l-4 group",
-        signal.border
-      )}
+      className="cursor-grab active:cursor-grabbing hover:shadow-md transition-all"
     >
       <CardContent className="p-3 space-y-1.5">
         {/* Title */}
-        <div className="flex items-start justify-between gap-1">
-          <p className="font-medium text-sm leading-tight line-clamp-2 flex-1 min-w-0">{displayTitle}</p>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-5 w-5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <MoreHorizontal className="w-3 h-3" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="bg-popover">
-              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEdit(lead); }}>
-                <Pencil className="w-3 h-3 mr-2" /> Edit
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDelete(lead.id); }} className="text-destructive">
-                <Trash2 className="w-3 h-3 mr-2" /> Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+        <p className="font-medium text-sm leading-tight line-clamp-2">{displayTitle}</p>
 
         {/* Customer name */}
         {customerName && (
           <p className="text-xs text-muted-foreground truncate">{customerName}</p>
         )}
 
-        {/* Revenue if present */}
-        {revenue > 0 && (
-          <p className="text-xs font-semibold text-foreground">
-            {revenue.toLocaleString("en-CA", { style: "currency", currency: "CAD", maximumFractionDigits: 0 })}
-          </p>
-        )}
-
-        {/* Bottom row: stars, icons, salesperson badge */}
+        {/* Bottom row: stars, activity dot, revenue, salesperson */}
         <div className="flex items-center justify-between pt-1">
           <div className="flex items-center gap-2">
             {/* Star rating */}
@@ -173,21 +109,32 @@ export function LeadCard({ lead, onDragStart, onDragEnd, onEdit, onDelete, onCli
               ))}
             </div>
 
-            {/* Activity icons */}
-            {isStale && <span title="AI suggestions available"><Sparkles className="w-3 h-3 text-amber-400 animate-pulse" /></span>}
-            {hasEmail && <Mail className="w-3 h-3 text-muted-foreground" />}
-            {lead.notes && <MessageSquare className="w-3 h-3 text-muted-foreground" />}
+            {/* Odoo activity status indicator */}
+            {activity && (
+              <span title={activity.label}>
+                <Clock className={cn("w-3.5 h-3.5", activity.color)} />
+              </span>
+            )}
           </div>
 
-          {/* Salesperson badge */}
-          {salesperson && (
-            <div
-              className={cn("w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white shrink-0", salesperson.color)}
-              title={salesperson.name}
-            >
-              {salesperson.initials}
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            {/* Revenue — Odoo format */}
+            {revenue > 0 && (
+              <span className="text-xs font-semibold text-foreground">
+                $ {revenue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            )}
+
+            {/* Salesperson badge */}
+            {salesperson && (
+              <div
+                className={cn("w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white shrink-0", salesperson.color)}
+                title={salesperson.name}
+              >
+                {salesperson.initials}
+              </div>
+            )}
+          </div>
         </div>
       </CardContent>
     </Card>
