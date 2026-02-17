@@ -197,6 +197,14 @@ export function useNotifications() {
             playMockingjayWhistle();
             const newRow = payload.new as any;
             showBrowserNotification(newRow.title, newRow.description, newRow.link_to);
+            toast(newRow.title, {
+              description: newRow.description || undefined,
+              duration: 8000,
+              action: newRow.link_to ? {
+                label: "View",
+                onClick: () => { window.location.href = newRow.link_to; },
+              } : undefined,
+            });
             setNotifications((prev) => [mapRow(newRow), ...prev]);
           } else if (payload.eventType === "UPDATE") {
             const updated = mapRow(payload.new);
