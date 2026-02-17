@@ -1,62 +1,69 @@
 
-# Surgical Cleanup: Dead Code Removal and Safety Guards
+# Fix: Quotations Limited to 1,000 Records + Improvements
 
-## Scope
-Read-only audit of accounting components. Minimal diff, zero behavior change.
+## Problem
+The database contains **2,586 archived quotations** but only **1,000** are displayed. This is caused by the default row limit in database queries. The current hook fetches all records in a single unbounded `SELECT *` call, which silently caps at 1,000.
 
----
+Additionally, loading 2,586 records into memory at once is unnecessary -- the UI should paginate and allow filtering.
 
-## Changes
-
-### 1. `src/components/accounting/AccountingReport.tsx`
-
-**Remove 3 unused icon imports** (line 9):
-- `TrendingUp`, `TrendingDown`, `DollarSign` are imported from `lucide-react` but never referenced anywhere in the component.
-
-**Remove unused `invoices` destructure** (line 124):
-- `invoices` is destructured from `data` but never used in the component body.
+## Status Breakdown (all 2,586 records)
+| Status | Count |
+|--------|-------|
+| Quotation Sent | 1,480 |
+| Sales Order | 969 |
+| Draft Quotation | 85 |
+| Cancelled | 52 |
 
 ---
 
-### 2. `src/components/accounting/AccountingAccounts.tsx`
+## What Will Be Fixed
 
-**Add missing React Fragment `key`** (line 335):
-- The `<>...</>` fragment wrapping group header row + account row inside `.map()` is missing a `key` prop. React will warn about this. Replace `<>` with `<Fragment key={a.Id}>` using the named `Fragment` import.
+### 1. Paginated Data Fetching in `useArchivedQuotations`
+- Replace the single unbounded query with a **paginated hook** that accepts `page`, `pageSize`, `search`, and `statusFilter` parameters
+- Use `.range(from, to)` to fetch only the current page
+- Return `totalCount` using `{ count: "exact", head: false }` so the UI knows total pages
+- Default page size: 50
 
----
+### 2. Add Search, Filters, and Pagination UI to `AccountingDocuments`
+- Add a **search bar** (filters by quote number or customer name)
+- Add a **status filter dropdown** (All, Draft Quotation, Quotation Sent, Sales Order, Cancelled)
+- Add **pagination controls** (Previous / Next with page indicator like "Page 1 of 52")
+- Show total count in the tab badge accurately (from count query, not array length)
 
-### 3. `src/components/accounting/VendorDetail.tsx`
-
-**Hoist `VENDOR_TXN_TYPES` outside the component** (line 100):
-- Currently defined inside the component body, causing a new array allocation every render. Move it to module scope (it is a static constant). This also eliminates a stale-closure risk in `syncVendorTransactions` which references it but does not list it as a `useCallback` dependency.
-
-**Add query invalidation after delete/void** (lines 44-68):
-- `handleDeleteTxn` and `handleVoidTxn` succeed but never invalidate the `["qb_vendor_transactions", vendor.Id]` query, so the UI stays stale until manual refresh. Add `queryClient.invalidateQueries` after the success toast.
-
----
-
-### 4. `src/components/accounting/AccountingVendors.tsx`
-
-**Hoist `VENDOR_TXN_TYPES` outside the component** (line 38):
-- Same issue as VendorDetail -- static constant recreated every render. Move to module scope.
+### 3. Server-Side Filtering
+- Search uses `.or()` with `ilike` on `quote_number` and metadata customer name
+- Status filter uses `.eq("odoo_status", status)` when not "all"
+- Both filters are applied server-side so pagination counts remain accurate
 
 ---
 
-## Summary Table
+## Files Changed
 
-| File | Change | Why |
-|------|--------|-----|
-| `AccountingReport.tsx` | Remove `TrendingUp`, `TrendingDown`, `DollarSign` imports | Unused imports (dead code) |
-| `AccountingReport.tsx` | Remove `invoices` from destructure | Unused variable |
-| `AccountingAccounts.tsx` | Add `Fragment` key to `.map()` wrapper | Missing React key warning |
-| `VendorDetail.tsx` | Hoist `VENDOR_TXN_TYPES` to module scope | Avoids per-render allocation + stale closure risk |
-| `VendorDetail.tsx` | Add `queryClient.invalidateQueries` after delete/void | Stale UI after mutation (guard) |
-| `AccountingVendors.tsx` | Hoist `VENDOR_TXN_TYPES` to module scope | Avoids per-render allocation |
+| File | Change |
+|------|--------|
+| `src/hooks/useArchivedQuotations.ts` | Rewrite to accept pagination/filter params, use `.range()` and `count: "exact"` |
+| `src/components/accounting/AccountingDocuments.tsx` | Add search bar, status filter dropdown, pagination controls for quotations tab |
 
-## Verification
+## Technical Details
 
-- No new side effects introduced
-- No changes to runtime behavior (except: UI now correctly refreshes after delete/void -- this is a bug fix guard, not a logic rewrite)
-- No cascading edits
-- All existing tests pass unchanged
-- No public API / export changes
+**Hook signature change:**
+```typescript
+useArchivedQuotations({ page, pageSize, search, status })
+// Returns: { quotations, isLoading, totalCount, totalPages }
+```
+
+**Key query fix:**
+```typescript
+let query = supabase
+  .from("quotes")
+  .select("*", { count: "exact" })
+  .eq("source", "odoo_sync");
+
+if (search) query = query.or(`quote_number.ilike.%${search}%,salesperson.ilike.%${search}%`);
+if (status !== "all") query = query.eq("odoo_status", status);
+
+query = query.order("created_at", { ascending: false })
+  .range(from, to);
+```
+
+This ensures all 2,586 quotations are accessible with fast, paginated loading.
