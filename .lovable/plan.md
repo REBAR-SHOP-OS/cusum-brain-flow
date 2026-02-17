@@ -1,84 +1,79 @@
 
-# Give Architect (App Builder) Full Read + Write Powers
 
-## Problem
-The Architect agent at `/empire` can **find problems** via `diagnose_platform` but cannot **fix them directly**. It can only create fix requests in `vizzy_fix_requests` — essentially filing tickets instead of acting. Meanwhile, Jarvis (`admin-chat`) has full ERP read/write tools. Architect should have the same power.
+# Add File Upload (Paperclip) to All Agents
 
-## What's Missing
+## Audit Results
 
-### ERP Read Tools (Architect has none of these)
-- `list_machines` -- query machines with status filter
-- `list_deliveries` -- query deliveries with status/date filter
-- `list_orders` -- query orders with status filter
-- `list_leads` -- query leads with status/score filter
-- `get_stock_levels` -- query inventory levels
+| Agent | Location | Has Upload? | Issue |
+|-------|----------|-------------|-------|
+| Sales, Support, Collections, Social, Copywriting, etc. | AgentWorkspace.tsx | Partial | ChatInput shows paperclip but files are NEVER passed to the AI -- they get uploaded to storage then silently dropped |
+| Penny (Accounting) | AccountingAgent.tsx | No | Uses raw textarea, no file upload at all |
+| Jarvis (Website) | WebsiteChat.tsx | Yes | Working correctly |
+| Architect (Empire) | EmpireBuilder.tsx | Yes | Working correctly |
+| Cal (Estimation) | CalChatInterface.tsx | Yes | Working correctly |
+| Inbox | Inbox.tsx | Yes | Working correctly |
 
-### ERP Write Tools (Architect has none of these)
-- `update_machine_status` -- fix blocked/down machines
-- `update_delivery_status` -- update delivery progress
-- `update_lead_status` -- update pipeline leads
-- `update_cut_plan_status` -- update production plans
-- `create_event` -- log activity events
+## Two Fixes Required
 
-### WooCommerce Write Tools (Architect is missing these)
-- `wp_update_product` -- fix product pricing, stock, descriptions
-- `wp_update_order_status` -- update WooCommerce orders
-- `wp_create_redirect` -- create 301 redirects
-- `wp_create_product` -- create new products
-- `wp_delete_product` -- remove products
-- `wp_optimize_speed` -- run speed optimizations
+### Fix 1: AgentWorkspace -- Wire uploaded files to the AI (all 10+ agents)
 
-## Fix Plan
+Currently `handleSend` ignores the `files` parameter from `ChatInput.onSend`. Files are uploaded to storage but never sent to the AI agent.
 
-### File: `supabase/functions/ai-agent/index.ts`
+**File: `src/pages/AgentWorkspace.tsx`**
 
-**1. Add ERP Read + Write tool definitions for the empire agent**
+- Update `handleSend` to accept the optional `UploadedFile[]` parameter
+- Update `handleSendInternal` to accept and forward `attachedFiles`
+- Pass `attachedFiles` to `sendAgentMessage()` instead of `undefined`
 
-After the existing empire tools block (around line 5848), add all 10 ERP tools (5 read + 5 write) as additional tool definitions gated by `agent === "empire"`. These are cloned from Jarvis's definitions in `admin-chat`.
+This single fix enables file upload for: Sales, Support, Collections, Social, Copywriting, SEO, Growth, Legal, BizDev, Eisenhower, Talent, Shopfloor, Delivery, Email, Data, Commander agents.
 
-**2. Add ERP tool call handlers**
+### Fix 2: AccountingAgent (Penny) -- Add paperclip file upload
 
-After the existing empire tool handlers (around line 6960), add handler logic for each new tool:
-- `list_machines` -- query `machines` table via `svcClient`
-- `list_deliveries` -- query `deliveries` table
-- `list_orders` -- query `orders` table
-- `list_leads` -- query `leads` table
-- `get_stock_levels` -- query `inventory_stock` table
-- `update_machine_status` -- update `machines` table
-- `update_delivery_status` -- update `deliveries` table
-- `update_lead_status` -- update `leads` table
-- `update_cut_plan_status` -- update `cut_plans` table
-- `create_event` -- insert into `activity_events` table
+**File: `src/components/accounting/AccountingAgent.tsx`**
 
-**3. Add missing WooCommerce write tool definitions**
+- Add `Paperclip` icon import from lucide-react
+- Add file input ref, attachments state, and upload logic (same pattern as WebsiteChat)
+- Add paperclip button next to the textarea
+- Add attachment preview strip above the input
+- Wire uploaded file URLs into `sendAgentMessage()` calls as `attachedFiles`
+- Support paste-to-attach for images
 
-Add `wp_update_product`, `wp_update_order_status`, `wp_create_redirect`, `wp_create_product`, `wp_delete_product`, and `wp_optimize_speed` to the empire agent's WordPress tools block (extending the existing array at line 6050).
+## Technical Details
 
-**4. Add WooCommerce write tool handlers**
+### AgentWorkspace Change
 
-Extend the existing WordPress tool handler block (around line 6370) to handle the new WP write tools using the shared `WPClient`.
+```typescript
+// Before
+const handleSend = useCallback((content: string) => {
+    handleSendInternal(content);
+}, [handleSendInternal]);
 
-**5. Update the system prompt**
-
-Update the Architect system prompt (line 2256 area) to tell the AI it has **direct** ERP read/write tools, not just "create fix requests":
-
-```
-### ERP Fixes:
-- Use list_machines, list_deliveries, list_orders, list_leads, get_stock_levels to READ current state
-- Use update_machine_status, update_delivery_status, update_lead_status, update_cut_plan_status to FIX issues directly
-- Use create_event to log what you fixed
-- Create fix requests in vizzy_fix_requests only for issues requiring human/code changes
+// After
+const handleSend = useCallback((content: string, files?: UploadedFile[]) => {
+    handleSendInternal(content, undefined, files);
+}, [handleSendInternal]);
 ```
 
-## Safety
+```typescript
+// Before (in handleSendInternal)
+const response = await sendAgentMessage(config.agentType, content, history, extraContext, undefined, slotOverride);
 
-All write tools follow the same safety pattern as Jarvis:
-- The AI must describe the change and get user confirmation before calling write tools
-- The system prompt instructs "Requires user confirmation" on all write tool descriptions
-- Activity events are logged for all writes
+// After
+const attachedFiles = files?.map(f => ({ name: f.name, url: f.url }));
+const response = await sendAgentMessage(config.agentType, content, history, extraContext, attachedFiles, slotOverride);
+```
+
+### AccountingAgent Change
+- Add hidden file input accepting images, PDFs, ZIPs
+- Add Paperclip button before the textarea
+- Add attachment preview row with remove buttons
+- Upload files to `clearance-photos/chat-uploads/` bucket (same as WebsiteChat)
+- Forward file URLs as `attachedFiles` in all `sendAgentMessage("accounting", ...)` calls
 
 ## Files Changed
 
 | File | Change |
 |------|--------|
-| `supabase/functions/ai-agent/index.ts` | Add 10 ERP tools (definitions + handlers), 6 WP write tools (definitions + handlers), update system prompt |
+| `src/pages/AgentWorkspace.tsx` | Wire files from ChatInput through to sendAgentMessage |
+| `src/components/accounting/AccountingAgent.tsx` | Add full paperclip upload UI + wire files to AI |
+
