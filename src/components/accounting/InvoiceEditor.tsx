@@ -214,30 +214,103 @@ export function InvoiceEditor({ invoice, customers, items, payments, onUpdate, o
           </div>
         </div>
 
-        {/* Bill To */}
-        <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-          <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Bill To</p>
-          {editing ? (
-            <Select
-              value={customerRef.value}
-              onValueChange={(val) => {
-                const c = customers.find((c) => c.Id === val);
-                if (c) setCustomerRef({ value: c.Id, name: c.DisplayName });
-              }}
-            >
-              <SelectTrigger className="bg-white border-gray-300">
-                <span className="truncate">{customerRef.name || "Select customer..."}</span>
-              </SelectTrigger>
-              <SelectContent>
-                {customers.map((c) => (
-                  <SelectItem key={c.Id} value={c.Id}>
-                    {c.DisplayName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          ) : (
-            <p className="text-base font-semibold text-gray-900">{customerRef.name || "Unknown"}</p>
+        {/* Bill To + Payment History row */}
+        <div className="flex gap-6 mb-6">
+          {/* Bill To */}
+          <div className="flex-1 p-4 bg-gray-50 rounded-lg">
+            <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Bill To</p>
+            {editing ? (
+              <Select
+                value={customerRef.value}
+                onValueChange={(val) => {
+                  const c = customers.find((c) => c.Id === val);
+                  if (c) setCustomerRef({ value: c.Id, name: c.DisplayName });
+                }}
+              >
+                <SelectTrigger className="bg-white border-gray-300">
+                  <span className="truncate">{customerRef.name || "Select customer..."}</span>
+                </SelectTrigger>
+                <SelectContent>
+                  {customers.map((c) => (
+                    <SelectItem key={c.Id} value={c.Id}>
+                      {c.DisplayName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <p className="text-base font-semibold text-gray-900">{customerRef.name || "Unknown"}</p>
+            )}
+          </div>
+
+          {/* Payment History - header area */}
+          {(linkedPayments.length > 0 || paid > 0) && (
+            <div className="w-72 p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[10px] uppercase tracking-widest text-gray-400 font-bold">Payment History</p>
+                <Badge
+                  className={`border-0 text-[10px] ${
+                    paymentStatus === "PAID"
+                      ? "bg-green-100 text-green-800"
+                      : paymentStatus === "PARTIAL"
+                      ? "bg-amber-100 text-amber-800"
+                      : "bg-gray-100 text-gray-600"
+                  }`}
+                >
+                  {paymentStatus}
+                </Badge>
+              </div>
+              {linkedPayments.length > 0 ? (
+                <>
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-gray-300">
+                        <th className="text-left py-1 font-semibold text-gray-500">Date</th>
+                        <th className="text-right py-1 font-semibold text-gray-500">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {linkedPayments.map((p, i) => (
+                        <tr key={i} className="border-b border-gray-100">
+                          <td className="py-1 text-gray-700">{p.date ? new Date(p.date).toLocaleDateString() : "—"}</td>
+                          <td className="py-1 text-right tabular-nums font-medium text-green-700">{fmt(p.amount)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <p className="text-[10px] text-gray-400 mt-1.5">
+                    {linkedPayments.length} payment{linkedPayments.length !== 1 ? "s" : ""} · Total {fmt(paid)}
+                  </p>
+                </>
+              ) : paid > 0 ? (
+                <div className="space-y-2">
+                  <p className="text-xs text-gray-700">Payments received: <span className="font-semibold text-green-700">{fmt(paid)}</span></p>
+                  <p className="text-[10px] text-gray-400 italic">Detailed records pending sync</p>
+                  {onSyncPayments && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-6 text-[10px] gap-1 w-full print:hidden"
+                      disabled={syncingPayments}
+                      onClick={async () => {
+                        setSyncingPayments(true);
+                        try {
+                          await onSyncPayments();
+                          toast({ title: "✅ Payment records synced" });
+                        } catch (err) {
+                          toast({ title: "Sync failed", description: String(err), variant: "destructive" });
+                        } finally {
+                          setSyncingPayments(false);
+                        }
+                      }}
+                    >
+                      {syncingPayments ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                      {syncingPayments ? "Syncing..." : "Sync Payment Records"}
+                    </Button>
+                  )}
+                </div>
+              ) : null}
+            </div>
           )}
         </div>
 
@@ -348,90 +421,6 @@ export function InvoiceEditor({ invoice, customers, items, payments, onUpdate, o
           </div>
         </div>
 
-        {/* Payment History */}
-        {(linkedPayments.length > 0 || paid > 0) && (
-          <div className="mt-6 mb-2">
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-[10px] uppercase tracking-widest text-gray-400 font-bold">Payment History</p>
-              <Badge
-                className={`border-0 text-xs ${
-                  paymentStatus === "PAID"
-                    ? "bg-green-100 text-green-800"
-                    : paymentStatus === "PARTIAL"
-                    ? "bg-amber-100 text-amber-800"
-                    : "bg-gray-100 text-gray-600"
-                }`}
-              >
-                {paymentStatus}
-              </Badge>
-            </div>
-            {linkedPayments.length > 0 ? (
-              <>
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-300">
-                      <th className="text-left py-1.5 font-semibold text-gray-600 text-xs">Date</th>
-                      <th className="text-right py-1.5 font-semibold text-gray-600 text-xs">Amount Applied</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {linkedPayments.map((p, i) => (
-                      <tr key={i} className="border-b border-gray-100">
-                        <td className="py-1.5 text-gray-700">{p.date ? new Date(p.date).toLocaleDateString() : "—"}</td>
-                        <td className="py-1.5 text-right tabular-nums font-medium text-green-700">{fmt(p.amount)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <p className="text-xs text-gray-400 mt-2">
-                  {linkedPayments.length} payment{linkedPayments.length !== 1 ? "s" : ""}
-                </p>
-              </>
-            ) : paid > 0 ? (
-              <>
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-300">
-                      <th className="text-left py-1.5 font-semibold text-gray-600 text-xs">Description</th>
-                      <th className="text-right py-1.5 font-semibold text-gray-600 text-xs">Amount Applied</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr className="border-b border-gray-100">
-                      <td className="py-1.5 text-gray-700">Total payments received</td>
-                      <td className="py-1.5 text-right tabular-nums font-medium text-green-700">{fmt(paid)}</td>
-                    </tr>
-                  </tbody>
-                </table>
-                <div className="flex items-center gap-3 mt-2">
-                  <p className="text-xs text-gray-400 italic">Detailed payment records pending sync</p>
-                  {onSyncPayments && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 text-xs gap-1 print:hidden"
-                      disabled={syncingPayments}
-                      onClick={async () => {
-                        setSyncingPayments(true);
-                        try {
-                          await onSyncPayments();
-                          toast({ title: "✅ Payment records synced" });
-                        } catch (err) {
-                          toast({ title: "Sync failed", description: String(err), variant: "destructive" });
-                        } finally {
-                          setSyncingPayments(false);
-                        }
-                      }}
-                    >
-                      {syncingPayments ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-                      {syncingPayments ? "Syncing..." : "Sync Payment Records"}
-                    </Button>
-                  )}
-                </div>
-              </>
-            ) : null}
-          </div>
-        )}
 
         {/* Amount Due */}
         <div className="flex justify-end">
