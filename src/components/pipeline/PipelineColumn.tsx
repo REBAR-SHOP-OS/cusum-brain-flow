@@ -6,6 +6,15 @@ import type { Tables } from "@/integrations/supabase/types";
 type Lead = Tables<"leads">;
 type LeadWithCustomer = Lead & { customers: { name: string; company_name: string | null } | null };
 
+function getPriorityStars(lead: Lead): number {
+  const meta = lead.metadata as Record<string, unknown> | null;
+  const odooPriority = meta?.odoo_priority as string | undefined;
+  if (odooPriority) return Math.min(parseInt(odooPriority) || 0, 3);
+  if (lead.priority === "high") return 3;
+  if (lead.priority === "medium") return 2;
+  return 0;
+}
+
 interface Stage {
   id: string;
   label: string;
@@ -44,6 +53,12 @@ export function PipelineColumn({
     return sum + ((meta?.odoo_revenue as number) || lead.expected_value || 0);
   }, 0);
 
+  // Priority distribution for Odoo-style bar
+  const total = leads.length;
+  const high = leads.filter((l) => getPriorityStars(l) === 3).length;
+  const medium = leads.filter((l) => getPriorityStars(l) === 2).length;
+  const low = total - high - medium;
+
   return (
     <div
       className={cn(
@@ -68,6 +83,22 @@ export function PipelineColumn({
               {leads.length}
             </Badge>
           </div>
+        </div>
+        {/* Priority distribution bar */}
+        <div className="mt-1.5 h-1 w-full rounded-full overflow-hidden flex" style={{ backgroundColor: 'hsl(var(--muted))' }}>
+          {total > 0 ? (
+            <>
+              {high > 0 && (
+                <div className="h-full" style={{ width: `${(high / total) * 100}%`, backgroundColor: '#21b632' }} />
+              )}
+              {medium > 0 && (
+                <div className="h-full" style={{ width: `${(medium / total) * 100}%`, backgroundColor: '#f0ad4e' }} />
+              )}
+              {low > 0 && (
+                <div className="h-full" style={{ width: `${(low / total) * 100}%`, backgroundColor: '#d9534f' }} />
+              )}
+            </>
+          ) : null}
         </div>
       </div>
 
