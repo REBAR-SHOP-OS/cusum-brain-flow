@@ -89,6 +89,7 @@ interface CustomerFormModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   customer: Customer | null;
+  onSaved?: (customer: Customer | null) => void;
 }
 
 // ── Collapsible Section ──
@@ -107,7 +108,7 @@ function Section({ title, defaultOpen = false, children }: { title: string; defa
   );
 }
 
-export function CustomerFormModal({ open, onOpenChange, customer }: CustomerFormModalProps) {
+export function CustomerFormModal({ open, onOpenChange, customer, onSaved }: CustomerFormModalProps) {
   const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -231,6 +232,7 @@ export function CustomerFormModal({ open, onOpenChange, customer }: CustomerForm
       queryClient.invalidateQueries({ queryKey: ["customers"] });
       queryClient.invalidateQueries({ queryKey: ["local_customer_by_qb"] });
       toast({ title: isEditing ? "Customer updated" : "Customer created" });
+      onSaved?.(customer);
       onOpenChange(false);
     },
     onError: (error) => {

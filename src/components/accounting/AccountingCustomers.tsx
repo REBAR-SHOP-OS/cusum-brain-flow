@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,18 +29,36 @@ export function AccountingCustomers({ data }: Props) {
   const [selectedQbId, setSelectedQbId] = useState<string | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+  const [deletedQbIds, setDeletedQbIds] = useState<Set<string>>(new Set());
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Delete mutation
+  // Delete mutation — also soft-deletes from qb_customers mirror
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async ({ id, quickbooks_id }: { id: string; quickbooks_id: string | null }) => {
+      // 1. Delete from local customers table
       const { error } = await supabase.from("customers").delete().eq("id", id);
       if (error) throw error;
+
+      // 2. Guard: only touch qb_customers if quickbooks_id exists
+      if (quickbooks_id) {
+        const { error: mirrorErr } = await supabase
+          .from("qb_customers")
+          .update({ is_deleted: true })
+          .eq("qb_id", quickbooks_id);
+        if (mirrorErr) {
+          console.warn("Failed to soft-delete qb_customers mirror row:", mirrorErr.message);
+          // Non-fatal: local delete succeeded, mirror will be stale but not blocking
+        }
+      }
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
+      // Optimistic: add to local deletedQbIds set so row vanishes instantly
+      if (variables.quickbooks_id) {
+        setDeletedQbIds((prev) => new Set(prev).add(variables.quickbooks_id!));
+      }
       queryClient.invalidateQueries({ queryKey: ["customers"] });
-      queryClient.invalidateQueries({ queryKey: ["qb_customers"] });
+      queryClient.invalidateQueries({ queryKey: ["local_customer_by_qb"] });
       setSelectedQbId(null);
       toast({ title: "Customer deleted" });
     },
@@ -48,6 +66,23 @@ export function AccountingCustomers({ data }: Props) {
       toast({ title: "Error deleting customer", description: error.message, variant: "destructive" });
     },
   });
+
+  // Callback after CustomerFormModal saves — sync display fields to qb_customers mirror
+  const handleFormSaved = useCallback(async (savedCustomer: Customer | null) => {
+    if (!savedCustomer?.quickbooks_id) return;
+    const { error } = await supabase
+      .from("qb_customers")
+      .update({
+        display_name: savedCustomer.name,
+        company_name: savedCustomer.company_name || null,
+      })
+      .eq("qb_id", savedCustomer.quickbooks_id);
+    if (error) {
+      console.warn("Failed to sync qb_customers mirror after edit:", error.message);
+    }
+    // Invalidate the local customer query so the sheet refreshes
+    queryClient.invalidateQueries({ queryKey: ["local_customer_by_qb"] });
+  }, [queryClient]);
 
   // Look up local customer by quickbooks_id when a row is selected
   const { data: localCustomer, isLoading: localLoading } = useQuery({
@@ -64,10 +99,12 @@ export function AccountingCustomers({ data }: Props) {
     },
   });
 
+  // Filter out deleted QB IDs from the displayed list
   const filtered = customers.filter(
     (c) =>
-      c.DisplayName.toLowerCase().includes(search.toLowerCase()) ||
-      (c.CompanyName || "").toLowerCase().includes(search.toLowerCase())
+      !deletedQbIds.has(c.Id) &&
+      (c.DisplayName.toLowerCase().includes(search.toLowerCase()) ||
+        (c.CompanyName || "").toLowerCase().includes(search.toLowerCase()))
   );
 
   const enriched = filtered.map((c) => {
@@ -172,7 +209,10 @@ export function AccountingCustomers({ data }: Props) {
                 setEditingCustomer(localCustomer);
                 setIsFormOpen(true);
               }}
-              onDelete={() => deleteMutation.mutate(localCustomer.id)}
+              onDelete={() => deleteMutation.mutate({
+                id: localCustomer.id,
+                quickbooks_id: localCustomer.quickbooks_id ?? null,
+              })}
             />
           )}
           {selectedQbId && !localLoading && !localCustomer && (
@@ -187,7 +227,12 @@ export function AccountingCustomers({ data }: Props) {
         </SheetContent>
       </Sheet>
 
-      <CustomerFormModal open={isFormOpen} onOpenChange={(open) => { setIsFormOpen(open); if (!open) setEditingCustomer(null); }} customer={editingCustomer} />
+      <CustomerFormModal
+        open={isFormOpen}
+        onOpenChange={(open) => { setIsFormOpen(open); if (!open) setEditingCustomer(null); }}
+        customer={editingCustomer}
+        onSaved={handleFormSaved}
+      />
     </div>
   );
 }
