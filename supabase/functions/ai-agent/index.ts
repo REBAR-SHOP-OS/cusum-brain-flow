@@ -2230,6 +2230,28 @@ Tasks that provide little value and should be removed or postponed indefinitely.
 - Do NOT provide general advice, coaching, or unrelated conversation.
 - Stay strictly within the Eisenhower Matrix workflow described above.
 
+## CRITICAL: Do NOT Hallucinate Missing Features
+Before claiming ANY feature is "missing" from the ERP, you MUST:
+1. Check your module inventory in the Apps You Manage section
+2. Ask the user to confirm if the feature exists
+3. NEVER claim a feature is missing unless you have concrete evidence
+
+Features that ALREADY EXIST and must NOT be reported as missing:
+- Chart of Accounts, P&L, Balance Sheet, Cash Flow, Trial Balance
+- AR Aging, Invoice Editor, Vendor Management
+- Bank/QB Reconciliation (via trial_balance_checks table)
+- Customer Detail view, Contact management
+- Pipeline/CRM, Shop Floor, Deliveries, HR, SEO
+
+## CRITICAL: You CAN and MUST Fix Things Directly
+You have direct read AND write tools for ERP, WordPress, and Odoo.
+When asked to fix something or add something, USE YOUR TOOLS.
+NEVER say "I cannot directly add or implement".
+NEVER say "I will create fix requests for your development team".
+You ARE the development team for operational fixes.
+Only create vizzy_fix_requests for issues requiring frontend code changes
+that are outside your tool capabilities.
+
 ## 💡 Ideas You Should Create:
 - Repeated Q4 tasks that should be eliminated → suggest removing them from routine
 - Delegation patterns not being used → suggest delegating more Q3 tasks
@@ -2241,7 +2263,29 @@ Tasks that provide little value and should be removed or postponed indefinitely.
 You are the most powerful AI agent in the system — a ruthless, data-driven startup advisor, venture architect, AND cross-platform diagnostics engine. You serve as ARIA's executive arm for fixing problems across ALL apps.
 
 ## Apps You Manage:
-1. **ERP (REBAR SHOP OS)** — This Lovable app. Modules: Pipeline, Shop Floor, Deliveries, Customers, Inbox, Office Portal, Admin, Brain.
+1. **ERP (REBAR SHOP OS)** — This Lovable app. Modules:
+   - Pipeline (CRM/Leads)
+   - Shop Floor (Machines, Work Orders, Cut Plans)
+   - Deliveries
+   - Customers (with QuickBooks sync, detail view, contacts)
+   - Inbox (Team Chat, Notifications)
+   - Office Portal
+   - Admin
+   - Brain (Human Tasks, AI Coordination)
+   - **Accounting** (already built):
+     - Chart of Accounts (CoA) — full QB clone with sync
+     - Profit & Loss report — real-time from QuickBooks API
+     - Balance Sheet — real-time from QuickBooks API
+     - Cash Flow Statement (derived)
+     - Trial Balance / Reconciliation checks
+     - AR Aging Dashboard (0-30, 31-60, 60+ days)
+     - Invoice Editor (dual view/edit, payment history, QB sparse updates)
+     - Vendor/Bill management
+     - Customer management (shared with /customers module)
+     - QB Sync Engine (on-demand per entity type)
+   - **Estimation** (Cal agent — quotes, takeoffs, templates)
+   - **HR** (Leave requests, timeclock, payroll)
+   - **SEO Dashboard**
 2. **rebar.shop (WordPress/WooCommerce)** — The public website. You can read/write posts, pages, products, and run SEO audits.
 3. **Odoo CRM** — External CRM synced via odoo-crm-sync. You can diagnose sync issues and data mismatches.
 
@@ -3369,6 +3413,40 @@ async function fetchContext(supabase: ReturnType<typeof createClient>, agent: st
             .limit(10);
           context.staleHumanTasks = staleTasks;
         } catch (_) {}
+
+        // Accounting health context
+        try {
+          const accountingHealth: any = {};
+
+          // Open invoices & total AR balance
+          const { data: openInvoices } = await svcClient
+            .from("accounting_mirror")
+            .select("id, balance")
+            .eq("entity_type", "invoice")
+            .gt("balance", 0);
+          if (openInvoices) {
+            accountingHealth.openInvoiceCount = openInvoices.length;
+            accountingHealth.totalARBalance = openInvoices.reduce((sum: number, inv: any) => sum + (Number(inv.balance) || 0), 0);
+          }
+
+          // Last QB sync timestamp
+          const { data: lastSync } = await svcClient
+            .from("accounting_mirror")
+            .select("last_synced_at")
+            .order("last_synced_at", { ascending: false })
+            .limit(1);
+          if (lastSync?.length) accountingHealth.lastQBSync = lastSync[0].last_synced_at;
+
+          // Trial balance check
+          const { data: tbCheck } = await svcClient
+            .from("trial_balance_checks" as any)
+            .select("status, checked_at, details")
+            .order("checked_at", { ascending: false })
+            .limit(1);
+          if (tbCheck?.length) accountingHealth.trialBalance = tbCheck[0];
+
+          context.accountingHealth = accountingHealth;
+        } catch (_) { /* accounting tables may not exist */ }
       } catch (e) {
         console.error("Failed to fetch empire context:", e);
       }
@@ -6855,6 +6933,49 @@ RULES:
               const { data: overdueDeliveries } = await svcClient.from("deliveries").select("id, delivery_number, scheduled_date, status").eq("status", "planned").lt("scheduled_date", new Date().toISOString().split("T")[0]).limit(5);
               if (overdueDeliveries?.length) diagnostics.issues.push({ platform: "ERP", area: "Deliveries", severity: "warning", detail: `${overdueDeliveries.length} overdue delivery(ies)` });
               else diagnostics.healthy.push("Deliveries on schedule");
+
+              // Accounting diagnostics
+              // 1. QB sync freshness
+              try {
+                const { data: lastQbSync } = await svcClient.from("accounting_mirror").select("last_synced_at").order("last_synced_at", { ascending: false }).limit(1);
+                if (!lastQbSync?.length) {
+                  diagnostics.issues.push({ platform: "ERP", area: "Accounting", severity: "warning", detail: "No QuickBooks sync data found" });
+                } else {
+                  const hoursSince = (Date.now() - new Date(lastQbSync[0].last_synced_at).getTime()) / 3600000;
+                  if (hoursSince > 48) diagnostics.issues.push({ platform: "ERP", area: "Accounting", severity: "warning", detail: `Last QB sync was ${Math.round(hoursSince)}h ago — may be stale` });
+                  else diagnostics.healthy.push(`QB sync healthy (last: ${Math.round(hoursSince)}h ago)`);
+                }
+              } catch (_) {}
+
+              // 2. Trial balance status
+              try {
+                const { data: tbChecks } = await svcClient.from("trial_balance_checks" as any).select("id, status, checked_at").order("checked_at", { ascending: false }).limit(1);
+                if (tbChecks?.length && (tbChecks[0] as any).status === "failed") {
+                  diagnostics.issues.push({ platform: "ERP", area: "Accounting", severity: "critical", detail: "Trial balance check FAILED — ERP/QB mismatch detected" });
+                } else if (tbChecks?.length) {
+                  diagnostics.healthy.push("Trial balance reconciled");
+                }
+              } catch (_) {}
+
+              // 3. Un-synced customers
+              try {
+                const { data: unsyncedCustomers } = await svcClient.from("customers").select("id").is("quickbooks_id", null).limit(50);
+                if (unsyncedCustomers && unsyncedCustomers.length > 5) {
+                  diagnostics.issues.push({ platform: "ERP", area: "Accounting", severity: "warning", detail: `${unsyncedCustomers.length} customer(s) not synced to QuickBooks` });
+                }
+              } catch (_) {}
+
+              // 4. Stale overdue invoices (balance > 0, entity_type = 'invoice')
+              try {
+                const { data: overdueInvoices } = await svcClient.from("accounting_mirror").select("id, quickbooks_id, balance, data").eq("entity_type", "invoice").gt("balance", 0).limit(20);
+                const staleInvoices = (overdueInvoices || []).filter((inv: any) => {
+                  const dueDate = inv.data?.DueDate || inv.data?.due_date;
+                  if (!dueDate) return false;
+                  return (Date.now() - new Date(dueDate).getTime()) > 90 * 86400000;
+                });
+                if (staleInvoices.length) diagnostics.issues.push({ platform: "ERP", area: "Accounting", severity: "critical", detail: `${staleInvoices.length} invoice(s) overdue >90 days with outstanding balance` });
+                else diagnostics.healthy.push("No critically overdue invoices");
+              } catch (_) {}
             }
 
             // WordPress diagnostics
