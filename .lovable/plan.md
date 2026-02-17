@@ -1,77 +1,47 @@
 
-# Clone Full QuickBooks Customer Detail View
 
-## Overview
-Redesign the Customer Details tab and header to display ALL fields from QuickBooks `raw_json` -- matching the QuickBooks customer detail page exactly. Currently we only show a handful of fields; QB has 30+ fields available.
+# Fix: Wire Up Customer Detail View in Accounting Customers Tab
 
-## What Changes
+## Problem
 
-### 1. Expand Header Section with ALL QB Contact Fields
+All previous improvements (clickable rows, detail slide-over, inline editing, full QB fields, transaction list) were made to `src/pages/Customers.tsx` and `src/components/customers/CustomerDetail.tsx`. However, the user is on `/accounting` which renders `AccountingCustomers.tsx` -- a completely separate, basic read-only table with no row click, no detail panel, and no editing.
 
-The header currently shows: email, phone, billing address, shipping address. QuickBooks also shows:
-- **Mobile phone** (`Mobile.FreeFormNumber`)
-- **Alternate phone** (`AlternatePhone.FreeFormNumber`)
-- **Fax** (`Fax.FreeFormNumber`)
-- **Website** (`WebAddr.URI`)
-- **Title / Suffix** (`Title`, `Suffix`)
-- **Given Name / Middle / Family Name** (`GivenName`, `MiddleName`, `FamilyName`)
-- **Balance with Jobs** (`BalanceWithJobs`)
-- **Preferred Delivery Method** (`PreferredDeliveryMethod`)
-- **Payment Method** (`PaymentMethodRef.name`)
-- **Sales Terms** (`SalesTermRef.name`)
-- **Taxable** (`Taxable`)
-- **Active** status (`Active`)
-- **Print on Check Name** (`PrintOnCheckName`)
-- **QB Notes** (`Notes`)
-- **Created / Last Updated** (`MetaData.CreateTime`, `MetaData.LastUpdatedTime`)
-- **Currency** (`CurrencyRef.name`)
+## Solution
 
-### 2. Redesign Customer Details Tab into Organized Sections
+Enhance `AccountingCustomers.tsx` to include:
+1. Clickable rows that open a detail slide-over (Sheet)
+2. Reuse the existing `CustomerDetail` component inside that Sheet
+3. Customer lookup: map the QB customer to the local `customers` table via `quickbooks_id` so the detail view works
 
-Replace the current simple form with grouped sections (matching QuickBooks layout):
+## Changes
 
-**Section 1: "Contact Information"**
-- Display Name, Given Name, Middle Name, Family Name, Title, Suffix
-- All read-only (synced from QB) with labels
+### `src/components/accounting/AccountingCustomers.tsx`
 
-**Section 2: "Communication"**
-- Primary Email, Primary Phone, Mobile, Alternate Phone, Fax, Website
-- Read-only for QB-synced fields
+- Add state for `selectedQbCustomerId`
+- On row click, set the selected QB customer
+- Query the local `customers` table to find matching customer by `quickbooks_id`
+- Render a `Sheet` with `CustomerDetail` component (already built with full QB data, transactions, editable fields, notes)
+- Import `Sheet`, `SheetContent`, `SheetHeader`, `SheetTitle`, `SheetDescription` from UI
+- Import `CustomerDetail` and `CustomerFormModal` from customers components
+- Add edit/delete handlers matching the pattern from `Customers.tsx`
 
-**Section 3: "Addresses"**
-- Full Billing Address (Line1, City, Province/State, Postal Code)
-- Full Shipping Address (same structure)
-- Read-only (from QB)
+### No other files need changes
 
-**Section 4: "Payment & Billing"**
-- Payment Method, Sales Terms, Preferred Delivery Method, Taxable, Currency, Print on Check Name
-- Read-only (from QB)
-
-**Section 5: "Local Settings" (editable)**
-- Name, Company Name, Status, Type, Payment Terms, Credit Limit
-- These are the ERP-local fields users can edit and save
-
-### 3. Expand Financial Summary
-
-Add more financial context to the summary card:
-- **QB Balance** (`Balance` from `qb_customers`)
-- **Balance with Jobs** (`BalanceWithJobs`)
-- Open Balance (computed from transactions, already exists)
-- Overdue (already exists)
-
-### 4. Files Modified
-
-| File | Change |
-|------|--------|
-| `src/components/customers/CustomerDetail.tsx` | Major update: expand header with all QB fields, redesign Customer Details tab into organized sections with all QB `raw_json` fields displayed, expand financial summary |
-
-### No other files change. No database changes needed.
+The `CustomerDetail` component already handles:
+- Full QB field display (all 30+ fields)
+- Transaction list with filters
+- Inline editable local settings (name, company, status, type, payment terms, credit limit)
+- Notes editing
+- Financial summary
 
 ## Technical Details
 
-- All new fields are extracted from the existing `qbCustomer?.raw_json` object already queried on line 65-77
-- No new queries needed -- just more fields extracted from `qbJson`
-- QB-synced fields shown as read-only with clean labels in organized card sections
-- Editable local fields (name, company, status, type, payment terms, credit limit) remain as form inputs with the existing save mutation
-- The `CustomerDetailsForm` component will be expanded to accept the full `qbJson` object as a prop and render all sections
-- Full billing/shipping addresses will show Line1, City, CountrySubDivisionCode (province), PostalCode on separate lines instead of a single concatenated string
+The mapping flow:
+1. User clicks a row in `AccountingCustomers` table
+2. The row has `c.Id` (the QuickBooks customer ID)
+3. Query `customers` table where `quickbooks_id = c.Id` to get the local customer record
+4. Pass that customer record to `CustomerDetail`
+5. If no local customer exists (QB-only customer), show a simplified read-only view or prompt to create one
+
+The `CustomerDetail` component internally queries `qb_customers` by `customer.quickbooks_id` for the full raw_json, so no duplication -- it will automatically load all fields.
+
