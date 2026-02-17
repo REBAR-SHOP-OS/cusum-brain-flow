@@ -1,58 +1,74 @@
 
 
-# Fix: Notification 404s + Field Employee Count Shows 0
+# Fix: Wire the "Save Changes" Button in Member Area Profile
 
-## Problem 1: Notification links go 404
+## Problem
 
-When clicking a notification in the Inbox panel, it navigates to routes like `/bills`, `/invoicing`, `/invoicing/overdue`, `/accounting/bills/8702`, `/accounting/invoices/8703` -- none of which exist. The only accounting route is `/accounting`.
+In the **Member Area > My Profile** tab, the "Save Changes" button does nothing when clicked. The form inputs for "Full Name" and "Job Title" use `defaultValue` (uncontrolled inputs), so there is no state tracking user edits. The button has no `onClick` handler.
 
-**Root cause**: The AI agent (edge function) generates free-form `link_to` values. The app has no route matching for these paths.
+## Root Cause
 
-**Fix**: Add a route normalizer in `InboxPanel.tsx` that maps invalid notification routes to valid ones before navigating. This is surgical -- only touches the `handleToggle` function.
+Lines 178-208 in `MemberAreaView.tsx` (`MyProfileTab`):
+- `<Input defaultValue={myProfile?.full_name} />` -- uncontrolled, edits are not captured
+- `<Input defaultValue={myProfile?.title} />` -- same issue
+- `<Button>Save Changes</Button>` -- no `onClick`, no save logic
 
-Route mapping:
-- `/bills` or `/accounting/bills` or `/accounting/bills/:id` --> `/accounting`
-- `/invoicing` or `/invoicing/overdue` or `/accounting/invoices/:id` --> `/accounting`
-- `/inbox/:emailId` --> `/inbox` (inbox page doesn't support deep-linking to specific emails)
-- Any other route --> pass through as-is
+## Fix (surgical, single component)
 
-## Problem 2: Field employee count shows 0
+### File: `src/components/office/MemberAreaView.tsx` -- `MyProfileTab` function only
 
-**Root cause**: The Admin Panel counts employees where `department === "field"` AND `is_active === true`. Database shows:
-- "Amiri Tariq" has `department: "field"` but `is_active: false`
-- "Tariq Amiri" (a different profile record) has `department: null` and `is_active: true`
+1. Add local state for the editable fields (`fullName`, `title`), initialized from `myProfile`
+2. Sync state when `myProfile` loads/changes (useEffect)
+3. Wire `onClick` on Save button to call `updateProfile.mutate()` with the edited values
+4. Add a `saving` guard to prevent double-clicks (disable button while mutation is pending)
+5. Show success feedback via existing toast (already built into `updateProfile` hook)
 
-There are two separate profile records for the same person. One is field but inactive; the other is active but has no department. This is a data issue, not a code bug.
-
-**Fix**: Update the "Tariq Amiri" profile record in the database to set `department = 'field'` so the count reflects correctly. No code changes needed for this.
-
----
-
-## Changes
-
-### File: `src/components/panels/InboxPanel.tsx`
-- Add a `normalizeRoute()` helper function before the component
-- Maps known broken route patterns to valid app routes
-- Guards: unknown routes pass through unchanged (no domino effect)
-- Update `handleToggle` to call `normalizeRoute(item.linkTo)` before `navigate()`
-
-### Database fix (migration)
-- Update the profile for "Tariq Amiri" to set `department = 'field'`
-- Single UPDATE, no schema changes
-
-## Technical Detail
+### Changes in detail
 
 ```typescript
-// Route normalizer (added to InboxPanel.tsx)
-function normalizeRoute(linkTo: string): string {
-  if (/^\/(bills|invoicing)/.test(linkTo)) return "/accounting";
-  if (/^\/accounting\/(bills|invoices)/.test(linkTo)) return "/accounting";
-  if (/^\/inbox\/[a-f0-9-]+$/.test(linkTo)) return "/inbox";
-  return linkTo;
-}
+// Add state for editable fields
+const [fullName, setFullName] = useState(myProfile?.full_name || "");
+const [title, setTitle] = useState(myProfile?.title || "");
+
+// Sync when profile loads
+useEffect(() => {
+  if (myProfile) {
+    setFullName(myProfile.full_name);
+    setTitle(myProfile.title || "");
+  }
+}, [myProfile]);
+
+// Save handler with guard
+const handleSave = () => {
+  if (!myProfile || updateProfile.isPending) return;
+  updateProfile.mutate({
+    id: myProfile.id,
+    full_name: fullName.trim(),
+    title: title.trim() || null,
+  });
+};
 ```
 
+Then update the inputs from `defaultValue` to controlled `value` + `onChange`, and wire the button:
+
+```
+<Input value={fullName} onChange={(e) => setFullName(e.target.value)} />
+<Input value={title} onChange={(e) => setTitle(e.target.value)} />
+<Button onClick={handleSave} disabled={updateProfile.isPending}>
+  {updateProfile.isPending ? "Saving..." : "Save Changes"}
+</Button>
+```
+
+## Guards and Safety
+
+- **No domino effects**: Only touches `MyProfileTab` inner function; no changes to hook signatures, no changes to Team Access or System Config tabs
+- **Double-click guard**: Button disabled while `updateProfile.isPending`
+- **Trim guard**: Whitespace-only names are trimmed; empty title becomes null
+- **Sync guard**: useEffect re-syncs local state if profile data changes externally (e.g., admin updates your name)
+- **No schema changes**: Uses existing `updateProfile` mutation from `useProfiles` hook
+
+## Files Modified
+
 | File | Change |
-|------|--------|
-| `src/components/panels/InboxPanel.tsx` | Add route normalizer to prevent 404 on notification click |
-| Database migration | Set Tariq Amiri's department to "field" |
+|---|---|
+| `src/components/office/MemberAreaView.tsx` | Wire Save button with controlled inputs and mutation call in `MyProfileTab` only |
