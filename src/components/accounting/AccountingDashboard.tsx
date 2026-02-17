@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import type { QBAccount } from "@/hooks/useQuickBooksData";
 import { usePennyQueue } from "@/hooks/usePennyQueue";
+import { useBankFeedBalances } from "@/hooks/useBankFeedBalances";
 import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
 import { useMemo } from "react";
 
@@ -175,16 +176,19 @@ function BankAccountCard({
   balance,
   icon = "checking",
   subAccounts,
+  bankFeedBalance,
   onNavigate,
 }: {
   name: string;
   balance: number;
   icon?: "checking" | "savings";
   subAccounts?: QBAccount[];
+  bankFeedBalance?: number | null;
   onNavigate: () => void;
 }) {
   const Icon = icon === "savings" ? PiggyBank : Wallet;
   const accentColor = icon === "savings" ? "text-success" : "text-primary";
+  const hasDiscrepancy = bankFeedBalance != null && Math.abs(bankFeedBalance - balance) > 0.01;
 
   return (
     <Card className="cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all" onClick={onNavigate}>
@@ -194,12 +198,22 @@ function BankAccountCard({
             <Icon className={`w-4 h-4 ${accentColor}`} />
             <h3 className={`font-semibold text-sm ${accentColor}`}>{name}</h3>
           </div>
-          <MoreVertical className="w-4 h-4 text-muted-foreground" />
+          {hasDiscrepancy && (
+            <AlertTriangle className="w-4 h-4 text-warning" />
+          )}
         </div>
 
-        <div className="flex items-center justify-between text-sm mb-2">
-          <span className="text-muted-foreground">Book Balance</span>
-          <span className="font-semibold tabular-nums text-lg">{fmt(balance)}</span>
+        <div className="space-y-1">
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Book Balance</span>
+            <span className="font-semibold tabular-nums text-lg">{fmt(balance)}</span>
+          </div>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Bank Balance</span>
+            <span className={`font-semibold tabular-nums ${bankFeedBalance != null ? (hasDiscrepancy ? "text-warning" : "") : "text-muted-foreground text-xs"}`}>
+              {bankFeedBalance != null ? fmt(bankFeedBalance) : "—"}
+            </span>
+          </div>
         </div>
 
         {subAccounts && subAccounts.length > 1 && (
@@ -305,6 +319,21 @@ export function AccountingDashboard({ data, onNavigate }: Props) {
   const totalChecking = checkingAccounts.reduce((s, a) => s + a.CurrentBalance, 0);
   const totalSavings = savingsAccounts.reduce((s, a) => s + a.CurrentBalance, 0);
 
+  const { getBalance } = useBankFeedBalances();
+
+  // Sum bank feed balances for multi-account cards
+  const checkingBankTotal = checkingAccounts.reduce((s, a) => {
+    const b = getBalance(a.Id);
+    return b ? s + b.bank_balance : s;
+  }, 0);
+  const hasAnyCheckingBank = checkingAccounts.some((a) => getBalance(a.Id));
+
+  const savingsBankTotal = savingsAccounts.reduce((s, a) => {
+    const b = getBalance(a.Id);
+    return b ? s + b.bank_balance : s;
+  }, 0);
+  const hasAnySavingsBank = savingsAccounts.some((a) => getBalance(a.Id));
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
       <InvoicesCard data={data} onNavigate={onNavigate} />
@@ -315,6 +344,11 @@ export function AccountingDashboard({ data, onNavigate }: Props) {
         balance={checkingAccounts.length === 1 ? checkingAccounts[0].CurrentBalance : totalChecking}
         icon="checking"
         subAccounts={checkingAccounts.length > 1 ? checkingAccounts : undefined}
+        bankFeedBalance={
+          checkingAccounts.length === 1
+            ? getBalance(checkingAccounts[0].Id)?.bank_balance ?? null
+            : hasAnyCheckingBank ? checkingBankTotal : null
+        }
         onNavigate={() => onNavigate("accounts")}
       />
 
@@ -323,6 +357,11 @@ export function AccountingDashboard({ data, onNavigate }: Props) {
         balance={savingsAccounts.length === 1 ? savingsAccounts[0].CurrentBalance : totalSavings}
         icon="savings"
         subAccounts={savingsAccounts.length > 1 ? savingsAccounts : undefined}
+        bankFeedBalance={
+          savingsAccounts.length === 1
+            ? getBalance(savingsAccounts[0].Id)?.bank_balance ?? null
+            : hasAnySavingsBank ? savingsBankTotal : null
+        }
         onNavigate={() => onNavigate("accounts")}
       />
 
