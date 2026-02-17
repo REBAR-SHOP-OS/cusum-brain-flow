@@ -6,6 +6,7 @@ import { AppTour } from "@/components/tour/AppTour";
 import { RoleGuard } from "@/components/auth/RoleGuard";
 import { LiveChatWidget } from "./LiveChatWidget";
 import { FloatingVizzyButton } from "@/components/vizzy/FloatingVizzyButton";
+import { ScreenshotFeedbackButton } from "@/components/feedback/ScreenshotFeedbackButton";
 import { useFixRequestMonitor } from "@/hooks/useFixRequestMonitor";
 import { ChatPanelProvider } from "@/contexts/ChatPanelContext";
 import { DockChatProvider } from "@/contexts/DockChatContext";
@@ -60,6 +61,9 @@ export function AppLayout({ children }: AppLayoutProps) {
 
             {/* Floating Vizzy avatar — always visible for super admin */}
             <FloatingVizzyButton />
+
+            {/* Screenshot Feedback button */}
+            <ScreenshotFeedbackButton />
 
             {/* Live Chat Widget — triggered by Vizzy button */}
             <LiveChatWidget />

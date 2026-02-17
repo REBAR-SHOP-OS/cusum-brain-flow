@@ -7167,6 +7167,7 @@ export type Database = {
         Row: {
           agent_type: string | null
           assigned_to: string | null
+          attachment_url: string | null
           company_id: string
           completed_at: string | null
           created_at: string
@@ -7184,6 +7185,7 @@ export type Database = {
         Insert: {
           agent_type?: string | null
           assigned_to?: string | null
+          attachment_url?: string | null
           company_id: string
           completed_at?: string | null
           created_at?: string
@@ -7201,6 +7203,7 @@ export type Database = {
         Update: {
           agent_type?: string | null
           assigned_to?: string | null
+          attachment_url?: string | null
           company_id?: string
           completed_at?: string | null
           created_at?: string
