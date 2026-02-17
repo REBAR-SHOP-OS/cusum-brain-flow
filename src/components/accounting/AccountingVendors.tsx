@@ -6,7 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Store, Search, AlertTriangle, FileText, DollarSign, ChevronDown, Plus } from "lucide-react";
+import { Store, Search, AlertTriangle, FileText, DollarSign, ChevronDown, Plus, RefreshCw } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
 import type { useQuickBooksData, QBVendor, QBBill } from "@/hooks/useQuickBooksData";
 import { VendorDetail } from "./VendorDetail";
 import { AddVendorDialog } from "./AddVendorDialog";
@@ -31,6 +33,29 @@ export function AccountingVendors({ data }: Props) {
   const [search, setSearch] = useState("");
   const [selectedVendor, setSelectedVendor] = useState<QBVendor | null>(null);
   const [addVendorOpen, setAddVendorOpen] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+
+  const VENDOR_TXN_TYPES = ["Bill", "BillPayment", "VendorCredit", "PurchaseOrder"];
+
+  const syncAllVendorData = async () => {
+    setSyncing(true);
+    try {
+      let totalSynced = 0;
+      for (const entityType of VENDOR_TXN_TYPES) {
+        const { data: result, error } = await supabase.functions.invoke("qb-sync-engine", {
+          body: { action: "sync-entity", entity_type: entityType },
+        });
+        if (error) console.error(`Sync ${entityType} failed:`, error);
+        else totalSynced += result?.upserted ?? 0;
+      }
+      toast({ title: "Vendor data synced", description: `${totalSynced} transaction records synced from QuickBooks` });
+      data.loadAll();
+    } catch (err) {
+      toast({ title: "Sync failed", description: String(err), variant: "destructive" });
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const filtered = vendors.filter(
     (v) =>
@@ -129,6 +154,10 @@ export function AccountingVendors({ data }: Props) {
         </div>
         <Button onClick={() => setAddVendorOpen(true)} className="h-12 gap-2">
           <Plus className="w-4 h-4" /> Add Vendor
+        </Button>
+        <Button variant="outline" onClick={syncAllVendorData} disabled={syncing} className="h-12 gap-2">
+          <RefreshCw className={`w-4 h-4 ${syncing ? "animate-spin" : ""}`} />
+          {syncing ? "Syncing..." : "Sync"}
         </Button>
       </div>
 
