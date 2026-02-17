@@ -24,6 +24,7 @@ interface Props {
   payments: QBPayment[];
   onUpdate: (invoiceId: string, updates: Record<string, unknown>) => Promise<unknown>;
   onClose: () => void;
+  onSyncPayments?: () => Promise<void>;
 }
 
 const fmt = (n: number) =>
@@ -48,10 +49,11 @@ function parseLineItems(invoice: QBInvoice): LineItem[] {
     });
 }
 
-export function InvoiceEditor({ invoice, customers, items, payments, onUpdate, onClose }: Props) {
+export function InvoiceEditor({ invoice, customers, items, payments, onUpdate, onClose, onSyncPayments }: Props) {
   const { toast } = useToast();
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [syncingPayments, setSyncingPayments] = useState(false);
 
   // Editable fields
   const [customerRef, setCustomerRef] = useState(invoice.CustomerRef);
@@ -401,7 +403,31 @@ export function InvoiceEditor({ invoice, customers, items, payments, onUpdate, o
                     </tr>
                   </tbody>
                 </table>
-                <p className="text-xs text-gray-400 mt-2 italic">Detailed payment records pending sync</p>
+                <div className="flex items-center gap-3 mt-2">
+                  <p className="text-xs text-gray-400 italic">Detailed payment records pending sync</p>
+                  {onSyncPayments && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs gap-1 print:hidden"
+                      disabled={syncingPayments}
+                      onClick={async () => {
+                        setSyncingPayments(true);
+                        try {
+                          await onSyncPayments();
+                          toast({ title: "✅ Payment records synced" });
+                        } catch (err) {
+                          toast({ title: "Sync failed", description: String(err), variant: "destructive" });
+                        } finally {
+                          setSyncingPayments(false);
+                        }
+                      }}
+                    >
+                      {syncingPayments ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                      {syncingPayments ? "Syncing..." : "Sync Payment Records"}
+                    </Button>
+                  )}
+                </div>
               </>
             ) : null}
           </div>
