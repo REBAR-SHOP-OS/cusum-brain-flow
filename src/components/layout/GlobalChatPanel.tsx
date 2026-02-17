@@ -99,7 +99,7 @@ export function GlobalChatPanel({ open, onClose }: GlobalChatPanelProps) {
   // Channel list view
   if (!selectedChannelId) {
     return (
-      <div className="fixed top-[46px] right-0 w-[360px] h-[calc(100vh-46px)] bg-card border-l border-border shadow-2xl z-50 flex flex-col animate-in slide-in-from-right-5 duration-200">
+      <div className="fixed top-[46px] right-0 w-[360px] h-[calc(100vh-46px)] bg-card border-l border-border shadow-2xl z-[9998] flex flex-col animate-in slide-in-from-right-5 duration-200">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <div className="flex items-center gap-2">
@@ -207,7 +207,7 @@ export function GlobalChatPanel({ open, onClose }: GlobalChatPanelProps) {
   const profileMap = new Map(profiles.map((p) => [p.id, p]));
 
   return (
-    <div className="fixed top-[46px] right-0 w-[360px] h-[calc(100vh-46px)] bg-card border-l border-border shadow-2xl z-50 flex flex-col animate-in slide-in-from-right-5 duration-200">
+    <div className="fixed top-[46px] right-0 w-[360px] h-[calc(100vh-46px)] bg-card border-l border-border shadow-2xl z-[9998] flex flex-col animate-in slide-in-from-right-5 duration-200">
       {/* Header */}
       <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border">
         <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => setSelectedChannelId(null)}>
