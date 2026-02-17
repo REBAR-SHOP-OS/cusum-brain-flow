@@ -1,70 +1,40 @@
 
 
-# Add Payment History to Invoice Editor
+# Fix: Customer Name and Payment History Not Showing in Invoice Editor
 
-## What's Missing
+## Diagnosis
 
-The QuickBooks invoice view (as shown in your screenshots) displays a **Payment History** section showing each payment date and amount applied. Our InvoiceEditor currently only shows a single "Paid" total line with no breakdown of individual payments.
+Two separate issues found after auditing the database and code:
 
-## Solution
+### Problem 1: Bill To dropdown shows empty in edit mode
+The customer data exists (1,946 customers in the database, including the correct one for this invoice). The Select component correctly matches `customerRef.value` ("1505") against customer IDs. However, the `SelectValue` component has no `placeholder` prop, and in some Radix Select edge cases with large option lists, the display can fail to render the matched label. Additionally, the view mode already shows the customer name correctly.
 
-Extract linked payments from the QuickBooks data and display them in a payment history table inside the InvoiceEditor, matching the QB layout (Date | Amount Applied).
+**Fix**: Add a `placeholder` to the SelectValue, and ensure the displayed value falls back to `customerRef.name` when no match is found in the customers list.
+
+### Problem 2: Payment History section never appears
+The `qb_transactions` table contains **zero Payment records** -- only 1,822 Invoices. The sync engine (`qb-sync-engine`) includes "Payment" in its `TXN_TYPES` list, meaning payments *should* sync, but either a full sync hasn't been run since payments were added to the engine, or payments failed silently during sync.
+
+The frontend code for extracting linked payments from the `payments` array is correct -- it properly scans `Line[].LinkedTxn[]` for matching invoice IDs. But since `payments` is always an empty array, the section never renders.
+
+**Fix**: Two changes needed:
+1. Show a fallback "Paid" line (from `invoice.Balance` vs `invoice.TotalAmt`) when no linked payment records exist, so users always see payment status
+2. Always show the payment status badge (PAID/PARTIAL/OPEN) regardless of whether detailed payment records are available
 
 ## Changes
 
-### 1. `src/components/accounting/AccountingInvoices.tsx`
-- Pass the `payments` array from the data hook to the `InvoiceEditor` component
+### File 1: `src/components/accounting/InvoiceEditor.tsx`
 
-### 2. `src/components/accounting/InvoiceEditor.tsx`
-- Accept a new `payments` prop (the full QBPayment array)
-- Add a `getLinkedPayments()` function that:
-  - Iterates through all payments
-  - Checks each payment's `Line[].LinkedTxn[]` for references to this invoice's ID
-  - Extracts the date (`TxnDate`) and amount applied to this specific invoice
-- Render a **Payment History** section between the totals and footer:
-  - Shows "PAYMENT STATUS: PAID / PARTIAL / OPEN" badge (like QB)
-  - Table with columns: **Date** and **Amount Applied**
-  - Summary line: "X payments made on [latest date]"
-  - Only shown when there are linked payments (hidden for unpaid invoices)
+**Customer display fix:**
+- Add `placeholder={customerRef.name || "Select customer..."}` to the `SelectValue` component so the name always shows even if the Select can't match the value
+- In view mode, already works correctly (shows `customerRef.name`)
 
-### 3. `src/hooks/useQuickBooksData.ts`
-- No changes needed -- the `QBPayment` type uses `raw_json` which already contains the full QB payment object including `Line` and `LinkedTxn` arrays
+**Payment history fix:**
+- Move the payment status badge and "Paid" amount display outside the `linkedPayments.length > 0` condition
+- When `linkedPayments.length > 0`: show the full payment history table (date + amount for each payment)
+- When `linkedPayments.length === 0` but `paid > 0`: show a simplified "Paid" line with the total paid amount and the status badge
+- Always show the "Amount Due" section with the correct remaining balance
 
-## Visual Layout (matching QB)
-
-```text
-+------------------------------------------+
-|  Subtotal:                    $39,750.00  |
-|  Tax (HST):                    $5,167.50  |
-|  ─────────────────────────────────────── |
-|  Total:                       $44,917.50  |
-|                                           |
-|  PAYMENT HISTORY              PAID        |
-|  ┌──────────────┬──────────────────┐     |
-|  │ Date         │ Amount Applied   │     |
-|  ├──────────────┼──────────────────┤     |
-|  │ 03/10/2025   │ $6,192.40        │     |
-|  │ 09/10/2025   │ $22,600.00       │     |
-|  │ 29/10/2025   │ $14,012.00       │     |
-|  │ 21/11/2025   │ $2,565.10        │     |
-|  └──────────────┴──────────────────┘     |
-|  4 payments                               |
-|                                           |
-|  ─────────────────────────────────────── |
-|  Amount Due:                      $0.00   |
-+------------------------------------------+
-```
-
-## Technical Details
-
-QuickBooks Payment objects store linked invoices in this structure:
-```json
-{
-  "Line": [{
-    "Amount": 6192.40,
-    "LinkedTxn": [{ "TxnId": "123", "TxnType": "Invoice" }]
-  }]
-}
-```
-
-The matching logic: for each payment, scan its `Line` array for `LinkedTxn` entries where `TxnType === "Invoice"` and `TxnId` matches the current invoice's `Id`. The `Amount` on that line is the amount applied to this specific invoice.
+### Summary of visual changes:
+- Bill To dropdown will always show the customer name (even if the dropdown options haven't loaded yet)
+- Invoices with payments will show "PAID" / "PARTIAL" badge and the paid amount, even when detailed payment records are unavailable
+- When payment records are synced in the future, the full payment history table will automatically appear
