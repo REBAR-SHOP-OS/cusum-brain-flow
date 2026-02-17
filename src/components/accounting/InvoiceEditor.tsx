@@ -64,11 +64,23 @@ export function InvoiceEditor({ invoice, customers, items, payments, onUpdate, o
   );
   const [lineItems, setLineItems] = useState<LineItem[]>(() => parseLineItems(invoice));
 
+  // Tax rate: initialize from invoice or default 13%
+  const initTaxRate = useMemo(() => {
+    const raw = (invoice as unknown as Record<string, unknown>).TxnTaxDetail as Record<string, unknown> | undefined;
+    const qbTotalTax = raw?.TotalTax as number | undefined;
+    const initSubtotal = parseLineItems(invoice).reduce((s, l) => s + l.Amount, 0);
+    if (qbTotalTax != null && initSubtotal > 0) return (qbTotalTax / initSubtotal) * 100;
+    return 13;
+  }, [invoice]);
+  const [taxRatePercent, setTaxRatePercent] = useState(initTaxRate);
+
   const subtotal = useMemo(() => lineItems.reduce((s, l) => s + l.Amount, 0), [lineItems]);
+  const safeTaxRate = Math.max(0, Math.min(100, taxRatePercent));
   const taxAmount = useMemo(() => {
+    if (editing) return subtotal * (safeTaxRate / 100);
     const raw = (invoice as unknown as Record<string, unknown>).TxnTaxDetail as Record<string, unknown> | undefined;
     return (raw?.TotalTax as number) || subtotal * 0.13;
-  }, [invoice, subtotal]);
+  }, [invoice, subtotal, editing, safeTaxRate]);
   const total = subtotal + taxAmount;
   const paid = invoice.TotalAmt - invoice.Balance;
   const amountDue = total - paid;
@@ -144,6 +156,9 @@ export function InvoiceEditor({ invoice, customers, items, payments, onUpdate, o
           // QB requires a SubTotalLine for sparse updates
           { DetailType: "SubTotalLineDetail", Amount: subtotal, SubTotalLineDetail: {} },
         ],
+        TxnTaxDetail: {
+          TotalTax: taxAmount,
+        },
       };
 
       await onUpdate(invoice.Id, updates);
@@ -404,8 +419,24 @@ export function InvoiceEditor({ invoice, customers, items, payments, onUpdate, o
               <span className="text-gray-500">Subtotal:</span>
               <span className="tabular-nums">{fmt(subtotal)}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">HST (ON) 13%:</span>
+            <div className="flex justify-between items-center">
+              {editing ? (
+                <label className="flex items-center gap-1 text-gray-500">
+                  <span>HST (ON)</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={0.01}
+                    value={taxRatePercent}
+                    onChange={(e) => setTaxRatePercent(Math.max(0, Math.min(100, Number(e.target.value))))}
+                    className="w-16 h-6 text-xs text-center border border-gray-300 rounded bg-white"
+                  />
+                  <span>%:</span>
+                </label>
+              ) : (
+                <span className="text-gray-500">HST (ON) {safeTaxRate.toFixed(0)}%:</span>
+              )}
               <span className="tabular-nums">{fmt(taxAmount)}</span>
             </div>
             <div className="flex justify-between font-bold text-base border-t border-gray-900 pt-2 mt-2">
