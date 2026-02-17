@@ -135,8 +135,13 @@ export function CustomerTable({ rows, isLoading, sortField, sortDir, onSort, onR
                     </DropdownMenuItem>
                     <DropdownMenuItem>Create sales receipt</DropdownMenuItem>
                     <DropdownMenuItem>Create estimate</DropdownMenuItem>
+                    <DropdownMenuItem>Create charge</DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem>Create statement</DropdownMenuItem>
+                    <DropdownMenuItem>Create time activity</DropdownMenuItem>
+                    <DropdownMenuItem>Create task</DropdownMenuItem>
+                    <DropdownMenuItem>Request feedback</DropdownMenuItem>
+                    <DropdownMenuSeparator />
                     <DropdownMenuItem>Make inactive</DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
