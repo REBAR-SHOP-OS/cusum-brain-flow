@@ -1,5 +1,5 @@
 import { Card, CardContent } from "@/components/ui/card";
-import { Star, Clock } from "lucide-react";
+import { Star, Clock, Mail } from "lucide-react";
 import { differenceInDays } from "date-fns";
 import { cn } from "@/lib/utils";
 import type { Tables } from "@/integrations/supabase/types";
@@ -75,6 +75,7 @@ export function LeadCard({ lead, onDragStart, onDragEnd, onEdit, onDelete, onCli
   const customerName = lead.customers?.company_name || lead.customers?.name || null;
   const displayTitle = lead.title.replace(/^S\d+,\s*/, "");
   const activity = getActivityStatus(lead);
+  const isEmailSource = lead.source?.startsWith("Email") || lead.source === "rfq_scan";
 
   return (
     <Card
@@ -85,8 +86,15 @@ export function LeadCard({ lead, onDragStart, onDragEnd, onEdit, onDelete, onCli
       className="cursor-grab active:cursor-grabbing hover:shadow-md transition-all"
     >
       <CardContent className="p-3 space-y-1.5">
-        {/* Title */}
-        <p className="font-medium text-sm leading-tight line-clamp-2">{displayTitle}</p>
+        {/* Title + email source badge */}
+        <div className="flex items-start gap-1">
+          <p className="font-medium text-sm leading-tight line-clamp-2 flex-1">{displayTitle}</p>
+          {isEmailSource && (
+            <span title="Email-sourced (ERP only)" className="shrink-0 mt-0.5">
+              <Mail className="w-3 h-3 text-muted-foreground" />
+            </span>
+          )}
+        </div>
 
         {/* Customer name */}
         {customerName && (

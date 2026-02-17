@@ -310,13 +310,13 @@ export default function Pipeline() {
   const handleOdooSync = async () => {
     setIsSyncingOdoo(true);
     try {
-      const { data, error } = await supabase.functions.invoke("odoo-crm-sync");
+      const { data, error } = await supabase.functions.invoke("odoo-crm-sync", { body: { mode: "full" } });
       if (error) throw error;
 
       queryClient.invalidateQueries({ queryKey: ["leads"] });
       toast({
         title: `Odoo Sync Complete`,
-        description: `${data.created} created, ${data.updated} updated, ${data.errors} errors (${data.total} total)`,
+        description: `${data.created} created, ${data.updated} updated, ${data.reconciled || 0} reconciled, ${data.errors} errors (${data.total} total, ${data.mode} mode)`,
       });
     } catch (err) {
       console.error("Odoo sync error:", err);
