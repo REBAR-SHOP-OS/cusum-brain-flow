@@ -129,9 +129,10 @@ export function CustomerFormModal({ open, onOpenChange, customer }: CustomerForm
           .eq("id", customer.id);
         if (error) throw error;
       } else {
+        if (!userCompanyId) throw new Error("Company ID is required to create a customer");
         const { error } = await supabase.from("customers").insert({
           ...basePayload,
-          ...(userCompanyId ? { company_id: userCompanyId } : {}),
+          company_id: userCompanyId,
         });
         if (error) throw error;
       }
