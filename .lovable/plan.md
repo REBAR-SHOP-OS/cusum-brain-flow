@@ -1,67 +1,34 @@
 
+# Fix: "Vault 1" Missing from Production Queue
 
-# Fix: Sync Odoo Activity Deadline to Power the Color Bar
+## Root Cause
 
-## Problem
-The colored activity bar in pipeline column headers shows only grey because 1,883 out of 2,813 leads have no `expected_close_date`. The Odoo sync function never fetches the `date_deadline` field from Odoo, so the data that drives the green/yellow/red colors simply doesn't exist in the database.
+The customer **SECTOR CONTRACTING LTD.** (linked to the "JD Sector Vault" project that contains the "Vault 1" barlist) has `company_id = NULL` in the database. The security policy on the `customers` table requires `company_id` to match the logged-in user's company. Since `NULL` never matches anything, the customer record is invisible to the app.
 
-## Solution
-Update the Odoo sync function to fetch and map `date_deadline` from Odoo into the `expected_close_date` field on each lead. This single change will immediately populate the activity bar with correct Odoo color semantics.
+The Production Queue tree builder skips any customer it cannot resolve by name (line 302: `if (!resolvedName) return`). So the entire SECTOR CONTRACTING branch -- including its project, barlist, and manifest -- is silently dropped from the queue.
 
-## What Changes
+## Fix (Two Parts)
 
-### 1. Odoo Sync Function (`supabase/functions/odoo-crm-sync/index.ts`)
-- Add `"date_deadline"` to the `FIELDS` array so it's fetched from Odoo
-- Map `date_deadline` to `expected_close_date` on both insert and update operations
-- Store `date_deadline` in metadata for audit trail
+### 1. Backfill the missing company_id (data fix)
+Set `company_id` on the 2 customers that currently have `NULL`:
 
-### 2. No Frontend Changes Needed
-The `PipelineColumn.tsx` already has the correct color logic:
-- Green = planned (date in the future)
-- Yellow/Orange = due today
-- Red = overdue (date in the past)
-- Grey = no activity date
-
-Once the data flows from Odoo, the colors will appear automatically.
-
-## Technical Details
-
-### Sync function field addition
-```typescript
-const FIELDS = [
-  "id", "name", "stage_id", "email_from", "phone", "contact_name",
-  "user_id", "probability", "expected_revenue", "type", "partner_name",
-  "city", "create_date", "write_date", "priority",
-  "date_deadline",  // NEW: drives activity status bar colors
-];
+```sql
+UPDATE customers
+SET company_id = 'a0000000-0000-0000-0000-000000000001'
+WHERE company_id IS NULL;
 ```
 
-### Mapping in lead processing
-For both insert and update:
-```typescript
-// Map Odoo date_deadline to expected_close_date
-const dateDeadline = ol.date_deadline || null;
+This immediately makes SECTOR CONTRACTING visible, and "Vault 1" will appear in the Production Queue under its correct customer and project.
 
-// In update payload:
-updatePayload.expected_close_date = dateDeadline;
-
-// In insert payload:
-expected_close_date: dateDeadline,
-```
-
-### Metadata enrichment
-```typescript
-metadata.odoo_date_deadline = ol.date_deadline || null;
-```
-
-## After Deployment
-- Run a **Full Sync** to backfill all existing leads with their `date_deadline` from Odoo
-- The pipeline column headers will immediately show green/yellow/red/grey distribution bars
-- Clicking bar segments will filter leads by activity status as before
+### 2. Prevent future orphans (code fix)
+When the AI Extract flow creates a new customer, ensure `company_id` is always populated. I will audit the customer-creation paths (AI Extract, manual creation) and add the logged-in user's `company_id` as a required default so this cannot recur.
 
 ## Files Modified
 
-| File | Change |
+| Item | Change |
 |---|---|
-| `supabase/functions/odoo-crm-sync/index.ts` | Add `date_deadline` to FIELDS, map to `expected_close_date` on insert and update |
+| Database migration | Backfill `company_id` on customers with NULL |
+| Customer creation code paths | Ensure `company_id` is always set on insert |
 
+## Expected Result
+After the migration, "Vault 1" will appear in the Production Queue under **SECTOR CONTRACTING LTD. > JD Sector Vault > Vault 1**, with its DRAFT manifest visible and editable.
