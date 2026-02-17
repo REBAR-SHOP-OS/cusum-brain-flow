@@ -871,6 +871,49 @@ async function handleReconcile(svc: SvcClient, companyId: string) {
   };
 }
 
+// ─── SYNC SINGLE ENTITY ────────────────────────────────────────────
+
+async function handleSyncEntity(svc: SvcClient, companyId: string, entityType: string) {
+  const t0 = Date.now();
+  if (!entityType) throw new Error("entity_type is required");
+
+  const conn = await getCompanyQBConfig(svc, companyId);
+  if (!conn) throw new Error("QuickBooks not connected for this company");
+
+  const { config, ctx } = conn;
+  const realmId = config.realm_id;
+  const errors: string[] = [];
+
+  // Query all records for this entity type from QB
+  const txns = await qbQuery(config, ctx, entityType) as Record<string, unknown>[];
+  const synced = await upsertTransactions(svc, companyId, realmId, entityType, txns);
+
+  // Normalize to GL
+  const accountLookup = await buildLookupMap(svc, "qb_accounts", companyId);
+  const customerLookup = await buildLookupMap(svc, "qb_customers", companyId);
+  const vendorLookup = await buildLookupMap(svc, "qb_vendors", companyId);
+
+  for (const t of txns) {
+    try {
+      const { data: row } = await svc
+        .from("qb_transactions")
+        .select("id")
+        .eq("company_id", companyId)
+        .eq("qb_id", String(t.Id))
+        .eq("entity_type", entityType)
+        .maybeSingle();
+      if (row) {
+        await normalizeToGL(svc, companyId, entityType, row.id, t, accountLookup, customerLookup, vendorLookup);
+      }
+    } catch (e) { errors.push(`GL ${t.Id}: ${e}`); }
+  }
+
+  const duration = Date.now() - t0;
+  await logSync(svc, companyId, entityType, "sync-entity", synced, errors.length, errors, duration);
+
+  return { entity_type: entityType, synced, errors, duration_ms: duration };
+}
+
 // ─── Main Handler ──────────────────────────────────────────────────
 
 function jsonRes(data: unknown, status = 200) {
@@ -931,6 +974,8 @@ serve(async (req) => {
         return jsonRes(await handleIncremental(svc, companyId));
       case "reconcile":
         return jsonRes(await handleReconcile(svc, companyId));
+      case "sync-entity":
+        return jsonRes(await handleSyncEntity(svc, companyId, body.entity_type));
       default:
         return jsonRes({ error: `Unknown action: ${action}` }, 400);
     }
