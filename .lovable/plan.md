@@ -1,72 +1,67 @@
 
-
-# Full Accounting Audit: Add Customer/Vendor Buttons, QB-Clone Chart of Accounts, and Real Reports
+# Audit, Diagnose, Fix and Improve: Chart of Accounts + Vendor Forms
 
 ## Problems Found
 
-### 1. Missing "Add Customer" Button in Accounting Customers Tab
-The Customers page (`/customers`) has an "Add Customer" button using `CustomerFormModal`, but the Accounting > Customers tab (`AccountingCustomers.tsx`) has no way to add a new customer. Same applies to Vendors tab -- no "Add Vendor" button.
+### 1. No "New Account" Form in Chart of Accounts
+The COA table has no way to create a new account. QuickBooks (your screenshots) shows a slide-over "New account" form with:
+- Account name field
+- Account type dropdown grouped by category (ASSET: Bank, Accounts receivable, Current assets, Property/plant/equipment, Long-term Assets | LIABILITY: Credit Card, Accounts payable, Other Current Liabilities, Long-term Liabilities | EQUITY: Equity | INCOME: Income, Other Income | EXPENSE: Cost of Goods Sold, Expenses, Other Expense)
+- Detail type dropdown (changes dynamically based on selected account type)
+- Currently: nothing exists -- no form, no edge function action
 
-### 2. Chart of Accounts is NOT a QuickBooks Clone
-Current layout groups accounts by `AccountType` in collapsible cards but is missing key QuickBooks COA columns:
-- **Number** (Account Number/Code)
-- **Type** column showing the full QB type
-- **Detail Type** (AccountSubType shown but labeled "Sub-Type")
-- **QuickBooks Balance** vs **Bank Balance** distinction
-- **Tax Line** mapping
-- Flat single-table layout (QB shows all accounts in one table with indentation for sub-accounts, not grouped cards)
+### 2. COA Table Missing "TAX" Column
+QuickBooks shows a TAX column between Detail Type and QuickBooks Balance. Current table skips this entirely.
 
-### 3. Reports Are Placeholder Summaries, Not Real QB Reports
-`AccountingReport.tsx` shows 3 summary cards with hardcoded aggregations from invoice/bill/payment totals. It does NOT call the actual QuickBooks Report API (`get-profit-loss`, `get-balance-sheet`), which already exists in the edge function. The reports should render the actual QB report data with proper row/column structure.
+### 3. Vendor "Add" Form is Too Minimal
+Current `AddVendorDialog` only has 5 fields: Display Name, Company Name, Email, Phone, Notes. QuickBooks (your screenshots) shows a full-featured Supplier form with:
+- Company name (searchable)
+- Supplier display name (dropdown)
+- Title, First name, Middle name, Last name, Suffix
+- Email, Phone number, Mobile number, Fax, Other, Website
+- Name to print on cheques
+- Address section (Street address 1, Street address 2, Add lines)
+- Current form is missing 12+ fields
 
-### 4. Vendor Payments Tab Shows ALL BillPayments Correctly
-This was already fixed in the last iteration and is working properly.
+### 4. Vendor Detail Missing Delete/Void Actions
+QuickBooks shows Delete and Void options in the Action column dropdown next to "View/Edit" on each transaction row. Current implementation only has "View/Edit" with no delete/void.
+
+### 5. Edge Function Missing "create-account" Action
+The `quickbooks-oauth` edge function has no handler for creating accounts in QuickBooks. Also the `create-vendor` handler only accepts 5 fields -- needs to accept all QB Vendor fields.
 
 ---
 
 ## What Will Be Built
 
-### 1. Add "Add Customer" Button to `AccountingCustomers.tsx`
-- Import and use the existing `CustomerFormModal` component
-- Add a "+" or "Add Customer" button next to the search bar
-- On success, refresh the customers list
+### 1. New "Create Account" Slide-Over for Chart of Accounts
+- Add a "New" button at the top of the COA page
+- Create a `NewAccountDrawer` component as a Sheet slide-over (matching QB's "New account" panel)
+- Fields: Account name, Account type (grouped Select with category headers matching QB exactly), Detail type (dynamic options based on selected account type)
+- The grouped Account Type dropdown will have these exact categories and options from your screenshots:
+  - ASSET: Bank, Accounts receivable (A/R), Current assets, Property plant and equipment, Long-term Assets
+  - LIABILITY: Credit Card, Accounts payable (A/P), Other Current Liabilities, Long-term Liabilities
+  - EQUITY: Equity
+  - INCOME: Income, Other Income
+  - EXPENSE: Cost of Goods Sold, Expenses, Other Expense
+- On submit: calls a new `create-account` action in the edge function
 
-### 2. Add "Add Vendor" Button to `AccountingVendors.tsx`
-- Create a `VendorFormDialog` component that calls the existing `create-vendor` edge function action
-- Fields: Display Name, Company Name, Email, Phone, Notes
-- Add button next to the search bar
-- On success, trigger a QB sync/refresh
+### 2. Add TAX Column to COA Table
+- Extract `TaxCodeRef` from account `raw_json`
+- Display tax label (e.g., "HST ON") between Detail Type and QuickBooks Balance columns
 
-### 3. Rebuild Chart of Accounts as Exact QB Clone
-Replace the grouped-cards layout with a single flat table matching QuickBooks:
+### 3. Rebuild Vendor Form to Match QB Supplier Form
+- Replace the minimal `AddVendorDialog` with a full-featured `AddVendorDialog` matching the QB Supplier form from your screenshot
+- Collapsible sections: "Name and contact" and "Address"
+- All fields: Company name, Supplier display name, Title, First name, Middle name, Last name, Suffix, Email, Phone number, Mobile number, Fax, Other, Website, Name to print on cheques, Street address 1, Street address 2, City, Province/State, Postal/ZIP code
+- Update the edge function `create-vendor` handler to accept all these fields
 
-| Column | Source |
-|--------|--------|
-| NAME | `Name` (indented for sub-accounts via `SubAccount` + `ParentRef`) |
-| TYPE | `AccountType` |
-| DETAIL TYPE | `AccountSubType` |
-| QUICKBOOKS BALANCE | `CurrentBalance` |
-| BANK BALANCE | From `raw_json` if available |
-| ACTION | "View register" link |
+### 4. Add Delete/Void Actions to Vendor Transaction List
+- Change the "View/Edit" button in `VendorDetail` transaction rows to a dropdown with: View/Edit, Delete, Void
+- Delete and Void will call appropriate QB API actions (update transaction with `SparseUpdate` setting Active=false or adding void flag)
 
-- Sub-accounts indented under parents (QB uses tree structure)
-- "New" button at top to create a new account (calls `create-item` or a future `create-account`)
-- Filter by account type dropdown
-- Single table, no cards -- matching QB exactly
-
-### 4. Wire Real QB Reports (P&L, Balance Sheet, Cash Flow)
-Replace `AccountingReport.tsx` placeholder with actual API calls:
-
-- **Profit & Loss**: Call `get-profit-loss` with date range picker, render the QB report rows (Income, COGS, Expenses, Net Income) in a hierarchical table
-- **Balance Sheet**: Call `get-balance-sheet` with as-of-date, render Assets/Liabilities/Equity sections
-- **Cash Flow**: Derive from P&L + Balance Sheet changes (QB Online doesn't have a native Cash Flow Statement API, so keep the current derived view but improve accuracy)
-
-Each report will have:
-- Date range/as-of-date picker
-- "Run Report" button
-- Collapsible section rows matching QB layout
-- Total rows with bold formatting
-- Export option (print/download)
+### 5. Edge Function Updates
+- Add `create-account` handler to `quickbooks-oauth` edge function (POST to QB `account` endpoint with Name, AccountType, AccountSubType)
+- Expand `create-vendor` handler to accept all new fields (Title, FirstName, MiddleName, LastName, Suffix, Mobile, Fax, WebAddr, PrintOnCheckName, BillAddr)
 
 ---
 
@@ -74,18 +69,18 @@ Each report will have:
 
 | File | Change |
 |------|--------|
-| `src/components/accounting/AccountingCustomers.tsx` | Add "Add Customer" button using existing `CustomerFormModal` |
-| `src/components/accounting/AccountingVendors.tsx` | Add "Add Vendor" button with new dialog |
-| `src/components/accounting/AddVendorDialog.tsx` | **New** -- Dialog to create vendor in QB via `create-vendor` action |
-| `src/components/accounting/AccountingAccounts.tsx` | **Major rewrite** -- Flat table with QB-matching columns (Name with indent, Type, Detail Type, Balance, Action) + type filter dropdown |
-| `src/components/accounting/AccountingReport.tsx` | **Major rewrite** -- Call real QB report APIs, render hierarchical report tables with date pickers |
+| `src/components/accounting/NewAccountDrawer.tsx` | **New** -- Sheet slide-over with grouped Account Type dropdown and dynamic Detail Type |
+| `src/components/accounting/AccountingAccounts.tsx` | Add "New" button, TAX column, import NewAccountDrawer |
+| `src/components/accounting/AddVendorDialog.tsx` | **Major rewrite** -- Full QB Supplier form with all fields and collapsible sections |
+| `src/components/accounting/VendorDetail.tsx` | Add Delete/Void dropdown on transaction rows |
+| `supabase/functions/quickbooks-oauth/index.ts` | Add `create-account` handler + expand `create-vendor` with all fields |
 
 ## Technical Details
 
-- `AccountingCustomers` will import `CustomerFormModal` from `@/components/customers/CustomerFormModal` and add state for `isFormOpen`
-- `AddVendorDialog` calls `supabase.functions.invoke("quickbooks-oauth", { body: { action: "create-vendor", displayName, companyName, email, phone, notes } })`
-- Chart of Accounts rebuilds the tree from flat array using `SubAccount` boolean and `ParentRef.value` from `raw_json` to create indentation levels
-- P&L report calls `qbAction("get-profit-loss", { startDate, endDate })` and parses the standard QB report response format (`Rows.Row[].ColData[]`)
-- Balance Sheet calls `qbAction("get-balance-sheet", { asOfDate })` with same parser
-- No database changes needed -- all data comes from existing QB mirror tables and API endpoints
-
+- The grouped Account Type dropdown uses Radix Select with `SelectGroup` and `SelectLabel` for category headers (ASSET, LIABILITY, EQUITY, INCOME, EXPENSE)
+- Detail Type options are a static map keyed by Account Type (e.g., Bank -> [Chequing, Savings, Cash on hand, Money market, Trust accounts, Rents held in trust])
+- The `create-account` edge function handler calls `qbFetch(config, "account", { method: "POST", body: JSON.stringify({ Name, AccountType, AccountSubType }) })`
+- The expanded `create-vendor` handler maps form fields to the QB Vendor API payload: `{ DisplayName, CompanyName, GivenName, MiddleName, FamilyName, Suffix, Title, PrimaryEmailAddr, PrimaryPhone, Mobile, Fax, WebAddr, PrintOnCheckName, BillAddr: { Line1, Line2, City, CountrySubDivisionCode, PostalCode } }`
+- Delete action calls QB API with sparse update to set `Active: false`
+- Void action dispatches to a `void-transaction` handler (or reuses existing void logic)
+- No database schema changes needed
