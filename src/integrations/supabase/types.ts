@@ -4847,6 +4847,30 @@ export type Database = {
           },
         ]
       }
+      pipeline_stage_order: {
+        Row: {
+          company_id: string
+          id: string
+          stage_order: Json
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          company_id?: string
+          id?: string
+          stage_order?: Json
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          id?: string
+          stage_order?: Json
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       production_tasks: {
         Row: {
           asa_shape_code: string | null

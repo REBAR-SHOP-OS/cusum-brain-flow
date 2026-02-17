@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -6,8 +7,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
 import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
   Building, Mail, Phone, Calendar, DollarSign, Pencil, Trash2,
-  TrendingUp, Clock, User, Star,
+  TrendingUp, Clock, User, Star, Archive,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -81,6 +87,11 @@ export function LeadDetailDrawer({
   const assigned = parseField(lead.notes, "Assigned");
   const city = parseField(lead.notes, "City");
   const quoteRef = parseField(lead.notes, "Quote");
+
+  const handleArchive = () => {
+    onStageChange(lead.id, "lost");
+    onOpenChange(false);
+  };
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -246,37 +257,53 @@ export function LeadDetailDrawer({
         {/* Footer */}
         <div className="border-t border-border p-4 text-xs text-muted-foreground flex items-center justify-between">
           <span>Created {format(new Date(lead.created_at), "MMM d, yyyy")}</span>
-          {isAdmin && (
+          {isAdmin ? (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive hover:text-destructive hover:bg-destructive/10 gap-1.5 h-7 text-xs"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  Delete Lead
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete this lead?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This action cannot be undone. The lead "{lead.title}" will be permanently removed.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    onClick={() => {
+                      onDelete(lead.id);
+                      onOpenChange(false);
+                    }}
+                  >
+                    Delete
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          ) : (
             <Button
               variant="ghost"
               size="sm"
-              className="text-destructive hover:text-destructive hover:bg-destructive/10 gap-1.5 h-7 text-xs"
-              onClick={() => {
-                if (confirm("Delete this lead?")) {
-                  onDelete(lead.id);
-                  onOpenChange(false);
-                }
-              }}
+              className="gap-1.5 h-7 text-xs"
+              onClick={handleArchive}
             >
-              <Trash2 className="w-3 h-3" />
-              Delete Lead
+              <Archive className="w-3 h-3" />
+              Archive
             </Button>
           )}
           <span>Updated {formatDistanceToNow(new Date(lead.updated_at), { addSuffix: true })}</span>
         </div>
       </SheetContent>
     </Sheet>
-  );
-}
-
-function DetailItem({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-border p-3 space-y-1">
-      <div className="flex items-center gap-1.5 text-muted-foreground">
-        <Icon className="w-3 h-3" />
-        <span className="text-xs">{label}</span>
-      </div>
-      <p className="text-sm font-medium truncate">{value}</p>
-    </div>
   );
 }
