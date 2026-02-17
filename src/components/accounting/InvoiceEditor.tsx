@@ -224,7 +224,7 @@ export function InvoiceEditor({ invoice, customers, items, payments, onUpdate, o
               }}
             >
               <SelectTrigger className="bg-white border-gray-300">
-                <SelectValue placeholder={customerRef.name || "Select customer..."} />
+                <span className="truncate">{customerRef.name || "Select customer..."}</span>
               </SelectTrigger>
               <SelectContent>
                 {customers.map((c) => (
@@ -385,12 +385,25 @@ export function InvoiceEditor({ invoice, customers, items, payments, onUpdate, o
                   {linkedPayments.length} payment{linkedPayments.length !== 1 ? "s" : ""}
                 </p>
               </>
-            ) : (
-              <div className="flex justify-between text-sm text-green-700">
-                <span>Paid:</span>
-                <span className="tabular-nums font-medium">{fmt(paid)}</span>
-              </div>
-            )}
+            ) : paid > 0 ? (
+              <>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-300">
+                      <th className="text-left py-1.5 font-semibold text-gray-600 text-xs">Description</th>
+                      <th className="text-right py-1.5 font-semibold text-gray-600 text-xs">Amount Applied</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr className="border-b border-gray-100">
+                      <td className="py-1.5 text-gray-700">Total payments received</td>
+                      <td className="py-1.5 text-right tabular-nums font-medium text-green-700">{fmt(paid)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+                <p className="text-xs text-gray-400 mt-2 italic">Detailed payment records pending sync</p>
+              </>
+            ) : null}
           </div>
         )}
 
