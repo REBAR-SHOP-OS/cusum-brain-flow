@@ -1,18 +1,24 @@
 
-
-# Fix: Screenshot Feedback "created_by" Column Error
+# Fix: Screenshot Feedback Button Z-Index -- Stay On Top of All Layers
 
 ## Problem
 
-The error at the bottom of the screenshot says: **"Failed to send feedback: Could not find the 'created_by' column of 'tasks' in the schema cache"**
+The Screenshot Feedback button uses `z-50` (Tailwind's highest named z-index utility), but so do dialogs, drawers, popovers, toasts, and other overlays. The toast provider even uses `z-[100]`. This means the button can get buried under other UI elements.
 
-The `AnnotationOverlay.tsx` insert includes `created_by: userId` but the `tasks` table has no such column.
+## Fix (Single file, single class change)
 
-## Fix (Single line removal)
+### `src/components/feedback/ScreenshotFeedbackButton.tsx` (line 39)
 
-### `src/components/feedback/AnnotationOverlay.tsx` (line 162)
+Change the button's class from `z-50` to `z-[9999]` so it renders above every other layer in the app, including toasts (`z-[100]`), dialogs (`z-50`), and any future overlays.
 
-Remove the `created_by: userId ?? undefined,` line from the task insert object. The `tasks` table columns are: `id, title, description, status, priority, due_date, assigned_to, customer_id, source, source_ref, agent_type, created_at, updated_at, completed_at, company_id, attachment_url` -- no `created_by`.
+**Before:**
+```
+className="fixed z-50 bottom-24 right-6 ..."
+```
 
-No other files, no database changes, no new dependencies.
+**After:**
+```
+className="fixed z-[9999] bottom-24 right-6 ..."
+```
 
+No other files touched. No new dependencies. No behavior changes.
