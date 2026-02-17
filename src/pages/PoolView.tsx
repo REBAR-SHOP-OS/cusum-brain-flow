@@ -51,7 +51,7 @@ const PHASE_CONFIG: Record<string, { label: string; shortLabel: string; icon: Re
   cut_done:  { label: "POOL → BENDER",        shortLabel: "POOL→BEND", icon: Flame,       color: "text-warning",          bg: "bg-warning/10",     actionLabel: "Open Bender",   actionRoute: "/shopfloor/station", actionColor: "bg-warning hover:bg-warning/90 text-warning-foreground" },
   bending:   { label: "BENDING",              shortLabel: "BENDING",   icon: RotateCcw,   color: "text-warning",          bg: "bg-warning/10" },
   clearance: { label: "CLEARANCE",            shortLabel: "QC",        icon: ShieldCheck,  color: "text-primary",          bg: "bg-primary/10",     actionLabel: "Review QC",     actionRoute: "/shopfloor/clearance", actionColor: "bg-primary hover:bg-primary/90 text-primary-foreground" },
-  complete:  { label: "COMPLETE → DISPATCH",  shortLabel: "DISPATCH",  icon: PackageCheck, color: "text-success",          bg: "bg-success/10",     actionLabel: "View Dispatch", actionRoute: "/deliveries", actionColor: "bg-success hover:bg-success/90 text-success-foreground" },
+  complete:  { label: "COMPLETE → LOADING",   shortLabel: "LOADING",   icon: PackageCheck, color: "text-success",          bg: "bg-success/10",     actionLabel: "Load Truck",    actionRoute: "/shopfloor/loading", actionColor: "bg-success hover:bg-success/90 text-success-foreground" },
 };
 
 export default function PoolView() {

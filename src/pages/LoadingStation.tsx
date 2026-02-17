@@ -1,0 +1,263 @@
+import { useState, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { useCompletedBundles, type CompletedBundle } from "@/hooks/useCompletedBundles";
+import { useLoadingChecklist } from "@/hooks/useLoadingChecklist";
+import { useDeliveryActions } from "@/hooks/useDeliveryActions";
+import { ReadyBundleList } from "@/components/dispatch/ReadyBundleList";
+import { Progress } from "@/components/ui/progress";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  ArrowLeft,
+  Camera,
+  CheckCircle2,
+  Loader2,
+  Package,
+  Truck,
+  ImageIcon,
+} from "lucide-react";
+
+export default function LoadingStation() {
+  const navigate = useNavigate();
+  const { bundles, isLoading: bundlesLoading } = useCompletedBundles();
+  const [selectedBundle, setSelectedBundle] = useState<CompletedBundle | null>(null);
+  const { createDeliveryFromBundle, creating } = useDeliveryActions();
+
+  const {
+    checklistMap,
+    loadedCount,
+    isLoading: checklistLoading,
+    initializeChecklist,
+    toggleLoaded,
+    uploadPhoto,
+  } = useLoadingChecklist(selectedBundle?.cutPlanId ?? null);
+
+  // Initialize checklist rows when bundle is selected
+  useEffect(() => {
+    if (selectedBundle) {
+      const ids = selectedBundle.items.map((i) => i.id);
+      initializeChecklist(ids);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedBundle?.cutPlanId]);
+
+  const totalItems = selectedBundle?.items.length ?? 0;
+  const allLoaded = totalItems > 0 && loadedCount >= totalItems;
+  const progressPct = totalItems > 0 ? Math.round((loadedCount / totalItems) * 100) : 0;
+
+  const handleCreateDelivery = async () => {
+    if (!selectedBundle) return;
+    const result = await createDeliveryFromBundle(selectedBundle);
+    if (result) {
+      navigate("/deliveries");
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-full bg-background">
+      {/* Header */}
+      <header className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-border bg-card">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/shop-floor")}>
+            <ArrowLeft className="w-5 h-5" />
+          </Button>
+          <div>
+            <h1 className="text-lg font-black italic uppercase tracking-wide text-foreground">
+              Loading Station
+            </h1>
+            <p className="text-[9px] tracking-[0.2em] uppercase text-primary">
+              Item-by-item truck loading with evidence
+            </p>
+          </div>
+        </div>
+        {selectedBundle && (
+          <Badge variant="outline" className="font-mono text-xs">
+            {loadedCount}/{totalItems} LOADED
+          </Badge>
+        )}
+      </header>
+
+      {!selectedBundle ? (
+        /* Bundle Selection */
+        <ScrollArea className="flex-1">
+          <div className="p-4 sm:p-6">
+            {bundlesLoading ? (
+              <div className="flex items-center justify-center h-64">
+                <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : bundles.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-64 text-muted-foreground gap-3">
+                <Package className="w-12 h-12 opacity-40" />
+                <p className="text-sm">No cleared bundles ready for loading</p>
+                <Button variant="outline" size="sm" onClick={() => navigate("/shop-floor")}>
+                  Back to Hub
+                </Button>
+              </div>
+            ) : (
+              <ReadyBundleList
+                bundles={bundles}
+                title="Select Bundle to Load"
+                onSelect={setSelectedBundle}
+              />
+            )}
+          </div>
+        </ScrollArea>
+      ) : (
+        /* Loading Checklist */
+        <>
+          {/* Progress Section */}
+          <div className="px-4 sm:px-6 py-4 border-b border-border bg-card/50">
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <h2 className="text-sm font-bold text-foreground">{selectedBundle.projectName}</h2>
+                <p className="text-[10px] text-muted-foreground">{selectedBundle.planName}</p>
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => setSelectedBundle(null)}>
+                Change Bundle
+              </Button>
+            </div>
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>{loadedCount} of {totalItems} items loaded</span>
+                <span className="font-mono font-bold">{progressPct}%</span>
+              </div>
+              <Progress value={progressPct} className="h-3" />
+            </div>
+          </div>
+
+          {/* Items Checklist */}
+          <ScrollArea className="flex-1">
+            <div className="p-4 sm:p-6 space-y-2">
+              {checklistLoading ? (
+                <div className="flex items-center justify-center h-32">
+                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : (
+                selectedBundle.items.map((item) => {
+                  const checklist = checklistMap.get(item.id);
+                  const isLoaded = checklist?.loaded ?? false;
+                  const hasPhoto = !!checklist?.photo_path;
+
+                  return (
+                    <LoadingItemCard
+                      key={item.id}
+                      markNumber={item.mark_number}
+                      barCode={item.bar_code}
+                      cutLength={item.cut_length_mm}
+                      pieces={item.total_pieces}
+                      shapeCode={item.asa_shape_code}
+                      isLoaded={isLoaded}
+                      hasPhoto={hasPhoto}
+                      onToggle={(loaded) => toggleLoaded.mutate({ itemId: item.id, loaded })}
+                      onPhoto={(file) => uploadPhoto(item.id, file)}
+                    />
+                  );
+                })
+              )}
+            </div>
+          </ScrollArea>
+
+          {/* Bottom Action */}
+          <div className="px-4 sm:px-6 py-4 border-t border-border bg-card">
+            <Button
+              className="w-full gap-2"
+              disabled={!allLoaded || creating}
+              onClick={handleCreateDelivery}
+            >
+              {creating ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Truck className="w-4 h-4" />
+              )}
+              {allLoaded ? "Create Delivery" : `${totalItems - loadedCount} items remaining`}
+            </Button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+LoadingStation.displayName = "LoadingStation";
+
+/* ---------- Sub-component ---------- */
+
+interface LoadingItemCardProps {
+  markNumber: string | null;
+  barCode: string;
+  cutLength: number;
+  pieces: number;
+  shapeCode: string | null;
+  isLoaded: boolean;
+  hasPhoto: boolean;
+  onToggle: (loaded: boolean) => void;
+  onPhoto: (file: File) => void;
+}
+
+function LoadingItemCard({
+  markNumber,
+  barCode,
+  cutLength,
+  pieces,
+  shapeCode,
+  isLoaded,
+  hasPhoto,
+  onToggle,
+  onPhoto,
+}: LoadingItemCardProps) {
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  return (
+    <Card className={`transition-all ${isLoaded ? "border-primary/40 bg-primary/5" : ""}`}>
+      <CardContent className="p-3 flex items-center gap-3">
+        <Checkbox
+          checked={isLoaded}
+          onCheckedChange={(checked) => onToggle(!!checked)}
+          className="h-6 w-6"
+        />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className={`text-sm font-bold ${isLoaded ? "line-through text-muted-foreground" : "text-foreground"}`}>
+              {markNumber || "No mark"}
+            </span>
+            <Badge variant="outline" className="text-[9px]">{barCode}</Badge>
+          </div>
+          <div className="text-[10px] text-muted-foreground flex gap-2 mt-0.5">
+            <span>{cutLength}mm</span>
+            <span>{pieces} pcs</span>
+            {shapeCode && <span>Shape: {shapeCode}</span>}
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5">
+          {hasPhoto && <ImageIcon className="w-4 h-4 text-primary" />}
+          {isLoaded && <CheckCircle2 className="w-4 h-4 text-primary" />}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => fileRef.current?.click()}
+          >
+            <Camera className="w-4 h-4" />
+          </Button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) onPhoto(file);
+              e.target.value = "";
+            }}
+          />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+LoadingItemCard.displayName = "LoadingItemCard";

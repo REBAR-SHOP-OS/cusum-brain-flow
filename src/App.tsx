@@ -21,6 +21,7 @@ import Pipeline from "./pages/Pipeline";
 import Prospecting from "./pages/Prospecting";
 import Customers from "./pages/Customers";
 import ShopFloor from "./pages/ShopFloor";
+import LoadingStation from "./pages/LoadingStation";
 import LiveMonitor from "./pages/LiveMonitor";
 import CutterPlanning from "./pages/CutterPlanning";
 import StationDashboard from "./pages/StationDashboard";
@@ -137,6 +138,7 @@ const App = () => (
                     <Route path="/shopfloor/station" element={<P><StationDashboard /></P>} />
                     <Route path="/shopfloor/station/:machineId" element={<P><StationView /></P>} />
                     <Route path="/shopfloor/pool" element={<P><PoolView /></P>} />
+                    <Route path="/shopfloor/loading" element={<P><LoadingStation /></P>} />
                     <Route path="/shopfloor/pickup" element={<P><PickupStation /></P>} />
                     <Route path="/shopfloor/clearance" element={<P><ClearanceStation /></P>} />
                     <Route path="/shopfloor/live-monitor" element={<P><LiveMonitor /></P>} />
