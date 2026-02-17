@@ -94,7 +94,7 @@ export default function Customers() {
       const today = new Date().toISOString().split("T")[0];
       const { data, error } = await supabase
         .from("qb_transactions")
-        .select("id, balance, raw_json")
+        .select("id, balance, raw_json, customer_qb_id")
         .eq("entity_type", "Invoice")
         .eq("is_deleted", false)
         .eq("is_voided", false)
@@ -143,11 +143,37 @@ export default function Customers() {
     return m;
   }, [invoiceBalances]);
 
+  // ── Invoice counts per customer ──
+  const invoiceCountByQbId = useMemo(() => {
+    const m = new Map<string, number>();
+    invoiceBalances.forEach((inv) => {
+      if (inv.customer_qb_id) {
+        m.set(inv.customer_qb_id, (m.get(inv.customer_qb_id) || 0) + 1);
+      }
+    });
+    return m;
+  }, [invoiceBalances]);
+
+  const overdueCountByQbId = useMemo(() => {
+    const m = new Map<string, number>();
+    overdueInvoices.forEach((inv) => {
+      // overdueInvoices already filtered by customer_qb_id isn't available directly
+      // We need to get customer_qb_id from the raw_json or re-query
+      const custQbId = (inv as any).customer_qb_id;
+      if (custQbId) {
+        m.set(custQbId, (m.get(custQbId) || 0) + 1);
+      }
+    });
+    return m;
+  }, [overdueInvoices]);
+
   const rows = useMemo(() => {
     const mapped = customers.map((c) => ({
       customer: c,
       phone: phoneMap.get(c.id) || null,
       openBalance: c.quickbooks_id ? (balanceByQbId.get(c.quickbooks_id) || 0) : 0,
+      invoiceCount: c.quickbooks_id ? (invoiceCountByQbId.get(c.quickbooks_id) || 0) : 0,
+      overdueCount: c.quickbooks_id ? (overdueCountByQbId.get(c.quickbooks_id) || 0) : 0,
     }));
 
     mapped.sort((a, b) => {
@@ -159,7 +185,7 @@ export default function Customers() {
     });
 
     return mapped;
-  }, [customers, phoneMap, balanceByQbId, sortField, sortDir]);
+  }, [customers, phoneMap, balanceByQbId, invoiceCountByQbId, overdueCountByQbId, sortField, sortDir]);
 
   // ── Summary stats ──
   const summaryStats = useMemo(() => {
