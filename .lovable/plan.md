@@ -1,77 +1,94 @@
 
 
-# Fix: Add All Missing Odoo Pipeline Stages
+# Fix: Priority Stars and Activity Icons to Match Odoo
 
-## Problem
+## Problems Identified
 
-The ERP pipeline is missing many columns that exist in Odoo. Currently, several Odoo stages are collapsed into other stages (e.g., "Fabrication In Shop" maps to "shop_drawing", "Delivered/Pickup Done" maps to "won"). The user wants every Odoo stage to appear as its own column, matching Odoo exactly.
+### 1. Duplicate leads inflating priority
+There are duplicate leads with the same `odoo_id` -- one from Odoo sync (correct: `odoo_priority: 0`, 0 stars) and one from RFQ email scan (wrong: `priority: medium`, showing 2 stars). These duplicates are cluttering the board and showing incorrect star ratings.
 
-## Missing Stages (from Odoo screenshots)
+Example: `odoo_id 5200` exists twice:
+- Odoo-synced: "FW: Bid Invite: Credit Valley Hospital..." (0 stars, correct)
+- Email-sourced: "S01535, FW: Bid Invite: Credit Valley Hospital..." (2 stars, wrong)
 
-These stages exist in Odoo but are missing from the ERP board:
+### 2. Priority fallback shows wrong stars
+When a lead has an `odoo_id` but no `odoo_priority` (email-sourced duplicates), it falls back to `lead.priority = "medium"` which shows 2 stars. Odoo shows 0 stars for these leads.
 
-- Fabrication In Shop (currently collapsed into Shop Drawing)
-- Ready To Dispatch/Pickup (currently collapsed into Won)
-- Delivered/Pickup Done (currently collapsed into Won)
-- Out for Delivery (missing entirely)
-- No rebars/Out of Scope (currently collapsed into Lost)
-- Loss (currently collapsed into Lost)
-- Merged (currently collapsed into Lost)
-- Temp: IR/VAM (missing entirely)
-- Migration-Others (missing entirely)
-- Estimation-Others (missing entirely)
-- Estimation Partha (missing entirely)
-- Dreamers (missing entirely)
+### 3. Activity icon style doesn't match Odoo
+ERP uses a Clock icon for activity status. Odoo uses horizontal bar icons for activity status indicators.
 
-Additionally, Qualified, RFI, Addendums, and Quotation Priority were incorrectly labeled as "ERP-only" when they DO exist in Odoo.
+## Solution
 
-## Changes
+### 1. Fix priority display (`src/components/pipeline/LeadCard.tsx`)
+If a lead has an `odoo_id` in metadata, only use `odoo_priority` for stars -- never fall back to `lead.priority`. This ensures Odoo-synced data is the source of truth.
 
-### 1. Update PIPELINE_STAGES in `src/pages/Pipeline.tsx`
+### 2. Fix priority display in column header (`src/components/pipeline/PipelineColumn.tsx`)
+Same logic fix for the priority distribution bar in column headers.
 
-Add all missing Odoo stages to the board in their correct Odoo order:
+### 3. Fix priority sorting (`src/pages/Pipeline.tsx`)
+Same logic fix in the `leadsByStage` sorting function so sort order matches Odoo.
 
-```text
-Prospecting > New > Telephonic Enquiries > QC - Ben > 
-Estimation - Ben > Estimation - Karthick > Estimation - Others > 
-Estimation Partha > Hot Enquiries > Qualified > RFI > Addendums > 
-Quotation Priority > Quotation Bids > Won > Lost > Loss > Merged > 
-Shop Drawing > Shop Drawing Sent for Approval > Fabrication In Shop > 
-Ready To Dispatch/Pickup > Delivered/Pickup Done > Out for Delivery > 
-No rebars (Out of Scope) > Temp: IR/VAM > Migration-Others > Dreamers
+### 4. Change activity icon to match Odoo
+Replace the `Clock` icon with a horizontal bars icon (using `AlignJustify` or similar from lucide-react) to visually match Odoo's activity status indicators.
+
+### 5. Clean up duplicate leads (data fix)
+Remove the email-sourced duplicate leads that share an `odoo_id` with an Odoo-synced lead, keeping only the Odoo-synced version.
+
+## Technical Details
+
+### Priority logic change (all 3 files)
+
+Current:
+```typescript
+function getPriorityStars(lead: Lead): number {
+  const meta = lead.metadata as Record<string, unknown> | null;
+  const odooPriority = meta?.odoo_priority as string | undefined;
+  if (odooPriority) return Math.min(parseInt(odooPriority) || 0, 3);
+  if (lead.priority === "high") return 3;
+  if (lead.priority === "medium") return 2;
+  return 0;
+}
 ```
 
-Remove the "ERP-only" comment since these stages all exist in Odoo.
+Fixed:
+```typescript
+function getPriorityStars(lead: Lead): number {
+  const meta = lead.metadata as Record<string, unknown> | null;
+  // If lead has an odoo_id, only use odoo_priority (source of truth)
+  const hasOdooId = !!meta?.odoo_id;
+  const odooPriority = meta?.odoo_priority as string | undefined;
+  if (odooPriority !== undefined && odooPriority !== null) {
+    return Math.min(parseInt(odooPriority) || 0, 3);
+  }
+  if (hasOdooId) return 0; // Odoo lead without priority data = 0 stars
+  if (lead.priority === "high") return 3;
+  if (lead.priority === "medium") return 2;
+  return 0;
+}
+```
 
-### 2. Update STAGE_MAP in `supabase/functions/odoo-crm-sync/index.ts`
+### Activity icon change (`src/components/pipeline/LeadCard.tsx`)
+Replace `Clock` import with `AlignJustify` (horizontal bars) to match Odoo's visual style for activity indicators.
 
-Stop collapsing stages -- each Odoo stage gets its own unique ERP stage ID:
+### Duplicate cleanup (SQL)
+Delete email-sourced duplicate leads that share an `odoo_id` with a properly synced lead:
 
-| Odoo Stage | Current Mapping | New Mapping |
-|---|---|---|
-| Fabrication In Shop | shop_drawing | fabrication_in_shop |
-| Ready To Dispatch/Pickup | won | ready_to_dispatch |
-| Delivered/Pickup Done | won | delivered_pickup_done |
-| Out for Delivery | (missing) | out_for_delivery |
-| No rebars(Our of Scope) | lost | no_rebars_out_of_scope |
-| Loss | lost | loss |
-| Merged | lost | merged |
-| Temp: IR/VAM | (missing) | temp_ir_vam |
-| Migration-Others | (missing) | migration_others |
-| Estimation-Others | (missing) | estimation_others |
-| Estimation Partha | (missing) | estimation_partha |
-| Dreamers | (missing) | dreamers |
-
-### 3. Data Migration
-
-Existing leads that were previously collapsed into wrong stages need to be corrected. On the next full Odoo sync, the reconciliation step will automatically fix them since the STAGE_MAP now maps correctly. No manual SQL migration needed.
+```sql
+DELETE FROM leads
+WHERE id IN (
+  SELECT l1.id FROM leads l1
+  JOIN leads l2 ON (l1.metadata->>'odoo_id') = (l2.metadata->>'odoo_id')
+  WHERE l1.id != l2.id
+  AND l1.title LIKE 'S0%,%'
+  AND l2.title NOT LIKE 'S0%,%'
+)
+```
 
 ## Files Modified
 
 | File | Change |
 |---|---|
-| `src/pages/Pipeline.tsx` | Add all missing stages to PIPELINE_STAGES in Odoo order |
-| `supabase/functions/odoo-crm-sync/index.ts` | Update STAGE_MAP so each Odoo stage has its own unique ID |
-
-No database schema changes needed -- the `stage` column is a text field that accepts any value.
+| `src/components/pipeline/LeadCard.tsx` | Fix priority logic; change Clock to horizontal bars icon |
+| `src/components/pipeline/PipelineColumn.tsx` | Fix priority logic in header bar |
+| `src/pages/Pipeline.tsx` | Fix priority logic in sort function |
 
