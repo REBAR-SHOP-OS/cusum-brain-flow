@@ -2,10 +2,10 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Plus, Mail, Loader2, Sparkles, RefreshCw, Pickaxe } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Plus, Mail, Loader2, Sparkles, RefreshCw, Pickaxe, MoreVertical } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { PipelineBoard } from "@/components/pipeline/PipelineBoard";
-import { PipelineAnalytics } from "@/components/pipeline/PipelineAnalytics";
 import { LeadFormModal } from "@/components/pipeline/LeadFormModal";
 import { LeadDetailDrawer } from "@/components/pipeline/LeadDetailDrawer";
 import { PipelineFilters, DEFAULT_FILTERS, type PipelineFilterState, type GroupByOption } from "@/components/pipeline/PipelineFilters";
@@ -344,30 +344,38 @@ export default function Pipeline() {
                 {filteredLeads.length}{filteredLeads.length !== leads.length ? ` / ${leads.length}` : ""} leads
               </p>
             </div>
-            <div className="hidden md:flex">
-              <PipelineAnalytics leads={filteredLeads} />
-            </div>
           </div>
 
-          <Button onClick={handleScanRfq} size="sm" variant="ghost" disabled={isScanningRfq} className="gap-1.5 h-8 px-2.5">
-            {isScanningRfq ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Mail className="w-3.5 h-3.5" />}
-            <span className="hidden lg:inline text-xs">Scan RFQ</span>
-          </Button>
-          <Button onClick={handleOdooSync} size="sm" variant="ghost" disabled={isSyncingOdoo} className="gap-1.5 h-8 px-2.5">
-            {isSyncingOdoo ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-            <span className="hidden lg:inline text-xs">Odoo Sync</span>
-          </Button>
-          <Button onClick={() => navigate("/prospecting")} size="sm" variant="ghost" className="gap-1.5 h-8 px-2.5">
-            <Pickaxe className="w-3.5 h-3.5" />
-            <span className="hidden lg:inline text-xs">Prospect</span>
-          </Button>
-          <Button onClick={() => setIsAISheetOpen(true)} size="sm" variant="ghost" className="gap-1.5 h-8 px-2.5 text-primary hover:bg-primary/10">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span className="hidden lg:inline text-xs">Blitz</span>
-          </Button>
+          {/* Overflow actions menu — keeps header clean like Odoo */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-8 px-2">
+                <MoreVertical className="w-4 h-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="bg-popover">
+              <DropdownMenuItem onClick={handleScanRfq} disabled={isScanningRfq}>
+                {isScanningRfq ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-2" /> : <Mail className="w-3.5 h-3.5 mr-2" />}
+                Scan RFQ
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleOdooSync} disabled={isSyncingOdoo}>
+                {isSyncingOdoo ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-2" /> : <RefreshCw className="w-3.5 h-3.5 mr-2" />}
+                Odoo Sync
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate("/prospecting")}>
+                <Pickaxe className="w-3.5 h-3.5 mr-2" />
+                Prospect
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setIsAISheetOpen(true)}>
+                <Sparkles className="w-3.5 h-3.5 mr-2" />
+                Blitz (AI)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           <Button onClick={() => setIsFormOpen(true)} size="sm" className="gap-1.5 h-8">
             <Plus className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline text-xs">Add Lead</span>
+            New
           </Button>
         </div>
 

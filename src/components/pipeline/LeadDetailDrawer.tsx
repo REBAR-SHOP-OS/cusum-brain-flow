@@ -7,17 +7,13 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
 import {
   Building, Mail, Phone, Calendar, DollarSign, Pencil, Trash2,
-  TrendingUp, Clock, User, FileText, Star, ArrowRight,
-  Paperclip, Download, Link2, File, Sparkles,
+  TrendingUp, Clock, User, Star,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { PIPELINE_STAGES } from "@/pages/Pipeline";
 import { useUserRole } from "@/hooks/useUserRole";
 import { OdooChatter } from "./OdooChatter";
-import { LeadEmailThread } from "./LeadEmailThread";
-import { LeadFiles } from "./LeadFiles";
-import { LeadAIPanel } from "./LeadAIPanel";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Lead = Tables<"leads">;
@@ -215,102 +211,13 @@ export function LeadDetailDrawer({
           </div>
         </div>
 
-        {/* Body */}
+        {/* Body — Odoo style: Internal Notes + Chatter */}
         <div className="p-6">
-          <Tabs defaultValue="email" className="w-full">
-            <TabsList className="w-full grid grid-cols-7 mb-4">
-              <TabsTrigger value="email">Email</TabsTrigger>
-              <TabsTrigger value="timeline">Timeline</TabsTrigger>
-              <TabsTrigger value="details">Details</TabsTrigger>
-              <TabsTrigger value="files">Files</TabsTrigger>
-              <TabsTrigger value="financials">$</TabsTrigger>
-              <TabsTrigger value="notes">Notes</TabsTrigger>
-              <TabsTrigger value="ai" className="gap-1"><Sparkles className="w-3 h-3" />AI</TabsTrigger>
+          <Tabs defaultValue="chatter" className="w-full">
+            <TabsList className="w-full grid grid-cols-2 mb-4">
+              <TabsTrigger value="notes">Internal Notes</TabsTrigger>
+              <TabsTrigger value="chatter">Chatter</TabsTrigger>
             </TabsList>
-
-            <TabsContent value="email" className="space-y-4 mt-0">
-              <LeadEmailThread metadata={lead.metadata} notes={lead.notes} source={lead.source} leadId={lead.id} customerId={lead.customer_id} leadTitle={lead.title} />
-            </TabsContent>
-
-            <TabsContent value="timeline" className="mt-0">
-              <OdooChatter lead={lead} />
-            </TabsContent>
-
-            <TabsContent value="details" className="space-y-5 mt-0">
-              {/* Secondary details grid */}
-              <div className="grid grid-cols-2 gap-3">
-                {assigned && <DetailItem icon={User} label="Assigned To" value={assigned} />}
-                {city && <DetailItem icon={Building} label="City" value={city} />}
-                {quoteRef && <DetailItem icon={FileText} label="Quote Ref" value={quoteRef} />}
-                {lead.source && <DetailItem icon={Star} label="Source" value={lead.source} />}
-              </div>
-
-              {/* Stage Progress */}
-              <div className="space-y-2">
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Pipeline Progress</h4>
-                <div className="flex gap-1">
-                  {PIPELINE_STAGES.map((stage, i) => (
-                    <button
-                      key={stage.id}
-                      onClick={() => onStageChange(lead.id, stage.id)}
-                      title={stage.label}
-                      className={cn(
-                        "h-2 flex-1 rounded-full transition-all cursor-pointer hover:opacity-80",
-                        i <= currentStageIndex ? stage.color : "bg-muted"
-                      )}
-                    />
-                  ))}
-                </div>
-                <p className="text-xs text-muted-foreground text-center">
-                  Stage {currentStageIndex + 1} of {PIPELINE_STAGES.length}
-                </p>
-              </div>
-            </TabsContent>
-
-            <TabsContent value="files" className="space-y-4 mt-0">
-              <LeadFiles metadata={lead.metadata} leadId={lead.id} />
-            </TabsContent>
-
-            <TabsContent value="financials" className="space-y-4 mt-0">
-              <div className="rounded-lg border border-border p-4 space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Expected Value</span>
-                  <span className="text-xl font-bold">
-                    ${(lead.expected_value || 0).toLocaleString()}
-                  </span>
-                </div>
-                <Separator />
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Probability</span>
-                  <span className="text-xl font-bold">{lead.probability ?? 0}%</span>
-                </div>
-                <div className="h-2 bg-muted rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-primary rounded-full transition-all"
-                    style={{ width: `${lead.probability ?? 0}%` }}
-                  />
-                </div>
-                <Separator />
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Weighted Value</span>
-                  <span className="text-lg font-semibold text-primary">
-                    ${Math.round((lead.expected_value || 0) * (lead.probability ?? 0) / 100).toLocaleString()}
-                  </span>
-                </div>
-              </div>
-
-              {lead.expected_close_date && (
-                <div className="rounded-lg border border-border p-4">
-                  <div className="flex items-center gap-2 text-sm">
-                    <Calendar className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-muted-foreground">Close by</span>
-                    <span className="font-medium">
-                      {format(new Date(lead.expected_close_date), "MMMM d, yyyy")}
-                    </span>
-                  </div>
-                </div>
-              )}
-            </TabsContent>
 
             <TabsContent value="notes" className="space-y-4 mt-0">
               {lead.description && (
@@ -330,8 +237,8 @@ export function LeadDetailDrawer({
               )}
             </TabsContent>
 
-            <TabsContent value="ai" className="mt-0">
-              <LeadAIPanel lead={lead} />
+            <TabsContent value="chatter" className="mt-0">
+              <OdooChatter lead={lead} />
             </TabsContent>
           </Tabs>
         </div>
