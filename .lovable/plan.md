@@ -1,32 +1,77 @@
 
 
-# Fix: Customer Name Empty + Payment History Not Detailed
+# Fix Payment History: Sync Payment Records from QuickBooks
 
-## Root Causes
+## Problem
 
-### 1. Bill To dropdown shows empty
-The Radix Select component has `value="1505"` set, but when the customers list hasn't finished loading or the matching item isn't found in the dropdown, the Select renders blank. The `placeholder` prop only works when value is `undefined` -- it does NOT work when a value is set but has no matching option.
+The Payment History section only shows a generic "Total payments received" fallback because the database has **zero** Payment records. The sync engine supports Payment syncing, but a full backfill times out (too many entity types). An incremental sync was triggered and synced 3 recent payments, confirming the data pipeline works -- but historical payments are missing.
 
-**Fix**: Replace the Select approach in edit mode with a display that always shows `customerRef.name` as the trigger text, regardless of whether the options have loaded.
+## Solution
 
-### 2. Payment History shows only a generic "Paid" line
-The database contains zero Payment records -- only 1,822 Invoices. The sync engine includes "Payment" in its entity types but a full backfill hasn't been run since that was added. Without payment records, only the fallback "Paid: $3,466.84" line appears (derived from `TotalAmt - Balance`).
-
-**Fix (two-part)**:
-- Frontend: Improve the fallback display so it still looks like a proper payment section even without detailed records
-- Backend: Trigger a payment sync so future views show the full breakdown
+Add a targeted "sync-entity" action to the sync engine that syncs only one entity type (e.g., Payment) without timing out. Then, on the frontend, add a "Sync Payments" button in the InvoiceEditor so users can trigger it when payment history is missing.
 
 ## Changes
 
-### File: `src/components/accounting/InvoiceEditor.tsx`
+### 1. Edge Function: `supabase/functions/qb-sync-engine/index.ts`
 
-1. **Customer dropdown fix**: Change the `SelectTrigger` to always render `customerRef.name` as visible text. Use a `defaultValue` pattern or render the name as a child of `SelectValue` so it never appears blank.
+Add a new `sync-entity` action that:
+- Accepts `entity_type` parameter (e.g., "Payment")
+- Runs the same backfill logic but only for that single entity type
+- Completes within the edge function timeout since it's scoped to one type
 
-2. **Payment history fallback improvement**: When `linkedPayments` is empty but `paid > 0`:
-   - Show a single row table with the paid amount (instead of just a plain text line)
-   - Keep the PAID/PARTIAL/OPEN badge
-   - Add a note: "Detailed payment records pending sync"
+Add to the switch statement:
+```
+case "sync-entity":
+  return jsonRes(await handleSyncEntity(svc, companyId, body.entity_type));
+```
 
-### No other files modified
-The `AccountingInvoices.tsx` already passes `payments` correctly. The sync engine already supports Payment type -- a manual backfill will populate the data.
+The `handleSyncEntity` function will:
+- Connect to QB using existing `getCompanyQBConfig`
+- Query all records for the specified entity type
+- Upsert them using `upsertTransactions`
+- Normalize to GL
+- Log the sync
 
+### 2. Frontend: `src/components/accounting/InvoiceEditor.tsx`
+
+When `linkedPayments` is empty but `paid > 0`:
+- Show a "Sync Payment Records" button alongside the fallback display
+- On click, call `qbAction("sync-entity", { entity_type: "Payment" })` then reload
+- After sync, the linked payments will populate from the newly synced Payment records
+
+This requires:
+- Adding `qbAction` to the component props (or passing a `onSyncPayments` callback)
+- Adding a loading state for the sync button
+
+### 3. Frontend: `src/components/accounting/AccountingInvoices.tsx`
+
+Pass a `onSyncPayments` callback to `InvoiceEditor` that calls the sync engine and reloads data.
+
+## Technical Details
+
+### New edge function action: `sync-entity`
+
+Request:
+```json
+{ "action": "sync-entity", "entity_type": "Payment" }
+```
+
+Response:
+```json
+{ "entity_type": "Payment", "synced": 245, "errors": [], "duration_ms": 3500 }
+```
+
+### Data flow after sync
+
+1. User opens invoice with Balance = 0 but no linked payments visible
+2. User clicks "Sync Payment Records"
+3. Edge function queries all Payment records from QuickBooks API
+4. Records are upserted into `qb_transactions` with `entity_type = 'Payment'`
+5. Frontend reloads data, `payments` array now populated
+6. `linkedPayments` memo finds matching payments via `Line[].LinkedTxn[].TxnId`
+7. Payment history table renders with individual dates and amounts
+
+### Files modified
+- `supabase/functions/qb-sync-engine/index.ts` -- add `sync-entity` action + handler
+- `src/components/accounting/InvoiceEditor.tsx` -- add sync button + callback prop
+- `src/components/accounting/AccountingInvoices.tsx` -- pass sync callback to InvoiceEditor
