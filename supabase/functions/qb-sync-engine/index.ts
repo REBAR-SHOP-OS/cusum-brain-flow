@@ -745,24 +745,30 @@ async function handleReconcile(svc: SvcClient, companyId: string) {
 
   const { config, ctx } = conn;
   const errors: string[] = [];
+  const accountDetails: Array<{ account: string; qb: number; erp: number; diff: number }> = [];
 
-  // 1. Fetch QB Trial Balance
+  // 1. Fetch QB Trial Balance — per-account breakdown
   let qbTrialBalance = 0;
+  const qbAccountBalances: Record<string, { name: string; debit: number; credit: number }> = {};
   try {
     const report = await qbFetch(config, "reports/TrialBalance", ctx) as Record<string, unknown>;
     const rows = (report as Record<string, unknown>).Rows as Record<string, unknown> | undefined;
     const rowData = (rows?.Row as Array<Record<string, unknown>>) || [];
-    // Sum the total row (last row typically has totals)
     for (const row of rowData) {
+      const colData = (row.ColData as Array<{ value?: string }>) || [];
       const summary = row.Summary as Record<string, unknown> | undefined;
       if (summary) {
-        const colData = (summary.ColData as Array<{ value?: string }>) || [];
-        if (colData.length >= 3) {
-          // colData[1] = debit total, colData[2] = credit total
-          const debit = parseFloat(colData[1]?.value || "0");
-          const credit = parseFloat(colData[2]?.value || "0");
-          qbTrialBalance = debit - credit; // Should be 0 if balanced
+        const sumCols = (summary.ColData as Array<{ value?: string }>) || [];
+        if (sumCols.length >= 3) {
+          const debit = parseFloat(sumCols[1]?.value || "0");
+          const credit = parseFloat(sumCols[2]?.value || "0");
+          qbTrialBalance = debit - credit;
         }
+      } else if (colData.length >= 3 && colData[0]?.value) {
+        const name = colData[0].value;
+        const debit = parseFloat(colData[1]?.value || "0");
+        const credit = parseFloat(colData[2]?.value || "0");
+        qbAccountBalances[name] = { name, debit, credit };
       }
     }
   } catch (e) { errors.push(`QB Trial Balance fetch: ${e}`); }
@@ -784,27 +790,85 @@ async function handleReconcile(svc: SvcClient, companyId: string) {
     erpTrialBalance = totalDebit - totalCredit;
   } catch (e) { errors.push(`ERP Trial Balance calc: ${e}`); }
 
-  const diff = Math.abs(qbTrialBalance - erpTrialBalance);
+  // 3. Per-account diffs: AR, AP from mirror tables
+  let arDiff = 0;
+  let apDiff = 0;
+  try {
+    // QB AR total from invoices mirror
+    const { data: invRows } = await svc
+      .from("qb_transactions")
+      .select("balance")
+      .eq("entity_type", "Invoice")
+      .eq("is_deleted", false);
+    const erpAR = (invRows || []).reduce((s: number, r: { balance: number | null }) => s + (r.balance || 0), 0);
 
-  // 3. Alert if difference > $0.01
-  if (diff > 0.01) {
+    // QB AP total from bills mirror
+    const { data: billRows } = await svc
+      .from("qb_transactions")
+      .select("balance")
+      .eq("entity_type", "Bill")
+      .eq("is_deleted", false);
+    const erpAP = (billRows || []).reduce((s: number, r: { balance: number | null }) => s + (r.balance || 0), 0);
+
+    // QB AR/AP from QB accounts
+    const qbAR = qbAccountBalances["Accounts Receivable (A/R)"]?.debit || 0;
+    const qbAP = qbAccountBalances["Accounts Payable (A/P)"]?.credit || 0;
+
+    arDiff = Math.abs(erpAR - qbAR);
+    apDiff = Math.abs(erpAP - qbAP);
+
+    if (arDiff > 0.01) accountDetails.push({ account: "Accounts Receivable", qb: qbAR, erp: erpAR, diff: arDiff });
+    if (apDiff > 0.01) accountDetails.push({ account: "Accounts Payable", qb: qbAP, erp: erpAP, diff: apDiff });
+  } catch (e) { errors.push(`AR/AP comparison: ${e}`); }
+
+  const diff = Math.abs(qbTrialBalance - erpTrialBalance);
+  const isBalanced = diff <= 0.01 && arDiff <= 0.01 && apDiff <= 0.01;
+
+  // 4. Persist trial balance check result (hard-stop enforcement)
+  try {
+    await svc.from("trial_balance_checks").insert({
+      company_id: companyId,
+      is_balanced: isBalanced,
+      total_diff: diff,
+      qb_total: qbTrialBalance,
+      erp_total: erpTrialBalance,
+      ar_diff: arDiff,
+      ap_diff: apDiff,
+      details: accountDetails,
+    });
+  } catch (e) { errors.push(`Persist trial balance check: ${e}`); }
+
+  // 5. Alert if mismatch
+  if (!isBalanced) {
+    const detailLines = accountDetails.map(d => `${d.account}: QB=$${d.qb.toFixed(2)} ERP=$${d.erp.toFixed(2)} Diff=$${d.diff.toFixed(2)}`).join("\n");
     await svc.from("human_tasks").insert({
       company_id: companyId,
-      title: `Trial Balance Mismatch: $${diff.toFixed(2)}`,
-      description: `QB Trial Balance differs from ERP by $${diff.toFixed(2)}. QB=${qbTrialBalance.toFixed(2)}, ERP=${erpTrialBalance.toFixed(2)}. Review and run incremental sync.`,
-      severity: "warning",
+      title: `⛔ Trial Balance Mismatch: $${diff.toFixed(2)} — Posting Blocked`,
+      description: `HARD STOP: QB Trial Balance differs from ERP by $${diff.toFixed(2)}. QB=${qbTrialBalance.toFixed(2)}, ERP=${erpTrialBalance.toFixed(2)}.\n\nAccount-level diffs:\n${detailLines || "No per-account breakdown available."}\n\nAll accounting posts are BLOCKED until this is resolved.`,
+      severity: "critical",
       category: "accounting",
       entity_type: "qb_sync",
     });
   }
 
-  // 4. Run incremental sync to repair any missed updates
+  // 6. Run incremental sync to repair any missed updates
   const incrementalResult = await handleIncremental(svc, companyId);
 
   const duration = Date.now() - t0;
   await logSync(svc, companyId, "ALL", "reconcile", incrementalResult.synced, errors.length, errors, duration, diff);
 
-  return { trial_balance_diff: diff, qb: qbTrialBalance, erp: erpTrialBalance, incremental: incrementalResult, errors, duration_ms: duration };
+  return {
+    trial_balance_diff: diff,
+    is_balanced: isBalanced,
+    qb: qbTrialBalance,
+    erp: erpTrialBalance,
+    ar_diff: arDiff,
+    ap_diff: apDiff,
+    account_details: accountDetails,
+    incremental: incrementalResult,
+    errors,
+    duration_ms: duration,
+  };
 }
 
 // ─── Main Handler ──────────────────────────────────────────────────
