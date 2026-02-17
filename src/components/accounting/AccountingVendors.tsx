@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Store, Search, AlertTriangle, FileText, DollarSign, ChevronDown } from "lucide-react";
+import { Store, Search, AlertTriangle, FileText, DollarSign, ChevronDown, Plus } from "lucide-react";
 import type { useQuickBooksData, QBVendor, QBBill } from "@/hooks/useQuickBooksData";
 import { VendorDetail } from "./VendorDetail";
+import { AddVendorDialog } from "./AddVendorDialog";
 
 interface Props {
   data: ReturnType<typeof useQuickBooksData>;
@@ -29,6 +30,7 @@ export function AccountingVendors({ data }: Props) {
   const { vendors, bills } = data;
   const [search, setSearch] = useState("");
   const [selectedVendor, setSelectedVendor] = useState<QBVendor | null>(null);
+  const [addVendorOpen, setAddVendorOpen] = useState(false);
 
   const filtered = vendors.filter(
     (v) =>
@@ -115,14 +117,19 @@ export function AccountingVendors({ data }: Props) {
         </Card>
       </div>
 
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-        <Input
-          placeholder="Search vendors..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-10 h-12 text-base"
-        />
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+          <Input
+            placeholder="Search vendors..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-10 h-12 text-base"
+          />
+        </div>
+        <Button onClick={() => setAddVendorOpen(true)} className="h-12 gap-2">
+          <Plus className="w-4 h-4" /> Add Vendor
+        </Button>
       </div>
 
       <Card>
@@ -211,6 +218,8 @@ export function AccountingVendors({ data }: Props) {
           {selectedVendor && <VendorDetail vendor={selectedVendor} />}
         </SheetContent>
       </Sheet>
+
+      <AddVendorDialog open={addVendorOpen} onOpenChange={setAddVendorOpen} onSuccess={() => data.loadAll()} />
     </div>
   );
 }
