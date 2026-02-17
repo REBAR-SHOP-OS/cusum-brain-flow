@@ -1,92 +1,45 @@
 
-# Auto-Open Team Chat on New Messages (Odoo-Style)
 
-## Overview
-When a new team message arrives, the chat panel should automatically open if the user isn't typing elsewhere. If the user IS busy typing, show a toast with an "Open Chat" button instead. This requires lifting the chat panel's open/close state out of `TopBar` into a shared context so the notification system can trigger it.
+# Fix: Vendors List Not Clickable + Missing Vendor Transactions
+
+## Problem 1: Vendors in Bills Tab Are Not Clickable
+
+In `src/components/accounting/AccountingBills.tsx`, the "Vendors" sub-tab renders rows as plain table rows with no click handler. Unlike the dedicated Vendors tab (`AccountingVendors.tsx`), these rows cannot be clicked to view vendor details.
+
+**Fix**: Add a `Sheet` with `VendorDetail` (same pattern used in `AccountingVendors.tsx`) and make each vendor row clickable with `cursor-pointer` and an `onClick` handler.
+
+## Problem 2: Vendor Transactions Don't Load
+
+In `src/components/accounting/VendorDetail.tsx` (line 161), the auto-sync logic only triggers when:
+- Transactions list is empty AND
+- `qbVendor?.balance > 0`
+
+If the vendor's cached balance is 0 or null (common when mirror data is incomplete), the auto-sync never fires and the user sees "No transactions found" permanently.
+
+**Fix**: Remove the balance check from the auto-sync condition. If there are no cached transactions, always attempt to sync them once from QuickBooks regardless of balance.
 
 ## Changes
 
-### 1. New file: `src/contexts/ChatPanelContext.tsx`
-Create a lightweight React context that holds:
-- `chatOpen` (boolean) and `setChatOpen`
-- `openChatToChannel(channelId: string)` -- opens the panel and navigates to a specific channel
-- `pendingChannelId` -- so GlobalChatPanel can auto-select the right channel when opened
+### File: `src/components/accounting/AccountingBills.tsx`
+- Import `Sheet`, `SheetContent`, `SheetHeader`, `SheetTitle` and `VendorDetail`
+- Add `selectedVendor` state
+- Add `cursor-pointer`, `hover:bg-muted/50`, and `onClick` to each vendor row
+- Add a `Sheet` at the bottom that renders `VendorDetail` when a vendor is selected
 
-### 2. Update `src/components/layout/TopBar.tsx`
-- Remove local `chatOpen` / `setChatOpen` state
-- Consume `ChatPanelContext` instead
-- Pass context values to `GlobalChatPanel`
+### File: `src/components/accounting/VendorDetail.tsx`
+- Line 161: Change the auto-sync condition from:
+  ```
+  transactions.length === 0 && (qbVendor?.balance ?? 0) > 0
+  ```
+  to:
+  ```
+  transactions.length === 0
+  ```
+  This ensures transactions are always fetched on first open regardless of cached balance.
 
-### 3. Update `src/components/layout/GlobalChatPanel.tsx`
-- Accept an optional `initialChannelId` prop from context
-- When `initialChannelId` changes and the panel opens, auto-select that channel
+## Summary
 
-### 4. Update `src/hooks/useNotifications.ts`
-- For INSERT notifications where `metadata.channel_id` exists (team chat messages), instead of a generic toast:
-  - Check if the user is actively typing (via `document.activeElement` tag check -- if an input/textarea is focused, they're typing)
-  - If NOT typing: call `openChatToChannel(channelId)` to auto-open the panel
-  - If typing: show a sonner toast with an "Open Chat" action button that calls `openChatToChannel(channelId)`
-- This requires `useNotifications` to accept an optional callback, OR we create a separate hook/listener
-
-Since `useNotifications` is a hook (not a component with context access), the cleanest approach is:
-- Add a **global event emitter** pattern (simple custom event on `window`) -- `team-chat-incoming` with `channelId` in detail
-- Fire this event from `useNotifications` when a team chat notification arrives
-- Listen for it in `TopBar` (or the context provider) to open the chat panel
-
-### 5. Wire into `AppLayout.tsx`
-- Wrap the layout with `ChatPanelProvider`
-
-## Technical Details
-
-**New file: `src/contexts/ChatPanelContext.tsx`**
-```typescript
-// React context with chatOpen, setChatOpen, openChatToChannel, pendingChannelId
-```
-
-**In `useNotifications.ts` (INSERT handler):**
-```typescript
-// When metadata has channel_id (team chat notification)
-if (newRow.metadata?.channel_id) {
-  window.dispatchEvent(new CustomEvent("team-chat-incoming", {
-    detail: { channelId: newRow.metadata.channel_id, title: newRow.title, description: newRow.description }
-  }));
-  // Skip the generic toast -- the listener will handle it
-  return;
-}
-```
-
-**In `ChatPanelProvider`:**
-```typescript
-useEffect(() => {
-  const handler = (e: CustomEvent) => {
-    const { channelId, title, description } = e.detail;
-    const isTyping = document.activeElement?.tagName === "INPUT" || 
-                     document.activeElement?.tagName === "TEXTAREA";
-    if (!isTyping) {
-      // Auto-open chat panel to that channel
-      setPendingChannelId(channelId);
-      setChatOpen(true);
-    } else {
-      // Show toast with "Open Chat" button
-      toast(title, {
-        description,
-        duration: 8000,
-        action: { label: "Open Chat", onClick: () => { setPendingChannelId(channelId); setChatOpen(true); } },
-      });
-    }
-  };
-  window.addEventListener("team-chat-incoming", handler);
-  return () => window.removeEventListener("team-chat-incoming", handler);
-}, []);
-```
-
-## Files Modified
 | File | Change |
 |------|--------|
-| `src/contexts/ChatPanelContext.tsx` | New -- context provider for chat panel state |
-| `src/components/layout/TopBar.tsx` | Use context instead of local state for chatOpen |
-| `src/components/layout/GlobalChatPanel.tsx` | Accept + react to `pendingChannelId` prop |
-| `src/components/layout/AppLayout.tsx` | Wrap with `ChatPanelProvider` |
-| `src/hooks/useNotifications.ts` | Fire custom event for team chat notifications |
-
-No database changes needed.
+| `src/components/accounting/AccountingBills.tsx` | Add clickable vendor rows with VendorDetail sheet |
+| `src/components/accounting/VendorDetail.tsx` | Remove balance > 0 gate on auto-sync |
