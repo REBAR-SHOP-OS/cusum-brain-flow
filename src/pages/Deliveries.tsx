@@ -5,9 +5,11 @@ import { useCompletedBundles, type CompletedBundle } from "@/hooks/useCompletedB
 import { useAuth } from "@/lib/auth";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useCompanyId } from "@/hooks/useCompanyId";
+import { useDeliveryActions } from "@/hooks/useDeliveryActions";
 import { ReadyBundleList } from "@/components/dispatch/ReadyBundleList";
 import { PODCaptureDialog } from "@/components/delivery/PODCaptureDialog";
 import { StopIssueDialog } from "@/components/delivery/StopIssueDialog";
+import { DeliveryPackingSlip } from "@/components/delivery/DeliveryPackingSlip";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -27,7 +29,8 @@ import {
   User,
   ArrowLeft,
   Camera,
-  FileWarning
+  FileWarning,
+  FileText
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -83,11 +86,20 @@ export default function Deliveries() {
   const [driverMode, setDriverMode] = useState(false);
   const [podStopId, setPodStopId] = useState<string | null>(null);
   const [issueStopId, setIssueStopId] = useState<string | null>(null);
+  const [showPackingSlip, setShowPackingSlip] = useState<{
+    slipNumber: string;
+    deliveryNumber: string;
+    customerName: string;
+    shipTo?: string;
+    date: string;
+    items: any[];
+  } | null>(null);
   const { bundles } = useCompletedBundles();
   const { user } = useAuth();
   const { isField } = useUserRole();
   const { companyId } = useCompanyId();
   const queryClient = useQueryClient();
+  const { createDeliveryFromBundle, creating } = useDeliveryActions();
 
   // Get current user's profile name for driver mode filtering
   const { data: myProfile } = useQuery({
@@ -133,6 +145,21 @@ export default function Deliveries() {
       return data as DeliveryStop[];
     },
     enabled: !!selectedDelivery && !!companyId,
+  });
+
+  // Packing slips query
+  const { data: packingSlips = [] } = useQuery({
+    queryKey: ["packing-slips", companyId],
+    enabled: !!companyId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("packing_slips" as any)
+        .select("*")
+        .eq("company_id", companyId!)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data as any[];
+    },
   });
 
   // Apply driver mode filter
@@ -276,6 +303,10 @@ export default function Deliveries() {
                   <TabsTrigger value="today">Today ({todayDeliveries.length})</TabsTrigger>
                   <TabsTrigger value="upcoming">Upcoming ({upcomingDeliveries.length})</TabsTrigger>
                   <TabsTrigger value="all">All ({filteredDeliveries.length})</TabsTrigger>
+                  <TabsTrigger value="slips">
+                    <FileText className="w-3.5 h-3.5 mr-1" />
+                    Slips ({packingSlips.length})
+                  </TabsTrigger>
                 </TabsList>
               </div>
 
@@ -307,6 +338,49 @@ export default function Deliveries() {
                   onSelect={(d) => { setSelectedDelivery(d); setSelectedBundle(null); }}
                   emptyMessage="No deliveries found"
                 />
+              </TabsContent>
+
+              <TabsContent value="slips" className="flex-1 overflow-hidden px-4 sm:px-6 pb-6">
+                <ScrollArea className="h-full">
+                  <div className="grid gap-3 pr-4 pt-4">
+                    {packingSlips.length === 0 ? (
+                      <div className="flex items-center justify-center h-64 text-muted-foreground">
+                        <p>No packing slips yet</p>
+                      </div>
+                    ) : packingSlips.map((slip: any) => (
+                      <Card
+                        key={slip.id}
+                        className="cursor-pointer hover:bg-muted/30 transition-colors"
+                        onClick={() => setShowPackingSlip({
+                          slipNumber: slip.slip_number,
+                          deliveryNumber: slip.slip_number,
+                          customerName: slip.customer_name || "—",
+                          date: slip.created_at,
+                          items: slip.items_json || [],
+                        })}
+                      >
+                        <CardContent className="p-4">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="font-medium flex items-center gap-2">
+                              <FileText className="w-4 h-4" />
+                              {slip.slip_number}
+                            </span>
+                            <Badge className={
+                              slip.status === "delivered" ? "bg-primary/30 text-primary" :
+                              slip.status === "archived" ? "bg-muted text-muted-foreground" :
+                              "bg-accent/20 text-accent-foreground"
+                            }>
+                              {slip.status}
+                            </Badge>
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            {slip.customer_name || "No customer"} • {format(new Date(slip.created_at), "MMM d, yyyy")}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </ScrollArea>
               </TabsContent>
             </Tabs>
           </div>
@@ -367,15 +441,26 @@ export default function Deliveries() {
               </div>
 
               <div className="px-4 sm:px-6 py-4 border-t border-border">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button className="w-full gap-2" disabled>
-                      <Plus className="w-4 h-4" />
-                      Create Delivery
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Coming soon</TooltipContent>
-                </Tooltip>
+                <Button
+                  className="w-full gap-2"
+                  disabled={creating}
+                  onClick={async () => {
+                    const result = await createDeliveryFromBundle(selectedBundle);
+                    if (result) {
+                      setShowPackingSlip({
+                        slipNumber: result.slipNumber,
+                        deliveryNumber: result.deliveryNumber,
+                        customerName: selectedBundle.projectName,
+                        date: new Date().toISOString(),
+                        items: result.items,
+                      });
+                      setSelectedBundle(null);
+                    }
+                  }}
+                >
+                  {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                  Create Delivery
+                </Button>
               </div>
             </>
           ) : selectedDelivery ? (
@@ -474,6 +559,19 @@ export default function Deliveries() {
           stopId={issueStopId || ""}
           onComplete={refreshStops}
         />
+
+        {/* Packing Slip Overlay */}
+        {showPackingSlip && (
+          <DeliveryPackingSlip
+            slipNumber={showPackingSlip.slipNumber}
+            deliveryNumber={showPackingSlip.deliveryNumber}
+            customerName={showPackingSlip.customerName}
+            shipTo={showPackingSlip.shipTo}
+            date={showPackingSlip.date}
+            items={showPackingSlip.items}
+            onClose={() => setShowPackingSlip(null)}
+          />
+        )}
       </div>
     </TooltipProvider>
   );

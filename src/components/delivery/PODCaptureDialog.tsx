@@ -6,11 +6,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { Camera, Pen, Loader2, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { useCompanyId } from "@/hooks/useCompanyId";
+import { SignaturePad } from "@/components/shopfloor/SignaturePad";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
@@ -22,17 +22,16 @@ interface PODCaptureDialogProps {
 }
 
 export function PODCaptureDialog({ open, onOpenChange, stopId, onComplete }: PODCaptureDialogProps) {
-  const [signature, setSignature] = useState("");
+  const [signatureData, setSignatureData] = useState<string | null>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const { companyId } = useCompanyId();
 
-  // Fix 3: Reset state when dialog opens/closes
   useEffect(() => {
     if (!open) {
-      setSignature("");
+      setSignatureData(null);
       setPhotoFile(null);
       setPhotoPreview(null);
     }
@@ -41,13 +40,10 @@ export function PODCaptureDialog({ open, onOpenChange, stopId, onComplete }: POD
   const handlePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    // Fix 2: File size validation
     if (file.size > MAX_FILE_SIZE) {
       toast.error("File too large — max 10MB per photo");
       return;
     }
-
     setPhotoFile(file);
     setPhotoPreview(URL.createObjectURL(file));
   };
@@ -56,28 +52,34 @@ export function PODCaptureDialog({ open, onOpenChange, stopId, onComplete }: POD
     setSaving(true);
     try {
       let photoPath: string | null = null;
+      let signaturePath: string | null = null;
 
       if (photoFile && companyId) {
-        const path = `${companyId}/pod/${stopId}-${Date.now()}.jpg`;
+        const path = `${companyId}/pod/${stopId}-photo-${Date.now()}.jpg`;
         const { error: uploadErr } = await supabase.storage
           .from("clearance-photos")
           .upload(path, photoFile);
         if (uploadErr) throw uploadErr;
-        photoPath = path; // Store path, not public URL
+        photoPath = path;
       }
 
-      const updates: {
-        status: string;
-        arrival_time: string;
-        departure_time: string;
-        pod_signature?: string;
-        pod_photo_url?: string;
-      } = {
+      // Upload signature canvas as PNG
+      if (signatureData && companyId) {
+        const blob = await (await fetch(signatureData)).blob();
+        const sigPath = `${companyId}/pod/${stopId}-sig-${Date.now()}.png`;
+        const { error: sigErr } = await supabase.storage
+          .from("clearance-photos")
+          .upload(sigPath, blob, { contentType: "image/png" });
+        if (sigErr) throw sigErr;
+        signaturePath = sigPath;
+      }
+
+      const updates: Record<string, unknown> = {
         status: "completed",
-        arrival_time: new Date().toISOString(), // Fix 5: Set arrival_time
+        arrival_time: new Date().toISOString(),
         departure_time: new Date().toISOString(),
       };
-      if (signature) updates.pod_signature = signature;
+      if (signaturePath) updates.pod_signature = signaturePath;
       if (photoPath) updates.pod_photo_url = photoPath;
 
       const { error } = await supabase
@@ -85,6 +87,28 @@ export function PODCaptureDialog({ open, onOpenChange, stopId, onComplete }: POD
         .update(updates)
         .eq("id", stopId);
       if (error) throw error;
+
+      // Update related packing_slips if paths exist
+      if (signaturePath || photoPath) {
+        // Find delivery_id for this stop
+        const { data: stop } = await supabase
+          .from("delivery_stops")
+          .select("delivery_id")
+          .eq("id", stopId)
+          .single();
+
+        if (stop?.delivery_id) {
+          const slipUpdates: Record<string, unknown> = {};
+          if (signaturePath) slipUpdates.signature_path = signaturePath;
+          if (photoPath) slipUpdates.site_photo_path = photoPath;
+          slipUpdates.status = "delivered";
+
+          await supabase
+            .from("packing_slips" as any)
+            .update(slipUpdates)
+            .eq("delivery_id", stop.delivery_id);
+        }
+      }
 
       toast.success("POD captured successfully");
       onComplete();
@@ -109,7 +133,7 @@ export function PODCaptureDialog({ open, onOpenChange, stopId, onComplete }: POD
         <div className="space-y-4">
           {/* Photo */}
           <div>
-            <label className="text-sm font-medium mb-1 block">Photo</label>
+            <label className="text-sm font-medium mb-1 block">Job Site Photo</label>
             <input
               ref={fileRef}
               type="file"
@@ -119,7 +143,17 @@ export function PODCaptureDialog({ open, onOpenChange, stopId, onComplete }: POD
               onChange={handlePhoto}
             />
             {photoPreview ? (
-              <img src={photoPreview} alt="POD" className="rounded-lg max-h-40 w-full object-cover" />
+              <div className="relative">
+                <img src={photoPreview} alt="POD" className="rounded-lg max-h-40 w-full object-cover" />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="absolute top-1 right-1 h-6 text-xs"
+                  onClick={() => { setPhotoFile(null); setPhotoPreview(null); }}
+                >
+                  Change
+                </Button>
+              </div>
             ) : (
               <Button
                 variant="outline"
@@ -132,23 +166,22 @@ export function PODCaptureDialog({ open, onOpenChange, stopId, onComplete }: POD
             )}
           </div>
 
-          {/* Signature (text for now) */}
+          {/* Canvas Signature */}
           <div>
             <label className="text-sm font-medium mb-1 flex items-center gap-1.5">
               <Pen className="w-3.5 h-3.5" />
-              Receiver Name / Signature
+              Signature
             </label>
-            <Textarea
-              value={signature}
-              onChange={(e) => setSignature(e.target.value)}
-              placeholder="Enter receiver's name"
-              rows={2}
+            <SignaturePad
+              onSignatureChange={setSignatureData}
+              width={380}
+              height={160}
             />
           </div>
 
           <Button
             onClick={handleSubmit}
-            disabled={saving || (!signature && !photoFile)}
+            disabled={saving || (!signatureData && !photoFile)}
             className="w-full gap-2"
           >
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
