@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { ChatThread } from "@/components/chat/ChatThread";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { Message } from "@/components/chat/ChatMessage";
-import { sendAgentMessage, AgentType, ChatMessage as AgentChatMessage, PixelPost } from "@/lib/agent";
+import { sendAgentMessage, AgentType, ChatMessage as AgentChatMessage, PixelPost, AttachedFile } from "@/lib/agent";
+import { UploadedFile } from "@/components/chat/ChatInput";
 import { AgentSuggestions } from "@/components/agent/AgentSuggestions";
 import { agentSuggestions } from "@/components/agent/agentSuggestionsData";
 import { AgentHistorySidebar } from "@/components/agent/AgentHistorySidebar";
@@ -129,7 +130,7 @@ export default function AgentWorkspace() {
     }
   }, [location.state]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleSendInternal = useCallback(async (content: string, slotOverride?: number) => {
+  const handleSendInternal = useCallback(async (content: string, slotOverride?: number, files?: UploadedFile[]) => {
     const userMsg: Message = {
       id: crypto.randomUUID(),
       role: "user",
@@ -173,7 +174,8 @@ export default function AgentWorkspace() {
         content: m.content,
       }));
 
-      const response = await sendAgentMessage(config.agentType, content, history, extraContext, undefined, slotOverride);
+      const attachedFiles = files?.map(f => ({ name: f.name, url: f.url }));
+      const response = await sendAgentMessage(config.agentType, content, history, extraContext, attachedFiles, slotOverride);
 
       // Track pixel sequential flow
       if (agentId === "social" && response.nextSlot) {
@@ -273,8 +275,8 @@ export default function AgentWorkspace() {
   // Keep ref in sync
   useEffect(() => { sendRef.current = handleSendInternal; }, [handleSendInternal]);
 
-  const handleSend = useCallback((content: string) => {
-    handleSendInternal(content);
+  const handleSend = useCallback((content: string, files?: UploadedFile[]) => {
+    handleSendInternal(content, undefined, files);
   }, [handleSendInternal]);
 
   const handleApprovePixelSlot = useCallback(async () => {
