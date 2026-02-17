@@ -92,7 +92,7 @@ export function DockChatBar() {
       })}
 
       {/* Launcher pill */}
-      <div className="fixed bottom-0 right-4 z-50">
+      <div className="fixed bottom-0 right-4 z-[9998]">
         <Popover open={launcherOpen} onOpenChange={setLauncherOpen}>
           <PopoverTrigger asChild>
             <button className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-t-lg shadow-lg hover:bg-primary/90 transition-colors text-xs font-semibold">

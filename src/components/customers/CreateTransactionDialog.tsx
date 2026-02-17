@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useState, useMemo } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompanyId } from "@/hooks/useCompanyId";
 import { useToast } from "@/hooks/use-toast";
@@ -15,6 +15,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 import { Plus, Trash2, Loader2 } from "lucide-react";
 
 export type TransactionType =
@@ -36,13 +38,11 @@ interface CreateTransactionDialogProps {
   type: TransactionType;
   customerQbId: string;
   customerName: string;
-  /** Pre-fill from pattern */
   prefill?: {
     lineItems?: LineItem[];
     memo?: string;
     amount?: number;
   };
-  /** Called after successful creation so pattern can be recorded */
   onCreated?: (payload: {
     type: TransactionType;
     lineItems: LineItem[];
@@ -93,6 +93,37 @@ export function CreateTransactionDialog({
   const [taxEnabled, setTaxEnabled] = useState(true);
   const [taxRate, setTaxRate] = useState(13);
 
+  // Fetch QB items for product picker
+  const { data: qbItems } = useQuery({
+    queryKey: ["qb_items_for_picker", companyId],
+    queryFn: async () => {
+      if (!companyId) return [];
+      const { data, error } = await supabase
+        .from("accounting_mirror")
+        .select("quickbooks_id, data")
+        .eq("company_id", companyId)
+        .eq("entity_type", "Item");
+      if (error) throw error;
+      return (data || [])
+        .map((row) => {
+          const d = row.data as Record<string, unknown>;
+          return {
+            id: row.quickbooks_id,
+            name: (d.Name as string) || "",
+            description: (d.Description as string) || "",
+            unitPrice: (d.UnitPrice as number) || 0,
+            type: (d.Type as string) || "",
+            active: d.Active !== false,
+          };
+        })
+        .filter((i) => i.active && i.type !== "Category");
+    },
+    enabled: !!companyId && open,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const activeProducts = useMemo(() => qbItems || [], [qbItems]);
+
   const total = lineItems.reduce((s, li) => s + li.qty * li.unitPrice, 0);
   const safeTaxRate = Math.max(0, Math.min(100, taxRate));
   const taxAmount = needsLineItems(type) && taxEnabled ? total * (safeTaxRate / 100) : 0;
@@ -108,6 +139,18 @@ export function CreateTransactionDialog({
     setLineItems((prev) =>
       prev.map((li, i) => (i === idx ? { ...li, [field]: value } : li))
     );
+
+  const selectProduct = (idx: number, productId: string) => {
+    const product = activeProducts.find((p) => p.id === productId);
+    if (!product) return;
+    setLineItems((prev) =>
+      prev.map((li, i) =>
+        i === idx
+          ? { ...li, description: product.description || product.name, unitPrice: product.unitPrice }
+          : li
+      )
+    );
+  };
 
   const handleSubmit = async () => {
     if (needsLineItems(type) && lineItems.every((li) => !li.description.trim())) {
@@ -171,7 +214,6 @@ export function CreateTransactionDialog({
       });
 
       onOpenChange(false);
-      // Reset
       setLineItems([{ description: "", qty: 1, unitPrice: 0 }]);
       setMemo("");
       setDueDate("");
@@ -200,7 +242,6 @@ export function CreateTransactionDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-2">
-          {/* Payment-specific: amount field */}
           {type === "Payment" && (
             <div className="space-y-1.5">
               <Label>Payment Amount ($)</Label>
@@ -215,7 +256,6 @@ export function CreateTransactionDialog({
             </div>
           )}
 
-          {/* Due date for Invoice / Estimate */}
           {(type === "Invoice" || type === "Estimate") && (
             <div className="space-y-1.5">
               <Label>{type === "Estimate" ? "Expiration Date" : "Due Date"}</Label>
@@ -227,12 +267,17 @@ export function CreateTransactionDialog({
             </div>
           )}
 
-          {/* Line items */}
           {needsLineItems(type) && (
             <div className="space-y-2">
               <Label>Line Items</Label>
               <div className="border border-border rounded-lg overflow-hidden">
-                <div className="grid grid-cols-[1fr_80px_100px_90px_36px] gap-2 px-3 py-2 bg-muted/50 text-xs font-medium text-muted-foreground">
+                <div className={cn(
+                  "grid gap-2 px-3 py-2 bg-muted/50 text-xs font-medium text-muted-foreground",
+                  activeProducts.length > 0
+                    ? "grid-cols-[140px_1fr_80px_100px_90px_36px]"
+                    : "grid-cols-[1fr_80px_100px_90px_36px]"
+                )}>
+                  {activeProducts.length > 0 && <span>Product/Service</span>}
                   <span>Description</span>
                   <span>Qty</span>
                   <span>Unit Price</span>
@@ -242,8 +287,27 @@ export function CreateTransactionDialog({
                 {lineItems.map((li, idx) => (
                   <div
                     key={idx}
-                    className="grid grid-cols-[1fr_80px_100px_90px_36px] gap-2 px-3 py-1.5 border-t border-border items-center"
+                    className={cn(
+                      "grid gap-2 px-3 py-1.5 border-t border-border items-center",
+                      activeProducts.length > 0
+                        ? "grid-cols-[140px_1fr_80px_100px_90px_36px]"
+                        : "grid-cols-[1fr_80px_100px_90px_36px]"
+                    )}
                   >
+                    {activeProducts.length > 0 && (
+                      <Select onValueChange={(val) => selectProduct(idx, val)}>
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue placeholder="Select..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {activeProducts.map((p) => (
+                            <SelectItem key={p.id} value={p.id}>
+                              {p.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
                     <Input
                       className="h-8 text-sm"
                       placeholder="Description"
@@ -318,7 +382,6 @@ export function CreateTransactionDialog({
             </div>
           )}
 
-          {/* Memo */}
           <div className="space-y-1.5">
             <Label>Memo / Notes</Label>
             <Textarea
