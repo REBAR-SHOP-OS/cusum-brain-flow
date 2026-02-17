@@ -1,47 +1,68 @@
 
-# Audit & Fix: Customer Detail -- Edit Not Wired, Delete Unsafe
+# Upgrade VendorDetail to Match CustomerDetail (QB Clone)
 
-## Problems Found
+## Problem
+The current VendorDetail is a minimal view -- just the vendor name, a few inline contact fields, and a flat 2-column grid under "Supplier Details". It's missing:
+- Avatar with initials
+- Copy-to-clipboard buttons on contact fields
+- Rich contact info grid in the header (Mobile, Alt Phone, Fax shown separately)
+- Proper Financial Summary card (matching CustomerDetail style with QB Balance line)
+- Organized detail sections (Contact Info, Communication, Address, Payment & Billing, QB Metadata)
+- Many QB fields not extracted at all (GivenName, FamilyName, Mobile, AlternatePhone, PrintOnCheckName, BillRate, CostRate, Vendor1099, T4AEligible, T5018Eligible)
 
-### 1. Edit button not wired in Accounting Customers
-In `AccountingCustomers.tsx` (line 147), the `onEdit` handler is `() => {}` -- clicking Edit does nothing.
+## Available QB Vendor Fields (from database)
+AcctNum, Active, AlternatePhone, Balance, BillAddr, BillRate, CompanyName, CostRate, CurrencyRef, DisplayName, FamilyName, GivenName, Id, MetaData, Mobile, PrimaryEmailAddr, PrimaryPhone, PrintOnCheckName, SyncToken, T4AEligible, T5018Eligible, TermRef, V4IDPseudonym, Vendor1099
 
-### 2. Delete button not wired in Accounting Customers
-In `AccountingCustomers.tsx` (line 148), the `onDelete` handler is `() => {}` -- clicking Delete does nothing.
+## Changes (single file: `src/components/accounting/VendorDetail.tsx`)
 
-### 3. Delete button is unsafe everywhere
-In `CustomerDetail.tsx` (line 386), the Delete button directly calls `onDelete()` with no confirmation dialog. The confirmation in `Customers.tsx` uses a basic `window.confirm()` which is not a proper UI pattern. Delete should use an `AlertDialog` for safe confirmation.
+### 1. Header Upgrade
+- Add avatar circle with initials (same pattern as CustomerDetail)
+- Show status badge + company name below display name
+- Add Copy button next to email and phone
 
----
+### 2. Contact Info Grid in Header
+Extract and display in a grid (matching CustomerDetail layout):
+- Email (with copy button)
+- Phone (with copy button)
+- Mobile (new -- from `qbJson?.Mobile?.FreeFormNumber`)
+- Alt. Phone (new -- from `qbJson?.AlternatePhone?.FreeFormNumber`)
+- Website
+- Billing Address
 
-## Fix Plan
+### 3. Financial Summary Card
+Replace the current inline open-balance / overdue card with a proper Financial Summary card matching CustomerDetail:
+- QB Balance (from `qb_vendors.balance`)
+- Open Balance (computed from open bills)
+- Overdue (computed)
 
-### 1. Move delete confirmation INTO CustomerDetail using AlertDialog
-Instead of relying on parent components to add confirmation, add an `AlertDialog` directly inside `CustomerDetail.tsx` wrapping the delete button. This ensures delete is always safe regardless of which parent renders it.
+### 4. "Supplier Details" Tab -- Organized Sections
+Replace the flat grid with organized Card sections:
 
-**File: `src/components/customers/CustomerDetail.tsx`**
-- Import `AlertDialog`, `AlertDialogAction`, `AlertDialogCancel`, `AlertDialogContent`, `AlertDialogDescription`, `AlertDialogFooter`, `AlertDialogHeader`, `AlertDialogTitle`, `AlertDialogTrigger`
-- Wrap the existing delete button in `AlertDialogTrigger`
-- Show confirmation dialog: "Are you sure? This will permanently delete this customer."
-- Only call `onDelete()` when user confirms
+**Contact Information**: DisplayName, GivenName, FamilyName, PrintOnCheckName
+**Communication**: Email, Phone, Mobile, Alt Phone
+**Address**: Billing Address (multi-line format)
+**Payment & Billing**: Payment Terms, Account No., Bill Rate, Cost Rate, Currency, Vendor1099, T4A Eligible, T5018 Eligible, Taxable
+**QuickBooks Metadata**: QB ID, Active, Notes, Created, Updated
 
-### 2. Wire Edit and Delete in AccountingCustomers
-**File: `src/components/accounting/AccountingCustomers.tsx`**
-- Add `editingCustomer` state and `useMutation` for delete (same pattern as `Customers.tsx`)
-- Wire `onEdit` to open `CustomerFormModal` with the selected customer
-- Wire `onDelete` to execute the delete mutation, close the sheet, and invalidate queries
-- Pass the editing customer to `CustomerFormModal` (currently always passes `null`)
+### 5. Extract Missing Fields
+Add extraction of these fields from `qbJson`:
+- `Mobile?.FreeFormNumber`
+- `AlternatePhone?.FreeFormNumber`
+- `GivenName`, `FamilyName`
+- `PrintOnCheckName`
+- `BillRate`, `CostRate`
+- `Vendor1099`
+- `T4AEligible`, `T5018Eligible`
 
-### 3. Remove redundant confirm() from Customers.tsx
-**File: `src/pages/Customers.tsx`**
-- Remove the `window.confirm()` from `handleDelete` since confirmation is now built into `CustomerDetail`
+### 6. Import Updates
+Add: `Copy`, `Globe`, `Smartphone`, `User` from lucide-react
 
----
-
-## Files Changed
+## File Changed
 
 | File | Change |
 |------|--------|
-| `src/components/customers/CustomerDetail.tsx` | Replace bare delete button with AlertDialog confirmation |
-| `src/components/accounting/AccountingCustomers.tsx` | Wire onEdit to open form modal, wire onDelete with mutation |
-| `src/pages/Customers.tsx` | Remove redundant window.confirm() from handleDelete |
+| `src/components/accounting/VendorDetail.tsx` | Full UI upgrade to match CustomerDetail pattern |
+
+## No Behavior Changes
+- All existing transaction list, sync, delete/void logic stays identical
+- Only the visual layout and data extraction is enhanced
