@@ -24,6 +24,7 @@ import { AccountingAgent } from "@/components/accounting/AccountingAgent";
 import { PayrollAuditView } from "@/components/office/PayrollAuditView";
 import { AccountingOrders } from "@/components/accounting/AccountingOrders";
 import { AccountingActionQueue } from "@/components/accounting/AccountingActionQueue";
+import { AccountingVendorPayments } from "@/components/accounting/AccountingVendorPayments";
 
 import { usePennyQueue } from "@/hooks/usePennyQueue";
 import { useIntegrations } from "@/hooks/useIntegrations";
@@ -275,6 +276,7 @@ export default function AccountingWorkspace() {
             {activeTab === "payroll-audit" && <PayrollAuditView />}
             {activeTab === "orders" && <AccountingOrders />}
             {activeTab === "actions" && <AccountingActionQueue />}
+            {activeTab === "vendor-payments" && <AccountingVendorPayments />}
             {activeTab === "documents" && <AccountingDocuments data={qb} />}
             {activeTab === "balance-sheet" && <AccountingReport data={qb} report="balance-sheet" />}
             {activeTab === "profit-loss" && <AccountingReport data={qb} report="profit-loss" />}
