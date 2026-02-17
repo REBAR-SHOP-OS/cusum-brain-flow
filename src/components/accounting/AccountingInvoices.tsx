@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ConfirmActionDialog } from "./ConfirmActionDialog";
-import { InvoiceTemplate } from "./documents/InvoiceTemplate";
+import { InvoiceEditor } from "./InvoiceEditor";
 import { FileText, Send, Ban, Search, Eye } from "lucide-react";
 import type { useQuickBooksData, QBInvoice } from "@/hooks/useQuickBooksData";
 
@@ -18,35 +18,12 @@ const fmt = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
 
 export function AccountingInvoices({ data, initialSearch }: Props) {
-  const { invoices, sendInvoice, voidInvoice } = data;
+  const { invoices, sendInvoice, voidInvoice, updateInvoice, customers, items } = data;
   const [search, setSearch] = useState(initialSearch || "");
   const [sendTarget, setSendTarget] = useState<{ id: string; name: string; doc: string } | null>(null);
   const [voidTarget, setVoidTarget] = useState<{ id: string; doc: string; syncToken: string } | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [previewInvoice, setPreviewInvoice] = useState<QBInvoice | null>(null);
-
-  const getInvoiceData = (inv: QBInvoice) => ({
-    invoiceNumber: inv.DocNumber,
-    invoiceDate: new Date(inv.TxnDate).toLocaleDateString(),
-    dueDate: new Date(inv.DueDate).toLocaleDateString(),
-    customerName: inv.CustomerRef?.name || "Unknown",
-    items: [{
-      description: "Rebar Fabrication & Supply",
-      quantity: 1,
-      unitPrice: inv.TotalAmt,
-      taxes: "HST ON-sale",
-      amount: inv.TotalAmt,
-    }],
-    untaxedAmount: inv.TotalAmt,
-    taxRate: 0.13,
-    taxAmount: inv.TotalAmt * 0.13,
-    total: inv.TotalAmt * 1.13,
-    paidAmount: inv.TotalAmt - inv.Balance,
-    amountDue: inv.Balance,
-    paymentCommunication: inv.DocNumber,
-    source: "",
-    inclusions: [],
-  });
 
   const filtered = invoices.filter(
     (inv) =>
@@ -159,28 +136,19 @@ export function AccountingInvoices({ data, initialSearch }: Props) {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-9 gap-1"
-                            onClick={() => setPreviewInvoice(inv)}
-                          >
+                          <Button size="sm" variant="ghost" className="h-9 gap-1" onClick={() => setPreviewInvoice(inv)}>
                             <Eye className="w-4 h-4" /> View
                           </Button>
                           {inv.Balance > 0 && (
                             <>
                               <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-9 gap-1"
+                                size="sm" variant="ghost" className="h-9 gap-1"
                                 onClick={() => setSendTarget({ id: inv.Id, name: inv.CustomerRef?.name, doc: inv.DocNumber })}
                               >
                                 <Send className="w-4 h-4" /> Email
                               </Button>
                               <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-9 gap-1 text-destructive hover:text-destructive"
+                                size="sm" variant="ghost" className="h-9 gap-1 text-destructive hover:text-destructive"
                                 onClick={() => setVoidTarget({ id: inv.Id, doc: inv.DocNumber, syncToken: inv.SyncToken || "0" })}
                               >
                                 <Ban className="w-4 h-4" /> Void
@@ -221,7 +189,13 @@ export function AccountingInvoices({ data, initialSearch }: Props) {
       />
 
       {previewInvoice && (
-        <InvoiceTemplate data={getInvoiceData(previewInvoice)} onClose={() => setPreviewInvoice(null)} />
+        <InvoiceEditor
+          invoice={previewInvoice}
+          customers={customers}
+          items={items}
+          onUpdate={updateInvoice}
+          onClose={() => setPreviewInvoice(null)}
+        />
       )}
     </div>
   );
