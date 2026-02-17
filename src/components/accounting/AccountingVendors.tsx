@@ -28,14 +28,14 @@ interface EnrichedVendor extends QBVendor {
   paidLast30Count: number;
 }
 
+const VENDOR_TXN_TYPES = ["Bill", "BillPayment", "VendorCredit", "PurchaseOrder"];
+
 export function AccountingVendors({ data }: Props) {
   const { vendors, bills } = data;
   const [search, setSearch] = useState("");
   const [selectedVendor, setSelectedVendor] = useState<QBVendor | null>(null);
   const [addVendorOpen, setAddVendorOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
-
-  const VENDOR_TXN_TYPES = ["Bill", "BillPayment", "VendorCredit", "PurchaseOrder"];
 
   const syncAllVendorData = async () => {
     setSyncing(true);
