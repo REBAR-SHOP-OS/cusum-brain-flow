@@ -1,40 +1,32 @@
 
 
-# Fix: Customer Name and Payment History Not Showing in Invoice Editor
+# Fix: Customer Name Empty + Payment History Not Detailed
 
-## Diagnosis
+## Root Causes
 
-Two separate issues found after auditing the database and code:
+### 1. Bill To dropdown shows empty
+The Radix Select component has `value="1505"` set, but when the customers list hasn't finished loading or the matching item isn't found in the dropdown, the Select renders blank. The `placeholder` prop only works when value is `undefined` -- it does NOT work when a value is set but has no matching option.
 
-### Problem 1: Bill To dropdown shows empty in edit mode
-The customer data exists (1,946 customers in the database, including the correct one for this invoice). The Select component correctly matches `customerRef.value` ("1505") against customer IDs. However, the `SelectValue` component has no `placeholder` prop, and in some Radix Select edge cases with large option lists, the display can fail to render the matched label. Additionally, the view mode already shows the customer name correctly.
+**Fix**: Replace the Select approach in edit mode with a display that always shows `customerRef.name` as the trigger text, regardless of whether the options have loaded.
 
-**Fix**: Add a `placeholder` to the SelectValue, and ensure the displayed value falls back to `customerRef.name` when no match is found in the customers list.
+### 2. Payment History shows only a generic "Paid" line
+The database contains zero Payment records -- only 1,822 Invoices. The sync engine includes "Payment" in its entity types but a full backfill hasn't been run since that was added. Without payment records, only the fallback "Paid: $3,466.84" line appears (derived from `TotalAmt - Balance`).
 
-### Problem 2: Payment History section never appears
-The `qb_transactions` table contains **zero Payment records** -- only 1,822 Invoices. The sync engine (`qb-sync-engine`) includes "Payment" in its `TXN_TYPES` list, meaning payments *should* sync, but either a full sync hasn't been run since payments were added to the engine, or payments failed silently during sync.
-
-The frontend code for extracting linked payments from the `payments` array is correct -- it properly scans `Line[].LinkedTxn[]` for matching invoice IDs. But since `payments` is always an empty array, the section never renders.
-
-**Fix**: Two changes needed:
-1. Show a fallback "Paid" line (from `invoice.Balance` vs `invoice.TotalAmt`) when no linked payment records exist, so users always see payment status
-2. Always show the payment status badge (PAID/PARTIAL/OPEN) regardless of whether detailed payment records are available
+**Fix (two-part)**:
+- Frontend: Improve the fallback display so it still looks like a proper payment section even without detailed records
+- Backend: Trigger a payment sync so future views show the full breakdown
 
 ## Changes
 
-### File 1: `src/components/accounting/InvoiceEditor.tsx`
+### File: `src/components/accounting/InvoiceEditor.tsx`
 
-**Customer display fix:**
-- Add `placeholder={customerRef.name || "Select customer..."}` to the `SelectValue` component so the name always shows even if the Select can't match the value
-- In view mode, already works correctly (shows `customerRef.name`)
+1. **Customer dropdown fix**: Change the `SelectTrigger` to always render `customerRef.name` as visible text. Use a `defaultValue` pattern or render the name as a child of `SelectValue` so it never appears blank.
 
-**Payment history fix:**
-- Move the payment status badge and "Paid" amount display outside the `linkedPayments.length > 0` condition
-- When `linkedPayments.length > 0`: show the full payment history table (date + amount for each payment)
-- When `linkedPayments.length === 0` but `paid > 0`: show a simplified "Paid" line with the total paid amount and the status badge
-- Always show the "Amount Due" section with the correct remaining balance
+2. **Payment history fallback improvement**: When `linkedPayments` is empty but `paid > 0`:
+   - Show a single row table with the paid amount (instead of just a plain text line)
+   - Keep the PAID/PARTIAL/OPEN badge
+   - Add a note: "Detailed payment records pending sync"
 
-### Summary of visual changes:
-- Bill To dropdown will always show the customer name (even if the dropdown options haven't loaded yet)
-- Invoices with payments will show "PAID" / "PARTIAL" badge and the paid amount, even when detailed payment records are unavailable
-- When payment records are synced in the future, the full payment history table will automatically appear
+### No other files modified
+The `AccountingInvoices.tsx` already passes `payments` correctly. The sync engine already supports Payment type -- a manual backfill will populate the data.
+
