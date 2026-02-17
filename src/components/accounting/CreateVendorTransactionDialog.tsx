@@ -60,8 +60,13 @@ export function CreateVendorTransactionDialog({
   const [dueDate, setDueDate] = useState("");
   const [amount, setAmount] = useState<number>(prefill?.amount ?? 0);
   const [submitting, setSubmitting] = useState(false);
+  const [taxEnabled, setTaxEnabled] = useState(true);
+  const [taxRate, setTaxRate] = useState(13);
 
   const total = lineItems.reduce((s, li) => s + li.qty * li.unitPrice, 0);
+  const safeTaxRate = Math.max(0, Math.min(100, taxRate));
+  const taxAmount = needsLineItems(type) && taxEnabled ? total * (safeTaxRate / 100) : 0;
+  const grandTotal = total + taxAmount;
 
   const addLine = () => setLineItems((prev) => [...prev, { description: "", qty: 1, unitPrice: 0 }]);
   const removeLine = (idx: number) => setLineItems((prev) => prev.filter((_, i) => i !== idx));
@@ -94,6 +99,10 @@ export function CreateVendorTransactionDialog({
         }));
       }
       if (type === "Cheque") body.totalAmount = amount;
+      if (needsLineItems(type) && taxEnabled && safeTaxRate > 0) {
+        body.taxRate = safeTaxRate / 100;
+        body.taxAmount = taxAmount;
+      }
       if (dueDate) body.dueDate = dueDate;
 
       const { data, error } = await supabase.functions.invoke("quickbooks-oauth", { body });
@@ -107,12 +116,13 @@ export function CreateVendorTransactionDialog({
 
       onCreated?.({
         type, lineItems: needsLineItems(type) ? lineItems.filter((li) => li.description.trim()) : [],
-        memo, totalAmount: type === "Cheque" ? amount : total,
+        memo, totalAmount: type === "Cheque" ? amount : grandTotal,
       });
 
       onOpenChange(false);
       setLineItems([{ description: "", qty: 1, unitPrice: 0 }]);
       setMemo(""); setDueDate(""); setAmount(0);
+      setTaxEnabled(true); setTaxRate(13);
     } catch (err: any) {
       toast({ title: "Failed to create transaction", description: err.message || "Unknown error", variant: "destructive" });
     } finally {
@@ -165,7 +175,19 @@ export function CreateVendorTransactionDialog({
                 ))}
                 <div className="flex items-center justify-between px-3 py-2 border-t border-border bg-muted/30">
                   <Button type="button" variant="ghost" size="sm" onClick={addLine} className="gap-1 text-xs"><Plus className="w-3 h-3" /> Add line</Button>
-                  <span className="text-sm font-semibold">Total: ${total.toFixed(2)}</span>
+                  <span className="text-sm text-muted-foreground">Subtotal: ${total.toFixed(2)}</span>
+                </div>
+                <div className="flex items-center justify-between px-3 py-2 border-t border-border bg-muted/30">
+                  <label className="flex items-center gap-2 text-xs">
+                    <input type="checkbox" checked={taxEnabled} onChange={(e) => setTaxEnabled(e.target.checked)} className="rounded border-input" />
+                    <span className="font-medium">HST (ON)</span>
+                    <Input type="number" min={0} max={100} step={0.01} value={taxRate} onChange={(e) => setTaxRate(Math.max(0, Math.min(100, Number(e.target.value))))} className="h-6 w-16 text-xs text-center" disabled={!taxEnabled} />
+                    <span className="text-muted-foreground">%</span>
+                  </label>
+                  <span className="text-sm tabular-nums">${taxAmount.toFixed(2)}</span>
+                </div>
+                <div className="flex items-center justify-end px-3 py-2 border-t border-border bg-muted/50">
+                  <span className="text-sm font-semibold">Grand Total: ${grandTotal.toFixed(2)}</span>
                 </div>
               </div>
             </div>
