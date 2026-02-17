@@ -18,7 +18,7 @@ const fmt = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
 
 export function AccountingInvoices({ data, initialSearch }: Props) {
-  const { invoices, sendInvoice, voidInvoice, updateInvoice, customers, items } = data;
+  const { invoices, sendInvoice, voidInvoice, updateInvoice, customers, items, payments } = data;
   const [search, setSearch] = useState(initialSearch || "");
   const [sendTarget, setSendTarget] = useState<{ id: string; name: string; doc: string } | null>(null);
   const [voidTarget, setVoidTarget] = useState<{ id: string; doc: string; syncToken: string } | null>(null);
@@ -193,6 +193,7 @@ export function AccountingInvoices({ data, initialSearch }: Props) {
           invoice={previewInvoice}
           customers={customers}
           items={items}
+          payments={payments}
           onUpdate={updateInvoice}
           onClose={() => setPreviewInvoice(null)}
         />
