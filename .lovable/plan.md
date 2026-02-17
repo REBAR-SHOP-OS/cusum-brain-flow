@@ -1,68 +1,84 @@
 
-# Upgrade VendorDetail to Match CustomerDetail (QB Clone)
+# Give Architect (App Builder) Full Read + Write Powers
 
 ## Problem
-The current VendorDetail is a minimal view -- just the vendor name, a few inline contact fields, and a flat 2-column grid under "Supplier Details". It's missing:
-- Avatar with initials
-- Copy-to-clipboard buttons on contact fields
-- Rich contact info grid in the header (Mobile, Alt Phone, Fax shown separately)
-- Proper Financial Summary card (matching CustomerDetail style with QB Balance line)
-- Organized detail sections (Contact Info, Communication, Address, Payment & Billing, QB Metadata)
-- Many QB fields not extracted at all (GivenName, FamilyName, Mobile, AlternatePhone, PrintOnCheckName, BillRate, CostRate, Vendor1099, T4AEligible, T5018Eligible)
+The Architect agent at `/empire` can **find problems** via `diagnose_platform` but cannot **fix them directly**. It can only create fix requests in `vizzy_fix_requests` — essentially filing tickets instead of acting. Meanwhile, Jarvis (`admin-chat`) has full ERP read/write tools. Architect should have the same power.
 
-## Available QB Vendor Fields (from database)
-AcctNum, Active, AlternatePhone, Balance, BillAddr, BillRate, CompanyName, CostRate, CurrencyRef, DisplayName, FamilyName, GivenName, Id, MetaData, Mobile, PrimaryEmailAddr, PrimaryPhone, PrintOnCheckName, SyncToken, T4AEligible, T5018Eligible, TermRef, V4IDPseudonym, Vendor1099
+## What's Missing
 
-## Changes (single file: `src/components/accounting/VendorDetail.tsx`)
+### ERP Read Tools (Architect has none of these)
+- `list_machines` -- query machines with status filter
+- `list_deliveries` -- query deliveries with status/date filter
+- `list_orders` -- query orders with status filter
+- `list_leads` -- query leads with status/score filter
+- `get_stock_levels` -- query inventory levels
 
-### 1. Header Upgrade
-- Add avatar circle with initials (same pattern as CustomerDetail)
-- Show status badge + company name below display name
-- Add Copy button next to email and phone
+### ERP Write Tools (Architect has none of these)
+- `update_machine_status` -- fix blocked/down machines
+- `update_delivery_status` -- update delivery progress
+- `update_lead_status` -- update pipeline leads
+- `update_cut_plan_status` -- update production plans
+- `create_event` -- log activity events
 
-### 2. Contact Info Grid in Header
-Extract and display in a grid (matching CustomerDetail layout):
-- Email (with copy button)
-- Phone (with copy button)
-- Mobile (new -- from `qbJson?.Mobile?.FreeFormNumber`)
-- Alt. Phone (new -- from `qbJson?.AlternatePhone?.FreeFormNumber`)
-- Website
-- Billing Address
+### WooCommerce Write Tools (Architect is missing these)
+- `wp_update_product` -- fix product pricing, stock, descriptions
+- `wp_update_order_status` -- update WooCommerce orders
+- `wp_create_redirect` -- create 301 redirects
+- `wp_create_product` -- create new products
+- `wp_delete_product` -- remove products
+- `wp_optimize_speed` -- run speed optimizations
 
-### 3. Financial Summary Card
-Replace the current inline open-balance / overdue card with a proper Financial Summary card matching CustomerDetail:
-- QB Balance (from `qb_vendors.balance`)
-- Open Balance (computed from open bills)
-- Overdue (computed)
+## Fix Plan
 
-### 4. "Supplier Details" Tab -- Organized Sections
-Replace the flat grid with organized Card sections:
+### File: `supabase/functions/ai-agent/index.ts`
 
-**Contact Information**: DisplayName, GivenName, FamilyName, PrintOnCheckName
-**Communication**: Email, Phone, Mobile, Alt Phone
-**Address**: Billing Address (multi-line format)
-**Payment & Billing**: Payment Terms, Account No., Bill Rate, Cost Rate, Currency, Vendor1099, T4A Eligible, T5018 Eligible, Taxable
-**QuickBooks Metadata**: QB ID, Active, Notes, Created, Updated
+**1. Add ERP Read + Write tool definitions for the empire agent**
 
-### 5. Extract Missing Fields
-Add extraction of these fields from `qbJson`:
-- `Mobile?.FreeFormNumber`
-- `AlternatePhone?.FreeFormNumber`
-- `GivenName`, `FamilyName`
-- `PrintOnCheckName`
-- `BillRate`, `CostRate`
-- `Vendor1099`
-- `T4AEligible`, `T5018Eligible`
+After the existing empire tools block (around line 5848), add all 10 ERP tools (5 read + 5 write) as additional tool definitions gated by `agent === "empire"`. These are cloned from Jarvis's definitions in `admin-chat`.
 
-### 6. Import Updates
-Add: `Copy`, `Globe`, `Smartphone`, `User` from lucide-react
+**2. Add ERP tool call handlers**
 
-## File Changed
+After the existing empire tool handlers (around line 6960), add handler logic for each new tool:
+- `list_machines` -- query `machines` table via `svcClient`
+- `list_deliveries` -- query `deliveries` table
+- `list_orders` -- query `orders` table
+- `list_leads` -- query `leads` table
+- `get_stock_levels` -- query `inventory_stock` table
+- `update_machine_status` -- update `machines` table
+- `update_delivery_status` -- update `deliveries` table
+- `update_lead_status` -- update `leads` table
+- `update_cut_plan_status` -- update `cut_plans` table
+- `create_event` -- insert into `activity_events` table
+
+**3. Add missing WooCommerce write tool definitions**
+
+Add `wp_update_product`, `wp_update_order_status`, `wp_create_redirect`, `wp_create_product`, `wp_delete_product`, and `wp_optimize_speed` to the empire agent's WordPress tools block (extending the existing array at line 6050).
+
+**4. Add WooCommerce write tool handlers**
+
+Extend the existing WordPress tool handler block (around line 6370) to handle the new WP write tools using the shared `WPClient`.
+
+**5. Update the system prompt**
+
+Update the Architect system prompt (line 2256 area) to tell the AI it has **direct** ERP read/write tools, not just "create fix requests":
+
+```
+### ERP Fixes:
+- Use list_machines, list_deliveries, list_orders, list_leads, get_stock_levels to READ current state
+- Use update_machine_status, update_delivery_status, update_lead_status, update_cut_plan_status to FIX issues directly
+- Use create_event to log what you fixed
+- Create fix requests in vizzy_fix_requests only for issues requiring human/code changes
+```
+
+## Safety
+
+All write tools follow the same safety pattern as Jarvis:
+- The AI must describe the change and get user confirmation before calling write tools
+- The system prompt instructs "Requires user confirmation" on all write tool descriptions
+- Activity events are logged for all writes
+
+## Files Changed
 
 | File | Change |
 |------|--------|
-| `src/components/accounting/VendorDetail.tsx` | Full UI upgrade to match CustomerDetail pattern |
-
-## No Behavior Changes
-- All existing transaction list, sync, delete/void logic stays identical
-- Only the visual layout and data extraction is enhanced
+| `supabase/functions/ai-agent/index.ts` | Add 10 ERP tools (definitions + handlers), 6 WP write tools (definitions + handlers), update system prompt |
