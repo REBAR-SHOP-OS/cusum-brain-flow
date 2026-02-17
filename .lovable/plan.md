@@ -1,70 +1,62 @@
 
-# Audit: Vendor Transactions Empty -- Root Cause and Fix
+# Surgical Cleanup: Dead Code Removal and Safety Guards
 
-## Diagnosis
+## Scope
+Read-only audit of accounting components. Minimal diff, zero behavior change.
 
-The Vendor Detail transaction list shows **"No transactions found"** because the `qb_transactions` database table contains **zero vendor-related records**:
+---
 
-| Entity Type | Count |
-|---|---|
-| Invoice | 1,827 |
-| Payment | 1,843 |
-| Transfer | 1 |
-| **Bill** | **0** |
-| **BillPayment** | **0** |
-| **PurchaseOrder** | **0** |
-| **VendorCredit** | **0** |
+## Changes
 
-There are **80 active vendors** in `qb_vendors`, but no transactions linked to them. The sync engine code correctly includes `Bill`, `BillPayment`, `PurchaseOrder`, `VendorCredit` in its `TXN_TYPES` array, and the `vendor_qb_id` column is properly mapped. The data simply was never synced from QuickBooks.
+### 1. `src/components/accounting/AccountingReport.tsx`
 
-The sync log shows only one incremental sync (14 records) -- the initial backfill either was never run for these entity types, timed out, or failed silently.
+**Remove 3 unused icon imports** (line 9):
+- `TrendingUp`, `TrendingDown`, `DollarSign` are imported from `lucide-react` but never referenced anywhere in the component.
 
-## Root Cause
+**Remove unused `invoices` destructure** (line 124):
+- `invoices` is destructured from `data` but never used in the component body.
 
-No Bill/BillPayment/VendorCredit/PurchaseOrder data was ever backfilled from QuickBooks into `qb_transactions`.
+---
 
-## Fix
+### 2. `src/components/accounting/AccountingAccounts.tsx`
 
-### 1. Add a "Sync Vendor Transactions" button to VendorDetail
+**Add missing React Fragment `key`** (line 335):
+- The `<>...</>` fragment wrapping group header row + account row inside `.map()` is missing a `key` prop. React will warn about this. Replace `<>` with `<Fragment key={a.Id}>` using the named `Fragment` import.
 
-Add a visible sync button in the VendorDetail transaction tab that triggers individual entity syncs for vendor-related types (Bill, BillPayment, VendorCredit, PurchaseOrder) using the existing `qb-sync-engine` edge function's `sync-entity` action.
+---
 
-**File: `src/components/accounting/VendorDetail.tsx`**
-- Add a "Sync Transactions" button next to the filters in the transaction tab
-- On click, call `qb-sync-engine` with `sync-entity` for Bill, BillPayment, VendorCredit, and PurchaseOrder sequentially
-- Show loading state during sync
-- Invalidate and refetch transactions query after sync completes
+### 3. `src/components/accounting/VendorDetail.tsx`
 
-### 2. Add "Sync All Vendor Data" button to AccountingVendors list page
+**Hoist `VENDOR_TXN_TYPES` outside the component** (line 100):
+- Currently defined inside the component body, causing a new array allocation every render. Move it to module scope (it is a static constant). This also eliminates a stale-closure risk in `syncVendorTransactions` which references it but does not list it as a `useCallback` dependency.
 
-**File: `src/components/accounting/AccountingVendors.tsx`**
-- Add a "Sync" button next to "Add Vendor"
-- On click, trigger backfill for all vendor transaction types
-- Show toast on completion with count of synced records
+**Add query invalidation after delete/void** (lines 44-68):
+- `handleDeleteTxn` and `handleVoidTxn` succeed but never invalidate the `["qb_vendor_transactions", vendor.Id]` query, so the UI stays stale until manual refresh. Add `queryClient.invalidateQueries` after the success toast.
 
-### 3. Auto-trigger vendor transaction sync on first empty load
+---
 
-**File: `src/components/accounting/VendorDetail.tsx`**
-- If transactions query returns empty AND vendor has a non-zero balance in QB, automatically trigger a sync for Bill/BillPayment entities
-- Show "Syncing vendor transactions from QuickBooks..." instead of "No transactions found"
-- This ensures first-time users see data without manual action
+### 4. `src/components/accounting/AccountingVendors.tsx`
 
-## Technical Details
+**Hoist `VENDOR_TXN_TYPES` outside the component** (line 38):
+- Same issue as VendorDetail -- static constant recreated every render. Move to module scope.
 
-The sync calls will use:
-```typescript
-await supabase.functions.invoke("qb-sync-engine", {
-  body: { action: "sync-entity", entity_type: "Bill" }
-});
-```
+---
 
-This calls the existing `handleSyncEntity` function which queries QuickBooks for all records of that type and upserts them into `qb_transactions` with proper `vendor_qb_id` mapping.
+## Summary Table
 
-After sync, the existing `useQuery` with key `["qb_vendor_transactions", vendor.Id]` is invalidated to refetch from the now-populated table.
+| File | Change | Why |
+|------|--------|-----|
+| `AccountingReport.tsx` | Remove `TrendingUp`, `TrendingDown`, `DollarSign` imports | Unused imports (dead code) |
+| `AccountingReport.tsx` | Remove `invoices` from destructure | Unused variable |
+| `AccountingAccounts.tsx` | Add `Fragment` key to `.map()` wrapper | Missing React key warning |
+| `VendorDetail.tsx` | Hoist `VENDOR_TXN_TYPES` to module scope | Avoids per-render allocation + stale closure risk |
+| `VendorDetail.tsx` | Add `queryClient.invalidateQueries` after delete/void | Stale UI after mutation (guard) |
+| `AccountingVendors.tsx` | Hoist `VENDOR_TXN_TYPES` to module scope | Avoids per-render allocation |
 
-## Files Changed
+## Verification
 
-| File | Change |
-|---|---|
-| `src/components/accounting/VendorDetail.tsx` | Add sync button + auto-sync on empty load |
-| `src/components/accounting/AccountingVendors.tsx` | Add "Sync" button for bulk vendor transaction sync |
+- No new side effects introduced
+- No changes to runtime behavior (except: UI now correctly refreshes after delete/void -- this is a bug fix guard, not a logic rewrite)
+- No cascading edits
+- All existing tests pass unchanged
+- No public API / export changes
