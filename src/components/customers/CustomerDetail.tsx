@@ -1,8 +1,5 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompanyId } from "@/hooks/useCompanyId";
 import { Button } from "@/components/ui/button";
@@ -10,9 +7,9 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
+import { InvoiceEditor } from "@/components/accounting/InvoiceEditor";
+import type { QBInvoice } from "@/hooks/useQuickBooksData";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Select,
@@ -96,6 +93,7 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
   const [txnDialogType, setTxnDialogType] = useState<TransactionType>("Invoice");
   const [txnPrefill, setTxnPrefill] = useState<any>(undefined);
   const [dismissedPatternId, setDismissedPatternId] = useState<string | null>(null);
+  const [previewInvoice, setPreviewInvoice] = useState<QBInvoice | null>(null);
 
   const openTxnDialog = (type: TransactionType, prefill?: any) => {
     setTxnDialogType(type);
@@ -665,16 +663,29 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
                           <TableCell className="text-xs">{txn.entity_type}</TableCell>
                           <TableCell className="text-xs font-medium text-primary">
                             {txn.doc_number ? (
-                              <a
-                                href={`/accounting?tab=invoices&search=${encodeURIComponent(txn.doc_number)}`}
-                                className="underline hover:text-primary/80 cursor-pointer"
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  window.location.href = `/accounting?tab=invoices&search=${encodeURIComponent(txn.doc_number!)}`;
+                              <button
+                                className="underline hover:text-primary/80 cursor-pointer bg-transparent border-none p-0 text-primary text-xs font-medium"
+                                onClick={async () => {
+                                  try {
+                                    const { data: rows } = await supabase
+                                      .from("accounting_mirror")
+                                      .select("data")
+                                      .eq("entity_type", "Invoice")
+                                      .filter("data->>DocNumber", "eq", txn.doc_number!)
+                                      .limit(1);
+                                    const raw = rows?.[0]?.data as Record<string, unknown> | null;
+                                    if (raw && raw.Id) {
+                                      setPreviewInvoice(raw as unknown as QBInvoice);
+                                    } else {
+                                      window.location.href = `/accounting?tab=invoices&search=${encodeURIComponent(txn.doc_number!)}`;
+                                    }
+                                  } catch {
+                                    window.location.href = `/accounting?tab=invoices&search=${encodeURIComponent(txn.doc_number!)}`;
+                                  }
                                 }}
                               >
                                 {txn.doc_number}
-                              </a>
+                              </button>
                             ) : "—"}
                           </TableCell>
                           <TableCell className="text-xs text-muted-foreground truncate max-w-[200px]">
@@ -806,13 +817,18 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
               </Card>
             )}
 
-            {/* Section 6: Local Settings (editable) */}
+            {/* Section 6: Edit All Details */}
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-semibold uppercase text-muted-foreground">Local Settings</CardTitle>
+                <CardTitle className="text-sm font-semibold uppercase text-muted-foreground">Edit Customer</CardTitle>
               </CardHeader>
               <CardContent>
-                <CustomerDetailsForm customer={customer} />
+                <p className="text-sm text-muted-foreground mb-3">
+                  Open the full customer form to edit all fields including contacts, addresses, billing info, and notes.
+                </p>
+                <Button variant="outline" onClick={onEdit} className="gap-2">
+                  <Pencil className="w-4 h-4" /> Edit All Details
+                </Button>
               </CardContent>
             </Card>
           </TabsContent>
@@ -863,156 +879,18 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
         prefill={txnPrefill}
         onCreated={recordPattern}
       />
+
+      {/* ── Invoice Preview ── */}
+      {previewInvoice && (
+        <InvoiceEditor
+          invoice={previewInvoice}
+          customers={[]}
+          items={[]}
+          payments={[]}
+          onUpdate={async () => {}}
+          onClose={() => setPreviewInvoice(null)}
+        />
+      )}
     </div>
-  );
-}
-
-// ── Local Settings Form (editable fields) ──
-
-const detailsSchema = z.object({
-  name: z.string().trim().min(1, "Name is required").max(100),
-  company_name: z.string().trim().max(100).optional().or(z.literal("")),
-  customer_type: z.enum(["business", "individual"]),
-  status: z.enum(["active", "inactive", "prospect"]),
-  payment_terms: z.enum(["net30", "net60", "net15", "due_on_receipt"]).optional(),
-  credit_limit: z.coerce.number().min(0).optional().or(z.literal("")),
-});
-
-type DetailsFormData = z.infer<typeof detailsSchema>;
-
-function CustomerDetailsForm({ customer }: { customer: Customer }) {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-
-  const form = useForm<DetailsFormData>({
-    resolver: zodResolver(detailsSchema),
-    defaultValues: {
-      name: customer.name,
-      company_name: customer.company_name || "",
-      customer_type: (customer.customer_type as "business" | "individual") || "business",
-      status: (customer.status as "active" | "inactive" | "prospect") || "active",
-      payment_terms: (customer.payment_terms as "net30" | "net60" | "net15" | "due_on_receipt") || "net30",
-      credit_limit: customer.credit_limit ?? "",
-    },
-  });
-
-  useEffect(() => {
-    form.reset({
-      name: customer.name,
-      company_name: customer.company_name || "",
-      customer_type: (customer.customer_type as "business" | "individual") || "business",
-      status: (customer.status as "active" | "inactive" | "prospect") || "active",
-      payment_terms: (customer.payment_terms as "net30" | "net60" | "net15" | "due_on_receipt") || "net30",
-      credit_limit: customer.credit_limit ?? "",
-    });
-  }, [customer, form]);
-
-  const saveMutation = useMutation({
-    mutationFn: async (data: DetailsFormData) => {
-      const { error } = await supabase
-        .from("customers")
-        .update({
-          name: data.name,
-          company_name: data.company_name || null,
-          customer_type: data.customer_type,
-          status: data.status,
-          payment_terms: data.payment_terms || null,
-          credit_limit: data.credit_limit ? Number(data.credit_limit) : null,
-        })
-        .eq("id", customer.id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["customers"] });
-      queryClient.invalidateQueries({ queryKey: ["local_customer_by_qb"] });
-      toast({ title: "Customer updated" });
-    },
-    onError: (err: Error) => {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    },
-  });
-
-  return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit((d) => saveMutation.mutate(d))} className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <FormField control={form.control} name="name" render={({ field }) => (
-            <FormItem>
-              <FormLabel>Name *</FormLabel>
-              <FormControl><Input {...field} /></FormControl>
-              <FormMessage />
-            </FormItem>
-          )} />
-          <FormField control={form.control} name="company_name" render={({ field }) => (
-            <FormItem>
-              <FormLabel>Company Name</FormLabel>
-              <FormControl><Input {...field} /></FormControl>
-              <FormMessage />
-            </FormItem>
-          )} />
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <FormField control={form.control} name="status" render={({ field }) => (
-            <FormItem>
-              <FormLabel>Status</FormLabel>
-              <Select onValueChange={field.onChange} value={field.value}>
-                <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                <SelectContent>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="inactive">Inactive</SelectItem>
-                  <SelectItem value="prospect">Prospect</SelectItem>
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )} />
-          <FormField control={form.control} name="customer_type" render={({ field }) => (
-            <FormItem>
-              <FormLabel>Type</FormLabel>
-              <Select onValueChange={field.onChange} value={field.value}>
-                <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                <SelectContent>
-                  <SelectItem value="business">Business</SelectItem>
-                  <SelectItem value="individual">Individual</SelectItem>
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )} />
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <FormField control={form.control} name="payment_terms" render={({ field }) => (
-            <FormItem>
-              <FormLabel>Payment Terms</FormLabel>
-              <Select onValueChange={field.onChange} value={field.value}>
-                <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                <SelectContent>
-                  <SelectItem value="due_on_receipt">Due on Receipt</SelectItem>
-                  <SelectItem value="net15">Net 15</SelectItem>
-                  <SelectItem value="net30">Net 30</SelectItem>
-                  <SelectItem value="net60">Net 60</SelectItem>
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )} />
-          <FormField control={form.control} name="credit_limit" render={({ field }) => (
-            <FormItem>
-              <FormLabel>Credit Limit</FormLabel>
-              <FormControl><Input type="number" placeholder="0" {...field} /></FormControl>
-              <FormMessage />
-            </FormItem>
-          )} />
-        </div>
-
-        <div className="flex justify-end pt-2">
-          <Button type="submit" disabled={saveMutation.isPending}>
-            {saveMutation.isPending ? "Saving..." : "Save Changes"}
-          </Button>
-        </div>
-      </form>
-    </Form>
   );
 }
