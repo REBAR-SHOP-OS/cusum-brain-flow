@@ -5,7 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ConfirmActionDialog } from "./ConfirmActionDialog";
-import { FileText, Send, Ban, Search } from "lucide-react";
+import { InvoiceTemplate } from "./documents/InvoiceTemplate";
+import { FileText, Send, Ban, Search, Eye } from "lucide-react";
 import type { useQuickBooksData, QBInvoice } from "@/hooks/useQuickBooksData";
 
 interface Props {
@@ -22,6 +23,30 @@ export function AccountingInvoices({ data, initialSearch }: Props) {
   const [sendTarget, setSendTarget] = useState<{ id: string; name: string; doc: string } | null>(null);
   const [voidTarget, setVoidTarget] = useState<{ id: string; doc: string; syncToken: string } | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [previewInvoice, setPreviewInvoice] = useState<QBInvoice | null>(null);
+
+  const getInvoiceData = (inv: QBInvoice) => ({
+    invoiceNumber: inv.DocNumber,
+    invoiceDate: new Date(inv.TxnDate).toLocaleDateString(),
+    dueDate: new Date(inv.DueDate).toLocaleDateString(),
+    customerName: inv.CustomerRef?.name || "Unknown",
+    items: [{
+      description: "Rebar Fabrication & Supply",
+      quantity: 1,
+      unitPrice: inv.TotalAmt,
+      taxes: "HST ON-sale",
+      amount: inv.TotalAmt,
+    }],
+    untaxedAmount: inv.TotalAmt,
+    taxRate: 0.13,
+    taxAmount: inv.TotalAmt * 0.13,
+    total: inv.TotalAmt * 1.13,
+    paidAmount: inv.TotalAmt - inv.Balance,
+    amountDue: inv.Balance,
+    paymentCommunication: inv.DocNumber,
+    source: "",
+    inclusions: [],
+  });
 
   const filtered = invoices.filter(
     (inv) =>
@@ -122,7 +147,7 @@ export function AccountingInvoices({ data, initialSearch }: Props) {
                 {filtered.map((inv) => {
                   const status = getStatus(inv);
                   return (
-                    <TableRow key={inv.Id} className="text-base">
+                    <TableRow key={inv.Id} className="text-base cursor-pointer" onClick={() => setPreviewInvoice(inv)}>
                       <TableCell className="font-mono font-semibold">#{inv.DocNumber}</TableCell>
                       <TableCell className="font-medium">{inv.CustomerRef?.name || "—"}</TableCell>
                       <TableCell>{inv.TxnDate ? new Date(inv.TxnDate).toLocaleDateString() : "—"}</TableCell>
@@ -133,7 +158,15 @@ export function AccountingInvoices({ data, initialSearch }: Props) {
                         <Badge className={`${status.color} border-0 text-sm`}>{status.label}</Badge>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center justify-center gap-1">
+                        <div className="flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-9 gap-1"
+                            onClick={() => setPreviewInvoice(inv)}
+                          >
+                            <Eye className="w-4 h-4" /> View
+                          </Button>
                           {inv.Balance > 0 && (
                             <>
                               <Button
@@ -186,6 +219,10 @@ export function AccountingInvoices({ data, initialSearch }: Props) {
         onConfirm={handleVoid}
         loading={actionLoading}
       />
+
+      {previewInvoice && (
+        <InvoiceTemplate data={getInvoiceData(previewInvoice)} onClose={() => setPreviewInvoice(null)} />
+      )}
     </div>
   );
 }
