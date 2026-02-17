@@ -158,11 +158,11 @@ export function VendorDetail({ vendor }: VendorDetailProps) {
   }, [vendor.Id, queryClient, toast]);
 
   useEffect(() => {
-    if (!autoSyncAttempted.current && !txnLoading && transactions.length === 0 && (qbVendor?.balance ?? 0) > 0) {
+    if (!autoSyncAttempted.current && !txnLoading && transactions.length === 0) {
       autoSyncAttempted.current = true;
       syncVendorTransactions();
     }
-  }, [txnLoading, transactions.length, qbVendor?.balance, syncVendorTransactions]);
+  }, [txnLoading, transactions.length, syncVendorTransactions]);
 
   // --- Extract all QB fields ---
   const qbJson = qbVendor?.raw_json as Record<string, any> | null;
