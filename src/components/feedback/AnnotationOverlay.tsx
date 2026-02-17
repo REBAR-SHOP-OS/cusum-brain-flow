@@ -159,7 +159,7 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl }: Props) {
           priority: "high",
           assigned_to: profileId,
           company_id: companyId ?? "a0000000-0000-0000-0000-000000000001",
-          created_by: userId ?? undefined,
+          
           attachment_url: publicUrl,
         } as any);
         if (taskErr) throw taskErr;
