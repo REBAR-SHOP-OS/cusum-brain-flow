@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
@@ -40,6 +40,9 @@ import {
   StickyNote,
   Clock,
   List,
+  Globe,
+  Smartphone,
+  Printer,
 } from "lucide-react";
 import { format, differenceInDays } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -53,6 +56,17 @@ interface CustomerDetailProps {
   onDelete: () => void;
 }
 
+// ── Helper: read-only info row ──
+function InfoRow({ label, value }: { label: string; value: string | null | undefined }) {
+  if (!value) return null;
+  return (
+    <div>
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="text-sm font-medium">{value}</p>
+    </div>
+  );
+}
+
 export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -61,7 +75,7 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
   const [notesValue, setNotesValue] = useState(customer.notes || "");
   const [isEditingNotes, setIsEditingNotes] = useState(false);
 
-  // ── QB Customer info (addresses, email, phone) ──
+  // ── QB Customer info ──
   const { data: qbCustomer } = useQuery({
     queryKey: ["qb_customer_detail", customer.quickbooks_id],
     enabled: !!customer.quickbooks_id,
@@ -124,18 +138,54 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
     },
   });
 
-  // ── Extract QB data ──
+  // ── Extract ALL QB data ──
   const qbJson = qbCustomer?.raw_json as Record<string, any> | null;
   const email = qbJson?.PrimaryEmailAddr?.Address || primaryContact?.email || null;
   const phone = qbJson?.PrimaryPhone?.FreeFormNumber || primaryContact?.phone || null;
+  const mobile = qbJson?.Mobile?.FreeFormNumber || null;
+  const altPhone = qbJson?.AlternatePhone?.FreeFormNumber || null;
+  const fax = qbJson?.Fax?.FreeFormNumber || null;
+  const website = qbJson?.WebAddr?.URI || null;
   const billAddr = qbJson?.BillAddr;
   const shipAddr = qbJson?.ShipAddr;
+
+  // Name parts
+  const givenName = qbJson?.GivenName || null;
+  const middleName = qbJson?.MiddleName || null;
+  const familyName = qbJson?.FamilyName || null;
+  const title = qbJson?.Title || null;
+  const suffix = qbJson?.Suffix || null;
+  const displayName = qbJson?.DisplayName || null;
+  const printOnCheckName = qbJson?.PrintOnCheckName || null;
+
+  // Payment & billing
+  const paymentMethod = qbJson?.PaymentMethodRef?.name || null;
+  const salesTerms = qbJson?.SalesTermRef?.name || null;
+  const preferredDelivery = qbJson?.PreferredDeliveryMethod || null;
+  const taxable = qbJson?.Taxable;
+  const currencyName = qbJson?.CurrencyRef?.name || null;
+  const qbActive = qbJson?.Active;
+  const qbNotes = qbJson?.Notes || null;
+
+  // Metadata
+  const qbCreated = qbJson?.MetaData?.CreateTime || null;
+  const qbUpdated = qbJson?.MetaData?.LastUpdatedTime || null;
+
+  // Balances
+  const qbBalance = qbCustomer?.balance ?? qbJson?.Balance ?? null;
+  const balanceWithJobs = qbJson?.BalanceWithJobs ?? null;
 
   const formatAddr = (addr: any) => {
     if (!addr) return null;
     return [addr.Line1, addr.City, addr.CountrySubDivisionCode, addr.PostalCode]
       .filter(Boolean)
       .join(", ") || null;
+  };
+
+  const formatAddrMultiline = (addr: any) => {
+    if (!addr) return null;
+    const parts = [addr.Line1, [addr.City, addr.CountrySubDivisionCode].filter(Boolean).join(", "), addr.PostalCode].filter(Boolean);
+    return parts.length ? parts : null;
   };
 
   // ── Financial summary ──
@@ -195,6 +245,9 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
     .slice(0, 2)
     .toUpperCase();
 
+  const fmtCurrency = (v: number | null) =>
+    v != null ? `$${v.toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "—";
+
   return (
     <div className="flex flex-col h-full">
       {/* ── Header ── */}
@@ -209,13 +262,19 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
             {customer.company_name && (
               <p className="text-sm text-muted-foreground">{customer.company_name}</p>
             )}
-            <div className="flex items-center gap-2 mt-1.5">
+            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
               <Badge variant={customer.status === "active" ? "default" : "secondary"}>
                 {customer.status}
               </Badge>
+              {qbActive === false && (
+                <Badge variant="destructive">Inactive in QB</Badge>
+              )}
               <Badge variant="outline">{customer.customer_type}</Badge>
               {customer.payment_terms && (
                 <Badge variant="outline">{customer.payment_terms}</Badge>
+              )}
+              {salesTerms && (
+                <Badge variant="outline">{salesTerms}</Badge>
               )}
             </div>
           </div>
@@ -244,10 +303,10 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
           </div>
         </div>
 
-        {/* Contact info + Financial summary */}
+        {/* Contact info grid + Financial summary */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Contact info */}
-          <div className="md:col-span-2 grid grid-cols-2 gap-3 text-sm">
+          <div className="md:col-span-2 grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
             {email && (
               <div className="flex items-start gap-2">
                 <Mail className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
@@ -272,11 +331,47 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
                 </Button>
               </div>
             )}
+            {mobile && (
+              <div className="flex items-start gap-2">
+                <Smartphone className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground">Mobile</p>
+                  <p>{mobile}</p>
+                </div>
+              </div>
+            )}
+            {altPhone && (
+              <div className="flex items-start gap-2">
+                <Phone className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground">Alt. Phone</p>
+                  <p>{altPhone}</p>
+                </div>
+              </div>
+            )}
+            {fax && (
+              <div className="flex items-start gap-2">
+                <Printer className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground">Fax</p>
+                  <p>{fax}</p>
+                </div>
+              </div>
+            )}
+            {website && (
+              <div className="flex items-start gap-2">
+                <Globe className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground">Website</p>
+                  <a href={website.startsWith("http") ? website : `https://${website}`} target="_blank" rel="noreferrer" className="text-primary underline truncate block">{website}</a>
+                </div>
+              </div>
+            )}
             {formatAddr(billAddr) && (
               <div className="flex items-start gap-2">
                 <MapPin className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
                 <div className="min-w-0">
-                  <p className="text-xs text-muted-foreground">Billing address</p>
+                  <p className="text-xs text-muted-foreground">Billing</p>
                   <p className="text-xs">{formatAddr(billAddr)}</p>
                 </div>
               </div>
@@ -285,7 +380,7 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
               <div className="flex items-start gap-2">
                 <MapPin className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
                 <div className="min-w-0">
-                  <p className="text-xs text-muted-foreground">Shipping address</p>
+                  <p className="text-xs text-muted-foreground">Shipping</p>
                   <p className="text-xs">{formatAddr(shipAddr)}</p>
                 </div>
               </div>
@@ -296,16 +391,28 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
           <Card className="bg-secondary/30">
             <CardContent className="p-4 space-y-2">
               <p className="text-xs font-medium text-muted-foreground uppercase">Financial Summary</p>
+              {qbBalance != null && (
+                <div className="flex items-baseline justify-between">
+                  <span className="text-sm text-muted-foreground">QB Balance</span>
+                  <span className="text-lg font-semibold">{fmtCurrency(qbBalance)}</span>
+                </div>
+              )}
+              {balanceWithJobs != null && (
+                <div className="flex items-baseline justify-between">
+                  <span className="text-sm text-muted-foreground">Balance w/ Jobs</span>
+                  <span className="text-sm font-medium">{fmtCurrency(balanceWithJobs)}</span>
+                </div>
+              )}
               <div className="flex items-baseline justify-between">
                 <span className="text-sm text-muted-foreground">Open Balance</span>
                 <span className="text-lg font-semibold">
-                  ${financialSummary.openBalance.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                  {fmtCurrency(financialSummary.openBalance)}
                 </span>
               </div>
               <div className="flex items-baseline justify-between">
                 <span className="text-sm text-muted-foreground">Overdue</span>
                 <span className={`text-lg font-semibold ${financialSummary.overdueBalance > 0 ? "text-destructive" : ""}`}>
-                  ${financialSummary.overdueBalance.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                  {fmtCurrency(financialSummary.overdueBalance)}
                 </span>
               </div>
             </CardContent>
@@ -427,9 +534,121 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
             </div>
           </TabsContent>
 
-          {/* ─── Customer Details ─── */}
-          <TabsContent value="details" className="mt-0 px-6 py-4">
-            <CustomerDetailsForm customer={customer} email={email} phone={phone} billAddr={formatAddr(billAddr)} shipAddr={formatAddr(shipAddr)} />
+          {/* ─── Customer Details (Full QB Clone) ─── */}
+          <TabsContent value="details" className="mt-0 px-6 py-4 space-y-4">
+            {/* Section 1: Contact Information (from QB) */}
+            {qbJson && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-semibold uppercase text-muted-foreground">Contact Information</CardTitle>
+                </CardHeader>
+                <CardContent className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3">
+                  <InfoRow label="Display Name" value={displayName} />
+                  <InfoRow label="Given Name" value={givenName} />
+                  <InfoRow label="Middle Name" value={middleName} />
+                  <InfoRow label="Family Name" value={familyName} />
+                  <InfoRow label="Title" value={title} />
+                  <InfoRow label="Suffix" value={suffix} />
+                  <InfoRow label="Print on Check Name" value={printOnCheckName} />
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Section 2: Communication (from QB) */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-semibold uppercase text-muted-foreground">Communication</CardTitle>
+              </CardHeader>
+              <CardContent className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3">
+                <InfoRow label="Primary Email" value={email} />
+                <InfoRow label="Primary Phone" value={phone} />
+                <InfoRow label="Mobile" value={mobile} />
+                <InfoRow label="Alternate Phone" value={altPhone} />
+                <InfoRow label="Fax" value={fax} />
+                <InfoRow label="Website" value={website} />
+                {!email && !phone && !mobile && !altPhone && !fax && !website && (
+                  <p className="text-sm text-muted-foreground col-span-full">No communication info available</p>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Section 3: Addresses (from QB) */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-semibold uppercase text-muted-foreground">Addresses</CardTitle>
+              </CardHeader>
+              <CardContent className="grid grid-cols-2 gap-6">
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Billing Address</p>
+                  {formatAddrMultiline(billAddr) ? (
+                    <div className="text-sm space-y-0.5">
+                      {formatAddrMultiline(billAddr)!.map((line, i) => (
+                        <p key={i} className="font-medium">{line}</p>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">—</p>
+                  )}
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Shipping Address</p>
+                  {formatAddrMultiline(shipAddr) ? (
+                    <div className="text-sm space-y-0.5">
+                      {formatAddrMultiline(shipAddr)!.map((line, i) => (
+                        <p key={i} className="font-medium">{line}</p>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">—</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Section 4: Payment & Billing (from QB) */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-semibold uppercase text-muted-foreground">Payment & Billing</CardTitle>
+              </CardHeader>
+              <CardContent className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3">
+                <InfoRow label="Payment Method" value={paymentMethod} />
+                <InfoRow label="Sales Terms" value={salesTerms} />
+                <InfoRow label="Preferred Delivery" value={preferredDelivery} />
+                <InfoRow label="Taxable" value={taxable != null ? (taxable ? "Yes" : "No") : null} />
+                <InfoRow label="Currency" value={currencyName} />
+                <InfoRow label="QB Balance" value={qbBalance != null ? fmtCurrency(qbBalance) : null} />
+                <InfoRow label="Balance with Jobs" value={balanceWithJobs != null ? fmtCurrency(balanceWithJobs) : null} />
+                {!paymentMethod && !salesTerms && !preferredDelivery && taxable == null && !currencyName && (
+                  <p className="text-sm text-muted-foreground col-span-full">No payment info available</p>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Section 5: QB Metadata */}
+            {qbJson && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-semibold uppercase text-muted-foreground">QuickBooks Metadata</CardTitle>
+                </CardHeader>
+                <CardContent className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3">
+                  <InfoRow label="QuickBooks ID" value={customer.quickbooks_id} />
+                  <InfoRow label="Active in QB" value={qbActive != null ? (qbActive ? "Yes" : "No") : null} />
+                  <InfoRow label="QB Notes" value={qbNotes} />
+                  <InfoRow label="Created in QB" value={qbCreated ? format(new Date(qbCreated), "MMM d, yyyy h:mm a") : null} />
+                  <InfoRow label="Last Updated in QB" value={qbUpdated ? format(new Date(qbUpdated), "MMM d, yyyy h:mm a") : null} />
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Section 6: Local Settings (editable) */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-semibold uppercase text-muted-foreground">Local Settings</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <CustomerDetailsForm customer={customer} />
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* ─── Notes ─── */}
@@ -471,6 +690,8 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
   );
 }
 
+// ── Local Settings Form (editable fields) ──
+
 const detailsSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(100),
   company_name: z.string().trim().max(100).optional().or(z.literal("")),
@@ -482,19 +703,7 @@ const detailsSchema = z.object({
 
 type DetailsFormData = z.infer<typeof detailsSchema>;
 
-function CustomerDetailsForm({
-  customer,
-  email,
-  phone,
-  billAddr,
-  shipAddr,
-}: {
-  customer: Customer;
-  email: string | null;
-  phone: string | null;
-  billAddr: string | null;
-  shipAddr: string | null;
-}) {
+function CustomerDetailsForm({ customer }: { customer: Customer }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -566,19 +775,6 @@ function CustomerDetailsForm({
         </div>
 
         <div className="grid grid-cols-2 gap-4">
-          <div>
-            <p className="text-xs font-medium mb-1.5">Email</p>
-            <p className="text-sm text-muted-foreground">{email || "—"}</p>
-            {email && <p className="text-[10px] text-muted-foreground/60 mt-0.5">Synced from QuickBooks</p>}
-          </div>
-          <div>
-            <p className="text-xs font-medium mb-1.5">Phone</p>
-            <p className="text-sm text-muted-foreground">{phone || "—"}</p>
-            {phone && <p className="text-[10px] text-muted-foreground/60 mt-0.5">Synced from QuickBooks</p>}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
           <FormField control={form.control} name="status" render={({ field }) => (
             <FormItem>
               <FormLabel>Status</FormLabel>
@@ -631,25 +827,6 @@ function CustomerDetailsForm({
               <FormMessage />
             </FormItem>
           )} />
-        </div>
-
-        <div className="grid grid-cols-2 gap-4 text-sm">
-          <div>
-            <p className="text-xs text-muted-foreground">Billing Address</p>
-            <p className="font-medium">{billAddr || "—"}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Shipping Address</p>
-            <p className="font-medium">{shipAddr || "—"}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">QuickBooks ID</p>
-            <p className="font-medium">{customer.quickbooks_id || "—"}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Created</p>
-            <p className="font-medium">{format(new Date(customer.created_at), "MMM d, yyyy")}</p>
-          </div>
         </div>
 
         <div className="flex justify-end pt-2">
