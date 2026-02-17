@@ -36,7 +36,7 @@ export function ScreenshotFeedbackButton() {
     <>
       <button
         onClick={capture}
-        className="fixed z-50 bottom-24 right-6 md:bottom-6 md:right-24 w-10 h-10 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center hover:scale-110 transition-transform"
+        className="fixed z-[9999] bottom-24 right-6 md:bottom-6 md:right-24 w-10 h-10 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center hover:scale-110 transition-transform"
         aria-label="Report a change"
         title="Screenshot Feedback"
       >
