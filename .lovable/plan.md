@@ -1,114 +1,65 @@
 
+# Fix: Ben's Chatter Visibility + Global Notification Pop-up
 
-# Fix Architect Agent: Stop Hallucinating Missing Features + Actually Fix Things
+## Issue 1: Ben Cannot See Chatter in Pipelines
 
-## Problem
+### Root Cause
+The `lead_activities` table has a SELECT RLS policy that uses a correlated subquery through the `leads` table:
 
-The Architect (App Builder) at `/empire` has three critical failures:
-
-1. **Hallucinating missing features**: It told you CoA, P&L, Balance Sheet, AR Aging, Invoice Editor, and Bank Reconciliation are "missing" -- but they ALL already exist. The root cause is the system prompt only lists "Pipeline, Shop Floor, Deliveries, Customers, Inbox, Office Portal, Admin, Brain" as ERP modules. Accounting is completely omitted, so the AI assumes it doesn't exist.
-
-2. **Refuses to fix things**: When asked "CAN YOU ADD THEM", it responded "I cannot directly add or implement". This is because the prompt still encourages creating "fix requests" as the primary action instead of using its direct write tools.
-
-3. **Diagnostics skip accounting**: The `diagnose_platform` tool checks machines, deliveries, tasks, WordPress, and Odoo -- but has ZERO accounting health checks.
-
-## Fix (1 file)
-
-**File: `supabase/functions/ai-agent/index.ts`**
-
-### Change 1: Add complete ERP module inventory to system prompt
-
-Update the "Apps You Manage" section (line 2244) to include ALL modules that actually exist:
-
-```
-1. **ERP (REBAR SHOP OS)** — This Lovable app. Modules:
-   - Pipeline (CRM/Leads)
-   - Shop Floor (Machines, Work Orders, Cut Plans)
-   - Deliveries
-   - Customers (with QuickBooks sync, detail view, contacts)
-   - Inbox (Team Chat, Notifications)
-   - Office Portal
-   - Admin
-   - Brain (Human Tasks, AI Coordination)
-   - **Accounting** (already built):
-     - Chart of Accounts (CoA) — full QB clone with sync
-     - Profit & Loss report — real-time from QuickBooks API
-     - Balance Sheet — real-time from QuickBooks API
-     - Cash Flow Statement (derived)
-     - Trial Balance / Reconciliation checks
-     - AR Aging Dashboard (0-30, 31-60, 60+ days)
-     - Invoice Editor (dual view/edit, payment history, QB sparse updates)
-     - Vendor/Bill management
-     - Customer management (shared with /customers module)
-     - QB Sync Engine (on-demand per entity type)
-   - **Estimation** (Cal agent — quotes, takeoffs, templates)
-   - **HR** (Leave requests, timeclock, payroll)
-   - **SEO Dashboard**
+```sql
+company_id IN (SELECT l.company_id FROM leads l WHERE l.id = lead_activities.lead_id)
 ```
 
-### Change 2: Add anti-hallucination rule to system prompt
+This subquery is subject to `leads` table RLS, which requires `has_any_role(auth.uid(), ARRAY['admin', 'sales', 'accounting'])`. While Ben has the `sales` role, this nested RLS evaluation can fail in edge cases (PostgreSQL's RLS-within-RLS evaluation is known to have subtle issues with correlated subqueries). The INSERT, UPDATE, and DELETE policies on the same table use the simpler `company_id = get_user_company_id(auth.uid())` pattern, which works reliably.
 
-Add a new mandatory rule section:
+### Fix
+Replace the SELECT policy with the same simple pattern used by the other policies:
 
-```
-## CRITICAL: Do NOT Hallucinate Missing Features
-Before claiming ANY feature is "missing" from the ERP, you MUST:
-1. Check your module inventory above
-2. Ask the user to confirm if the feature exists
-3. NEVER claim a feature is missing unless you have concrete evidence
-
-Features that ALREADY EXIST and must NOT be reported as missing:
-- Chart of Accounts, P&L, Balance Sheet, Cash Flow, Trial Balance
-- AR Aging, Invoice Editor, Vendor Management
-- Bank/QB Reconciliation (via trial_balance_checks table)
-- Customer Detail view, Contact management
-- Pipeline/CRM, Shop Floor, Deliveries, HR, SEO
-
-## CRITICAL: You CAN and MUST Fix Things Directly
-You have direct read AND write tools for ERP, WordPress, and Odoo.
-When asked to fix something or add something, USE YOUR TOOLS. 
-NEVER say "I cannot directly add or implement".
-NEVER say "I will create fix requests for your development team".
-You ARE the development team for operational fixes.
-Only create vizzy_fix_requests for issues requiring frontend code changes 
-that are outside your tool capabilities.
+```sql
+DROP POLICY "Users can view activities for their company leads" ON lead_activities;
+CREATE POLICY "Users can view activities for their company"
+  ON lead_activities FOR SELECT
+  USING (company_id = get_user_company_id(auth.uid()));
 ```
 
-### Change 3: Add accounting diagnostics to `diagnose_platform`
+This is consistent with all other policies on the table and eliminates the subquery dependency.
 
-After the existing ERP diagnostics (line 6857), add accounting health checks:
+---
 
-- Check for QB sync freshness (last `qb_transactions` entry date)
-- Check trial balance status (`trial_balance_checks` table for failures)
-- Check for un-synced customers (customers without `quickbooks_id`)
-- Check for stale overdue invoices (invoices with balance > 0 and past due > 90 days)
-- Check QB token health (look for recent auth errors)
+## Issue 2: Global In-App Notification Pop-up
 
-### Change 4: Add accounting context to empire agent
+### Current State
+When a notification arrives via realtime:
+- Sound plays (mockingjay whistle)
+- Browser notification shows (only when tab is not focused)
+- Badge count updates on the bell icon
+- But there is NO visible in-app pop-up/toast
 
-In the empire context-fetching block (around line 3340), add:
+### Fix
+Add a `sonner` toast pop-up inside the `useNotifications` realtime handler. When a new notification INSERT event arrives, display a clickable toast with the notification title and description. Clicking it navigates to the `link_to` URL.
 
-- Fetch open invoice count and total AR balance from `qb_transactions`
-- Fetch last QB sync timestamp
-- Fetch trial balance check results
-- Pass as `context.accountingHealth`
+**File: `src/hooks/useNotifications.ts`**
 
-This gives the Architect grounded data about accounting state so it doesn't have to guess.
+In the realtime INSERT handler (around line 196), after `showBrowserNotification`, add:
 
-## Summary of Changes
+```typescript
+toast(newRow.title, {
+  description: newRow.description || undefined,
+  duration: 8000,
+  action: newRow.link_to ? {
+    label: "View",
+    onClick: () => { window.location.href = newRow.link_to; }
+  } : undefined,
+});
+```
 
-| Location | Change |
-|----------|--------|
-| System prompt (line 2244) | Add complete module inventory including Accounting |
-| System prompt (new section) | Add anti-hallucination rules and "you MUST fix directly" mandate |
-| `diagnose_platform` handler (line 6857) | Add 5 accounting health checks |
-| Empire context block (line 3340) | Add accounting context data (AR balance, sync freshness, trial balance) |
+This uses the already-imported `sonner` toast, which renders on any page since the `<Toaster />` component is mounted at the app root.
 
-## Expected Result
+---
 
-After this fix:
-- Architect will never again claim CoA, P&L, Balance Sheet, AR Aging, etc. are "missing"
-- When asked to fix something, it will USE its tools instead of saying "I cannot"
-- `diagnose_platform` will include accounting health in its reports
-- The only legitimately missing features (Job Costing Dashboard, Holdback Tracking) will be correctly identified as gaps
+## Summary
 
+| Change | File | What |
+|--------|------|------|
+| Fix RLS policy | Database migration | Replace subquery-based SELECT policy on `lead_activities` with simple `company_id = get_user_company_id()` |
+| Add in-app popup | `src/hooks/useNotifications.ts` | Show a sonner toast with title, description, and "View" action on every new notification |
