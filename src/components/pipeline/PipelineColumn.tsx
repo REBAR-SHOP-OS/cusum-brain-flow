@@ -43,7 +43,7 @@ const ACTIVITY_COLORS: Record<ActivityStatus, string> = {
   planned: "#21b632",
   today: "#f0ad4e",
   overdue: "#d9534f",
-  none: "hsl(var(--muted))",
+  none: "#d1d5db",
 };
 
 const ACTIVITY_ORDER: ActivityStatus[] = ["planned", "today", "overdue", "none"];
@@ -109,7 +109,7 @@ export function PipelineColumn({
           </div>
         </div>
         {/* Activity status distribution bar — clickable segments */}
-        <div className="mt-1.5 h-1.5 w-full rounded-full overflow-hidden flex" style={{ backgroundColor: 'hsl(var(--muted))' }}>
+        <div className="mt-1.5 h-2 w-full rounded-full overflow-hidden flex" style={{ backgroundColor: '#e5e7eb' }}>
           {total > 0 && ACTIVITY_ORDER.map((status) => {
             const count = counts[status];
             if (count === 0) return null;
