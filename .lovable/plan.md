@@ -1,59 +1,91 @@
 
 
-# Audit and Upgrade: Vendor UI to Full QuickBooks Parity
+# Full Accounting Audit: Add Customer/Vendor Buttons, QB-Clone Chart of Accounts, and Real Reports
 
-## Current State
-The vendor system already has the core structure (VendorDetail slide-over, summary bar, CreateVendorTransactionDialog, AccountingVendorPayments). However, comparing pixel-by-pixel with your QuickBooks screenshots reveals several gaps that need fixing.
+## Problems Found
 
-## Issues Found
+### 1. Missing "Add Customer" Button in Accounting Customers Tab
+The Customers page (`/customers`) has an "Add Customer" button using `CustomerFormModal`, but the Accounting > Customers tab (`AccountingCustomers.tsx`) has no way to add a new customer. Same applies to Vendors tab -- no "Add Vendor" button.
 
-### 1. Vendor Detail Transaction Table -- Missing QB Columns
-**Current columns**: Date, Type, No., Total, Balance, Status
-**QB columns** (from your screenshots): Date, Type, No., Payee, Category, Total Before Sales Tax, Sales Tax, Total, Action (View/Edit)
+### 2. Chart of Accounts is NOT a QuickBooks Clone
+Current layout groups accounts by `AccountType` in collapsible cards but is missing key QuickBooks COA columns:
+- **Number** (Account Number/Code)
+- **Type** column showing the full QB type
+- **Detail Type** (AccountSubType shown but labeled "Sub-Type")
+- **QuickBooks Balance** vs **Bank Balance** distinction
+- **Tax Line** mapping
+- Flat single-table layout (QB shows all accounts in one table with indentation for sub-accounts, not grouped cards)
 
-Missing: Payee, Category, Total Before Sales Tax, Sales Tax, and Action link columns.
+### 3. Reports Are Placeholder Summaries, Not Real QB Reports
+`AccountingReport.tsx` shows 3 summary cards with hardcoded aggregations from invoice/bill/payment totals. It does NOT call the actual QuickBooks Report API (`get-profit-loss`, `get-balance-sheet`), which already exists in the edge function. The reports should render the actual QB report data with proper row/column structure.
 
-### 2. Vendor List -- Missing "Action" Column
-QB shows contextual actions per row: "Create bill" when balance is $0, "Make payment" when balance > $0 (with a dropdown chevron for more options). Current table has no Action column.
-
-### 3. Vendor Detail -- Missing "Bill Pay ACH info" Field
-QB shows "Bill Pay ACH info" next to billing address in the vendor header. This field exists in `raw_json` but is not extracted.
-
-### 4. Vendor Detail Summary Card -- Missing "Overdue payment" Label
-QB shows "Open balance" and "Overdue payment" as separate labeled amounts in a right-side summary card (like the customer Financial Summary card). Current shows them inline but not in the same styled card layout as CustomerDetail.
-
-### 5. Summary Bar -- Missing Count Labels
-QB summary bar shows counts: "18 OVERDUE", "21 OPEN BILLS", "42 PAID LAST 30 DAYS". Current shows only dollar amounts without counts.
+### 4. Vendor Payments Tab Shows ALL BillPayments Correctly
+This was already fixed in the last iteration and is working properly.
 
 ---
 
-## Changes
+## What Will Be Built
 
-### File: `src/components/accounting/VendorDetail.tsx`
-- Add QB-matching columns to transaction table: Payee (from `raw_json.VendorRef.name`), Category (from `raw_json.Line[0].AccountBasedExpenseLineDetail.AccountRef.name`), Total Before Sales Tax, Sales Tax (from `raw_json.TxnTaxDetail.TotalTax`), and Action ("View/Edit" link)
-- Extract and display "Bill Pay ACH info" from `raw_json` in the header
-- Style the financial summary as a proper card matching CustomerDetail's Financial Summary card layout (right-aligned, with labeled Open balance and Overdue payment)
-- Add "Pay down credit card" and "Import Bills" to the New Transaction dropdown (matching QB exactly)
+### 1. Add "Add Customer" Button to `AccountingCustomers.tsx`
+- Import and use the existing `CustomerFormModal` component
+- Add a "+" or "Add Customer" button next to the search bar
+- On success, refresh the customers list
 
-### File: `src/components/accounting/AccountingVendors.tsx`
-- Add "Action" column to the vendor table with contextual links: "Create bill" when openBalance is 0, "Make payment" when openBalance > 0, with a dropdown chevron for more options (Create bill, Make payment, Create expense)
-- Add count labels to summary bar cards: show "X OVERDUE", "Y OPEN BILLS", "Z PAID LAST 30 DAYS" under the dollar amounts
-- Stop click propagation on action buttons so they don't trigger the row click
+### 2. Add "Add Vendor" Button to `AccountingVendors.tsx`
+- Create a `VendorFormDialog` component that calls the existing `create-vendor` edge function action
+- Fields: Display Name, Company Name, Email, Phone, Notes
+- Add button next to the search bar
+- On success, trigger a QB sync/refresh
 
-### File: `src/components/accounting/AccountingVendorPayments.tsx`
-- Add vendor name search + date column formatting improvements
-- Add "Status" column (derived from balance)
-- Add "Account" column from `raw_json`
+### 3. Rebuild Chart of Accounts as Exact QB Clone
+Replace the grouped-cards layout with a single flat table matching QuickBooks:
+
+| Column | Source |
+|--------|--------|
+| NAME | `Name` (indented for sub-accounts via `SubAccount` + `ParentRef`) |
+| TYPE | `AccountType` |
+| DETAIL TYPE | `AccountSubType` |
+| QUICKBOOKS BALANCE | `CurrentBalance` |
+| BANK BALANCE | From `raw_json` if available |
+| ACTION | "View register" link |
+
+- Sub-accounts indented under parents (QB uses tree structure)
+- "New" button at top to create a new account (calls `create-item` or a future `create-account`)
+- Filter by account type dropdown
+- Single table, no cards -- matching QB exactly
+
+### 4. Wire Real QB Reports (P&L, Balance Sheet, Cash Flow)
+Replace `AccountingReport.tsx` placeholder with actual API calls:
+
+- **Profit & Loss**: Call `get-profit-loss` with date range picker, render the QB report rows (Income, COGS, Expenses, Net Income) in a hierarchical table
+- **Balance Sheet**: Call `get-balance-sheet` with as-of-date, render Assets/Liabilities/Equity sections
+- **Cash Flow**: Derive from P&L + Balance Sheet changes (QB Online doesn't have a native Cash Flow Statement API, so keep the current derived view but improve accuracy)
+
+Each report will have:
+- Date range/as-of-date picker
+- "Run Report" button
+- Collapsible section rows matching QB layout
+- Total rows with bold formatting
+- Export option (print/download)
 
 ---
+
+## Files Changed
+
+| File | Change |
+|------|--------|
+| `src/components/accounting/AccountingCustomers.tsx` | Add "Add Customer" button using existing `CustomerFormModal` |
+| `src/components/accounting/AccountingVendors.tsx` | Add "Add Vendor" button with new dialog |
+| `src/components/accounting/AddVendorDialog.tsx` | **New** -- Dialog to create vendor in QB via `create-vendor` action |
+| `src/components/accounting/AccountingAccounts.tsx` | **Major rewrite** -- Flat table with QB-matching columns (Name with indent, Type, Detail Type, Balance, Action) + type filter dropdown |
+| `src/components/accounting/AccountingReport.tsx` | **Major rewrite** -- Call real QB report APIs, render hierarchical report tables with date pickers |
 
 ## Technical Details
 
-- All vendor transaction data is already in `qb_transactions` with `raw_json` containing the full QB payload -- no new queries needed
-- Category is extracted from `raw_json.Line[].AccountBasedExpenseLineDetail.AccountRef.name` or `raw_json.Line[].ItemBasedExpenseLineDetail.ItemRef.name`
-- Sales Tax comes from `raw_json.TxnTaxDetail.TotalTax`
-- Total Before Sales Tax = `total_amt - salesTax`
-- Payee for bills = vendor name (already known from context)
-- Bill Pay ACH info from `raw_json.BillPayACHInfo` or similar nested field
-- No database changes required
+- `AccountingCustomers` will import `CustomerFormModal` from `@/components/customers/CustomerFormModal` and add state for `isFormOpen`
+- `AddVendorDialog` calls `supabase.functions.invoke("quickbooks-oauth", { body: { action: "create-vendor", displayName, companyName, email, phone, notes } })`
+- Chart of Accounts rebuilds the tree from flat array using `SubAccount` boolean and `ParentRef.value` from `raw_json` to create indentation levels
+- P&L report calls `qbAction("get-profit-loss", { startDate, endDate })` and parses the standard QB report response format (`Rows.Row[].ColData[]`)
+- Balance Sheet calls `qbAction("get-balance-sheet", { asOfDate })` with same parser
+- No database changes needed -- all data comes from existing QB mirror tables and API endpoints
 
