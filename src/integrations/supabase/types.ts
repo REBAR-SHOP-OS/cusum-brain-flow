@@ -1545,6 +1545,7 @@ export type Database = {
         Row: {
           company_id: string
           created_at: string
+          cut_plan_id: string | null
           delivery_number: string
           driver_name: string | null
           id: string
@@ -1557,6 +1558,7 @@ export type Database = {
         Insert: {
           company_id: string
           created_at?: string
+          cut_plan_id?: string | null
           delivery_number: string
           driver_name?: string | null
           id?: string
@@ -1569,6 +1571,7 @@ export type Database = {
         Update: {
           company_id?: string
           created_at?: string
+          cut_plan_id?: string | null
           delivery_number?: string
           driver_name?: string | null
           id?: string
@@ -1578,7 +1581,15 @@ export type Database = {
           updated_at?: string
           vehicle?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "deliveries_cut_plan_id_fkey"
+            columns: ["cut_plan_id"]
+            isOneToOne: false
+            referencedRelation: "cut_plans"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       delivery_stops: {
         Row: {
@@ -4257,6 +4268,69 @@ export type Database = {
             columns: ["quote_id"]
             isOneToOne: false
             referencedRelation: "quotes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      packing_slips: {
+        Row: {
+          company_id: string
+          created_at: string
+          customer_name: string | null
+          cut_plan_id: string | null
+          delivery_id: string | null
+          id: string
+          items_json: Json
+          ship_to: string | null
+          signature_path: string | null
+          site_photo_path: string | null
+          slip_number: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          customer_name?: string | null
+          cut_plan_id?: string | null
+          delivery_id?: string | null
+          id?: string
+          items_json?: Json
+          ship_to?: string | null
+          signature_path?: string | null
+          site_photo_path?: string | null
+          slip_number: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          customer_name?: string | null
+          cut_plan_id?: string | null
+          delivery_id?: string | null
+          id?: string
+          items_json?: Json
+          ship_to?: string | null
+          signature_path?: string | null
+          site_photo_path?: string | null
+          slip_number?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "packing_slips_cut_plan_id_fkey"
+            columns: ["cut_plan_id"]
+            isOneToOne: false
+            referencedRelation: "cut_plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "packing_slips_delivery_id_fkey"
+            columns: ["delivery_id"]
+            isOneToOne: false
+            referencedRelation: "deliveries"
             referencedColumns: ["id"]
           },
         ]
