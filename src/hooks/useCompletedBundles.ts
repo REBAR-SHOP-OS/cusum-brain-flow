@@ -40,19 +40,19 @@ export function useCompletedBundles() {
       if (err) throw err;
       if (!items?.length) return [];
 
-      // Group by project
-      const byProject = new Map<string, { planName: string; cutPlanId: string; items: CompletedBundleItem[] }>();
+      // Group by cutPlanId to prevent merge bugs when multiple plans share a project name
+      const byPlan = new Map<string, { projectName: string; planName: string; items: CompletedBundleItem[] }>();
       for (const item of items as Record<string, unknown>[]) {
         const cutPlans = item.cut_plans as Record<string, unknown> | undefined;
-        const key = (cutPlans?.project_name as string) || (cutPlans?.name as string) || "Unassigned";
-        if (!byProject.has(key)) {
-          byProject.set(key, {
+        const key = item.cut_plan_id as string;
+        if (!byPlan.has(key)) {
+          byPlan.set(key, {
+            projectName: (cutPlans?.project_name as string) || (cutPlans?.name as string) || "Unassigned",
             planName: (cutPlans?.name as string) || "",
-            cutPlanId: item.cut_plan_id as string,
             items: [],
           });
         }
-        byProject.get(key)!.items.push({
+        byPlan.get(key)!.items.push({
           id: item.id as string,
           mark_number: item.mark_number as string | null,
           drawing_ref: item.drawing_ref as string | null,
@@ -64,11 +64,11 @@ export function useCompletedBundles() {
       }
 
       const bundles: CompletedBundle[] = [];
-      for (const [projectName, data] of byProject) {
+      for (const [cutPlanId, data] of byPlan) {
         bundles.push({
-          projectName,
+          projectName: data.projectName,
           planName: data.planName,
-          cutPlanId: data.cutPlanId,
+          cutPlanId,
           items: data.items,
           totalPieces: data.items.reduce((sum, i) => sum + i.total_pieces, 0),
         });

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, forwardRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { usePickupOrders, usePickupOrderItems } from "@/hooks/usePickupOrders";
 import { useCompletedBundles, type CompletedBundle } from "@/hooks/useCompletedBundles";
@@ -18,7 +18,7 @@ const statusColors: Record<string, string> = {
   released: "bg-warning/20 text-warning",
 };
 
-export default function PickupStation() {
+const PickupStation = forwardRef<HTMLDivElement>(function PickupStation(_props, ref) {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { orders, loading, error, authorizeRelease } = usePickupOrders();
@@ -167,4 +167,6 @@ export default function PickupStation() {
       </div>
     </div>
   );
-}
+});
+
+export default PickupStation;

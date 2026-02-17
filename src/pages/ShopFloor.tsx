@@ -3,7 +3,6 @@ import {
   Factory, 
   LayoutGrid, 
   ShieldCheck, 
-  Truck as LoadingIcon,
   Send, 
   PackageCheck,
   ArrowLeft
@@ -45,14 +44,8 @@ const hubCards: HubCard[] = [
     to: "/shopfloor/clearance",
   },
   {
-    label: "LOADING ST.",
-    subtitle: "PREP & DISPATCH",
-    icon: <LoadingIcon className="w-7 h-7" />,
-    to: "/deliveries",
-  },
-  {
     label: "DELIVERY",
-    subtitle: "SITE DISPATCH",
+    subtitle: "DISPATCH & LOADING",
     icon: <Send className="w-7 h-7" />,
     to: "/deliveries",
   },
