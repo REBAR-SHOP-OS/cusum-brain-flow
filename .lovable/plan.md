@@ -1,48 +1,77 @@
 
+# Clone Full QuickBooks Customer Detail View
 
-# Make Customer Details Editable Inline
-
-## Problem
-
-The "Customer Details" tab in the customer detail slide-over only shows read-only text fields with an "Edit Customer Details" button that opens a separate modal dialog. The user wants fields to be directly editable within the detail view itself.
+## Overview
+Redesign the Customer Details tab and header to display ALL fields from QuickBooks `raw_json` -- matching the QuickBooks customer detail page exactly. Currently we only show a handful of fields; QB has 30+ fields available.
 
 ## What Changes
 
-### `src/components/customers/CustomerDetail.tsx`
+### 1. Expand Header Section with ALL QB Contact Fields
 
-Replace the read-only `InfoRow` grid in the "Customer Details" tab (lines 426-446) with inline-editable form fields:
+The header currently shows: email, phone, billing address, shipping address. QuickBooks also shows:
+- **Mobile phone** (`Mobile.FreeFormNumber`)
+- **Alternate phone** (`AlternatePhone.FreeFormNumber`)
+- **Fax** (`Fax.FreeFormNumber`)
+- **Website** (`WebAddr.URI`)
+- **Title / Suffix** (`Title`, `Suffix`)
+- **Given Name / Middle / Family Name** (`GivenName`, `MiddleName`, `FamilyName`)
+- **Balance with Jobs** (`BalanceWithJobs`)
+- **Preferred Delivery Method** (`PreferredDeliveryMethod`)
+- **Payment Method** (`PaymentMethodRef.name`)
+- **Sales Terms** (`SalesTermRef.name`)
+- **Taxable** (`Taxable`)
+- **Active** status (`Active`)
+- **Print on Check Name** (`PrintOnCheckName`)
+- **QB Notes** (`Notes`)
+- **Created / Last Updated** (`MetaData.CreateTime`, `MetaData.LastUpdatedTime`)
+- **Currency** (`CurrencyRef.name`)
 
-- **Name**, **Company Name**: Editable `Input` fields
-- **Email**, **Phone**: Editable `Input` fields (saved to `contacts` table for primary contact, or displayed from QB data as read-only fallback)
-- **Status**: Editable `Select` dropdown (active / inactive / prospect)
-- **Type**: Editable `Select` dropdown (business / individual)
-- **Payment Terms**: Editable `Select` dropdown (Net 15 / Net 30 / Net 60 / Due on Receipt)
-- **Credit Limit**: Editable number `Input`
-- **Billing Address**, **Shipping Address**: Read-only (sourced from QuickBooks -- cannot edit locally)
-- **QuickBooks ID**, **Created**: Read-only display
+### 2. Redesign Customer Details Tab into Organized Sections
 
-Add a save mutation that updates the `customers` table on field blur or via a "Save Changes" button at the bottom of the form. Fields will use `react-hook-form` with the existing `customerSchema` from `CustomerFormModal.tsx` for validation.
+Replace the current simple form with grouped sections (matching QuickBooks layout):
 
-### `src/components/customers/CustomerTable.tsx`
+**Section 1: "Contact Information"**
+- Display Name, Given Name, Middle Name, Family Name, Title, Suffix
+- All read-only (synced from QB) with labels
 
-Add two missing columns to match the user's screenshot:
-- **Invoices**: Count of `qb_transactions` where `entity_type = 'Invoice'` for each customer
-- **Overdue**: Count of overdue invoices (balance > 0 and DueDate < today)
-- **Status**: Customer status badge column
+**Section 2: "Communication"**
+- Primary Email, Primary Phone, Mobile, Alternate Phone, Fax, Website
+- Read-only for QB-synced fields
 
-Update the `CustomerRow` interface to accept `invoiceCount` and `overdueCount`.
+**Section 3: "Addresses"**
+- Full Billing Address (Line1, City, Province/State, Postal Code)
+- Full Shipping Address (same structure)
+- Read-only (from QB)
 
-### `src/pages/Customers.tsx`
+**Section 4: "Payment & Billing"**
+- Payment Method, Sales Terms, Preferred Delivery Method, Taxable, Currency, Print on Check Name
+- Read-only (from QB)
 
-- Compute `invoiceCount` and `overdueCount` per customer from the existing `invoiceBalances` and `overdueInvoices` queries
-- Pass these new fields to `CustomerTable`
-- After saving edits in the detail view, invalidate the `customers` query so the table refreshes
+**Section 5: "Local Settings" (editable)**
+- Name, Company Name, Status, Type, Payment Terms, Credit Limit
+- These are the ERP-local fields users can edit and save
+
+### 3. Expand Financial Summary
+
+Add more financial context to the summary card:
+- **QB Balance** (`Balance` from `qb_customers`)
+- **Balance with Jobs** (`BalanceWithJobs`)
+- Open Balance (computed from transactions, already exists)
+- Overdue (already exists)
+
+### 4. Files Modified
+
+| File | Change |
+|------|--------|
+| `src/components/customers/CustomerDetail.tsx` | Major update: expand header with all QB fields, redesign Customer Details tab into organized sections with all QB `raw_json` fields displayed, expand financial summary |
+
+### No other files change. No database changes needed.
 
 ## Technical Details
 
-- Reuse the same zod schema from `CustomerFormModal` for validation consistency
-- The inline form will use `useForm` with `defaultValues` populated from the selected customer
-- Save triggers on a "Save Changes" button click (not on blur, to avoid accidental saves)
-- QB-sourced fields (addresses, QB ID) remain read-only with a label indicating they sync from QuickBooks
-- The `CustomerFormModal` remains available for the "New Customer" flow from the header button
-
+- All new fields are extracted from the existing `qbCustomer?.raw_json` object already queried on line 65-77
+- No new queries needed -- just more fields extracted from `qbJson`
+- QB-synced fields shown as read-only with clean labels in organized card sections
+- Editable local fields (name, company, status, type, payment terms, credit limit) remain as form inputs with the existing save mutation
+- The `CustomerDetailsForm` component will be expanded to accept the full `qbJson` object as a prop and render all sections
+- Full billing/shipping addresses will show Line1, City, CountrySubDivisionCode (province), PostalCode on separate lines instead of a single concatenated string
