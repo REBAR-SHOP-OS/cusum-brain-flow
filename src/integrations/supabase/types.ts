@@ -6714,6 +6714,10 @@ export type Database = {
           odoo_status: string | null
           quote_number: string
           salesperson: string | null
+          signature_data: string | null
+          signature_ip: string | null
+          signed_at: string | null
+          signed_by: string | null
           source: string | null
           status: string | null
           total_amount: number | null
@@ -6734,6 +6738,10 @@ export type Database = {
           odoo_status?: string | null
           quote_number: string
           salesperson?: string | null
+          signature_data?: string | null
+          signature_ip?: string | null
+          signed_at?: string | null
+          signed_by?: string | null
           source?: string | null
           status?: string | null
           total_amount?: number | null
@@ -6754,6 +6762,10 @@ export type Database = {
           odoo_status?: string | null
           quote_number?: string
           salesperson?: string | null
+          signature_data?: string | null
+          signature_ip?: string | null
+          signed_at?: string | null
+          signed_by?: string | null
           source?: string | null
           status?: string | null
           total_amount?: number | null
