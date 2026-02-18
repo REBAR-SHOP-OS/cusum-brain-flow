@@ -31,41 +31,62 @@ export function ScreenshotFeedbackButton() {
     setCapturing(true);
     setTimeout(() => { cooldown.current = false; }, THROTTLE_MS);
 
+    const baseOpts = {
+      useCORS: true,
+      allowTaint: false,
+      scale: 1,
+      width: window.innerWidth,
+      height: window.innerHeight,
+      windowWidth: window.innerWidth,
+      windowHeight: window.innerHeight,
+      x: 0,
+      y: 0,
+      scrollX: 0,
+      scrollY: 0,
+      backgroundColor: getComputedStyle(document.documentElement).backgroundColor || "#0f172a",
+      logging: false,
+      ignoreElements: (el: Element) => {
+        return el.getAttribute?.("data-feedback-btn") === "true" ||
+          el.classList?.contains("floating-vizzy");
+      },
+      onclone: (clonedDoc: Document) => {
+        const style = clonedDoc.createElement("style");
+        style.textContent = "*, *::before, *::after { animation: none !important; transition: none !important; }";
+        clonedDoc.head.appendChild(style);
+      },
+    };
+
+    const captureOnce = (skipImages: boolean): Promise<HTMLCanvasElement> => {
+      const opts = { ...baseOpts, imageTimeout: skipImages ? 0 : 5000 };
+      return Promise.race([
+        html2canvas(document.body, opts),
+        new Promise<never>((_, rej) => setTimeout(() => rej(new Error("screenshot_timeout")), 3000)),
+      ]);
+    };
+
     try {
       await document.fonts.ready;
       await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 
-      const target = document.body;
+      let dataUrl: string;
+      try {
+        const canvas = await captureOnce(false);
+        dataUrl = canvas.toDataURL("image/png");
+        if (dataUrl.length < 1000) throw new Error("blank_canvas");
+      } catch (firstErr) {
+        console.warn("Screenshot attempt 1 failed, retrying without images:", firstErr);
+        const canvas = await captureOnce(true);
+        dataUrl = canvas.toDataURL("image/png");
+        if (dataUrl.length < 1000) throw new Error("blank_canvas_after_retry");
+      }
 
-      const canvas = await html2canvas(target, {
-        useCORS: true,
-        scale: 1,
-        width: window.innerWidth,
-        height: window.innerHeight,
-        windowWidth: window.innerWidth,
-        windowHeight: window.innerHeight,
-        x: 0,
-        y: 0,
-        scrollX: 0,
-        scrollY: 0,
-        backgroundColor: getComputedStyle(document.documentElement).backgroundColor || "#0f172a",
-        logging: false,
-        allowTaint: true,
-        ignoreElements: (el) => {
-          return el.getAttribute?.("data-feedback-btn") === "true" ||
-            el.classList?.contains("floating-vizzy");
-        },
-        onclone: (clonedDoc) => {
-          const style = clonedDoc.createElement("style");
-          style.textContent = "*, *::before, *::after { animation: none !important; transition: none !important; }";
-          clonedDoc.head.appendChild(style);
-        },
-      });
-      const dataUrl = canvas.toDataURL("image/png");
       setScreenshot(dataUrl);
       setOverlayOpen(true);
     } catch (err: any) {
-      console.error("Screenshot capture error:", err?.message, err?.stack);
+      console.error("Screenshot failed after retry:", err?.message, err?.stack, {
+        path: window.location.pathname,
+        domElements: document.body.querySelectorAll("*").length,
+      });
       toast.error(`Failed to capture screen on ${window.location.pathname}`);
     } finally {
       setCapturing(false);
