@@ -20,10 +20,16 @@ import { useAuth } from "@/lib/auth";
 import { getUserAgentMapping } from "@/lib/userAgentMap";
 import { PixelBrainDialog } from "@/components/social/PixelBrainDialog";
 import { useSuperAdmin } from "@/hooks/useSuperAdmin";
+import { useUserRole, AppRole } from "@/hooks/useUserRole";
 // VizzyApprovalDialog removed — actions auto-execute
 import { useWebPhone } from "@/hooks/useWebPhone";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+
+// Agents restricted to specific roles (all others are open)
+const RESTRICTED_AGENTS: Record<string, AppRole[]> = {
+  accounting: ["admin", "accounting"],
+};
 
 export default function AgentWorkspace() {
   const { agentId } = useParams<{ agentId: string }>();
@@ -32,6 +38,7 @@ export default function AgentWorkspace() {
   const { user } = useAuth();
   const config = agentConfigs[agentId || ""] || agentConfigs.sales;
   const { isSuperAdmin } = useSuperAdmin();
+  const { hasRole, isLoading: rolesLoading } = useUserRole();
   const [webPhoneState, webPhoneActions] = useWebPhone();
 
   // Initialize WebPhone for Vizzy (super admin only)
@@ -50,6 +57,16 @@ export default function AgentWorkspace() {
       navigate("/home", { replace: true });
     }
   }, [agentId, isSuperAdmin, navigate]);
+
+  // Block users without required roles from restricted agents
+  useEffect(() => {
+    if (rolesLoading) return;
+    const required = RESTRICTED_AGENTS[agentId || ""];
+    if (required && !required.some((r) => hasRole(r))) {
+      navigate("/home", { replace: true });
+      toast.error("Access restricted");
+    }
+  }, [agentId, rolesLoading, hasRole, navigate]);
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);

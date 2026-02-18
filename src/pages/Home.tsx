@@ -87,7 +87,7 @@ export default function Home() {
 
   const mapping = getUserAgentMapping(user?.email);
   const { isSuperAdmin } = useSuperAdmin();
-  const { roles, isAdmin, isWorkshop } = useUserRole();
+  const { roles, isAdmin, isWorkshop, hasRole } = useUserRole();
 
   // Resolve agent for suggestions
   const agentSuggestion = useMemo(() => {
@@ -104,12 +104,16 @@ export default function Home() {
 
   // Reorder helpers: primary agent first
   const orderedHelpers = useMemo(() => {
-    const filtered = isSuperAdmin ? helpers : helpers.filter((h) => h.id !== "assistant");
+    let filtered = isSuperAdmin ? helpers : helpers.filter((h) => h.id !== "assistant");
+    // Hide accounting agent (Penny) from users without admin/accounting role
+    if (!hasRole("admin") && !hasRole("accounting")) {
+      filtered = filtered.filter((h) => h.id !== "accounting");
+    }
     if (!mapping) return filtered;
     const primary = filtered.find((h) => h.id === mapping.agentKey);
     if (!primary) return filtered;
     return [primary, ...filtered.filter((h) => h.id !== mapping.agentKey)];
-  }, [mapping, isSuperAdmin]);
+  }, [mapping, isSuperAdmin, hasRole]);
 
   const handleSend = useCallback((content: string) => {
     const result = routeToAgent(content);
