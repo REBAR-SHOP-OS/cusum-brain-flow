@@ -1,55 +1,43 @@
 
-# Pipeline Drawer Tabs Audit & Odoo Clone Polish
+
+# Pipeline Empty States -- Exact Odoo Clone
 
 ## Scope
-Only the **Chatter, Notes, and Activities** tabs inside the Lead Detail Drawer. No changes to Pipeline board, cards, columns, header, database, or logic.
+Fix the empty states in all three tabs (Notes, Chatter, Activities) inside the Lead Detail Drawer to be pixel-perfect copies of Odoo 17's empty state. No logic, database, or other changes.
 
-## What the Reference Shows (Odoo 17)
-The user's screenshot shows the Chatter tab open with:
-1. Three action buttons at top: **"Log note" | "Send message" | "Schedule activity"** -- plain text, no background, separated by spacing (not tabs with underlines)
-2. A large centered empty state with a **clipboard/document icon** and text: "No activities yet." / "Log a note or schedule an activity above."
-3. The overall area is clean, no borders between the action bar and the empty state
+## What Odoo Shows (Reference Screenshot)
+When any tab is empty, Odoo shows:
+- A clipboard/document icon (centered, large, muted)
+- "No activities yet." as primary text
+- "Log a note or schedule an activity above." as secondary text
+- Clean, spacious layout with generous vertical padding
 
-## Current Issues Found
+## Changes
 
-### 1. OdooChatter.tsx -- Composer Tab Bar
-- **Current**: Uses underline-style tabs with `h-0.5 bg-primary` active indicator
-- **Odoo**: Uses plain text buttons without underline, just font-weight/color difference
-- Fix: Remove underline indicator, use bolder text for active state
+### 1. `src/components/pipeline/LeadDetailDrawer.tsx` -- Notes Tab Empty State
+**Current**: FileText icon + "No notes yet."
+**Fix**: Match Odoo exactly: same clipboard icon + "No notes yet." + "Add a description or internal note using the edit button above."
 
-### 2. OdooChatter.tsx -- Empty State
-- **Current**: Icon is `FileText` at `w-10 h-10` with `text-muted-foreground/30`
-- **Odoo**: Uses a larger clipboard-style icon, more visible (not as faded)
-- Fix: Increase icon size to `w-16 h-16`, lighten to `text-muted-foreground/20` for exact Odoo match
+### 2. `src/components/pipeline/OdooChatter.tsx` -- Chatter Empty State
+**Current**: Already close -- FileText icon + correct text
+**Fix**: Minor -- ensure the icon matches Odoo's clipboard style (ClipboardList from lucide) and text exactly matches Odoo
 
-### 3. LeadDetailDrawer.tsx -- Notes Tab Empty State
-- Already has FileText icon + "No notes yet." -- matches Odoo
-- Minor: icon could be slightly larger for consistency
-
-### 4. ScheduledActivities.tsx -- Empty State
-- Already has Clock icon + text -- matches Odoo
-- The "Schedule Activity" button at top should not show when in the Activities tab (the chatter already has "Schedule activity" button)
-- Keep as-is since it's the Activities tab, not chatter
-
-### 5. LeadDetailDrawer.tsx -- Tab Underline
-- **Current**: `h-0.5` underline
-- **Odoo**: `h-[2px]` underline (slightly thicker)
-- Fix: Change to `h-[2px]`
-
-## Files to Modify
-
-### `src/components/pipeline/OdooChatter.tsx`
-- Line 259-277: Restyle composer tab bar -- remove underline indicator, use Odoo plain-button style
-- Line 416-424: Adjust empty state icon size to be larger (w-16 h-16) matching Odoo's more prominent clipboard icon
-
-### `src/components/pipeline/LeadDetailDrawer.tsx`
-- Line 231: Change tab underline from `h-0.5` to `h-[2px]`
-- Line 255-258: Make Notes empty state icon slightly larger for consistency
-
-### `src/components/pipeline/ScheduledActivities.tsx`
-- Line 169-177: Make empty state icon larger (w-16 h-16) for consistency with Odoo
+### 3. `src/components/pipeline/ScheduledActivities.tsx` -- Activities Tab Empty State
+**Current**: Clock icon + "No activities yet." + "Schedule an activity to get started." + separate "Schedule Activity" button visible
+**Fix**: Use same clipboard-style icon (ClipboardList) and Odoo-matching text: "No activities yet." + "Schedule an activity to get started." -- keep the Schedule Activity button but make it subtler
 
 ## Technical Details
-- All changes are CSS/className only
-- No logic, data model, API, or database changes
-- No changes outside the pipeline directory
+
+### Files to modify:
+- `src/components/pipeline/LeadDetailDrawer.tsx` (line 254-258: Notes empty state)
+- `src/components/pipeline/OdooChatter.tsx` (line 413-421: Chatter empty state icon)
+- `src/components/pipeline/ScheduledActivities.tsx` (line 167-177: Activities empty state icon)
+
+### Icon change:
+- Replace `FileText` and `Clock` icons in empty states with `ClipboardList` from lucide-react (closest to Odoo's clipboard icon)
+- Size: `w-16 h-16`, color: `text-muted-foreground/20`
+
+### No changes to:
+- Database, RLS, logic, API
+- Any components outside the pipeline drawer tabs
+- Existing functionality (schedule, log, send still work)
