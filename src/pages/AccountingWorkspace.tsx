@@ -33,6 +33,7 @@ import { QuoteTemplateManager } from "@/components/accounting/QuoteTemplateManag
 import { ExpenseClaimsManager } from "@/components/accounting/ExpenseClaimsManager";
 import { ThreeWayMatchingManager } from "@/components/accounting/ThreeWayMatchingManager";
 import { EmployeeContractsManager } from "@/components/accounting/EmployeeContractsManager";
+import { RecruitmentPipeline } from "@/components/accounting/RecruitmentPipeline";
 
 import { usePennyQueue } from "@/hooks/usePennyQueue";
 import { useIntegrations } from "@/hooks/useIntegrations";
@@ -322,6 +323,7 @@ export default function AccountingWorkspace() {
             {activeTab === "expense-claims" && <ExpenseClaimsManager />}
             {activeTab === "three-way-matching" && <ThreeWayMatchingManager />}
             {activeTab === "employee-contracts" && <EmployeeContractsManager />}
+            {activeTab === "recruitment" && <RecruitmentPipeline />}
             {activeTab === "documents" && <AccountingDocuments data={qb} />}
             {activeTab === "balance-sheet" && <AccountingReport data={qb} report="balance-sheet" />}
             {activeTab === "profit-loss" && <AccountingReport data={qb} report="profit-loss" />}

@@ -3650,6 +3650,143 @@ export type Database = {
           },
         ]
       }
+      job_applicants: {
+        Row: {
+          company_id: string
+          cover_letter: string | null
+          created_at: string
+          email: string | null
+          first_name: string
+          id: string
+          interview_date: string | null
+          last_name: string
+          notes: string | null
+          phone: string | null
+          position_id: string
+          rating: number | null
+          rejection_reason: string | null
+          resume_url: string | null
+          source: string | null
+          stage: string
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          cover_letter?: string | null
+          created_at?: string
+          email?: string | null
+          first_name: string
+          id?: string
+          interview_date?: string | null
+          last_name: string
+          notes?: string | null
+          phone?: string | null
+          position_id: string
+          rating?: number | null
+          rejection_reason?: string | null
+          resume_url?: string | null
+          source?: string | null
+          stage?: string
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          cover_letter?: string | null
+          created_at?: string
+          email?: string | null
+          first_name?: string
+          id?: string
+          interview_date?: string | null
+          last_name?: string
+          notes?: string | null
+          phone?: string | null
+          position_id?: string
+          rating?: number | null
+          rejection_reason?: string | null
+          resume_url?: string | null
+          source?: string | null
+          stage?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_applicants_position_id_fkey"
+            columns: ["position_id"]
+            isOneToOne: false
+            referencedRelation: "job_positions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      job_positions: {
+        Row: {
+          company_id: string
+          created_at: string
+          created_by: string | null
+          department: string | null
+          description: string | null
+          employment_type: string
+          hiring_manager_id: string | null
+          id: string
+          location: string | null
+          requirements: string | null
+          salary_range_max: number | null
+          salary_range_min: number | null
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          department?: string | null
+          description?: string | null
+          employment_type?: string
+          hiring_manager_id?: string | null
+          id?: string
+          location?: string | null
+          requirements?: string | null
+          salary_range_max?: number | null
+          salary_range_min?: number | null
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          department?: string | null
+          description?: string | null
+          employment_type?: string
+          hiring_manager_id?: string | null
+          id?: string
+          location?: string | null
+          requirements?: string | null
+          salary_range_max?: number | null
+          salary_range_min?: number | null
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_positions_hiring_manager_id_fkey"
+            columns: ["hiring_manager_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_positions_hiring_manager_id_fkey"
+            columns: ["hiring_manager_id"]
+            isOneToOne: false
+            referencedRelation: "profiles_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       kb_articles: {
         Row: {
           category_id: string | null
