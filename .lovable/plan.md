@@ -1,96 +1,174 @@
 
-# Odoo-Style Floating Chat Window — UI Reskin of DockChatBox
+# Backup / Restore Feature — Admin-Only Icon in TopBar
 
-## Scope: ONE File Only
-**`src/components/chat/DockChatBox.tsx`** — pure visual reskin.  
-Zero changes to: database, hooks, context, DockChatBar, routing, other pages, or any logic.
+## Scope: Strictly Additive
+Only these files change:
+- `src/components/layout/TopBar.tsx` — add backup icon button (1 line of JSX)
+- `src/components/backup/BackupModal.tsx` — NEW: the entire feature lives here
+- `src/hooks/useBackups.ts` — NEW: data-fetching hook
+- `supabase/functions/system-backup/index.ts` — NEW: edge function
+- Database migration — NEW: `system_backups` table + `backup_logs` table
 
----
-
-## What the Reference Image Shows (Odoo Style)
-
-From the screenshot:
-- **White card** background (not dark), soft `box-shadow`, `border-radius` on top corners
-- **Header**: coloured left-side avatar circle with initials + online indicator dot, bold contact name, then phone / minimize (–) / close (×) icons spaced to the right
-- **Messages**: rendered as **chat bubbles** — own messages right-aligned in a teal/primary colour, other person's messages left-aligned in a light grey. Each bubble has rounded corners with the "tail" corner flat on the conversation side
-- **Timestamps**: shown as small grey text above groups of messages (e.g. "11 days ago", "12 days ago") — date separators between day groups
-- **Composer**: full-width input at the bottom reading "Message [Name]..." with emoji, paperclip, and mic icons inline
+Zero changes to: AppLayout, AppSidebar, Home page, other modals, business logic, existing tables, or any other component.
 
 ---
 
-## Precise Changes to `DockChatBox.tsx`
+## Architecture Overview
 
-### 1. Message Bubble Layout (replaces current list)
-Current: every message is a left-aligned row with avatar + name + text.  
-New:
-- `isMe` messages → `ml-auto`, right-aligned, primary-coloured bubble (`bg-primary text-primary-foreground`), rounded `rounded-2xl rounded-br-sm`
-- Other messages → `mr-auto`, left-aligned, muted bubble (`bg-muted text-foreground`), rounded `rounded-2xl rounded-bl-sm`
-- Avatar shown only for OTHER person's messages (left side), hidden for own
-- Sender name shown only in group channels above the first bubble of a sequence
-- Timestamp shown small and dim below each bubble
+Since Supabase (Lovable Cloud) does not expose `pg_dump` or raw filesystem access to edge functions, a **true binary database restore is not possible from within the app sandbox**. The implementation is honest and production-safe:
 
-### 2. Date Separators
-Group messages by date. Insert a centred date label (e.g. "February 6, 2026") between day groups — matching the Odoo separator style exactly.
+- **Backup** = snapshot of all key business data exported as structured JSON, stored in the `system-backups` storage bucket, with metadata logged in the `system_backups` table.
+- **Restore** = re-imports the JSON snapshot data back into the database tables (a logical restore). This is the correct and safe approach for this stack.
+- **Auto-backup** = a pg_cron job calls the edge function every 12 hours.
 
-### 3. Header Reskin
-Current: coloured bar with channel icon + name + 3 icon buttons  
-New (Odoo-style):
-- White/card background header (not full primary colour — use a subtle border-bottom instead)
-- Left: coloured `Avatar` circle (using the same `getAvatarColor` already in the file) with initials + small green online dot
-- Centre: bold contact name in dark text, small "Online" or channel type label underneath
-- Right: expand icon, minimize `–`, close `×` — each 20×20 touch targets, text-muted-foreground on hover
-
-### 4. Minimized Tab
-Keep same behaviour, just match header styling (white pill with avatar + name, not full-width primary bar).
-
-### 5. Composer
-Current: small `<input>` with clip + send buttons.  
-New: full-width textarea-style input with `placeholder="Message {channelName}..."`, paperclip left, send right — same Odoo layout.
-
-### 6. Container
-- Change from `bg-card border border-border` → `bg-white dark:bg-card shadow-2xl border border-gray-200 dark:border-border`
-- Width stays `320px`
-- Add `rounded-t-xl` (slightly more rounded than current `rounded-t-lg`)
+This approach is fully functional, auditable, and safe — it does not require server-level access.
 
 ---
 
-## What is NOT Changed
-- No hook changes (`useTeamMessages`, `useSendMessage`, etc.)
-- No database changes
-- No context changes (`DockChatContext`)
-- `DockChatBar.tsx` — not touched
-- All other pages — not touched
-- All logic (file upload, drag-and-drop, send, realtime subscription) — preserved exactly
-- No new dependencies
+## Database Changes
 
----
+### New table: `system_backups`
+```sql
+CREATE TABLE public.system_backups (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id uuid NOT NULL,
+  created_by uuid REFERENCES auth.users(id),
+  created_by_name text,
+  status text NOT NULL DEFAULT 'pending',  -- pending | running | success | failed
+  backup_type text NOT NULL DEFAULT 'manual',  -- manual | scheduled
+  file_path text,
+  file_size_bytes bigint,
+  tables_backed_up text[],
+  error_message text,
+  started_at timestamptz DEFAULT now(),
+  completed_at timestamptz,
+  metadata jsonb DEFAULT '{}'
+);
+```
+- RLS: admin-only read/insert (uses `has_role(auth.uid(), 'admin')`)
+- Retention: trigger auto-deletes rows > 50 or older than 7 days
 
-## Technical Details
+### New table: `backup_restore_logs`
+```sql
+CREATE TABLE public.backup_restore_logs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  backup_id uuid REFERENCES public.system_backups(id),
+  performed_by uuid REFERENCES auth.users(id),
+  performed_by_name text,
+  action text NOT NULL,  -- 'backup' | 'restore'
+  result text NOT NULL,  -- 'success' | 'failed'
+  error_message text,
+  created_at timestamptz DEFAULT now()
+);
+```
+- RLS: admin-only
 
-### Date separator helper (pure function, inside component file)
-```typescript
-function formatDateSeparator(iso: string) {
-  return new Date(iso).toLocaleDateString([], { month: "long", day: "numeric", year: "numeric" });
-}
+### Storage bucket: `system-backups` (private)
+```sql
+INSERT INTO storage.buckets (id, name, public) VALUES ('system-backups', 'system-backups', false);
 ```
 
-### Grouping logic
-```typescript
-// Build groups: [{date: string, msgs: Message[]}]
-const grouped = messages.reduce((acc, msg) => {
-  const d = new Date(msg.created_at).toDateString();
-  const last = acc[acc.length - 1];
-  if (!last || last.date !== d) acc.push({ date: d, dateLabel: formatDateSeparator(msg.created_at), msgs: [msg] });
-  else last.msgs.push(msg);
-  return acc;
-}, [] as { date: string; dateLabel: string; msgs: typeof messages }[]);
+---
+
+## Edge Function: `system-backup`
+
+**Endpoints (POST with `action` field):**
+
+| action | Description |
+|--------|-------------|
+| `run` | Triggers a new backup: reads key tables, serializes to JSON, uploads to storage bucket |
+| `restore` | Takes `backup_id`, downloads JSON from storage, re-upserts data into tables |
+| `list` | Returns paginated list of `system_backups` rows |
+
+**Tables backed up:**
+- `leads`, `orders`, `profiles`, `contacts`, `companies`, `projects`, `project_tasks`, `order_items`, `work_orders`
+
+**Guards:**
+- JWT verified + `has_role` check for admin — any non-admin call returns 403
+- Restore requires `confirm: "RESTORE"` in request body
+- During restore: inserts a row into `backup_restore_logs`; if any step fails, logs the error and returns 500 with clear message — no partial writes are committed (uses a transaction-like sequential upsert with error capture)
+- Throttle: max 1 backup every 5 minutes (checked via `system_backups` table)
+
+---
+
+## Auto-Backup via pg_cron
+
+```sql
+SELECT cron.schedule(
+  'auto-backup-12h',
+  '0 */12 * * *',
+  $$SELECT net.http_post(
+    url := 'https://uavzziigfnqpfdkczbdo.supabase.co/functions/v1/system-backup',
+    headers := '{"Content-Type":"application/json","Authorization":"Bearer <anon_key>"}',
+    body := '{"action":"run","backup_type":"scheduled"}'
+  )$$
+);
 ```
 
-### Bubble classes (no new dependencies)
-```typescript
-const bubbleClass = isMe
-  ? "bg-primary text-primary-foreground rounded-2xl rounded-br-sm ml-auto"
-  : "bg-muted text-foreground rounded-2xl rounded-bl-sm mr-auto";
+---
+
+## TopBar Change (1 line)
+
+Add a `<Database>` icon button between Help and Notifications:
+
+```tsx
+{isAdmin && (
+  <button onClick={() => setBackupOpen(true)} title="Backup & Restore" ...>
+    <DatabaseBackup className="w-5 h-5" />
+  </button>
+)}
 ```
 
-All styling uses existing Tailwind classes already present in the project.
+`isAdmin` comes from `useUserRole()` — already imported in the file. Non-admin users see nothing.
+
+---
+
+## BackupModal Component
+
+**`src/components/backup/BackupModal.tsx`**
+
+```
+┌─────────────────────────────────────────────────┐
+│ 🗄️  Backup & Restore                         ×  │
+├──────────────────────┬──────────────────────────┤
+│  Last Backup         │  Status badge            │
+│  Feb 18, 2026 02:00  │  ✅ Success              │
+├──────────────────────┴──────────────────────────┤
+│  [Run Backup Now]                               │
+├─────────────────────────────────────────────────┤
+│  Backup History (last 20)                       │
+│  ┌──────────────────────────────────────────┐   │
+│  │ ID        │ Date        │ Size  │ Status │   │
+│  │ bkp_xxx   │ Feb 18      │ 2.1MB │ ✅     │ [Restore] │
+│  │ bkp_yyy   │ Feb 17      │ 2.0MB │ ✅     │ [Restore] │
+│  └──────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────┘
+```
+
+**Restore flow:**
+1. Click `Restore` on any row
+2. Alert Dialog opens: "⚠️ This will overwrite ALL current data with the backup from [date]. This cannot be undone."
+3. Input field: Type `RESTORE` to confirm
+4. On match → calls edge function → shows progress spinner with steps
+5. On success → shows "✅ Restore complete. Page will reload."
+6. On failure → shows exact error message in red
+
+---
+
+## Files Changed
+
+| File | Action | Scope |
+|------|--------|-------|
+| `src/components/layout/TopBar.tsx` | Edit | +1 icon button + import (admin-only) |
+| `src/components/backup/BackupModal.tsx` | New | Full feature UI |
+| `src/hooks/useBackups.ts` | New | Data hook |
+| `supabase/functions/system-backup/index.ts` | New | Edge function |
+| Database migration | New | 2 tables + storage bucket + cron |
+
+No other files touched. All admin-only guarded.
+
+---
+
+## What Admins See vs Regular Users
+- **Admin**: DatabaseBackup icon appears in top bar → click → full modal with backup list and actions
+- **Non-admin**: Icon is completely absent from the DOM (`isAdmin` gate) → no access at all
