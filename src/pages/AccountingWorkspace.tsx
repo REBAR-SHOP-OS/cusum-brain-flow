@@ -48,6 +48,7 @@ import { AccountingAttachments } from "@/components/accounting/AccountingAttachm
 import { AccountingReconciliation } from "@/components/accounting/AccountingReconciliation";
 import { AccountingScheduledReports } from "@/components/accounting/AccountingScheduledReports";
 import { AccountingRecurringTxns } from "@/components/accounting/AccountingRecurringTxns";
+import { TaxPlanning } from "@/components/accounting/TaxPlanning";
 
 import { usePennyQueue } from "@/hooks/usePennyQueue";
 import { useIntegrations } from "@/hooks/useIntegrations";
@@ -352,6 +353,7 @@ export default function AccountingWorkspace() {
             {activeTab === "reconciliation" && <AccountingReconciliation />}
             {activeTab === "scheduled-reports" && <AccountingScheduledReports />}
             {activeTab === "recurring-auto" && <AccountingRecurringTxns />}
+            {activeTab === "tax-planning" && <TaxPlanning />}
             {activeTab === "documents" && <AccountingDocuments data={qb} />}
             {activeTab === "balance-sheet" && <AccountingReport data={qb} report="balance-sheet" />}
             {activeTab === "profit-loss" && <AccountingReport data={qb} report="profit-loss" />}
