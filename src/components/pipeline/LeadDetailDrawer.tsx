@@ -228,7 +228,7 @@ export function LeadDetailDrawer({
               >
                 {tab}
                 {activeTab === tab && (
-                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                  <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-primary" />
                 )}
               </button>
             ))}
@@ -253,7 +253,7 @@ export function LeadDetailDrawer({
               )}
               {!lead.description && !lead.notes && (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <FileText className="w-10 h-10 text-muted-foreground/30 mb-3" />
+                  <FileText className="w-16 h-16 text-muted-foreground/20 mb-3" />
                   <p className="text-[13px] text-muted-foreground">No notes yet.</p>
                 </div>
               )}

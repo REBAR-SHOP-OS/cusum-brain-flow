@@ -167,7 +167,7 @@ export function ScheduledActivities({ entityType, entityId }: ScheduledActivitie
 
       {planned.length === 0 && done.length === 0 && !showForm && (
         <div className="flex flex-col items-center justify-center py-12 text-center">
-          <Clock className="w-10 h-10 text-muted-foreground/30 mb-3" />
+          <Clock className="w-16 h-16 text-muted-foreground/20 mb-3" />
           <p className="text-[13px] text-muted-foreground">
             No activities yet.
           </p>
