@@ -1,43 +1,111 @@
 
 
-# Pipeline Empty States -- Exact Odoo Clone
+# Sync Missing Odoo Chatter & Activities -- Apple to Apple
 
-## Scope
-Fix the empty states in all three tabs (Notes, Chatter, Activities) inside the Lead Detail Drawer to be pixel-perfect copies of Odoo 17's empty state. No logic, database, or other changes.
+## Problem
+- 384 out of 2,764 leads have ZERO activities in the ERP (no chatter, no notes, no log notes)
+- ALL Odoo scheduled activities (`mail.activity`) are missing -- 0 rows in `scheduled_activities`
+- The existing `odoo-crm-sync` only syncs lead metadata (stage, value) but NEVER imports Odoo's chatter messages or scheduled activities
+- The UI code works perfectly -- it just has no data to show for these 384 leads
 
-## What Odoo Shows (Reference Screenshot)
-When any tab is empty, Odoo shows:
-- A clipboard/document icon (centered, large, muted)
-- "No activities yet." as primary text
-- "Log a note or schedule an activity above." as secondary text
-- Clean, spacious layout with generous vertical padding
+## Data Audit (Current State)
 
-## Changes
+```text
++------------------------------+---------+
+| Metric                       | Count   |
++------------------------------+---------+
+| Total Odoo leads in ERP      | 2,764   |
+| Leads WITH activities        | 2,380   |
+| Leads WITHOUT activities     | 384     |
+| Total lead_activities rows   | 38,472  |
+| Total scheduled_activities   | 0       |
+| Total lead_events            | 530     |
++------------------------------+---------+
+```
 
-### 1. `src/components/pipeline/LeadDetailDrawer.tsx` -- Notes Tab Empty State
-**Current**: FileText icon + "No notes yet."
-**Fix**: Match Odoo exactly: same clipboard icon + "No notes yet." + "Add a description or internal note using the edit button above."
+## Solution: New Edge Function `odoo-chatter-sync`
 
-### 2. `src/components/pipeline/OdooChatter.tsx` -- Chatter Empty State
-**Current**: Already close -- FileText icon + correct text
-**Fix**: Minor -- ensure the icon matches Odoo's clipboard style (ClipboardList from lucide) and text exactly matches Odoo
+### What it does:
+1. For all 384 leads missing activities, fetch `mail.message` records from Odoo using the lead's `odoo_id`
+2. Also fetch `mail.activity` (scheduled activities) from Odoo for ALL leads
+3. Insert into `lead_activities` and `scheduled_activities` tables with dedup
 
-### 3. `src/components/pipeline/ScheduledActivities.tsx` -- Activities Tab Empty State
-**Current**: Clock icon + "No activities yet." + "Schedule an activity to get started." + separate "Schedule Activity" button visible
-**Fix**: Use same clipboard-style icon (ClipboardList) and Odoo-matching text: "No activities yet." + "Schedule an activity to get started." -- keep the Schedule Activity button but make it subtler
+### Step 1: Create `supabase/functions/odoo-chatter-sync/index.ts`
 
-## Technical Details
+This function will:
+- Query all ERP leads that have an `odoo_id` in metadata but zero `lead_activities`
+- For each, call Odoo RPC to read `mail.message` records linked to the `crm.lead` model
+- Map Odoo message types to ERP activity types:
+  - `comment` (log notes) -> `note` 
+  - `email` -> `email`
+  - `notification` (stage changes) -> `system`
+- Insert into `lead_activities` with `odoo_message_id` for dedup
+- Also fetch `mail.activity` records and insert into `scheduled_activities`
 
-### Files to modify:
-- `src/components/pipeline/LeadDetailDrawer.tsx` (line 254-258: Notes empty state)
-- `src/components/pipeline/OdooChatter.tsx` (line 413-421: Chatter empty state icon)
-- `src/components/pipeline/ScheduledActivities.tsx` (line 167-177: Activities empty state icon)
+### Step 2: Odoo `mail.message` fields to fetch
 
-### Icon change:
-- Replace `FileText` and `Clock` icons in empty states with `ClipboardList` from lucide-react (closest to Odoo's clipboard icon)
-- Size: `w-16 h-16`, color: `text-muted-foreground/20`
+```text
+Odoo Model: mail.message
+Filter: res_model = 'crm.lead', res_id IN [list of odoo_ids]
+Fields: id, body, subject, message_type, subtype_id, author_id, date, res_id
+```
 
-### No changes to:
-- Database, RLS, logic, API
-- Any components outside the pipeline drawer tabs
-- Existing functionality (schedule, log, send still work)
+### Step 3: Odoo `mail.activity` fields to fetch
+
+```text
+Odoo Model: mail.activity
+Filter: res_model = 'crm.lead', res_id IN [list of odoo_ids]  
+Fields: id, summary, note, activity_type_id, date_deadline, user_id, state, res_id
+```
+
+### Step 4: Mapping Logic
+
+For `mail.message` -> `lead_activities`:
+- `message_type = 'comment'` -> `activity_type = 'comment'` or `'note'`
+- `message_type = 'email'` -> `activity_type = 'email'`
+- `message_type = 'notification'` -> `activity_type = 'system'`
+- `author_id[1]` -> `created_by` (Odoo user name)
+- `date` -> `created_at`
+- `body` -> `description` (HTML stripped)
+- `subject` -> `title`
+- Dedup key: `odoo_message_id` column (already exists in schema)
+
+For `mail.activity` -> `scheduled_activities`:
+- `activity_type_id` -> map to `call`, `email`, `meeting`, `todo`, `follow_up`
+- `summary` -> `summary`
+- `note` -> `note`
+- `date_deadline` -> `due_date`
+- `user_id[1]` -> `assigned_name`
+- `state` = 'done' -> `status = 'done'`, else `status = 'planned'`
+
+### Step 5: Batch Processing
+
+- Process in batches of 50 Odoo IDs per RPC call (Odoo limit)
+- Insert in batches of 100 rows
+- Use `odoo_message_id` for upsert/dedup to prevent duplicates on re-run
+
+## Files to Create/Modify
+
+### New file: `supabase/functions/odoo-chatter-sync/index.ts`
+- Full edge function implementing the sync logic above
+- Reuses existing `_shared/auth.ts` for authentication
+- Uses same Odoo RPC pattern as `odoo-crm-sync`
+- Supports `mode: "missing"` (only 384 missing) and `mode: "full"` (re-sync all)
+
+### No UI changes needed
+- The existing `OdooChatter.tsx`, `ScheduledActivities.tsx`, and `LeadDetailDrawer.tsx` already correctly render data when it exists
+- Once data is synced, all tabs will populate automatically
+
+## Execution Plan
+1. Create the edge function
+2. Deploy it
+3. Test with a single lead first (the one you opened: odoo_id 4842)
+4. Run full sync for all 384 missing leads
+5. Then run `mail.activity` sync for scheduled activities across all leads
+
+## No changes to:
+- Database schema (tables already exist with correct columns)
+- RLS policies (already configured correctly)
+- UI components (already working, just need data)
+- Existing sync functions
+
