@@ -1,83 +1,72 @@
 
+# Equip Vizzy with Full-Duplex Voice Chat (Siri-Like)
 
-# Max-Equip All Agents and Fix Landing Chat Widget
+## What We're Building
 
-## What's Wrong
+A real-time, full-duplex voice conversation mode for Vizzy using ElevenLabs Conversational AI. When the user taps the mic button on the Vizzy avatar, instead of going to the text chat page, it opens a beautiful full-screen voice interface where Vizzy listens and responds like Siri -- naturally, with interruption support, and zero typing required.
 
-1. **Landing page chat widget (circled)**: React throws a "Function components cannot be given refs" warning. The `PublicChatWidget` is not wrapped in `forwardRef`, causing console noise.
+## How It Works
 
-2. **Missing agent quick-start suggestions**: The `agentSuggestionsData.ts` file is missing entries for `legal` and `empire` (empire exists but could use more). When users open these agents, they see no helpful starter prompts.
+1. User taps the mic icon on the floating Vizzy button
+2. A full-screen voice overlay opens with a pulsing orb animation
+3. The app requests microphone permission, fetches a conversation token from the backend, and connects via WebRTC
+4. User speaks naturally -- Vizzy listens, thinks, and responds with a human-like voice in real-time
+5. Full duplex: user can interrupt Vizzy mid-sentence, just like talking to a real person
+6. Live captions show what the user said and what Vizzy is saying
+7. Tap the X or say "goodbye" to end the session
 
-3. **Agent router gaps**: The smart router (`agentRouter.ts`) is missing the `empire` agent entirely -- typing "venture", "diagnose", "architect" won't route to the right agent.
+## Architecture
 
-4. **`commander` agent type exists** in the AgentType union but has no config, no route, and no suggestions -- dead code that could cause fallback errors.
+```
+User speaks --> Microphone --> WebRTC --> ElevenLabs Agent (cloud)
+                                              |
+                                    Processes speech, generates response
+                                              |
+ElevenLabs Agent --> WebRTC --> Speaker --> User hears Vizzy
+```
 
-5. **Landing page stat** says "17 AI Agents" but there are actually 19 configured agents.
-
----
-
-## Fix Plan
-
-### 1. Fix PublicChatWidget ref warning
-**File**: `src/components/landing/PublicChatWidget.tsx`
-- Wrap the component in `React.forwardRef` (matching the pattern used by `FloatingVizzyButton` and `AgentSuggestionCard`).
-
-### 2. Add missing agent suggestions
-**File**: `src/components/agent/agentSuggestionsData.ts`
-- Add `legal` entry with starter prompts (contract review, lien advice, compliance questions).
-- Ensure `empire` entry has robust prompts for venture building, diagnostics, and cross-platform fixes.
-
-### 3. Add empire route to agent router
-**File**: `src/lib/agentRouter.ts`
-- Add an `empire` entry with keywords: "venture", "architect", "diagnose", "cross-platform", "aria", "empire", "odoo", "wordpress fix", "stress test", "meta-builder".
-
-### 4. Clean up commander type
-**File**: `src/lib/agent.ts`
-- Keep `commander` in the AgentType union (it's used by the backend edge function), but no frontend changes needed since it routes through the sales commander config on the backend.
-
-### 5. Update landing page stat
-**File**: `src/pages/Landing.tsx`
-- Change "17" to "19" for the AI Agents counter to reflect the actual count.
-
----
+The ElevenLabs Agent (configured externally with ELEVENLABS_AGENT_ID) handles the full pipeline: speech-to-text, AI reasoning, and text-to-speech -- all in real-time over a single WebRTC connection.
 
 ## Technical Details
 
-### PublicChatWidget.tsx
-Wrap the existing function component:
-```typescript
-export const PublicChatWidget = React.forwardRef<HTMLDivElement, {}>(
-  function PublicChatWidget(_props, ref) {
-    // ... existing code, wrap outer fragment in a div with ref
-  }
-);
-PublicChatWidget.displayName = "PublicChatWidget";
-```
+### 1. Create Edge Function: `supabase/functions/elevenlabs-conversation-token/index.ts`
+- Fetches a single-use WebRTC conversation token from ElevenLabs API using the stored `ELEVENLABS_API_KEY` and `ELEVENLABS_AGENT_ID` secrets
+- Returns `{ token }` to the client
+- Config entry already exists in `config.toml`
 
-### agentSuggestionsData.ts -- New Entries
-```typescript
-legal: [
-  { title: "Review a contract clause for risks", category: "Contracts" },
-  { title: "What are my construction lien rights in Ontario?", category: "Liens" },
-  { title: "Check OHSA compliance requirements", category: "Compliance" },
-],
-```
+### 2. Create Voice Chat Component: `src/components/vizzy/VizzyVoiceChat.tsx`
+- Full-screen overlay with dark glassmorphic background
+- Animated pulsing orb that reacts to speaking state (user speaking vs Vizzy speaking vs idle)
+- Uses `useConversation` hook from `@elevenlabs/react` for WebRTC connection
+- Shows live captions: user transcript and agent response
+- Close button + auto-disconnect on unmount
+- Status indicators: "Connecting...", "Listening...", "Vizzy is speaking...", "Tap to end"
+- Volume visualization using `getInputVolume()` / `getOutputVolume()`
 
-### agentRouter.ts -- Empire Route
-```typescript
-{
-  id: "empire",
-  route: "/agent/empire",
-  name: "Architect",
-  keywords: [
-    "venture", "ventures", "architect", "empire", "diagnose",
-    "cross-platform", "meta-builder", "stress test", "odoo",
-    "wordpress fix", "aria", "build a business", "platform commander",
-  ],
-}
-```
+### 3. Create Hook: `src/hooks/useVizzyVoice.ts`
+- Wraps the ElevenLabs `useConversation` hook
+- Manages connection lifecycle (token fetch, connect, disconnect)
+- Tracks conversation state: idle, connecting, connected, error
+- Stores transcript history for display
+- Handles errors gracefully with toast notifications
 
-### Landing.tsx
-```typescript
-{ value: 19, suffix: "", label: "AI Agents", prefix: "" },
-```
+### 4. Update `src/components/vizzy/FloatingVizzyButton.tsx`
+- Change the mic button's `onMicClick` to open the voice overlay instead of navigating to `/chat?voice=1`
+- Add state to toggle the `VizzyVoiceChat` overlay
+
+### 5. Voice Chat UI Design
+- **Idle/Listening**: Soft teal pulsing orb with "Listening..." label
+- **Vizzy Speaking**: Brighter, faster pulse with "Vizzy is speaking..." label
+- **Connecting**: Spinner with "Connecting to Vizzy..."
+- **Error**: Red flash with retry button
+- Vizzy's avatar displayed in center of the orb
+- Transcript bubbles scroll up from bottom (last 3-4 exchanges visible)
+- Single large "End Call" button at bottom
+
+### Files to Create
+1. `supabase/functions/elevenlabs-conversation-token/index.ts` -- Token endpoint
+2. `src/hooks/useVizzyVoice.ts` -- Voice session management hook
+3. `src/components/vizzy/VizzyVoiceChat.tsx` -- Full-screen voice UI
+
+### Files to Modify
+1. `src/components/vizzy/FloatingVizzyButton.tsx` -- Wire up mic to voice overlay
