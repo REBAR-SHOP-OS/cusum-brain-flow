@@ -197,6 +197,25 @@ const agentRoutes: AgentRoute[] = [
       "work-life", "self improvement", "mentoring", "growth",
     ],
   },
+  {
+    id: "empire",
+    route: "/agent/empire",
+    name: "Architect",
+    keywords: [
+      "venture", "ventures", "architect", "empire", "diagnose",
+      "cross-platform", "meta-builder", "stress test", "odoo",
+      "wordpress fix", "aria", "build a business", "platform commander",
+    ],
+  },
+  {
+    id: "commander",
+    route: "/agent/commander",
+    name: "Commander",
+    keywords: [
+      "commander", "department", "kpi", "team performance",
+      "escalate", "escalation", "oversight", "department head",
+    ],
+  },
 ];
 
 export interface RouteResult {

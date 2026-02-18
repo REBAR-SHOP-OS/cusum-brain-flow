@@ -16,7 +16,7 @@ const STATS = [
   { value: 10000, suffix: "+", label: "Tons Processed", prefix: "" },
   { value: 500, suffix: "+", label: "Projects Delivered", prefix: "" },
   { value: 99.2, suffix: "%", label: "Uptime", prefix: "", decimals: 1 },
-  { value: 17, suffix: "", label: "AI Agents", prefix: "" },
+  { value: 19, suffix: "", label: "AI Agents", prefix: "" },
 ];
 
 const FEATURES = [
