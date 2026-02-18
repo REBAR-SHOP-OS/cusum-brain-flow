@@ -61,6 +61,9 @@ const menus: Menu[] = [
       { type: "label", label: "HR" },
       { label: "Employee Contracts & Certs", tab: "employee-contracts" },
       { label: "Recruitment Pipeline", tab: "recruitment" },
+      { type: "separator" },
+      { type: "label", label: "Projects" },
+      { label: "Project Management", tab: "project-management" },
     ],
   },
   {
