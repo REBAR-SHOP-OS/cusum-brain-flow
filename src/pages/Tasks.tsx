@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { CheckSquare, Filter, Plus, RefreshCw, Mail, Circle, Clock, Sparkles } from "lucide-react";
+import { CheckSquare, Filter, Plus, RefreshCw, Mail, Circle, Clock, Sparkles, Copy, Check, Maximize2 } from "lucide-react";
+import { toast as sonnerToast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -102,7 +103,42 @@ export default function Tasks() {
   const [agentFilter, setAgentFilter] = useState("all");
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [fullScreenOpen, setFullScreenOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
   const { toast } = useToast();
+
+  const copyToClipboard = async (text: string | null) => {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      sonnerToast("Copied!");
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      sonnerToast("Copied!");
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const linkifyText = (text: string | null) => {
+    if (!text) return null;
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const parts = text.split(urlRegex);
+    return parts.map((part, i) =>
+      urlRegex.test(part) ? (
+        <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-primary underline break-all">{part}</a>
+      ) : (
+        <span key={i}>{part}</span>
+      )
+    );
+  };
 
   const loadTasks = async () => {
     setLoading(true);
@@ -310,7 +346,7 @@ export default function Tasks() {
 
         {/* Task Detail Dialog */}
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogContent className="max-w-lg">
+          <DialogContent className="max-w-2xl">
             {selectedTask && (
               <>
                 <DialogHeader>
@@ -321,8 +357,22 @@ export default function Tasks() {
                 <div className="space-y-4 text-sm">
                   {selectedTask.description && (
                     <div>
-                      <span className="text-muted-foreground font-medium">Description</span>
-                      <p className="mt-1">{selectedTask.description}</p>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-muted-foreground font-medium">Description</span>
+                        <div className="flex items-center gap-1">
+                          <Button variant="ghost" size="icon" className="h-7 w-7"
+                            onClick={() => copyToClipboard(selectedTask.description)}>
+                            {copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7"
+                            onClick={() => setFullScreenOpen(true)}>
+                            <Maximize2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="mt-1 text-[15px] leading-relaxed text-foreground whitespace-pre-wrap break-words overflow-y-auto max-h-[calc(100vh-320px)] rounded-md border border-border/50 bg-muted/30 p-3">
+                        {linkifyText(selectedTask.description)}
+                      </div>
                     </div>
                   )}
 
@@ -394,6 +444,19 @@ export default function Tasks() {
           </DialogContent>
         </Dialog>
       </div>
+
+      {/* Full Screen Description Dialog */}
+      <Dialog open={fullScreenOpen} onOpenChange={setFullScreenOpen}>
+        <DialogContent className="max-w-[90vw] max-h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>{selectedTask?.title}</DialogTitle>
+            <DialogDescription className="sr-only">Full screen task description</DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto text-[15px] leading-relaxed text-foreground whitespace-pre-wrap break-words p-4">
+            {selectedTask?.description && linkifyText(selectedTask.description)}
+          </div>
+        </DialogContent>
+      </Dialog>
     </TooltipProvider>
   );
 }
