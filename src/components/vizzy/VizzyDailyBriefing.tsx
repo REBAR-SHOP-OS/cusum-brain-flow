@@ -10,6 +10,24 @@ import { RichMarkdown } from "@/components/chat/RichMarkdown";
 import assistantHelper from "@/assets/helpers/assistant-helper.png";
 
 const DISMISS_KEY = "vizzy-brief-dismissed";
+const CACHE_KEY = "vizzy-brief-cache";
+
+function getCachedBriefing(): string | null {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const { date, briefing } = JSON.parse(raw);
+    if (date === new Date().toISOString().split("T")[0]) return briefing;
+  } catch {}
+  return null;
+}
+
+function cacheBriefing(briefing: string) {
+  localStorage.setItem(CACHE_KEY, JSON.stringify({
+    date: new Date().toISOString().split("T")[0],
+    briefing,
+  }));
+}
 
 export function VizzyDailyBriefing() {
   const { user } = useAuth();
@@ -17,7 +35,7 @@ export function VizzyDailyBriefing() {
   const avatarImg = agent?.image || assistantHelper;
   const navigate = useNavigate();
 
-  const [briefing, setBriefing] = useState<string | null>(null);
+  const [briefing, setBriefing] = useState<string | null>(() => getCachedBriefing());
   const [loading, setLoading] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [error, setError] = useState(false);
@@ -30,6 +48,9 @@ export function VizzyDailyBriefing() {
       return;
     }
 
+    // Already have today's cached briefing — skip fetch
+    if (getCachedBriefing()) return;
+
     let cancelled = false;
     setLoading(true);
 
@@ -40,11 +61,11 @@ export function VizzyDailyBriefing() {
 
         const res = await supabase.functions.invoke("vizzy-daily-brief", {});
         if (cancelled) return;
-        // Treat rate-limit (429) as a soft skip — just hide the widget
         if (res.error || !res.data?.briefing) {
           setError(true);
         } else {
           setBriefing(res.data.briefing);
+          cacheBriefing(res.data.briefing);
         }
       } catch {
         if (!cancelled) setError(true);
