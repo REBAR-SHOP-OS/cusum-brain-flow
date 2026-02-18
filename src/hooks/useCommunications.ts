@@ -38,9 +38,20 @@ export function useCommunications(options?: { search?: string; typeFilter?: stri
     setLoading(true);
     setError(null);
     try {
+      // Belt-and-suspenders: get the authenticated user's ID client-side.
+      // RLS already enforces user_id = auth.uid() server-side, but this
+      // explicit filter ensures correctness even if RLS is ever misconfigured.
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setCommunications([]);
+        setLoading(false);
+        return;
+      }
+
       let query = supabase
         .from("communications")
         .select("*")
+        .eq("user_id", user.id)   // explicit client-side guard — reads from session, not params
         .order("received_at", { ascending: false })
         .limit(200);
 
