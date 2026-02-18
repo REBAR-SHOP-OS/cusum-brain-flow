@@ -1,5 +1,8 @@
 project_id = "uavzziigfnqpfdkczbdo"
 
+[functions.system-backup]
+verify_jwt = false
+
 [functions.gmail-sync]
 verify_jwt = false
 
