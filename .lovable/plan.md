@@ -1,74 +1,91 @@
 
+# Upgrade Backup & Restore -- Download, Delete, Import, Logs
 
-# Expand Backup to Cover Full ERP Database
+## Current State
+- Backup icon already exists in TopBar (admin-only) -- NO CHANGE needed there
+- BackupModal has: Run Backup, Refresh, Restore -- but is MISSING: Download, Delete, Import, Logs
+- Edge function supports: `run`, `restore`, `list` -- needs: `download`, `delete`, `import`, `logs`
+- `backup_restore_logs` table exists but no UI shows it
+- `system-backups` storage bucket exists (private)
+- Auto backup cron already configured (every 12 hours)
 
-## Problem
-The backup only backs up **9 tables** (2.3 MB) but the full ERP database has **40+ tables totaling ~100+ MB**. Critical business data is completely excluded from backups.
+## What Will Be Added
 
-## Current vs Required Coverage
+### 1. Edge Function: 4 New Actions
+**File: `supabase/functions/system-backup/index.ts`**
 
-```text
-CURRENTLY BACKED UP (9 tables, ~2.3 MB):
-  leads, orders, profiles, contacts, customers,
-  projects, project_tasks, order_items, work_orders
+- **`download`** -- Generate a signed URL (60-minute expiry) for the backup file in storage. Returns `{ url: "..." }`.
+- **`delete`** -- Requires `confirm: "DELETE"`. Deletes the file from storage AND the record from `system_backups`. Logs to `backup_restore_logs`.
+- **`import`** -- Accepts base64-encoded backup JSON. Validates structure, stores in storage bucket, creates a `system_backups` record with `backup_type: "imported"`. Logs to `backup_restore_logs`.
+- **`logs`** -- Returns last 20 entries from `backup_restore_logs` ordered by `created_at desc`.
 
-MISSING FROM BACKUP (major tables):
-  lead_activities       38,472 rows   39 MB   <-- BIGGEST TABLE
-  chat_messages            377 rows   19 MB
-  qb_transactions        4,132 rows  8.4 MB
-  accounting_mirror      1,902 rows  7.1 MB
-  lead_files            15,787 rows  6.4 MB
-  communications         1,231 rows    5 MB
-  qb_customers           1,946 rows  4.5 MB
-  quotes                 2,586 rows    2 MB
-  activity_events        1,223 rows  1.2 MB
-  scheduled_activities   1,929 rows  936 KB
-  gl_lines               3,085 rows  944 KB
-  gl_transactions        1,591 rows  592 KB
-  lead_events              447 rows  512 KB
-  notifications            775 rows  504 KB
-  seo_keyword_ai         1,130 rows  632 KB
-  seo_rank_history       1,232 rows  536 KB
-  contacts (already in)  2,679 rows  792 KB
-  ... plus 20+ smaller tables
-```
+### 2. Frontend Hook: New Mutations + Logs Query
+**File: `src/hooks/useBackups.ts`**
 
-## Solution
+- `useDownloadBackup()` -- calls `action: "download"`, opens signed URL in new tab
+- `useDeleteBackup()` -- calls `action: "delete"` with `confirm: "DELETE"`
+- `useImportBackup()` -- reads uploaded file, sends base64 to `action: "import"`
+- `useBackupLogs()` -- calls `action: "logs"`, returns recent audit entries
+- Update `SystemBackup.backup_type` to include `"imported"`
 
-### File: `supabase/functions/system-backup/index.ts`
+### 3. BackupModal UI Enhancements
+**File: `src/components/backup/BackupModal.tsx`**
 
-Expand `TABLES_TO_BACKUP` from 9 to all ~35 business tables:
+**Actions row additions:**
+- "Import Backup" button next to "Run Backup Now"
 
-```text
-leads, orders, profiles, contacts, customers,
-projects, project_tasks, order_items, work_orders,
-lead_activities, lead_events, lead_files,
-scheduled_activities, activity_events,
-quotes, quote_items,
-communications, comms_alerts,
-chat_messages, chat_sessions,
-qb_transactions, qb_customers, qb_accounts, qb_vendors, qb_items,
-accounting_mirror, gl_transactions, gl_lines,
-notifications, user_roles,
-machines, machine_capabilities, machine_runs,
-cut_plans, cut_plan_items,
-tasks, extract_sessions, extract_rows,
-support_conversations, support_messages,
-team_messages, team_channels, team_channel_members
-```
+**Table Actions column:**
+- For each successful backup: **Restore** | **Download** | **Delete** buttons
+- Download: immediate signed-URL download
+- Delete: opens confirmation dialog requiring user to type `DELETE`
 
-### Important Note on Size
-- With all tables included, the backup JSON will be approximately **80-100 MB**
-- The `lead_activities` table alone (38K rows) will be the bulk of it
-- The 10,000 row limit per table in the current code is sufficient for most tables, but `lead_activities` has 38,472 rows -- we need to increase the limit to 50,000 for that table
-- Storage upload limit in Supabase is 50 MB by default for a single file, so we may need to handle this
+**New section at bottom of modal:**
+- "Recent Logs" collapsible section showing last 20 audit entries (action, user, time, result)
+- Columns: Action, User, Date, Result
 
-### Changes
-1. Expand `TABLES_TO_BACKUP` array to include all business tables
-2. Increase per-table row limit from 10,000 to 50,000 to capture `lead_activities` fully
-3. No UI changes needed -- the backup modal already shows file size dynamically
+**Delete confirmation dialog:**
+- Similar to Restore dialog but with `DELETE` confirmation text
+- Warning: "This will permanently remove this backup file."
 
-### No changes to:
-- Database schema, RLS, or UI components
-- Backup/restore logic (same JSON snapshot approach)
-- Retention policy (7 days / 50 snapshots)
+## Files Modified (ONLY these)
+
+| File | Change |
+|------|--------|
+| `supabase/functions/system-backup/index.ts` | Add `download`, `delete`, `import`, `logs` actions |
+| `src/hooks/useBackups.ts` | Add 4 new hooks + logs query |
+| `src/components/backup/BackupModal.tsx` | Add Download/Delete/Import buttons + Delete dialog + Logs section |
+
+## No Changes To
+- TopBar (already has backup icon, admin-only)
+- Database schema (tables already exist)
+- Storage bucket (already exists)
+- Cron schedule (already running every 12h)
+- Any other component, page, route, or logic in the app
+
+## Technical Details
+
+### Download Flow
+1. User clicks Download on a backup row
+2. Frontend calls edge function with `{ action: "download", backup_id: "..." }`
+3. Edge function generates signed URL via `serviceClient.storage.from("system-backups").createSignedUrl(filePath, 3600)`
+4. Frontend opens URL in new tab (browser downloads the JSON file)
+
+### Delete Flow
+1. User clicks Delete on a backup row
+2. Confirmation dialog opens: "Type DELETE to permanently remove this backup"
+3. Edge function deletes file from storage: `serviceClient.storage.from("system-backups").remove([filePath])`
+4. Deletes record from `system_backups` table
+5. Logs action to `backup_restore_logs`
+
+### Import Flow
+1. User clicks "Import Backup"
+2. File picker opens (accepts .json)
+3. File is read as text, validated (must have `version` and `tables` keys)
+4. Sent to edge function as `{ action: "import", data: <json_string> }`
+5. Edge function stores file in storage bucket, creates `system_backups` record with `backup_type: "imported"`
+6. Appears in backup list, can be restored or downloaded
+
+### Logs Section
+- Collapsible "Recent Logs" at the bottom of the modal
+- Shows last 20 log entries from `backup_restore_logs`
+- Columns: Action (backup/restore/delete/download/import), User, Date, Result (success/failed)
