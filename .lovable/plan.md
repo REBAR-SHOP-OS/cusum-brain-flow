@@ -1,48 +1,68 @@
 
-# Add "Payroll Summary" Tab to Timeclock Page
 
-## What This Does
-Adds a new tab to the Timeclock page (`/timeclock`) that shows each employee's total hours worked in the current payroll cycle, using existing `payroll_weekly_summary` and `payroll_daily_snapshot` tables.
+# Make "Fix with ARIA" Actually Fix Problems
 
-## Scope
-Only TWO files will be changed. No other pages, modules, or backend logic will be touched.
+## Problem
+Currently, clicking "Fix with ARIA" on the Tasks page only redirects to the Empire Builder chat with a message. The Architect agent creates fix tickets and generates fix prompts, but never actually resolves the original task or applies real fixes to ERP/QuickBooks/Odoo data. The user wants the system to take real action, not just report.
 
 ---
 
 ## Changes
 
-### 1. New Component: `src/components/timeclock/PayrollSummaryTab.tsx`
+### 1. Add `resolve_task` Tool to Empire Agent (ai-agent/index.ts -- empire section only)
 
-A new tab component that:
-- Fetches the current week's `payroll_weekly_summary` records (joined with `profiles` for names)
-- Displays a table/card grid showing per-employee:
-  - Name
-  - Employee type (salaried/hourly)
-  - Regular hours
-  - Overtime hours
-  - Total paid hours
-  - Exceptions count
-  - Status (draft / approved / locked)
-- Shows a "Current Week" header with the date range
-- Falls back to computing hours from `time_clock_entries` if no weekly summary exists yet
-- Admin-only: shows all employees. Non-admin: shows only the logged-in user's summary.
+**New tool definition** that allows the Architect to:
+- Read the original task from the `tasks` table by ID
+- Apply the fix using existing ERP write tools (update_machine_status, update_delivery_status, update_lead_status, etc.)
+- Mark the original task as `completed` with a resolution note
+- Log the resolution in `activity_events`
 
-### 2. Modified File: `src/pages/TimeClock.tsx`
+**Tool parameters:**
+- `task_id` (string, required) -- the original task UUID
+- `resolution_note` (string, required) -- what was done to fix it
+- `new_status` (string, default "completed") -- new task status
 
-- Import the new `PayrollSummaryTab` component
-- Add a new tab trigger "Payroll" (with a `DollarSign` or `Receipt` icon) to the existing `TabsList`
-- Add a new `TabsContent` rendering the `PayrollSummaryTab`
-- Pass `isAdmin`, `myProfile`, and `profiles` as props
+### 2. Add `read_task` Tool to Empire Agent (ai-agent/index.ts -- empire section only)
 
-## Technical Details
+Allows the Architect to fetch the full task details (title, description, source, priority) so it can understand what needs fixing before acting.
 
-### Data Sources (already exist, no DB changes needed)
-- `payroll_weekly_summary`: weekly aggregated hours per employee (regular, overtime, total, exceptions, status)
-- `payroll_daily_snapshot`: daily breakdowns (clock in/out, lunch deductions, paid minutes, overtime, exceptions)
-- `profiles`: employee names and types
+### 3. Update Empire System Prompt (ai-agent/index.ts -- empire section only)
 
-### No files modified outside of:
-- `src/components/timeclock/PayrollSummaryTab.tsx` (new)
-- `src/pages/TimeClock.tsx` (add tab)
+Update the system prompt to instruct the Architect:
+- When receiving an autofix request, first use `read_task` to understand the problem
+- Then use existing ERP/WP/Odoo write tools to apply the actual fix
+- Then use `resolve_task` to mark the task as completed with a resolution note
+- Remove the "READ-ONLY" restriction for QB/Odoo -- the Architect has write tools and should use them
+- Add explicit instruction: "Do NOT just create fix requests or tickets. Use your write tools to fix the problem directly."
 
-### No database changes needed -- all required tables already exist.
+### 4. Improve Autofix Flow in Tasks Page (src/pages/Tasks.tsx)
+
+Change `fixWithAria` to:
+- Include the `task.id` in the autofix payload so the Architect can reference and resolve it
+- After redirect, pass `task_id` as a separate query param so the agent can call `resolve_task` with it
+- Add a toast notification "Sending to Architect for resolution..."
+
+### 5. Update Empire Autofix Handler (src/pages/EmpireBuilder.tsx)
+
+Update the autofix useEffect to:
+- Extract `task_id` from query params
+- Include `task_id` in the auto-message sent to the Architect so it knows which task to resolve
+- After the Architect responds, check if the task was resolved and show a confirmation
+
+---
+
+## What This Fixes
+- "Fix with ARIA" will actually diagnose and apply fixes using existing ERP/WP write tools
+- The original task will be marked as "completed" with a resolution note
+- The Architect will stop creating tickets about tickets and instead take action
+- QuickBooks/Odoo write operations remain controlled through existing tools (wp_update_product, update_machine_status, etc.)
+
+## Files Modified
+1. `supabase/functions/ai-agent/index.ts` -- Empire section only (add tools + update prompt)
+2. `src/pages/Tasks.tsx` -- Update `fixWithAria` function
+3. `src/pages/EmpireBuilder.tsx` -- Update autofix handler
+
+## Files NOT Modified
+- No other pages, components, or modules
+- No database changes needed (tasks table already exists)
+- No changes to auth, routing, or other agents
