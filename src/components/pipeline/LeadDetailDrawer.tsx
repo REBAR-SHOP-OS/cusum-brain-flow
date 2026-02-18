@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Building, Mail, Phone, Calendar, DollarSign, Pencil, Trash2,
-  TrendingUp, Clock, User, Star, Archive, X,
+  TrendingUp, Clock, User, Star, Archive, X, FileText,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -252,7 +252,10 @@ export function LeadDetailDrawer({
                 </div>
               )}
               {!lead.description && !lead.notes && (
-                <p className="text-[13px] text-muted-foreground text-center py-8">No notes yet.</p>
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <FileText className="w-10 h-10 text-muted-foreground/30 mb-3" />
+                  <p className="text-[13px] text-muted-foreground">No notes yet.</p>
+                </div>
               )}
             </div>
           )}

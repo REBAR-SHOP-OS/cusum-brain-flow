@@ -74,7 +74,7 @@ export function ScheduledActivities({ entityType, entityId }: ScheduledActivitie
     <div className="space-y-4">
       {/* Schedule button */}
       {!showForm && (
-        <Button variant="outline" size="sm" onClick={() => setShowForm(true)} className="w-full gap-1.5">
+        <Button variant="outline" size="sm" onClick={() => setShowForm(true)} className="w-full gap-1.5 rounded-sm text-[13px]">
           <Plus className="w-3.5 h-3.5" />
           Schedule Activity
         </Button>
@@ -166,9 +166,15 @@ export function ScheduledActivities({ entityType, entityId }: ScheduledActivitie
       )}
 
       {planned.length === 0 && done.length === 0 && !showForm && (
-        <p className="text-sm text-muted-foreground text-center py-6">
-          No scheduled activities yet.
-        </p>
+        <div className="flex flex-col items-center justify-center py-12 text-center">
+          <Clock className="w-10 h-10 text-muted-foreground/30 mb-3" />
+          <p className="text-[13px] text-muted-foreground">
+            No activities yet.
+          </p>
+          <p className="text-[13px] text-muted-foreground">
+            Schedule an activity to get started.
+          </p>
+        </div>
       )}
     </div>
   );

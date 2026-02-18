@@ -413,9 +413,15 @@ export function OdooChatter({ lead }: OdooChatterProps) {
             <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
           </div>
         ) : thread.length === 0 ? (
-          <p className="text-[13px] text-muted-foreground text-center py-8">
-            No activities yet. Log a note or schedule an activity above.
-          </p>
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <FileText className="w-10 h-10 text-muted-foreground/30 mb-3" />
+            <p className="text-[13px] text-muted-foreground">
+              No activities yet.
+            </p>
+            <p className="text-[13px] text-muted-foreground">
+              Log a note or schedule an activity above.
+            </p>
+          </div>
         ) : (
           <div className="space-y-0">
             {thread.map((item, idx) => {
