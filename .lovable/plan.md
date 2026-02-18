@@ -1,63 +1,120 @@
 
 
-# Fix: Screenshot Memory Crash and Freeze
+# Improve Task Detail Dialog UI -- Readability, Copy, Full Screen
 
-## Root Cause
+## Scope
+Only the Task Detail Dialog in `src/pages/Tasks.tsx` (lines 311-395). No other files, pages, database, or logic changes.
 
-The Pipeline page has ~2800 lead cards distributed across scrollable columns (`overflow-y: auto`). The current pre-hide logic checks each card's `getBoundingClientRect()` against the window viewport -- but cards scrolled out of view **inside a scrollable column** still report coordinates within the viewport (because the column container itself is visible). So nearly ALL 2800 cards survive the filter and get cloned by `html2canvas`, causing 170MB+ memory usage and a complete UI freeze.
+## Changes
 
-## Solution
+### 1. Wider Dialog
+- Change `max-w-lg` to `max-w-2xl` on `DialogContent` (line 313)
+- This gives ~50% screen width on desktop
 
-Replace the viewport-based filtering with **scroll-container-aware filtering**. For each scrollable container inside the target, calculate which children are actually visible within the scroll area, and hide everything else before capture.
+### 2. Description Container -- Readable and Scrollable
+Replace the plain `<p>` description (lines 322-327) with a styled container:
+- `whitespace-pre-wrap` to preserve line breaks
+- `break-words` for long URLs
+- `overflow-y: auto` with `max-h-[calc(100vh-320px)]` for vertical scroll
+- Font size `text-[15px]`, `leading-relaxed` (line-height ~1.6)
+- Better contrast: `text-foreground` instead of default
+- Auto-detect URLs and make them clickable links
+- Auto-detect code blocks (backtick-wrapped) and render in monospace
 
-Also add an **element count cap**: if after filtering there are still more than 500 elements, progressively hide more until the count is manageable.
+### 3. Copy Button
+- Add a "Copy" button (clipboard icon) next to the "Description" label
+- On click: `navigator.clipboard.writeText(description)` with fallback to `document.execCommand("copy")`
+- Show toast "Copied!" on success
+- Icon changes briefly to a checkmark after copying
 
-## File: `src/components/feedback/ScreenshotFeedbackButton.tsx`
+### 4. Full Screen / Expand Button
+- Add an "Expand" button (Maximize2 icon) next to Copy
+- Opens a new Dialog (modal) that is full-screen (`max-w-[90vw] max-h-[90vh]`)
+- Shows the full description text with same styling
+- Close with X button or ESC key
+- Pure UI, no data changes
 
-### Changes
+### 5. New Imports
+Add to existing imports: `Copy, Check, Maximize2` from lucide-react
 
-**1. New pre-hide logic: scroll-container-aware trimming**
+## Technical Detail
 
-Instead of checking `getBoundingClientRect()` against the window, find all scrollable containers (`overflow-y: auto` or `scroll`) inside the target. For each scrollable container, get its visible scroll area and hide all children whose position is outside that visible scroll window.
+All changes are in `src/pages/Tasks.tsx`:
 
+**Line 2**: Add `Copy, Check, Maximize2` to lucide imports
+
+**Line 3-4**: Add `toast` from `sonner` import (for lightweight "Copied" toast)
+
+**Line 97**: Add state: `const [fullScreenOpen, setFullScreenOpen] = useState(false);` and `const [copied, setCopied] = useState(false);`
+
+**Add helper function** `copyToClipboard(text)`:
 ```text
-// Pseudo-code:
-const scrollContainers = target.querySelectorAll('*');
-scrollContainers.forEach(container => {
-  if (container.scrollHeight > container.clientHeight) {
-    // This is a scroll container
-    const containerRect = container.getBoundingClientRect();
-    const visibleTop = containerRect.top;
-    const visibleBottom = containerRect.bottom;
-    
-    // Hide children outside the visible scroll area
-    container.children.forEach(child => {
-      const childRect = child.getBoundingClientRect();
-      if (childRect.bottom < visibleTop - 20 || childRect.top > visibleBottom + 20) {
-        child.style.display = 'none';
-        hiddenEls.push(child);
-      }
-    });
+async function copyToClipboard(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    toast("Copied!");
+    setTimeout(() => setCopied(false), 2000);
+  } catch {
+    // fallback
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    document.body.removeChild(ta);
+    toast("Copied!");
   }
-});
+}
 ```
 
-**2. Element count safety cap**
+**Add helper function** `linkifyText(text)` to auto-detect URLs and render as clickable `<a>` tags.
 
-After scroll-aware trimming, check remaining element count. If still above 500, hide additional non-visible elements (deeper nested items like list items, table rows).
+**Line 313**: `max-w-lg` becomes `max-w-2xl`
 
-**3. Lower scale for heavy pages**
+**Lines 322-327**: Replace description block with:
+```text
+<div>
+  <div className="flex items-center justify-between mb-1">
+    <span className="text-muted-foreground font-medium">Description</span>
+    <div className="flex items-center gap-1">
+      <Button variant="ghost" size="icon" className="h-7 w-7"
+        onClick={() => copyToClipboard(selectedTask.description)}>
+        {copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+      </Button>
+      <Button variant="ghost" size="icon" className="h-7 w-7"
+        onClick={() => setFullScreenOpen(true)}>
+        <Maximize2 className="w-3.5 h-3.5" />
+      </Button>
+    </div>
+  </div>
+  <div className="mt-1 text-[15px] leading-relaxed text-foreground
+    whitespace-pre-wrap break-words overflow-y-auto
+    max-h-[calc(100vh-320px)] rounded-md border border-border/50
+    bg-muted/30 p-3">
+    {linkifyText(selectedTask.description)}
+  </div>
+</div>
+```
 
-On pages with more than 1000 remaining elements after trimming, reduce `scale` from 1 to 0.5. This cuts canvas memory usage by 75% while still producing a usable screenshot for feedback purposes.
+**After the main Dialog (after line 395)**: Add Full Screen Dialog:
+```text
+<Dialog open={fullScreenOpen} onOpenChange={setFullScreenOpen}>
+  <DialogContent className="max-w-[90vw] max-h-[90vh] flex flex-col">
+    <DialogHeader>
+      <DialogTitle>{selectedTask?.title}</DialogTitle>
+    </DialogHeader>
+    <div className="flex-1 overflow-y-auto text-[15px] leading-relaxed
+      text-foreground whitespace-pre-wrap break-words p-4">
+      {selectedTask?.description && linkifyText(selectedTask.description)}
+    </div>
+  </DialogContent>
+</Dialog>
+```
 
-**4. Keep everything else the same**
-- Target remains `main-content`
-- `pointerEvents: "auto"` stays
-- Retry logic stays
-- Restore logic in `finally` stays
-- 5s timeout stays
-
-### Why This Fixes the Problem
-
-The Pipeline has 6-8 columns, each with `overflow-y: auto` and hundreds of cards. Only ~5-10 cards per column are actually visible in the scroll window. This new logic will correctly identify and hide the ~2700 invisible cards, leaving only ~50-80 elements for html2canvas to process. Result: under 2 seconds, no memory spike, no freeze.
-
+## What Does NOT Change
+- Task list UI
+- Database queries or schema
+- Task status logic
+- Any other page or component
+- Filters, header, or navigation
