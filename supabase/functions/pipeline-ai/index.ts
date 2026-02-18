@@ -130,7 +130,7 @@ ${odooSnapshot}`;
       });
     }
 
-    const context = buildLeadContext(lead, activities);
+    const context = lead ? buildLeadContext(lead, activities) : "";
     const enrichedSystemPrompt = `${systemPrompt}\n\n${odooSnapshot}`;
 
     // ── suggest_actions ──
@@ -333,7 +333,7 @@ ${odooSnapshot}`;
         { type: "function", function: { name: "recommend_stage_result" } }
       );
 
-      const result = extractToolResult(data) || { current: lead.stage, recommended: lead.stage, reason: "Unable to analyze", confidence: 0 };
+      const result = extractToolResult(data) || { current: lead?.stage || "", recommended: lead?.stage || "", reason: "Unable to analyze", confidence: 0 };
       return new Response(JSON.stringify(result), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
