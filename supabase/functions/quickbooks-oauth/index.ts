@@ -1117,9 +1117,10 @@ async function handleCreateInvoice(supabase: ReturnType<typeof createClient>, us
 
 async function handleCreatePayment(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
   const config = await getQBConfig(supabase, userId);
-  const { customerId, customerName, totalAmount, invoiceId, paymentMethod, memo } = body as {
+  const { customerId, customerName, totalAmount, invoiceId, invoiceLines, paymentMethod, memo } = body as {
     customerId: string; customerName: string; totalAmount: number;
-    invoiceId?: string; paymentMethod?: string; memo?: string;
+    invoiceId?: string; invoiceLines?: { invoiceId: string; amount: number }[];
+    paymentMethod?: string; memo?: string;
   };
 
   if (!customerId || !totalAmount) throw new Error("Customer ID and total amount required");
@@ -1131,7 +1132,14 @@ async function handleCreatePayment(supabase: ReturnType<typeof createClient>, us
     ...(paymentMethod && { PaymentMethodRef: { value: paymentMethod } }),
   };
 
-  if (invoiceId) {
+  // Support multiple linked invoices (new path)
+  if (invoiceLines && invoiceLines.length > 0) {
+    payload.Line = invoiceLines.map((line) => ({
+      Amount: line.amount,
+      LinkedTxn: [{ TxnId: line.invoiceId, TxnType: "Invoice" }],
+    }));
+  } else if (invoiceId) {
+    // Legacy single-invoice fallback
     payload.Line = [{
       Amount: totalAmount,
       LinkedTxn: [{ TxnId: invoiceId, TxnType: "Invoice" }],
