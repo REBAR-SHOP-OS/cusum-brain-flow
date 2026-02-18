@@ -8096,10 +8096,11 @@ RULES:
               seoToolResults.push({ id: tc.id, name: "db_read_query", result: { error: "Only SELECT/WITH queries are allowed. Use db_write_fix for modifications." } });
             } else {
               // Block any sneaky write attempts inside CTE
-              const dangerousWrite = /\b(INSERT|UPDATE|DELETE|DROP|TRUNCATE|ALTER|CREATE|GRANT|REVOKE)\b/i;
-              const cteBody = query.replace(/^WITH[\s\S]*?SELECT/i, ""); // rough check
-              if (dangerousWrite.test(query) && !query.toUpperCase().includes("SELECT") ) {
-                seoToolResults.push({ id: tc.id, name: "db_read_query", result: { error: "Write operations detected. Use db_write_fix instead." } });
+              // Guard: only block multi-statement injections (semicolon + write keyword)
+              // Don't flag SELECT queries that merely reference write keywords in pg_policies/filters/strings
+              const hasMultiStatement = /;\s*(INSERT|UPDATE|DELETE|DROP|TRUNCATE|ALTER|CREATE|GRANT|REVOKE)\b/i.test(query);
+              if (hasMultiStatement) {
+                seoToolResults.push({ id: tc.id, name: "db_read_query", result: { error: "Multi-statement write detected. Use db_write_fix for modifications." } });
               } else {
                 const { data, error } = await svcClient.rpc("execute_readonly_query" as any, { sql_query: query });
                 if (error) {
@@ -8497,7 +8498,92 @@ RULES:
               }
             }
 
-            const handledNames = ["send_email", "read_task", "resolve_task", "update_machine_status", "update_delivery_status", "update_lead_status", "update_cut_plan_status", "create_event", "create_notifications", "create_fix_ticket", "update_fix_ticket", "list_fix_tickets"];
+            // ── db_read_query (multi-turn) ──
+            if (tc.function?.name === "db_read_query") {
+              try {
+                const args = JSON.parse(tc.function.arguments || "{}");
+                const query = (args.query || "").trim();
+                const normalized = query.replace(/\/\*[\s\S]*?\*\//g, "").replace(/--[^\n]*/g, "").trim().toUpperCase();
+                if (!normalized.startsWith("SELECT") && !normalized.startsWith("WITH")) {
+                  seoToolResults.push({ id: tc.id, name: "db_read_query", result: { error: "Only SELECT/WITH queries are allowed. Use db_write_fix for modifications." } });
+                } else {
+                  const hasMultiStatement = /;\s*(INSERT|UPDATE|DELETE|DROP|TRUNCATE|ALTER|CREATE|GRANT|REVOKE)\b/i.test(query);
+                  if (hasMultiStatement) {
+                    seoToolResults.push({ id: tc.id, name: "db_read_query", result: { error: "Multi-statement write detected. Use db_write_fix for modifications." } });
+                  } else {
+                    const { data, error } = await svcClient.rpc("execute_readonly_query" as any, { sql_query: query });
+                    if (error) {
+                      try {
+                        const rawResult = await fetch(`${Deno.env.get("SUPABASE_URL")}/rest/v1/rpc/execute_readonly_query`, {
+                          method: "POST",
+                          headers: {
+                            "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+                            "Content-Type": "application/json",
+                            "apikey": Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+                          },
+                          body: JSON.stringify({ sql_query: query }),
+                        });
+                        if (rawResult.ok) {
+                          const rawData = await rawResult.json();
+                          seoToolResults.push({ id: tc.id, name: "db_read_query", result: { success: true, rows: Array.isArray(rawData) ? rawData.slice(0, 50) : rawData, row_count: Array.isArray(rawData) ? Math.min(rawData.length, 50) : 1 } });
+                        } else {
+                          seoToolResults.push({ id: tc.id, name: "db_read_query", result: { error: error.message } });
+                        }
+                      } catch (_) {
+                        seoToolResults.push({ id: tc.id, name: "db_read_query", result: { error: error.message } });
+                      }
+                    } else {
+                      const rows = Array.isArray(data) ? data.slice(0, 50) : data;
+                      seoToolResults.push({ id: tc.id, name: "db_read_query", result: { success: true, rows, row_count: Array.isArray(data) ? Math.min(data.length, 50) : 1 } });
+                    }
+                  }
+                }
+              } catch (e) {
+                seoToolResults.push({ id: tc.id, name: "db_read_query", result: { error: e instanceof Error ? e.message : "db_read_query failed" } });
+              }
+            }
+
+            // ── db_write_fix (multi-turn) ──
+            if (tc.function?.name === "db_write_fix") {
+              try {
+                const args = JSON.parse(tc.function.arguments || "{}");
+                const query = (args.query || "").trim();
+                const reason = args.reason || "No reason provided";
+                const confirm = args.confirm === true;
+                if (!confirm) {
+                  seoToolResults.push({ id: tc.id, name: "db_write_fix", result: { error: "Safety flag: confirm must be true to execute write operations." } });
+                } else {
+                  const destructive = /\b(DROP\s+TABLE|DROP\s+DATABASE|TRUNCATE\s+|ALTER\s+TABLE\s+\S+\s+DROP\s+)/i;
+                  if (destructive.test(query)) {
+                    seoToolResults.push({ id: tc.id, name: "db_write_fix", result: { error: "Blocked: destructive operations (DROP TABLE, DROP DATABASE, TRUNCATE, ALTER TABLE...DROP) are not allowed." } });
+                  } else {
+                    const execResult = await fetch(`${Deno.env.get("SUPABASE_URL")}/rest/v1/rpc/execute_write_fix`, {
+                      method: "POST",
+                      headers: {
+                        "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+                        "Content-Type": "application/json",
+                        "apikey": Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+                      },
+                      body: JSON.stringify({ sql_query: query }),
+                    });
+                    let fixResult: any;
+                    if (execResult.ok) { fixResult = await execResult.json(); }
+                    else { const errText = await execResult.text(); fixResult = { error: errText }; }
+                    await svcClient.from("activity_events").insert({
+                      company_id: companyId, entity_type: "database_fix", entity_id: crypto.randomUUID(),
+                      event_type: "db_write_fix", description: `DB fix applied: ${reason}`.substring(0, 500),
+                      actor_id: user.id, actor_type: "architect", source: "architect_db_fix",
+                      metadata: { query: query.substring(0, 1000), reason, success: !fixResult?.error },
+                    }).catch(() => {});
+                    seoToolResults.push({ id: tc.id, name: "db_write_fix", result: fixResult?.error ? { error: fixResult.error } : { success: true, message: `Fix applied: ${reason}`, result: fixResult } });
+                  }
+                }
+              } catch (e) {
+                seoToolResults.push({ id: tc.id, name: "db_write_fix", result: { error: e instanceof Error ? e.message : "db_write_fix failed" } });
+              }
+            }
+
+            const handledNames = ["send_email", "read_task", "resolve_task", "update_machine_status", "update_delivery_status", "update_lead_status", "update_cut_plan_status", "create_event", "create_notifications", "create_fix_ticket", "update_fix_ticket", "list_fix_tickets", "db_read_query", "db_write_fix", "odoo_write", "wp_update_product", "wp_list_posts", "wp_create_post", "diagnose_from_screenshot", "generate_patch", "validate_code"];
             if (!handledNames.includes(tc.function?.name)) {
               seoToolResults.push({ id: tc.id, name: tc.function?.name || "unknown", result: { success: true, message: "Processed" } });
             }
