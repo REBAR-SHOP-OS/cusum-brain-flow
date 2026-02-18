@@ -34,6 +34,10 @@ function getAvatarColor(name: string) {
   return avatarColors[Math.abs(hash) % avatarColors.length];
 }
 
+function formatDateSeparator(iso: string) {
+  return new Date(iso).toLocaleDateString([], { month: "long", day: "numeric", year: "numeric" });
+}
+
 interface DockChatBoxProps {
   channelId: string;
   channelName: string;
@@ -67,7 +71,6 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
   }, [minimized]);
 
   const handleHeaderMouseDown = useCallback((e: React.MouseEvent) => {
-    // Only left click
     if (e.button !== 0) return;
     e.preventDefault();
     isDragging.current = true;
@@ -104,8 +107,6 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
     e.stopPropagation();
   }, []);
 
-  // --- end drag ---
-
   const myLang = myProfile?.preferred_language || "en";
   const targetLangs = useMemo(() => {
     const langs = new Set<string>();
@@ -120,6 +121,20 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
   useEffect(() => {
     if (!minimized) bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, minimized]);
+
+  // Group messages by date
+  const grouped = useMemo(() => {
+    return messages.reduce((acc, msg) => {
+      const d = new Date(msg.created_at).toDateString();
+      const last = acc[acc.length - 1];
+      if (!last || last.date !== d) {
+        acc.push({ date: d, dateLabel: formatDateSeparator(msg.created_at), msgs: [msg] });
+      } else {
+        last.msgs.push(msg);
+      }
+      return acc;
+    }, [] as { date: string; dateLabel: string; msgs: typeof messages }[]);
+  }, [messages]);
 
   const addFiles = useCallback((files: FileList | File[]) => {
     const arr = Array.from(files);
@@ -212,8 +227,20 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
     }
   };
 
-  const ChannelIcon = channelType === "group" ? Hash : Users;
   const isBusy = uploading || sendMutation.isPending;
+
+  // Get avatar info for header (first other profile in DM, or channel icon for group)
+  const headerProfile = useMemo(() => {
+    if (channelType === "dm") {
+      const other = profiles.find((p) => p.id !== myProfile?.id && p.is_active);
+      return other || null;
+    }
+    return null;
+  }, [channelType, profiles, myProfile]);
+
+  const headerName = channelName;
+  const headerInitials = getInitials(headerName);
+  const headerColor = getAvatarColor(headerName);
 
   // Merge style prop with drag offset
   const containerStyle: React.CSSProperties = {
@@ -221,19 +248,24 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
     transform: `translate(${dragOffset.x}px, ${dragOffset.y}px)`,
   };
 
-  // Minimized state
+  // --- Minimized state (Odoo-style white pill) ---
   if (minimized) {
     return (
       <div
         style={style}
-        className="fixed bottom-0 z-[9998] w-[320px] cursor-pointer"
+        className="fixed bottom-0 z-[9998] w-[280px] cursor-pointer"
         onClick={() => toggleMinimize(channelId)}
       >
-        <div className="flex items-center gap-2 px-3 py-2 bg-primary text-primary-foreground rounded-t-lg shadow-lg">
-          <ChannelIcon className="w-3.5 h-3.5 shrink-0" />
-          <span className="text-xs font-semibold truncate flex-1">{channelName}</span>
+        <div className="flex items-center gap-2 px-3 py-2 bg-background border border-border rounded-t-xl shadow-lg">
+          <div className="relative shrink-0">
+            <div className={cn("w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold", headerColor)}>
+              {headerInitials}
+            </div>
+            <span className="absolute bottom-0 right-0 w-2 h-2 bg-green-500 border-2 border-background rounded-full" />
+          </div>
+          <span className="text-xs font-semibold text-foreground truncate flex-1">{channelName}</span>
           <button
-            className="w-5 h-5 flex items-center justify-center rounded hover:bg-white/20"
+            className="w-5 h-5 flex items-center justify-center rounded hover:bg-muted text-muted-foreground"
             onClick={(e) => { e.stopPropagation(); closeChat(channelId); }}
           >
             <X className="w-3 h-3" />
@@ -247,84 +279,149 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
     <div
       style={containerStyle}
       className={cn(
-        "fixed bottom-0 z-[9998] w-[320px] flex flex-col bg-card border border-border rounded-t-lg shadow-2xl transition-colors",
+        "fixed bottom-0 z-[9998] w-[320px] flex flex-col bg-background border border-border rounded-t-xl shadow-2xl transition-colors",
         dragOver && "ring-2 ring-primary border-primary"
       )}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      {/* Header — draggable */}
+      {/* Header — Odoo style, draggable */}
       <div
         className={cn(
-          "flex items-center gap-2 px-3 py-2 bg-primary text-primary-foreground rounded-t-lg",
+          "flex items-center gap-2.5 px-3 py-2.5 bg-background border-b border-border rounded-t-xl",
           isDragging.current ? "cursor-grabbing" : "cursor-grab"
         )}
         onMouseDown={handleHeaderMouseDown}
       >
-        <ChannelIcon className="w-3.5 h-3.5 shrink-0" />
-        <span className="text-xs font-semibold truncate flex-1">{channelName}</span>
-        <button
-          className="w-5 h-5 flex items-center justify-center rounded hover:bg-white/20"
-          onClick={() => { closeChat(channelId); navigate("/team-hub"); }}
-          onMouseDown={stopDragPropagation}
-          title="Open full Team Hub"
-        >
-          <Maximize2 className="w-3 h-3" />
-        </button>
-        <button
-          className="w-5 h-5 flex items-center justify-center rounded hover:bg-white/20"
-          onClick={() => toggleMinimize(channelId)}
-          onMouseDown={stopDragPropagation}
-          title="Minimize"
-        >
-          <Minus className="w-3 h-3" />
-        </button>
-        <button
-          className="w-5 h-5 flex items-center justify-center rounded hover:bg-white/20"
-          onClick={() => closeChat(channelId)}
-          onMouseDown={stopDragPropagation}
-          title="Close"
-        >
-          <X className="w-3 h-3" />
-        </button>
+        {/* Avatar with online dot */}
+        <div className="relative shrink-0">
+          <div className={cn("w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold", headerColor)}>
+            {headerProfile?.avatar_url ? (
+              <img src={headerProfile.avatar_url} alt={headerName} className="w-full h-full rounded-full object-cover" />
+            ) : (
+              headerInitials
+            )}
+          </div>
+          <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 border-2 border-background rounded-full" />
+        </div>
+
+        {/* Name + subtitle */}
+        <div className="flex-1 min-w-0">
+          <p className="text-[12px] font-semibold text-foreground truncate leading-tight">{channelName}</p>
+          <p className="text-[10px] text-muted-foreground leading-tight">
+            {channelType === "group" ? "Group Channel" : "Online"}
+          </p>
+        </div>
+
+        {/* Action buttons */}
+        <div className="flex items-center gap-0.5 shrink-0" onMouseDown={stopDragPropagation}>
+          <button
+            className="w-6 h-6 flex items-center justify-center rounded hover:bg-muted text-muted-foreground"
+            onClick={() => { closeChat(channelId); navigate("/team-hub"); }}
+            title="Open full Team Hub"
+          >
+            <Maximize2 className="w-3.5 h-3.5" />
+          </button>
+          <button
+            className="w-6 h-6 flex items-center justify-center rounded hover:bg-muted text-muted-foreground"
+            onClick={() => toggleMinimize(channelId)}
+            title="Minimize"
+          >
+            <Minus className="w-3.5 h-3.5" />
+          </button>
+          <button
+            className="w-6 h-6 flex items-center justify-center rounded hover:bg-muted text-muted-foreground"
+            onClick={() => closeChat(channelId)}
+            title="Close"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
 
       {/* Messages */}
-      <ScrollArea className="h-[300px] px-3 py-2">
+      <ScrollArea className="h-[300px] px-3 py-3">
         {isLoading ? (
           <p className="text-xs text-muted-foreground text-center py-8">Loading…</p>
         ) : messages.length === 0 ? (
           <p className="text-xs text-muted-foreground text-center py-8">No messages yet</p>
         ) : (
-          <div className="space-y-2.5">
-            {messages.map((msg) => {
-              const sender = profileMap.get(msg.sender_profile_id);
-              const isMe = msg.sender_profile_id === myProfile?.id;
-              const displayText =
-                !isMe && msg.translations && msg.translations[myLang]
-                  ? msg.translations[myLang]
-                  : msg.original_text;
-              return (
-                <div key={msg.id} className="flex gap-1.5">
-                  <Avatar className="w-5 h-5 mt-0.5 shrink-0">
-                    <AvatarImage src={sender?.avatar_url || ""} />
-                    <AvatarFallback className={cn("text-[8px] font-bold text-white", getAvatarColor(sender?.full_name || "?"))}>
-                      {getInitials(sender?.full_name || "?")}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="min-w-0">
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-[11px] font-semibold text-foreground">{sender?.full_name || "Unknown"}</span>
-                      <span className="text-[9px] text-muted-foreground">
-                        {new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                      </span>
-                    </div>
-                    <p className="text-xs text-foreground/90 break-words">{displayText}</p>
-                  </div>
+          <div className="flex flex-col gap-0.5">
+            {grouped.map((group) => (
+              <div key={group.date}>
+                {/* Date separator */}
+                <div className="flex items-center gap-2 my-3">
+                  <div className="flex-1 h-px bg-border" />
+                  <span className="text-[10px] text-muted-foreground font-medium px-1 shrink-0">{group.dateLabel}</span>
+                  <div className="flex-1 h-px bg-border" />
                 </div>
-              );
-            })}
+
+                {group.msgs.map((msg, idx) => {
+                  const sender = profileMap.get(msg.sender_profile_id);
+                  const isMe = msg.sender_profile_id === myProfile?.id;
+                  const displayText =
+                    !isMe && msg.translations && msg.translations[myLang]
+                      ? msg.translations[myLang]
+                      : msg.original_text;
+
+                  // Show avatar/name only for first message in a sequence from same sender
+                  const prevMsg = group.msgs[idx - 1];
+                  const isFirstInSequence = !prevMsg || prevMsg.sender_profile_id !== msg.sender_profile_id;
+
+                  return (
+                    <div
+                      key={msg.id}
+                      className={cn(
+                        "flex gap-1.5 w-full",
+                        isMe ? "flex-row-reverse" : "flex-row",
+                        isFirstInSequence ? "mt-2" : "mt-0.5"
+                      )}
+                    >
+                      {/* Avatar — only for others, only first in sequence */}
+                      {!isMe && (
+                        <div className="w-6 shrink-0 self-end">
+                          {isFirstInSequence && (
+                            <Avatar className="w-6 h-6">
+                              <AvatarImage src={sender?.avatar_url || ""} />
+                              <AvatarFallback className={cn("text-[8px] font-bold text-white", getAvatarColor(sender?.full_name || "?"))}>
+                                {getInitials(sender?.full_name || "?")}
+                              </AvatarFallback>
+                            </Avatar>
+                          )}
+                        </div>
+                      )}
+
+                      <div className={cn("flex flex-col max-w-[75%]", isMe ? "items-end" : "items-start")}>
+                        {/* Sender name for group channels */}
+                        {!isMe && isFirstInSequence && channelType === "group" && (
+                          <span className="text-[10px] font-semibold text-muted-foreground mb-0.5 px-1">
+                            {sender?.full_name || "Unknown"}
+                          </span>
+                        )}
+
+                        {/* Bubble */}
+                        <div
+                          className={cn(
+                            "px-3 py-1.5 text-xs leading-relaxed break-words",
+                            isMe
+                              ? "bg-primary text-primary-foreground rounded-2xl rounded-br-sm"
+                              : "bg-muted text-foreground rounded-2xl rounded-bl-sm"
+                          )}
+                        >
+                          {displayText}
+                        </div>
+
+                        {/* Timestamp */}
+                        <span className="text-[9px] text-muted-foreground mt-0.5 px-1">
+                          {new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
             <div ref={bottomRef} />
           </div>
         )}
@@ -345,37 +442,43 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
         </div>
       )}
 
-      {/* Input */}
+      {/* Composer — Odoo style */}
       <div className="border-t border-border p-2">
-        <div className="flex gap-1">
+        <div className="flex items-center gap-1.5 bg-muted/40 rounded-xl px-2 py-1.5 border border-border focus-within:ring-1 focus-within:ring-primary">
           <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect} />
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-8 w-8 p-0 shrink-0"
+          <button
+            className="text-muted-foreground hover:text-foreground transition-colors"
             onClick={() => fileInputRef.current?.click()}
             disabled={isBusy}
             title="Attach file"
           >
             <Paperclip className="w-3.5 h-3.5" />
-          </Button>
+          </button>
           <input
-            className="flex-1 h-8 rounded border border-border bg-background px-2 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-            placeholder="Type a message…"
+            className="flex-1 bg-transparent text-xs placeholder:text-muted-foreground focus:outline-none text-foreground min-w-0"
+            placeholder={`Message ${channelName}…`}
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
             disabled={isBusy}
           />
-          <Button size="sm" className="h-8 w-8 p-0" onClick={handleSend} disabled={(!inputText.trim() && pendingFiles.length === 0) || isBusy}>
+          <button
+            className={cn(
+              "text-muted-foreground hover:text-primary transition-colors disabled:opacity-40",
+              (inputText.trim() || pendingFiles.length > 0) && "text-primary"
+            )}
+            onClick={handleSend}
+            disabled={(!inputText.trim() && pendingFiles.length === 0) || isBusy}
+            title="Send"
+          >
             {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-          </Button>
+          </button>
         </div>
       </div>
 
       {/* Drag overlay */}
       {dragOver && (
-        <div className="absolute inset-0 bg-primary/10 rounded-t-lg flex items-center justify-center pointer-events-none">
+        <div className="absolute inset-0 bg-primary/10 rounded-t-xl flex items-center justify-center pointer-events-none">
           <p className="text-xs font-semibold text-primary">Drop files here</p>
         </div>
       )}
