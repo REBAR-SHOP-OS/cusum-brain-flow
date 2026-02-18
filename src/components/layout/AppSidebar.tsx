@@ -2,7 +2,7 @@ import { Link, useLocation } from "react-router-dom";
 import {
   Home, Inbox, CheckSquare, Kanban, Users, Factory, Package, Truck,
   LayoutGrid, Brain, Settings, Shield, Plug, DollarSign, Activity,
-  Terminal, Lock, BarChart3, Clock, MessageSquare, Bot, Globe, Search, Headset,
+  Terminal, Lock, BarChart3, Clock, MessageSquare, Bot, Globe, Search, Headset, Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -111,6 +111,7 @@ export function AppSidebar() {
         { name: "CEO Portal", href: "/ceo", icon: BarChart3, roles: ["admin"], lockReason: "Requires Admin role", tourId: "nav-ceo" },
         { name: "Support", href: "/support-inbox", icon: Headset, roles: ["admin", "office"], lockReason: "Requires Admin or Office role", tourId: "nav-support" },
         { name: "Pipeline", href: "/pipeline", icon: Kanban, roles: ["admin", "sales", "office", "accounting"], lockReason: "Requires Sales or Office role", tourId: "nav-pipeline" },
+        { name: "Lead Scoring", href: "/lead-scoring", icon: Zap, roles: ["admin", "sales", "office"], lockReason: "Requires Sales or Admin role", tourId: "nav-lead-scoring" },
         { name: "Customers", href: "/customers", icon: Users, tourId: "nav-customers" },
         { name: "Accounting", href: "/accounting", icon: DollarSign, roles: ["admin", "accounting", "office"], lockReason: "Requires Accounting role", tourId: "nav-accounting" },
       ],
