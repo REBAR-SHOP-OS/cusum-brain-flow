@@ -53,14 +53,42 @@ export function ScreenshotFeedbackButton() {
         const style = clonedDoc.createElement("style");
         style.textContent = "*, *::before, *::after { animation: none !important; transition: none !important; }";
         clonedDoc.head.appendChild(style);
+
+        // Aggressive DOM trimming: remove off-screen heavy elements from clone
+        const vpW = window.innerWidth;
+        const vpH = window.innerHeight;
+
+        // Collect bounding rects from the LIVE DOM before working on the clone
+        const heavySelectors = '[draggable="true"], [class*="card"], [class*="lead-"], tr, li';
+        const originals = document.body.querySelectorAll(heavySelectors);
+        const offScreenIndices = new Set<number>();
+        originals.forEach((el, i) => {
+          const r = el.getBoundingClientRect();
+          if (r.bottom < -50 || r.top > vpH + 50 || r.right < -50 || r.left > vpW + 50) {
+            offScreenIndices.add(i);
+          }
+        });
+
+        // Now remove matching elements from the cloned DOM
+        if (offScreenIndices.size > 0) {
+          const clonedEls = clonedDoc.body.querySelectorAll(heavySelectors);
+          // Iterate in reverse to avoid index shifts
+          for (let i = clonedEls.length - 1; i >= 0; i--) {
+            if (offScreenIndices.has(i)) {
+              clonedEls[i].remove();
+            }
+          }
+        }
       },
     };
 
+    const isHeavyPage = document.body.querySelectorAll("*").length > 1500;
+
     const captureOnce = (skipImages: boolean): Promise<HTMLCanvasElement> => {
-      const opts = { ...baseOpts, imageTimeout: skipImages ? 0 : 5000 };
+      const opts = { ...baseOpts, imageTimeout: (skipImages || isHeavyPage) ? 0 : 5000 };
       return Promise.race([
         html2canvas(document.body, opts),
-        new Promise<never>((_, rej) => setTimeout(() => rej(new Error("screenshot_timeout")), 3000)),
+        new Promise<never>((_, rej) => setTimeout(() => rej(new Error("screenshot_timeout")), 5000)),
       ]);
     };
 
