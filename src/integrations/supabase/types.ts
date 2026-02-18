@@ -783,6 +783,57 @@ export type Database = {
           },
         ]
       }
+      cca_schedule_items: {
+        Row: {
+          additions: number
+          asset_description: string
+          cca_claimed: number
+          cca_class: number
+          cca_rate: number
+          company_id: string
+          created_at: string
+          dispositions: number
+          fiscal_year: number
+          id: string
+          ucc_closing: number
+          ucc_opening: number
+          updated_at: string
+          use_this_year: boolean
+        }
+        Insert: {
+          additions?: number
+          asset_description?: string
+          cca_claimed?: number
+          cca_class?: number
+          cca_rate?: number
+          company_id: string
+          created_at?: string
+          dispositions?: number
+          fiscal_year?: number
+          id?: string
+          ucc_closing?: number
+          ucc_opening?: number
+          updated_at?: string
+          use_this_year?: boolean
+        }
+        Update: {
+          additions?: number
+          asset_description?: string
+          cca_claimed?: number
+          cca_class?: number
+          cca_rate?: number
+          company_id?: string
+          created_at?: string
+          dispositions?: number
+          fiscal_year?: number
+          id?: string
+          ucc_closing?: number
+          ucc_opening?: number
+          updated_at?: string
+          use_this_year?: boolean
+        }
+        Relationships: []
+      }
       chat_messages: {
         Row: {
           agent_type: string | null
@@ -8624,6 +8675,138 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      tax_deduction_tracker: {
+        Row: {
+          category: string
+          claimed_amount: number
+          company_id: string
+          created_at: string
+          description: string
+          estimated_amount: number
+          fiscal_year: number
+          id: string
+          is_claimed: boolean
+          updated_at: string
+        }
+        Insert: {
+          category?: string
+          claimed_amount?: number
+          company_id: string
+          created_at?: string
+          description?: string
+          estimated_amount?: number
+          fiscal_year?: number
+          id?: string
+          is_claimed?: boolean
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          claimed_amount?: number
+          company_id?: string
+          created_at?: string
+          description?: string
+          estimated_amount?: number
+          fiscal_year?: number
+          id?: string
+          is_claimed?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      tax_planning_profiles: {
+        Row: {
+          company_id: string
+          created_at: string
+          fiscal_year: number
+          hsa_annual_limit: number
+          hsa_claimed_ytd: number
+          id: string
+          max_withdrawal_pct: number
+          notes: string | null
+          owner_pay_strategy: string
+          personal_bracket_estimate: number
+          sbr_rate: number
+          target_retained_earnings: number
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          fiscal_year?: number
+          hsa_annual_limit?: number
+          hsa_claimed_ytd?: number
+          id?: string
+          max_withdrawal_pct?: number
+          notes?: string | null
+          owner_pay_strategy?: string
+          personal_bracket_estimate?: number
+          sbr_rate?: number
+          target_retained_earnings?: number
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          fiscal_year?: number
+          hsa_annual_limit?: number
+          hsa_claimed_ytd?: number
+          id?: string
+          max_withdrawal_pct?: number
+          notes?: string | null
+          owner_pay_strategy?: string
+          personal_bracket_estimate?: number
+          sbr_rate?: number
+          target_retained_earnings?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      tax_planning_tasks: {
+        Row: {
+          assigned_to: string | null
+          category: string
+          company_id: string
+          completed_at: string | null
+          created_at: string
+          description: string | null
+          due_date: string | null
+          fiscal_year: number
+          id: string
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          category?: string
+          company_id: string
+          completed_at?: string | null
+          created_at?: string
+          description?: string | null
+          due_date?: string | null
+          fiscal_year?: number
+          id?: string
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          assigned_to?: string | null
+          category?: string
+          company_id?: string
+          completed_at?: string | null
+          created_at?: string
+          description?: string | null
+          due_date?: string | null
+          fiscal_year?: number
+          id?: string
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       team_channel_members: {
         Row: {
