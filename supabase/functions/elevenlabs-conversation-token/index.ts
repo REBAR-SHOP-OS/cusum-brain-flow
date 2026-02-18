@@ -14,7 +14,7 @@ serve(async (req) => {
     if (!ELEVENLABS_AGENT_ID) throw new Error("ELEVENLABS_AGENT_ID not configured");
 
     const response = await fetch(
-      `https://api.elevenlabs.io/v1/convai/conversation/token?agent_id=${ELEVENLABS_AGENT_ID}`,
+      `https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=${ELEVENLABS_AGENT_ID}`,
       {
         headers: { "xi-api-key": ELEVENLABS_API_KEY },
       }
@@ -22,12 +22,12 @@ serve(async (req) => {
 
     if (!response.ok) {
       const errText = await response.text();
-      console.error("ElevenLabs conversation token error:", response.status, errText);
-      return json({ error: "Failed to get conversation token" }, 500);
+      console.error("ElevenLabs signed URL error:", response.status, errText);
+      return json({ error: "Failed to get signed URL" }, 500);
     }
 
-    const { token } = await response.json();
-    return json({ token });
+    const { signed_url } = await response.json();
+    return json({ signed_url });
   } catch (e) {
     if (e instanceof Response) return e;
     console.error("elevenlabs-conversation-token error:", e);
