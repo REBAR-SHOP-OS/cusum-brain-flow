@@ -60,6 +60,7 @@ import AccountingWorkspace from "./pages/AccountingWorkspace";
 import CustomerAction from "./pages/CustomerAction";
 import CustomerPortal from "./pages/CustomerPortal";
 import CEOPortal from "./pages/CEOPortal";
+import VendorPortal from "./pages/VendorPortal";
 import Transcribe from "./pages/Transcribe";
 import TranscribeWatch from "./pages/TranscribeWatch";
 import WebsiteManager from "./pages/WebsiteManager";
@@ -191,6 +192,7 @@ const App = () => (
                     <Route path="/terms" element={<TermsOfService />} />
                     <Route path="/terms-of-service" element={<TermsOfService />} />
                     <Route path="/portal" element={<CustomerPortal />} />
+                    <Route path="/vendor-portal" element={<VendorPortal />} />
                     <Route path="/install" element={<Install />} />
                     <Route path="/knowledge-base" element={<KnowledgeBasePublic />} />
                     <Route path="/unsubscribe" element={<Unsubscribe />} />
