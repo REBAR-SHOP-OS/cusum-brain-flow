@@ -10517,6 +10517,8 @@ export type Database = {
         Returns: boolean
       }
       cleanup_rate_limit_entries: { Args: never; Returns: undefined }
+      execute_readonly_query: { Args: { sql_query: string }; Returns: Json }
+      execute_write_fix: { Args: { sql_query: string }; Returns: Json }
       get_my_rc_status: {
         Args: never
         Returns: {
