@@ -30,6 +30,7 @@ import StationView from "./pages/StationView";
 import PickupStation from "./pages/PickupStation";
 import PoolView from "./pages/PoolView";
 import Deliveries from "./pages/Deliveries";
+import InventoryCountPage from "./pages/InventoryCountPage";
 import Brain from "./pages/Brain";
 import Integrations from "./pages/Integrations";
 import IntegrationCallback from "./pages/IntegrationCallback";
@@ -143,6 +144,7 @@ const App = () => (
                     <Route path="/shopfloor/loading" element={<P><LoadingStation /></P>} />
                     <Route path="/shopfloor/pickup" element={<P><PickupStation /></P>} />
                     <Route path="/shopfloor/clearance" element={<P><ClearanceStation /></P>} />
+                    <Route path="/shopfloor/inventory" element={<P><InventoryCountPage /></P>} />
                     <Route path="/shopfloor/live-monitor" element={<P><LiveMonitor /></P>} />
                     <Route path="/deliveries" element={<P><Deliveries /></P>} />
                     <Route path="/timeclock" element={<P><TimeClock /></P>} />
