@@ -4068,10 +4068,53 @@ export type Database = {
           },
         ]
       }
+      lead_scoring_rules: {
+        Row: {
+          company_id: string
+          created_at: string
+          created_by: string | null
+          enabled: boolean
+          field_name: string
+          field_value: string
+          id: string
+          name: string
+          operator: string
+          score_points: number
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          enabled?: boolean
+          field_name: string
+          field_value: string
+          id?: string
+          name: string
+          operator?: string
+          score_points?: number
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          enabled?: boolean
+          field_name?: string
+          field_value?: string
+          id?: string
+          name?: string
+          operator?: string
+          score_points?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       leads: {
         Row: {
           assigned_to: string | null
           company_id: string
+          computed_score: number | null
           contact_id: string | null
           created_at: string
           customer_id: string | null
@@ -4085,6 +4128,7 @@ export type Database = {
           priority: string | null
           probability: number | null
           quote_id: string | null
+          score_updated_at: string | null
           sla_breached: boolean
           sla_deadline: string | null
           source: string | null
@@ -4096,6 +4140,7 @@ export type Database = {
         Insert: {
           assigned_to?: string | null
           company_id: string
+          computed_score?: number | null
           contact_id?: string | null
           created_at?: string
           customer_id?: string | null
@@ -4109,6 +4154,7 @@ export type Database = {
           priority?: string | null
           probability?: number | null
           quote_id?: string | null
+          score_updated_at?: string | null
           sla_breached?: boolean
           sla_deadline?: string | null
           source?: string | null
@@ -4120,6 +4166,7 @@ export type Database = {
         Update: {
           assigned_to?: string | null
           company_id?: string
+          computed_score?: number | null
           contact_id?: string | null
           created_at?: string
           customer_id?: string | null
@@ -4133,6 +4180,7 @@ export type Database = {
           priority?: string | null
           probability?: number | null
           quote_id?: string | null
+          score_updated_at?: string | null
           sla_breached?: boolean
           sla_deadline?: string | null
           source?: string | null

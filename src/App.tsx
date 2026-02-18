@@ -20,6 +20,7 @@ import Inbox from "./pages/Inbox";
 import Tasks from "./pages/Tasks";
 import Pipeline from "./pages/Pipeline";
 import Prospecting from "./pages/Prospecting";
+import LeadScoring from "./pages/LeadScoring";
 import Customers from "./pages/Customers";
 import ShopFloor from "./pages/ShopFloor";
 import LoadingStation from "./pages/LoadingStation";
@@ -125,6 +126,7 @@ const App = () => (
 
                     {/* Sales */}
                     <Route path="/pipeline" element={<P><Pipeline /></P>} />
+                    <Route path="/lead-scoring" element={<P><LeadScoring /></P>} />
                     <Route path="/prospecting" element={<P><Prospecting /></P>} />
                     <Route path="/customers" element={<P><Customers /></P>} />
 
