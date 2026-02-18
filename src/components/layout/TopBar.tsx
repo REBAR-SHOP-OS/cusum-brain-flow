@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { LayoutGrid, Search, Bell, ChevronRight, MessageSquare, HelpCircle } from "lucide-react";
+import { LayoutGrid, Search, Bell, ChevronRight, HelpCircle, DatabaseBackup } from "lucide-react";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useActiveModule } from "@/hooks/useActiveModule";
+import { useUserRole } from "@/hooks/useUserRole";
 import { InboxPanel } from "@/components/panels/InboxPanel";
 import { HelpPanel } from "@/components/help/HelpPanel";
+import { BackupModal } from "@/components/backup/BackupModal";
 import { UserMenu } from "./UserMenu";
 import { CommandBar } from "./CommandBar";
 
@@ -14,7 +16,9 @@ export function TopBar() {
   const [commandOpen, setCommandOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [backupOpen, setBackupOpen] = useState(false);
   const { unreadCount } = useNotifications();
+  const { isAdmin } = useUserRole();
 
   // Keep Cmd+K shortcut
   useEffect(() => {
@@ -82,6 +86,18 @@ export function TopBar() {
           <HelpCircle className="w-5 h-5" />
         </button>
 
+        {/* Backup & Restore — admin only */}
+        {isAdmin && (
+          <button
+            className="relative w-8 h-8 flex items-center justify-center rounded hover:bg-white/10 transition-colors mr-1"
+            onClick={() => setBackupOpen(true)}
+            title="Backup & Restore"
+            aria-label="Backup and restore"
+          >
+            <DatabaseBackup className="w-5 h-5" />
+          </button>
+        )}
+
         {/* Notifications */}
         <button
           className="relative w-8 h-8 flex items-center justify-center rounded hover:bg-white/10 transition-colors mr-1"
@@ -106,6 +122,7 @@ export function TopBar() {
       <CommandBar open={commandOpen} onOpenChange={setCommandOpen} />
       <InboxPanel isOpen={notifOpen} onClose={() => setNotifOpen(false)} />
       <HelpPanel isOpen={helpOpen} onClose={() => setHelpOpen(false)} />
+      <BackupModal isOpen={backupOpen} onClose={() => setBackupOpen(false)} />
     </>
   );
 }

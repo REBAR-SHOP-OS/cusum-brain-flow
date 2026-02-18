@@ -544,6 +544,47 @@ export type Database = {
         }
         Relationships: []
       }
+      backup_restore_logs: {
+        Row: {
+          action: string
+          backup_id: string | null
+          created_at: string | null
+          error_message: string | null
+          id: string
+          performed_by: string | null
+          performed_by_name: string | null
+          result: string
+        }
+        Insert: {
+          action: string
+          backup_id?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          performed_by?: string | null
+          performed_by_name?: string | null
+          result: string
+        }
+        Update: {
+          action?: string
+          backup_id?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          performed_by?: string | null
+          performed_by_name?: string | null
+          result?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "backup_restore_logs_backup_id_fkey"
+            columns: ["backup_id"]
+            isOneToOne: false
+            referencedRelation: "system_backups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bank_feed_balances: {
         Row: {
           account_id: string
@@ -8760,6 +8801,54 @@ export type Database = {
           updated_at?: string
           welcome_message?: string | null
           widget_key?: string
+        }
+        Relationships: []
+      }
+      system_backups: {
+        Row: {
+          backup_type: string
+          company_id: string
+          completed_at: string | null
+          created_by: string | null
+          created_by_name: string | null
+          error_message: string | null
+          file_path: string | null
+          file_size_bytes: number | null
+          id: string
+          metadata: Json | null
+          started_at: string | null
+          status: string
+          tables_backed_up: string[] | null
+        }
+        Insert: {
+          backup_type?: string
+          company_id: string
+          completed_at?: string | null
+          created_by?: string | null
+          created_by_name?: string | null
+          error_message?: string | null
+          file_path?: string | null
+          file_size_bytes?: number | null
+          id?: string
+          metadata?: Json | null
+          started_at?: string | null
+          status?: string
+          tables_backed_up?: string[] | null
+        }
+        Update: {
+          backup_type?: string
+          company_id?: string
+          completed_at?: string | null
+          created_by?: string | null
+          created_by_name?: string | null
+          error_message?: string | null
+          file_path?: string | null
+          file_size_bytes?: number | null
+          id?: string
+          metadata?: Json | null
+          started_at?: string | null
+          status?: string
+          tables_backed_up?: string[] | null
         }
         Relationships: []
       }
