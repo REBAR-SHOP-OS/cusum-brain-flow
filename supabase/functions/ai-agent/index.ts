@@ -8083,14 +8083,19 @@ RULES:
         }
       }
 
-      // If the AI returned tool calls, do a follow-up to get a reply with tool results
-      // SEO tools ALWAYS need a follow-up since the AI must analyze the returned data
-      if (seoToolResults.length > 0 || (!reply && (createdNotifications.length > 0 || emailResults.length > 0))) {
+      // Multi-turn tool call loop: keep processing until AI returns text or max iterations
+      let toolLoopIterations = 0;
+      const MAX_TOOL_ITERATIONS = 5;
+      let lastAssistantMsg = choice.message;
+      let lastToolCalls = toolCalls;
+
+      while (toolLoopIterations < MAX_TOOL_ITERATIONS &&
+             (seoToolResults.length > 0 || (!reply && (createdNotifications.length > 0 || emailResults.length > 0)))) {
+
         const toolResultMessages = [
           ...messages,
-          choice.message,
-          ...toolCalls.map((tc: any) => {
-            // Check if this is an SEO tool result
+          lastAssistantMsg,
+          ...lastToolCalls.map((tc: any) => {
             const seoResult = seoToolResults.find(r => r.id === tc.id);
             if (seoResult) {
               return {
@@ -8120,13 +8125,167 @@ RULES:
             messages: toolResultMessages,
             max_tokens: modelConfig.maxTokens,
             temperature: modelConfig.temperature,
+            ...(allTools.length > 0 ? { tools: allTools } : {}),
           }),
         });
 
-        if (followUp.ok) {
-          const followUpData = await followUp.json();
-          reply = followUpData.choices?.[0]?.message?.content || reply;
+        if (!followUp.ok) break;
+
+        const followUpData = await followUp.json();
+        const followUpChoice = followUpData.choices?.[0];
+
+        // Extract text reply if present
+        if (followUpChoice?.message?.content) {
+          reply = followUpChoice.message.content;
         }
+
+        // Check if follow-up returns more tool calls
+        const newToolCalls = followUpChoice?.message?.tool_calls;
+        if (newToolCalls && newToolCalls.length > 0) {
+          // Reset for this round
+          seoToolResults.length = 0;
+
+          for (const tc of newToolCalls) {
+            // ── Re-use all existing tool handlers ──
+            // send_email
+            if (tc.function?.name === "send_email") {
+              try {
+                const args = JSON.parse(tc.function.arguments);
+                const emailRes = await fetch(
+                  `${Deno.env.get("SUPABASE_URL")}/functions/v1/gmail-send`,
+                  {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "Authorization": authHeader! },
+                    body: JSON.stringify({ to: args.to, subject: args.subject, body: args.body, ...(args.threadId && { threadId: args.threadId }), ...(args.replyToMessageId && { replyToMessageId: args.replyToMessageId }) }),
+                  }
+                );
+                if (emailRes.ok) { emailResults.push({ success: true, to: args.to }); }
+                else { emailResults.push({ success: false, to: args.to, error: await emailRes.text() }); }
+              } catch (e) { emailResults.push({ success: false, error: e instanceof Error ? e.message : "Unknown" }); }
+            }
+
+            // read_task
+            if (tc.function?.name === "read_task") {
+              try {
+                const args = JSON.parse(tc.function.arguments || "{}");
+                const { data, error } = await svcClient.from("tasks").select("*").eq("id", args.task_id).single();
+                seoToolResults.push({ id: tc.id, name: "read_task", result: error ? { error: error.message } : { success: true, task: data } });
+              } catch (e) { seoToolResults.push({ id: tc.id, name: "read_task", result: { error: e instanceof Error ? e.message : "Failed" } }); }
+            }
+
+            // resolve_task
+            if (tc.function?.name === "resolve_task") {
+              try {
+                const args = JSON.parse(tc.function.arguments || "{}");
+                const newStatus = args.new_status || "completed";
+                const { data, error } = await svcClient.from("tasks").update({
+                  status: newStatus,
+                  completed_at: newStatus === "completed" ? new Date().toISOString() : null,
+                  resolution_note: args.resolution_note,
+                }).eq("id", args.task_id).select().single();
+                if (!error) {
+                  await svcClient.from("activity_events").insert({
+                    company_id: companyId, entity_type: "task", entity_id: args.task_id,
+                    event_type: "task_resolved", description: `Task resolved by Architect: ${args.resolution_note}`,
+                    actor_id: user.id, actor_type: "architect", source: "architect_autofix",
+                    metadata: { new_status: newStatus, resolution_note: args.resolution_note },
+                  }).catch(() => {});
+                }
+                seoToolResults.push({ id: tc.id, name: "resolve_task", result: error ? { error: error.message } : { success: true, message: `Task ${newStatus}`, data } });
+              } catch (e) { seoToolResults.push({ id: tc.id, name: "resolve_task", result: { error: e instanceof Error ? e.message : "Failed" } }); }
+            }
+
+            // update_machine_status
+            if (tc.function?.name === "update_machine_status") {
+              try {
+                const args = JSON.parse(tc.function.arguments || "{}");
+                const { data, error } = await svcClient.from("machines").update({ status: args.status }).eq("id", args.id).select().single();
+                seoToolResults.push({ id: tc.id, name: "update_machine_status", result: error ? { error: error.message } : { success: true, data } });
+              } catch (e) { seoToolResults.push({ id: tc.id, name: "update_machine_status", result: { error: e instanceof Error ? e.message : "Failed" } }); }
+            }
+
+            // update_delivery_status
+            if (tc.function?.name === "update_delivery_status") {
+              try {
+                const args = JSON.parse(tc.function.arguments || "{}");
+                const { data, error } = await svcClient.from("deliveries").update({ status: args.status }).eq("id", args.id).select().single();
+                seoToolResults.push({ id: tc.id, name: "update_delivery_status", result: error ? { error: error.message } : { success: true, data } });
+              } catch (e) { seoToolResults.push({ id: tc.id, name: "update_delivery_status", result: { error: e instanceof Error ? e.message : "Failed" } }); }
+            }
+
+            // update_lead_status
+            if (tc.function?.name === "update_lead_status") {
+              try {
+                const args = JSON.parse(tc.function.arguments || "{}");
+                const { data, error } = await svcClient.from("leads").update({ status: args.status }).eq("id", args.id).select().single();
+                seoToolResults.push({ id: tc.id, name: "update_lead_status", result: error ? { error: error.message } : { success: true, data } });
+              } catch (e) { seoToolResults.push({ id: tc.id, name: "update_lead_status", result: { error: e instanceof Error ? e.message : "Failed" } }); }
+            }
+
+            // update_cut_plan_status
+            if (tc.function?.name === "update_cut_plan_status") {
+              try {
+                const args = JSON.parse(tc.function.arguments || "{}");
+                const { data, error } = await svcClient.from("cut_plans").update({ status: args.status }).eq("id", args.id).select().single();
+                seoToolResults.push({ id: tc.id, name: "update_cut_plan_status", result: error ? { error: error.message } : { success: true, data } });
+              } catch (e) { seoToolResults.push({ id: tc.id, name: "update_cut_plan_status", result: { error: e instanceof Error ? e.message : "Failed" } }); }
+            }
+
+            // create_event
+            if (tc.function?.name === "create_event") {
+              try {
+                const args = JSON.parse(tc.function.arguments || "{}");
+                const { data, error } = await svcClient.from("activity_events").insert({
+                  company_id: companyId, entity_type: args.entity_type, entity_id: args.entity_id || crypto.randomUUID(),
+                  event_type: args.event_type, description: args.description, actor_id: user.id, actor_type: "architect", source: "system",
+                }).select().single();
+                seoToolResults.push({ id: tc.id, name: "create_event", result: error ? { error: error.message } : { success: true, data } });
+              } catch (e) { seoToolResults.push({ id: tc.id, name: "create_event", result: { error: e instanceof Error ? e.message : "Failed" } }); }
+            }
+
+            // create_notifications
+            if (tc.function?.name === "create_notifications") {
+              try {
+                const args = JSON.parse(tc.function.arguments);
+                const items = args.items || [];
+                const employeeList = (mergedContext.availableEmployees as { id: string; name: string }[]) || [];
+                for (const item of items) {
+                  let assignedTo: string | null = null;
+                  if (item.assigned_to_name) {
+                    const match = employeeList.find((e: any) => e.name.toLowerCase().includes(item.assigned_to_name.toLowerCase()));
+                    assignedTo = match?.id || null;
+                  }
+                  const agentName = agentPrompts[agent]?.match(/\*\*(\w+)\*\*/)?.[1] || agent;
+                  const { error: insertErr } = await svcClient.from("notifications").insert({
+                    user_id: user.id, type: item.type || "todo", title: item.title, description: item.description || null,
+                    agent_name: agentName, agent_color: "bg-red-500", priority: item.priority || "normal",
+                    assigned_to: assignedTo, reminder_at: item.reminder_at || null, link_to: item.link_to || null,
+                    status: "unread", metadata: { created_by_agent: agent, assigned_to_name: item.assigned_to_name || null },
+                  });
+                  if (!insertErr) createdNotifications.push({ type: item.type, title: item.title, assigned_to_name: item.assigned_to_name });
+                }
+              } catch (e) { console.error("Failed to parse tool call:", e); }
+            }
+
+            // Any other tool call that wasn't explicitly handled — provide a generic result
+            const handledNames = ["send_email", "read_task", "resolve_task", "update_machine_status", "update_delivery_status", "update_lead_status", "update_cut_plan_status", "create_event", "create_notifications"];
+            if (!handledNames.includes(tc.function?.name)) {
+              seoToolResults.push({ id: tc.id, name: tc.function?.name || "unknown", result: { success: true, message: "Processed" } });
+            }
+          }
+
+          // Update for next iteration
+          lastAssistantMsg = followUpChoice.message;
+          lastToolCalls = newToolCalls;
+        } else {
+          // No more tool calls, we're done
+          break;
+        }
+
+        // If we got a text reply, stop
+        if (reply) break;
+
+        toolLoopIterations++;
       }
     }
 
