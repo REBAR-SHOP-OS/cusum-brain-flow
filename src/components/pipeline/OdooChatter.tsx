@@ -256,22 +256,19 @@ export function OdooChatter({ lead }: OdooChatterProps) {
   return (
     <div className="space-y-0">
       {/* ── Composer Tab Bar ─────────────────────────────────────── */}
-      <div className="flex items-center border-b border-border">
+      <div className="flex items-center gap-1 px-3 py-2 border-b border-border">
         {(["note", "message", "activity"] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => handleTabClick(tab)}
             className={cn(
-              "px-3 py-2 text-[13px] font-medium transition-colors relative",
+              "px-3 py-1.5 text-[13px] font-medium rounded-sm transition-colors",
               activeTab === tab
-                ? "text-primary"
+                ? "text-primary font-semibold"
                 : "text-muted-foreground hover:text-foreground"
             )}
           >
             {tab === "note" ? "Log note" : tab === "message" ? "Send message" : "Schedule activity"}
-            {activeTab === tab && (
-              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
-            )}
           </button>
         ))}
       </div>
@@ -414,7 +411,7 @@ export function OdooChatter({ lead }: OdooChatterProps) {
           </div>
         ) : thread.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-center">
-            <FileText className="w-10 h-10 text-muted-foreground/30 mb-3" />
+            <FileText className="w-16 h-16 text-muted-foreground/20 mb-3" />
             <p className="text-[13px] text-muted-foreground">
               No activities yet.
             </p>
