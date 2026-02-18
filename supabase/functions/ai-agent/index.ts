@@ -2394,11 +2394,23 @@ You can manage ventures via \`manage_venture\` tool and diagnose/fix issues via 
 
 Use this real data to ground your analysis — never fabricate numbers.
 
+## CRITICAL — Autofix Behavior (HIGHEST PRIORITY — OVERRIDES ALL OTHER SECTIONS):
+When you receive an autofix request with a task_id:
+1. Use \`read_task\` to understand the full problem
+2. Use your ERP/WP/Odoo write tools to apply the ACTUAL fix (update_machine_status, update_delivery_status, odoo_write, wp_update_product, etc.)
+3. Use \`resolve_task\` to mark the task as completed with a resolution note
+4. Do NOT just create fix requests or tickets. Use your write tools to FIX the problem directly.
+5. If you cannot fix it automatically, explain WHY and what manual steps are needed.
+
+**ABSOLUTE RULE: When you have a task_id, you MUST NOT call \`create_fix_ticket\`. Instead use \`read_task\` → write tools → \`resolve_task\`. This is non-negotiable.**
+
 ## Fix Ticket System (Screenshot → Fix Engine):
+**IMPORTANT: If you already have a \`task_id\` from an autofix request, do NOT create a new fix ticket. Use \`read_task\` and \`resolve_task\` instead. Fix tickets are ONLY for NEW screenshot-based bug reports that are NOT linked to an existing task.**
+
 You have access to structured fix tickets via \`create_fix_ticket\`, \`update_fix_ticket\`, and \`list_fix_tickets\` tools.
 
 ### Fix Ticket Lifecycle:
-1. **new** → User reports a bug (screenshot + description)
+1. **new** → User reports a NEW bug (screenshot + description, NO existing task_id)
 2. **in_progress** → You are diagnosing/fixing
 3. **fixed** → Fix applied (but NOT verified yet)
 4. **verified** → Verification passed (ONLY if verification_result = "pass")
@@ -2406,20 +2418,13 @@ You have access to structured fix tickets via \`create_fix_ticket\`, \`update_fi
 6. **blocked** → Cannot fix, needs external help
 
 ### CRITICAL RULES:
+- **NEVER** use \`create_fix_ticket\` when a task_id is present — use write tools + \`resolve_task\` instead
 - **NEVER** mark a ticket as "verified" without running verification and getting verification_result = "pass"
 - If verification fails, set status to "failed" and explain why
 - Always include verification_steps when fixing a ticket
 - When generating a Lovable Fix Prompt, set fix_output_type = "lovable_prompt"
 - Never expose API keys, tokens, or connection strings in responses
 - All diagnostic access is logged in activity_events with source = "architect_diagnostic"
-
-## CRITICAL — Autofix Behavior:
-When you receive an autofix request with a task_id:
-1. Use \`read_task\` to understand the full problem
-2. Use your ERP/WP/Odoo write tools to apply the ACTUAL fix (update_machine_status, update_delivery_status, odoo_write, wp_update_product, etc.)
-3. Use \`resolve_task\` to mark the task as completed with a resolution note
-4. Do NOT just create fix requests or tickets. Use your write tools to FIX the problem directly.
-5. If you cannot fix it automatically, explain WHY and what manual steps are needed.
 
 ### Lovable Fix Prompt Template:
 When generating fix prompts for Lovable, use this format:
@@ -8268,7 +8273,69 @@ RULES:
             }
 
             // Any other tool call that wasn't explicitly handled — provide a generic result
-            const handledNames = ["send_email", "read_task", "resolve_task", "update_machine_status", "update_delivery_status", "update_lead_status", "update_cut_plan_status", "create_event", "create_notifications"];
+            // create_fix_ticket (in multi-turn loop)
+            if (tc.function?.name === "create_fix_ticket") {
+              try {
+                const args = JSON.parse(tc.function.arguments || "{}");
+                const userEmail = user.email || "";
+                const { data: ticket, error } = await svcClient.from("fix_tickets").insert({
+                  company_id: companyId, reporter_user_id: user.id, reporter_email: userEmail,
+                  page_url: args.page_url || null, screenshot_url: args.screenshot_url || null,
+                  repro_steps: args.repro_steps, expected_result: args.expected_result || null,
+                  actual_result: args.actual_result, severity: args.severity || "medium",
+                  system_area: args.system_area || null, status: "new",
+                }).select().single();
+                await svcClient.from("activity_events").insert({
+                  company_id: companyId, entity_type: "fix_ticket", entity_id: ticket?.id || crypto.randomUUID(),
+                  event_type: "fix_ticket_created", description: `Fix ticket created for ${args.system_area || "unknown"}: ${(args.actual_result || "").substring(0, 100)}`,
+                  actor_id: user.id, actor_type: "architect", source: "architect_agent",
+                  metadata: { severity: args.severity, system_area: args.system_area },
+                }).catch(() => {});
+                seoToolResults.push({ id: tc.id, name: "create_fix_ticket", result: error ? { error: error.message } : { success: true, ticket_id: ticket?.id, message: `Fix ticket created: ${ticket?.id}` } });
+              } catch (e) {
+                seoToolResults.push({ id: tc.id, name: "create_fix_ticket", result: { error: e instanceof Error ? e.message : "Failed" } });
+              }
+            }
+
+            // update_fix_ticket (in multi-turn loop)
+            if (tc.function?.name === "update_fix_ticket") {
+              try {
+                const args = JSON.parse(tc.function.arguments || "{}");
+                const updates: Record<string, unknown> = {};
+                if (args.status) updates.status = args.status;
+                if (args.fix_output) updates.fix_output = args.fix_output;
+                if (args.fix_output_type) updates.fix_output_type = args.fix_output_type;
+                if (args.verification_steps) updates.verification_steps = args.verification_steps;
+                if (args.verification_result) updates.verification_result = args.verification_result;
+                if (args.verification_evidence) updates.verification_evidence = args.verification_evidence;
+                if (args.status === "in_progress" && !updates.diagnosed_at) updates.diagnosed_at = new Date().toISOString();
+                const { data, error } = await svcClient.from("fix_tickets").update(updates).eq("id", args.ticket_id).select().single();
+                await svcClient.from("activity_events").insert({
+                  company_id: companyId, entity_type: "fix_ticket", entity_id: args.ticket_id,
+                  event_type: "fix_ticket_updated", description: `Fix ticket ${args.ticket_id} updated: status=${args.status || "unchanged"}`,
+                  actor_id: user.id, actor_type: "architect", source: "architect_agent",
+                  metadata: { updates, verification_result: args.verification_result },
+                }).catch(() => {});
+                seoToolResults.push({ id: tc.id, name: "update_fix_ticket", result: error ? { error: error.message } : { success: true, ticket: data } });
+              } catch (e) {
+                seoToolResults.push({ id: tc.id, name: "update_fix_ticket", result: { error: e instanceof Error ? e.message : "Failed" } });
+              }
+            }
+
+            // list_fix_tickets (in multi-turn loop)
+            if (tc.function?.name === "list_fix_tickets") {
+              try {
+                const args = JSON.parse(tc.function.arguments || "{}");
+                let query = svcClient.from("fix_tickets").select("*").eq("company_id", companyId).order("created_at", { ascending: false }).limit(args.limit || 10);
+                if (args.status) { query = query.eq("status", args.status); } else { query = query.in("status", ["new", "in_progress", "fixed", "blocked", "failed"]); }
+                const { data, error } = await query;
+                seoToolResults.push({ id: tc.id, name: "list_fix_tickets", result: error ? { error: error.message } : { success: true, tickets: data, count: data?.length || 0 } });
+              } catch (e) {
+                seoToolResults.push({ id: tc.id, name: "list_fix_tickets", result: { error: e instanceof Error ? e.message : "Failed" } });
+              }
+            }
+
+            const handledNames = ["send_email", "read_task", "resolve_task", "update_machine_status", "update_delivery_status", "update_lead_status", "update_cut_plan_status", "create_event", "create_notifications", "create_fix_ticket", "update_fix_ticket", "list_fix_tickets"];
             if (!handledNames.includes(tc.function?.name)) {
               seoToolResults.push({ id: tc.id, name: tc.function?.name || "unknown", result: { success: true, message: "Processed" } });
             }
