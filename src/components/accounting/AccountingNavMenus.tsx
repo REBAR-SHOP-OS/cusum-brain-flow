@@ -43,6 +43,9 @@ const menus: Menu[] = [
       { label: "Vendors", tab: "vendors" },
       { label: "Bills", tab: "bills" },
       { label: "Vendor Payments", tab: "vendor-payments" },
+      { type: "separator" },
+      { type: "label", label: "Procurement" },
+      { label: "3-Way Matching", tab: "three-way-matching" },
     ],
   },
   {

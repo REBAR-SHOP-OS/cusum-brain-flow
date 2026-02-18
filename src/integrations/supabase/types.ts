@@ -3000,6 +3000,109 @@ export type Database = {
           },
         ]
       }
+      goods_receipt_items: {
+        Row: {
+          created_at: string
+          id: string
+          notes: string | null
+          po_item_id: string
+          receipt_id: string
+          received_qty: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          po_item_id: string
+          receipt_id: string
+          received_qty?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          po_item_id?: string
+          receipt_id?: string
+          received_qty?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "goods_receipt_items_po_item_id_fkey"
+            columns: ["po_item_id"]
+            isOneToOne: false
+            referencedRelation: "purchase_order_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "goods_receipt_items_receipt_id_fkey"
+            columns: ["receipt_id"]
+            isOneToOne: false
+            referencedRelation: "goods_receipts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      goods_receipts: {
+        Row: {
+          company_id: string
+          created_at: string
+          id: string
+          notes: string | null
+          purchase_order_id: string
+          receipt_number: string
+          received_by: string | null
+          received_date: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          purchase_order_id: string
+          receipt_number: string
+          received_by?: string | null
+          received_date?: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          purchase_order_id?: string
+          receipt_number?: string
+          received_by?: string | null
+          received_date?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "goods_receipts_purchase_order_id_fkey"
+            columns: ["purchase_order_id"]
+            isOneToOne: false
+            referencedRelation: "purchase_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "goods_receipts_received_by_fkey"
+            columns: ["received_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "goods_receipts_received_by_fkey"
+            columns: ["received_by"]
+            isOneToOne: false
+            referencedRelation: "profiles_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       human_tasks: {
         Row: {
           actions: Json | null
@@ -5672,6 +5775,50 @@ export type Database = {
           },
         ]
       }
+      purchase_order_items: {
+        Row: {
+          billed_qty: number
+          created_at: string
+          description: string
+          id: string
+          purchase_order_id: string
+          quantity: number
+          received_qty: number
+          total: number | null
+          unit_price: number
+        }
+        Insert: {
+          billed_qty?: number
+          created_at?: string
+          description?: string
+          id?: string
+          purchase_order_id: string
+          quantity?: number
+          received_qty?: number
+          total?: number | null
+          unit_price?: number
+        }
+        Update: {
+          billed_qty?: number
+          created_at?: string
+          description?: string
+          id?: string
+          purchase_order_id?: string
+          quantity?: number
+          received_qty?: number
+          total?: number | null
+          unit_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "purchase_order_items_purchase_order_id_fkey"
+            columns: ["purchase_order_id"]
+            isOneToOne: false
+            referencedRelation: "purchase_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       purchase_order_lines: {
         Row: {
           bar_code: string
@@ -7996,6 +8143,86 @@ export type Database = {
           {
             foreignKeyName: "team_messages_sender_profile_id_fkey"
             columns: ["sender_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      three_way_matches: {
+        Row: {
+          auto_matched: boolean | null
+          bill_quickbooks_id: string | null
+          company_id: string
+          created_at: string
+          goods_receipt_id: string | null
+          id: string
+          match_status: string
+          notes: string | null
+          price_variance: number | null
+          purchase_order_id: string
+          qty_variance: number | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          updated_at: string
+        }
+        Insert: {
+          auto_matched?: boolean | null
+          bill_quickbooks_id?: string | null
+          company_id: string
+          created_at?: string
+          goods_receipt_id?: string | null
+          id?: string
+          match_status?: string
+          notes?: string | null
+          price_variance?: number | null
+          purchase_order_id: string
+          qty_variance?: number | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          updated_at?: string
+        }
+        Update: {
+          auto_matched?: boolean | null
+          bill_quickbooks_id?: string | null
+          company_id?: string
+          created_at?: string
+          goods_receipt_id?: string | null
+          id?: string
+          match_status?: string
+          notes?: string | null
+          price_variance?: number | null
+          purchase_order_id?: string
+          qty_variance?: number | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "three_way_matches_goods_receipt_id_fkey"
+            columns: ["goods_receipt_id"]
+            isOneToOne: false
+            referencedRelation: "goods_receipts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "three_way_matches_purchase_order_id_fkey"
+            columns: ["purchase_order_id"]
+            isOneToOne: false
+            referencedRelation: "purchase_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "three_way_matches_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "three_way_matches_reviewed_by_fkey"
+            columns: ["reviewed_by"]
             isOneToOne: false
             referencedRelation: "profiles_safe"
             referencedColumns: ["id"]
