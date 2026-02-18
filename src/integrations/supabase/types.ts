@@ -6061,6 +6061,104 @@ export type Database = {
         }
         Relationships: []
       }
+      quote_template_items: {
+        Row: {
+          created_at: string
+          description: string
+          id: string
+          is_optional: boolean
+          notes: string | null
+          quantity: number
+          sort_order: number
+          template_id: string
+          unit_price: number
+        }
+        Insert: {
+          created_at?: string
+          description: string
+          id?: string
+          is_optional?: boolean
+          notes?: string | null
+          quantity?: number
+          sort_order?: number
+          template_id: string
+          unit_price?: number
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          id?: string
+          is_optional?: boolean
+          notes?: string | null
+          quantity?: number
+          sort_order?: number
+          template_id?: string
+          unit_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quote_template_items_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "quote_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      quote_templates: {
+        Row: {
+          company_id: string
+          created_at: string
+          created_by: string | null
+          customer_type: string | null
+          default_tax_rate: number
+          default_valid_days: number
+          description: string | null
+          exclusions: string[] | null
+          id: string
+          inclusions: string[] | null
+          is_active: boolean
+          name: string
+          notes: string | null
+          terms: string[] | null
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          customer_type?: string | null
+          default_tax_rate?: number
+          default_valid_days?: number
+          description?: string | null
+          exclusions?: string[] | null
+          id?: string
+          inclusions?: string[] | null
+          is_active?: boolean
+          name: string
+          notes?: string | null
+          terms?: string[] | null
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          customer_type?: string | null
+          default_tax_rate?: number
+          default_valid_days?: number
+          description?: string | null
+          exclusions?: string[] | null
+          id?: string
+          inclusions?: string[] | null
+          is_active?: boolean
+          name?: string
+          notes?: string | null
+          terms?: string[] | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       quotes: {
         Row: {
           company_id: string | null
