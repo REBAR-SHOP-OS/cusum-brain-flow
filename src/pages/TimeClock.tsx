@@ -12,7 +12,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Clock, LogIn, LogOut, ArrowLeft, Timer, ScanFace, Maximize, Users, CalendarDays, Palmtree } from "lucide-react";
+import { Clock, LogIn, LogOut, ArrowLeft, Timer, ScanFace, Maximize, Users, CalendarDays, Palmtree, DollarSign } from "lucide-react";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { format, differenceInMinutes } from "date-fns";
@@ -22,6 +22,7 @@ import { FaceEnrollment } from "@/components/timeclock/FaceEnrollment";
 import { FaceRecognitionResult } from "@/components/timeclock/FaceRecognitionResult";
 import { MyLeaveTab } from "@/components/timeclock/MyLeaveTab";
 import { TeamCalendarTab } from "@/components/timeclock/TeamCalendarTab";
+import { PayrollSummaryTab } from "@/components/timeclock/PayrollSummaryTab";
 
 function getInitials(name: string) {
   return name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
@@ -310,6 +311,9 @@ export default function TimeClock() {
             <TabsTrigger value="team-calendar" className="flex-1 gap-1.5">
               <CalendarDays className="w-3.5 h-3.5" /> Team Calendar
             </TabsTrigger>
+            <TabsTrigger value="payroll" className="flex-1 gap-1.5">
+              <DollarSign className="w-3.5 h-3.5" /> Payroll
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="team-status">
@@ -376,6 +380,14 @@ export default function TimeClock() {
               onReview={leave.reviewRequest}
               currentProfileId={leave.myProfile?.id}
               isAdmin={isAdmin}
+            />
+          </TabsContent>
+
+          <TabsContent value="payroll">
+            <PayrollSummaryTab
+              isAdmin={isAdmin}
+              myProfile={myProfile as any}
+              profiles={profiles as any}
             />
           </TabsContent>
         </Tabs>
