@@ -174,6 +174,7 @@ export default function AccountingWorkspace() {
   webPhoneActionsRef.current = webPhoneActions;
   const webPhoneStatusRef = useRef(webPhoneState.status);
   webPhoneStatusRef.current = webPhoneState.status;
+  const hasLoadedToday = useRef(false);
 
   const updateRefreshTimestamp = useCallback(() => {
     const now = new Date();
@@ -189,20 +190,22 @@ export default function AccountingWorkspace() {
   }, [qb.loadAll, updateRefreshTimestamp]);
 
   useEffect(() => {
-    if (!hasAccess) return;
+    if (!hasAccess || hasLoadedToday.current) return;
 
     const today = new Date().toLocaleDateString("en-CA");
     const lastLoad = localStorage.getItem(QB_LAST_LOAD_KEY);
 
     if (lastLoad !== today) {
       loadAllRef.current();
-      updateRefreshTimestamp();
+      // updateRefreshTimestamp removed — prevents chat refresh coupling
     }
+
+    hasLoadedToday.current = true;
 
     if (webPhoneStatusRef.current === "idle") {
       webPhoneActionsRef.current.initialize();
     }
-  }, [hasAccess, updateRefreshTimestamp]);
+  }, [hasAccess]);
 
   if (rolesLoading) {
     return (
