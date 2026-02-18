@@ -51,7 +51,7 @@ export function ScreenshotFeedbackButton() {
         y: 0,
         scrollX: 0,
         scrollY: 0,
-        backgroundColor: null,
+        backgroundColor: getComputedStyle(document.documentElement).backgroundColor || "#0f172a",
         logging: false,
         allowTaint: true,
         ignoreElements: (el) => {
