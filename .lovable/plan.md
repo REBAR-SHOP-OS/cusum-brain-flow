@@ -1,75 +1,67 @@
 
 
-# Fix: Screenshot on Pipeline - Under 2 Seconds
+# Fix: Screenshot Button - Two Critical Issues
 
-## Root Cause
+## Issue 1: Button Not Clickable When Lead Drawer is Open
 
-The Pipeline page has 2800+ lead cards in the DOM. `html2canvas` clones the **entire** `document.body` and re-renders every single element -- even cards scrolled far off-screen. The 3-second timeout does NOT help because html2canvas blocks the main thread during rendering, so the UI freezes regardless.
+**Root cause**: Radix UI Dialog (used by the Sheet component for lead detail drawer) sets `pointer-events: none` on the `<body>` element when a dialog is open. This blocks the fixed-position camera button from receiving any click/pointer events, even though it's visually on top (z-9999).
 
-## Solution
+**Fix**: Add `pointerEvents: "auto"` to the button's inline style. This overrides the inherited `pointer-events: none` from the body, making the button clickable regardless of whether a Sheet/Dialog is open.
 
-Only one file changes: `src/components/feedback/ScreenshotFeedbackButton.tsx`
+## Issue 2: Still Freezing for 40 Seconds on Pipeline
 
-### The Key Fix: Trim Off-Screen Elements in `onclone`
+**Root cause**: Even with `onclone` trimming, html2canvas still has to:
+1. Clone the entire `document.body` DOM (2800+ elements) BEFORE `onclone` runs
+2. The cloning itself blocks the main thread
+3. The `Promise.race` timeout cannot fire while the main thread is blocked
 
-The `onclone` callback runs on a **cloned copy** of the DOM before html2canvas renders it. We will use this to **remove all elements outside the viewport** from the clone. This means html2canvas only renders the ~50-100 visible elements instead of 2800+.
+**Fix**: Instead of relying on `onclone` alone, change the capture **target** from `document.body` to just the visible main content area. On the Pipeline page, there are portaled elements (the Sheet drawer) that we also want to capture. The solution:
 
-### Changes
+1. Before calling html2canvas, clone only the visible portions manually into a temporary container
+2. Or simpler: keep targeting `document.body` but make the trimming much more aggressive -- remove ALL off-screen elements, not just specific selectors
+3. Most importantly: reduce the timeout to 5 seconds AND add a pre-capture DOM count check -- if DOM has more than 1500 elements, aggressively simplify BEFORE calling html2canvas (not just in onclone)
 
-**1. Aggressive DOM trimming in `onclone`**
-- After cloning, walk through all elements in the cloned DOM
-- Remove any element whose bounding rect (from the original DOM) is fully outside the viewport
-- Target specifically pipeline card elements and other heavy off-screen content
-- This reduces rendering from 2800+ elements to only ~50-100 visible ones
+**Chosen approach**: Keep the current architecture but add a pre-capture step that hides off-screen heavy elements on the LIVE DOM momentarily (via `visibility: hidden; display: none`), captures, then restores them. This is faster than relying on `onclone` because html2canvas won't even clone those hidden elements.
 
-**2. Increase timeout to 5 seconds (safety margin)**
-- The 3-second timeout was too aggressive for even normal pages
-- With DOM trimming, capture should take under 2 seconds, but keep 5s as safety
+## Technical Changes
 
-**3. Skip images on first attempt for Pipeline**
-- On pages with many elements (detected via DOM count), start with `imageTimeout: 0`
-- This avoids waiting for avatar images to load via CORS
+**File: `src/components/feedback/ScreenshotFeedbackButton.tsx`**
 
-### Technical Implementation
+1. Add `pointerEvents: "auto"` to button inline style (line 140)
+2. Before `html2canvas()` call, add pre-capture DOM trimming:
+   - Query all heavy off-screen elements in the LIVE DOM
+   - Set `display: none` on them temporarily
+   - Run html2canvas (now with far fewer elements to clone)
+   - Restore all hidden elements immediately after
+3. This moves the performance optimization BEFORE the blocking clone step
 
 ```text
-File: src/components/feedback/ScreenshotFeedbackButton.tsx
+Changes summary:
 
-In onclone callback:
-1. Collect bounding rects of all elements BEFORE cloning (from live DOM)
-2. In the cloned DOM, find matching elements and remove those fully off-screen
-3. This is safe because it only modifies the clone, not the live page
+Button style (line 140):
+  style={{ left: pos.x, top: pos.y, touchAction: "none", pointerEvents: "auto" }}
 
-Pseudo-code for onclone:
-  onclone: (clonedDoc) => {
-    // Disable animations (existing)
-    ...
-    
-    // Collect all elements and check visibility
-    const allOriginal = document.body.querySelectorAll('*');
-    const vpW = window.innerWidth;
-    const vpH = window.innerHeight;
-    
-    // Build a set of data-attributes marking off-screen elements
-    // Then remove them from the cloned DOM
-    // Key: only remove leaf/heavy elements, keep structural containers
-    
-    // Target: pipeline cards, list items, table rows that are off-screen
-    const clonedAll = clonedDoc.body.querySelectorAll(
-      '[class*="card"], [class*="lead-"], [draggable="true"]'
-    );
-    // For each, check if original counterpart was in viewport
-    // If not, remove from clone
+capture function:
+  // Before html2canvas call:
+  const hiddenEls: HTMLElement[] = [];
+  if (isHeavyPage) {
+    const heavySelectors = '[draggable="true"], [class*="card"], [class*="lead-"], tr, li';
+    document.body.querySelectorAll(heavySelectors).forEach((el) => {
+      const r = el.getBoundingClientRect();
+      if (r.bottom < -50 || r.top > vpH + 50 || r.right < -50 || r.left > vpW + 50) {
+        (el as HTMLElement).style.display = "none";
+        hiddenEls.push(el as HTMLElement);
+      }
+    });
   }
+  
+  // ... html2canvas call ...
+  
+  // After capture (in finally block):
+  hiddenEls.forEach(el => el.style.display = "");
 ```
-
-### Why This Works
-- `html2canvas` speed is proportional to the number of elements it renders
-- 2800 elements takes 40 seconds; 100 elements takes under 1 second
-- The `onclone` approach is safe: it never touches the live DOM
-- The user sees the exact same screenshot (only visible content matters)
 
 ## No Other Changes
 - No database changes
-- No changes to AnnotationOverlay, Pipeline page, or any other file
+- No changes to Sheet component, LeadDetailDrawer, AppLayout, or any other file
 - Only ScreenshotFeedbackButton.tsx is modified
