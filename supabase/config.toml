@@ -267,3 +267,9 @@ verify_jwt = false
 
 [functions.autopilot-engine]
 verify_jwt = false
+
+[functions.alert-router]
+verify_jwt = false
+
+[functions.check-escalations]
+verify_jwt = false
