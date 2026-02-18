@@ -1,72 +1,116 @@
 
-# Fix: Show Actual Bank Balance from Bank Feed (Not Just Posted Balance)
 
-## Problem
-The Chart of Accounts page has a "Bank Balance" column that always shows "---" for bank accounts. The user can see the posted/book balance (CurrentBalance from QuickBooks) but NOT the actual bank feed balance. In QuickBooks, bank accounts show both values (e.g., "Bank: $24,955.74" and "Posted: $32,035").
+# Pipeline: AI-Driven + Manual Dual-Mode
 
-## Root Cause
-The edge function `handleListAccounts` queries `SELECT * FROM Account` which returns `CurrentBalance` (the book balance) but does NOT include bank feed balances. The bank feed balance requires reading the QuickBooks `CompanyInfo` resource or individual account reads -- the standard bulk Account query does not include it.
+## What You Get
 
-QuickBooks Online does NOT expose the bank feed balance through the standard Account query API. The `BankBalance` field that the frontend tries to read from the response simply does not exist in the API response.
+A new **AI Autopilot toggle** on the Pipeline page that lets you switch between:
 
-## Solution
+- **Manual Mode** (current behavior): You drag leads, send emails, change stages yourself
+- **AI Mode**: Blitz (or Gauge) automatically scores leads, recommends stage moves, queues follow-up emails, and flags stale leads -- all with your approval before execution
 
-### Part 1: Edge Function -- New "get-bank-balances" Action
-**File: `supabase/functions/quickbooks-oauth/index.ts`**
+## How It Works
 
-Add a new handler `handleGetBankBalances` that:
-1. First queries all Bank-type accounts to get their IDs: `SELECT Id, Name FROM Account WHERE AccountType = 'Bank'`
-2. Then reads each bank account individually via `GET /v3/company/{realmId}/account/{id}` -- individual reads sometimes return additional metadata
-3. If individual reads don't include bank feed balance (which is likely), fall back to a practical approach: store the bank balance in a new `bank_feed_balances` table that can be manually updated or synced from a bank feed integration
+### 1. Pipeline Mode Toggle (Header)
 
-### Part 2: Practical Approach -- Manual Bank Balance Entry
-Since the QuickBooks API does not expose live bank feed balances through its public API, the most reliable solution is:
+Add a toggle switch in the Pipeline header bar (next to the "New" button):
 
-**New database table: `bank_feed_balances`**
-```sql
-CREATE TABLE public.bank_feed_balances (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  account_id TEXT NOT NULL,           -- QB Account ID
-  account_name TEXT NOT NULL,
-  bank_balance NUMERIC NOT NULL,
-  last_updated TIMESTAMPTZ DEFAULT now(),
-  updated_by UUID REFERENCES auth.users(id),
-  company_id UUID NOT NULL
-);
+```
+[Manual] [AI Autopilot]
 ```
 
-**UI Changes in `AccountingAccounts.tsx`:**
-- Fetch `bank_feed_balances` on mount
-- Match by `account_id` to populate the "Bank Balance" column
-- Add a small edit (pencil) icon next to each Bank-type account's balance that opens an inline editor to manually set the bank feed balance
-- Show the last-updated timestamp as a tooltip so the user knows how fresh the data is
+- Default: Manual (current behavior, nothing changes)
+- When AI Autopilot is ON: a persistent sidebar panel appears showing AI-queued actions
+- Mode preference saved to `localStorage` so it persists between sessions
 
-**Visual change on bank account rows:**
-```
-Before:  QuickBooks Balance: $32,035.00  |  Bank Balance: ---
-After:   QB Balance: $32,035.00  |  Bank Balance: $24,955.74 (pencil icon) 
-                                     Updated: 2 hours ago
-```
+### 2. New Database Table: `pipeline_ai_actions`
 
-### Part 3: Dashboard Bank Summary Card
-Add or update the bank summary on the Accounting Dashboard to show both values side by side for each bank account, with a clear label distinguishing "Book Balance" vs "Bank Balance" and a visual indicator if they differ (yellow warning icon when there's a discrepancy).
+Stores AI-generated action items that await human approval (like Penny's collection queue pattern):
 
-## What Changes
+| Column | Type | Purpose |
+|--------|------|---------|
+| id | UUID | Primary key |
+| lead_id | UUID FK | Which lead |
+| action_type | TEXT | `move_stage`, `send_followup`, `set_reminder`, `flag_stale`, `score_update` |
+| status | TEXT | `pending`, `approved`, `executed`, `dismissed` |
+| priority | TEXT | `critical`, `high`, `medium`, `low` |
+| ai_reasoning | TEXT | Why the AI suggests this |
+| suggested_data | JSONB | Stage name, email draft, score, etc. |
+| company_id | UUID | RLS scoping |
+| created_by | UUID | User who triggered the scan |
+| created_at / updated_at | TIMESTAMPTZ | Timestamps |
+
+RLS: company-scoped read/write for authenticated users.
+
+### 3. AI Autopilot Panel (Right Sidebar)
+
+When AI mode is ON, a collapsible right panel shows:
+
+- **Pending Actions** count badge on the toggle
+- Each action card shows: Lead name, action type icon, AI reasoning, and Approve/Dismiss buttons
+- Action types with icons:
+  - **Move Stage** (ArrowRight): "Move 'ABC Corp' from Estimation to Qualified — no activity in 12 days, estimation complete"
+  - **Send Follow-up** (Mail): Shows draft email preview, Edit + Approve
+  - **Score Update** (BarChart3): "Score dropped from 72 to 45 — no response in 14 days"
+  - **Flag Stale** (AlertTriangle): "Lead inactive 10+ days, recommend follow-up or archive"
+  - **Set Reminder** (Calendar): "Schedule call for Thursday — last contact was 7 days ago"
+- Bulk actions: "Approve All", "Dismiss All"
+
+### 4. AI Scan Trigger
+
+- **Manual trigger**: "Scan Now" button in the AI panel header (like Penny's pattern)
+- **Auto-scan**: When AI mode is ON and pipeline loads, auto-scan runs once (debounced, max once per 30 minutes per user)
+- Scan calls the existing `pipeline-ai` edge function with a new `action: "autopilot_scan"` that:
+  1. Analyzes all leads for staleness, stage mismatches, missing follow-ups
+  2. Returns structured action items via tool calling
+  3. Frontend inserts them into `pipeline_ai_actions` table
+
+### 5. Action Execution
+
+When user approves an action:
+- **move_stage**: Calls existing `updateStageMutation` to move the lead
+- **send_followup**: Calls existing email-sending flow (or queues for manual send)
+- **score_update**: Updates lead metadata with new AI score
+- **set_reminder**: Creates a task via `CreateTaskDialog` pattern
+- **flag_stale**: Adds a visual badge on the lead card + creates notification
+
+### 6. Visual Indicators on Lead Cards (AI Mode Only)
+
+When AI Autopilot is ON, lead cards get subtle indicators:
+- Small colored dot (orange = AI action pending, green = recently actioned)
+- Tooltip showing the pending AI suggestion
+
+### 7. Edge Function Update (`pipeline-ai`)
+
+Add a new `autopilot_scan` action handler that:
+- Takes the full pipeline stats (already built by `buildPipelineStats`)
+- Returns structured array of suggested actions via tool calling
+- Each action includes: `lead_id`, `action_type`, `priority`, `reasoning`, `suggested_data`
+
+## Files Changed
 
 | File | Change |
 |------|--------|
-| Database migration | Create `bank_feed_balances` table with RLS policies |
-| `src/components/accounting/AccountingAccounts.tsx` | Fetch bank balances from new table, show in column, add inline edit |
-| `src/components/accounting/AccountingDashboard.tsx` | Show bank vs book discrepancy in bank summary card |
+| **Database migration** | Create `pipeline_ai_actions` table + RLS |
+| `src/pages/Pipeline.tsx` | Add mode toggle, AI panel trigger, pass mode to board |
+| `src/components/pipeline/PipelineAIActions.tsx` | **NEW** -- AI actions sidebar panel |
+| `src/hooks/usePipelineAI.ts` | **NEW** -- Hook for fetching/approving/dismissing AI actions |
+| `supabase/functions/pipeline-ai/index.ts` | Add `autopilot_scan` action handler |
+| `src/components/pipeline/LeadCard.tsx` | Add AI action pending indicator dot |
 
 ## What Does NOT Change
-- The `useQuickBooksData` hook -- untouched
-- The QuickBooks edge function Account queries -- untouched
-- All other accounting modules -- untouched
-- Invoice, bill, payment flows -- untouched
+
+- Manual drag-and-drop behavior -- fully preserved
+- Existing Blitz/Gauge AI Sheet -- untouched (complementary feature)
+- Lead form, detail drawer, filters, search -- all untouched
+- Odoo sync, RFQ scan -- untouched
+- All other modules -- untouched
 
 ## Guards
-- RLS policy on `bank_feed_balances`: company-scoped access only
-- Inline edit has debounced save (no rapid-fire DB writes)
-- Tooltip shows staleness of bank balance data
-- If no manual balance is entered, column still shows "---" (no fake data)
+
+- AI actions always require human approval before execution (no auto-execute)
+- Scan rate-limited: max once per 30 minutes per user via `localStorage` timestamp
+- Dismissed actions don't resurface for 7 days (stored in `suggested_data.dismissed_until`)
+- AI mode toggle is admin-only by default (configurable)
+- Table has validation trigger for status and action_type fields
+
