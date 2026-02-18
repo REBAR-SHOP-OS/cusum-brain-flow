@@ -1,91 +1,48 @@
 
-# Upgrade Backup & Restore -- Download, Delete, Import, Logs
 
-## Current State
-- Backup icon already exists in TopBar (admin-only) -- NO CHANGE needed there
-- BackupModal has: Run Backup, Refresh, Restore -- but is MISSING: Download, Delete, Import, Logs
-- Edge function supports: `run`, `restore`, `list` -- needs: `download`, `delete`, `import`, `logs`
-- `backup_restore_logs` table exists but no UI shows it
-- `system-backups` storage bucket exists (private)
-- Auto backup cron already configured (every 12 hours)
+# Add "Auto Fix" Button to Task Detail Drawer
 
-## What Will Be Added
+## What This Does
+Adds a working "Auto Fix with ARIA" button in the task detail drawer (next to "Mark Complete" and "Delete"). When clicked, it navigates to the Architect agent (`/empire`) with the task's context pre-loaded, triggering ARIA's automated fix pipeline.
 
-### 1. Edge Function: 4 New Actions
-**File: `supabase/functions/system-backup/index.ts`**
+## How It Works
 
-- **`download`** -- Generate a signed URL (60-minute expiry) for the backup file in storage. Returns `{ url: "..." }`.
-- **`delete`** -- Requires `confirm: "DELETE"`. Deletes the file from storage AND the record from `system_backups`. Logs to `backup_restore_logs`.
-- **`import`** -- Accepts base64-encoded backup JSON. Validates structure, stores in storage bucket, creates a `system_backups` record with `backup_type: "imported"`. Logs to `backup_restore_logs`.
-- **`logs`** -- Returns last 20 entries from `backup_restore_logs` ordered by `created_at desc`.
+The system already has this exact pipeline built:
+1. `SmartErrorBoundary` already redirects to `/empire?autofix=...&task_id=...`
+2. `EmpireBuilder.tsx` already picks up those query params and auto-sends a fix request to the AI agent
+3. The AI agent already has tools to read tasks, apply fixes, and resolve tasks
 
-### 2. Frontend Hook: New Mutations + Logs Query
-**File: `src/hooks/useBackups.ts`**
+The only missing piece is the button in the task drawer.
 
-- `useDownloadBackup()` -- calls `action: "download"`, opens signed URL in new tab
-- `useDeleteBackup()` -- calls `action: "delete"` with `confirm: "DELETE"`
-- `useImportBackup()` -- reads uploaded file, sends base64 to `action: "import"`
-- `useBackupLogs()` -- calls `action: "logs"`, returns recent audit entries
-- Update `SystemBackup.backup_type` to include `"imported"`
+## Changes
 
-### 3. BackupModal UI Enhancements
-**File: `src/components/backup/BackupModal.tsx`**
+### File: `src/pages/Tasks.tsx`
 
-**Actions row additions:**
-- "Import Backup" button next to "Run Backup Now"
+1. **Add import**: Import `Sparkles` icon from `lucide-react` and `useNavigate` from `react-router-dom`
 
-**Table Actions column:**
-- For each successful backup: **Restore** | **Download** | **Delete** buttons
-- Download: immediate signed-URL download
-- Delete: opens confirmation dialog requiring user to type `DELETE`
+2. **Add "Auto Fix" button** in the Actions section (line ~600), between "Mark Complete" and "Delete":
+   - Orange gradient button with Sparkles icon, labeled "Auto Fix"
+   - On click: navigates to `/empire?autofix=<encoded task description>&task_id=<task id>`
+   - This triggers the existing autofix flow in EmpireBuilder
 
-**New section at bottom of modal:**
-- "Recent Logs" collapsible section showing last 20 audit entries (action, user, time, result)
-- Columns: Action, User, Date, Result
-
-**Delete confirmation dialog:**
-- Similar to Restore dialog but with `DELETE` confirmation text
-- Warning: "This will permanently remove this backup file."
-
-## Files Modified (ONLY these)
-
-| File | Change |
-|------|--------|
-| `supabase/functions/system-backup/index.ts` | Add `download`, `delete`, `import`, `logs` actions |
-| `src/hooks/useBackups.ts` | Add 4 new hooks + logs query |
-| `src/components/backup/BackupModal.tsx` | Add Download/Delete/Import buttons + Delete dialog + Logs section |
+3. **Button logic**:
+   - Constructs an error/problem description from the task title + description
+   - URL-encodes it and navigates to the Architect agent
+   - The Architect agent automatically picks it up, reads the task, attempts fixes using its write tools, and marks the task resolved
 
 ## No Changes To
-- TopBar (already has backup icon, admin-only)
-- Database schema (tables already exist)
-- Storage bucket (already exists)
-- Cron schedule (already running every 12h)
-- Any other component, page, route, or logic in the app
+- EmpireBuilder page (already handles autofix params)
+- SmartErrorBoundary (unchanged)
+- Database schema, RLS, or any other component
+- Any styling or layout outside the task drawer actions row
 
-## Technical Details
+## Technical Detail
 
-### Download Flow
-1. User clicks Download on a backup row
-2. Frontend calls edge function with `{ action: "download", backup_id: "..." }`
-3. Edge function generates signed URL via `serviceClient.storage.from("system-backups").createSignedUrl(filePath, 3600)`
-4. Frontend opens URL in new tab (browser downloads the JSON file)
+The button click handler:
+```
+const desc = `${selectedTask.title}\n\n${selectedTask.description || ""}`;
+const payload = encodeURIComponent(desc.slice(0, 500));
+navigate(`/empire?autofix=${payload}&task_id=${selectedTask.id}`);
+```
 
-### Delete Flow
-1. User clicks Delete on a backup row
-2. Confirmation dialog opens: "Type DELETE to permanently remove this backup"
-3. Edge function deletes file from storage: `serviceClient.storage.from("system-backups").remove([filePath])`
-4. Deletes record from `system_backups` table
-5. Logs action to `backup_restore_logs`
-
-### Import Flow
-1. User clicks "Import Backup"
-2. File picker opens (accepts .json)
-3. File is read as text, validated (must have `version` and `tables` keys)
-4. Sent to edge function as `{ action: "import", data: <json_string> }`
-5. Edge function stores file in storage bucket, creates `system_backups` record with `backup_type: "imported"`
-6. Appears in backup list, can be restored or downloaded
-
-### Logs Section
-- Collapsible "Recent Logs" at the bottom of the modal
-- Shows last 20 log entries from `backup_restore_logs`
-- Columns: Action (backup/restore/delete/download/import), User, Date, Result (success/failed)
+This reuses the exact same query-param contract that `SmartErrorBoundary` already uses, ensuring the Architect agent processes it identically.
