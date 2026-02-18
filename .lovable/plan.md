@@ -1,51 +1,89 @@
 
-
-# Improve Auto Fix: Real Problem Resolution + Success Feedback
+# Make Architect Agent Actually Fix Problems (Database Diagnostic Tools)
 
 ## Problem
-When "Auto Fix" is triggered from Tasks, the Architect agent says "I cannot fix it directly, I will create a fix request" instead of actually attempting to fix or asking clarifying questions. Also, there's no visual success confirmation (green badge) when a fix is completed.
+When the Architect receives a bug like "failed to open DM", it says "I cannot directly modify client-side code." But most of these bugs are NOT code bugs -- they are **database-level issues** (RLS policy violations, missing tables/columns, broken permissions). The agent has no tool to investigate or fix these.
 
-## Root Causes
-1. The agent's system prompt tells it to use "ERP/WP/Odoo write tools" but many tasks (like client-side bugs) don't have matching write tools -- the agent gives up and creates a fix request
-2. The autofix trigger message doesn't instruct the agent to ask the user questions when it can't auto-fix
-3. No visual feedback in the chat when `resolve_task` succeeds
+## Root Cause Analysis
+The "failed to open DM" error specifically is caused by an RLS policy violation when inserting into `team_channels` or `team_channel_members`. The agent has tools for machines, deliveries, WordPress, Odoo -- but NO tool to:
+- Query database tables to understand the structure
+- Check RLS policies to find permission issues
+- Run safe SQL fixes (like adjusting policies or inserting missing data)
 
-## Changes (3 files only)
+## Solution: Add 2 New Tools to the Architect Agent
 
-### 1. Edge Function: Stronger Autofix Instructions
-**File: `supabase/functions/ai-agent/index.ts`**
+### 1. `db_read_query` Tool (Read-Only Database Inspector)
+Allows the agent to run SELECT queries to investigate issues:
+- Check RLS policies: `SELECT * FROM pg_policies WHERE tablename = 'team_channels'`
+- Check table structure: `SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'team_channels'`
+- Check data state: `SELECT * FROM team_channel_members WHERE profile_id = '...'`
+- Find missing records that cause errors
 
-Update the CRITICAL Autofix Behavior section (~line 2397) to add a clear fallback protocol:
+**Safety**: Only SELECT statements allowed. INSERT/UPDATE/DELETE blocked.
 
-- When the agent has write tools that match the problem: use them directly
-- When it CANNOT fix automatically (e.g., code bugs, UI issues): it MUST ask the user clarifying questions and provide step-by-step actionable instructions -- NOT just create a fix request
-- Only create a fix request as absolute last resort after exhausting questions
-- When `resolve_task` succeeds, the agent must include a `[FIX_CONFIRMED]` marker in its response
+### 2. `db_write_fix` Tool (Safe Database Fixer)
+Allows the agent to run approved SQL fixes:
+- Fix RLS policies that block legitimate operations
+- Insert missing records (e.g., missing profile links)
+- Update broken data states
 
-### 2. Frontend: Autofix Trigger Message Enhancement
-**File: `src/pages/EmpireBuilder.tsx`**
+**Safety**: 
+- Requires `confirm: true` parameter (same pattern as `odoo_write`)
+- Blocked patterns: `DROP TABLE`, `DROP DATABASE`, `TRUNCATE`, `ALTER TABLE ... DROP`
+- All executions logged to `activity_events` with source = "architect_db_fix"
 
-Update the autofix message (~line 172) to be more explicit:
+### 3. Update System Prompt
+Add to the Architect's autofix behavior:
+- "When you receive a client-side error, FIRST use `db_read_query` to investigate the database (check RLS policies, table structure, data state)"
+- "If the root cause is a database issue, use `db_write_fix` to apply the fix"
+- "If it's truly a code-only issue, provide a precise Lovable fix prompt with file paths and exact changes"
 
-```
-"If you CANNOT fix it with your tools, do NOT create a fix request.
-Instead: (1) Ask the user clarifying questions, (2) Provide specific
-actionable steps the user can follow, (3) Only use resolve_task when
-the problem is actually fixed."
-```
+## Files Modified
 
-### 3. Frontend: Green Success Confirmation in Chat
-**File: `src/pages/EmpireBuilder.tsx`**
-
-In the message rendering section, detect `[FIX_CONFIRMED]` in agent responses and display a green success banner:
-
-- Green gradient card with checkmark icon
-- Text: "Fix completed successfully"
-- Strip the marker from the displayed text
-- This gives clear visual confirmation that the fix was applied
+| File | Change |
+|------|--------|
+| `supabase/functions/ai-agent/index.ts` | Add `db_read_query` and `db_write_fix` tool definitions + handlers + update system prompt |
 
 ## No Changes To
-- Tasks page (Auto Fix button is already working correctly)
-- Database schema, RLS, or any other component
-- Any other agent or edge function
+- Any frontend file
+- Database schema
+- Any other edge function
+- WordPress/Odoo integrations
 
+## Technical Details
+
+### db_read_query Tool Definition
+```
+name: "db_read_query"
+parameters: { query: string }
+```
+Handler: Uses `svcClient.rpc` or raw SQL via service client. Validates query starts with SELECT/WITH. Returns up to 50 rows.
+
+### db_write_fix Tool Definition
+```
+name: "db_write_fix"
+parameters: { query: string, reason: string, confirm: boolean }
+```
+Handler: Validates no destructive patterns. Requires `confirm: true`. Logs to `activity_events`. Executes via service role client.
+
+### System Prompt Addition (Autofix section)
+```
+When you receive a bug report about a client-side error:
+1. Use `db_read_query` to check RLS policies: SELECT * FROM pg_policies WHERE tablename = '<table>'
+2. Use `db_read_query` to check the actual data state
+3. If the issue is an RLS policy or data problem, use `db_write_fix` to apply the fix
+4. If the issue is purely frontend code, generate a precise Lovable fix prompt with:
+   - Problem description
+   - Root cause
+   - File path(s)
+   - Exact code changes needed
+   - Test criteria
+```
+
+## How This Fixes the "Failed to Open DM" Example
+1. Agent receives the autofix request
+2. Runs `db_read_query`: `SELECT * FROM pg_policies WHERE tablename = 'team_channels'`
+3. Discovers the INSERT policy is too restrictive (e.g., missing company_id check)
+4. Runs `db_write_fix`: `CREATE POLICY ... ON team_channels FOR INSERT ...` with `confirm: true`
+5. Calls `resolve_task` with resolution note
+6. Green banner appears with [FIX_CONFIRMED]
