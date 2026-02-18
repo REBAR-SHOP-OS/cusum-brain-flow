@@ -1,96 +1,97 @@
 
+# Fix: Why ARIA Still Can't Fix Database Issues
 
-# Audit and Fix: Architect Agent Multi-Turn Tool Loop
+## Root Cause
 
-## Problem Found
+The `execute_readonly_query` database function is **fundamentally broken**. It uses:
 
-The Architect agent says "I couldn't process that request" because of a critical code duplication gap in the multi-turn tool loop.
+```sql
+EXECUTE sql_query INTO result;
+RETURN result;
+```
 
-The edge function has TWO sections that handle tool calls:
-1. **First-pass handlers** (lines 8088-8191) -- handles `db_read_query` and `db_write_fix` correctly
-2. **Multi-turn loop handlers** (lines 8315-8503) -- these tools are MISSING here
+The `INTO result` clause expects a **single jsonb value**, but normal SELECT queries (like `SELECT * FROM pg_policies WHERE tablename = 'team_channels'`) return **row sets**, not a single jsonb scalar. Result: the function returns `NULL` for every query the agent runs. The agent gets empty data, can't diagnose anything, and falls back to "I couldn't process that request."
 
-When the agent receives an autofix task, it typically:
-- Turn 1: calls `read_task` (works -- handled in both sections)
-- Turn 2: calls `db_read_query` (FAILS -- not in multi-turn loop, gets generic `{success: true, message: "Processed"}` with no data)
-- Turn 3: model gets confused by empty result, gives up
+## Solution (Surgical — 1 migration only)
 
-This is why you see "Okay, I'm on it..." followed by "I couldn't process that request."
+Replace `execute_readonly_query` with a function that properly wraps multi-row results into a jsonb array using `row_to_json` + `json_agg`. No edge function changes needed — the callers already handle jsonb output correctly.
 
-## Additional Issues Found
+Also fix `execute_write_fix` to return affected row count for better agent feedback.
 
-1. **False-positive write detection**: The regex that blocks write keywords in `db_read_query` can reject legitimate queries like `SELECT * FROM pg_policies` because the `pg_policies` view contains column names like `cmd` with values `INSERT`/`UPDATE` in the query text context.
+### What Changes
 
-2. **Missing tools in handledNames**: `db_read_query`, `db_write_fix`, `odoo_write`, `wp_update_product`, `diagnose_from_screenshot`, `generate_patch`, `validate_code` are not in the `handledNames` array, causing them to receive duplicate generic results.
+| Target | Change |
+|--------|--------|
+| SQL Migration | Replace `execute_readonly_query` to return proper row-set results as jsonb array |
+| SQL Migration | Improve `execute_write_fix` to return row count on success |
 
-## Solution (Surgical)
+### What Does NOT Change
 
-### File: `supabase/functions/ai-agent/index.ts`
-
-**Change 1**: Add `db_read_query` and `db_write_fix` handlers inside the multi-turn loop (after `list_fix_tickets` handler, before the `handledNames` check). These will be exact copies of the first-pass handlers.
-
-**Change 2**: Add all missing tool names to the `handledNames` array at line 8500 to prevent duplicate generic results.
-
-**Change 3**: Fix the `dangerousWrite` regex guard to only flag queries that CONTAIN actual write statements (not just mention write keywords in string literals or column references). Change the check to exclude the query from the `SELECT` clause and only test the top-level statement structure.
-
-## What This Fixes
-
-- Agent will successfully execute `db_read_query` in turns 2-5 of the multi-turn loop
-- Agent will successfully execute `db_write_fix` in turns 2-5
-- No more "I couldn't process that request" for autofix tasks that need database investigation
-- Legitimate `pg_policies` inspection queries won't be falsely blocked
-
-## What This Does NOT Touch
-
+- No edge function changes (callers already handle jsonb)
 - No UI changes
-- No database changes
-- No changes to any other agent or module
-- First-pass handlers remain unchanged
-- All existing tool handlers preserved
+- No other modules touched
+- All existing guards, throttling, and safety checks preserved
 
 ## Technical Details
 
-### Multi-turn loop additions (inside `for (const tc of newToolCalls)` block):
+### Fixed `execute_readonly_query`
 
-```typescript
-// db_read_query (multi-turn)
-if (tc.function?.name === "db_read_query") {
-  // Exact same handler as first-pass (lines 8089-8134)
-}
+```sql
+CREATE OR REPLACE FUNCTION public.execute_readonly_query(sql_query text)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+DECLARE
+  result jsonb;
+BEGIN
+  -- Wrap the user query to aggregate all rows into a jsonb array
+  EXECUTE format(
+    'SELECT COALESCE(jsonb_agg(row_to_json(t)), ''[]''::jsonb) FROM (%s) t',
+    sql_query
+  ) INTO result;
+  RETURN result;
+END;
+$$;
 
-// db_write_fix (multi-turn)  
-if (tc.function?.name === "db_write_fix") {
-  // Exact same handler as first-pass (lines 8138-8191)
-}
+-- Keep restricted to service_role only
+REVOKE ALL ON FUNCTION public.execute_readonly_query(text) FROM public, anon, authenticated;
 ```
 
-### Updated handledNames:
+This wraps any SELECT into `jsonb_agg(row_to_json(...))`, so the result is always a jsonb array (e.g., `[{"tablename":"team_channels","policyname":"...","cmd":"SELECT",...}, ...]`). The agent gets real data instead of NULL.
 
-```typescript
-const handledNames = [
-  "send_email", "read_task", "resolve_task",
-  "update_machine_status", "update_delivery_status",
-  "update_lead_status", "update_cut_plan_status",
-  "create_event", "create_notifications",
-  "create_fix_ticket", "update_fix_ticket", "list_fix_tickets",
-  "db_read_query", "db_write_fix",
-  "odoo_write", "wp_update_product", "wp_list_posts", "wp_create_post",
-  "diagnose_from_screenshot", "generate_patch", "validate_code",
-];
+### Fixed `execute_write_fix`
+
+```sql
+CREATE OR REPLACE FUNCTION public.execute_write_fix(sql_query text)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+DECLARE
+  affected_rows integer;
+BEGIN
+  EXECUTE sql_query;
+  GET DIAGNOSTICS affected_rows = ROW_COUNT;
+  RETURN jsonb_build_object('success', true, 'affected_rows', affected_rows);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.execute_write_fix(text) FROM public, anon, authenticated;
 ```
 
-### Fixed dangerousWrite guard:
+### Why This Fixes ARIA
 
-```typescript
-// Only block if the TOP-LEVEL statement is a write operation
-// Don't flag SELECT queries that merely reference write keywords in filters/strings
-const upperQuery = query.toUpperCase().replace(/\/\*[\s\S]*?\*\//g, "").replace(/--[^\n]*/g, "").trim();
-if (!upperQuery.startsWith("SELECT") && !upperQuery.startsWith("WITH")) {
-  // Already blocked above
-} 
-// For SELECT/WITH queries, only block if there's a semicolon followed by a write statement
-const hasMultiStatement = /;\s*(INSERT|UPDATE|DELETE|DROP|TRUNCATE|ALTER|CREATE|GRANT|REVOKE)\b/i.test(query);
-if (hasMultiStatement) {
-  seoToolResults.push({ id: tc.id, name: "db_read_query", result: { error: "Multi-statement write detected." } });
-}
-```
+1. Agent calls `db_read_query` with `SELECT * FROM pg_policies WHERE tablename = 'team_channels'`
+2. Edge function calls `execute_readonly_query` RPC
+3. Function now returns `[{"tablename":"team_channels","policyname":"...","cmd":"SELECT","qual":"..."}]` instead of `NULL`
+4. Agent sees actual RLS policies, diagnoses the issue, and applies the fix using `db_write_fix`
+5. `db_write_fix` returns `{"success": true, "affected_rows": 1}` instead of just `{"success": true}`
+
+### Guards Preserved
+
+- SECURITY DEFINER with `SET search_path TO 'public'` (prevents search_path hijacking)
+- REVOKE from public/anon/authenticated (only service_role can call)
+- All existing edge function guards unchanged (multi-statement injection check, destructive pattern block, confirm flag requirement)
