@@ -1,5 +1,4 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -16,9 +15,7 @@ import {
   ChevronRight,
   Circle,
   X,
-  Headphones,
 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import type { TeamChannel } from "@/hooks/useTeamChat";
 import type { Profile } from "@/hooks/useProfiles";
 
@@ -49,28 +46,10 @@ function getAvatarColor(name: string) {
 }
 
 export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, profiles, onCreateChannel, onClickMember, onClose }: ChannelSidebarProps) {
-  const navigate = useNavigate();
   const [channelsOpen, setChannelsOpen] = useState(true);
   const [dmsOpen, setDmsOpen] = useState(true);
   const [membersOpen, setMembersOpen] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [openSupportCount, setOpenSupportCount] = useState(0);
-
-  useEffect(() => {
-    const fetchCount = async () => {
-      const { count } = await supabase
-        .from("support_conversations")
-        .select("*", { count: "exact", head: true })
-        .in("status", ["open", "assigned", "pending"]);
-      setOpenSupportCount(count ?? 0);
-    };
-    fetchCount();
-    const channel = supabase
-      .channel("support-count")
-      .on("postgres_changes", { event: "*", schema: "public", table: "support_conversations" }, () => fetchCount())
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, []);
 
   const groupChannels = channels.filter((c) => c.channel_type === "group");
   const dmChannels = channels.filter((c) => c.channel_type === "dm");
@@ -187,26 +166,11 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
                 {dmsOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
                 Direct Messages
                 <Badge variant="secondary" className="ml-auto text-[9px] px-1 py-0 h-4">
-                  {dmChannels.length + 1}
+                  {dmChannels.length}
                 </Badge>
               </button>
               {dmsOpen && (
                 <div className="space-y-0.5 mb-3">
-                  {/* SUPPORT entry */}
-                  <button
-                    onClick={() => { navigate("/support-inbox"); onClose?.(); }}
-                    className="w-full flex items-center gap-2 px-2.5 py-2 md:py-1.5 text-sm rounded-lg transition-all hover:bg-muted/50 group"
-                  >
-                    <div className="w-5 h-5 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shrink-0">
-                      <Headphones className="w-3 h-3 text-white" />
-                    </div>
-                    <span className="font-bold text-foreground tracking-wide">SUPPORT</span>
-                    {openSupportCount > 0 && (
-                      <Badge className="ml-auto bg-orange-500 text-white border-transparent text-[9px] px-1.5 py-0 h-4">
-                        {openSupportCount}
-                      </Badge>
-                    )}
-                  </button>
                   {dmChannels.map((ch) => (
                     <button
                       key={ch.id}
