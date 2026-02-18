@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import {
-  CheckSquare, Plus, RefreshCw, Copy, Check, Maximize2, Minus,
+  CheckSquare, Plus, RefreshCw, Copy, Check, Maximize2, Minus, Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -133,6 +134,7 @@ function linkifyText(text: string | null) {
 
 // ─── Component ──────────────────────────────────────────
 export default function Tasks() {
+  const navigate = useNavigate();
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [employees, setEmployees] = useState<EmployeeProfile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -600,6 +602,18 @@ export default function Tasks() {
               <div className="flex gap-2">
                 <Button size="sm" variant={selectedTask.status === "completed" ? "outline" : "default"} onClick={() => toggleComplete(selectedTask)} className="flex-1">
                   {selectedTask.status === "completed" ? "Mark Incomplete" : "Mark Complete"}
+                </Button>
+                <Button
+                  size="sm"
+                  className="bg-gradient-to-r from-orange-500 to-red-500 text-white hover:opacity-90"
+                  onClick={() => {
+                    const desc = `${selectedTask.title}\n\n${selectedTask.description || ""}`;
+                    const payload = encodeURIComponent(desc.slice(0, 500));
+                    navigate(`/empire?autofix=${payload}&task_id=${selectedTask.id}`);
+                  }}
+                >
+                  <Sparkles className="w-4 h-4" />
+                  Auto Fix
                 </Button>
                 <Button size="sm" variant="destructive" onClick={() => { if (window.confirm("Delete this task?")) { supabase.from("tasks").delete().eq("id", selectedTask.id).then(({ error }) => { if (error) toast.error(error.message); else { toast.success("Task deleted"); setDrawerOpen(false); loadData(); } }); } }}>Delete</Button>
               </div>
