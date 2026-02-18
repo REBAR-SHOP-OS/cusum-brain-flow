@@ -10,7 +10,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useProjectTasks, TASK_STATUSES, TaskStatus } from "@/hooks/useProjectTasks";
-import { Plus, ChevronRight, Calendar, Flag, Loader2, Target, LayoutGrid, BarChart3, Search } from "lucide-react";
+import { Plus, ChevronRight, Calendar, Flag, Loader2, Target, LayoutGrid, BarChart3, Search, Clock } from "lucide-react";
+import { ProjectTimeline } from "./ProjectTimeline";
 import { format, differenceInDays, startOfDay, addDays, parseISO, isAfter, isBefore } from "date-fns";
 
 const PRIORITY_COLORS: Record<string, string> = {
@@ -245,6 +246,7 @@ export function ProjectManagement() {
           <TabsTrigger value="kanban" className="gap-1"><LayoutGrid className="w-3.5 h-3.5" /> Kanban</TabsTrigger>
           <TabsTrigger value="gantt" className="gap-1"><BarChart3 className="w-3.5 h-3.5" /> Gantt</TabsTrigger>
           <TabsTrigger value="milestones" className="gap-1"><Target className="w-3.5 h-3.5" /> Milestones ({filteredMilestones.length})</TabsTrigger>
+          <TabsTrigger value="timeline" className="gap-1"><Clock className="w-3.5 h-3.5" /> Timeline</TabsTrigger>
         </TabsList>
 
         <TabsContent value="kanban" className="mt-3">
@@ -296,6 +298,14 @@ export function ProjectManagement() {
             ))}
             {filteredMilestones.length === 0 && <p className="text-sm text-muted-foreground text-center py-10">No milestones yet.</p>}
           </div>
+        </TabsContent>
+
+        <TabsContent value="timeline" className="mt-3">
+          <Card>
+            <CardContent className="p-4">
+              <ProjectTimeline projectId={filterProject !== "all" ? filterProject : undefined} />
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

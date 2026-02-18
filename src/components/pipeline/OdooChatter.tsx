@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Textarea } from "@/components/ui/textarea";
@@ -50,6 +50,47 @@ export function OdooChatter({ lead }: OdooChatterProps) {
   const [activityDate, setActivityDate] = useState(() => format(new Date(), "yyyy-MM-dd"));
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingFile, setUploadingFile] = useState(false);
+
+  const ALLOWED_TYPES = ["image/", "application/pdf", "application/msword", "application/vnd.openxmlformats", "application/vnd.ms-excel", "text/csv"];
+  const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
+
+  const handleFileAttach = async (file: File) => {
+    if (uploadingFile) return; // throttle
+    if (file.size > MAX_FILE_SIZE) {
+      toast({ title: "File too large", description: "Maximum file size is 20MB", variant: "destructive" });
+      return;
+    }
+    if (!ALLOWED_TYPES.some(t => file.type.startsWith(t))) {
+      toast({ title: "Unsupported file type", description: "Please attach images, PDFs, or documents", variant: "destructive" });
+      return;
+    }
+    setUploadingFile(true);
+    try {
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const path = `lead-attachments/${lead.id}/${Date.now()}-${safeName}`;
+      const { error: uploadError } = await supabase.storage.from("clearance-photos").upload(path, file);
+      if (uploadError) throw uploadError;
+      const { error: insertError } = await supabase.from("lead_files").insert({
+        lead_id: lead.id,
+        company_id: lead.company_id,
+        file_name: file.name,
+        mime_type: file.type,
+        file_size_bytes: file.size,
+        storage_path: path,
+        source: "chatter_upload",
+      });
+      if (insertError) throw insertError;
+      queryClient.invalidateQueries({ queryKey: ["lead-files-timeline", lead.id] });
+      toast({ title: "File attached" });
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err.message || "Unknown error", variant: "destructive" });
+    } finally {
+      setUploadingFile(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
 
   // ── Queries ──────────────────────────────────────────────────────
   const { data: activities = [], isLoading } = useQuery({
@@ -275,9 +316,25 @@ export function OdooChatter({ lead }: OdooChatterProps) {
             className={cn("min-h-[60px] text-[13px] resize-none", activeTab === "note" && "bg-transparent border-amber-300/50 dark:border-amber-700/50")}
           />
           <div className="flex items-center justify-between">
-            <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-muted-foreground">
-              <Paperclip className="w-3 h-3" />
-              Attach
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) handleFileAttach(f);
+              }}
+            />
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs gap-1 text-muted-foreground"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadingFile}
+            >
+              {uploadingFile ? <Loader2 className="w-3 h-3 animate-spin" /> : <Paperclip className="w-3 h-3" />}
+              {uploadingFile ? "Uploading..." : "Attach"}
             </Button>
             <Button
               size="sm"
