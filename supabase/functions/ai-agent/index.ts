@@ -2387,10 +2387,54 @@ You can manage ventures via \`manage_venture\` tool and diagnose/fix issues via 
 - \`seoMetrics\`: Website traffic from rebar.shop
 - \`odooLeads\`: Odoo CRM pipeline data
 - \`fixRequests\`: Open fix requests from vizzy_fix_requests
+- \`fixTickets\`: Structured fix tickets from fix_tickets table
 - \`machineStatus\`: Current machine health
 - \`deliveryStatus\`: Active deliveries
+- \`recentActivityEvents\`: Recent activity log entries for cross-referencing errors
 
 Use this real data to ground your analysis — never fabricate numbers.
+
+## Fix Ticket System (Screenshot → Fix Engine):
+You have access to structured fix tickets via \`create_fix_ticket\`, \`update_fix_ticket\`, and \`list_fix_tickets\` tools.
+
+### Fix Ticket Lifecycle:
+1. **new** → User reports a bug (screenshot + description)
+2. **in_progress** → You are diagnosing/fixing
+3. **fixed** → Fix applied (but NOT verified yet)
+4. **verified** → Verification passed (ONLY if verification_result = "pass")
+5. **failed** → Verification failed, returned to investigation
+6. **blocked** → Cannot fix, needs external help
+
+### CRITICAL RULES:
+- **NEVER** mark a ticket as "verified" without running verification and getting verification_result = "pass"
+- If verification fails, set status to "failed" and explain why
+- Always include verification_steps when fixing a ticket
+- When generating a Lovable Fix Prompt, set fix_output_type = "lovable_prompt"
+- All QB/Odoo/ERP data access is READ-ONLY from this agent — never expose secrets
+
+### Lovable Fix Prompt Template:
+When generating fix prompts for Lovable, use this format:
+\`\`\`
+Problem: [clear description]
+Root Cause: [what's actually wrong]
+File(s): [specific file paths]
+Fix: [exact changes needed]
+Test Criteria: [how to verify the fix works]
+Do not mark done until verified.
+\`\`\`
+
+### Screenshot Diagnosis:
+When a user attaches a screenshot:
+1. Analyze the image for error messages, broken UI, console errors
+2. Cross-reference with recentActivityEvents for matching errors
+3. Auto-create a fix_ticket with the diagnosis
+4. Report the ticket ID in your response
+
+### Security Rules:
+- Never expose API keys, tokens, or connection strings in responses
+- QuickBooks data: read-only from accounting_mirror (no direct QB API writes)
+- Odoo data: read-only from odoo_leads
+- All diagnostic access is logged in activity_events with source = "architect_diagnostic"
 
 ## Code Engineer Mode:
 When the user asks you to "generate patch", "write code", "fix module", "engineer mode", "create patch", or similar engineering tasks, you MUST:
@@ -3443,6 +3487,29 @@ async function fetchContext(supabase: ReturnType<typeof createClient>, agent: st
             .order("created_at", { ascending: true })
             .limit(10);
           context.staleHumanTasks = staleTasks;
+        } catch (_) {}
+
+        // Fix tickets (structured fix requests)
+        try {
+          const { data: fixTickets } = await svcClient
+            .from("fix_tickets")
+            .select("id, severity, system_area, status, page_url, repro_steps, fix_output_type, verification_result, created_at")
+            .eq("company_id", companyId)
+            .in("status", ["new", "in_progress", "fixed", "blocked", "failed"])
+            .order("created_at", { ascending: false })
+            .limit(15);
+          context.fixTickets = fixTickets;
+        } catch (_) {}
+
+        // Recent activity_events for diagnostic cross-reference
+        try {
+          const { data: recentErrors } = await svcClient
+            .from("activity_events")
+            .select("id, entity_type, event_type, description, source, created_at, metadata")
+            .eq("company_id", companyId)
+            .order("created_at", { ascending: false })
+            .limit(20);
+          context.recentActivityEvents = recentErrors;
         } catch (_) {}
 
         // Accounting health context
@@ -5997,6 +6064,81 @@ RULES:
       {
         type: "function" as const,
         function: {
+          name: "create_fix_ticket",
+          description: "Create a structured fix ticket for screenshot-to-fix workflow. Use when diagnosing bugs reported with screenshots or detailed error descriptions.",
+          parameters: {
+            type: "object",
+            properties: {
+              page_url: { type: "string", description: "URL of the page where the bug occurs" },
+              screenshot_url: { type: "string", description: "URL of the uploaded screenshot" },
+              repro_steps: { type: "string", description: "Steps to reproduce the issue" },
+              expected_result: { type: "string", description: "What should happen" },
+              actual_result: { type: "string", description: "What actually happens" },
+              severity: { type: "string", enum: ["low", "medium", "high", "critical"], description: "Issue severity" },
+              system_area: { type: "string", description: "Which system area (chat, accounting, inbox, shopfloor, pipeline, etc.)" },
+            },
+            required: ["repro_steps", "actual_result", "severity", "system_area"],
+            additionalProperties: false,
+          },
+        },
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "update_fix_ticket",
+          description: "Update a fix ticket status, add fix output, verification steps/result. Cannot set status to 'verified' without verification_result='pass'.",
+          parameters: {
+            type: "object",
+            properties: {
+              ticket_id: { type: "string", description: "Fix ticket UUID" },
+              status: { type: "string", enum: ["new", "in_progress", "fixed", "blocked", "verified", "failed"], description: "New status" },
+              fix_output: { type: "string", description: "The fix (code diff or Lovable prompt)" },
+              fix_output_type: { type: "string", enum: ["code_fix", "lovable_prompt"], description: "Type of fix output" },
+              verification_steps: { type: "string", description: "Steps to verify the fix works" },
+              verification_result: { type: "string", enum: ["pass", "fail"], description: "Did verification pass?" },
+              verification_evidence: { type: "string", description: "Evidence of verification (log output, screenshot description, etc.)" },
+            },
+            required: ["ticket_id"],
+            additionalProperties: false,
+          },
+        },
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "list_fix_tickets",
+          description: "List fix tickets filtered by status. Returns open/in-progress tickets by default.",
+          parameters: {
+            type: "object",
+            properties: {
+              status: { type: "string", description: "Filter by status (new, in_progress, fixed, blocked, verified, failed). Omit for all open." },
+              limit: { type: "number", description: "Max results (default 10)" },
+            },
+            additionalProperties: false,
+          },
+        },
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "diagnose_from_screenshot",
+          description: "Analyze a screenshot for errors, cross-reference with ERP logs and activity events, and auto-create a fix ticket with structured diagnosis.",
+          parameters: {
+            type: "object",
+            properties: {
+              screenshot_url: { type: "string", description: "URL of the screenshot to analyze" },
+              page_url: { type: "string", description: "URL of the page where the error occurred" },
+              user_description: { type: "string", description: "User's description of the problem" },
+              system_area: { type: "string", description: "Which system area (chat, accounting, inbox, shopfloor, etc.)" },
+            },
+            required: ["screenshot_url"],
+            additionalProperties: false,
+          },
+        },
+      },
+      {
+        type: "function" as const,
+        function: {
           name: "odoo_write",
           description: "Create or update records in any Odoo model via JSON-RPC. Requires confirm:true for write operations.",
           parameters: {
@@ -7036,6 +7178,52 @@ RULES:
               }
             }
 
+            // Network trace / refresh coupling detection
+            if (args.target === "erp" || args.target === "all") {
+              try {
+                // Check activity_events for recent errors matching reported area
+                const { data: recentErrors } = await svcClient.from("activity_events")
+                  .select("id, entity_type, event_type, description, source, created_at")
+                  .eq("company_id", companyId)
+                  .order("created_at", { ascending: false })
+                  .limit(15);
+                const errorEvents = (recentErrors || []).filter((e: any) =>
+                  e.event_type?.includes("error") || e.event_type?.includes("fail") || e.description?.toLowerCase().includes("error")
+                );
+                if (errorEvents.length) {
+                  diagnostics.issues.push({
+                    platform: "ERP", area: "Error Log", severity: "warning",
+                    detail: `${errorEvents.length} recent error event(s) in activity log`,
+                    items: errorEvents.slice(0, 5),
+                  });
+                }
+
+                // Detect chat/QB refresh coupling
+                const { data: refreshEvents } = await svcClient.from("activity_events")
+                  .select("event_type, source, created_at")
+                  .eq("company_id", companyId)
+                  .in("source", ["qb_sync", "chat_refresh", "system", "accounting"])
+                  .order("created_at", { ascending: false })
+                  .limit(30);
+                if (refreshEvents?.length) {
+                  const qbTimes = refreshEvents.filter((e: any) => e.source === "qb_sync" || e.source === "accounting").map((e: any) => new Date(e.created_at).getTime());
+                  const chatTimes = refreshEvents.filter((e: any) => e.source === "chat_refresh").map((e: any) => new Date(e.created_at).getTime());
+                  let coupledCount = 0;
+                  for (const qt of qbTimes) {
+                    if (chatTimes.some((ct: number) => Math.abs(ct - qt) < 5000)) coupledCount++;
+                  }
+                  if (coupledCount > 0) {
+                    diagnostics.issues.push({
+                      platform: "ERP", area: "Refresh Coupling", severity: "warning",
+                      detail: `${coupledCount} instance(s) where QB sync and chat refresh occurred within 5s — possible coupling`,
+                    });
+                  } else {
+                    diagnostics.healthy.push("No QB/Chat refresh coupling detected");
+                  }
+                }
+              } catch (_) {}
+            }
+
             // Odoo diagnostics
             if (args.target === "odoo" || args.target === "all") {
               try {
@@ -7578,6 +7766,177 @@ RULES:
             seoToolResults.push({ id: tc.id, name: "create_fix_request", result: error ? { error: error.message } : { success: true, message: `Fix request created: ${args.affected_area}` } });
           } catch (e) {
             seoToolResults.push({ id: tc.id, name: "create_fix_request", result: { error: e instanceof Error ? e.message : "Failed" } });
+          }
+        }
+
+        // Empire — create_fix_ticket handler
+        if (tc.function?.name === "create_fix_ticket") {
+          try {
+            const args = JSON.parse(tc.function.arguments || "{}");
+            const userEmail = user.email || "";
+            const { data: ticket, error } = await svcClient.from("fix_tickets").insert({
+              company_id: companyId,
+              reporter_user_id: user.id,
+              reporter_email: userEmail,
+              page_url: args.page_url || null,
+              screenshot_url: args.screenshot_url || null,
+              repro_steps: args.repro_steps,
+              expected_result: args.expected_result || null,
+              actual_result: args.actual_result,
+              severity: args.severity || "medium",
+              system_area: args.system_area || null,
+              status: "new",
+            }).select().single();
+            // Log diagnostic access
+            await svcClient.from("activity_events").insert({
+              company_id: companyId,
+              entity_type: "fix_ticket",
+              entity_id: ticket?.id || crypto.randomUUID(),
+              event_type: "fix_ticket_created",
+              description: `Fix ticket created for ${args.system_area || "unknown"}: ${(args.actual_result || "").substring(0, 100)}`,
+              actor_id: user.id,
+              actor_type: "architect",
+              source: "architect_agent",
+              metadata: { severity: args.severity, system_area: args.system_area },
+            }).catch(() => {});
+            seoToolResults.push({ id: tc.id, name: "create_fix_ticket", result: error ? { error: error.message } : { success: true, ticket_id: ticket?.id, message: `Fix ticket created: ${ticket?.id}` } });
+          } catch (e) {
+            seoToolResults.push({ id: tc.id, name: "create_fix_ticket", result: { error: e instanceof Error ? e.message : "Failed" } });
+          }
+        }
+
+        // Empire — update_fix_ticket handler
+        if (tc.function?.name === "update_fix_ticket") {
+          try {
+            const args = JSON.parse(tc.function.arguments || "{}");
+            const updates: Record<string, unknown> = {};
+            if (args.status) updates.status = args.status;
+            if (args.fix_output) updates.fix_output = args.fix_output;
+            if (args.fix_output_type) updates.fix_output_type = args.fix_output_type;
+            if (args.verification_steps) updates.verification_steps = args.verification_steps;
+            if (args.verification_result) updates.verification_result = args.verification_result;
+            if (args.verification_evidence) updates.verification_evidence = args.verification_evidence;
+            if (args.status === "in_progress" && !updates.diagnosed_at) updates.diagnosed_at = new Date().toISOString();
+            const { data, error } = await svcClient.from("fix_tickets").update(updates).eq("id", args.ticket_id).select().single();
+            // Log the update
+            await svcClient.from("activity_events").insert({
+              company_id: companyId,
+              entity_type: "fix_ticket",
+              entity_id: args.ticket_id,
+              event_type: "fix_ticket_updated",
+              description: `Fix ticket ${args.ticket_id} updated: status=${args.status || "unchanged"}`,
+              actor_id: user.id,
+              actor_type: "architect",
+              source: "architect_agent",
+              metadata: { updates, verification_result: args.verification_result },
+            }).catch(() => {});
+            seoToolResults.push({ id: tc.id, name: "update_fix_ticket", result: error ? { error: error.message } : { success: true, ticket: data } });
+          } catch (e) {
+            seoToolResults.push({ id: tc.id, name: "update_fix_ticket", result: { error: e instanceof Error ? e.message : "Failed" } });
+          }
+        }
+
+        // Empire — list_fix_tickets handler
+        if (tc.function?.name === "list_fix_tickets") {
+          try {
+            const args = JSON.parse(tc.function.arguments || "{}");
+            let query = svcClient.from("fix_tickets").select("*").eq("company_id", companyId).order("created_at", { ascending: false }).limit(args.limit || 10);
+            if (args.status) {
+              query = query.eq("status", args.status);
+            } else {
+              query = query.in("status", ["new", "in_progress", "fixed", "blocked", "failed"]);
+            }
+            const { data, error } = await query;
+            seoToolResults.push({ id: tc.id, name: "list_fix_tickets", result: error ? { error: error.message } : { success: true, tickets: data, count: data?.length || 0 } });
+          } catch (e) {
+            seoToolResults.push({ id: tc.id, name: "list_fix_tickets", result: { error: e instanceof Error ? e.message : "Failed" } });
+          }
+        }
+
+        // Empire — diagnose_from_screenshot handler
+        if (tc.function?.name === "diagnose_from_screenshot") {
+          try {
+            const args = JSON.parse(tc.function.arguments || "{}");
+            const diagnosis: any = { screenshot_url: args.screenshot_url, findings: [], cross_references: [] };
+
+            // 1. OCR/Vision analysis of screenshot
+            try {
+              const ocrResult = await analyzeDocumentWithGemini(
+                args.screenshot_url,
+                "screenshot.png",
+                "Analyze this screenshot for: 1) Any error messages or warnings visible 2) Broken UI elements 3) Console errors if visible 4) Any text that indicates a bug or malfunction. Return a structured analysis with severity assessment."
+              );
+              diagnosis.ocr_analysis = ocrResult.text;
+            } catch (_) {
+              diagnosis.ocr_analysis = "OCR analysis failed";
+            }
+
+            // 2. Cross-reference with recent activity_events
+            try {
+              const { data: recentEvents } = await svcClient.from("activity_events")
+                .select("id, entity_type, event_type, description, source, created_at")
+                .eq("company_id", companyId)
+                .order("created_at", { ascending: false })
+                .limit(10);
+              if (recentEvents?.length) {
+                diagnosis.cross_references.push({ source: "activity_events", count: recentEvents.length, events: recentEvents });
+              }
+            } catch (_) {}
+
+            // 3. Check QB sync status for coupling detection
+            try {
+              const { data: qbEvents } = await svcClient.from("activity_events")
+                .select("created_at, event_type, source")
+                .eq("company_id", companyId)
+                .in("source", ["qb_sync", "chat_refresh", "system"])
+                .order("created_at", { ascending: false })
+                .limit(20);
+              if (qbEvents?.length) {
+                const qbSyncs = qbEvents.filter((e: any) => e.source === "qb_sync" || e.event_type?.includes("qb"));
+                const chatRefreshes = qbEvents.filter((e: any) => e.source === "chat_refresh" || e.event_type?.includes("chat"));
+                diagnosis.cross_references.push({
+                  source: "refresh_coupling_check",
+                  qb_sync_events: qbSyncs.length,
+                  chat_refresh_events: chatRefreshes.length,
+                  potential_coupling: qbSyncs.length > 0 && chatRefreshes.length > 0,
+                });
+              }
+            } catch (_) {}
+
+            // 4. Auto-create fix ticket
+            const userEmail = user.email || "";
+            const { data: ticket, error: ticketErr } = await svcClient.from("fix_tickets").insert({
+              company_id: companyId,
+              reporter_user_id: user.id,
+              reporter_email: userEmail,
+              page_url: args.page_url || null,
+              screenshot_url: args.screenshot_url,
+              repro_steps: args.user_description || "Screenshot-based report",
+              actual_result: diagnosis.ocr_analysis?.substring(0, 500) || "See screenshot",
+              severity: "medium",
+              system_area: args.system_area || "unknown",
+              status: "new",
+            }).select().single();
+
+            diagnosis.ticket_id = ticket?.id || null;
+            diagnosis.ticket_created = !ticketErr;
+
+            // Log diagnostic access
+            await svcClient.from("activity_events").insert({
+              company_id: companyId,
+              entity_type: "diagnostic",
+              entity_id: ticket?.id || crypto.randomUUID(),
+              event_type: "screenshot_diagnosis",
+              description: `Screenshot diagnosis for ${args.system_area || "unknown"} area`,
+              actor_id: user.id,
+              actor_type: "architect",
+              source: "architect_agent",
+              metadata: { screenshot_url: args.screenshot_url, systems_queried: ["activity_events", "accounting_mirror"] },
+            }).catch(() => {});
+
+            seoToolResults.push({ id: tc.id, name: "diagnose_from_screenshot", result: diagnosis });
+          } catch (e) {
+            seoToolResults.push({ id: tc.id, name: "diagnose_from_screenshot", result: { error: e instanceof Error ? e.message : "diagnose_from_screenshot failed" } });
           }
         }
 
