@@ -1,138 +1,44 @@
 
-# Corporate Tax Optimization — CPA Playbook (Canada)
+# Fix Screenshot Capture + Make Floating Buttons Draggable
 
-A new "Tax Planning" module inside the Accounting workspace that brings the entire CPA playbook to life with interactive calculators, checklists, and tracking tools.
+## Problem 1: Screenshot Doesn't Capture Notices
+The screenshot tool captures `#main-content`, which has `overflow-hidden` on it. Content that is scrolled below the visible viewport (like overdue notices further down the page) gets clipped. html2canvas needs to be told to capture the full scrollable height.
 
----
+**Fix**: Instead of capturing the `#main-content` element directly (which clips at the viewport), find the scrollable child inside it and configure html2canvas to capture the full scroll height by setting `scrollY: 0`, `windowHeight: target.scrollHeight`, and `height: target.scrollHeight`. This ensures the entire scrollable content, including notices below the fold, is captured.
 
-## What Gets Built
+## Problem 2: Make Camera and Chat Buttons Draggable
+The camera (ScreenshotFeedbackButton) and chat (PublicChatWidget) buttons are fixed-position but not draggable. The Vizzy button already has a working drag implementation using pointer events and localStorage persistence -- we'll reuse that same pattern.
 
-### 1. Tax Planning Dashboard (Main Tab)
-A single-page command center with cards for each pillar of the playbook:
-- **Owner Pay Strategy** — Salary vs. Dividend calculator with real-time comparison
-- **Corporate Retention** — Visual gauge showing retained earnings vs. withdrawals, with deferral savings estimate
-- **HSA Tracker** — Health Spending Account status, annual limit, and claimed-to-date
-- **Expense Maximization** — Checklist of CRA-safe deduction categories with claimed/unclaimed status
-- **CCA Schedule** — Depreciation planner showing available CCA by asset class, with "use this year" toggles
-- **GST/HST ITC Review** — Summary of claimed vs. eligible Input Tax Credits
-- **Vicky Task List** — The 5 CPA tasks from the playbook, tracked with status (To Do / In Progress / Done)
+**Fix**: Create a shared `useDraggablePosition` hook extracted from the Vizzy button's drag logic, then apply it to:
+- `ScreenshotFeedbackButton` (camera icon)
+- `PublicChatWidget` (chat bubble) -- only on the landing page
 
-### 2. Salary vs. Dividend Calculator
-Interactive tool with inputs:
-- Corporate net income
-- Personal other income
-- RRSP room needed (yes/no + amount)
-- CPP benefit desired (yes/no)
-
-Outputs a side-by-side comparison:
-- Total tax paid (corp + personal) under salary-only, dividend-only, and blended scenarios
-- Uses Ontario 2024/2025 brackets, SBD rate (~12.2%), eligible/non-eligible dividend gross-up and tax credits
-- Shows the "optimal split" recommendation
-
-### 3. Year-End Tax Playbook
-A guided checklist organized by quarter:
-- Q3: Review CCA schedule, estimate year-end profit
-- Q4: Finalize expense claims, decide salary vs. dividend timing
-- Year-End: HSA top-up, dividend declaration, RRSP contribution
-- Post Year-End: T2 prep checklist, GST/HST annual review
-
-### 4. Profit Retention Policy
-Configurable rules:
-- Minimum retained earnings target
-- Maximum annual withdrawal percentage
-- "How much can I pull out?" calculator based on current retained earnings, upcoming obligations, and tax bracket optimization
+Each button will have its own localStorage key so positions are remembered independently.
 
 ---
 
-## Database Tables (1 migration)
+## Technical Details
 
-### `tax_planning_profiles`
-Stores per-company tax configuration:
-- `company_id`, `fiscal_year`
-- `owner_pay_strategy` (salary_first / dividend_first / blended)
-- `hsa_annual_limit`, `hsa_claimed_ytd`
-- `target_retained_earnings`, `max_withdrawal_pct`
-- `sbr_rate`, `personal_bracket_estimate`
-- `notes`, timestamps
+### Files to Create
+1. **`src/hooks/useDraggablePosition.ts`** -- Shared hook encapsulating:
+   - `pos` state initialized from localStorage (with fallback default)
+   - `onPointerDown`, `onPointerMove`, `onPointerUp` handlers
+   - Drag threshold (5px) to distinguish tap from drag
+   - Clamp to viewport on resize
+   - Returns `{ pos, handlers, wasDragged }` so the consumer can skip onClick when dragged
 
-### `tax_planning_tasks`
-The Vicky task list + year-end playbook items:
-- `company_id`, `fiscal_year`
-- `title`, `description`, `category` (owner-pay / expenses / hsa / cca / gst-hst / year-end)
-- `status` (todo / in_progress / done)
-- `due_date`, `assigned_to`, `completed_at`
-- timestamps
+### Files to Modify
+1. **`src/components/feedback/ScreenshotFeedbackButton.tsx`**
+   - Use `useDraggablePosition` hook with key `"feedback-btn-pos"` and default bottom-right position
+   - Change the button from CSS `fixed bottom-24 right-6` to `fixed` with `left/top` from hook
+   - Fix html2canvas call: find the scrollable container inside `#main-content`, then pass `scrollY: 0` and `height: scrollHeight` to capture full content including notices
+   - Skip `capture()` if `wasDragged` is true (so dragging doesn't trigger screenshot)
 
-### `tax_deduction_tracker`
-Expense maximization checklist:
-- `company_id`, `fiscal_year`
-- `category` (home-office / phone / software / professional / banking / insurance / education / other)
-- `description`, `estimated_amount`, `claimed_amount`
-- `is_claimed` boolean
-- timestamps
+2. **`src/components/landing/PublicChatWidget.tsx`**
+   - Use `useDraggablePosition` hook with key `"chat-widget-pos"` and default bottom-right position
+   - Apply drag handlers to the floating bubble button
+   - Position the chat panel relative to the bubble's dragged position
+   - Skip toggle if `wasDragged` is true
 
-### `cca_schedule_items`
-Capital Cost Allowance planning:
-- `company_id`, `fiscal_year`
-- `asset_description`, `cca_class`, `ucc_opening`, `additions`, `dispositions`
-- `cca_rate`, `cca_claimed`, `ucc_closing`
-- `use_this_year` boolean
-- timestamps
-
-All tables scoped by `company_id` with RLS policies.
-
----
-
-## New Files
-
-| File | Purpose |
-|------|---------|
-| `src/hooks/useTaxPlanning.ts` | Hook for tax_planning_profiles CRUD |
-| `src/hooks/useTaxTasks.ts` | Hook for tax_planning_tasks CRUD |
-| `src/hooks/useTaxDeductions.ts` | Hook for tax_deduction_tracker CRUD |
-| `src/hooks/useCCASchedule.ts` | Hook for cca_schedule_items CRUD |
-| `src/components/accounting/TaxPlanning.tsx` | Main dashboard with all cards |
-| `src/components/accounting/tax/SalaryDividendCalculator.tsx` | Interactive calculator |
-| `src/components/accounting/tax/YearEndPlaybook.tsx` | Guided checklist |
-| `src/components/accounting/tax/ProfitRetentionPolicy.tsx` | Withdrawal calculator |
-| `src/components/accounting/tax/HSATracker.tsx` | HSA card component |
-| `src/components/accounting/tax/CCAPlanner.tsx` | CCA schedule manager |
-| `src/components/accounting/tax/DeductionChecklist.tsx` | Expense maximization |
-| `src/components/accounting/tax/VickyTaskList.tsx` | CPA task tracker |
-| `src/lib/tax/canadianTaxRates.ts` | Ontario/Federal tax brackets, SBD rate, dividend gross-up constants |
-| `src/lib/tax/taxCalculator.ts` | Pure functions for salary vs dividend math |
-
-## Modified Files
-
-| File | Change |
-|------|--------|
-| `AccountingNavMenus.tsx` | Add "Tax Planning" item under Accounting menu |
-| `AccountingWorkspace.tsx` | Add `tax-planning` tab routing to `TaxPlanning` component |
-
----
-
-## Tax Calculator Logic (Ontario, Canada)
-
-The calculator uses deterministic, rule-based math:
-
-- **Federal SBD rate**: 9% (first $500K active business income)
-- **Ontario small business rate**: 3.2%
-- **Combined corp rate**: ~12.2%
-- **Eligible dividend gross-up**: 38%, federal credit 15.0198%, Ontario credit 10%
-- **Non-eligible dividend gross-up**: 15%, federal credit 9.0301%, Ontario credit 2.9863%
-- **CPP max contribution** (employee): ~$3,867
-- **Federal/Ontario personal brackets**: Built-in 2024/2025 tables
-- **Basic personal amount**: Federal $15,705 / Ontario $11,865
-
-The calculator compares 3 scenarios and shows total combined tax (corporate + personal) for each.
-
----
-
-## Implementation Order
-
-1. Database migration (4 tables + RLS)
-2. Tax rate constants and calculator functions
-3. Hooks (4 files)
-4. UI components (8 files)
-5. Wire into nav menu and workspace routing
-6. Pre-seed Vicky's 5 tasks on first load
+3. **`src/components/vizzy/FloatingVizzyButton.tsx`** (optional refactor)
+   - Refactor to use the same shared `useDraggablePosition` hook to reduce duplication
