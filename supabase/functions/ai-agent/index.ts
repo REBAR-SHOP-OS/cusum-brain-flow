@@ -8256,13 +8256,14 @@ RULES:
       const MAX_TOOL_ITERATIONS = 5;
       let lastAssistantMsg = choice.message;
       let lastToolCalls = toolCalls;
+      const accumulatedTurns: any[] = [];
 
       while (toolLoopIterations < MAX_TOOL_ITERATIONS &&
              (seoToolResults.length > 0 || (!reply && (createdNotifications.length > 0 || emailResults.length > 0)))) {
 
-        const toolResultMessages = [
-          ...messages,
-          lastAssistantMsg,
+        // Accumulate conversation across iterations (cumulative, not replacing)
+        accumulatedTurns.push(lastAssistantMsg);
+        accumulatedTurns.push(
           ...lastToolCalls.map((tc: any) => {
             const seoResult = seoToolResults.find(r => r.id === tc.id);
             if (seoResult) {
@@ -8279,8 +8280,9 @@ RULES:
                 ? JSON.stringify(emailResults.find(r => true) || { success: false, error: "No result" })
                 : JSON.stringify({ success: true, created: createdNotifications.length }),
             };
-          }),
-        ];
+          })
+        );
+        const toolResultMessages = [...messages, ...accumulatedTurns];
 
         const followUp = await fetch(aiUrl, {
           method: "POST",
@@ -8297,7 +8299,11 @@ RULES:
           }),
         });
 
-        if (!followUp.ok) break;
+        if (!followUp.ok) {
+          const errText = await followUp.text().catch(() => "unknown");
+          console.error(`Multi-turn AI call failed (iter ${toolLoopIterations}): ${followUp.status} ${errText.substring(0, 200)}`);
+          break;
+        }
 
         const followUpData = await followUp.json();
         const followUpChoice = followUpData.choices?.[0];
@@ -8605,7 +8611,9 @@ RULES:
     }
 
     // Fallback if still no reply
-    if (!reply) reply = "I couldn't process that request.";
+    if (reply === null || reply === undefined || reply.trim() === "") {
+      reply = "I couldn't process that request.";
+    }
 
     return new Response(
       JSON.stringify({ 
