@@ -1,40 +1,33 @@
 
-
-# Fix Task Creator to Show Actual User
+# Prevent Past Due Dates on Task Creation
 
 ## Overview
-Currently, all tasks are hardcoded to be created by Neel (`NEEL_PROFILE_ID`), and the board only shows Neel's tasks. This change makes the system use the actual logged-in user as the task creator, and shows all tasks across all creators.
+Add a minimum date restriction to the due date input field so users can only select today or future dates when creating tasks.
 
 ## Scope
 Only `src/pages/Tasks.tsx` -- no other files change.
 
 ## Changes
 
-### 1. Use current user's profile ID when creating tasks
-Instead of hardcoding `created_by_profile_id: NEEL_PROFILE_ID`, fetch the current user's profile ID and use that. The current user's auth ID is already available (`currentUserId`), so we need to also store their profile ID.
+### 1. Set `min` attribute on the due date input
+The date input field (line 514) will get a `min` attribute set to today's date (`YYYY-MM-DD` format). This prevents the browser date picker from allowing past dates.
 
-### 2. Remove the Neel-only filter on task loading
-Currently tasks are filtered with `.eq("created_by_profile_id", NEEL_PROFILE_ID)`. This filter will be removed so tasks from all creators are visible in the board.
-
-### 3. Creator name already displayed
-The "by [Name]" label on each task card already works correctly using `task.created_by_profile?.full_name` -- no change needed there. Once tasks are created with the real user's profile ID, the correct name will appear automatically.
+### 2. Add validation in `createTask` function
+Before submitting, if a due date is provided and it is earlier than today, show an error toast and abort creation. This acts as a safety net in case the browser `min` attribute is bypassed.
 
 ## Technical Details
 
-### New state
-- Add `currentProfileId` state (string | null) alongside existing `currentUserId`
-- In the `useEffect` that fetches the current user, also query `profiles` table to get the profile ID matching that `user_id`
+### Date input change (line 514)
+Add `min={new Date().toISOString().split("T")[0]}` to the Input element.
 
-### Task creation change (line 285)
+### Validation in createTask (line 280)
+Add a check:
 ```
-created_by_profile_id: currentProfileId   // was NEEL_PROFILE_ID
+if (newDueDate && newDueDate < new Date().toISOString().split("T")[0]) {
+  toast.error("Due date cannot be in the past");
+  return;
+}
 ```
-
-### Task fetching change (line 174)
-Remove the `.eq("created_by_profile_id", NEEL_PROFILE_ID)` filter so all tasks assigned to @rebar.shop employees are shown regardless of creator.
-
-### Subtitle change
-The "X tasks by Neel" subtitle will change to just "X tasks" since tasks are no longer filtered to one creator.
 
 ## Files Modified
 1. `src/pages/Tasks.tsx` only
