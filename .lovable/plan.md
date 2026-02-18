@@ -1,126 +1,96 @@
 
-# Fix Upload Wiring in Lead Chatter + Add Project Timelines
+# Odoo-Style Floating Chat Window — UI Reskin of DockChatBox
 
-## Issues Identified
-
-### Issue 1: Attach Button is Dead (OdooChatter.tsx)
-The "Attach" button in the Chatter composer (line 278) is a plain `<Button>` with NO `onClick` handler, no file input, no upload logic. It renders but does nothing -- exactly what the red circle in the screenshot highlights.
-
-### Issue 2: No Timeline View on Projects
-The Project Management view (`ProjectManagement.tsx`) has a Kanban board and Gantt chart for tasks, but no activity/event timeline (like the Odoo chatter timeline shown in the second screenshot). Projects don't track who did what and when in a chronological feed.
+## Scope: ONE File Only
+**`src/components/chat/DockChatBox.tsx`** — pure visual reskin.  
+Zero changes to: database, hooks, context, DockChatBar, routing, other pages, or any logic.
 
 ---
 
-## Fix 1: Wire the Attach Button in OdooChatter
+## What the Reference Image Shows (Odoo Style)
 
-**File: `src/components/pipeline/OdooChatter.tsx`**
-
-Add file upload capability to the Chatter composer:
-
-1. Add a hidden `<input type="file">` ref
-2. Wire the Attach button's `onClick` to trigger the file input
-3. On file selection:
-   - Upload to `clearance-photos` bucket under `lead-attachments/{leadId}/{timestamp}-{filename}` (matches existing upload pattern across the app)
-   - Insert a row into `lead_files` with `storage_path`, `file_name`, `mime_type`, `file_size_bytes`, `source: "chatter_upload"`, `lead_id`, `company_id`
-   - Invalidate `lead-files-timeline` query so the file appears instantly in the thread
-4. Add guards: throttle (prevent double-clicks), file size limit (20MB), type validation
-5. Show upload progress via a small preview strip with a spinner (similar to WebsiteChat pattern)
-6. Accept images, PDFs, and common document types
-
-**Changes are surgical**: Only touches the OdooChatter component. The `lead_files` table and `clearance-photos` bucket already exist. The timeline thread already renders files from `lead_files` -- so once inserted, they appear automatically.
+From the screenshot:
+- **White card** background (not dark), soft `box-shadow`, `border-radius` on top corners
+- **Header**: coloured left-side avatar circle with initials + online indicator dot, bold contact name, then phone / minimize (–) / close (×) icons spaced to the right
+- **Messages**: rendered as **chat bubbles** — own messages right-aligned in a teal/primary colour, other person's messages left-aligned in a light grey. Each bubble has rounded corners with the "tail" corner flat on the conversation side
+- **Timestamps**: shown as small grey text above groups of messages (e.g. "11 days ago", "12 days ago") — date separators between day groups
+- **Composer**: full-width input at the bottom reading "Message [Name]..." with emoji, paperclip, and mic icons inline
 
 ---
 
-## Fix 2: Add Activity Timeline to Each Project
+## Precise Changes to `DockChatBox.tsx`
 
-**Database: New table `project_events`**
+### 1. Message Bubble Layout (replaces current list)
+Current: every message is a left-aligned row with avatar + name + text.  
+New:
+- `isMe` messages → `ml-auto`, right-aligned, primary-coloured bubble (`bg-primary text-primary-foreground`), rounded `rounded-2xl rounded-br-sm`
+- Other messages → `mr-auto`, left-aligned, muted bubble (`bg-muted text-foreground`), rounded `rounded-2xl rounded-bl-sm`
+- Avatar shown only for OTHER person's messages (left side), hidden for own
+- Sender name shown only in group channels above the first bubble of a sequence
+- Timestamp shown small and dim below each bubble
 
-```
-project_events
-- id (uuid, PK)
-- company_id (uuid, NOT NULL)
-- project_id (uuid, FK -> projects)
-- event_type (text): "task_created", "task_completed", "status_changed", "note", "file_attached", "milestone_reached"
-- title (text)
-- description (text, nullable)
-- created_by (text): user name or "System"
-- metadata (jsonb)
-- created_at (timestamptz, default now())
-```
+### 2. Date Separators
+Group messages by date. Insert a centred date label (e.g. "February 6, 2026") between day groups — matching the Odoo separator style exactly.
 
-With RLS: company members can read/insert for their own company.
+### 3. Header Reskin
+Current: coloured bar with channel icon + name + 3 icon buttons  
+New (Odoo-style):
+- White/card background header (not full primary colour — use a subtle border-bottom instead)
+- Left: coloured `Avatar` circle (using the same `getAvatarColor` already in the file) with initials + small green online dot
+- Centre: bold contact name in dark text, small "Online" or channel type label underneath
+- Right: expand icon, minimize `–`, close `×` — each 20×20 touch targets, text-muted-foreground on hover
 
-**Trigger: Auto-log task changes**
+### 4. Minimized Tab
+Keep same behaviour, just match header styling (white pill with avatar + name, not full-width primary bar).
 
-Create a database trigger on `project_tasks` that logs to `project_events` when:
-- A new task is created (event_type: "task_created")
-- A task status changes (event_type: "status_changed", old -> new in metadata)
-- A task is completed (event_type: "task_completed")
+### 5. Composer
+Current: small `<input>` with clip + send buttons.  
+New: full-width textarea-style input with `placeholder="Message {channelName}..."`, paperclip left, send right — same Odoo layout.
 
-**New component: `ProjectTimeline.tsx`**
+### 6. Container
+- Change from `bg-card border border-border` → `bg-white dark:bg-card shadow-2xl border border-gray-200 dark:border-border`
+- Width stays `320px`
+- Add `rounded-t-xl` (slightly more rounded than current `rounded-t-lg`)
 
-A timeline feed component (following the OdooChatter/LeadTimeline pattern) showing:
-- Chronological list of project events grouped by date separators
-- Icons per event type (same icon map pattern as LeadTimeline)
-- Author avatars with initials
-- "Log note" composer at the top for manual entries
+---
 
-**Wire into ProjectManagement.tsx**
-
-Add a "Timeline" tab alongside existing "Kanban" and "Gantt" tabs. When a project is selected, show its timeline. When no project is selected, show a unified timeline across all projects.
+## What is NOT Changed
+- No hook changes (`useTeamMessages`, `useSendMessage`, etc.)
+- No database changes
+- No context changes (`DockChatContext`)
+- `DockChatBar.tsx` — not touched
+- All other pages — not touched
+- All logic (file upload, drag-and-drop, send, realtime subscription) — preserved exactly
+- No new dependencies
 
 ---
 
 ## Technical Details
 
-### OdooChatter Upload Logic
+### Date separator helper (pure function, inside component file)
 ```typescript
-// New state
-const [uploadingFile, setUploadingFile] = useState(false);
-const fileInputRef = useRef<HTMLInputElement>(null);
-
-// Upload handler with guards
-const handleAttach = async (file: File) => {
-  if (uploadingFile) return; // throttle
-  if (file.size > 20 * 1024 * 1024) { toast error; return; }
-  setUploadingFile(true);
-  try {
-    const path = `lead-attachments/${lead.id}/${Date.now()}-${file.name}`;
-    await supabase.storage.from("clearance-photos").upload(path, file);
-    await supabase.from("lead_files").insert({
-      lead_id: lead.id,
-      company_id: lead.company_id,
-      file_name: file.name,
-      mime_type: file.type,
-      file_size_bytes: file.size,
-      storage_path: path,
-      source: "chatter_upload",
-    });
-    queryClient.invalidateQueries({ queryKey: ["lead-files-timeline", lead.id] });
-    toast({ title: "File attached" });
-  } catch { toast error; }
-  finally { setUploadingFile(false); }
-};
+function formatDateSeparator(iso: string) {
+  return new Date(iso).toLocaleDateString([], { month: "long", day: "numeric", year: "numeric" });
+}
 ```
 
-### Project Events Table Schema
-- RLS: `USING (company_id IN (SELECT company_id FROM user_roles WHERE user_id = auth.uid()))`
-- Trigger on `project_tasks` for INSERT and UPDATE to auto-log events
+### Grouping logic
+```typescript
+// Build groups: [{date: string, msgs: Message[]}]
+const grouped = messages.reduce((acc, msg) => {
+  const d = new Date(msg.created_at).toDateString();
+  const last = acc[acc.length - 1];
+  if (!last || last.date !== d) acc.push({ date: d, dateLabel: formatDateSeparator(msg.created_at), msgs: [msg] });
+  else last.msgs.push(msg);
+  return acc;
+}, [] as { date: string; dateLabel: string; msgs: typeof messages }[]);
+```
 
-### ProjectTimeline Component
-- Follows exact same pattern as OdooChatter thread rendering
-- Date separators, icon maps, author initials
-- Note composer with the same Attach + Send pattern (also wired to upload)
+### Bubble classes (no new dependencies)
+```typescript
+const bubbleClass = isMe
+  ? "bg-primary text-primary-foreground rounded-2xl rounded-br-sm ml-auto"
+  : "bg-muted text-foreground rounded-2xl rounded-bl-sm mr-auto";
+```
 
----
-
-## Files Changed
-
-| File | Action | What |
-|------|--------|------|
-| `src/components/pipeline/OdooChatter.tsx` | Edit | Wire Attach button with file input, upload logic, guards |
-| `src/components/accounting/ProjectTimeline.tsx` | New | Timeline feed component for projects |
-| `src/components/accounting/ProjectManagement.tsx` | Edit | Add "Timeline" tab |
-| Database migration | New | Create `project_events` table + trigger on `project_tasks` |
-
-No other files are touched. All changes are additive and use existing infrastructure (storage bucket, query patterns, UI components).
+All styling uses existing Tailwind classes already present in the project.
