@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Building, Mail, Phone, Calendar, DollarSign, Pencil, Trash2,
-  TrendingUp, Clock, User, Star, Archive, X, FileText,
+  TrendingUp, Clock, User, Star, Archive, X, FileText, ClipboardList,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -253,8 +253,9 @@ export function LeadDetailDrawer({
               )}
               {!lead.description && !lead.notes && (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <FileText className="w-16 h-16 text-muted-foreground/20 mb-3" />
+                  <ClipboardList className="w-16 h-16 text-muted-foreground/20 mb-3" />
                   <p className="text-[13px] text-muted-foreground">No notes yet.</p>
+                  <p className="text-[13px] text-muted-foreground">Add a description or internal note using the edit button above.</p>
                 </div>
               )}
             </div>

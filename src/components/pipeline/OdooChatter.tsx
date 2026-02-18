@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import {
   MessageSquare, Phone, Mail, Calendar, ArrowRight,
   Send, Clock, CheckCircle2, Loader2, Paperclip,
-  PhoneCall, FileText, Zap, Download, File, FileSpreadsheet, Image,
+  PhoneCall, FileText, Zap, Download, File, FileSpreadsheet, Image, ClipboardList,
 } from "lucide-react";
 import { format, formatDistanceToNow, isToday, isBefore, startOfDay } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -411,7 +411,7 @@ export function OdooChatter({ lead }: OdooChatterProps) {
           </div>
         ) : thread.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-center">
-            <FileText className="w-16 h-16 text-muted-foreground/20 mb-3" />
+            <ClipboardList className="w-16 h-16 text-muted-foreground/20 mb-3" />
             <p className="text-[13px] text-muted-foreground">
               No activities yet.
             </p>
