@@ -15,10 +15,22 @@ const USER_ACTION_PATTERNS: { pattern: string; guidance: string }[] = [
   { pattern: "cache", guidance: "Try clearing your browser cache and refreshing." },
 ];
 
+const ERROR_INDICATORS = ["expired", "unauthorized", "401", "403", "invalid", "failed", "error", "denied", "timeout", "refused"];
+const FEATURE_REQUEST_WORDS = ["implement", "modify", "create", "build", "add", "update", "improve", "redesign"];
+
 function getActionableGuidance(description: string): string | null {
   const lower = description.toLowerCase();
+  // Skip feature requests / descriptive items that happen to contain keywords
+  if (FEATURE_REQUEST_WORDS.some(w => lower.includes(w))) {
+    return null;
+  }
+  // Only match if both a trigger keyword AND an error indicator are present
   for (const { pattern, guidance } of USER_ACTION_PATTERNS) {
-    if (lower.includes(pattern)) return guidance;
+    if (lower.includes(pattern)) {
+      if (ERROR_INDICATORS.some(e => lower.includes(e))) {
+        return guidance;
+      }
+    }
   }
   return null;
 }
