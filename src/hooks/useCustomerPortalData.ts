@@ -2,6 +2,14 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 
+export interface PortalInvoice {
+  id: string;
+  quickbooks_id: string;
+  balance: number | null;
+  data: any;
+  last_synced_at: string | null;
+}
+
 export function useCustomerPortalData() {
   const { user } = useAuth();
 
@@ -39,7 +47,6 @@ export function useCustomerPortalData() {
     queryKey: ["customer-deliveries", customerId],
     enabled: !!customerId,
     queryFn: async () => {
-      // Filter deliveries to only those with stops for this customer
       const { data, error } = await supabase
         .from("deliveries")
         .select("*, delivery_stops!inner(*)")
@@ -50,11 +57,50 @@ export function useCustomerPortalData() {
     },
   });
 
+  const { data: invoices = [], isLoading: invoicesLoading } = useQuery({
+    queryKey: ["customer-invoices", customerId],
+    enabled: !!customerId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("accounting_mirror")
+        .select("id, quickbooks_id, balance, data, last_synced_at")
+        .eq("customer_id", customerId!)
+        .eq("entity_type", "Invoice")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data || []) as PortalInvoice[];
+    },
+  });
+
+  const { data: packingSlips = [], isLoading: slipsLoading } = useQuery({
+    queryKey: ["customer-packing-slips", customerId],
+    enabled: !!customerId,
+    queryFn: async () => {
+      // Get customer name from orders to match packing slips
+      if (orders.length === 0) return [];
+      const { data: customer } = await supabase
+        .from("customers")
+        .select("name")
+        .eq("id", customerId!)
+        .single();
+      if (!customer) return [];
+      const { data, error } = await supabase
+        .from("packing_slips")
+        .select("*")
+        .ilike("customer_name", `%${customer.name}%`)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
   return {
     customerId,
     orders,
     deliveries,
-    isLoading: linkLoading || ordersLoading || deliveriesLoading,
+    invoices,
+    packingSlips,
+    isLoading: linkLoading || ordersLoading || deliveriesLoading || invoicesLoading || slipsLoading,
     hasAccess: !!customerLink,
   };
 }
