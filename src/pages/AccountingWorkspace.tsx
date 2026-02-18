@@ -40,6 +40,11 @@ import { AccountingRefundReceipts } from "@/components/accounting/AccountingRefu
 import { AccountingDeposits } from "@/components/accounting/AccountingDeposits";
 import { AccountingTransfers } from "@/components/accounting/AccountingTransfers";
 import { AccountingJournalEntries } from "@/components/accounting/AccountingJournalEntries";
+import { AccountingRecurring } from "@/components/accounting/AccountingRecurring";
+import { AccountingBatchActions } from "@/components/accounting/AccountingBatchActions";
+import { AccountingStatements } from "@/components/accounting/AccountingStatements";
+import { AccountingExpenses } from "@/components/accounting/AccountingExpenses";
+import { AccountingAttachments } from "@/components/accounting/AccountingAttachments";
 
 import { usePennyQueue } from "@/hooks/usePennyQueue";
 import { useIntegrations } from "@/hooks/useIntegrations";
@@ -336,6 +341,11 @@ export default function AccountingWorkspace() {
             {activeTab === "deposits" && <AccountingDeposits data={qb} />}
             {activeTab === "transfers" && <AccountingTransfers data={qb} />}
             {activeTab === "journal-entries" && <AccountingJournalEntries data={qb} />}
+            {activeTab === "recurring" && <AccountingRecurring data={qb} />}
+            {activeTab === "batch-actions" && <AccountingBatchActions data={qb} />}
+            {activeTab === "statements" && <AccountingStatements data={qb} />}
+            {activeTab === "expenses" && <AccountingExpenses data={qb} />}
+            {activeTab === "attachments" && <AccountingAttachments data={qb} />}
             {activeTab === "documents" && <AccountingDocuments data={qb} />}
             {activeTab === "balance-sheet" && <AccountingReport data={qb} report="balance-sheet" />}
             {activeTab === "profit-loss" && <AccountingReport data={qb} report="profit-loss" />}
