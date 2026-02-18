@@ -1,50 +1,44 @@
 
 
-# Changes to Employee Tasks Kanban Board
+# Add Unique Colors to Kanban Columns
+
+## Overview
+Assign a distinct color to each employee's Kanban column header so users can visually distinguish columns at a glance.
 
 ## Scope
-Only `src/pages/Tasks.tsx` -- no other files or database changes.
+Only `src/pages/Tasks.tsx` -- no other files change.
 
-## Changes
+## Implementation
 
-### 1. Remove Ai and Kourosh columns
-Filter out profiles with emails `ai@rebar.shop` and `kourosh@rebar.shop` from the employee list so their columns never render.
+### Color Palette
+Define an array of visually distinct colors (as Tailwind border-top / header background classes):
 
-### 2. Show task creator on each card
-Add a small line below the task title showing "by [Creator Name]" using the existing `created_by_profile` join data. This appears on both active and completed task items.
-
-### 3. Current user's column appears first
-On page load, get the current authenticated user's ID via `supabase.auth.getUser()`. When sorting columns, move the employee whose `user_id` matches the current user to position 0 (first column). All other columns remain alphabetically sorted.
-
-### 4. Send notification on task creation
-After a task is created successfully, insert a row into the existing `notifications` table:
-- `user_id` = the `user_id` of the assigned employee (from profiles data)
-- `type` = "notification"
-- `title` = "New Task Assigned"
-- `description` = task title (truncated)
-- `status` = "unread"
-
-This uses the existing notifications infrastructure (the `useNotifications` hook and inbox panel already handle display and sound).
-
-## Technical Details
-
-### Excluded emails (hardcoded constant)
-```
-EXCLUDED_EMAILS = ["ai@rebar.shop", "kourosh@rebar.shop"]
+```text
+COLUMN_COLORS = [
+  "border-t-blue-500 bg-blue-500/10",
+  "border-t-purple-500 bg-purple-500/10",
+  "border-t-emerald-500 bg-emerald-500/10",
+  "border-t-orange-500 bg-orange-500/10",
+  "border-t-pink-500 bg-pink-500/10",
+  "border-t-teal-500 bg-teal-500/10",
+  "border-t-yellow-500 bg-yellow-500/10",
+  "border-t-red-500 bg-red-500/10",
+  "border-t-indigo-500 bg-indigo-500/10",
+  "border-t-cyan-500 bg-cyan-500/10",
+]
 ```
 
-### Column ordering logic
-```
-1. Get current user ID from auth
-2. Sort employees alphabetically (existing)
-3. Filter out excluded emails
-4. Move current user's profile to index 0
-```
+### Assignment
+Each employee gets a color based on their index in the sorted employees array: `COLUMN_COLORS[index % COLUMN_COLORS.length]`.
 
-### Notification insert (in createTask function, after successful insert)
-```
-Insert into notifications table with the assigned employee's user_id
-```
+### Visual Changes
+- Column container: gets a thick colored top border (`border-t-4`)
+- Column header area: gets a subtle tinted background matching the color
+- The rest of the column body remains unchanged
+
+### What Changes in Code
+1. Add `COLUMN_COLORS` constant array (line ~62 area)
+2. In the `.map()` rendering columns (line ~340), use the index to apply `COLUMN_COLORS[index]` to the column wrapper div's className (adding `border-t-4` and the color class) and to the header div's className (adding the bg tint)
 
 ## Files Modified
 1. `src/pages/Tasks.tsx` only
