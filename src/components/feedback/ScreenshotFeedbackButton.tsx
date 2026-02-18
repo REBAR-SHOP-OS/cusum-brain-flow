@@ -31,16 +31,19 @@ export function ScreenshotFeedbackButton() {
     setCapturing(true);
     setTimeout(() => { cooldown.current = false; }, THROTTLE_MS);
 
+    const target = document.getElementById("main-content") || document.body;
+    const rect = target.getBoundingClientRect();
+
     const baseOpts = {
       useCORS: true,
       allowTaint: false,
       scale: 1,
-      width: window.innerWidth,
-      height: window.innerHeight,
+      width: rect.width,
+      height: rect.height,
       windowWidth: window.innerWidth,
       windowHeight: window.innerHeight,
-      x: 0,
-      y: 0,
+      x: rect.left,
+      y: rect.top,
       scrollX: 0,
       scrollY: 0,
       backgroundColor: getComputedStyle(document.documentElement).backgroundColor || "#0f172a",
@@ -53,45 +56,17 @@ export function ScreenshotFeedbackButton() {
         const style = clonedDoc.createElement("style");
         style.textContent = "*, *::before, *::after { animation: none !important; transition: none !important; }";
         clonedDoc.head.appendChild(style);
-
-        // Aggressive DOM trimming: remove off-screen heavy elements from clone
-        const vpW = window.innerWidth;
-        const vpH = window.innerHeight;
-
-        // Collect bounding rects from the LIVE DOM before working on the clone
-        const heavySelectors = '[draggable="true"], [class*="card"], [class*="lead-"], tr, li';
-        const originals = document.body.querySelectorAll(heavySelectors);
-        const offScreenIndices = new Set<number>();
-        originals.forEach((el, i) => {
-          const r = el.getBoundingClientRect();
-          if (r.bottom < -50 || r.top > vpH + 50 || r.right < -50 || r.left > vpW + 50) {
-            offScreenIndices.add(i);
-          }
-        });
-
-        // Now remove matching elements from the cloned DOM
-        if (offScreenIndices.size > 0) {
-          const clonedEls = clonedDoc.body.querySelectorAll(heavySelectors);
-          // Iterate in reverse to avoid index shifts
-          for (let i = clonedEls.length - 1; i >= 0; i--) {
-            if (offScreenIndices.has(i)) {
-              clonedEls[i].remove();
-            }
-          }
-        }
       },
     };
 
-    const isHeavyPage = document.body.querySelectorAll("*").length > 1500;
+    const isHeavyPage = target.querySelectorAll("*").length > 1500;
 
-    // Pre-capture: hide off-screen heavy elements in the LIVE DOM
-    // so html2canvas doesn't even clone them (much faster than onclone trimming)
     const hiddenEls: HTMLElement[] = [];
     if (isHeavyPage) {
       const vpW = window.innerWidth;
       const vpH = window.innerHeight;
       const heavySelectors = '[draggable="true"], [class*="card"], [class*="lead-"], tr, li';
-      document.body.querySelectorAll(heavySelectors).forEach((el) => {
+      target.querySelectorAll(heavySelectors).forEach((el) => {
         const r = el.getBoundingClientRect();
         if (r.bottom < -50 || r.top > vpH + 50 || r.right < -50 || r.left > vpW + 50) {
           (el as HTMLElement).style.display = "none";
@@ -103,7 +78,7 @@ export function ScreenshotFeedbackButton() {
     const captureOnce = (skipImages: boolean): Promise<HTMLCanvasElement> => {
       const opts = { ...baseOpts, imageTimeout: (skipImages || isHeavyPage) ? 0 : 5000 };
       return Promise.race([
-        html2canvas(document.body, opts),
+        html2canvas(target, opts),
         new Promise<never>((_, rej) => setTimeout(() => rej(new Error("screenshot_timeout")), 5000)),
       ]);
     };
