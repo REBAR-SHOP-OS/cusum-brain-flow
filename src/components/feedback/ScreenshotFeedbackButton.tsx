@@ -84,6 +84,22 @@ export function ScreenshotFeedbackButton() {
 
     const isHeavyPage = document.body.querySelectorAll("*").length > 1500;
 
+    // Pre-capture: hide off-screen heavy elements in the LIVE DOM
+    // so html2canvas doesn't even clone them (much faster than onclone trimming)
+    const hiddenEls: HTMLElement[] = [];
+    if (isHeavyPage) {
+      const vpW = window.innerWidth;
+      const vpH = window.innerHeight;
+      const heavySelectors = '[draggable="true"], [class*="card"], [class*="lead-"], tr, li';
+      document.body.querySelectorAll(heavySelectors).forEach((el) => {
+        const r = el.getBoundingClientRect();
+        if (r.bottom < -50 || r.top > vpH + 50 || r.right < -50 || r.left > vpW + 50) {
+          (el as HTMLElement).style.display = "none";
+          hiddenEls.push(el as HTMLElement);
+        }
+      });
+    }
+
     const captureOnce = (skipImages: boolean): Promise<HTMLCanvasElement> => {
       const opts = { ...baseOpts, imageTimeout: (skipImages || isHeavyPage) ? 0 : 5000 };
       return Promise.race([
@@ -117,6 +133,8 @@ export function ScreenshotFeedbackButton() {
       });
       toast.error(`Failed to capture screen on ${window.location.pathname}`);
     } finally {
+      // Restore hidden elements immediately
+      hiddenEls.forEach(el => el.style.display = "");
       setCapturing(false);
     }
   }, [capturing]);
@@ -137,7 +155,7 @@ export function ScreenshotFeedbackButton() {
         onPointerMove={handlers.onPointerMove}
         onPointerUp={handlePointerUp}
         className="fixed z-[9999] w-10 h-10 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center hover:scale-110 transition-transform cursor-grab active:cursor-grabbing select-none"
-        style={{ left: pos.x, top: pos.y, touchAction: "none" }}
+        style={{ left: pos.x, top: pos.y, touchAction: "none", pointerEvents: "auto" }}
         aria-label="Report a change"
         title="Screenshot Feedback"
       >
