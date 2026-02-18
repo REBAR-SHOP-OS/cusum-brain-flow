@@ -29,6 +29,7 @@ import { AccountingOrders } from "@/components/accounting/AccountingOrders";
 import { AccountingActionQueue } from "@/components/accounting/AccountingActionQueue";
 import { AccountingVendorPayments } from "@/components/accounting/AccountingVendorPayments";
 import { BudgetManagement } from "@/components/accounting/BudgetManagement";
+import { QuoteTemplateManager } from "@/components/accounting/QuoteTemplateManager";
 
 import { usePennyQueue } from "@/hooks/usePennyQueue";
 import { useIntegrations } from "@/hooks/useIntegrations";
@@ -314,6 +315,7 @@ export default function AccountingWorkspace() {
             {activeTab === "actions" && <AccountingActionQueue />}
             {activeTab === "vendor-payments" && <AccountingVendorPayments />}
             {activeTab === "budgets" && <BudgetManagement />}
+            {activeTab === "quote-templates" && <QuoteTemplateManager />}
             {activeTab === "documents" && <AccountingDocuments data={qb} />}
             {activeTab === "balance-sheet" && <AccountingReport data={qb} report="balance-sheet" />}
             {activeTab === "profit-loss" && <AccountingReport data={qb} report="profit-loss" />}

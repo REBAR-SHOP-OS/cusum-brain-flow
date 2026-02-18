@@ -31,6 +31,7 @@ const menus: Menu[] = [
       { label: "Orders", tab: "orders" },
       { label: "Invoices / Packing Slips", tab: "documents" },
       { label: "Quotations / Estimates", tab: "documents" },
+      { label: "Quotation Templates", tab: "quote-templates" },
     ],
   },
   {
