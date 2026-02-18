@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { format } from "date-fns";
 import {
   DatabaseBackup,
@@ -9,6 +9,11 @@ import {
   Clock,
   Loader2,
   ShieldAlert,
+  Download,
+  Trash2,
+  Upload,
+  ScrollText,
+  ChevronDown,
 } from "lucide-react";
 import {
   Dialog,
@@ -37,9 +42,18 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
   useBackups,
   useRunBackup,
   useRestoreBackup,
+  useDownloadBackup,
+  useDeleteBackup,
+  useImportBackup,
+  useBackupLogs,
   formatBytes,
   SystemBackup,
 } from "@/hooks/useBackups";
@@ -80,8 +94,13 @@ function StatusBadge({ status }: { status: SystemBackup["status"] }) {
 
 export function BackupModal({ isOpen, onClose }: BackupModalProps) {
   const { data: backups = [], isLoading, refetch } = useBackups();
+  const { data: logs = [], isLoading: logsLoading } = useBackupLogs();
   const runBackup = useRunBackup();
   const restoreBackup = useRestoreBackup();
+  const downloadBackup = useDownloadBackup();
+  const deleteBackup = useDeleteBackup();
+  const importBackup = useImportBackup();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [restoreTarget, setRestoreTarget] = useState<SystemBackup | null>(null);
   const [confirmText, setConfirmText] = useState("");
@@ -90,22 +109,31 @@ export function BackupModal({ isOpen, onClose }: BackupModalProps) {
   >("confirm");
   const [restoreError, setRestoreError] = useState("");
 
+  // Delete dialog state
+  const [deleteTarget, setDeleteTarget] = useState<SystemBackup | null>(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deleteStep, setDeleteStep] = useState<
+    "confirm" | "deleting" | "done" | "error"
+  >("confirm");
+  const [deleteError, setDeleteError] = useState("");
+
+  const [logsOpen, setLogsOpen] = useState(false);
+
   const lastSuccess = backups.find((b) => b.status === "success");
 
+  // Restore dialog handlers
   function openRestoreDialog(backup: SystemBackup) {
     setRestoreTarget(backup);
     setConfirmText("");
     setRestoreStep("confirm");
     setRestoreError("");
   }
-
   function closeRestoreDialog() {
     setRestoreTarget(null);
     setConfirmText("");
     setRestoreStep("confirm");
     setRestoreError("");
   }
-
   async function handleRestore() {
     if (!restoreTarget || confirmText !== "RESTORE") return;
     setRestoreStep("restoring");
@@ -119,6 +147,46 @@ export function BackupModal({ isOpen, onClose }: BackupModalProps) {
       setRestoreError(err instanceof Error ? err.message : "Unknown error");
       setRestoreStep("error");
     }
+  }
+
+  // Delete dialog handlers
+  function openDeleteDialog(backup: SystemBackup) {
+    setDeleteTarget(backup);
+    setDeleteConfirmText("");
+    setDeleteStep("confirm");
+    setDeleteError("");
+  }
+  function closeDeleteDialog() {
+    setDeleteTarget(null);
+    setDeleteConfirmText("");
+    setDeleteStep("confirm");
+    setDeleteError("");
+  }
+  async function handleDelete() {
+    if (!deleteTarget || deleteConfirmText !== "DELETE") return;
+    setDeleteStep("deleting");
+    try {
+      await deleteBackup.mutateAsync({
+        backup_id: deleteTarget.id,
+        confirm: "DELETE",
+      });
+      setDeleteStep("done");
+      setTimeout(() => closeDeleteDialog(), 1500);
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Unknown error");
+      setDeleteStep("error");
+    }
+  }
+
+  // Import handler
+  function handleImportClick() {
+    fileInputRef.current?.click();
+  }
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    importBackup.mutate(file);
+    e.target.value = "";
   }
 
   return (
@@ -159,7 +227,7 @@ export function BackupModal({ isOpen, onClose }: BackupModalProps) {
           </div>
 
           {/* Actions */}
-          <div className="shrink-0 flex gap-2">
+          <div className="shrink-0 flex gap-2 flex-wrap">
             <Button
               onClick={() => runBackup.mutate()}
               disabled={runBackup.isPending}
@@ -172,6 +240,26 @@ export function BackupModal({ isOpen, onClose }: BackupModalProps) {
               )}
               {runBackup.isPending ? "Running Backup…" : "Run Backup Now"}
             </Button>
+            <Button
+              variant="outline"
+              onClick={handleImportClick}
+              disabled={importBackup.isPending}
+              className="gap-2"
+            >
+              {importBackup.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Upload className="w-4 h-4" />
+              )}
+              {importBackup.isPending ? "Importing…" : "Import Backup"}
+            </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json"
+              className="hidden"
+              onChange={handleFileChange}
+            />
             <Button
               variant="outline"
               size="icon"
@@ -233,25 +321,46 @@ export function BackupModal({ isOpen, onClose }: BackupModalProps) {
                         {backup.created_by_name ?? "System"}
                       </TableCell>
                       <TableCell className="text-right">
-                        {backup.status === "success" && (
+                        <div className="flex items-center justify-end gap-1">
+                          {backup.status === "success" && (
+                            <>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-1 h-7 text-xs"
+                                onClick={() => openRestoreDialog(backup)}
+                              >
+                                <RotateCcw className="w-3 h-3" />
+                                Restore
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-1 h-7 text-xs"
+                                onClick={() => downloadBackup.mutate(backup.id)}
+                                disabled={downloadBackup.isPending}
+                              >
+                                <Download className="w-3 h-3" />
+                              </Button>
+                            </>
+                          )}
                           <Button
                             variant="outline"
                             size="sm"
-                            className="gap-1 h-7 text-xs"
-                            onClick={() => openRestoreDialog(backup)}
+                            className="gap-1 h-7 text-xs text-destructive hover:text-destructive"
+                            onClick={() => openDeleteDialog(backup)}
                           >
-                            <RotateCcw className="w-3 h-3" />
-                            Restore
+                            <Trash2 className="w-3 h-3" />
                           </Button>
-                        )}
-                        {backup.status === "failed" && backup.error_message && (
-                          <span
-                            className="text-xs text-destructive truncate max-w-[120px] block"
-                            title={backup.error_message}
-                          >
-                            {backup.error_message.slice(0, 40)}…
-                          </span>
-                        )}
+                          {backup.status === "failed" && backup.error_message && (
+                            <span
+                              className="text-xs text-destructive truncate max-w-[120px] block"
+                              title={backup.error_message}
+                            >
+                              {backup.error_message.slice(0, 40)}…
+                            </span>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -259,6 +368,62 @@ export function BackupModal({ isOpen, onClose }: BackupModalProps) {
               </Table>
             )}
           </div>
+
+          {/* Recent Logs collapsible */}
+          <Collapsible open={logsOpen} onOpenChange={setLogsOpen} className="shrink-0">
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" className="w-full justify-between gap-2 text-xs text-muted-foreground">
+                <span className="flex items-center gap-2">
+                  <ScrollText className="w-4 h-4" />
+                  Recent Logs (last 20)
+                </span>
+                <ChevronDown className={`w-4 h-4 transition-transform ${logsOpen ? "rotate-180" : ""}`} />
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="rounded-lg border border-border overflow-auto max-h-48 mt-1">
+                {logsLoading ? (
+                  <div className="flex items-center justify-center py-6">
+                    <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                  </div>
+                ) : logs.length === 0 ? (
+                  <p className="text-xs text-muted-foreground text-center py-4">No logs yet</p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="text-xs">Action</TableHead>
+                        <TableHead className="text-xs">User</TableHead>
+                        <TableHead className="text-xs">Date</TableHead>
+                        <TableHead className="text-xs">Result</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {logs.map((log) => (
+                        <TableRow key={log.id}>
+                          <TableCell className="text-xs capitalize">{log.action}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">
+                            {log.performed_by_name ?? "System"}
+                          </TableCell>
+                          <TableCell className="text-xs whitespace-nowrap">
+                            {format(new Date(log.created_at), "MMM d, HH:mm")}
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={log.result === "success" ? "default" : "destructive"}
+                              className="text-xs"
+                            >
+                              {log.result}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
 
           <p className="shrink-0 text-xs text-muted-foreground">
             Backups are retained for 7 days or up to 50 snapshots. Auto-backup runs every 12 hours.
@@ -301,7 +466,6 @@ export function BackupModal({ isOpen, onClose }: BackupModalProps) {
               />
             </div>
           )}
-
           {restoreStep === "restoring" && (
             <div className="flex items-center gap-3 py-4">
               <Loader2 className="w-6 h-6 animate-spin text-primary" />
@@ -313,7 +477,6 @@ export function BackupModal({ isOpen, onClose }: BackupModalProps) {
               </div>
             </div>
           )}
-
           {restoreStep === "done" && (
             <div className="flex items-center gap-3 py-4 text-primary">
               <CheckCircle className="w-6 h-6" />
@@ -323,7 +486,6 @@ export function BackupModal({ isOpen, onClose }: BackupModalProps) {
               </div>
             </div>
           )}
-
           {restoreStep === "error" && (
             <div className="flex items-start gap-3 py-4 text-destructive">
               <XCircle className="w-5 h-5 mt-0.5 shrink-0" />
@@ -335,10 +497,7 @@ export function BackupModal({ isOpen, onClose }: BackupModalProps) {
           )}
 
           <AlertDialogFooter>
-            <AlertDialogCancel
-              onClick={closeRestoreDialog}
-              disabled={restoreStep === "restoring"}
-            >
+            <AlertDialogCancel onClick={closeRestoreDialog} disabled={restoreStep === "restoring"}>
               Cancel
             </AlertDialogCancel>
             {restoreStep === "confirm" && (
@@ -353,10 +512,90 @@ export function BackupModal({ isOpen, onClose }: BackupModalProps) {
               </Button>
             )}
             {restoreStep === "error" && (
+              <Button variant="destructive" onClick={() => setRestoreStep("confirm")}>
+                Try Again
+              </Button>
+            )}
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && closeDeleteDialog()}>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="w-5 h-5" />
+              Delete Backup
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-sm space-y-2">
+              <span className="block font-semibold text-foreground">
+                ⚠️ This will permanently remove the backup from{" "}
+                {deleteTarget &&
+                  format(new Date(deleteTarget.started_at), "MMM d, yyyy HH:mm")}
+                .
+              </span>
+              <span className="block">
+                The backup file and record will be deleted forever. This cannot be undone.
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          {deleteStep === "confirm" && (
+            <div className="space-y-3 py-2">
+              <p className="text-sm font-medium">
+                Type <span className="font-mono text-destructive font-bold">DELETE</span> to confirm:
+              </p>
+              <Input
+                value={deleteConfirmText}
+                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                placeholder="Type DELETE"
+                className="font-mono"
+                autoFocus
+              />
+            </div>
+          )}
+          {deleteStep === "deleting" && (
+            <div className="flex items-center gap-3 py-4">
+              <Loader2 className="w-6 h-6 animate-spin text-destructive" />
+              <div>
+                <p className="text-sm font-medium">Deleting backup…</p>
+              </div>
+            </div>
+          )}
+          {deleteStep === "done" && (
+            <div className="flex items-center gap-3 py-4 text-primary">
+              <CheckCircle className="w-6 h-6" />
+              <p className="text-sm font-medium">Backup deleted.</p>
+            </div>
+          )}
+          {deleteStep === "error" && (
+            <div className="flex items-start gap-3 py-4 text-destructive">
+              <XCircle className="w-5 h-5 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-sm font-semibold">Delete failed</p>
+                <p className="text-xs mt-1 break-words">{deleteError}</p>
+              </div>
+            </div>
+          )}
+
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={closeDeleteDialog} disabled={deleteStep === "deleting"}>
+              Cancel
+            </AlertDialogCancel>
+            {deleteStep === "confirm" && (
               <Button
                 variant="destructive"
-                onClick={() => setRestoreStep("confirm")}
+                onClick={handleDelete}
+                disabled={deleteConfirmText !== "DELETE"}
+                className="gap-2"
               >
+                <Trash2 className="w-4 h-4" />
+                Delete Permanently
+              </Button>
+            )}
+            {deleteStep === "error" && (
+              <Button variant="destructive" onClick={() => setDeleteStep("confirm")}>
                 Try Again
               </Button>
             )}

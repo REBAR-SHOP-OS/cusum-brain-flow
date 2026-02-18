@@ -8,7 +8,7 @@ export interface SystemBackup {
   created_by: string | null;
   created_by_name: string | null;
   status: "pending" | "running" | "success" | "failed";
-  backup_type: "manual" | "scheduled";
+  backup_type: "manual" | "scheduled" | "imported";
   file_path: string | null;
   file_size_bytes: number | null;
   tables_backed_up: string[] | null;
@@ -16,6 +16,17 @@ export interface SystemBackup {
   started_at: string;
   completed_at: string | null;
   metadata: Record<string, unknown>;
+}
+
+export interface BackupLog {
+  id: string;
+  backup_id: string | null;
+  performed_by: string | null;
+  performed_by_name: string | null;
+  action: string;
+  result: string;
+  error_message: string | null;
+  created_at: string;
 }
 
 async function callBackupFunction(body: Record<string, unknown>) {
@@ -56,6 +67,7 @@ export function useRunBackup() {
     onSuccess: () => {
       toast.success("Backup completed successfully");
       qc.invalidateQueries({ queryKey: ["system_backups"] });
+      qc.invalidateQueries({ queryKey: ["backup_logs"] });
     },
     onError: (err: Error) => {
       toast.error("Backup failed: " + err.message);
@@ -71,11 +83,80 @@ export function useRestoreBackup() {
     onSuccess: () => {
       toast.success("Restore complete! The page will reload shortly.");
       qc.invalidateQueries({ queryKey: ["system_backups"] });
+      qc.invalidateQueries({ queryKey: ["backup_logs"] });
       setTimeout(() => window.location.reload(), 2000);
     },
     onError: (err: Error) => {
       toast.error("Restore failed: " + err.message);
     },
+  });
+}
+
+export function useDownloadBackup() {
+  return useMutation({
+    mutationFn: async (backupId: string) => {
+      const result = await callBackupFunction({ action: "download", backup_id: backupId });
+      if (result.url) {
+        window.open(result.url, "_blank");
+      }
+      return result;
+    },
+    onSuccess: () => {
+      toast.success("Download started");
+    },
+    onError: (err: Error) => {
+      toast.error("Download failed: " + err.message);
+    },
+  });
+}
+
+export function useDeleteBackup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { backup_id: string; confirm: string }) =>
+      callBackupFunction({ action: "delete", ...vars }),
+    onSuccess: () => {
+      toast.success("Backup deleted permanently");
+      qc.invalidateQueries({ queryKey: ["system_backups"] });
+      qc.invalidateQueries({ queryKey: ["backup_logs"] });
+    },
+    onError: (err: Error) => {
+      toast.error("Delete failed: " + err.message);
+    },
+  });
+}
+
+export function useImportBackup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (file: File) => {
+      const text = await file.text();
+      // Validate JSON structure before sending
+      const parsed = JSON.parse(text);
+      if (!parsed.version || !parsed.tables) {
+        throw new Error("Invalid backup file: must contain 'version' and 'tables'");
+      }
+      return callBackupFunction({ action: "import", data: text });
+    },
+    onSuccess: () => {
+      toast.success("Backup imported successfully");
+      qc.invalidateQueries({ queryKey: ["system_backups"] });
+      qc.invalidateQueries({ queryKey: ["backup_logs"] });
+    },
+    onError: (err: Error) => {
+      toast.error("Import failed: " + err.message);
+    },
+  });
+}
+
+export function useBackupLogs() {
+  return useQuery<BackupLog[]>({
+    queryKey: ["backup_logs"],
+    queryFn: async () => {
+      const result = await callBackupFunction({ action: "logs" });
+      return result.logs ?? [];
+    },
+    staleTime: 30_000,
   });
 }
 
