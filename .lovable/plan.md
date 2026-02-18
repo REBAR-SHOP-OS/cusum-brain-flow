@@ -1,68 +1,76 @@
 
 
-# Make "Fix with ARIA" Actually Fix Problems
+# Fix: Multi-Turn Tool Call Loop for Empire Agent
 
-## Problem
-Currently, clicking "Fix with ARIA" on the Tasks page only redirects to the Empire Builder chat with a message. The Architect agent creates fix tickets and generates fix prompts, but never actually resolves the original task or applies real fixes to ERP/QuickBooks/Odoo data. The user wants the system to take real action, not just report.
+## Root Cause
+The `ai-agent` edge function only performs **one follow-up call** after processing tool calls (line 8088-8130). The Architect agent's autofix flow requires **multiple rounds**:
 
----
+1. AI calls `read_task` to understand the problem
+2. Follow-up returns tool results, AI then calls `resolve_task` (or other write tools)
+3. **This second round of tool calls is never processed** -- the code only handles one follow-up
+4. `reply` stays empty, so the fallback "I couldn't process that request." is returned
 
-## Changes
+## Fix
 
-### 1. Add `resolve_task` Tool to Empire Agent (ai-agent/index.ts -- empire section only)
+### File: `supabase/functions/ai-agent/index.ts` (lines ~8086-8130)
 
-**New tool definition** that allows the Architect to:
-- Read the original task from the `tasks` table by ID
-- Apply the fix using existing ERP write tools (update_machine_status, update_delivery_status, update_lead_status, etc.)
-- Mark the original task as `completed` with a resolution note
-- Log the resolution in `activity_events`
+Replace the single follow-up call with a **loop** that continues processing tool calls until the AI returns a text reply (or a max iteration limit is reached to prevent infinite loops).
 
-**Tool parameters:**
-- `task_id` (string, required) -- the original task UUID
-- `resolution_note` (string, required) -- what was done to fix it
-- `new_status` (string, default "completed") -- new task status
+**Before (simplified):**
+```
+if (seoToolResults.length > 0 || ...) {
+  // single follow-up call
+  const followUp = await fetch(aiUrl, ...);
+  reply = followUpData.choices?.[0]?.message?.content || reply;
+}
+```
 
-### 2. Add `read_task` Tool to Empire Agent (ai-agent/index.ts -- empire section only)
+**After:**
+```
+let iterations = 0;
+const MAX_TOOL_ITERATIONS = 5;
 
-Allows the Architect to fetch the full task details (title, description, source, priority) so it can understand what needs fixing before acting.
+while (iterations < MAX_TOOL_ITERATIONS && 
+       (seoToolResults.length > 0 || (!reply && (createdNotifications.length > 0 || emailResults.length > 0)))) {
+  
+  // Build tool result messages
+  const toolResultMessages = [...messages, lastAssistantMessage, ...toolResultEntries];
+  
+  // Make follow-up call
+  const followUp = await fetch(aiUrl, { ... });
+  const followUpData = await followUp.json();
+  const followUpChoice = followUpData.choices?.[0];
+  
+  // Check if follow-up returns more tool calls
+  if (followUpChoice?.message?.tool_calls?.length > 0) {
+    // Process new tool calls (read_task, resolve_task, etc.)
+    // Push results to seoToolResults
+    // Update lastAssistantMessage for next iteration
+    seoToolResults = []; // reset for next round
+    // ... process each tool call same as before ...
+  }
+  
+  // Extract text reply if present
+  if (followUpChoice?.message?.content) {
+    reply = followUpChoice.message.content;
+    break; // got a reply, stop looping
+  }
+  
+  iterations++;
+}
+```
 
-### 3. Update Empire System Prompt (ai-agent/index.ts -- empire section only)
+### Key Details
+- Max 5 iterations to prevent infinite loops or runaway API costs
+- Each iteration processes any new tool calls returned by the follow-up
+- The loop breaks as soon as the AI returns a text `content` reply
+- All existing tool handlers (read_task, resolve_task, create_fix_ticket, diagnose_from_screenshot, SEO tools, etc.) are reused inside the loop
+- No changes needed to any frontend files
 
-Update the system prompt to instruct the Architect:
-- When receiving an autofix request, first use `read_task` to understand the problem
-- Then use existing ERP/WP/Odoo write tools to apply the actual fix
-- Then use `resolve_task` to mark the task as completed with a resolution note
-- Remove the "READ-ONLY" restriction for QB/Odoo -- the Architect has write tools and should use them
-- Add explicit instruction: "Do NOT just create fix requests or tickets. Use your write tools to fix the problem directly."
+### Files Modified
+- `supabase/functions/ai-agent/index.ts` -- Replace single follow-up block (lines ~8086-8130) with a multi-turn loop
 
-### 4. Improve Autofix Flow in Tasks Page (src/pages/Tasks.tsx)
-
-Change `fixWithAria` to:
-- Include the `task.id` in the autofix payload so the Architect can reference and resolve it
-- After redirect, pass `task_id` as a separate query param so the agent can call `resolve_task` with it
-- Add a toast notification "Sending to Architect for resolution..."
-
-### 5. Update Empire Autofix Handler (src/pages/EmpireBuilder.tsx)
-
-Update the autofix useEffect to:
-- Extract `task_id` from query params
-- Include `task_id` in the auto-message sent to the Architect so it knows which task to resolve
-- After the Architect responds, check if the task was resolved and show a confirmation
-
----
-
-## What This Fixes
-- "Fix with ARIA" will actually diagnose and apply fixes using existing ERP/WP write tools
-- The original task will be marked as "completed" with a resolution note
-- The Architect will stop creating tickets about tickets and instead take action
-- QuickBooks/Odoo write operations remain controlled through existing tools (wp_update_product, update_machine_status, etc.)
-
-## Files Modified
-1. `supabase/functions/ai-agent/index.ts` -- Empire section only (add tools + update prompt)
-2. `src/pages/Tasks.tsx` -- Update `fixWithAria` function
-3. `src/pages/EmpireBuilder.tsx` -- Update autofix handler
-
-## Files NOT Modified
-- No other pages, components, or modules
-- No database changes needed (tasks table already exists)
-- No changes to auth, routing, or other agents
+### No Other Changes Needed
+- No database changes
+- No frontend changes
+- No new files
