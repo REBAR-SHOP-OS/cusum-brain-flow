@@ -183,6 +183,161 @@ export type Database = {
         }
         Relationships: []
       }
+      alert_dispatch_log: {
+        Row: {
+          channel: string
+          company_id: string
+          delivered_at: string | null
+          error_message: string | null
+          id: string
+          metadata: Json | null
+          notification_id: string | null
+          recipient_address: string
+          recipient_user_id: string | null
+          sent_at: string
+          status: string
+        }
+        Insert: {
+          channel: string
+          company_id: string
+          delivered_at?: string | null
+          error_message?: string | null
+          id?: string
+          metadata?: Json | null
+          notification_id?: string | null
+          recipient_address?: string
+          recipient_user_id?: string | null
+          sent_at?: string
+          status?: string
+        }
+        Update: {
+          channel?: string
+          company_id?: string
+          delivered_at?: string | null
+          error_message?: string | null
+          id?: string
+          metadata?: Json | null
+          notification_id?: string | null
+          recipient_address?: string
+          recipient_user_id?: string | null
+          sent_at?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "alert_dispatch_log_notification_id_fkey"
+            columns: ["notification_id"]
+            isOneToOne: false
+            referencedRelation: "notifications"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      alert_escalation_queue: {
+        Row: {
+          acknowledged_at: string | null
+          company_id: string
+          created_at: string
+          escalate_at: string
+          escalation_level: number
+          id: string
+          notification_id: string
+          resolved_at: string | null
+          rule_id: string
+          status: string
+        }
+        Insert: {
+          acknowledged_at?: string | null
+          company_id: string
+          created_at?: string
+          escalate_at: string
+          escalation_level?: number
+          id?: string
+          notification_id: string
+          resolved_at?: string | null
+          rule_id: string
+          status?: string
+        }
+        Update: {
+          acknowledged_at?: string | null
+          company_id?: string
+          created_at?: string
+          escalate_at?: string
+          escalation_level?: number
+          id?: string
+          notification_id?: string
+          resolved_at?: string | null
+          rule_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "alert_escalation_queue_notification_id_fkey"
+            columns: ["notification_id"]
+            isOneToOne: false
+            referencedRelation: "notifications"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "alert_escalation_queue_rule_id_fkey"
+            columns: ["rule_id"]
+            isOneToOne: false
+            referencedRelation: "alert_routing_rules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      alert_routing_rules: {
+        Row: {
+          channels: string[]
+          company_id: string
+          created_at: string
+          enabled: boolean
+          escalate_after_minutes: number
+          escalate_to_ceo_after_minutes: number | null
+          escalate_to_role: string | null
+          event_category: string
+          event_type: string | null
+          id: string
+          priority: string
+          slack_channel: string | null
+          target_roles: string[]
+          updated_at: string
+        }
+        Insert: {
+          channels?: string[]
+          company_id: string
+          created_at?: string
+          enabled?: boolean
+          escalate_after_minutes?: number
+          escalate_to_ceo_after_minutes?: number | null
+          escalate_to_role?: string | null
+          event_category: string
+          event_type?: string | null
+          id?: string
+          priority?: string
+          slack_channel?: string | null
+          target_roles?: string[]
+          updated_at?: string
+        }
+        Update: {
+          channels?: string[]
+          company_id?: string
+          created_at?: string
+          enabled?: boolean
+          escalate_after_minutes?: number
+          escalate_to_ceo_after_minutes?: number | null
+          escalate_to_role?: string | null
+          event_category?: string
+          event_type?: string | null
+          id?: string
+          priority?: string
+          slack_channel?: string | null
+          target_roles?: string[]
+          updated_at?: string
+        }
+        Relationships: []
+      }
       autopilot_actions: {
         Row: {
           approved_at: string | null
@@ -5921,6 +6076,7 @@ export type Database = {
           is_active: boolean | null
           manager_id: string | null
           phone: string | null
+          phone_number: string | null
           preferred_language: string
           preferred_voice_id: string | null
           title: string | null
@@ -5941,6 +6097,7 @@ export type Database = {
           is_active?: boolean | null
           manager_id?: string | null
           phone?: string | null
+          phone_number?: string | null
           preferred_language?: string
           preferred_voice_id?: string | null
           title?: string | null
@@ -5961,6 +6118,7 @@ export type Database = {
           is_active?: boolean | null
           manager_id?: string | null
           phone?: string | null
+          phone_number?: string | null
           preferred_language?: string
           preferred_voice_id?: string | null
           title?: string | null
