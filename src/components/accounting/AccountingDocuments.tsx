@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FileText, Package, Calculator, ClipboardList, Eye, Loader2, ArrowRight, ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { FileText, Package, Calculator, ClipboardList, Eye, Loader2, ArrowRight, ChevronLeft, ChevronRight, Search, PenTool } from "lucide-react";
 import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
 import { InvoiceTemplate } from "./documents/InvoiceTemplate";
 import { PackingSlipTemplate } from "./documents/PackingSlipTemplate";
@@ -19,6 +19,7 @@ import { QuotationTemplate } from "./documents/QuotationTemplate";
 import { EstimationTemplate } from "./documents/EstimationTemplate";
 import { useArchivedQuotations } from "@/hooks/useArchivedQuotations";
 import { ConvertQuoteDialog } from "@/components/orders/ConvertQuoteDialog";
+import { ESignatureDialog } from "@/components/accounting/ESignatureDialog";
 
 interface Props {
   data: ReturnType<typeof useQuickBooksData>;
@@ -49,6 +50,7 @@ export function AccountingDocuments({ data }: Props) {
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [previewType, setPreviewType] = useState<DocType | null>(null);
   const [convertQuote, setConvertQuote] = useState<{ id: string; quote_number: string; total_amount: number | null; customer_name: string } | null>(null);
+  const [signQuote, setSignQuote] = useState<{ id: string; quote_number: string } | null>(null);
 
   // Quotation pagination & filter state
   const [qPage, setQPage] = useState(1);
@@ -275,6 +277,21 @@ export function AccountingDocuments({ data }: Props) {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
+                    {!q.signature_data && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1.5 text-xs"
+                        onClick={(e) => { e.stopPropagation(); setSignQuote({ id: q.id, quote_number: q.quote_number }); }}
+                      >
+                        <PenTool className="w-3.5 h-3.5" /> Sign
+                      </Button>
+                    )}
+                    {q.signature_data && (
+                      <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-600 border-emerald-200">
+                        ✓ Signed
+                      </Badge>
+                    )}
                     {isSale && (
                       <Button
                         size="sm"
@@ -412,6 +429,17 @@ export function AccountingDocuments({ data }: Props) {
           open={!!convertQuote}
           onOpenChange={(open) => !open && setConvertQuote(null)}
           quote={convertQuote}
+        />
+      )}
+
+      {/* eSignature Dialog */}
+      {signQuote && (
+        <ESignatureDialog
+          open={!!signQuote}
+          onOpenChange={(open) => !open && setSignQuote(null)}
+          quoteId={signQuote.id}
+          quoteNumber={signQuote.quote_number}
+          onSigned={() => { setSignQuote(null); }}
         />
       )}
     </div>
