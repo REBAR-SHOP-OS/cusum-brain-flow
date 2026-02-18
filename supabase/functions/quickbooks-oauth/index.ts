@@ -390,6 +390,38 @@ serve(async (req) => {
       case "account-quick-report":
         return handleAccountQuickReport(supabase, userId, body);
 
+      // ── Phase 1: New Transaction Types ─────────────────────────
+      case "list-sales-receipts":
+        return handleListSalesReceipts(supabase, userId);
+      case "create-sales-receipt":
+        return handleCreateSalesReceipt(supabase, userId, body);
+      case "list-refund-receipts":
+        return handleListRefundReceipts(supabase, userId);
+      case "create-refund-receipt":
+        return handleCreateRefundReceipt(supabase, userId, body);
+      case "list-deposits":
+        return handleListDeposits(supabase, userId);
+      case "create-deposit":
+        return handleCreateDeposit(supabase, userId, body);
+      case "create-transfer":
+        return handleCreateTransfer(supabase, userId, body);
+      case "list-journal-entries":
+        return handleListJournalEntries(supabase, userId);
+      case "create-journal-entry":
+        return handleCreateJournalEntry(supabase, userId, body);
+
+      // ── Phase 1: New Reports ───────────────────────────────────
+      case "get-aged-receivables":
+        return handleGetAgedReceivables(supabase, userId, body);
+      case "get-aged-payables":
+        return handleGetAgedPayables(supabase, userId, body);
+      case "get-general-ledger":
+        return handleGetGeneralLedger(supabase, userId, body);
+      case "get-trial-balance":
+        return handleGetTrialBalance(supabase, userId, body);
+      case "get-transaction-list":
+        return handleGetTransactionList(supabase, userId, body);
+
       // ── Sync Engine Delegation ─────────────────────────────────
       case "full-sync":
       case "incremental-sync":
@@ -1518,7 +1550,218 @@ async function handleAccountQuickReport(
       }
       if (row.Rows?.Row) {
         parseRows(row.Rows.Row);
-      }
+}
+
+// ─── Sales Receipts ───────────────────────────────────────────────
+
+async function handleListSalesReceipts(supabase: ReturnType<typeof createClient>, userId: string) {
+  const config = await getQBConfig(supabase, userId);
+  const data = await qbQuery(config, "SalesReceipt");
+  return jsonRes({ salesReceipts: data.QueryResponse?.SalesReceipt || [] });
+}
+
+async function handleCreateSalesReceipt(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const { customerId, customerName, lineItems, memo, depositToAccountId, paymentMethodId } = body as {
+    customerId: string; customerName: string;
+    lineItems: { description: string; amount: number; quantity?: number; serviceId?: string }[];
+    memo?: string; depositToAccountId?: string; paymentMethodId?: string;
+  };
+  if (!customerId || !lineItems || lineItems.length === 0) throw new Error("Customer ID and line items required");
+
+  const payload: Record<string, unknown> = {
+    CustomerRef: { value: customerId, name: customerName },
+    Line: lineItems.map(item => ({
+      DetailType: "SalesItemLineDetail",
+      Amount: item.amount * (item.quantity || 1),
+      Description: item.description,
+      SalesItemLineDetail: { Qty: item.quantity || 1, UnitPrice: item.amount, ...(item.serviceId && { ItemRef: { value: item.serviceId } }) },
+    })),
+    ...(memo && { CustomerMemo: { value: memo } }),
+    ...(depositToAccountId && { DepositToAccountRef: { value: depositToAccountId } }),
+    ...(paymentMethodId && { PaymentMethodRef: { value: paymentMethodId } }),
+  };
+
+  const data = await qbFetch(config, "salesreceipt", { method: "POST", body: JSON.stringify(payload) });
+  return jsonRes({ success: true, salesReceipt: (data as any).SalesReceipt, docNumber: (data as any).SalesReceipt?.DocNumber });
+}
+
+// ─── Refund Receipts ──────────────────────────────────────────────
+
+async function handleListRefundReceipts(supabase: ReturnType<typeof createClient>, userId: string) {
+  const config = await getQBConfig(supabase, userId);
+  const data = await qbQuery(config, "RefundReceipt");
+  return jsonRes({ refundReceipts: data.QueryResponse?.RefundReceipt || [] });
+}
+
+async function handleCreateRefundReceipt(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const { customerId, customerName, lineItems, memo, depositToAccountId } = body as {
+    customerId: string; customerName: string;
+    lineItems: { description: string; amount: number; quantity?: number; serviceId?: string }[];
+    memo?: string; depositToAccountId?: string;
+  };
+  if (!customerId || !lineItems || lineItems.length === 0) throw new Error("Customer ID and line items required");
+
+  const payload: Record<string, unknown> = {
+    CustomerRef: { value: customerId, name: customerName },
+    Line: lineItems.map(item => ({
+      DetailType: "SalesItemLineDetail",
+      Amount: item.amount * (item.quantity || 1),
+      Description: item.description,
+      SalesItemLineDetail: { Qty: item.quantity || 1, UnitPrice: item.amount, ...(item.serviceId && { ItemRef: { value: item.serviceId } }) },
+    })),
+    ...(memo && { CustomerMemo: { value: memo } }),
+    ...(depositToAccountId && { DepositToAccountRef: { value: depositToAccountId } }),
+  };
+
+  const data = await qbFetch(config, "refundreceipt", { method: "POST", body: JSON.stringify(payload) });
+  return jsonRes({ success: true, refundReceipt: (data as any).RefundReceipt, docNumber: (data as any).RefundReceipt?.DocNumber });
+}
+
+// ─── Deposits ─────────────────────────────────────────────────────
+
+async function handleListDeposits(supabase: ReturnType<typeof createClient>, userId: string) {
+  const config = await getQBConfig(supabase, userId);
+  const data = await qbQuery(config, "Deposit");
+  return jsonRes({ deposits: data.QueryResponse?.Deposit || [] });
+}
+
+async function handleCreateDeposit(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const { depositToAccountId, lineItems, memo, txnDate } = body as {
+    depositToAccountId: string;
+    lineItems: { amount: number; accountId: string; description?: string; entityType?: string; entityId?: string }[];
+    memo?: string; txnDate?: string;
+  };
+  if (!depositToAccountId || !lineItems || lineItems.length === 0) throw new Error("Deposit account and line items required");
+
+  const payload: Record<string, unknown> = {
+    DepositToAccountRef: { value: depositToAccountId },
+    Line: lineItems.map(item => ({
+      Amount: item.amount,
+      DetailType: "DepositLineDetail",
+      DepositLineDetail: {
+        AccountRef: { value: item.accountId },
+        ...(item.description && { memo: item.description }),
+        ...(item.entityType && item.entityId && { Entity: { Type: item.entityType, EntityRef: { value: item.entityId } } }),
+      },
+    })),
+    ...(memo && { PrivateNote: memo }),
+    ...(txnDate && { TxnDate: txnDate }),
+  };
+
+  const data = await qbFetch(config, "deposit", { method: "POST", body: JSON.stringify(payload) });
+  return jsonRes({ success: true, deposit: (data as any).Deposit, docNumber: (data as any).Deposit?.DocNumber });
+}
+
+// ─── Bank Transfer ────────────────────────────────────────────────
+
+async function handleCreateTransfer(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const { fromAccountId, toAccountId, amount, memo, txnDate } = body as {
+    fromAccountId: string; toAccountId: string; amount: number; memo?: string; txnDate?: string;
+  };
+  if (!fromAccountId || !toAccountId || !amount) throw new Error("From/To accounts and amount required");
+
+  const payload: Record<string, unknown> = {
+    FromAccountRef: { value: fromAccountId },
+    ToAccountRef: { value: toAccountId },
+    Amount: amount,
+    ...(memo && { PrivateNote: memo }),
+    ...(txnDate && { TxnDate: txnDate }),
+  };
+
+  const data = await qbFetch(config, "transfer", { method: "POST", body: JSON.stringify(payload) });
+  return jsonRes({ success: true, transfer: (data as any).Transfer });
+}
+
+// ─── General Journal Entries ──────────────────────────────────────
+
+async function handleListJournalEntries(supabase: ReturnType<typeof createClient>, userId: string) {
+  const config = await getQBConfig(supabase, userId);
+  const data = await qbQuery(config, "JournalEntry");
+  return jsonRes({ journalEntries: data.QueryResponse?.JournalEntry || [] });
+}
+
+async function handleCreateJournalEntry(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const { lines, memo, txnDate } = body as {
+    lines: { accountId: string; accountName: string; amount: number; type: "debit" | "credit"; description?: string }[];
+    memo?: string; txnDate?: string;
+  };
+  if (!lines || lines.length === 0) throw new Error("At least one journal line required");
+
+  const totalDebits = lines.filter(l => l.type === "debit").reduce((s, l) => s + l.amount, 0);
+  const totalCredits = lines.filter(l => l.type === "credit").reduce((s, l) => s + l.amount, 0);
+  if (Math.abs(totalDebits - totalCredits) > 0.01) {
+    throw new Error(`Debits ($${totalDebits.toFixed(2)}) must equal Credits ($${totalCredits.toFixed(2)})`);
+  }
+
+  const payload = {
+    TxnDate: txnDate || new Date().toISOString().split("T")[0],
+    PrivateNote: memo || "General journal entry",
+    Line: lines.map(line => ({
+      DetailType: "JournalEntryLineDetail",
+      Amount: line.amount,
+      Description: line.description || "",
+      JournalEntryLineDetail: {
+        PostingType: line.type === "debit" ? "Debit" : "Credit",
+        AccountRef: { value: line.accountId, name: line.accountName },
+      },
+    })),
+  };
+
+  const data = await qbFetch(config, "journalentry", { method: "POST", body: JSON.stringify(payload) });
+  return jsonRes({ success: true, journalEntry: (data as any).JournalEntry, docNumber: (data as any).JournalEntry?.DocNumber });
+}
+
+// ─── Aged Receivables Report ──────────────────────────────────────
+
+async function handleGetAgedReceivables(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const asOfDate = (body.asOfDate as string) || new Date().toISOString().split("T")[0];
+  const data = await qbFetch(config, `reports/AgedReceivableDetail?report_date=${asOfDate}`);
+  return jsonRes({ report: data });
+}
+
+// ─── Aged Payables Report ─────────────────────────────────────────
+
+async function handleGetAgedPayables(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const asOfDate = (body.asOfDate as string) || new Date().toISOString().split("T")[0];
+  const data = await qbFetch(config, `reports/AgedPayableDetail?report_date=${asOfDate}`);
+  return jsonRes({ report: data });
+}
+
+// ─── General Ledger Report ────────────────────────────────────────
+
+async function handleGetGeneralLedger(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const startDate = (body.startDate as string) || new Date(new Date().getFullYear(), 0, 1).toISOString().split("T")[0];
+  const endDate = (body.endDate as string) || new Date().toISOString().split("T")[0];
+  const data = await qbFetch(config, `reports/GeneralLedger?start_date=${startDate}&end_date=${endDate}&columns=tx_date,txn_type,doc_num,name,memo,account,subt_nat_amount,rbal_nat_amount`);
+  return jsonRes({ report: data });
+}
+
+// ─── Trial Balance Report ─────────────────────────────────────────
+
+async function handleGetTrialBalance(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const asOfDate = (body.asOfDate as string) || new Date().toISOString().split("T")[0];
+  const data = await qbFetch(config, `reports/TrialBalance?report_date=${asOfDate}`);
+  return jsonRes({ report: data });
+}
+
+// ─── Transaction List by Date ─────────────────────────────────────
+
+async function handleGetTransactionList(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const startDate = (body.startDate as string) || new Date(new Date().getFullYear(), 0, 1).toISOString().split("T")[0];
+  const endDate = (body.endDate as string) || new Date().toISOString().split("T")[0];
+  const data = await qbFetch(config, `reports/TransactionList?start_date=${startDate}&end_date=${endDate}&columns=tx_date,txn_type,doc_num,name,memo,account,subt_nat_amount`);
+  return jsonRes({ report: data });
+}
       if (row.ColData) {
         const vals = row.ColData.map((c: any) => c.value || "");
         transactions.push({
