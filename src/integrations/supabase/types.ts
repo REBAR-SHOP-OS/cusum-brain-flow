@@ -6083,6 +6083,60 @@ export type Database = {
         }
         Relationships: []
       }
+      scheduled_activities: {
+        Row: {
+          activity_type: string
+          assigned_name: string | null
+          assigned_to: string | null
+          company_id: string
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          due_date: string
+          entity_id: string
+          entity_type: string
+          id: string
+          note: string | null
+          status: string
+          summary: string
+          updated_at: string
+        }
+        Insert: {
+          activity_type?: string
+          assigned_name?: string | null
+          assigned_to?: string | null
+          company_id: string
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          due_date: string
+          entity_id: string
+          entity_type?: string
+          id?: string
+          note?: string | null
+          status?: string
+          summary: string
+          updated_at?: string
+        }
+        Update: {
+          activity_type?: string
+          assigned_name?: string | null
+          assigned_to?: string | null
+          company_id?: string
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          due_date?: string
+          entity_id?: string
+          entity_type?: string
+          id?: string
+          note?: string | null
+          status?: string
+          summary?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       seo_crawl_pages: {
         Row: {
           canonical: string | null

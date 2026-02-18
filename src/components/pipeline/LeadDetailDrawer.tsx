@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { ScheduledActivities } from "./ScheduledActivities";
 import { Progress } from "@/components/ui/progress";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -225,9 +226,10 @@ export function LeadDetailDrawer({
         {/* Body — Odoo style: Internal Notes + Chatter */}
         <div className="p-6">
           <Tabs defaultValue="chatter" className="w-full">
-            <TabsList className="w-full grid grid-cols-2 mb-4">
-              <TabsTrigger value="notes">Internal Notes</TabsTrigger>
+            <TabsList className="w-full grid grid-cols-3 mb-4">
+              <TabsTrigger value="notes">Notes</TabsTrigger>
               <TabsTrigger value="chatter">Chatter</TabsTrigger>
+              <TabsTrigger value="activities">Activities</TabsTrigger>
             </TabsList>
 
             <TabsContent value="notes" className="space-y-4 mt-0">
@@ -250,6 +252,10 @@ export function LeadDetailDrawer({
 
             <TabsContent value="chatter" className="mt-0">
               <OdooChatter lead={lead} />
+            </TabsContent>
+
+            <TabsContent value="activities" className="mt-0">
+              <ScheduledActivities entityType="lead" entityId={lead.id} />
             </TabsContent>
           </Tabs>
         </div>
