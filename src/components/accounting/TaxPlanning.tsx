@@ -5,6 +5,7 @@ import { HSATracker } from "./tax/HSATracker";
 import { CCAPlanner } from "./tax/CCAPlanner";
 import { YearEndPlaybook } from "./tax/YearEndPlaybook";
 import { ProfitRetentionPolicy } from "./tax/ProfitRetentionPolicy";
+import { GSTHSTReview } from "./tax/GSTHSTReview";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { COMBINED_CORP_RATE } from "@/lib/tax/canadianTaxRates";
 import { formatCurrency } from "@/lib/tax/taxCalculator";
@@ -56,6 +57,7 @@ export function TaxPlanning() {
       </div>
 
       <DeductionChecklist />
+      <GSTHSTReview />
       <CCAPlanner />
       <YearEndPlaybook />
     </div>
