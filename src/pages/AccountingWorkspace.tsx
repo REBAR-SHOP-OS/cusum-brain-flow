@@ -45,6 +45,9 @@ import { AccountingBatchActions } from "@/components/accounting/AccountingBatchA
 import { AccountingStatements } from "@/components/accounting/AccountingStatements";
 import { AccountingExpenses } from "@/components/accounting/AccountingExpenses";
 import { AccountingAttachments } from "@/components/accounting/AccountingAttachments";
+import { AccountingReconciliation } from "@/components/accounting/AccountingReconciliation";
+import { AccountingScheduledReports } from "@/components/accounting/AccountingScheduledReports";
+import { AccountingRecurringTxns } from "@/components/accounting/AccountingRecurringTxns";
 
 import { usePennyQueue } from "@/hooks/usePennyQueue";
 import { useIntegrations } from "@/hooks/useIntegrations";
@@ -346,6 +349,9 @@ export default function AccountingWorkspace() {
             {activeTab === "statements" && <AccountingStatements data={qb} />}
             {activeTab === "expenses" && <AccountingExpenses data={qb} />}
             {activeTab === "attachments" && <AccountingAttachments data={qb} />}
+            {activeTab === "reconciliation" && <AccountingReconciliation />}
+            {activeTab === "scheduled-reports" && <AccountingScheduledReports />}
+            {activeTab === "recurring-auto" && <AccountingRecurringTxns />}
             {activeTab === "documents" && <AccountingDocuments data={qb} />}
             {activeTab === "balance-sheet" && <AccountingReport data={qb} report="balance-sheet" />}
             {activeTab === "profit-loss" && <AccountingReport data={qb} report="profit-loss" />}

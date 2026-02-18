@@ -7094,6 +7094,71 @@ export type Database = {
         }
         Relationships: []
       }
+      reconciliation_matches: {
+        Row: {
+          bank_account_id: string
+          bank_txn_amount: number
+          bank_txn_date: string
+          bank_txn_description: string | null
+          company_id: string
+          confidence: number
+          created_at: string
+          id: string
+          match_reason: string | null
+          matched_entity_id: string | null
+          matched_entity_type: string | null
+          matched_mirror_id: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          bank_account_id: string
+          bank_txn_amount: number
+          bank_txn_date: string
+          bank_txn_description?: string | null
+          company_id: string
+          confidence?: number
+          created_at?: string
+          id?: string
+          match_reason?: string | null
+          matched_entity_id?: string | null
+          matched_entity_type?: string | null
+          matched_mirror_id?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          bank_account_id?: string
+          bank_txn_amount?: number
+          bank_txn_date?: string
+          bank_txn_description?: string | null
+          company_id?: string
+          confidence?: number
+          created_at?: string
+          id?: string
+          match_reason?: string | null
+          matched_entity_id?: string | null
+          matched_entity_type?: string | null
+          matched_mirror_id?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reconciliation_matches_matched_mirror_id_fkey"
+            columns: ["matched_mirror_id"]
+            isOneToOne: false
+            referencedRelation: "accounting_mirror"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       reconciliation_runs: {
         Row: {
           created_count: number
@@ -7129,6 +7194,65 @@ export type Database = {
           window_days?: number
         }
         Relationships: []
+      }
+      recurring_transactions: {
+        Row: {
+          auto_post: boolean
+          company_id: string
+          created_at: string
+          created_by: string | null
+          customer_id: string | null
+          enabled: boolean
+          frequency: string
+          id: string
+          last_run_at: string | null
+          name: string
+          next_run_at: string
+          template_data: Json
+          transaction_type: string
+          updated_at: string
+        }
+        Insert: {
+          auto_post?: boolean
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          customer_id?: string | null
+          enabled?: boolean
+          frequency?: string
+          id?: string
+          last_run_at?: string | null
+          name: string
+          next_run_at: string
+          template_data?: Json
+          transaction_type: string
+          updated_at?: string
+        }
+        Update: {
+          auto_post?: boolean
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          customer_id?: string | null
+          enabled?: boolean
+          frequency?: string
+          id?: string
+          last_run_at?: string | null
+          name?: string
+          next_run_at?: string
+          template_data?: Json
+          transaction_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recurring_transactions_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       salary_history: {
         Row: {
@@ -7221,6 +7345,57 @@ export type Database = {
           note?: string | null
           status?: string
           summary?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      scheduled_reports: {
+        Row: {
+          company_id: string
+          config: Json
+          created_at: string
+          created_by: string | null
+          enabled: boolean
+          frequency: string
+          id: string
+          last_report_url: string | null
+          last_run_at: string | null
+          name: string
+          next_run_at: string
+          recipients: string[]
+          report_type: string
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          config?: Json
+          created_at?: string
+          created_by?: string | null
+          enabled?: boolean
+          frequency?: string
+          id?: string
+          last_report_url?: string | null
+          last_run_at?: string | null
+          name: string
+          next_run_at: string
+          recipients?: string[]
+          report_type: string
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          config?: Json
+          created_at?: string
+          created_by?: string | null
+          enabled?: boolean
+          frequency?: string
+          id?: string
+          last_report_url?: string | null
+          last_run_at?: string | null
+          name?: string
+          next_run_at?: string
+          recipients?: string[]
+          report_type?: string
           updated_at?: string
         }
         Relationships: []
