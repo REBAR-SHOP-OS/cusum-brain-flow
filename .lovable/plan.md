@@ -140,3 +140,178 @@ After a deep audit of every edge function action, UI component, hook, and naviga
 - The nav menu already has a "Reporting" dropdown -- new reports slot in there naturally.
 - General Journal Entry creation reuses the same pattern as `handleCreatePayrollCorrection` but without the employee constraint.
 - Recurring transactions require the QB `RecurringTransaction` API endpoint which is read-only in QBO API v3 -- the ERP would need its own scheduler to replicate this.
+
+---
+---
+
+# Odoo vs ERP: Complete Feature Gap Analysis
+
+## Summary
+
+After auditing every Odoo-related edge function, UI component, hook, migration, and DB table in the ERP, here is the full apple-to-apple comparison against Odoo 17 Community/Enterprise.
+
+---
+
+## WHAT YOU ALREADY HAVE (Covered from Odoo)
+
+| Odoo Module / Feature | ERP Status | Implementation |
+|---|---|---|
+| **CRM — Pipeline (Kanban)** | ✅ DONE | `Pipeline.tsx` + `PipelineBoard` with 28 Odoo stages mapped 1:1 |
+| **CRM — Lead/Opportunity sync** | ✅ DONE | `odoo-crm-sync` edge function (incremental + full mode) |
+| **CRM — Stage mapping (28 stages)** | ✅ DONE | `STAGE_MAP` in sync function, all 28 Odoo stages covered |
+| **CRM — Lead priority (stars)** | ✅ DONE | `odoo_priority` mapped to 0-3 star display in `LeadCard` |
+| **CRM — Salesperson assignment** | ✅ DONE | `odoo_salesperson` synced and filterable in pipeline |
+| **CRM — Probability/Revenue** | ✅ DONE | `odoo_probability` + `odoo_revenue` synced, shown in cards |
+| **CRM — Expected close date** | ✅ DONE | `date_deadline` → `expected_close_date` for SLA color bars |
+| **CRM — Contact/Partner linkage** | ✅ DONE | Auto-creates customers on sync, enforces `customer_id` |
+| **CRM — Activity timeline (Chatter)** | ✅ DONE | `LeadTimeline` + `lead_events` table, Odoo-style chatter |
+| **CRM — Lead attachments/files** | ✅ DONE | `lead_files` table + `odoo-file-proxy` for download |
+| **CRM — File migration to storage** | ✅ DONE | `archive-odoo-files` batch cron (18K+ files) |
+| **CRM — Dump ZIP import** | ✅ DONE | `OdooDumpImportDialog` for bulk ZIP restore |
+| **CRM — Deduplication** | ✅ DONE | Auto-dedup in sync with rollback logging (`dedup_rollback_log`) |
+| **CRM — Reconciliation report** | ✅ DONE | `odoo-reconciliation-report` edge function + UI in Admin |
+| **CRM — Migration status dashboard** | ✅ DONE | `OdooMigrationStatusCard` in CEO Portal |
+| **Sales — Quotations (archived Odoo)** | ✅ DONE | `useArchivedQuotations` hook, `quotes` table with `odoo_id` |
+| **Sales — Quote → Order conversion** | ✅ DONE | `convert-quote-to-order` edge function |
+| **Operations — Autopilot risk policies** | ✅ DONE | `autopilot_risk_policies` with Odoo model protection |
+| **Operations — Code patch review** | ✅ DONE | `code_patches` with `target_system = 'odoo'` support |
+| **Architect agent — Odoo diagnostics** | ✅ DONE | Empire Builder agent has cross-platform Odoo capabilities |
+
+---
+
+## WHAT IS MISSING (Gaps)
+
+### TIER 1 — CRM Features (Odoo has them, ERP does not)
+
+| # | Odoo Feature | What It Does | Impact |
+|---|---|---|---|
+| 1 | **Activities (scheduled)** | Odoo Activities: schedule calls, emails, meetings with due dates + responsible person. Color-coded (overdue/today/planned). | ERP has no scheduled activity system — only timeline events. No "Plan activity" button. |
+| 2 | **Lead Scoring (predictive)** | Odoo's ML-based lead scoring with configurable weights per field | ERP has `probability` from Odoo but no local scoring engine |
+| 3 | **Lead Enrichment** | Auto-enrich company data from domain (Odoo IAP) | No enrichment — only what Odoo syncs |
+| 4 | **Quotation Templates** | Reusable quote templates with predefined products, terms, optional items | No template system for quotes |
+| 5 | **Online Quotation (portal)** | Customer-facing portal to view, approve, sign, pay quotes online | No customer-facing portal |
+| 6 | **eSignature on quotes** | Digital signature capture directly on quotation | No signature capture |
+| 7 | **Customer Portal** | Full self-service portal: view invoices, track orders, download docs | No customer portal exists |
+
+### TIER 2 — Sales Order Features
+
+| # | Odoo Feature | What It Does | Impact |
+|---|---|---|---|
+| 8 | **Sale Order Line Items (from Odoo)** | `sale.order.line` sync — individual line items with products, qty, price | Only totals synced; line items require manual entry (known limitation) |
+| 9 | **Upselling / Cross-selling** | Suggest related products on quotation | No product recommendations |
+| 10 | **Margin analysis** | Cost vs sale price per line, margin % | No margin tracking on orders |
+| 11 | **Pricelist management** | Multiple pricelists per customer/segment with rules | No pricelist system |
+| 12 | **Discount management** | Per-line and global discount rules | No discount engine |
+
+### TIER 3 — Inventory / Warehouse (Odoo has full WMS)
+
+| # | Odoo Feature | What It Does | Impact |
+|---|---|---|---|
+| 13 | **Stock Moves / Transfers** | Track inventory movements between locations | ERP has `cut_output_batches` but no general stock moves |
+| 14 | **Warehouse Locations (hierarchical)** | Multi-level location tree (WH/Stock/Shelf-A) | No warehouse location hierarchy |
+| 15 | **Stock Valuation** | FIFO/AVCO/Standard cost valuation | No inventory valuation |
+| 16 | **Reordering Rules** | Min/Max automatic replenishment triggers | No auto-reorder |
+| 17 | **Lot/Serial Number tracking** | Full traceability per lot or serial number | ERP tracks by `bar_code` + `mark_number` but no lot/serial system |
+| 18 | **Stock Adjustment / Inventory Count** | Cycle counting and stock adjustment wizard | No inventory count workflow |
+| 19 | **Routes / Procurement Rules** | Pull/Push rules for multi-step flows (pick → pack → ship) | No procurement routing |
+
+### TIER 4 — Purchase (beyond what exists)
+
+| # | Odoo Feature | What It Does | Impact |
+|---|---|---|---|
+| 20 | **Vendor Pricelist** | Supplier-specific pricing per product | No vendor pricing engine |
+| 21 | **Purchase Agreements (blanket orders)** | Framework agreements for recurring purchases at agreed terms | No blanket orders |
+| 22 | **Receipt / Quality inspection** | Goods receipt with quality check triggers | No receipt inspection workflow |
+| 23 | **3-Way Matching** | Match PO → Receipt → Vendor Bill before payment | No 3-way matching |
+
+### TIER 5 — Accounting (Odoo-specific, beyond QB gaps)
+
+| # | Odoo Feature | What It Does | Impact |
+|---|---|---|---|
+| 24 | **Bank Reconciliation (Odoo style)** | Match bank statement lines to journal entries with AI suggestions | Covered in QB gap — same gap |
+| 25 | **Analytic Accounts** | Track costs/revenues by project, department, or cost center | No analytic accounting |
+| 26 | **Budget management** | Set budgets per analytic account and track actual vs budget | No budget tracking |
+| 27 | **Asset management** | Track fixed assets, depreciation schedules | No asset depreciation |
+| 28 | **Lock dates** | Fiscal lock periods to prevent backdating entries | No period locking |
+
+### TIER 6 — HR / People (Odoo has full HR suite)
+
+| # | Odoo Feature | What It Does | Impact |
+|---|---|---|---|
+| 29 | **Recruitment / Job Positions** | Post jobs, track applicants, interview pipeline | No recruitment module |
+| 30 | **Appraisals** | Performance reviews, goals, 360° feedback | No performance reviews |
+| 31 | **Fleet management** | Company vehicle tracking, fuel logs, maintenance schedules | No fleet module (ERP has `deliveries` but not fleet) |
+| 32 | **Expense Claims** | Employee expense submission, approval, reimbursement | No expense claims (only `Bills` via QB) |
+| 33 | **Skills / Certifications** | Track employee certifications, expiry, training | No skill/cert tracking |
+| 34 | **Employee Contracts** | Contract management with salary history, renewals | No contract management |
+
+### TIER 7 — Project / Planning
+
+| # | Odoo Feature | What It Does | Impact |
+|---|---|---|---|
+| 35 | **Project management (Kanban)** | Tasks, subtasks, milestones, Kanban board, Gantt chart | ERP has `projects` table but no task/milestone management |
+| 36 | **Timesheets (project-linked)** | Log time per task/project for billing and cost analysis | ERP has `time_activities` (QB) but not project-linked |
+| 37 | **Planning / Shift management** | Drag-and-drop shift scheduling, Gantt view | No shift planning UI |
+
+### TIER 8 — Communication & Marketing
+
+| # | Odoo Feature | What It Does | Impact |
+|---|---|---|---|
+| 38 | **Mass Mailing (campaigns)** | Email campaigns with templates, A/B test, analytics | ✅ Partially done — `email_campaigns` + `email_campaign_sends` |
+| 39 | **SMS Marketing** | SMS campaigns and automated SMS | No SMS marketing |
+| 40 | **Live Chat (website)** | Real-time chat widget for website visitors | ✅ DONE — `support-chat` + `website-chat-widget` |
+| 41 | **Email Marketing Automation** | Drip sequences, triggered by events | ✅ Partially done — `email_automations` table exists |
+| 42 | **Social Media Management** | Post to social platforms, schedule, analytics | ✅ Partially done — `social-publish` edge function |
+
+### TIER 9 — Website / eCommerce
+
+| # | Odoo Feature | What It Does | Impact |
+|---|---|---|---|
+| 43 | **Website Builder** | Drag-and-drop website builder | Not applicable — uses WordPress |
+| 44 | **eCommerce** | Full online store with cart, checkout, payment | Not applicable — B2B business |
+| 45 | **Blog** | CMS-style blog management | Not applicable — WordPress handles this |
+
+### TIER 10 — Configuration & Settings
+
+| # | Odoo Feature | What It Does | Impact |
+|---|---|---|---|
+| 46 | **Multi-company** | Run multiple companies from one instance | ERP has `company_id` on tables — partially supported |
+| 47 | **Access Rights / Groups** | Fine-grained module-level access control (groups + rules) | ERP has `user_roles` with role-based access — simpler model |
+| 48 | **Audit Trail (Odoo tracking)** | Field-level change tracking on any model | ERP has `activity_events` + `financial_access_log` but not per-field |
+| 49 | **Custom Fields / Studio** | Add custom fields to any model without code | No dynamic field creation |
+| 50 | **Data Import/Export (CSV/XLSX)** | Bulk import/export any model via CSV | Limited — only specific imports (dump ZIP, CRM import) |
+
+---
+
+## Recommended Priority for Implementation
+
+**Phase 1 — High-Impact, Moderate Effort**
+- Scheduled Activities system (plan call/email/meeting with due dates, color-coded overdue)
+- Sale Order Line Items sync from Odoo (`sale.order.line`)
+- Inventory Count / Stock Adjustment workflow
+- Per-field audit trail (change log on key entities)
+- Budget management (set + track actuals vs budget)
+
+**Phase 2 — Business Critical**
+- Quotation Templates
+- Customer Portal (view invoices, track orders)
+- Expense Claims module
+- 3-Way Matching (PO → Receipt → Bill)
+- Employee Contracts + Certification tracking
+
+**Phase 3 — Advanced / Long-term**
+- Predictive Lead Scoring (local ML or rules engine)
+- Project management with tasks + Gantt
+- Multi-step warehouse routing
+- Recruitment pipeline
+- eSignature on quotes
+
+---
+
+## Technical Notes
+
+- **Activities system**: Can be built as a new `activities` table with `activity_type`, `due_date`, `assigned_to`, `status`, linked to leads/orders/customers. Reuses the existing chatter timeline pattern in `LeadTimeline`.
+- **Sale order line sync**: Requires adding `sale.order.line` to the `odoo-crm-sync` or a new `odoo-order-sync` edge function. Already noted as a known limitation.
+- **Audit trail**: Can leverage PostgreSQL triggers (similar to existing `audit_financial_access`) to capture old/new values on UPDATE for key tables.
+- **Customer portal**: Would require a separate auth flow (customer login vs employee login). Can use the existing `customer_user_links` table as the bridge.
+- **Most Odoo inventory features** don't directly apply since the ERP is specialized for rebar fabrication — the `cut_output_batches` and `barlist_items` tables serve as the domain-specific equivalent.
