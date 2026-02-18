@@ -1,14 +1,12 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
-  CheckSquare, Filter, Plus, RefreshCw, Clock, Copy, Check, Maximize2,
-  ChevronDown, ChevronRight, Search, X, Users,
+  CheckSquare, Plus, RefreshCw, Copy, Check, Maximize2, Minus,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -19,15 +17,10 @@ import {
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
 } from "@/components/ui/sheet";
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table";
-import {
-  Collapsible, CollapsibleContent, CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
-import { format, isPast, isToday, isThisWeek, startOfDay } from "date-fns";
+import { format, isPast, isToday, startOfDay } from "date-fns";
 
 // ─── Types ──────────────────────────────────────────────
 interface TaskRow {
@@ -43,7 +36,6 @@ interface TaskRow {
   updated_at: string;
   completed_at: string | null;
   company_id: string;
-  assigned_profile?: { id: string; full_name: string | null } | null;
   created_by_profile?: { id: string; full_name: string | null } | null;
 }
 
@@ -57,15 +49,17 @@ interface AuditEntry {
   created_at: string;
 }
 
-interface Profile {
+interface EmployeeProfile {
   id: string;
   full_name: string | null;
+  email: string | null;
   user_id: string | null;
 }
 
 // ─── Constants ──────────────────────────────────────────
+const NEEL_PROFILE_ID = "a94932c5-e873-46fd-9658-dc270f6f5ff3";
+
 const STATUS_MAP: Record<string, string> = { open: "Pending", in_progress: "In Progress", completed: "Completed" };
-const STATUS_REVERSE: Record<string, string> = { Pending: "open", "In Progress": "in_progress", Completed: "completed" };
 const PRIORITY_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 };
 const PRIORITY_COLORS: Record<string, string> = {
   high: "bg-destructive/20 text-destructive",
@@ -89,21 +83,17 @@ function sortTasks(tasks: TaskRow[]): TaskRow[] {
   const completed = tasks.filter(t => t.status === "completed");
 
   active.sort((a, b) => {
-    // overdue first
     const aOver = isOverdue(a) ? 0 : 1;
     const bOver = isOverdue(b) ? 0 : 1;
     if (aOver !== bOver) return aOver - bOver;
-    // due_date ascending, nulls last
     if (a.due_date && b.due_date) {
       const diff = new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
       if (diff !== 0) return diff;
     } else if (a.due_date && !b.due_date) return -1;
     else if (!a.due_date && b.due_date) return 1;
-    // priority
     const ap = PRIORITY_ORDER[a.priority || "medium"] ?? 1;
     const bp = PRIORITY_ORDER[b.priority || "medium"] ?? 1;
     if (ap !== bp) return ap - bp;
-    // created_at desc
     return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
   });
 
@@ -130,14 +120,8 @@ function linkifyText(text: string | null) {
 // ─── Component ──────────────────────────────────────────
 export default function Tasks() {
   const [tasks, setTasks] = useState<TaskRow[]>([]);
-  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [employees, setEmployees] = useState<EmployeeProfile[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [priorityFilter, setPriorityFilter] = useState("all");
-  const [dueDateFilter, setDueDateFilter] = useState("all");
-  const [showCompleted, setShowCompleted] = useState(false);
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
   // Detail drawer
   const [selectedTask, setSelectedTask] = useState<TaskRow | null>(null);
@@ -146,10 +130,9 @@ export default function Tasks() {
   const [auditLoading, setAuditLoading] = useState(false);
 
   // Create modal
-  const [createOpen, setCreateOpen] = useState(false);
+  const [createForEmployee, setCreateForEmployee] = useState<EmployeeProfile | null>(null);
   const [newTitle, setNewTitle] = useState("");
   const [newDesc, setNewDesc] = useState("");
-  const [newAssignee, setNewAssignee] = useState("");
   const [newDueDate, setNewDueDate] = useState("");
   const [newPriority, setNewPriority] = useState("medium");
   const [creating, setCreating] = useState(false);
@@ -162,14 +145,25 @@ export default function Tasks() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [tasksRes, profilesRes] = await Promise.all([
-        supabase.from("tasks").select("*, created_by_profile:profiles!tasks_created_by_profile_id_fkey(id, full_name)").order("created_at", { ascending: false }),
-        supabase.from("profiles").select("id, full_name, user_id"),
+      const [tasksRes, employeesRes] = await Promise.all([
+        supabase
+          .from("tasks")
+          .select("*, created_by_profile:profiles!tasks_created_by_profile_id_fkey(id, full_name)")
+          .eq("created_by_profile_id", NEEL_PROFILE_ID)
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("profiles")
+          .select("id, full_name, email, user_id")
+          .ilike("email", "%@rebar.shop"),
       ]);
       if (tasksRes.error) throw tasksRes.error;
-      if (profilesRes.error) throw profilesRes.error;
+      if (employeesRes.error) throw employeesRes.error;
       setTasks((tasksRes.data as any) || []);
-      setProfiles(profilesRes.data || []);
+      setEmployees(
+        (employeesRes.data || []).sort((a, b) =>
+          (a.full_name || "").localeCompare(b.full_name || "")
+        )
+      );
     } catch (err: any) {
       toast.error(err.message || "Failed to load tasks");
     } finally {
@@ -194,61 +188,16 @@ export default function Tasks() {
     finally { setAuditLoading(false); }
   };
 
-  // ─── Filtering ────────────────────────────────────────
-  const filtered = useMemo(() => {
-    let result = [...tasks];
-
-    // search
-    if (search) {
-      const q = search.toLowerCase();
-      result = result.filter(t => t.title.toLowerCase().includes(q) || (t.description || "").toLowerCase().includes(q));
+  // ─── Group tasks by employee ──────────────────────────
+  const tasksByEmployee = new Map<string, TaskRow[]>();
+  for (const emp of employees) {
+    tasksByEmployee.set(emp.id, []);
+  }
+  for (const t of tasks) {
+    if (t.assigned_to && tasksByEmployee.has(t.assigned_to)) {
+      tasksByEmployee.get(t.assigned_to)!.push(t);
     }
-    // status
-    if (statusFilter !== "all") result = result.filter(t => t.status === statusFilter);
-    // priority
-    if (priorityFilter !== "all") result = result.filter(t => t.priority === priorityFilter);
-    // due date
-    if (dueDateFilter === "overdue") result = result.filter(isOverdue);
-    else if (dueDateFilter === "today") result = result.filter(t => t.due_date && isToday(new Date(t.due_date)));
-    else if (dueDateFilter === "week") result = result.filter(t => t.due_date && isThisWeek(new Date(t.due_date)));
-    else if (dueDateFilter === "none") result = result.filter(t => !t.due_date);
-    // show completed
-    if (!showCompleted) result = result.filter(t => t.status !== "completed");
-
-    return result;
-  }, [tasks, search, statusFilter, priorityFilter, dueDateFilter, showCompleted]);
-
-  // ─── Grouping ─────────────────────────────────────────
-  const grouped = useMemo(() => {
-    const map = new Map<string, { name: string; profileId: string | null; tasks: TaskRow[] }>();
-    for (const t of filtered) {
-      const key = t.assigned_to || "__unassigned__";
-      if (!map.has(key)) {
-        const assignedProfile = profiles.find(p => p.id === t.assigned_to);
-        const name = assignedProfile?.full_name || "Unassigned";
-        map.set(key, { name, profileId: t.assigned_to, tasks: [] });
-      }
-      map.get(key)!.tasks.push(t);
-    }
-    // Sort each group's tasks
-    for (const g of map.values()) g.tasks = sortTasks(g.tasks);
-    // Sort groups: Unassigned last, then by name
-    return Array.from(map.values()).sort((a, b) => {
-      if (!a.profileId) return 1;
-      if (!b.profileId) return -1;
-      return (a.name || "").localeCompare(b.name || "");
-    });
-  }, [filtered, profiles]);
-
-  // Auto-collapse groups with only completed tasks
-  useEffect(() => {
-    const toCollapse = new Set<string>();
-    for (const g of grouped) {
-      const key = g.profileId || "__unassigned__";
-      if (g.tasks.every(t => t.status === "completed")) toCollapse.add(key);
-    }
-    setCollapsedGroups(toCollapse);
-  }, [grouped]);
+  }
 
   // ─── Mutations ────────────────────────────────────────
   const writeAudit = async (taskId: string, action: string, field: string | null, oldVal: string | null, newVal: string | null) => {
@@ -263,73 +212,58 @@ export default function Tasks() {
     } as any);
   };
 
-  const updateField = async (task: TaskRow, field: string, value: string | null) => {
-    const oldVal = (task as any)[field];
-    const updates: any = { [field]: value, updated_at: new Date().toISOString() };
-
-    if (field === "status" && value === "completed") {
-      updates.completed_at = new Date().toISOString();
-    } else if (field === "status" && oldVal === "completed") {
-      updates.completed_at = null;
-    }
+  const toggleComplete = async (task: TaskRow) => {
+    const isCompleted = task.status === "completed";
+    const newStatus = isCompleted ? "open" : "completed";
+    const updates: any = {
+      status: newStatus,
+      updated_at: new Date().toISOString(),
+      completed_at: isCompleted ? null : new Date().toISOString(),
+    };
 
     const { error } = await supabase.from("tasks").update(updates).eq("id", task.id);
     if (error) { toast.error(error.message); return; }
 
-    const actionMap: Record<string, string> = {
-      status: value === "completed" ? "complete" : oldVal === "completed" ? "uncomplete" : "status_change",
-      priority: "priority_change",
-      assigned_to: "reassign",
-      due_date: "due_date_change",
-    };
-    await writeAudit(task.id, actionMap[field] || "update", field, String(oldVal ?? ""), String(value ?? ""));
-    toast.success("Task updated");
+    await writeAudit(task.id, isCompleted ? "uncomplete" : "complete", "status", task.status || "open", newStatus);
+    toast.success(isCompleted ? "Task reopened" : "Task completed");
     loadData();
   };
 
-  const toggleComplete = async (task: TaskRow) => {
-    if (task.status === "completed") {
-      await updateField(task, "status", "open");
-    } else {
-      await updateField(task, "status", "completed");
-    }
+  const deleteTask = async (taskId: string) => {
+    if (!window.confirm("Delete this task?")) return;
+    const { error } = await supabase.from("tasks").delete().eq("id", taskId);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Task deleted");
+    if (drawerOpen && selectedTask?.id === taskId) setDrawerOpen(false);
+    loadData();
   };
 
   const createTask = async () => {
-    if (!newTitle.trim() || !newAssignee) { toast.error("Title and assignee are required"); return; }
+    if (!newTitle.trim() || !createForEmployee) { toast.error("Title is required"); return; }
     setCreating(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      const profile = profiles.find(p => p.user_id === user?.id);
       const companyRes = await supabase.from("profiles").select("company_id").eq("user_id", user?.id || "").single();
 
       const { data, error } = await supabase.from("tasks").insert({
         title: newTitle.trim(),
         description: newDesc.trim() || null,
-        assigned_to: newAssignee,
+        assigned_to: createForEmployee.id,
         due_date: newDueDate || null,
         priority: newPriority,
         status: "open",
         company_id: companyRes.data?.company_id,
-        created_by_profile_id: profile?.id || null,
+        created_by_profile_id: NEEL_PROFILE_ID,
       } as any).select().single();
 
       if (error) throw error;
       await writeAudit(data.id, "create", null, null, null);
       toast.success("Task created");
-      setCreateOpen(false);
-      setNewTitle(""); setNewDesc(""); setNewAssignee(""); setNewDueDate(""); setNewPriority("medium");
+      setCreateForEmployee(null);
+      setNewTitle(""); setNewDesc(""); setNewDueDate(""); setNewPriority("medium");
       loadData();
     } catch (err: any) { toast.error(err.message); }
     finally { setCreating(false); }
-  };
-
-  const deleteTask = async (taskId: string) => {
-    const { error } = await supabase.from("tasks").delete().eq("id", taskId);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Task deleted");
-    setDrawerOpen(false);
-    loadData();
   };
 
   const copyToClipboard = async (text: string | null) => {
@@ -353,196 +287,143 @@ export default function Tasks() {
     loadAudit(task.id);
   };
 
-  const toggleGroup = (key: string) => {
-    setCollapsedGroups(prev => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key); else next.add(key);
-      return next;
-    });
-  };
-
   // ─── Render ───────────────────────────────────────────
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <header className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-border">
+      <header className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-border shrink-0">
         <div>
           <h1 className="text-xl font-semibold">Employee Tasks</h1>
-          <p className="text-sm text-muted-foreground">{filtered.length} task{filtered.length !== 1 ? "s" : ""}</p>
+          <p className="text-sm text-muted-foreground">{tasks.length} task{tasks.length !== 1 ? "s" : ""} by Neel</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" onClick={loadData} disabled={loading}>
-            <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
-          </Button>
-          <Button size="sm" onClick={() => setCreateOpen(true)}>
-            <Plus className="w-4 h-4 mr-1" /> New Task
-          </Button>
-        </div>
+        <Button variant="ghost" size="icon" onClick={loadData} disabled={loading}>
+          <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
+        </Button>
       </header>
 
-      {/* Filters */}
-      <div className="flex flex-wrap items-center gap-2 px-4 sm:px-6 py-3 border-b border-border bg-secondary/30">
-        <div className="relative flex-1 min-w-[180px] max-w-sm">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Search tasks..." value={search} onChange={e => setSearch(e.target.value)} className="pl-8 h-8 text-sm" />
-          {search && (
-            <button onClick={() => setSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2">
-              <X className="w-3.5 h-3.5 text-muted-foreground" />
-            </button>
-          )}
-        </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[120px] h-8 text-xs"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Statuses</SelectItem>
-            <SelectItem value="open">Pending</SelectItem>
-            <SelectItem value="in_progress">In Progress</SelectItem>
-            <SelectItem value="completed">Completed</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-          <SelectTrigger className="w-[110px] h-8 text-xs"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Priority</SelectItem>
-            <SelectItem value="high">High</SelectItem>
-            <SelectItem value="medium">Medium</SelectItem>
-            <SelectItem value="low">Low</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={dueDateFilter} onValueChange={setDueDateFilter}>
-          <SelectTrigger className="w-[120px] h-8 text-xs"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Dates</SelectItem>
-            <SelectItem value="overdue">Overdue</SelectItem>
-            <SelectItem value="today">Due Today</SelectItem>
-            <SelectItem value="week">This Week</SelectItem>
-            <SelectItem value="none">No Due Date</SelectItem>
-          </SelectContent>
-        </Select>
-        <div className="flex items-center gap-1.5">
-          <Switch id="show-completed" checked={showCompleted} onCheckedChange={setShowCompleted} className="scale-75" />
-          <Label htmlFor="show-completed" className="text-xs text-muted-foreground cursor-pointer">Show Completed</Label>
-        </div>
-      </div>
-
-      {/* Main content */}
-      <div className="flex-1 overflow-y-auto">
+      {/* Kanban Board */}
+      <div className="flex-1 overflow-x-auto overflow-y-hidden">
         {loading && tasks.length === 0 ? (
           <div className="flex items-center justify-center p-8 text-muted-foreground">
             <RefreshCw className="w-5 h-5 animate-spin mr-2" /> Loading...
           </div>
-        ) : grouped.length === 0 ? (
-          <div className="flex flex-col items-center justify-center p-8 text-muted-foreground">
-            <CheckSquare className="w-12 h-12 mb-4 opacity-50" />
-            <p>No tasks found</p>
-          </div>
         ) : (
-          <div className="divide-y divide-border">
-            {grouped.map(group => {
-              const key = group.profileId || "__unassigned__";
-              const isCollapsed = collapsedGroups.has(key);
-              const pending = group.tasks.filter(t => t.status === "open").length;
-              const inProgress = group.tasks.filter(t => t.status === "in_progress").length;
-              const overdue = group.tasks.filter(isOverdue).length;
-              const completed = group.tasks.filter(t => t.status === "completed").length;
+          <div className="flex gap-4 p-4 h-full min-w-max">
+            {employees.map(emp => {
+              const empTasks = sortTasks(tasksByEmployee.get(emp.id) || []);
+              const activeTasks = empTasks.filter(t => t.status !== "completed");
+              const completedTasks = empTasks.filter(t => t.status === "completed");
 
               return (
-                <Collapsible key={key} open={!isCollapsed} onOpenChange={() => toggleGroup(key)}>
-                  <CollapsibleTrigger className="w-full flex items-center gap-3 px-4 sm:px-6 py-3 bg-muted/40 hover:bg-muted/60 transition-colors cursor-pointer">
-                    {isCollapsed ? <ChevronRight className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
-                    <Users className="w-4 h-4 text-muted-foreground" />
-                    <span className="font-medium text-sm">{group.name}</span>
-                    <div className="flex items-center gap-1.5 ml-auto">
-                      {pending > 0 && <Badge variant="secondary" className="text-[10px] px-1.5 bg-blue-500/20 text-blue-600 dark:text-blue-400">{pending} Pending</Badge>}
-                      {inProgress > 0 && <Badge variant="secondary" className="text-[10px] px-1.5 bg-orange-500/20 text-orange-600 dark:text-orange-400">{inProgress} In Progress</Badge>}
-                      {overdue > 0 && <Badge variant="secondary" className="text-[10px] px-1.5 bg-destructive/20 text-destructive">{overdue} Overdue</Badge>}
-                      {showCompleted && completed > 0 && <Badge variant="secondary" className="text-[10px] px-1.5 bg-green-500/20 text-green-600 dark:text-green-400">{completed} Done</Badge>}
+                <div
+                  key={emp.id}
+                  className="w-[320px] flex flex-col bg-muted/30 rounded-lg border border-border shrink-0"
+                >
+                  {/* Column Header */}
+                  <div className="flex items-center justify-between px-3 py-2.5 border-b border-border">
+                    <div className="min-w-0 flex-1">
+                      <div className="font-medium text-sm truncate">{emp.full_name || "Unknown"}</div>
+                      <div className="text-[11px] text-muted-foreground truncate">{emp.email}</div>
                     </div>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <div className="overflow-x-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow className="text-xs">
-                            <TableHead className="w-8"></TableHead>
-                            <TableHead>Task</TableHead>
-                            <TableHead className="w-[110px]">Status</TableHead>
-                            <TableHead className="w-[100px]">Due Date</TableHead>
-                            <TableHead className="w-[90px]">Priority</TableHead>
-                            <TableHead className="w-[140px]">Assigned To</TableHead>
-                            <TableHead className="w-[110px]">Created By</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {group.tasks.map(task => (
-                            <TableRow
+                    <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                      <Badge variant="secondary" className="text-[10px] px-1.5">
+                        {activeTasks.length}
+                      </Badge>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={() => {
+                          setCreateForEmployee(emp);
+                          setNewTitle(""); setNewDesc(""); setNewDueDate(""); setNewPriority("medium");
+                        }}
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Task List */}
+                  <ScrollArea className="flex-1">
+                    <div className="p-2 space-y-1.5">
+                      {activeTasks.length === 0 && completedTasks.length === 0 && (
+                        <p className="text-xs text-muted-foreground text-center py-4">No tasks</p>
+                      )}
+
+                      {activeTasks.map(task => (
+                        <div
+                          key={task.id}
+                          className="flex items-start gap-2 px-2.5 py-2 rounded-md bg-background border border-border/50 hover:border-border transition-colors group"
+                        >
+                          <Checkbox
+                            checked={false}
+                            onCheckedChange={() => toggleComplete(task)}
+                            className="mt-0.5 shrink-0"
+                          />
+                          <button
+                            className="flex-1 text-left min-w-0"
+                            onClick={() => openDrawer(task)}
+                          >
+                            <span className={cn(
+                              "text-sm font-medium block truncate",
+                              isOverdue(task) && "text-destructive"
+                            )}>
+                              {task.title}
+                            </span>
+                            {task.due_date && (
+                              <span className={cn(
+                                "text-[10px]",
+                                isOverdue(task) ? "text-destructive" : "text-muted-foreground"
+                              )}>
+                                {format(new Date(task.due_date), "MMM d")}
+                              </span>
+                            )}
+                          </button>
+                          <button
+                            onClick={() => deleteTask(task.id)}
+                            className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity mt-0.5 text-muted-foreground hover:text-destructive"
+                          >
+                            <Minus className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+
+                      {completedTasks.length > 0 && (
+                        <>
+                          <div className="text-[10px] text-muted-foreground uppercase tracking-wider px-2 pt-2">
+                            Done ({completedTasks.length})
+                          </div>
+                          {completedTasks.map(task => (
+                            <div
                               key={task.id}
-                              className={cn("cursor-pointer hover:bg-muted/30", task.status === "completed" && "opacity-60")}
-                              onClick={() => openDrawer(task)}
+                              className="flex items-start gap-2 px-2.5 py-2 rounded-md bg-background/50 border border-border/30 opacity-50 group"
                             >
-                              <TableCell onClick={e => e.stopPropagation()} className="pr-0">
-                                <Checkbox
-                                  checked={task.status === "completed"}
-                                  onCheckedChange={() => toggleComplete(task)}
-                                />
-                              </TableCell>
-                              <TableCell>
-                                <div>
-                                  <span className={cn("font-medium text-sm", task.status === "completed" && "line-through text-muted-foreground")}>{task.title}</span>
-                                  {task.description && <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{task.description}</p>}
-                                </div>
-                              </TableCell>
-                              <TableCell onClick={e => e.stopPropagation()}>
-                                <Select value={task.status || "open"} onValueChange={v => updateField(task, "status", v)}>
-                                  <SelectTrigger className="h-7 text-[11px] border-0 bg-transparent px-1">
-                                    <Badge variant="secondary" className={cn("text-[10px]", STATUS_COLORS[task.status || "open"])}>{STATUS_MAP[task.status || "open"]}</Badge>
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="open">Pending</SelectItem>
-                                    <SelectItem value="in_progress">In Progress</SelectItem>
-                                    <SelectItem value="completed">Completed</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </TableCell>
-                              <TableCell>
-                                <span className={cn("text-xs", isOverdue(task) && "text-destructive font-medium")}>
-                                  {task.due_date ? format(new Date(task.due_date), "MMM d") : "—"}
+                              <Checkbox
+                                checked={true}
+                                onCheckedChange={() => toggleComplete(task)}
+                                className="mt-0.5 shrink-0"
+                              />
+                              <button
+                                className="flex-1 text-left min-w-0"
+                                onClick={() => openDrawer(task)}
+                              >
+                                <span className="text-sm line-through text-muted-foreground block truncate">
+                                  {task.title}
                                 </span>
-                              </TableCell>
-                              <TableCell onClick={e => e.stopPropagation()}>
-                                <Select value={task.priority || "medium"} onValueChange={v => updateField(task, "priority", v)}>
-                                  <SelectTrigger className="h-7 text-[11px] border-0 bg-transparent px-1">
-                                    <Badge variant="secondary" className={cn("text-[10px]", PRIORITY_COLORS[task.priority || "medium"])}>{(task.priority || "medium").charAt(0).toUpperCase() + (task.priority || "medium").slice(1)}</Badge>
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="high">High</SelectItem>
-                                    <SelectItem value="medium">Medium</SelectItem>
-                                    <SelectItem value="low">Low</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </TableCell>
-                              <TableCell onClick={e => e.stopPropagation()}>
-                                <Select value={task.assigned_to || ""} onValueChange={v => updateField(task, "assigned_to", v)}>
-                                  <SelectTrigger className="h-7 text-[11px] border-0 bg-transparent px-1 max-w-[130px]">
-                                    <SelectValue placeholder="Unassigned" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {profiles.map(p => (
-                                      <SelectItem key={p.id} value={p.id}>{p.full_name || "Unknown"}</SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </TableCell>
-                              <TableCell>
-                                <span className="text-xs text-muted-foreground">{task.created_by_profile?.full_name || "—"}</span>
-                              </TableCell>
-                            </TableRow>
+                              </button>
+                              <button
+                                onClick={() => deleteTask(task.id)}
+                                className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity mt-0.5 text-muted-foreground hover:text-destructive"
+                              >
+                                <Minus className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           ))}
-                        </TableBody>
-                      </Table>
+                        </>
+                      )}
                     </div>
-                  </CollapsibleContent>
-                </Collapsible>
+                  </ScrollArea>
+                </div>
               );
             })}
           </div>
@@ -550,11 +431,11 @@ export default function Tasks() {
       </div>
 
       {/* ─── Create Task Modal ─── */}
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+      <Dialog open={!!createForEmployee} onOpenChange={(open) => { if (!open) setCreateForEmployee(null); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>New Task</DialogTitle>
-            <DialogDescription className="sr-only">Create a new employee task</DialogDescription>
+            <DialogTitle>New Task for {createForEmployee?.full_name}</DialogTitle>
+            <DialogDescription className="sr-only">Create a new task assigned to this employee</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div>
@@ -564,15 +445,6 @@ export default function Tasks() {
             <div>
               <Label className="text-xs">Description</Label>
               <textarea value={newDesc} onChange={e => setNewDesc(e.target.value)} placeholder="Optional description" className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[80px] resize-y" />
-            </div>
-            <div>
-              <Label className="text-xs">Assign To *</Label>
-              <Select value={newAssignee} onValueChange={setNewAssignee}>
-                <SelectTrigger className="mt-1"><SelectValue placeholder="Select employee" /></SelectTrigger>
-                <SelectContent>
-                  {profiles.map(p => <SelectItem key={p.id} value={p.id}>{p.full_name || "Unknown"}</SelectItem>)}
-                </SelectContent>
-              </Select>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -639,7 +511,7 @@ export default function Tasks() {
                 </div>
                 <div>
                   <span className="text-xs text-muted-foreground">Assigned To</span>
-                  <p className="mt-0.5 text-sm">{profiles.find(p => p.id === selectedTask.assigned_to)?.full_name || "Unassigned"}</p>
+                  <p className="mt-0.5 text-sm">{employees.find(p => p.id === selectedTask.assigned_to)?.full_name || "Unassigned"}</p>
                 </div>
                 <div>
                   <span className="text-xs text-muted-foreground">Created By</span>
@@ -666,7 +538,7 @@ export default function Tasks() {
                 <Button size="sm" variant={selectedTask.status === "completed" ? "outline" : "default"} onClick={() => toggleComplete(selectedTask)} className="flex-1">
                   {selectedTask.status === "completed" ? "Mark Incomplete" : "Mark Complete"}
                 </Button>
-                <Button size="sm" variant="destructive" onClick={() => deleteTask(selectedTask.id)}>Delete</Button>
+                <Button size="sm" variant="destructive" onClick={() => { if (window.confirm("Delete this task?")) { supabase.from("tasks").delete().eq("id", selectedTask.id).then(({ error }) => { if (error) toast.error(error.message); else { toast.success("Task deleted"); setDrawerOpen(false); loadData(); } }); } }}>Delete</Button>
               </div>
 
               {/* Audit Log */}
