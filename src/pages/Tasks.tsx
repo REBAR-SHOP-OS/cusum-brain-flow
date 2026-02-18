@@ -60,6 +60,19 @@ interface EmployeeProfile {
 const NEEL_PROFILE_ID = "a94932c5-e873-46fd-9658-dc270f6f5ff3";
 const EXCLUDED_EMAILS = ["ai@rebar.shop", "kourosh@rebar.shop"];
 
+const COLUMN_COLORS = [
+  "border-t-blue-500 bg-blue-500/10",
+  "border-t-purple-500 bg-purple-500/10",
+  "border-t-emerald-500 bg-emerald-500/10",
+  "border-t-orange-500 bg-orange-500/10",
+  "border-t-pink-500 bg-pink-500/10",
+  "border-t-teal-500 bg-teal-500/10",
+  "border-t-yellow-500 bg-yellow-500/10",
+  "border-t-red-500 bg-red-500/10",
+  "border-t-indigo-500 bg-indigo-500/10",
+  "border-t-cyan-500 bg-cyan-500/10",
+];
+
 const STATUS_MAP: Record<string, string> = { open: "Pending", in_progress: "In Progress", completed: "Completed" };
 const PRIORITY_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 };
 const PRIORITY_COLORS: Record<string, string> = {
@@ -337,7 +350,7 @@ export default function Tasks() {
           </div>
         ) : (
           <div className="flex gap-4 p-4 h-full min-w-max">
-            {employees.map(emp => {
+            {employees.map((emp, empIndex) => {
               const empTasks = sortTasks(tasksByEmployee.get(emp.id) || []);
               const activeTasks = empTasks.filter(t => t.status !== "completed");
               const completedTasks = empTasks.filter(t => t.status === "completed");
@@ -345,7 +358,7 @@ export default function Tasks() {
               return (
                 <div
                   key={emp.id}
-                  className="w-[320px] flex flex-col bg-muted/30 rounded-lg border border-border shrink-0"
+                  className={cn("w-[320px] flex flex-col bg-muted/30 rounded-lg border border-border shrink-0 border-t-4", COLUMN_COLORS[empIndex % COLUMN_COLORS.length])}
                 >
                   {/* Column Header */}
                   <div className="flex items-center justify-between px-3 py-2.5 border-b border-border">
