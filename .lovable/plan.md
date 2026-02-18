@@ -1,141 +1,126 @@
 
+# Fix Upload Wiring in Lead Chatter + Add Project Timelines
 
-# Add Transaction Filter and Payment Method to Receive Payment Dialog
+## Issues Identified
 
-## Overview
+### Issue 1: Attach Button is Dead (OdooChatter.tsx)
+The "Attach" button in the Chatter composer (line 278) is a plain `<Button>` with NO `onClick` handler, no file input, no upload logic. It renders but does nothing -- exactly what the red circle in the screenshot highlights.
 
-Two enhancements to the **CreateTransactionDialog** when creating a Payment, bringing it closer to QuickBooks' "Receive Payment" screen:
-
-1. **Outstanding Items List with Type Filter** -- Show the customer's open invoices and credit memos as selectable rows, with a dropdown to filter by type
-2. **Payment Method Selector** -- Add a dropdown for payment method (Check, Cash, Credit Card, etc.) that sends the selection to QuickBooks
-
----
-
-## What Already Exists
-
-- `CreateTransactionDialog` already handles Payment type with a simple "Payment Amount" input and memo
-- The backend (`handleCreatePayment` in `quickbooks-oauth`) already accepts `invoiceId`, `paymentMethod`, and builds `Line` with `LinkedTxn` -- but the frontend never sends these fields
-- Customer transactions are already fetched and available via `qb_customer_transactions` query in `CustomerDetail.tsx`
-- The dialog currently does NOT show outstanding items or let you pick a payment method
+### Issue 2: No Timeline View on Projects
+The Project Management view (`ProjectManagement.tsx`) has a Kanban board and Gantt chart for tasks, but no activity/event timeline (like the Odoo chatter timeline shown in the second screenshot). Projects don't track who did what and when in a chronological feed.
 
 ---
 
-## Changes
+## Fix 1: Wire the Attach Button in OdooChatter
 
-### File: `src/components/customers/CreateTransactionDialog.tsx`
+**File: `src/components/pipeline/OdooChatter.tsx`**
 
-**1. Fetch outstanding items when type is "Payment"**
+Add file upload capability to the Chatter composer:
 
-Add a query that fetches the customer's open invoices and credit memos from `accounting_mirror` (filtering by `customer_id` and `balance > 0`). This gives us the list of items the payment can be applied to.
+1. Add a hidden `<input type="file">` ref
+2. Wire the Attach button's `onClick` to trigger the file input
+3. On file selection:
+   - Upload to `clearance-photos` bucket under `lead-attachments/{leadId}/{timestamp}-{filename}` (matches existing upload pattern across the app)
+   - Insert a row into `lead_files` with `storage_path`, `file_name`, `mime_type`, `file_size_bytes`, `source: "chatter_upload"`, `lead_id`, `company_id`
+   - Invalidate `lead-files-timeline` query so the file appears instantly in the thread
+4. Add guards: throttle (prevent double-clicks), file size limit (20MB), type validation
+5. Show upload progress via a small preview strip with a spinner (similar to WebsiteChat pattern)
+6. Accept images, PDFs, and common document types
 
-**2. Add a type filter dropdown**
+**Changes are surgical**: Only touches the OdooChatter component. The `lead_files` table and `clearance-photos` bucket already exist. The timeline thread already renders files from `lead_files` -- so once inserted, they appear automatically.
 
-Above the outstanding items list, add a Select dropdown with options:
-- All Outstanding
-- Invoices
-- Credit Memos
+---
 
-This filters the displayed list by `entity_type`.
+## Fix 2: Add Activity Timeline to Each Project
 
-**3. Render outstanding items as selectable rows**
+**Database: New table `project_events`**
 
-Display a table/list showing each outstanding item with:
-- Checkbox to select/deselect
-- Date, Type, Doc Number, Original Amount, Open Balance
-- When checked, an "Applied Amount" input pre-filled with the open balance (editable)
-
-The total payment amount auto-calculates from the sum of applied amounts (replacing the manual-only input, which stays as an override/display).
-
-**4. Add Payment Method dropdown**
-
-Add a Select above or beside the payment amount with standard QuickBooks payment methods:
-- Check
-- Cash
-- Credit Card
-- E-Transfer
-- Direct Deposit
-- Other
-
-**5. Update submit handler**
-
-When submitting, pass to the backend:
-- `paymentMethod`: the selected method value
-- `invoiceLines`: array of `{ invoiceId, amount }` for each checked outstanding item (instead of single `invoiceId`)
-- Keep backward compatibility: if no items selected, just send `totalAmount` as before
-
-### File: `supabase/functions/quickbooks-oauth/index.ts`
-
-**6. Enhance `handleCreatePayment` to support multiple linked invoices**
-
-Currently it only handles a single `invoiceId`. Update to accept an `invoiceLines` array:
-```typescript
-// New: support multiple linked transactions
-if (invoiceLines && invoiceLines.length > 0) {
-  payload.Line = invoiceLines.map(line => ({
-    Amount: line.amount,
-    LinkedTxn: [{ TxnId: line.invoiceId, TxnType: "Invoice" }],
-  }));
-}
 ```
-Fall back to the existing single `invoiceId` logic for backward compatibility.
+project_events
+- id (uuid, PK)
+- company_id (uuid, NOT NULL)
+- project_id (uuid, FK -> projects)
+- event_type (text): "task_created", "task_completed", "status_changed", "note", "file_attached", "milestone_reached"
+- title (text)
+- description (text, nullable)
+- created_by (text): user name or "System"
+- metadata (jsonb)
+- created_at (timestamptz, default now())
+```
+
+With RLS: company members can read/insert for their own company.
+
+**Trigger: Auto-log task changes**
+
+Create a database trigger on `project_tasks` that logs to `project_events` when:
+- A new task is created (event_type: "task_created")
+- A task status changes (event_type: "status_changed", old -> new in metadata)
+- A task is completed (event_type: "task_completed")
+
+**New component: `ProjectTimeline.tsx`**
+
+A timeline feed component (following the OdooChatter/LeadTimeline pattern) showing:
+- Chronological list of project events grouped by date separators
+- Icons per event type (same icon map pattern as LeadTimeline)
+- Author avatars with initials
+- "Log note" composer at the top for manual entries
+
+**Wire into ProjectManagement.tsx**
+
+Add a "Timeline" tab alongside existing "Kanban" and "Gantt" tabs. When a project is selected, show its timeline. When no project is selected, show a unified timeline across all projects.
 
 ---
 
 ## Technical Details
 
-### Outstanding Items Query
+### OdooChatter Upload Logic
 ```typescript
-// Fetch open invoices + credit memos for this customer
-const { data: outstandingItems } = useQuery({
-  queryKey: ["outstanding-items", customerQbId, companyId],
-  enabled: type === "Payment" && !!companyId && !!customerQbId && open,
-  queryFn: async () => {
-    const { data } = await supabase
-      .from("accounting_mirror")
-      .select("quickbooks_id, entity_type, balance, data")
-      .eq("company_id", companyId)
-      .eq("customer_qb_id", customerQbId)
-      .in("entity_type", ["Invoice", "CreditMemo"])
-      .gt("balance", 0);
-    return data || [];
-  },
-});
+// New state
+const [uploadingFile, setUploadingFile] = useState(false);
+const fileInputRef = useRef<HTMLInputElement>(null);
+
+// Upload handler with guards
+const handleAttach = async (file: File) => {
+  if (uploadingFile) return; // throttle
+  if (file.size > 20 * 1024 * 1024) { toast error; return; }
+  setUploadingFile(true);
+  try {
+    const path = `lead-attachments/${lead.id}/${Date.now()}-${file.name}`;
+    await supabase.storage.from("clearance-photos").upload(path, file);
+    await supabase.from("lead_files").insert({
+      lead_id: lead.id,
+      company_id: lead.company_id,
+      file_name: file.name,
+      mime_type: file.type,
+      file_size_bytes: file.size,
+      storage_path: path,
+      source: "chatter_upload",
+    });
+    queryClient.invalidateQueries({ queryKey: ["lead-files-timeline", lead.id] });
+    toast({ title: "File attached" });
+  } catch { toast error; }
+  finally { setUploadingFile(false); }
+};
 ```
 
-If `customer_qb_id` is not directly on `accounting_mirror`, we will filter by matching the `CustomerRef.value` inside the JSON `data` field, or join through the `customers` table. The exact approach depends on the schema -- we will verify during implementation.
+### Project Events Table Schema
+- RLS: `USING (company_id IN (SELECT company_id FROM user_roles WHERE user_id = auth.uid()))`
+- Trigger on `project_tasks` for INSERT and UPDATE to auto-log events
 
-### New State Variables
-```typescript
-const [paymentMethodValue, setPaymentMethodValue] = useState("");
-const [outstandingFilter, setOutstandingFilter] = useState<"all" | "Invoice" | "CreditMemo">("all");
-const [selectedItems, setSelectedItems] = useState<Record<string, number>>({}); // qbId -> applied amount
-```
-
-### Auto-Calculate Total
-```typescript
-const appliedTotal = Object.values(selectedItems).reduce((s, v) => s + v, 0);
-// paymentAmount syncs with appliedTotal when items are toggled
-```
-
-### Payment Methods Constant
-```typescript
-const PAYMENT_METHODS = [
-  { value: "1", label: "Cash" },
-  { value: "2", label: "Check" },
-  { value: "3", label: "Credit Card" },
-  { value: "4", label: "E-Transfer" },
-  { value: "5", label: "Direct Deposit" },
-  { value: "other", label: "Other" },
-];
-```
+### ProjectTimeline Component
+- Follows exact same pattern as OdooChatter thread rendering
+- Date separators, icon maps, author initials
+- Note composer with the same Attach + Send pattern (also wired to upload)
 
 ---
 
-## What Does NOT Change
+## Files Changed
 
-- No database schema changes required
-- No changes to CustomerDetail.tsx or any other component
-- Invoice, Estimate, SalesReceipt, and CreditMemo flows in the dialog remain untouched
-- The existing backend single-invoice path stays as fallback
-- No changes to routing, permissions, or other pages
+| File | Action | What |
+|------|--------|------|
+| `src/components/pipeline/OdooChatter.tsx` | Edit | Wire Attach button with file input, upload logic, guards |
+| `src/components/accounting/ProjectTimeline.tsx` | New | Timeline feed component for projects |
+| `src/components/accounting/ProjectManagement.tsx` | Edit | Add "Timeline" tab |
+| Database migration | New | Create `project_events` table + trigger on `project_tasks` |
 
+No other files are touched. All changes are additive and use existing infrastructure (storage bucket, query patterns, UI components).
