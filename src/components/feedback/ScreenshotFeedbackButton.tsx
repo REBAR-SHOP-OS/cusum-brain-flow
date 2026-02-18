@@ -32,31 +32,40 @@ export function ScreenshotFeedbackButton() {
       // Hide the feedback button during capture so it doesn't appear in screenshot
       if (btnRef.current) btnRef.current.style.display = "none";
 
-      // Capture the entire main-content area (all layers, notices, modals, etc.)
-      const target = document.getElementById("main-content") || document.body;
+      // Wait for fonts and rendering to complete
+      await document.fonts.ready;
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+      // Capture from document.body to include portaled elements (Sheet, Dialog, etc.)
+      const target = document.body;
 
       const html2canvas = (await import("html2canvas")).default;
       const canvas = await html2canvas(target, {
         useCORS: true,
-        scale: 1,
-        scrollY: -window.scrollY,
-        height: target.scrollHeight,
-        windowHeight: target.scrollHeight,
-        width: target.scrollWidth,
-        windowWidth: target.scrollWidth,
+        scale: window.devicePixelRatio || 1,
+        width: window.innerWidth,
+        height: window.innerHeight,
+        windowWidth: window.innerWidth,
+        windowHeight: window.innerHeight,
+        x: 0,
+        y: 0,
+        scrollX: 0,
+        scrollY: 0,
+        backgroundColor: null,
         logging: false,
         allowTaint: true,
         ignoreElements: (el) => {
-          // Ignore this feedback button if it's somehow still visible
-          return el.getAttribute?.("data-feedback-btn") === "true";
+          // Ignore feedback button and Vizzy floating button
+          return el.getAttribute?.("data-feedback-btn") === "true" ||
+            el.classList?.contains("floating-vizzy");
         },
       });
       const dataUrl = canvas.toDataURL("image/png");
       setScreenshot(dataUrl);
       setOverlayOpen(true);
-    } catch (err) {
-      console.error("Screenshot capture error:", err);
-      toast.error("Failed to capture screen");
+    } catch (err: any) {
+      console.error("Screenshot capture error:", err?.message, err?.stack);
+      toast.error(`Failed to capture screen on ${window.location.pathname}`);
     } finally {
       // Always restore button visibility
       if (btnRef.current) btnRef.current.style.display = "";
