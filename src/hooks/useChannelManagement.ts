@@ -94,82 +94,23 @@ export function useOpenDM() {
   return useMutation({
     mutationFn: async ({
       targetProfileId,
-      targetName,
     }: {
       targetProfileId: string;
-      targetName: string;
+      targetName?: string;
     }) => {
       if (!user) throw new Error("Not logged in");
       if (!myProfile)
         throw new Error(
           "Your profile is not set up yet. Please ask an admin to link your account."
         );
-      if (targetProfileId === myProfile.id)
-        throw new Error("You cannot DM yourself.");
 
-      // --- Check for existing DM ---
-      const { data: existingMembers } = await (supabase as any)
-        .from("team_channel_members")
-        .select("channel_id")
-        .eq("profile_id", myProfile.id);
+      const { data, error } = await supabase.rpc("create_dm_channel" as any, {
+        _my_profile_id: myProfile.id,
+        _target_profile_id: targetProfileId,
+      });
 
-      const myChannelIds = (existingMembers || []).map(
-        (m: any) => m.channel_id
-      );
-
-      if (myChannelIds.length > 0) {
-        const { data: sharedMembers } = await (supabase as any)
-          .from("team_channel_members")
-          .select("channel_id")
-          .eq("profile_id", targetProfileId)
-          .in("channel_id", myChannelIds);
-
-        const sharedChannelIds = (sharedMembers || []).map(
-          (m: any) => m.channel_id
-        );
-
-        if (sharedChannelIds.length > 0) {
-          const { data: dmChannels } = await (supabase as any)
-            .from("team_channels")
-            .select("id")
-            .eq("channel_type", "dm")
-            .in("id", sharedChannelIds);
-
-          if (dmChannels && dmChannels.length > 0) {
-            return { id: dmChannels[0].id, existed: true };
-          }
-        }
-      }
-
-      // --- Create new DM channel ---
-      const companyId = await resolveCompanyId(user.id, myProfile as any);
-
-      const dmName = [myProfile.full_name, targetName].sort().join(" & ");
-
-      const { data: channel, error: channelErr } = await (supabase as any)
-        .from("team_channels")
-        .insert({
-          name: dmName,
-          channel_type: "dm",
-          created_by: user.id,
-          company_id: companyId,
-        })
-        .select("id")
-        .single();
-
-      if (channelErr) throw channelErr;
-
-      // Add both members atomically
-      const { error: membersErr } = await (supabase as any)
-        .from("team_channel_members")
-        .insert([
-          { channel_id: channel.id, profile_id: myProfile.id },
-          { channel_id: channel.id, profile_id: targetProfileId },
-        ]);
-
-      if (membersErr) throw membersErr;
-
-      return { id: channel.id, existed: false };
+      if (error) throw error;
+      return { id: data as string, existed: false };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["team-channels"] });

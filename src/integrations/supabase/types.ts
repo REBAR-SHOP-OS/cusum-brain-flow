@@ -10517,6 +10517,10 @@ export type Database = {
         Returns: boolean
       }
       cleanup_rate_limit_entries: { Args: never; Returns: undefined }
+      create_dm_channel: {
+        Args: { _my_profile_id: string; _target_profile_id: string }
+        Returns: string
+      }
       execute_readonly_query: { Args: { sql_query: string }; Returns: Json }
       execute_write_fix: { Args: { sql_query: string }; Returns: Json }
       get_my_rc_status: {
