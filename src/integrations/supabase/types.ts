@@ -2165,6 +2165,129 @@ export type Database = {
         }
         Relationships: []
       }
+      employee_certifications: {
+        Row: {
+          certificate_number: string | null
+          certification_name: string
+          company_id: string
+          created_at: string
+          created_by: string | null
+          document_url: string | null
+          employee_email: string | null
+          employee_name: string
+          expiry_date: string | null
+          id: string
+          issued_date: string | null
+          issuing_body: string | null
+          notes: string | null
+          reminder_days: number | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          certificate_number?: string | null
+          certification_name: string
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          document_url?: string | null
+          employee_email?: string | null
+          employee_name: string
+          expiry_date?: string | null
+          id?: string
+          issued_date?: string | null
+          issuing_body?: string | null
+          notes?: string | null
+          reminder_days?: number | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          certificate_number?: string | null
+          certification_name?: string
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          document_url?: string | null
+          employee_email?: string | null
+          employee_name?: string
+          expiry_date?: string | null
+          id?: string
+          issued_date?: string | null
+          issuing_body?: string | null
+          notes?: string | null
+          reminder_days?: number | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      employee_contracts: {
+        Row: {
+          company_id: string
+          contract_type: string
+          created_at: string
+          created_by: string | null
+          department: string | null
+          employee_email: string | null
+          employee_name: string
+          end_date: string | null
+          id: string
+          notes: string | null
+          notice_period_days: number | null
+          pay_frequency: string
+          position: string
+          probation_end_date: string | null
+          salary: number
+          salary_currency: string
+          start_date: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          company_id?: string
+          contract_type?: string
+          created_at?: string
+          created_by?: string | null
+          department?: string | null
+          employee_email?: string | null
+          employee_name: string
+          end_date?: string | null
+          id?: string
+          notes?: string | null
+          notice_period_days?: number | null
+          pay_frequency?: string
+          position: string
+          probation_end_date?: string | null
+          salary?: number
+          salary_currency?: string
+          start_date: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          contract_type?: string
+          created_at?: string
+          created_by?: string | null
+          department?: string | null
+          employee_email?: string | null
+          employee_name?: string
+          end_date?: string | null
+          id?: string
+          notes?: string | null
+          notice_period_days?: number | null
+          pay_frequency?: string
+          position?: string
+          probation_end_date?: string | null
+          salary?: number
+          salary_currency?: string
+          start_date?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       employee_salaries: {
         Row: {
           company_id: string
@@ -6667,6 +6790,47 @@ export type Database = {
           window_days?: number
         }
         Relationships: []
+      }
+      salary_history: {
+        Row: {
+          approved_by: string | null
+          contract_id: string
+          created_at: string
+          effective_date: string
+          id: string
+          new_salary: number
+          previous_salary: number | null
+          reason: string | null
+        }
+        Insert: {
+          approved_by?: string | null
+          contract_id: string
+          created_at?: string
+          effective_date: string
+          id?: string
+          new_salary: number
+          previous_salary?: number | null
+          reason?: string | null
+        }
+        Update: {
+          approved_by?: string | null
+          contract_id?: string
+          created_at?: string
+          effective_date?: string
+          id?: string
+          new_salary?: number
+          previous_salary?: number | null
+          reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "salary_history_contract_id_fkey"
+            columns: ["contract_id"]
+            isOneToOne: false
+            referencedRelation: "employee_contracts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       scheduled_activities: {
         Row: {

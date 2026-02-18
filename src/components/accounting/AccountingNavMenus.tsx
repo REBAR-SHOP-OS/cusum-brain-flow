@@ -57,6 +57,9 @@ const menus: Menu[] = [
       { type: "separator" },
       { label: "Payroll Corrections", tab: "payroll" },
       { label: "Payroll Audit", tab: "payroll-audit" },
+      { type: "separator" },
+      { type: "label", label: "HR" },
+      { label: "Employee Contracts & Certs", tab: "employee-contracts" },
     ],
   },
   {
