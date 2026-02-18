@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback, useMemo } from "react";
+import { useEffect, useState, useRef, useCallback, lazy, Suspense } from "react";
 import { useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -9,57 +9,67 @@ import {
 } from "lucide-react";
 import { AccountingNavMenus } from "@/components/accounting/AccountingNavMenus";
 import { useQuickBooksData } from "@/hooks/useQuickBooksData";
-import { AccountingDashboard } from "@/components/accounting/AccountingDashboard";
-import { AccountingInvoices } from "@/components/accounting/AccountingInvoices";
-import { AccountingBills } from "@/components/accounting/AccountingBills";
-import { AccountingPayments } from "@/components/accounting/AccountingPayments";
-import { AccountingCustomers } from "@/components/accounting/AccountingCustomers";
-import { AccountingVendors } from "@/components/accounting/AccountingVendors";
-import { AccountingAccounts } from "@/components/accounting/AccountingAccounts";
-import { AccountingAudit } from "@/components/accounting/AccountingAudit";
-import { AccountingPayroll } from "@/components/accounting/AccountingPayroll";
-import { AccountingDocuments } from "@/components/accounting/AccountingDocuments";
-import { AccountingReport } from "@/components/accounting/AccountingReport";
-import { AccountingAgedReceivables } from "@/components/accounting/AccountingAgedReceivables";
-import { AccountingAgedPayables } from "@/components/accounting/AccountingAgedPayables";
-import { AccountingQBReport } from "@/components/accounting/AccountingQBReport";
-import { AccountingAgent } from "@/components/accounting/AccountingAgent";
-import { PayrollAuditView } from "@/components/office/PayrollAuditView";
-import { AccountingOrders } from "@/components/accounting/AccountingOrders";
-import { AccountingActionQueue } from "@/components/accounting/AccountingActionQueue";
-import { AccountingVendorPayments } from "@/components/accounting/AccountingVendorPayments";
-import { BudgetManagement } from "@/components/accounting/BudgetManagement";
-import { QuoteTemplateManager } from "@/components/accounting/QuoteTemplateManager";
-import { ExpenseClaimsManager } from "@/components/accounting/ExpenseClaimsManager";
-import { ThreeWayMatchingManager } from "@/components/accounting/ThreeWayMatchingManager";
-import { EmployeeContractsManager } from "@/components/accounting/EmployeeContractsManager";
-import { RecruitmentPipeline } from "@/components/accounting/RecruitmentPipeline";
-import { ProjectManagement } from "@/components/accounting/ProjectManagement";
-import { AccountingSalesReceipts } from "@/components/accounting/AccountingSalesReceipts";
-import { AccountingRefundReceipts } from "@/components/accounting/AccountingRefundReceipts";
-import { AccountingDeposits } from "@/components/accounting/AccountingDeposits";
-import { AccountingTransfers } from "@/components/accounting/AccountingTransfers";
-import { AccountingJournalEntries } from "@/components/accounting/AccountingJournalEntries";
-import { AccountingRecurring } from "@/components/accounting/AccountingRecurring";
-import { AccountingBatchActions } from "@/components/accounting/AccountingBatchActions";
-import { AccountingStatements } from "@/components/accounting/AccountingStatements";
-import { AccountingExpenses } from "@/components/accounting/AccountingExpenses";
-import { AccountingAttachments } from "@/components/accounting/AccountingAttachments";
-import { AccountingReconciliation } from "@/components/accounting/AccountingReconciliation";
-import { AccountingScheduledReports } from "@/components/accounting/AccountingScheduledReports";
-import { AccountingRecurringTxns } from "@/components/accounting/AccountingRecurringTxns";
-import { TaxPlanning } from "@/components/accounting/TaxPlanning";
-import { BudgetVsActuals } from "@/components/accounting/BudgetVsActuals";
-
 import { usePennyQueue } from "@/hooks/usePennyQueue";
 import { useIntegrations } from "@/hooks/useIntegrations";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useWebPhone } from "@/hooks/useWebPhone";
 import accountingHelper from "@/assets/helpers/accounting-helper.png";
 
+/* ── Lazy-loaded tab components ── */
+const AccountingDashboard = lazy(() => import("@/components/accounting/AccountingDashboard").then(m => ({ default: m.AccountingDashboard })));
+const AccountingInvoices = lazy(() => import("@/components/accounting/AccountingInvoices").then(m => ({ default: m.AccountingInvoices })));
+const AccountingBills = lazy(() => import("@/components/accounting/AccountingBills").then(m => ({ default: m.AccountingBills })));
+const AccountingPayments = lazy(() => import("@/components/accounting/AccountingPayments").then(m => ({ default: m.AccountingPayments })));
+const AccountingCustomers = lazy(() => import("@/components/accounting/AccountingCustomers").then(m => ({ default: m.AccountingCustomers })));
+const AccountingVendors = lazy(() => import("@/components/accounting/AccountingVendors").then(m => ({ default: m.AccountingVendors })));
+const AccountingAccounts = lazy(() => import("@/components/accounting/AccountingAccounts").then(m => ({ default: m.AccountingAccounts })));
+const AccountingAudit = lazy(() => import("@/components/accounting/AccountingAudit").then(m => ({ default: m.AccountingAudit })));
+const AccountingPayroll = lazy(() => import("@/components/accounting/AccountingPayroll").then(m => ({ default: m.AccountingPayroll })));
+const AccountingDocuments = lazy(() => import("@/components/accounting/AccountingDocuments").then(m => ({ default: m.AccountingDocuments })));
+const AccountingReport = lazy(() => import("@/components/accounting/AccountingReport").then(m => ({ default: m.AccountingReport })));
+const AccountingAgedReceivables = lazy(() => import("@/components/accounting/AccountingAgedReceivables").then(m => ({ default: m.AccountingAgedReceivables })));
+const AccountingAgedPayables = lazy(() => import("@/components/accounting/AccountingAgedPayables").then(m => ({ default: m.AccountingAgedPayables })));
+const AccountingQBReport = lazy(() => import("@/components/accounting/AccountingQBReport").then(m => ({ default: m.AccountingQBReport })));
+const AccountingAgent = lazy(() => import("@/components/accounting/AccountingAgent").then(m => ({ default: m.AccountingAgent })));
+const PayrollAuditView = lazy(() => import("@/components/office/PayrollAuditView").then(m => ({ default: m.PayrollAuditView })));
+const AccountingOrders = lazy(() => import("@/components/accounting/AccountingOrders").then(m => ({ default: m.AccountingOrders })));
+const AccountingActionQueue = lazy(() => import("@/components/accounting/AccountingActionQueue").then(m => ({ default: m.AccountingActionQueue })));
+const AccountingVendorPayments = lazy(() => import("@/components/accounting/AccountingVendorPayments").then(m => ({ default: m.AccountingVendorPayments })));
+const BudgetManagement = lazy(() => import("@/components/accounting/BudgetManagement").then(m => ({ default: m.BudgetManagement })));
+const QuoteTemplateManager = lazy(() => import("@/components/accounting/QuoteTemplateManager").then(m => ({ default: m.QuoteTemplateManager })));
+const ExpenseClaimsManager = lazy(() => import("@/components/accounting/ExpenseClaimsManager").then(m => ({ default: m.ExpenseClaimsManager })));
+const ThreeWayMatchingManager = lazy(() => import("@/components/accounting/ThreeWayMatchingManager").then(m => ({ default: m.ThreeWayMatchingManager })));
+const EmployeeContractsManager = lazy(() => import("@/components/accounting/EmployeeContractsManager").then(m => ({ default: m.EmployeeContractsManager })));
+const RecruitmentPipeline = lazy(() => import("@/components/accounting/RecruitmentPipeline").then(m => ({ default: m.RecruitmentPipeline })));
+const ProjectManagement = lazy(() => import("@/components/accounting/ProjectManagement").then(m => ({ default: m.ProjectManagement })));
+const AccountingSalesReceipts = lazy(() => import("@/components/accounting/AccountingSalesReceipts").then(m => ({ default: m.AccountingSalesReceipts })));
+const AccountingRefundReceipts = lazy(() => import("@/components/accounting/AccountingRefundReceipts").then(m => ({ default: m.AccountingRefundReceipts })));
+const AccountingDeposits = lazy(() => import("@/components/accounting/AccountingDeposits").then(m => ({ default: m.AccountingDeposits })));
+const AccountingTransfers = lazy(() => import("@/components/accounting/AccountingTransfers").then(m => ({ default: m.AccountingTransfers })));
+const AccountingJournalEntries = lazy(() => import("@/components/accounting/AccountingJournalEntries").then(m => ({ default: m.AccountingJournalEntries })));
+const AccountingRecurring = lazy(() => import("@/components/accounting/AccountingRecurring").then(m => ({ default: m.AccountingRecurring })));
+const AccountingBatchActions = lazy(() => import("@/components/accounting/AccountingBatchActions").then(m => ({ default: m.AccountingBatchActions })));
+const AccountingStatements = lazy(() => import("@/components/accounting/AccountingStatements").then(m => ({ default: m.AccountingStatements })));
+const AccountingExpenses = lazy(() => import("@/components/accounting/AccountingExpenses").then(m => ({ default: m.AccountingExpenses })));
+const AccountingAttachments = lazy(() => import("@/components/accounting/AccountingAttachments").then(m => ({ default: m.AccountingAttachments })));
+const AccountingReconciliation = lazy(() => import("@/components/accounting/AccountingReconciliation").then(m => ({ default: m.AccountingReconciliation })));
+const AccountingScheduledReports = lazy(() => import("@/components/accounting/AccountingScheduledReports").then(m => ({ default: m.AccountingScheduledReports })));
+const AccountingRecurringTxns = lazy(() => import("@/components/accounting/AccountingRecurringTxns").then(m => ({ default: m.AccountingRecurringTxns })));
+const TaxPlanning = lazy(() => import("@/components/accounting/TaxPlanning").then(m => ({ default: m.TaxPlanning })));
+const BudgetVsActuals = lazy(() => import("@/components/accounting/BudgetVsActuals").then(m => ({ default: m.BudgetVsActuals })));
+
 /* ── Constants ── */
 const QB_LAST_LOAD_KEY = "qb-last-load-date";
 const QB_LAST_LOAD_TIME_KEY = "qb-last-load-time";
+
+/* ── Tab loading spinner ── */
+function TabLoader() {
+  return (
+    <div className="flex items-center justify-center py-20">
+      <Loader2 className="w-8 h-8 animate-spin text-primary" />
+    </div>
+  );
+}
 
 /* ── Draggable Penny FAB ── */
 const PENNY_STORAGE_KEY = "penny-btn-pos";
@@ -223,7 +233,6 @@ export default function AccountingWorkspace() {
     );
   }
 
-  // Error state with retry
   if (qb.error && !qb.loading && qb.connected !== false) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -245,7 +254,6 @@ export default function AccountingWorkspace() {
     );
   }
 
-  // Allow documents tab even without QuickBooks
   if (qb.connected === false && activeTab !== "documents") {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -290,11 +298,14 @@ export default function AccountingWorkspace() {
     <div className="flex flex-col h-full overflow-hidden relative">
       {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-border gap-2 sm:gap-0 shrink-0">
-          <div className="flex items-center gap-4 min-w-0">
+          <div className="flex items-center gap-4 min-w-0 overflow-hidden w-full sm:w-auto">
             <h1 className="text-lg sm:text-xl font-bold flex items-center gap-2 shrink-0">
-              💰 <span>Accounting</span>
+              💰 <span className="hidden sm:inline">Accounting</span>
+              <span className="sm:hidden">Acct</span>
             </h1>
-            <AccountingNavMenus activeTab={activeTab} onNavigate={setActiveTab} pendingCount={pendingCount} />
+            <div className="overflow-x-auto scrollbar-none flex-1 min-w-0">
+              <AccountingNavMenus activeTab={activeTab} onNavigate={setActiveTab} pendingCount={pendingCount} />
+            </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {lastRefreshTime && (
@@ -320,51 +331,52 @@ export default function AccountingWorkspace() {
       <div className="flex-1 flex overflow-hidden">
         {!(showAgent && agentMode === "fullscreen") && (
           <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-            
-            {activeTab === "dashboard" && <AccountingDashboard data={qb} onNavigate={setActiveTab} />}
-            {activeTab === "invoices" && <AccountingInvoices data={qb} initialSearch={urlSearch} />}
-            {activeTab === "bills" && <AccountingBills data={qb} />}
-            {activeTab === "payments" && <AccountingPayments data={qb} />}
-            {activeTab === "customers" && <AccountingCustomers data={qb} />}
-            {activeTab === "vendors" && <AccountingVendors data={qb} />}
-            {activeTab === "accounts" && <AccountingAccounts data={qb} />}
-            {activeTab === "audit" && <AccountingAudit data={qb} />}
-            {activeTab === "payroll" && <AccountingPayroll data={qb} />}
-            {activeTab === "payroll-audit" && <PayrollAuditView />}
-            {activeTab === "orders" && <AccountingOrders />}
-            {activeTab === "actions" && <AccountingActionQueue />}
-            {activeTab === "vendor-payments" && <AccountingVendorPayments />}
-            {activeTab === "budgets" && <BudgetManagement />}
-            {activeTab === "quote-templates" && <QuoteTemplateManager />}
-            {activeTab === "expense-claims" && <ExpenseClaimsManager />}
-            {activeTab === "three-way-matching" && <ThreeWayMatchingManager />}
-            {activeTab === "employee-contracts" && <EmployeeContractsManager />}
-            {activeTab === "recruitment" && <RecruitmentPipeline />}
-            {activeTab === "project-management" && <ProjectManagement />}
-            {activeTab === "sales-receipts" && <AccountingSalesReceipts data={qb} />}
-            {activeTab === "refund-receipts" && <AccountingRefundReceipts data={qb} />}
-            {activeTab === "deposits" && <AccountingDeposits data={qb} />}
-            {activeTab === "transfers" && <AccountingTransfers data={qb} />}
-            {activeTab === "journal-entries" && <AccountingJournalEntries data={qb} />}
-            {activeTab === "recurring" && <AccountingRecurring data={qb} />}
-            {activeTab === "batch-actions" && <AccountingBatchActions data={qb} />}
-            {activeTab === "statements" && <AccountingStatements data={qb} />}
-            {activeTab === "expenses" && <AccountingExpenses data={qb} />}
-            {activeTab === "attachments" && <AccountingAttachments data={qb} />}
-            {activeTab === "reconciliation" && <AccountingReconciliation />}
-            {activeTab === "scheduled-reports" && <AccountingScheduledReports />}
-            {activeTab === "recurring-auto" && <AccountingRecurringTxns />}
-            {activeTab === "tax-planning" && <TaxPlanning />}
-            {activeTab === "budget-vs-actuals" && <BudgetVsActuals />}
-            {activeTab === "documents" && <AccountingDocuments data={qb} />}
-            {activeTab === "balance-sheet" && <AccountingReport data={qb} report="balance-sheet" />}
-            {activeTab === "profit-loss" && <AccountingReport data={qb} report="profit-loss" />}
-            {activeTab === "cash-flow" && <AccountingReport data={qb} report="cash-flow" />}
-            {activeTab === "aged-receivables" && <AccountingAgedReceivables data={qb} />}
-            {activeTab === "aged-payables" && <AccountingAgedPayables data={qb} />}
-            {activeTab === "general-ledger" && <AccountingQBReport data={qb} report="general-ledger" />}
-            {activeTab === "trial-balance" && <AccountingQBReport data={qb} report="trial-balance" />}
-            {activeTab === "transaction-list" && <AccountingQBReport data={qb} report="transaction-list" />}
+            <Suspense fallback={<TabLoader />}>
+              {activeTab === "dashboard" && <AccountingDashboard data={qb} onNavigate={setActiveTab} />}
+              {activeTab === "invoices" && <AccountingInvoices data={qb} initialSearch={urlSearch} />}
+              {activeTab === "bills" && <AccountingBills data={qb} />}
+              {activeTab === "payments" && <AccountingPayments data={qb} />}
+              {activeTab === "customers" && <AccountingCustomers data={qb} />}
+              {activeTab === "vendors" && <AccountingVendors data={qb} />}
+              {activeTab === "accounts" && <AccountingAccounts data={qb} />}
+              {activeTab === "audit" && <AccountingAudit data={qb} />}
+              {activeTab === "payroll" && <AccountingPayroll data={qb} />}
+              {activeTab === "payroll-audit" && <PayrollAuditView />}
+              {activeTab === "orders" && <AccountingOrders />}
+              {activeTab === "actions" && <AccountingActionQueue />}
+              {activeTab === "vendor-payments" && <AccountingVendorPayments />}
+              {activeTab === "budgets" && <BudgetManagement />}
+              {activeTab === "quote-templates" && <QuoteTemplateManager />}
+              {activeTab === "expense-claims" && <ExpenseClaimsManager />}
+              {activeTab === "three-way-matching" && <ThreeWayMatchingManager />}
+              {activeTab === "employee-contracts" && <EmployeeContractsManager />}
+              {activeTab === "recruitment" && <RecruitmentPipeline />}
+              {activeTab === "project-management" && <ProjectManagement />}
+              {activeTab === "sales-receipts" && <AccountingSalesReceipts data={qb} />}
+              {activeTab === "refund-receipts" && <AccountingRefundReceipts data={qb} />}
+              {activeTab === "deposits" && <AccountingDeposits data={qb} />}
+              {activeTab === "transfers" && <AccountingTransfers data={qb} />}
+              {activeTab === "journal-entries" && <AccountingJournalEntries data={qb} />}
+              {activeTab === "recurring" && <AccountingRecurring data={qb} />}
+              {activeTab === "batch-actions" && <AccountingBatchActions data={qb} />}
+              {activeTab === "statements" && <AccountingStatements data={qb} />}
+              {activeTab === "expenses" && <AccountingExpenses data={qb} />}
+              {activeTab === "attachments" && <AccountingAttachments data={qb} />}
+              {activeTab === "reconciliation" && <AccountingReconciliation />}
+              {activeTab === "scheduled-reports" && <AccountingScheduledReports />}
+              {activeTab === "recurring-auto" && <AccountingRecurringTxns />}
+              {activeTab === "tax-planning" && <TaxPlanning />}
+              {activeTab === "budget-vs-actuals" && <BudgetVsActuals />}
+              {activeTab === "documents" && <AccountingDocuments data={qb} />}
+              {activeTab === "balance-sheet" && <AccountingReport data={qb} report="balance-sheet" />}
+              {activeTab === "profit-loss" && <AccountingReport data={qb} report="profit-loss" />}
+              {activeTab === "cash-flow" && <AccountingReport data={qb} report="cash-flow" />}
+              {activeTab === "aged-receivables" && <AccountingAgedReceivables data={qb} />}
+              {activeTab === "aged-payables" && <AccountingAgedPayables data={qb} />}
+              {activeTab === "general-ledger" && <AccountingQBReport data={qb} report="general-ledger" />}
+              {activeTab === "trial-balance" && <AccountingQBReport data={qb} report="trial-balance" />}
+              {activeTab === "transaction-list" && <AccountingQBReport data={qb} report="transaction-list" />}
+            </Suspense>
           </div>
         )}
 
@@ -376,14 +388,16 @@ export default function AccountingWorkspace() {
             "p-3"
           )}>
             <div className="w-full h-full min-h-0">
-              <AccountingAgent
-                viewMode={agentMode}
-                onViewModeChange={(m) => setAgentMode(m)}
-                qbSummary={qb}
-                autoGreet
-                webPhoneState={webPhoneState}
-                webPhoneActions={webPhoneActions}
-              />
+              <Suspense fallback={<TabLoader />}>
+                <AccountingAgent
+                  viewMode={agentMode}
+                  onViewModeChange={(m) => setAgentMode(m)}
+                  qbSummary={qb}
+                  autoGreet
+                  webPhoneState={webPhoneState}
+                  webPhoneActions={webPhoneActions}
+                />
+              </Suspense>
             </div>
           </div>
         )}
@@ -397,7 +411,6 @@ export default function AccountingWorkspace() {
             ? "inset-0 bg-background p-3"
             : "inset-x-3 bottom-3 max-h-[75vh] rounded-xl shadow-2xl overflow-hidden flex flex-col"
         )}>
-          {/* Mobile close button */}
           {agentMode !== "fullscreen" && (
             <button
               onClick={() => setShowAgent(false)}
@@ -407,14 +420,16 @@ export default function AccountingWorkspace() {
               <X className="w-4 h-4" />
             </button>
           )}
-          <AccountingAgent
-            viewMode={agentMode}
-            onViewModeChange={(m) => setAgentMode(m)}
-            qbSummary={qb}
-            autoGreet
-            webPhoneState={webPhoneState}
-            webPhoneActions={webPhoneActions}
-          />
+          <Suspense fallback={<TabLoader />}>
+            <AccountingAgent
+              viewMode={agentMode}
+              onViewModeChange={(m) => setAgentMode(m)}
+              qbSummary={qb}
+              autoGreet
+              webPhoneState={webPhoneState}
+              webPhoneActions={webPhoneActions}
+            />
+          </Suspense>
         </div>
       )}
 

@@ -120,7 +120,7 @@ const menus: Menu[] = [
 
 export function AccountingNavMenus({ activeTab, onNavigate, pendingCount = 0 }: AccountingNavProps) {
   return (
-    <nav className="flex items-center gap-0.5">
+    <nav className="flex items-center gap-0.5 overflow-x-auto scrollbar-none max-w-full">
       {menus.map((menu) => {
         if (!menu.items) {
           // Direct link (Dashboard, AI Actions)
