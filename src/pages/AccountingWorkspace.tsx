@@ -20,6 +20,9 @@ import { AccountingAudit } from "@/components/accounting/AccountingAudit";
 import { AccountingPayroll } from "@/components/accounting/AccountingPayroll";
 import { AccountingDocuments } from "@/components/accounting/AccountingDocuments";
 import { AccountingReport } from "@/components/accounting/AccountingReport";
+import { AccountingAgedReceivables } from "@/components/accounting/AccountingAgedReceivables";
+import { AccountingAgedPayables } from "@/components/accounting/AccountingAgedPayables";
+import { AccountingQBReport } from "@/components/accounting/AccountingQBReport";
 import { AccountingAgent } from "@/components/accounting/AccountingAgent";
 import { PayrollAuditView } from "@/components/office/PayrollAuditView";
 import { AccountingOrders } from "@/components/accounting/AccountingOrders";
@@ -313,6 +316,11 @@ export default function AccountingWorkspace() {
             {activeTab === "balance-sheet" && <AccountingReport data={qb} report="balance-sheet" />}
             {activeTab === "profit-loss" && <AccountingReport data={qb} report="profit-loss" />}
             {activeTab === "cash-flow" && <AccountingReport data={qb} report="cash-flow" />}
+            {activeTab === "aged-receivables" && <AccountingAgedReceivables data={qb} />}
+            {activeTab === "aged-payables" && <AccountingAgedPayables data={qb} />}
+            {activeTab === "general-ledger" && <AccountingQBReport data={qb} report="general-ledger" />}
+            {activeTab === "trial-balance" && <AccountingQBReport data={qb} report="trial-balance" />}
+            {activeTab === "transaction-list" && <AccountingQBReport data={qb} report="transaction-list" />}
           </div>
         )}
 
