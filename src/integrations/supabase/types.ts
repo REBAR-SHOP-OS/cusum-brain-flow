@@ -3030,6 +3030,99 @@ export type Database = {
         }
         Relationships: []
       }
+      inventory_count_lines: {
+        Row: {
+          bar_code: string
+          count_id: string
+          counted_qty: number | null
+          created_at: string
+          expected_qty: number
+          id: string
+          notes: string | null
+          variance: number | null
+        }
+        Insert: {
+          bar_code: string
+          count_id: string
+          counted_qty?: number | null
+          created_at?: string
+          expected_qty?: number
+          id?: string
+          notes?: string | null
+          variance?: number | null
+        }
+        Update: {
+          bar_code?: string
+          count_id?: string
+          counted_qty?: number | null
+          created_at?: string
+          expected_qty?: number
+          id?: string
+          notes?: string | null
+          variance?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_count_lines_bar_code_fkey"
+            columns: ["bar_code"]
+            isOneToOne: false
+            referencedRelation: "rebar_sizes"
+            referencedColumns: ["bar_code"]
+          },
+          {
+            foreignKeyName: "inventory_count_lines_count_id_fkey"
+            columns: ["count_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_counts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inventory_counts: {
+        Row: {
+          approved_by: string | null
+          company_id: string
+          count_date: string
+          count_number: string
+          count_type: string
+          counted_by: string | null
+          created_at: string
+          id: string
+          location: string | null
+          notes: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          approved_by?: string | null
+          company_id: string
+          count_date?: string
+          count_number: string
+          count_type?: string
+          counted_by?: string | null
+          created_at?: string
+          id?: string
+          location?: string | null
+          notes?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          approved_by?: string | null
+          company_id?: string
+          count_date?: string
+          count_number?: string
+          count_type?: string
+          counted_by?: string | null
+          created_at?: string
+          id?: string
+          location?: string | null
+          notes?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       inventory_lots: {
         Row: {
           bar_code: string

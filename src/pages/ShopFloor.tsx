@@ -5,7 +5,8 @@ import {
   ShieldCheck, 
   Send, 
   PackageCheck,
-  ArrowLeft
+  ArrowLeft,
+  ClipboardList
 } from "lucide-react";
 import { MyJobsCard } from "@/components/shopfloor/MyJobsCard";
 import { VoiceRecorderWidget } from "@/components/shopfloor/VoiceRecorderWidget";
@@ -60,6 +61,12 @@ const hubCards: HubCard[] = [
     subtitle: "CUSTOMER COLLECTION",
     icon: <PackageCheck className="w-7 h-7" />,
     to: "/shopfloor/pickup",
+  },
+  {
+    label: "INVENTORY",
+    subtitle: "COUNTS & ADJUSTMENTS",
+    icon: <ClipboardList className="w-7 h-7" />,
+    to: "/shopfloor/inventory",
   },
 ];
 
