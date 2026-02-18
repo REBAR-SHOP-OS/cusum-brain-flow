@@ -6,8 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { RebarTagCard } from "@/components/office/RebarTagCard";
 import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ZebraZplModal } from "@/components/office/ZebraZplModal";
+import { generateZpl } from "@/utils/generateZpl";
+import {
   LayoutGrid, Table as TableIcon, Download, Printer,
-  Zap, Sparkles, ChevronRight,
+  Zap, Sparkles, ChevronRight, ChevronDown, Tag,
 } from "lucide-react";
 
 // Mass per meter by bar code (RSIC Canada)
@@ -32,6 +37,8 @@ export function TagsExportView() {
   const { getShapeImageUrl } = useShapeSchematics();
   const [viewMode, setViewMode] = useState<"table" | "cards">("table");
   const [sortMode, setSortMode] = useState<"standard" | "optimized">("standard");
+  const [zebraOpen, setZebraOpen] = useState(false);
+  const [zebraZpl, setZebraZpl] = useState("");
 
   const selectedSession = sessions.find((s) => s.id === selectedSessionId);
 
@@ -84,6 +91,33 @@ export function TagsExportView() {
 
   // Print tags — let printer driver handle label size
   const handlePrint = () => window.print();
+
+  // Zebra ZPL export
+  const handleZebraZPL = () => {
+    const zplRows = sortedRows.map((row) => {
+      const size = row.bar_size_mapped || row.bar_size || "";
+      const dims: Record<string, number | null> = {};
+      DIM_COLS.forEach((d) => {
+        const key = `dim_${d.toLowerCase()}` as keyof typeof row;
+        const v = row[key];
+        dims[d] = typeof v === "number" ? v : null;
+      });
+      return {
+        mark: row.mark || "",
+        size,
+        grade: row.grade_mapped || row.grade || "",
+        qty: row.quantity,
+        total_length_mm: row.total_length_mm,
+        weight: getWeight(size, row.total_length_mm, row.quantity),
+        dwg: row.dwg || "",
+        row_index: row.row_index,
+        reference: row.reference || "",
+        dims,
+      };
+    });
+    setZebraZpl(generateZpl(zplRows, selectedSession?.name || "tags-export"));
+    setZebraOpen(true);
+  };
 
   // Session selection screen
   if (!selectedSessionId) {
@@ -192,9 +226,25 @@ export function TagsExportView() {
           >
             <Download className="w-3.5 h-3.5" /> Export CSV
           </Button>
-          <Button size="sm" className="gap-1.5 text-xs h-8" onClick={handlePrint}>
-            <Printer className="w-3.5 h-3.5" /> Print Tags
-          </Button>
+          {/* Print Tags split button */}
+          <div className="flex items-center">
+            <Button size="sm" className="gap-1.5 text-xs h-8 rounded-r-none" onClick={handlePrint}>
+              <Printer className="w-3.5 h-3.5" /> Print Tags
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" className="h-8 px-1.5 rounded-l-none border-l border-primary-foreground/30">
+                  <ChevronDown className="w-3.5 h-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={handleZebraZPL}>
+                  <Tag className="w-3.5 h-3.5 mr-2" />
+                  Zebra ZT411 (4×6 in) — ZPL
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </div>
 
@@ -319,6 +369,14 @@ export function TagsExportView() {
           </div>
         </ScrollArea>
       )}
+
+      <ZebraZplModal
+        open={zebraOpen}
+        onOpenChange={setZebraOpen}
+        zpl={zebraZpl}
+        labelCount={sortedRows.length}
+        sessionName={selectedSession?.name || "tags-export"}
+      />
     </div>
   );
 }
