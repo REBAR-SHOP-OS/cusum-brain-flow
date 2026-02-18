@@ -3,7 +3,6 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ScheduledActivities } from "./ScheduledActivities";
 import { Progress } from "@/components/ui/progress";
@@ -14,7 +13,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Building, Mail, Phone, Calendar, DollarSign, Pencil, Trash2,
-  TrendingUp, Clock, User, Star, Archive,
+  TrendingUp, Clock, User, Star, Archive, X,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -59,12 +58,12 @@ export function LeadDetailDrawer({
   onStageChange,
 }: LeadDetailDrawerProps) {
   const { isAdmin } = useUserRole();
+  const [activeTab, setActiveTab] = useState<"notes" | "chatter" | "activities">("chatter");
 
   if (!lead) return null;
 
   const meta = (lead.metadata ?? {}) as Record<string, unknown>;
   const currentStageIndex = PIPELINE_STAGES.findIndex((s) => s.id === lead.stage);
-  const currentStage = PIPELINE_STAGES[currentStageIndex];
   const priority = priorityConfig[lead.priority || "medium"] || priorityConfig.medium;
   const age = formatDistanceToNow(new Date(lead.created_at), { addSuffix: false });
 
@@ -79,16 +78,6 @@ export function LeadDetailDrawer({
   const contactName = odooContact || lead.customers?.name || null;
   const companyName = lead.customers?.company_name || null;
 
-  // Legacy notes parsing
-  const parseField = (notes: string | null, key: string) => {
-    if (!notes) return null;
-    const match = notes.match(new RegExp(`${key}:\\s*([^|]+)`));
-    return match ? match[1].trim() : null;
-  };
-  const assigned = parseField(lead.notes, "Assigned");
-  const city = parseField(lead.notes, "City");
-  const quoteRef = parseField(lead.notes, "Quote");
-
   const handleArchive = () => {
     onStageChange(lead.id, "lost");
     onOpenChange(false);
@@ -96,43 +85,48 @@ export function LeadDetailDrawer({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-lg overflow-y-auto p-0">
-        {/* Header */}
-        <div className="p-6 pb-4 border-b border-border">
-          <SheetHeader className="text-left mb-3">
-            <div className="flex items-start justify-between gap-3">
-              <SheetTitle className="text-lg font-bold leading-tight pr-4">
+      <SheetContent className="w-full sm:max-w-[45vw] overflow-y-auto p-0 rounded-none">
+        {/* Header — Odoo style */}
+        <div className="px-4 pt-4 pb-3 border-b border-border bg-background">
+          <div className="flex items-start justify-between gap-3">
+            <SheetHeader className="text-left flex-1 min-w-0">
+              <SheetTitle className="text-lg font-bold leading-tight text-foreground">
                 {lead.title}
               </SheetTitle>
-              <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" onClick={() => { onOpenChange(false); onEdit(lead); }}>
+            </SheetHeader>
+            <div className="flex items-center gap-1 shrink-0">
+              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => { onOpenChange(false); onEdit(lead); }}>
                 <Pencil className="w-3.5 h-3.5" />
               </Button>
+              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => onOpenChange(false)}>
+                <X className="w-3.5 h-3.5" />
+              </Button>
             </div>
-          </SheetHeader>
+          </div>
 
           {/* Badges */}
-          <div className="flex items-center gap-2 flex-wrap mb-4">
-            <Badge variant="outline" className={priority.class}>
+          <div className="flex items-center gap-1.5 flex-wrap mt-2">
+            <Badge variant="outline" className={cn("text-[11px] rounded-sm px-1.5 py-0", priority.class)}>
               {priority.label}
             </Badge>
-            <Badge variant="secondary" className="gap-1">
+            <Badge variant="secondary" className="text-[11px] rounded-sm px-1.5 py-0 gap-1">
               <Clock className="w-3 h-3" />
               {age} old
             </Badge>
           </div>
 
-          {/* Stage Navigation Chips */}
-          <div className="flex gap-1 overflow-x-auto pb-2 mb-4 -mx-1 px-1">
+          {/* Stage Ribbon — Odoo breadcrumb style */}
+          <div className="flex gap-0 overflow-x-auto mt-3 -mx-1 px-1">
             {PIPELINE_STAGES.map((stage, i) => (
               <button
                 key={stage.id}
                 onClick={() => onStageChange(lead.id, stage.id)}
                 className={cn(
-                  "shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition-all",
+                  "shrink-0 px-2.5 py-1 text-[11px] font-medium border-y border-r first:border-l first:rounded-l-sm last:rounded-r-sm transition-colors",
                   i === currentStageIndex
-                    ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                    ? "bg-primary text-primary-foreground border-primary"
                     : i < currentStageIndex
-                    ? "bg-primary/10 text-primary border-primary/20 hover:bg-primary/20"
+                    ? "bg-primary/15 text-primary border-primary/20 hover:bg-primary/25"
                     : "bg-muted text-muted-foreground border-border hover:bg-accent"
                 )}
               >
@@ -140,128 +134,142 @@ export function LeadDetailDrawer({
               </button>
             ))}
           </div>
+        </div>
 
-          {/* Key Info Section */}
-          <div className="space-y-2.5">
-            {/* Contact & Company */}
+        {/* Info Section — Odoo form layout: label-above-value grid */}
+        <div className="px-4 py-3 border-b border-border bg-background">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-[13px]">
+            {/* Customer */}
             {(contactName || companyName) && (
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                  <Building className="w-4 h-4 text-primary" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium truncate">{companyName || contactName}</p>
-                  {companyName && contactName && companyName !== contactName && (
-                    <p className="text-xs text-muted-foreground truncate">{contactName}</p>
-                  )}
+              <div>
+                <span className="text-[11px] text-muted-foreground font-medium">Customer</span>
+                <p className="font-medium truncate">{companyName || contactName}</p>
+                {companyName && contactName && companyName !== contactName && (
+                  <p className="text-xs text-muted-foreground truncate">{contactName}</p>
+                )}
+              </div>
+            )}
+
+            {/* Salesperson */}
+            {salesperson && (
+              <div className="flex items-start gap-2">
+                <div>
+                  <span className="text-[11px] text-muted-foreground font-medium">Salesperson</span>
+                  <div className="flex items-center gap-1.5">
+                    <Avatar className="h-5 w-5 text-[9px]">
+                      <AvatarFallback className="bg-primary/10 text-primary text-[9px]">
+                        {getInitials(salesperson)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <p className="font-medium truncate">{salesperson}</p>
+                  </div>
                 </div>
               </div>
             )}
 
-            {/* Contact details row */}
-            <div className="flex items-center gap-3 flex-wrap text-xs">
-              {odooEmail && (
-                <a href={`mailto:${odooEmail}`} className="flex items-center gap-1 text-primary hover:underline truncate max-w-[200px]">
-                  <Mail className="w-3 h-3 shrink-0" />
-                  {odooEmail}
-                </a>
-              )}
-              {odooPhone && (
-                <a href={`tel:${odooPhone}`} className="flex items-center gap-1 text-primary hover:underline">
-                  <Phone className="w-3 h-3 shrink-0" />
-                  {odooPhone}
-                </a>
-              )}
-            </div>
+            {/* Email */}
+            {odooEmail && (
+              <div>
+                <span className="text-[11px] text-muted-foreground font-medium">Email</span>
+                <a href={`mailto:${odooEmail}`} className="text-primary hover:underline truncate block">{odooEmail}</a>
+              </div>
+            )}
 
-            {/* Salesperson, Revenue, Probability, Close Date */}
-            <div className="grid grid-cols-2 gap-2">
-              {salesperson && (
-                <div className="flex items-center gap-2 rounded-md border border-border p-2">
-                  <Avatar className="h-6 w-6 text-[10px]">
-                    <AvatarFallback className="bg-primary/10 text-primary text-[10px]">
-                      {getInitials(salesperson)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="min-w-0">
-                    <p className="text-[10px] text-muted-foreground leading-none">Salesperson</p>
-                    <p className="text-xs font-medium truncate">{salesperson}</p>
-                  </div>
+            {/* Phone */}
+            {odooPhone && (
+              <div>
+                <span className="text-[11px] text-muted-foreground font-medium">Phone</span>
+                <a href={`tel:${odooPhone}`} className="text-primary hover:underline block">{odooPhone}</a>
+              </div>
+            )}
+
+            {/* Revenue */}
+            {revenue > 0 && (
+              <div>
+                <span className="text-[11px] text-muted-foreground font-medium">Expected Revenue</span>
+                <p className="font-medium">${revenue.toLocaleString()}</p>
+              </div>
+            )}
+
+            {/* Probability */}
+            {probability > 0 && (
+              <div>
+                <span className="text-[11px] text-muted-foreground font-medium">Probability</span>
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">{probability}%</span>
+                  <Progress value={probability} className="h-1.5 flex-1 max-w-[80px]" />
                 </div>
-              )}
-              {revenue > 0 && (
-                <div className="flex items-center gap-2 rounded-md border border-border p-2">
-                  <DollarSign className="w-4 h-4 text-muted-foreground shrink-0" />
-                  <div className="min-w-0">
-                    <p className="text-[10px] text-muted-foreground leading-none">Revenue</p>
-                    <p className="text-xs font-medium">${revenue.toLocaleString()}</p>
-                  </div>
-                </div>
-              )}
-              {probability > 0 && (
-                <div className="flex items-center gap-2 rounded-md border border-border p-2">
-                  <TrendingUp className="w-4 h-4 text-muted-foreground shrink-0" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[10px] text-muted-foreground leading-none">Probability</p>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-medium">{probability}%</span>
-                      <Progress value={probability} className="h-1.5 flex-1" />
-                    </div>
-                  </div>
-                </div>
-              )}
-              {lead.expected_close_date && (
-                <div className="flex items-center gap-2 rounded-md border border-border p-2">
-                  <Calendar className="w-4 h-4 text-muted-foreground shrink-0" />
-                  <div className="min-w-0">
-                    <p className="text-[10px] text-muted-foreground leading-none">Close Date</p>
-                    <p className="text-xs font-medium">{format(new Date(lead.expected_close_date), "MMM d, yyyy")}</p>
-                  </div>
-                </div>
-              )}
-            </div>
+              </div>
+            )}
+
+            {/* Expected Closing */}
+            {lead.expected_close_date && (
+              <div>
+                <span className="text-[11px] text-muted-foreground font-medium">Expected Closing</span>
+                <p className="font-medium">{format(new Date(lead.expected_close_date), "MMM d, yyyy")}</p>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Body — Odoo style: Internal Notes + Chatter */}
-        <div className="p-6">
-          <Tabs defaultValue="chatter" className="w-full">
-            <TabsList className="w-full grid grid-cols-3 mb-4">
-              <TabsTrigger value="notes">Notes</TabsTrigger>
-              <TabsTrigger value="chatter">Chatter</TabsTrigger>
-              <TabsTrigger value="activities">Activities</TabsTrigger>
-            </TabsList>
+        {/* Tabs — Odoo underline style */}
+        <div className="border-b border-border bg-background">
+          <div className="flex">
+            {(["notes", "chatter", "activities"] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={cn(
+                  "px-4 py-2 text-[13px] font-medium transition-colors relative capitalize",
+                  activeTab === tab
+                    ? "text-primary"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {tab}
+                {activeTab === tab && (
+                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
 
-            <TabsContent value="notes" className="space-y-4 mt-0">
+        {/* Tab Content */}
+        <div className="bg-background min-h-[200px]">
+          {activeTab === "notes" && (
+            <div className="p-4 space-y-3">
               {lead.description && (
-                <div className="rounded-lg border border-border p-4">
-                  <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Description</h4>
-                  <p className="text-sm whitespace-pre-wrap">{lead.description}</p>
+                <div className="border border-border rounded-sm p-3">
+                  <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Description</h4>
+                  <p className="text-[13px] whitespace-pre-wrap">{lead.description}</p>
                 </div>
               )}
               {lead.notes && (
-                <div className="rounded-lg border border-border p-4">
-                  <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Internal Notes</h4>
-                  <p className="text-sm whitespace-pre-wrap">{lead.notes}</p>
+                <div className="border border-border rounded-sm p-3">
+                  <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Internal Notes</h4>
+                  <p className="text-[13px] whitespace-pre-wrap">{lead.notes}</p>
                 </div>
               )}
               {!lead.description && !lead.notes && (
-                <p className="text-sm text-muted-foreground text-center py-8">No notes yet.</p>
+                <p className="text-[13px] text-muted-foreground text-center py-8">No notes yet.</p>
               )}
-            </TabsContent>
+            </div>
+          )}
 
-            <TabsContent value="chatter" className="mt-0">
-              <OdooChatter lead={lead} />
-            </TabsContent>
+          {activeTab === "chatter" && (
+            <OdooChatter lead={lead} />
+          )}
 
-            <TabsContent value="activities" className="mt-0">
+          {activeTab === "activities" && (
+            <div className="p-4">
               <ScheduledActivities entityType="lead" entityId={lead.id} />
-            </TabsContent>
-          </Tabs>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
-        <div className="border-t border-border p-4 text-xs text-muted-foreground flex items-center justify-between">
+        <div className="border-t border-border p-3 text-[11px] text-muted-foreground flex items-center justify-between bg-muted/30">
           <span>Created {format(new Date(lead.created_at), "MMM d, yyyy")}</span>
           {isAdmin ? (
             <AlertDialog>
@@ -269,10 +277,10 @@ export function LeadDetailDrawer({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="text-destructive hover:text-destructive hover:bg-destructive/10 gap-1.5 h-7 text-xs"
+                  className="text-destructive hover:text-destructive hover:bg-destructive/10 gap-1 h-6 text-[11px] rounded-sm"
                 >
                   <Trash2 className="w-3 h-3" />
-                  Delete Lead
+                  Delete
                 </Button>
               </AlertDialogTrigger>
               <AlertDialogContent>
@@ -300,7 +308,7 @@ export function LeadDetailDrawer({
             <Button
               variant="ghost"
               size="sm"
-              className="gap-1.5 h-7 text-xs"
+              className="gap-1 h-6 text-[11px] rounded-sm"
               onClick={handleArchive}
             >
               <Archive className="w-3 h-3" />

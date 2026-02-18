@@ -181,7 +181,7 @@ export function PipelineBoard({
       onDragEnd={handleDragEnd}
       onDrop={() => clearAutoScroll()}
     >
-      <div className="flex gap-4 p-4 sm:p-6 min-w-max h-full">
+      <div className="flex gap-0 min-w-max h-full">
         {localStages.map((stage) => (
           <div
             key={stage.id}
