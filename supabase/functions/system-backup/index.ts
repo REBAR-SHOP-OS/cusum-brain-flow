@@ -8,15 +8,32 @@ const corsHeaders = {
 };
 
 const TABLES_TO_BACKUP = [
-  "leads",
-  "orders",
-  "profiles",
-  "contacts",
-  "customers",
-  "projects",
-  "project_tasks",
-  "order_items",
-  "work_orders",
+  // Core CRM & Sales
+  "leads", "orders", "profiles", "contacts", "customers",
+  "projects", "project_tasks", "order_items", "work_orders",
+  // Lead activity & history
+  "lead_activities", "lead_events", "lead_files",
+  "scheduled_activities", "activity_events",
+  // Quotes
+  "quotes", "quote_items",
+  // Communications
+  "communications", "comms_alerts",
+  // Chat
+  "chat_messages", "chat_sessions",
+  // QuickBooks & Accounting
+  "qb_transactions", "qb_customers", "qb_accounts", "qb_vendors", "qb_items",
+  "accounting_mirror", "gl_transactions", "gl_lines",
+  // System
+  "notifications", "user_roles",
+  // Manufacturing
+  "machines", "machine_capabilities", "machine_runs",
+  "cut_plans", "cut_plan_items",
+  // Extraction
+  "tasks", "extract_sessions", "extract_rows",
+  // Support
+  "support_conversations", "support_messages",
+  // Team messaging
+  "team_messages", "team_channels", "team_channel_members",
 ];
 
 function json(body: unknown, status = 200) {
@@ -158,7 +175,7 @@ serve(async (req) => {
         const { data: rows, error: tableErr } = await serviceClient
           .from(table)
           .select("*")
-          .limit(10000);
+          .limit(50000);
         if (tableErr) {
           console.warn(`Warning: could not back up table ${table}: ${tableErr.message}`);
           snapshot[table] = [];
