@@ -1,111 +1,74 @@
 
 
-# Sync Missing Odoo Chatter & Activities -- Apple to Apple
+# Expand Backup to Cover Full ERP Database
 
 ## Problem
-- 384 out of 2,764 leads have ZERO activities in the ERP (no chatter, no notes, no log notes)
-- ALL Odoo scheduled activities (`mail.activity`) are missing -- 0 rows in `scheduled_activities`
-- The existing `odoo-crm-sync` only syncs lead metadata (stage, value) but NEVER imports Odoo's chatter messages or scheduled activities
-- The UI code works perfectly -- it just has no data to show for these 384 leads
+The backup only backs up **9 tables** (2.3 MB) but the full ERP database has **40+ tables totaling ~100+ MB**. Critical business data is completely excluded from backups.
 
-## Data Audit (Current State)
+## Current vs Required Coverage
 
 ```text
-+------------------------------+---------+
-| Metric                       | Count   |
-+------------------------------+---------+
-| Total Odoo leads in ERP      | 2,764   |
-| Leads WITH activities        | 2,380   |
-| Leads WITHOUT activities     | 384     |
-| Total lead_activities rows   | 38,472  |
-| Total scheduled_activities   | 0       |
-| Total lead_events            | 530     |
-+------------------------------+---------+
+CURRENTLY BACKED UP (9 tables, ~2.3 MB):
+  leads, orders, profiles, contacts, customers,
+  projects, project_tasks, order_items, work_orders
+
+MISSING FROM BACKUP (major tables):
+  lead_activities       38,472 rows   39 MB   <-- BIGGEST TABLE
+  chat_messages            377 rows   19 MB
+  qb_transactions        4,132 rows  8.4 MB
+  accounting_mirror      1,902 rows  7.1 MB
+  lead_files            15,787 rows  6.4 MB
+  communications         1,231 rows    5 MB
+  qb_customers           1,946 rows  4.5 MB
+  quotes                 2,586 rows    2 MB
+  activity_events        1,223 rows  1.2 MB
+  scheduled_activities   1,929 rows  936 KB
+  gl_lines               3,085 rows  944 KB
+  gl_transactions        1,591 rows  592 KB
+  lead_events              447 rows  512 KB
+  notifications            775 rows  504 KB
+  seo_keyword_ai         1,130 rows  632 KB
+  seo_rank_history       1,232 rows  536 KB
+  contacts (already in)  2,679 rows  792 KB
+  ... plus 20+ smaller tables
 ```
 
-## Solution: New Edge Function `odoo-chatter-sync`
+## Solution
 
-### What it does:
-1. For all 384 leads missing activities, fetch `mail.message` records from Odoo using the lead's `odoo_id`
-2. Also fetch `mail.activity` (scheduled activities) from Odoo for ALL leads
-3. Insert into `lead_activities` and `scheduled_activities` tables with dedup
+### File: `supabase/functions/system-backup/index.ts`
 
-### Step 1: Create `supabase/functions/odoo-chatter-sync/index.ts`
-
-This function will:
-- Query all ERP leads that have an `odoo_id` in metadata but zero `lead_activities`
-- For each, call Odoo RPC to read `mail.message` records linked to the `crm.lead` model
-- Map Odoo message types to ERP activity types:
-  - `comment` (log notes) -> `note` 
-  - `email` -> `email`
-  - `notification` (stage changes) -> `system`
-- Insert into `lead_activities` with `odoo_message_id` for dedup
-- Also fetch `mail.activity` records and insert into `scheduled_activities`
-
-### Step 2: Odoo `mail.message` fields to fetch
+Expand `TABLES_TO_BACKUP` from 9 to all ~35 business tables:
 
 ```text
-Odoo Model: mail.message
-Filter: res_model = 'crm.lead', res_id IN [list of odoo_ids]
-Fields: id, body, subject, message_type, subtype_id, author_id, date, res_id
+leads, orders, profiles, contacts, customers,
+projects, project_tasks, order_items, work_orders,
+lead_activities, lead_events, lead_files,
+scheduled_activities, activity_events,
+quotes, quote_items,
+communications, comms_alerts,
+chat_messages, chat_sessions,
+qb_transactions, qb_customers, qb_accounts, qb_vendors, qb_items,
+accounting_mirror, gl_transactions, gl_lines,
+notifications, user_roles,
+machines, machine_capabilities, machine_runs,
+cut_plans, cut_plan_items,
+tasks, extract_sessions, extract_rows,
+support_conversations, support_messages,
+team_messages, team_channels, team_channel_members
 ```
 
-### Step 3: Odoo `mail.activity` fields to fetch
+### Important Note on Size
+- With all tables included, the backup JSON will be approximately **80-100 MB**
+- The `lead_activities` table alone (38K rows) will be the bulk of it
+- The 10,000 row limit per table in the current code is sufficient for most tables, but `lead_activities` has 38,472 rows -- we need to increase the limit to 50,000 for that table
+- Storage upload limit in Supabase is 50 MB by default for a single file, so we may need to handle this
 
-```text
-Odoo Model: mail.activity
-Filter: res_model = 'crm.lead', res_id IN [list of odoo_ids]  
-Fields: id, summary, note, activity_type_id, date_deadline, user_id, state, res_id
-```
+### Changes
+1. Expand `TABLES_TO_BACKUP` array to include all business tables
+2. Increase per-table row limit from 10,000 to 50,000 to capture `lead_activities` fully
+3. No UI changes needed -- the backup modal already shows file size dynamically
 
-### Step 4: Mapping Logic
-
-For `mail.message` -> `lead_activities`:
-- `message_type = 'comment'` -> `activity_type = 'comment'` or `'note'`
-- `message_type = 'email'` -> `activity_type = 'email'`
-- `message_type = 'notification'` -> `activity_type = 'system'`
-- `author_id[1]` -> `created_by` (Odoo user name)
-- `date` -> `created_at`
-- `body` -> `description` (HTML stripped)
-- `subject` -> `title`
-- Dedup key: `odoo_message_id` column (already exists in schema)
-
-For `mail.activity` -> `scheduled_activities`:
-- `activity_type_id` -> map to `call`, `email`, `meeting`, `todo`, `follow_up`
-- `summary` -> `summary`
-- `note` -> `note`
-- `date_deadline` -> `due_date`
-- `user_id[1]` -> `assigned_name`
-- `state` = 'done' -> `status = 'done'`, else `status = 'planned'`
-
-### Step 5: Batch Processing
-
-- Process in batches of 50 Odoo IDs per RPC call (Odoo limit)
-- Insert in batches of 100 rows
-- Use `odoo_message_id` for upsert/dedup to prevent duplicates on re-run
-
-## Files to Create/Modify
-
-### New file: `supabase/functions/odoo-chatter-sync/index.ts`
-- Full edge function implementing the sync logic above
-- Reuses existing `_shared/auth.ts` for authentication
-- Uses same Odoo RPC pattern as `odoo-crm-sync`
-- Supports `mode: "missing"` (only 384 missing) and `mode: "full"` (re-sync all)
-
-### No UI changes needed
-- The existing `OdooChatter.tsx`, `ScheduledActivities.tsx`, and `LeadDetailDrawer.tsx` already correctly render data when it exists
-- Once data is synced, all tabs will populate automatically
-
-## Execution Plan
-1. Create the edge function
-2. Deploy it
-3. Test with a single lead first (the one you opened: odoo_id 4842)
-4. Run full sync for all 384 missing leads
-5. Then run `mail.activity` sync for scheduled activities across all leads
-
-## No changes to:
-- Database schema (tables already exist with correct columns)
-- RLS policies (already configured correctly)
-- UI components (already working, just need data)
-- Existing sync functions
-
+### No changes to:
+- Database schema, RLS, or UI components
+- Backup/restore logic (same JSON snapshot approach)
+- Retention policy (7 days / 50 snapshots)
