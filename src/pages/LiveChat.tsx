@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
+import { AnimatePresence } from "framer-motion";
 import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Send, Loader2, Square, Trash2, Type, Hash, Brain, ShieldAlert, CheckCircle2, XCircle } from "lucide-react";
+import { ArrowLeft, Send, Loader2, Square, Trash2, Type, Hash, Brain, ShieldAlert, CheckCircle2, XCircle, Mic } from "lucide-react";
+import { VizzyVoiceChat } from "@/components/vizzy/VizzyVoiceChat";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAdminChat } from "@/hooks/useAdminChat";
@@ -41,6 +43,7 @@ export default function LiveChat() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [input, setInput] = useState("");
+  const [showVoiceChat, setShowVoiceChat] = useState(false);
   const chat = useAdminChat();
   const { messages, isStreaming, pendingAction, sendMessage, confirmAction, cancelAction, clearChat, cancelStream } = chat;
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -244,11 +247,16 @@ export default function LiveChat() {
               )}
             </p>
           </div>
-          {messages.length > 0 && (
-            <Button variant="ghost" size="icon" className="h-9 w-9" onClick={clearChat} title="Clear chat">
-              <Trash2 className="w-4 h-4" />
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => setShowVoiceChat(true)} title="Voice chat">
+              <Mic className="w-4 h-4 text-primary" />
             </Button>
-          )}
+            {messages.length > 0 && (
+              <Button variant="ghost" size="icon" className="h-9 w-9" onClick={clearChat} title="Clear chat">
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Messages */}
@@ -448,6 +456,9 @@ export default function LiveChat() {
           </div>
         </div>
       </div>
+      <AnimatePresence>
+        {showVoiceChat && <VizzyVoiceChat onClose={() => setShowVoiceChat(false)} />}
+      </AnimatePresence>
     </TooltipProvider>
   );
 }
