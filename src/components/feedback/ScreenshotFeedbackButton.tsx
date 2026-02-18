@@ -59,24 +59,43 @@ export function ScreenshotFeedbackButton() {
       },
     };
 
-    const isHeavyPage = target.querySelectorAll("*").length > 1500;
-
     const hiddenEls: HTMLElement[] = [];
-    if (isHeavyPage) {
-      const vpW = window.innerWidth;
-      const vpH = window.innerHeight;
-      const heavySelectors = '[draggable="true"], [class*="card"], [class*="lead-"], tr, li';
-      target.querySelectorAll(heavySelectors).forEach((el) => {
+
+    // Scroll-container-aware trimming: hide children outside each scroll container's visible area
+    target.querySelectorAll("*").forEach((el) => {
+      const htmlEl = el as HTMLElement;
+      if (htmlEl.scrollHeight > htmlEl.clientHeight + 50 && htmlEl.children.length > 3) {
+        const cRect = htmlEl.getBoundingClientRect();
+        Array.from(htmlEl.children).forEach((child) => {
+          const childRect = child.getBoundingClientRect();
+          if (childRect.bottom < cRect.top - 20 || childRect.top > cRect.bottom + 20) {
+            (child as HTMLElement).style.display = "none";
+            hiddenEls.push(child as HTMLElement);
+          }
+        });
+      }
+    });
+
+    // Element count safety cap
+    const remainingCount = target.querySelectorAll("*").length - hiddenEls.length;
+    if (remainingCount > 500) {
+      target.querySelectorAll('tr, li, [class*="card"]').forEach((el) => {
         const r = el.getBoundingClientRect();
-        if (r.bottom < -50 || r.top > vpH + 50 || r.right < -50 || r.left > vpW + 50) {
+        if (r.width === 0 || r.height === 0) {
           (el as HTMLElement).style.display = "none";
           hiddenEls.push(el as HTMLElement);
         }
       });
     }
 
+    const isHeavyPage = remainingCount > 1000;
+
     const captureOnce = (skipImages: boolean): Promise<HTMLCanvasElement> => {
-      const opts = { ...baseOpts, imageTimeout: (skipImages || isHeavyPage) ? 0 : 5000 };
+      const opts = {
+        ...baseOpts,
+        scale: isHeavyPage ? 0.5 : 1,
+        imageTimeout: (skipImages || isHeavyPage) ? 0 : 5000,
+      };
       return Promise.race([
         html2canvas(target, opts),
         new Promise<never>((_, rej) => setTimeout(() => rej(new Error("screenshot_timeout")), 5000)),
