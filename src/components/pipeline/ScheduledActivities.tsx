@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import {
   Phone, Mail, Calendar, Clock, CheckCircle2, Plus, Send,
-  X, Loader2, AlertCircle,
+  X, Loader2, AlertCircle, ClipboardList,
 } from "lucide-react";
 import { format, isBefore, isToday, startOfDay } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -167,7 +167,7 @@ export function ScheduledActivities({ entityType, entityId }: ScheduledActivitie
 
       {planned.length === 0 && done.length === 0 && !showForm && (
         <div className="flex flex-col items-center justify-center py-12 text-center">
-          <Clock className="w-16 h-16 text-muted-foreground/20 mb-3" />
+          <ClipboardList className="w-16 h-16 text-muted-foreground/20 mb-3" />
           <p className="text-[13px] text-muted-foreground">
             No activities yet.
           </p>
