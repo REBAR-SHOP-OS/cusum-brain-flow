@@ -25,6 +25,8 @@ const menus: Menu[] = [
     items: [
       { label: "Invoices", tab: "invoices" },
       { label: "Payments", tab: "payments" },
+      { label: "Sales Receipts", tab: "sales-receipts" },
+      { label: "Refund Receipts", tab: "refund-receipts" },
       { label: "Customers", tab: "customers" },
       { type: "separator" },
       { type: "label", label: "Orders & Documents" },
@@ -52,6 +54,9 @@ const menus: Menu[] = [
     label: "Accounting",
     items: [
       { label: "Chart of Accounts", tab: "accounts" },
+      { label: "Journal Entries", tab: "journal-entries" },
+      { label: "Deposits", tab: "deposits" },
+      { label: "Bank Transfers", tab: "transfers" },
       { label: "Budget Management", tab: "budgets" },
       { label: "AI Audit", tab: "audit" },
       { type: "separator" },

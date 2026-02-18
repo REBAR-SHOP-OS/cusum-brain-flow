@@ -35,6 +35,11 @@ import { ThreeWayMatchingManager } from "@/components/accounting/ThreeWayMatchin
 import { EmployeeContractsManager } from "@/components/accounting/EmployeeContractsManager";
 import { RecruitmentPipeline } from "@/components/accounting/RecruitmentPipeline";
 import { ProjectManagement } from "@/components/accounting/ProjectManagement";
+import { AccountingSalesReceipts } from "@/components/accounting/AccountingSalesReceipts";
+import { AccountingRefundReceipts } from "@/components/accounting/AccountingRefundReceipts";
+import { AccountingDeposits } from "@/components/accounting/AccountingDeposits";
+import { AccountingTransfers } from "@/components/accounting/AccountingTransfers";
+import { AccountingJournalEntries } from "@/components/accounting/AccountingJournalEntries";
 
 import { usePennyQueue } from "@/hooks/usePennyQueue";
 import { useIntegrations } from "@/hooks/useIntegrations";
@@ -326,6 +331,11 @@ export default function AccountingWorkspace() {
             {activeTab === "employee-contracts" && <EmployeeContractsManager />}
             {activeTab === "recruitment" && <RecruitmentPipeline />}
             {activeTab === "project-management" && <ProjectManagement />}
+            {activeTab === "sales-receipts" && <AccountingSalesReceipts data={qb} />}
+            {activeTab === "refund-receipts" && <AccountingRefundReceipts data={qb} />}
+            {activeTab === "deposits" && <AccountingDeposits data={qb} />}
+            {activeTab === "transfers" && <AccountingTransfers data={qb} />}
+            {activeTab === "journal-entries" && <AccountingJournalEntries data={qb} />}
             {activeTab === "documents" && <AccountingDocuments data={qb} />}
             {activeTab === "balance-sheet" && <AccountingReport data={qb} report="balance-sheet" />}
             {activeTab === "profit-loss" && <AccountingReport data={qb} report="profit-loss" />}
