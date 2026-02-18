@@ -18,6 +18,15 @@ serve(async (req) => {
     return new Response("Method not allowed", { status: 405 });
   }
 
+  // Verify webhook secret token (passed as query param when registering the webhook URL)
+  const url = new URL(req.url);
+  const token = url.searchParams.get("token");
+  const expectedToken = Deno.env.get("RINGCENTRAL_WEBHOOK_SECRET");
+  if (expectedToken && token !== expectedToken) {
+    console.error("Invalid or missing webhook token");
+    return new Response("Forbidden", { status: 403 });
+  }
+
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const supabase = createClient(supabaseUrl, serviceKey);
