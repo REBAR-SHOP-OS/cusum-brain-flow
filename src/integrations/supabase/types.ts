@@ -8990,6 +8990,7 @@ export type Database = {
           due_date: string | null
           id: string
           priority: string | null
+          resolution_note: string | null
           source: string | null
           source_ref: string | null
           status: string | null
@@ -9008,6 +9009,7 @@ export type Database = {
           due_date?: string | null
           id?: string
           priority?: string | null
+          resolution_note?: string | null
           source?: string | null
           source_ref?: string | null
           status?: string | null
@@ -9026,6 +9028,7 @@ export type Database = {
           due_date?: string | null
           id?: string
           priority?: string | null
+          resolution_note?: string | null
           source?: string | null
           source_ref?: string | null
           status?: string | null
