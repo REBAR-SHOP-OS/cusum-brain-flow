@@ -604,6 +604,84 @@ export type Database = {
         }
         Relationships: []
       }
+      budgets: {
+        Row: {
+          account_category: string | null
+          apr: number
+          aug: number
+          company_id: string
+          created_at: string
+          created_by: string | null
+          dec: number
+          department: string | null
+          feb: number
+          fiscal_year: number
+          id: string
+          jan: number
+          jul: number
+          jun: number
+          mar: number
+          may: number
+          name: string
+          notes: string | null
+          nov: number
+          oct: number
+          period_type: string
+          sep: number
+          updated_at: string
+        }
+        Insert: {
+          account_category?: string | null
+          apr?: number
+          aug?: number
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          dec?: number
+          department?: string | null
+          feb?: number
+          fiscal_year?: number
+          id?: string
+          jan?: number
+          jul?: number
+          jun?: number
+          mar?: number
+          may?: number
+          name: string
+          notes?: string | null
+          nov?: number
+          oct?: number
+          period_type?: string
+          sep?: number
+          updated_at?: string
+        }
+        Update: {
+          account_category?: string | null
+          apr?: number
+          aug?: number
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          dec?: number
+          department?: string | null
+          feb?: number
+          fiscal_year?: number
+          id?: string
+          jan?: number
+          jul?: number
+          jun?: number
+          mar?: number
+          may?: number
+          name?: string
+          notes?: string | null
+          nov?: number
+          oct?: number
+          period_type?: string
+          sep?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       call_tasks: {
         Row: {
           agent_id: string | null
