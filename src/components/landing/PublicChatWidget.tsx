@@ -15,7 +15,8 @@ interface Msg {
   content: string;
 }
 
-export function PublicChatWidget() {
+export const PublicChatWidget = React.forwardRef<HTMLDivElement, {}>(
+  function PublicChatWidget(_props, _ref) {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Msg[]>([]);
@@ -284,4 +285,5 @@ export function PublicChatWidget() {
       </button>
     </>
   );
-}
+});
+PublicChatWidget.displayName = "PublicChatWidget";

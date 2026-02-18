@@ -91,5 +91,16 @@ export const agentSuggestions: Record<string, AgentSuggestion[]> = {
     { title: "Show me all my ventures", category: "List" },
     { title: "Run a stress test on my latest venture", category: "Analyze" },
     { title: "What should I build next?", category: "Strategy" },
+    { title: "Diagnose cross-platform issues", category: "Ops" },
+  ],
+  legal: [
+    { title: "Review a contract clause for risks", category: "Contracts" },
+    { title: "What are my construction lien rights in Ontario?", category: "Liens" },
+    { title: "Check OHSA compliance requirements", category: "Compliance" },
+  ],
+  commander: [
+    { title: "Show department KPIs this week", category: "KPIs" },
+    { title: "Which team needs attention right now?", category: "Teams" },
+    { title: "Escalate a critical issue to ARIA", category: "Escalation" },
   ],
 };
