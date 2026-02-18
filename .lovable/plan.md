@@ -1,76 +1,32 @@
 
+# Fix: Architect Agent Creates Tickets Instead of Actually Fixing
 
-# Fix: Multi-Turn Tool Call Loop for Empire Agent
+## Problem
+The Architect agent, when given a "Fix with ARIA" autofix request, calls `create_fix_ticket` instead of using its write tools (`update_machine_status`, `resolve_task`, etc.) to fix the actual problem. The user sees a response like "I will create a fix ticket to escalate this..." instead of a direct resolution.
 
 ## Root Cause
-The `ai-agent` edge function only performs **one follow-up call** after processing tool calls (line 8088-8130). The Architect agent's autofix flow requires **multiple rounds**:
+1. The system prompt has a detailed "Fix Ticket System" section (lines 2397-2413) that instructs the agent to use `create_fix_ticket` for any bug report -- this overrides the "Autofix Behavior" section.
+2. The `create_fix_ticket` tool description says "Use when diagnosing bugs reported with screenshots or detailed error descriptions" which is too broad -- it matches autofix scenarios too.
+3. In the multi-turn loop (line 8271), `create_fix_ticket` is not in the `handledNames` list, so when called inside the loop it gets a fake generic success response and the agent stops.
 
-1. AI calls `read_task` to understand the problem
-2. Follow-up returns tool results, AI then calls `resolve_task` (or other write tools)
-3. **This second round of tool calls is never processed** -- the code only handles one follow-up
-4. `reply` stays empty, so the fallback "I couldn't process that request." is returned
+## Changes (Only in `supabase/functions/ai-agent/index.ts`)
 
-## Fix
+### 1. Update System Prompt -- Autofix Section (lines ~2416-2422)
+Make the autofix instruction **stronger and positioned before** the Fix Ticket section. Add explicit rule:
+- "When handling an autofix request (message contains 'task_id'), you MUST NOT call `create_fix_ticket`. Instead: `read_task` -> use write tools -> `resolve_task`."
+- "Only use `create_fix_ticket` for NEW screenshot-based bug reports that are NOT linked to an existing task."
 
-### File: `supabase/functions/ai-agent/index.ts` (lines ~8086-8130)
+### 2. Update Fix Ticket System Prompt Section (lines ~2397-2413)
+Add a guard clause:
+- "If you already have a `task_id`, do NOT create a new fix ticket. Use `read_task` and `resolve_task` instead."
 
-Replace the single follow-up call with a **loop** that continues processing tool calls until the AI returns a text reply (or a max iteration limit is reached to prevent infinite loops).
+### 3. Add `create_fix_ticket` to Multi-Turn Loop Handlers (line ~8271)
+Add `create_fix_ticket`, `update_fix_ticket`, `list_fix_tickets` to the `handledNames` array so they get properly handled in follow-up rounds (they already have handlers in the first-round tool processing at lines 7855-7888).
 
-**Before (simplified):**
-```
-if (seoToolResults.length > 0 || ...) {
-  // single follow-up call
-  const followUp = await fetch(aiUrl, ...);
-  reply = followUpData.choices?.[0]?.message?.content || reply;
-}
-```
+### 4. Duplicate `create_fix_ticket` Handler Inside Multi-Turn Loop
+Add the `create_fix_ticket` handler inside the loop body (around line 8196) so it actually executes if called in a follow-up round, rather than returning a fake generic success.
 
-**After:**
-```
-let iterations = 0;
-const MAX_TOOL_ITERATIONS = 5;
-
-while (iterations < MAX_TOOL_ITERATIONS && 
-       (seoToolResults.length > 0 || (!reply && (createdNotifications.length > 0 || emailResults.length > 0)))) {
-  
-  // Build tool result messages
-  const toolResultMessages = [...messages, lastAssistantMessage, ...toolResultEntries];
-  
-  // Make follow-up call
-  const followUp = await fetch(aiUrl, { ... });
-  const followUpData = await followUp.json();
-  const followUpChoice = followUpData.choices?.[0];
-  
-  // Check if follow-up returns more tool calls
-  if (followUpChoice?.message?.tool_calls?.length > 0) {
-    // Process new tool calls (read_task, resolve_task, etc.)
-    // Push results to seoToolResults
-    // Update lastAssistantMessage for next iteration
-    seoToolResults = []; // reset for next round
-    // ... process each tool call same as before ...
-  }
-  
-  // Extract text reply if present
-  if (followUpChoice?.message?.content) {
-    reply = followUpChoice.message.content;
-    break; // got a reply, stop looping
-  }
-  
-  iterations++;
-}
-```
-
-### Key Details
-- Max 5 iterations to prevent infinite loops or runaway API costs
-- Each iteration processes any new tool calls returned by the follow-up
-- The loop breaks as soon as the AI returns a text `content` reply
-- All existing tool handlers (read_task, resolve_task, create_fix_ticket, diagnose_from_screenshot, SEO tools, etc.) are reused inside the loop
-- No changes needed to any frontend files
-
-### Files Modified
-- `supabase/functions/ai-agent/index.ts` -- Replace single follow-up block (lines ~8086-8130) with a multi-turn loop
-
-### No Other Changes Needed
-- No database changes
+## No Other Changes
 - No frontend changes
-- No new files
+- No database changes
+- No changes to other agents or pages
