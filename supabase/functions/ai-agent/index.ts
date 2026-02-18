@@ -2410,7 +2410,16 @@ You have access to structured fix tickets via \`create_fix_ticket\`, \`update_fi
 - If verification fails, set status to "failed" and explain why
 - Always include verification_steps when fixing a ticket
 - When generating a Lovable Fix Prompt, set fix_output_type = "lovable_prompt"
-- All QB/Odoo/ERP data access is READ-ONLY from this agent — never expose secrets
+- Never expose API keys, tokens, or connection strings in responses
+- All diagnostic access is logged in activity_events with source = "architect_diagnostic"
+
+## CRITICAL — Autofix Behavior:
+When you receive an autofix request with a task_id:
+1. Use \`read_task\` to understand the full problem
+2. Use your ERP/WP/Odoo write tools to apply the ACTUAL fix (update_machine_status, update_delivery_status, odoo_write, wp_update_product, etc.)
+3. Use \`resolve_task\` to mark the task as completed with a resolution note
+4. Do NOT just create fix requests or tickets. Use your write tools to FIX the problem directly.
+5. If you cannot fix it automatically, explain WHY and what manual steps are needed.
 
 ### Lovable Fix Prompt Template:
 When generating fix prompts for Lovable, use this format:
@@ -2432,9 +2441,8 @@ When a user attaches a screenshot:
 
 ### Security Rules:
 - Never expose API keys, tokens, or connection strings in responses
-- QuickBooks data: read-only from accounting_mirror (no direct QB API writes)
-- Odoo data: read-only from odoo_leads
-- All diagnostic access is logged in activity_events with source = "architect_diagnostic"
+- QuickBooks data: read from accounting_mirror, write through ERP tools
+- Odoo data: read from odoo_leads, write through odoo_write tool
 
 ## Code Engineer Mode:
 When the user asks you to "generate patch", "write code", "fix module", "engineer mode", "create patch", or similar engineering tasks, you MUST:
@@ -6554,6 +6562,39 @@ RULES:
           },
         },
       },
+      // ─── Task Resolution Tools (for autofix) ───
+      {
+        type: "function" as const,
+        function: {
+          name: "read_task",
+          description: "Read a task from the tasks table by ID to understand what needs fixing.",
+          parameters: {
+            type: "object",
+            properties: {
+              task_id: { type: "string", description: "The task UUID to read" },
+            },
+            required: ["task_id"],
+            additionalProperties: false,
+          },
+        },
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "resolve_task",
+          description: "Mark a task as completed with a resolution note after fixing the underlying problem. Also logs the resolution in activity_events.",
+          parameters: {
+            type: "object",
+            properties: {
+              task_id: { type: "string", description: "The task UUID to resolve" },
+              resolution_note: { type: "string", description: "What was done to fix the problem" },
+              new_status: { type: "string", enum: ["completed", "in_progress"], description: "New task status (default: completed)" },
+            },
+            required: ["task_id", "resolution_note"],
+            additionalProperties: false,
+          },
+        },
+      },
       ] : []),
       // WordPress tools — available to SEO, Social, Data, BizDev, WebBuilder, Copywriting, AND Empire agents
       ...(["seo", "social", "data", "bizdev", "webbuilder", "copywriting", "empire"].includes(agent) ? [
@@ -7421,6 +7462,48 @@ RULES:
             seoToolResults.push({ id: tc.id, name: "create_event", result: error ? { error: error.message } : { success: true, message: `Event logged: ${args.event_type}`, data } });
           } catch (e) {
             seoToolResults.push({ id: tc.id, name: "create_event", result: { error: e instanceof Error ? e.message : "Failed" } });
+          }
+        }
+
+        // ─── Task Resolution Tool Handlers ───
+        if (tc.function?.name === "read_task") {
+          try {
+            const args = JSON.parse(tc.function.arguments || "{}");
+            const { data, error } = await svcClient.from("tasks").select("*").eq("id", args.task_id).single();
+            seoToolResults.push({ id: tc.id, name: "read_task", result: error ? { error: error.message } : { success: true, task: data } });
+          } catch (e) {
+            seoToolResults.push({ id: tc.id, name: "read_task", result: { error: e instanceof Error ? e.message : "Failed to read task" } });
+          }
+        }
+
+        if (tc.function?.name === "resolve_task") {
+          try {
+            const args = JSON.parse(tc.function.arguments || "{}");
+            const newStatus = args.new_status || "completed";
+            const { data, error } = await svcClient.from("tasks").update({
+              status: newStatus,
+              completed_at: newStatus === "completed" ? new Date().toISOString() : null,
+              resolution_note: args.resolution_note,
+            }).eq("id", args.task_id).select().single();
+
+            // Log resolution in activity_events
+            if (!error) {
+              await svcClient.from("activity_events").insert({
+                company_id: companyId,
+                entity_type: "task",
+                entity_id: args.task_id,
+                event_type: "task_resolved",
+                description: `Task resolved by Architect: ${args.resolution_note}`,
+                actor_id: user.id,
+                actor_type: "architect",
+                source: "architect_autofix",
+                metadata: { new_status: newStatus, resolution_note: args.resolution_note },
+              }).catch(() => {});
+            }
+
+            seoToolResults.push({ id: tc.id, name: "resolve_task", result: error ? { error: error.message } : { success: true, message: `Task ${newStatus}: ${args.resolution_note}`, data } });
+          } catch (e) {
+            seoToolResults.push({ id: tc.id, name: "resolve_task", result: { error: e instanceof Error ? e.message : "Failed to resolve task" } });
           }
         }
 

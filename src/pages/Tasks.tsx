@@ -79,9 +79,10 @@ const agentColors: Record<string, string> = {
   estimation: "bg-amber-500/20 text-amber-400",
 };
 
-const fixWithAria = (task: Task) => {
+const fixWithAria = (task: Task, toastFn: ReturnType<typeof useToast>["toast"]) => {
   const summary = [
     `[Task] ${task.title}`,
+    `Task ID: ${task.id}`,
     task.priority ? `Priority: ${task.priority}` : null,
     task.agent_type ? `Agent: ${task.agent_type}` : null,
     task.description ? `Description: ${task.description.slice(0, 300)}` : null,
@@ -89,7 +90,8 @@ const fixWithAria = (task: Task) => {
     task.due_date ? `Due: ${task.due_date}` : null,
   ].filter(Boolean).join(" | ");
 
-  window.location.href = `/empire?autofix=${encodeURIComponent(summary)}`;
+  toastFn({ title: "Sending to Architect for resolution..." });
+  window.location.href = `/empire?autofix=${encodeURIComponent(summary)}&task_id=${task.id}`;
 };
 
 export default function Tasks() {
@@ -275,7 +277,7 @@ export default function Tasks() {
                           variant="ghost"
                           size="icon"
                           className="h-7 w-7 flex-shrink-0"
-                          onClick={(e) => { e.stopPropagation(); fixWithAria(task); }}
+                          onClick={(e) => { e.stopPropagation(); fixWithAria(task, toast); }}
                         >
                           <Sparkles className="w-4 h-4 text-orange-400" />
                         </Button>
@@ -381,7 +383,7 @@ export default function Tasks() {
                 <div className="pt-4 border-t border-border">
                   <Button
                     className="w-full bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white"
-                    onClick={() => fixWithAria(selectedTask)}
+                    onClick={() => fixWithAria(selectedTask, toast)}
                   >
                     <Sparkles className="w-4 h-4 mr-2" />
                     Fix with ARIA
