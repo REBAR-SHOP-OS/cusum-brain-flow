@@ -162,12 +162,14 @@ export default function EmpireBuilder() {
   // Autofix query param handler
   useEffect(() => {
     const autofix = searchParams.get("autofix");
+    const taskId = searchParams.get("task_id");
     if (autofix && !autofixTriggered.current) {
       autofixTriggered.current = true;
       const errorMsg = decodeURIComponent(autofix);
       setSearchParams({}, { replace: true });
+      const taskRef = taskId ? `\n\n**Task ID:** \`${taskId}\`\nUse \`read_task\` to get full details, then fix the problem using your write tools, and finally call \`resolve_task\` to mark it completed.` : "";
       setTimeout(() => {
-        handleSend(`🔴 Auto-fix request — An error occurred in the app:\n\n\`\`\`\n${errorMsg}\n\`\`\`\n\nPlease diagnose the root cause, check all connected platforms, and create fix requests as needed.`);
+        handleSend(`🔴 Auto-fix request — Fix this problem NOW:\n\n\`\`\`\n${errorMsg}\n\`\`\`${taskRef}\n\nDo NOT just create tickets. Use your ERP/WP/Odoo write tools to apply the actual fix, then resolve the task.`);
       }, 500);
     }
   }, [searchParams]);
