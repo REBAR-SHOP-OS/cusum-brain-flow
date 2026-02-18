@@ -1,4 +1,3 @@
-import { Card, CardContent } from "@/components/ui/card";
 import { Star, AlignJustify, Mail } from "lucide-react";
 import { differenceInDays } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -83,80 +82,78 @@ export function LeadCard({ lead, onDragStart, onDragEnd, onEdit, onDelete, onCli
   const isEmailSource = lead.source?.startsWith("Email") || lead.source === "rfq_scan";
 
   return (
-    <Card
+    <div
       draggable
       onDragStart={(e) => onDragStart(e, lead.id)}
       onDragEnd={onDragEnd}
       onClick={() => onClick(lead)}
-      className="cursor-grab active:cursor-grabbing hover:shadow-md transition-all"
+      className="cursor-pointer bg-background border border-border rounded-sm p-2.5 hover:shadow-sm transition-shadow relative"
     >
-      <CardContent className="p-3 space-y-1.5 relative">
-        {/* AI action indicator */}
-        {hasAIAction && (
-          <span
-            className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-orange-500 animate-pulse"
-            title="AI action pending"
-          />
+      {/* AI action indicator */}
+      {hasAIAction && (
+        <span
+          className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-orange-500 animate-pulse"
+          title="AI action pending"
+        />
+      )}
+      {/* Title + email source badge */}
+      <div className="flex items-start gap-1">
+        <p className="font-semibold text-[13px] leading-tight line-clamp-2 flex-1">{displayTitle}</p>
+        {isEmailSource && (
+          <span title="Email-sourced (ERP only)" className="shrink-0 mt-0.5">
+            <Mail className="w-3 h-3 text-muted-foreground" />
+          </span>
         )}
-        {/* Title + email source badge */}
-        <div className="flex items-start gap-1">
-          <p className="font-medium text-sm leading-tight line-clamp-2 flex-1">{displayTitle}</p>
-          {isEmailSource && (
-            <span title="Email-sourced (ERP only)" className="shrink-0 mt-0.5">
-              <Mail className="w-3 h-3 text-muted-foreground" />
+      </div>
+
+      {/* Customer name */}
+      {customerName && (
+        <p className="text-xs text-muted-foreground truncate mt-0.5">{customerName}</p>
+      )}
+
+      {/* Bottom row: stars, activity dot, revenue, salesperson */}
+      <div className="flex items-center justify-between mt-2">
+        <div className="flex items-center gap-2">
+          {/* Star rating */}
+          <div className="flex items-center gap-px">
+            {[1, 2, 3].map((i) => (
+              <Star
+                key={i}
+                className={cn(
+                  "w-3 h-3",
+                  i <= stars ? "text-amber-400 fill-amber-400" : "text-muted-foreground/30"
+                )}
+              />
+            ))}
+          </div>
+
+          {/* Odoo activity status indicator */}
+          {activity && (
+            <span title={activity.label}>
+              <AlignJustify className={cn("w-3 h-3", activity.color)} />
             </span>
           )}
         </div>
 
-        {/* Customer name */}
-        {customerName && (
-          <p className="text-xs text-muted-foreground truncate">{customerName}</p>
-        )}
+        <div className="flex items-center gap-2">
+          {/* Revenue — Odoo format */}
+          {revenue > 0 && (
+            <span className="text-xs font-medium text-foreground">
+              $ {revenue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+          )}
 
-        {/* Bottom row: stars, activity dot, revenue, salesperson */}
-        <div className="flex items-center justify-between pt-1">
-          <div className="flex items-center gap-2">
-            {/* Star rating */}
-            <div className="flex items-center gap-px">
-              {[1, 2, 3].map((i) => (
-                <Star
-                  key={i}
-                  className={cn(
-                    "w-3 h-3",
-                    i <= stars ? "text-amber-400 fill-amber-400" : "text-muted-foreground/30"
-                  )}
-                />
-              ))}
+          {/* Salesperson badge */}
+          {salesperson && (
+            <div
+              className={cn("w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold text-white shrink-0", salesperson.color)}
+              title={salesperson.name}
+            >
+              {salesperson.initials}
             </div>
-
-            {/* Odoo activity status indicator */}
-            {activity && (
-              <span title={activity.label}>
-                <AlignJustify className={cn("w-3.5 h-3.5", activity.color)} />
-              </span>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2">
-            {/* Revenue — Odoo format */}
-            {revenue > 0 && (
-              <span className="text-xs font-semibold text-foreground">
-                $ {revenue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </span>
-            )}
-
-            {/* Salesperson badge */}
-            {salesperson && (
-              <div
-                className={cn("w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white shrink-0", salesperson.color)}
-                title={salesperson.name}
-              >
-                {salesperson.initials}
-              </div>
-            )}
-          </div>
+          )}
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

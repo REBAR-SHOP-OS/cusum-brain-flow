@@ -90,30 +90,30 @@ export function PipelineColumn({
   return (
     <div
       className={cn(
-        "w-[280px] flex-shrink-0 rounded-lg transition-colors flex flex-col h-full",
-        isDragOver ? "bg-primary/10 ring-2 ring-primary/50" : "bg-secondary/30"
+        "w-[272px] flex-shrink-0 transition-colors flex flex-col h-full border-r border-border last:border-r-0",
+        isDragOver ? "bg-primary/5" : "bg-muted/20"
       )}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
     >
-      {/* Column Header */}
-      <div className="px-3 pt-3 pb-2">
+      {/* Column Header — Odoo style: flat, compact */}
+      <div className="px-2 pt-2 pb-1.5 border-b border-border">
         <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-sm truncate flex-1">{stage.label}</h3>
+          <h3 className="font-semibold text-[13px] truncate flex-1 text-foreground">{stage.label}</h3>
           <div className="flex items-center gap-1.5 shrink-0">
             {totalValue > 0 && (
-              <span className="text-xs font-medium text-muted-foreground">
+              <span className="text-[11px] font-medium text-muted-foreground">
                 $ {totalValue.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
               </span>
             )}
-            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 min-w-[20px] justify-center">
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 min-w-[20px] justify-center rounded-sm">
               {activityFilter ? displayedLeads.length : leads.length}
             </Badge>
           </div>
         </div>
         {/* Activity status distribution bar — clickable segments */}
-        <div className="mt-1.5 h-2 w-full rounded-full overflow-hidden flex" style={{ backgroundColor: '#cbd5e1' }}>
+        <div className="mt-1 h-1.5 w-full rounded-sm overflow-hidden flex" style={{ backgroundColor: '#e2e8f0' }}>
           {total > 0 && ACTIVITY_ORDER.map((status) => {
             const count = counts[status];
             if (count === 0) return null;
@@ -138,7 +138,7 @@ export function PipelineColumn({
       </div>
 
       {/* Cards */}
-      <div className="px-2 pb-2 space-y-2 min-h-[120px] flex-1 overflow-y-auto">
+      <div className="px-1.5 py-1.5 space-y-1 min-h-[120px] flex-1 overflow-y-auto">
         {displayedLeads.length === 0 ? (
           <p className="text-xs text-muted-foreground text-center py-8 opacity-50">
             {activityFilter ? "No leads with this activity" : "Drop leads here"}

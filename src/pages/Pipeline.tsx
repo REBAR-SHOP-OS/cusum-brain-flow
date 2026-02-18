@@ -438,16 +438,14 @@ export default function Pipeline() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <header className="px-4 sm:px-6 py-2.5 border-b border-border shrink-0 space-y-2">
-      {/* Row 1: Title, stats, actions */}
+      <header className="px-4 sm:px-6 py-2 border-b border-border shrink-0 space-y-1.5 bg-background">
+      {/* Row 1: Title, stats, actions — Odoo style */}
         <div className="flex items-center gap-3 flex-wrap">
-          <div className="flex items-center gap-3 mr-auto">
-            <div>
-              <h1 className="text-lg font-semibold leading-tight">Pipeline</h1>
-              <p className="text-xs text-muted-foreground">
-                {filteredLeads.length}{filteredLeads.length !== leads.length ? ` / ${leads.length}` : ""} leads
-              </p>
-            </div>
+          <div className="flex items-center gap-2 mr-auto">
+            <h1 className="text-[15px] font-semibold leading-tight text-foreground">Pipeline</h1>
+            <span className="text-[11px] text-muted-foreground">
+              ({filteredLeads.length}{filteredLeads.length !== leads.length ? ` / ${leads.length}` : ""})
+            </span>
           </div>
 
           {/* AI Mode Toggle */}
@@ -496,7 +494,7 @@ export default function Pipeline() {
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <Button onClick={() => setIsFormOpen(true)} size="sm" className="gap-1.5 h-8">
+          <Button onClick={() => setIsFormOpen(true)} size="sm" className="gap-1.5 h-7 rounded-sm text-[13px] font-medium">
             <Plus className="w-3.5 h-3.5" />
             New
           </Button>
