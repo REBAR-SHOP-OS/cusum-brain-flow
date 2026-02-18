@@ -21,27 +21,35 @@ export function ScreenshotFeedbackButton() {
     }),
   });
 
+  const btnRef = useRef<HTMLButtonElement>(null);
+
   const capture = useCallback(async () => {
     if (cooldown.current) return;
     cooldown.current = true;
     setTimeout(() => { cooldown.current = false; }, THROTTLE_MS);
 
     try {
-      const wrapper = document.getElementById("main-content");
-      if (!wrapper) {
-        toast.error("Cannot capture screen");
-        return;
-      }
-      // Find the scrollable child (first child with overflow) or use wrapper itself
-      const target = wrapper.querySelector("[class*='overflow']") as HTMLElement || wrapper;
+      // Hide the feedback button during capture so it doesn't appear in screenshot
+      if (btnRef.current) btnRef.current.style.display = "none";
+
+      // Capture the entire main-content area (all layers, notices, modals, etc.)
+      const target = document.getElementById("main-content") || document.body;
 
       const html2canvas = (await import("html2canvas")).default;
       const canvas = await html2canvas(target, {
         useCORS: true,
         scale: 1,
-        scrollY: 0,
+        scrollY: -window.scrollY,
         height: target.scrollHeight,
         windowHeight: target.scrollHeight,
+        width: target.scrollWidth,
+        windowWidth: target.scrollWidth,
+        logging: false,
+        allowTaint: true,
+        ignoreElements: (el) => {
+          // Ignore this feedback button if it's somehow still visible
+          return el.getAttribute?.("data-feedback-btn") === "true";
+        },
       });
       const dataUrl = canvas.toDataURL("image/png");
       setScreenshot(dataUrl);
@@ -49,6 +57,9 @@ export function ScreenshotFeedbackButton() {
     } catch (err) {
       console.error("Screenshot capture error:", err);
       toast.error("Failed to capture screen");
+    } finally {
+      // Always restore button visibility
+      if (btnRef.current) btnRef.current.style.display = "";
     }
   }, []);
 
@@ -63,6 +74,8 @@ export function ScreenshotFeedbackButton() {
   return (
     <>
       <button
+        ref={btnRef}
+        data-feedback-btn="true"
         onPointerDown={handlers.onPointerDown}
         onPointerMove={handlers.onPointerMove}
         onPointerUp={handlePointerUp}
