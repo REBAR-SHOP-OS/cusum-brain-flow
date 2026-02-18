@@ -1,32 +1,81 @@
 
-# Fix: Architect Agent Creates Tickets Instead of Actually Fixing
+
+# Fix: Screenshot Feedback Button - Complete and Accurate Capture
 
 ## Problem
-The Architect agent, when given a "Fix with ARIA" autofix request, calls `create_fix_ticket` instead of using its write tools (`update_machine_status`, `resolve_task`, etc.) to fix the actual problem. The user sees a response like "I will create a fix ticket to escalate this..." instead of a direct resolution.
+The screenshot feedback button (camera icon) has multiple issues:
+1. The CRM Pipeline's right-side detail panel (Sheet/Drawer) renders via a **portal to document.body**, so it's **outside** `#main-content` and never captured
+2. Using `scrollHeight` captures the full scrollable content instead of the visible viewport
+3. `scale: 1` gives low quality on high-DPI screens
+4. The `scrollY` offset logic is wrong (scroll happens inside the container, not the window)
 
-## Root Cause
-1. The system prompt has a detailed "Fix Ticket System" section (lines 2397-2413) that instructs the agent to use `create_fix_ticket` for any bug report -- this overrides the "Autofix Behavior" section.
-2. The `create_fix_ticket` tool description says "Use when diagnosing bugs reported with screenshots or detailed error descriptions" which is too broad -- it matches autofix scenarios too.
-3. In the multi-turn loop (line 8271), `create_fix_ticket` is not in the `handledNames` list, so when called inside the loop it gets a fake generic success response and the agent stops.
+## Solution
+Only one file changes: `src/components/feedback/ScreenshotFeedbackButton.tsx`
 
-## Changes (Only in `supabase/functions/ai-agent/index.ts`)
+### Changes
 
-### 1. Update System Prompt -- Autofix Section (lines ~2416-2422)
-Make the autofix instruction **stronger and positioned before** the Fix Ticket section. Add explicit rule:
-- "When handling an autofix request (message contains 'task_id'), you MUST NOT call `create_fix_ticket`. Instead: `read_task` -> use write tools -> `resolve_task`."
-- "Only use `create_fix_ticket` for NEW screenshot-based bug reports that are NOT linked to an existing task."
+**1. Capture from `document.body` instead of `#main-content`**
+- Portaled elements (Sheet, Dialog, etc.) render directly on `document.body`
+- We must capture from `document.body` to include overlays, drawers, and panels
+- The feedback button itself is hidden during capture and also filtered via `ignoreElements`
 
-### 2. Update Fix Ticket System Prompt Section (lines ~2397-2413)
-Add a guard clause:
-- "If you already have a `task_id`, do NOT create a new fix ticket. Use `read_task` and `resolve_task` instead."
+**2. Capture only the visible viewport (not scrollHeight)**
+- Set `width: window.innerWidth`, `height: window.innerHeight`
+- Remove `scrollHeight`/`scrollWidth` overrides
+- Remove the `scrollY` offset hack
 
-### 3. Add `create_fix_ticket` to Multi-Turn Loop Handlers (line ~8271)
-Add `create_fix_ticket`, `update_fix_ticket`, `list_fix_tickets` to the `handledNames` array so they get properly handled in follow-up rounds (they already have handlers in the first-round tool processing at lines 7855-7888).
+**3. Wait for fonts and rendering before capture**
+- `await document.fonts.ready`
+- Double `requestAnimationFrame` to ensure the browser has painted
 
-### 4. Duplicate `create_fix_ticket` Handler Inside Multi-Turn Loop
-Add the `create_fix_ticket` handler inside the loop body (around line 8196) so it actually executes if called in a follow-up round, rather than returning a fake generic success.
+**4. Use `window.devicePixelRatio` for better quality**
+- `scale: window.devicePixelRatio` for crisp screenshots on Retina/HiDPI displays
+
+**5. Ignore floating UI elements that shouldn't appear**
+- Continue ignoring elements with `data-feedback-btn="true"`
+- Also ignore the Vizzy floating button if present
+
+**6. Better error logging**
+- Log the full error with stack trace to console
+- Show descriptive toast error with page context
+
+## Technical Details
+
+```text
+File: src/components/feedback/ScreenshotFeedbackButton.tsx
+
+Before:
+  target = document.getElementById("main-content") || document.body
+  html2canvas(target, {
+    scale: 1,
+    scrollY: -window.scrollY,
+    height: target.scrollHeight,
+    windowHeight: target.scrollHeight,
+    width: target.scrollWidth,
+    windowWidth: target.scrollWidth,
+  })
+
+After:
+  await document.fonts.ready;
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+  
+  target = document.body
+  html2canvas(target, {
+    scale: window.devicePixelRatio || 1,
+    width: window.innerWidth,
+    height: window.innerHeight,
+    windowWidth: window.innerWidth,
+    windowHeight: window.innerHeight,
+    x: 0,
+    y: 0,
+    scrollX: 0,
+    scrollY: 0,
+    backgroundColor: null,
+  })
+```
 
 ## No Other Changes
-- No frontend changes
 - No database changes
-- No changes to other agents or pages
+- No changes to AnnotationOverlay, AppLayout, or any other file
+- No changes to the upload/send logic (already works correctly)
+
