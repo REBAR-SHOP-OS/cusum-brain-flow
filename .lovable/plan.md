@@ -1,75 +1,113 @@
 
 
-# Fix Vizzy Voice Chat — Can't Hear or Be Heard
+# Max-Tech Vizzy Voice Chat Upgrade
 
-## Root Cause
+## Current Issues Found
 
-The console logs show repeated errors:
-- "Initial connection failed: v1 RTC path not found. Consider upgrading your LiveKit server version"
-- WebSocket connections closing with code 1006 (abnormal closure)
+1. **No voice button in the LiveChat page** -- users on `/chat` have no way to start voice chat
+2. **Missing `onStatusChange` callback** -- the hook manually tracks state but ignores the SDK's built-in status events (`connecting`, `connected`, `disconnected`, `disconnecting`), causing state mismatches
+3. **No audio-reactive visualization** -- the orb pulses with CSS animations instead of reacting to actual audio volume levels via `getInputVolume()` / `getOutputVolume()`
+4. **No `onModeChange` tracking** -- the SDK fires `speaking`/`listening` mode changes but the hook only checks `isSpeaking`, missing nuanced state
+5. **No connection timeout** -- if the WebSocket hangs, users are stuck on "Connecting..." forever
+6. **No `onDisconnect` details** -- the hook ignores disconnection reasons (error vs agent ended vs user ended)
+7. **No volume control** -- users can't adjust Vizzy's voice volume
 
-The ElevenLabs React SDK v0.14.0 uses LiveKit internally for WebRTC, but the LiveKit protocol negotiation is failing. The connection never establishes, so audio never flows in either direction.
+## Upgrade Plan
 
-## Fix
+### 1. Upgrade `src/hooks/useVizzyVoice.ts` (Major Rewrite)
 
-Switch from WebRTC to **WebSocket** connection using a **signed URL** instead of a conversation token. WebSocket connections are more compatible and bypass the LiveKit RTC path issue entirely.
+- Add `onStatusChange` callback to sync with SDK status precisely
+- Add `onModeChange` to track speaking/listening mode
+- Add `onDisconnect` with details handling (show different messages for error vs agent hangup)
+- Add 15-second connection timeout that auto-cancels and shows retry
+- Expose `getInputVolume` and `getOutputVolume` for real-time audio visualization
+- Expose `setVolume` for output volume control
+- Expose `sendUserActivity` to prevent interruption during UI interaction
+- Return `mode` ("speaking" | "listening") alongside `isSpeaking`
 
-### Changes
+### 2. Upgrade `src/components/vizzy/VizzyVoiceChat.tsx` (Visual Overhaul)
 
-**1. Update Edge Function: `supabase/functions/elevenlabs-conversation-token/index.ts`**
-- Rename to serve both token types, but primarily return a `signed_url` for WebSocket
-- Change API call from `/v1/convai/conversation/token` to `/v1/convai/conversation/get-signed-url`
-- Return `{ signed_url }` instead of `{ token }`
+- **Audio-reactive orb**: Use `requestAnimationFrame` loop to poll `getInputVolume()` and `getOutputVolume()`, scaling the orb ring and glow intensity based on real audio levels (not CSS animations)
+- **Waveform ring**: Render a circular waveform around the avatar using `getOutputByteFrequencyData()` for a Siri-like visual
+- **Live status bar**: Show mode transitions smoothly -- "Listening...", "Vizzy is thinking...", "Vizzy is speaking..."
+- **Volume slider**: Small slider at the bottom to control Vizzy's output volume
+- **Connection timeout UI**: If connecting takes more than 10 seconds, show "Taking longer than expected..." with a cancel button
+- **Disconnect reason toast**: If Vizzy hangs up or an error occurs, show a clear message
+- **Haptic feedback on mobile**: Vibrate on connect/disconnect (navigator.vibrate)
 
-**2. Update Hook: `src/hooks/useVizzyVoice.ts`**
-- Change `startSession` to use `signedUrl` + `connectionType: "websocket"` instead of `conversationToken` + `connectionType: "webrtc"`
-- Add `onStatusChange` callback to better track connection state
-- Add a connection timeout (15 seconds) so users aren't stuck on "Connecting..." forever
+### 3. Add Voice Button to `src/pages/LiveChat.tsx`
 
-**3. Update Voice UI: `src/components/vizzy/VizzyVoiceChat.tsx`**
-- No major changes needed — the UI already handles all states correctly
-- Add a small "connection timeout" message if stuck connecting for too long
+- Import `Mic` icon and `VizzyVoiceChat` component
+- Add `showVoiceChat` state
+- Add a teal mic button in the header bar (next to the trash/clear button)
+- Render `VizzyVoiceChat` overlay when active
+- This gives users a direct path from text chat to voice chat
 
-### Technical Details
+---
 
-Edge function change:
+## Technical Details
+
+### useVizzyVoice.ts -- New Return Shape
+
 ```typescript
-// Before
-const response = await fetch(
-  `https://api.elevenlabs.io/v1/convai/conversation/token?agent_id=${ELEVENLABS_AGENT_ID}`,
-  { headers: { "xi-api-key": ELEVENLABS_API_KEY } }
-);
-const { token } = await response.json();
-return json({ token });
-
-// After
-const response = await fetch(
-  `https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=${ELEVENLABS_AGENT_ID}`,
-  { headers: { "xi-api-key": ELEVENLABS_API_KEY } }
-);
-const { signed_url } = await response.json();
-return json({ signed_url });
+return {
+  voiceState,          // "idle" | "connecting" | "connected" | "error"
+  transcripts,         // TranscriptEntry[]
+  isSpeaking,          // boolean
+  mode,                // "speaking" | "listening" | null
+  status,              // SDK status
+  getInputVolume,      // () => number (0-1, user mic level)
+  getOutputVolume,     // () => number (0-1, Vizzy voice level)
+  getOutputFrequency,  // () => Uint8Array (for waveform)
+  setVolume,           // (vol: number) => void
+  startSession,
+  endSession,
+};
 ```
 
-Hook change:
-```typescript
-// Before
-await conversation.startSession({
-  conversationToken: data.token,
-  connectionType: "webrtc",
-});
+### VizzyVoiceChat.tsx -- Audio-Reactive Animation
 
-// After
-await conversation.startSession({
-  signedUrl: data.signed_url,
-  connectionType: "websocket",
-});
+```typescript
+// requestAnimationFrame loop for real-time audio visualization
+useEffect(() => {
+  let animId: number;
+  const tick = () => {
+    const input = getInputVolume();   // user mic level 0-1
+    const output = getOutputVolume(); // vizzy voice level 0-1
+    setInputLevel(input);
+    setOutputLevel(output);
+    animId = requestAnimationFrame(tick);
+  };
+  if (voiceState === "connected") {
+    animId = requestAnimationFrame(tick);
+  }
+  return () => cancelAnimationFrame(animId);
+}, [voiceState]);
+
+// Orb scale reacts to audio level
+<div style={{
+  transform: `scale(${1 + outputLevel * 0.3})`,
+  boxShadow: `0 0 ${40 + outputLevel * 60}px ${outputLevel * 20}px rgba(45, 212, 191, ${0.2 + outputLevel * 0.4})`
+}}>
 ```
 
-### Why WebSocket over WebRTC?
+### LiveChat.tsx -- Header Mic Button
 
-- WebRTC requires LiveKit server protocol compatibility — the current SDK version expects a newer protocol that the ElevenLabs infrastructure may not be serving for this agent configuration
-- WebSocket is the original and most battle-tested connection method for ElevenLabs Conversational AI
-- Audio quality is still excellent over WebSocket — the difference is negligible for voice chat
-- WebSocket connections are simpler and don't need STUN/TURN negotiation
+```typescript
+const [showVoiceChat, setShowVoiceChat] = useState(false);
+
+// In header, next to trash button:
+<Button variant="ghost" size="icon" className="h-9 w-9"
+  onClick={() => setShowVoiceChat(true)} title="Voice chat">
+  <Mic className="w-4 h-4 text-teal-400" />
+</Button>
+
+// At component root:
+{showVoiceChat && <VizzyVoiceChat onClose={() => setShowVoiceChat(false)} />}
+```
+
+### Files to Modify
+1. `src/hooks/useVizzyVoice.ts` -- Full upgrade with all SDK callbacks + volume APIs
+2. `src/components/vizzy/VizzyVoiceChat.tsx` -- Audio-reactive UI with waveform, volume slider, timeout handling
+3. `src/pages/LiveChat.tsx` -- Add mic button + voice chat overlay
 
