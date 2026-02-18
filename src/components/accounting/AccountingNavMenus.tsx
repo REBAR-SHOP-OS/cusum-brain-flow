@@ -32,6 +32,9 @@ const menus: Menu[] = [
       { label: "Invoices / Packing Slips", tab: "documents" },
       { label: "Quotations / Estimates", tab: "documents" },
       { label: "Quotation Templates", tab: "quote-templates" },
+      { type: "separator" },
+      { type: "label", label: "Expense Management" },
+      { label: "Expense Claims", tab: "expense-claims" },
     ],
   },
   {
