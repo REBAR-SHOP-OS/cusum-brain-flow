@@ -1,106 +1,75 @@
 
 
-# Fix: Screenshot Button - Robust, Fast, and Reliable on Pipeline
+# Fix: Screenshot on Pipeline - Under 2 Seconds
 
-## Root Cause Analysis
+## Root Cause
 
-The Pipeline page has **2816 leads** rendered across multiple columns. When `html2canvas` targets `document.body`, it must **clone and re-render the entire DOM** -- thousands of card elements, avatars, badges, etc. This causes:
-
-1. **Slowness**: Cloning 2800+ cards takes several seconds
-2. **Failures**: The massive cloned DOM can exhaust memory or hit browser limits, causing silent failures
-3. **`allowTaint: true`**: This setting can cause `canvas.toDataURL()` to throw a security error if any cross-origin image is drawn, resulting in a silent fail (no screenshot, no error toast)
+The Pipeline page has 2800+ lead cards in the DOM. `html2canvas` clones the **entire** `document.body` and re-renders every single element -- even cards scrolled far off-screen. The 3-second timeout does NOT help because html2canvas blocks the main thread during rendering, so the UI freezes regardless.
 
 ## Solution
 
 Only one file changes: `src/components/feedback/ScreenshotFeedbackButton.tsx`
 
+### The Key Fix: Trim Off-Screen Elements in `onclone`
+
+The `onclone` callback runs on a **cloned copy** of the DOM before html2canvas renders it. We will use this to **remove all elements outside the viewport** from the clone. This means html2canvas only renders the ~50-100 visible elements instead of 2800+.
+
 ### Changes
 
-**1. Fix `allowTaint` (critical bug fix)**
-- Change `allowTaint: true` to `allowTaint: false`
-- With `allowTaint: true`, any cross-origin image (e.g., avatar URLs) taints the canvas, and `toDataURL()` throws a `SecurityError`
-- Combined with `useCORS: true`, cross-origin images will either load via CORS or be skipped -- but the canvas stays usable
+**1. Aggressive DOM trimming in `onclone`**
+- After cloning, walk through all elements in the cloned DOM
+- Remove any element whose bounding rect (from the original DOM) is fully outside the viewport
+- Target specifically pipeline card elements and other heavy off-screen content
+- This reduces rendering from 2800+ elements to only ~50-100 visible ones
 
-**2. Add timeout wrapper (3-second limit)**
-- Wrap `html2canvas()` in a `Promise.race` with a 3-second timeout
-- If html2canvas takes longer than 3 seconds, the timeout wins and triggers retry
+**2. Increase timeout to 5 seconds (safety margin)**
+- The 3-second timeout was too aggressive for even normal pages
+- With DOM trimming, capture should take under 2 seconds, but keep 5s as safety
 
-**3. Add automatic retry (1 retry with simplified settings)**
-- On first failure or timeout, retry once with simplified settings:
-  - `imageTimeout: 0` (skip all images entirely for speed)
-  - This ensures the layout/text is captured even if images are problematic
-- User only clicks once; retry is automatic and invisible
+**3. Skip images on first attempt for Pipeline**
+- On pages with many elements (detected via DOM count), start with `imageTimeout: 0`
+- This avoids waiting for avatar images to load via CORS
 
-**4. Disable button during capture**
-- Button is already disabled via `capturing` state + cooldown ref -- this is already implemented and working
-
-**5. Better error handling**
-- After `toDataURL()`, validate the output length (detect blank/corrupt canvas)
-- If dataUrl is suspiciously small (less than 1KB), treat as failure and retry
-- Log detailed error info including page path and DOM element count for debugging
-
-## Technical Details
+### Technical Implementation
 
 ```text
 File: src/components/feedback/ScreenshotFeedbackButton.tsx
 
-Key changes:
+In onclone callback:
+1. Collect bounding rects of all elements BEFORE cloning (from live DOM)
+2. In the cloned DOM, find matching elements and remove those fully off-screen
+3. This is safe because it only modifies the clone, not the live page
 
-1. allowTaint: false (instead of true) -- prevents SecurityError on toDataURL
-2. Timeout wrapper: Promise.race([html2canvas(...), timeout(3000)])
-3. Retry logic: on failure/timeout, retry once with imageTimeout: 0
-4. Validation: check dataUrl.length > 1000 before accepting
-5. All other settings (scale:1, backgroundColor, ignoreElements, onclone) unchanged
-```
-
-### Code Structure
-
-```text
-capture = async () => {
-  // ... existing guards and setup ...
-  
-  const captureOnce = (skipImages: boolean) => {
-    const opts = {
-      useCORS: true,
-      allowTaint: false,        // <-- FIX: was true
-      scale: 1,
-      width: window.innerWidth,
-      height: window.innerHeight,
-      // ... same viewport settings ...
-      imageTimeout: skipImages ? 0 : 5000,
-      // ... same ignoreElements, onclone, backgroundColor ...
-    };
-    return Promise.race([
-      html2canvas(document.body, opts),
-      new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 3000))
-    ]);
-  };
-
-  try {
-    let canvas = await captureOnce(false);        // Attempt 1: full capture
-    let dataUrl = canvas.toDataURL("image/png");
+Pseudo-code for onclone:
+  onclone: (clonedDoc) => {
+    // Disable animations (existing)
+    ...
     
-    if (dataUrl.length < 1000) throw new Error("blank canvas");
+    // Collect all elements and check visibility
+    const allOriginal = document.body.querySelectorAll('*');
+    const vpW = window.innerWidth;
+    const vpH = window.innerHeight;
     
-    setScreenshot(dataUrl);
-    setOverlayOpen(true);
-  } catch (err) {
-    // Retry once with images disabled
-    try {
-      let canvas = await captureOnce(true);
-      let dataUrl = canvas.toDataURL("image/png");
-      if (dataUrl.length < 1000) throw new Error("blank canvas after retry");
-      setScreenshot(dataUrl);
-      setOverlayOpen(true);
-    } catch (retryErr) {
-      console.error("Screenshot failed after retry:", retryErr);
-      toast.error("Failed to capture screenshot");
-    }
+    // Build a set of data-attributes marking off-screen elements
+    // Then remove them from the cloned DOM
+    // Key: only remove leaf/heavy elements, keep structural containers
+    
+    // Target: pipeline cards, list items, table rows that are off-screen
+    const clonedAll = clonedDoc.body.querySelectorAll(
+      '[class*="card"], [class*="lead-"], [draggable="true"]'
+    );
+    // For each, check if original counterpart was in viewport
+    // If not, remove from clone
   }
-};
 ```
+
+### Why This Works
+- `html2canvas` speed is proportional to the number of elements it renders
+- 2800 elements takes 40 seconds; 100 elements takes under 1 second
+- The `onclone` approach is safe: it never touches the live DOM
+- The user sees the exact same screenshot (only visible content matters)
 
 ## No Other Changes
 - No database changes
-- No changes to AnnotationOverlay, AppLayout, Pipeline page, or any other file
+- No changes to AnnotationOverlay, Pipeline page, or any other file
 - Only ScreenshotFeedbackButton.tsx is modified
