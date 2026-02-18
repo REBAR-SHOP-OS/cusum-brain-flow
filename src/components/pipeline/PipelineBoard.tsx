@@ -23,7 +23,11 @@ interface PipelineBoardProps {
   onLeadClick: (lead: LeadWithCustomer) => void;
   canReorder?: boolean;
   onReorder?: (newOrder: string[]) => void;
+  aiMode?: boolean;
+  aiActionLeadIds?: Set<string>;
 }
+
+export { type PipelineBoardProps };
 
 const EDGE_ZONE = 60;
 const SCROLL_SPEED = 8;
@@ -38,6 +42,8 @@ export function PipelineBoard({
   onLeadClick,
   canReorder = false,
   onReorder,
+  aiMode = false,
+  aiActionLeadIds = new Set(),
 }: PipelineBoardProps) {
   const [draggedLead, setDraggedLead] = useState<string | null>(null);
   const [dragOverStage, setDragOverStage] = useState<string | null>(null);
@@ -210,6 +216,8 @@ export function PipelineBoard({
               onEdit={onEdit}
               onDelete={onDelete}
               onLeadClick={onLeadClick}
+              aiMode={aiMode}
+              aiActionLeadIds={aiActionLeadIds}
             />
           </div>
         ))}

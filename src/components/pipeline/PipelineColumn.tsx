@@ -37,6 +37,8 @@ interface PipelineColumnProps {
   onEdit: (lead: Lead) => void;
   onDelete: (id: string) => void;
   onLeadClick: (lead: LeadWithCustomer) => void;
+  aiMode?: boolean;
+  aiActionLeadIds?: Set<string>;
 }
 
 const ACTIVITY_COLORS: Record<ActivityStatus, string> = {
@@ -60,6 +62,8 @@ export function PipelineColumn({
   onEdit,
   onDelete,
   onLeadClick,
+  aiMode = false,
+  aiActionLeadIds = new Set(),
 }: PipelineColumnProps) {
   const [activityFilter, setActivityFilter] = useState<ActivityStatus | null>(null);
 
@@ -149,6 +153,7 @@ export function PipelineColumn({
               onEdit={onEdit}
               onDelete={onDelete}
               onClick={onLeadClick}
+              hasAIAction={aiMode && aiActionLeadIds.has(lead.id)}
             />
           ))
         )}
