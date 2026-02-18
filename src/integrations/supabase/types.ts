@@ -6143,6 +6143,50 @@ export type Database = {
           },
         ]
       }
+      project_events: {
+        Row: {
+          company_id: string
+          created_at: string
+          created_by: string
+          description: string | null
+          event_type: string
+          id: string
+          metadata: Json | null
+          project_id: string | null
+          title: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          event_type?: string
+          id?: string
+          metadata?: Json | null
+          project_id?: string | null
+          title: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          event_type?: string
+          id?: string
+          metadata?: Json | null
+          project_id?: string | null
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_events_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_milestones: {
         Row: {
           company_id: string
