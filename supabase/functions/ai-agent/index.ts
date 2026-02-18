@@ -8125,7 +8125,7 @@ RULES:
             messages: toolResultMessages,
             max_tokens: modelConfig.maxTokens,
             temperature: modelConfig.temperature,
-            ...(allTools.length > 0 ? { tools: allTools } : {}),
+            ...(tools && tools.length > 0 ? { tools, tool_choice: "auto" } : {}),
           }),
         });
 
