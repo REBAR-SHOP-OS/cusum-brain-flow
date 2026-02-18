@@ -1,89 +1,122 @@
 
-# Make Architect Agent Actually Fix Problems (Database Diagnostic Tools)
-
-## Problem
-When the Architect receives a bug like "failed to open DM", it says "I cannot directly modify client-side code." But most of these bugs are NOT code bugs -- they are **database-level issues** (RLS policy violations, missing tables/columns, broken permissions). The agent has no tool to investigate or fix these.
+# Fix "Failed to Open DM" + Agent "I couldn't process that request"
 
 ## Root Cause Analysis
-The "failed to open DM" error specifically is caused by an RLS policy violation when inserting into `team_channels` or `team_channel_members`. The agent has tools for machines, deliveries, WordPress, Odoo -- but NO tool to:
-- Query database tables to understand the structure
-- Check RLS policies to find permission issues
-- Run safe SQL fixes (like adjusting policies or inserting missing data)
 
-## Solution: Add 2 New Tools to the Architect Agent
+There are TWO interconnected problems:
 
-### 1. `db_read_query` Tool (Read-Only Database Inspector)
-Allows the agent to run SELECT queries to investigate issues:
-- Check RLS policies: `SELECT * FROM pg_policies WHERE tablename = 'team_channels'`
-- Check table structure: `SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'team_channels'`
-- Check data state: `SELECT * FROM team_channel_members WHERE profile_id = '...'`
-- Find missing records that cause errors
+### Problem 1: "Failed to Open DM" (the actual bug)
+The `useOpenDM` hook does:
+1. INSERT into `team_channels` (with `.select("id").single()`)
+2. INSERT into `team_channel_members` (add both users)
 
-**Safety**: Only SELECT statements allowed. INSERT/UPDATE/DELETE blocked.
+But the SELECT RLS policy on `team_channels` requires `is_channel_member(auth.uid(), id)` -- meaning the user must already be a member to read the row. At step 1, no members exist yet, so the `.select("id").single()` after INSERT fails because RLS blocks reading back the just-inserted row.
 
-### 2. `db_write_fix` Tool (Safe Database Fixer)
-Allows the agent to run approved SQL fixes:
-- Fix RLS policies that block legitimate operations
-- Insert missing records (e.g., missing profile links)
-- Update broken data states
+### Problem 2: Agent says "I couldn't process that request"
+The Architect agent correctly identifies it as an RLS issue and tries to use `db_read_query`, but the Gemini model is likely hitting a context/processing error in the multi-turn loop. This is secondary -- fixing the actual DM bug eliminates the need for the agent to fix it.
 
-**Safety**: 
-- Requires `confirm: true` parameter (same pattern as `odoo_write`)
-- Blocked patterns: `DROP TABLE`, `DROP DATABASE`, `TRUNCATE`, `ALTER TABLE ... DROP`
-- All executions logged to `activity_events` with source = "architect_db_fix"
+## Solution
 
-### 3. Update System Prompt
-Add to the Architect's autofix behavior:
-- "When you receive a client-side error, FIRST use `db_read_query` to investigate the database (check RLS policies, table structure, data state)"
-- "If the root cause is a database issue, use `db_write_fix` to apply the fix"
-- "If it's truly a code-only issue, provide a precise Lovable fix prompt with file paths and exact changes"
+### 1. Create a server-side `create_dm_channel` RPC function (SQL Migration)
+An atomic SECURITY DEFINER function that:
+- Checks both users belong to the same company
+- Checks for existing DM between the two users
+- Creates the channel + members in one transaction
+- Returns the channel ID
+- Bypasses RLS timing issues entirely
+
+### 2. Update `useOpenDM` hook to use the RPC
+Replace the multi-step client-side logic with a single `supabase.rpc('create_dm_channel', ...)` call.
+
+### 3. Fix the SELECT RLS policy on `team_channels`
+Add `OR (created_by = auth.uid())` to the SELECT policy so channel creators can always read their own channels. This prevents similar issues in other flows.
 
 ## Files Modified
 
 | File | Change |
 |------|--------|
-| `supabase/functions/ai-agent/index.ts` | Add `db_read_query` and `db_write_fix` tool definitions + handlers + update system prompt |
-
-## No Changes To
-- Any frontend file
-- Database schema
-- Any other edge function
-- WordPress/Odoo integrations
+| SQL Migration | Create `create_dm_channel` RPC function |
+| SQL Migration | Update SELECT policy on `team_channels` |
+| `src/hooks/useChannelManagement.ts` | Simplify `useOpenDM` to use RPC |
 
 ## Technical Details
 
-### db_read_query Tool Definition
-```
-name: "db_read_query"
-parameters: { query: string }
-```
-Handler: Uses `svcClient.rpc` or raw SQL via service client. Validates query starts with SELECT/WITH. Returns up to 50 rows.
+### `create_dm_channel` RPC
+```sql
+CREATE OR REPLACE FUNCTION public.create_dm_channel(
+  _my_profile_id uuid,
+  _target_profile_id uuid
+)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+DECLARE
+  _my_company uuid;
+  _target_company uuid;
+  _existing_channel uuid;
+  _new_channel uuid;
+  _dm_name text;
+  _my_name text;
+  _target_name text;
+BEGIN
+  -- Verify caller owns _my_profile_id
+  IF NOT EXISTS (SELECT 1 FROM profiles WHERE id = _my_profile_id AND user_id = auth.uid()) THEN
+    RAISE EXCEPTION 'Profile mismatch';
+  END IF;
 
-### db_write_fix Tool Definition
-```
-name: "db_write_fix"
-parameters: { query: string, reason: string, confirm: boolean }
-```
-Handler: Validates no destructive patterns. Requires `confirm: true`. Logs to `activity_events`. Executes via service role client.
+  -- Get companies
+  SELECT company_id, full_name INTO _my_company, _my_name FROM profiles WHERE id = _my_profile_id;
+  SELECT company_id, full_name INTO _target_company, _target_name FROM profiles WHERE id = _target_profile_id;
 
-### System Prompt Addition (Autofix section)
-```
-When you receive a bug report about a client-side error:
-1. Use `db_read_query` to check RLS policies: SELECT * FROM pg_policies WHERE tablename = '<table>'
-2. Use `db_read_query` to check the actual data state
-3. If the issue is an RLS policy or data problem, use `db_write_fix` to apply the fix
-4. If the issue is purely frontend code, generate a precise Lovable fix prompt with:
-   - Problem description
-   - Root cause
-   - File path(s)
-   - Exact code changes needed
-   - Test criteria
+  IF _my_company IS DISTINCT FROM _target_company THEN
+    RAISE EXCEPTION 'Users must be in the same company';
+  END IF;
+
+  -- Check existing DM
+  SELECT tc.id INTO _existing_channel
+  FROM team_channels tc
+  JOIN team_channel_members m1 ON m1.channel_id = tc.id AND m1.profile_id = _my_profile_id
+  JOIN team_channel_members m2 ON m2.channel_id = tc.id AND m2.profile_id = _target_profile_id
+  WHERE tc.channel_type = 'dm'
+  LIMIT 1;
+
+  IF _existing_channel IS NOT NULL THEN
+    RETURN _existing_channel;
+  END IF;
+
+  -- Create channel + members atomically
+  _dm_name := (SELECT string_agg(n, ' & ' ORDER BY n) FROM unnest(ARRAY[_my_name, _target_name]) AS n);
+
+  INSERT INTO team_channels (name, channel_type, created_by, company_id)
+  VALUES (_dm_name, 'dm', auth.uid(), _my_company)
+  RETURNING id INTO _new_channel;
+
+  INSERT INTO team_channel_members (channel_id, profile_id) VALUES
+    (_new_channel, _my_profile_id),
+    (_new_channel, _target_profile_id);
+
+  RETURN _new_channel;
+END;
+$$;
 ```
 
-## How This Fixes the "Failed to Open DM" Example
-1. Agent receives the autofix request
-2. Runs `db_read_query`: `SELECT * FROM pg_policies WHERE tablename = 'team_channels'`
-3. Discovers the INSERT policy is too restrictive (e.g., missing company_id check)
-4. Runs `db_write_fix`: `CREATE POLICY ... ON team_channels FOR INSERT ...` with `confirm: true`
-5. Calls `resolve_task` with resolution note
-6. Green banner appears with [FIX_CONFIRMED]
+### Updated SELECT Policy
+```sql
+DROP POLICY "Users can view channels they belong to" ON team_channels;
+CREATE POLICY "Users can view channels they belong to or created"
+  ON team_channels FOR SELECT
+  USING (is_channel_member(auth.uid(), id) OR created_by = auth.uid() OR has_any_role(auth.uid(), ARRAY['admin'::app_role]));
+```
+
+### Simplified `useOpenDM` Hook
+The entire mutation reduces to:
+```typescript
+const { data, error } = await supabase.rpc('create_dm_channel', {
+  _my_profile_id: myProfile.id,
+  _target_profile_id: targetProfileId,
+});
+if (error) throw error;
+return { id: data, existed: false };
+```
