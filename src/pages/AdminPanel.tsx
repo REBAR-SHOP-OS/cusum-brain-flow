@@ -15,7 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import {
   Shield, Plus, Pencil, Trash2, DollarSign, Users, Building2, Loader2,
-  Activity, Lock, Monitor, Terminal, UserCog, GitCompare,
+  Activity, Lock, Monitor, Terminal, UserCog, GitCompare, FileSearch,
 } from "lucide-react";
 import { LiveMonitorView } from "@/components/office/LiveMonitorView";
 import { DiagnosticLogView } from "@/components/office/DiagnosticLogView";
@@ -25,6 +25,7 @@ import { useUserRole } from "@/hooks/useUserRole";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CEODashboardView } from "@/components/office/CEODashboardView";
 import { OdooReconciliationReport } from "@/components/admin/OdooReconciliationReport";
+import { FieldAuditTrailView } from "@/components/admin/FieldAuditTrailView";
 
 
 
@@ -171,6 +172,10 @@ export default function AdminPanel() {
           <TabsTrigger value="odoo-reconciliation" className="gap-1.5 text-xs">
             <GitCompare className="w-3.5 h-3.5" />
             Odoo Sync
+          </TabsTrigger>
+          <TabsTrigger value="audit-trail" className="gap-1.5 text-xs">
+            <FileSearch className="w-3.5 h-3.5" />
+            Audit Trail
           </TabsTrigger>
         </TabsList>
       </div>
@@ -337,6 +342,12 @@ export default function AdminPanel() {
       <TabsContent value="odoo-reconciliation" className="flex-1 mt-0 overflow-hidden">
         <ScrollArea className="h-full">
           <OdooReconciliationReport />
+        </ScrollArea>
+      </TabsContent>
+
+      <TabsContent value="audit-trail" className="flex-1 mt-0 overflow-hidden">
+        <ScrollArea className="h-full">
+          <FieldAuditTrailView />
         </ScrollArea>
       </TabsContent>
     </Tabs>
