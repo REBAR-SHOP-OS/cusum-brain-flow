@@ -58,6 +58,7 @@ interface EmployeeProfile {
 
 // ─── Constants ──────────────────────────────────────────
 const NEEL_PROFILE_ID = "a94932c5-e873-46fd-9658-dc270f6f5ff3";
+const EXCLUDED_EMAILS = ["ai@rebar.shop", "kourosh@rebar.shop"];
 
 const STATUS_MAP: Record<string, string> = { open: "Pending", in_progress: "In Progress", completed: "Completed" };
 const PRIORITY_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 };
@@ -122,6 +123,7 @@ export default function Tasks() {
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [employees, setEmployees] = useState<EmployeeProfile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   // Detail drawer
   const [selectedTask, setSelectedTask] = useState<TaskRow | null>(null);
@@ -141,6 +143,13 @@ export default function Tasks() {
   const [fullScreenOpen, setFullScreenOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  // Fetch current user ID once
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setCurrentUserId(data.user?.id ?? null);
+    });
+  }, []);
+
   // ─── Data loading ─────────────────────────────────────
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -159,17 +168,24 @@ export default function Tasks() {
       if (tasksRes.error) throw tasksRes.error;
       if (employeesRes.error) throw employeesRes.error;
       setTasks((tasksRes.data as any) || []);
-      setEmployees(
-        (employeesRes.data || []).sort((a, b) =>
-          (a.full_name || "").localeCompare(b.full_name || "")
-        )
-      );
+      // Filter excluded emails, sort alphabetically, then move current user first
+      const filtered = (employeesRes.data || [])
+        .filter(e => !EXCLUDED_EMAILS.includes((e.email || "").toLowerCase()))
+        .sort((a, b) => (a.full_name || "").localeCompare(b.full_name || ""));
+      if (currentUserId) {
+        const myIdx = filtered.findIndex(e => e.user_id === currentUserId);
+        if (myIdx > 0) {
+          const [me] = filtered.splice(myIdx, 1);
+          filtered.unshift(me);
+        }
+      }
+      setEmployees(filtered);
     } catch (err: any) {
       toast.error(err.message || "Failed to load tasks");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [currentUserId]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -258,6 +274,18 @@ export default function Tasks() {
 
       if (error) throw error;
       await writeAudit(data.id, "create", null, null, null);
+
+      // Send notification to the assigned employee
+      if (createForEmployee.user_id) {
+        await supabase.from("notifications").insert({
+          user_id: createForEmployee.user_id,
+          type: "notification",
+          title: "New Task Assigned",
+          description: newTitle.trim().substring(0, 200),
+          status: "unread",
+        } as any);
+      }
+
       toast.success("Task created");
       setCreateForEmployee(null);
       setNewTitle(""); setNewDesc(""); setNewDueDate(""); setNewPriority("medium");
@@ -370,14 +398,21 @@ export default function Tasks() {
                             )}>
                               {task.title}
                             </span>
-                            {task.due_date && (
-                              <span className={cn(
-                                "text-[10px]",
-                                isOverdue(task) ? "text-destructive" : "text-muted-foreground"
-                              )}>
-                                {format(new Date(task.due_date), "MMM d")}
-                              </span>
-                            )}
+                            <div className="flex items-center gap-1.5">
+                              {task.created_by_profile?.full_name && (
+                                <span className="text-[10px] text-muted-foreground">
+                                  by {task.created_by_profile.full_name}
+                                </span>
+                              )}
+                              {task.due_date && (
+                                <span className={cn(
+                                  "text-[10px]",
+                                  isOverdue(task) ? "text-destructive" : "text-muted-foreground"
+                                )}>
+                                  · {format(new Date(task.due_date), "MMM d")}
+                                </span>
+                              )}
+                            </div>
                           </button>
                           <button
                             onClick={() => deleteTask(task.id)}
@@ -410,6 +445,11 @@ export default function Tasks() {
                                 <span className="text-sm line-through text-muted-foreground block truncate">
                                   {task.title}
                                 </span>
+                                {task.created_by_profile?.full_name && (
+                                  <span className="text-[10px] text-muted-foreground">
+                                    by {task.created_by_profile.full_name}
+                                  </span>
+                                )}
                               </button>
                               <button
                                 onClick={() => deleteTask(task.id)}
