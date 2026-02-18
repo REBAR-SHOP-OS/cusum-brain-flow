@@ -3210,6 +3210,81 @@ export type Database = {
         }
         Relationships: []
       }
+      fix_tickets: {
+        Row: {
+          actual_result: string | null
+          company_id: string
+          created_at: string
+          diagnosed_at: string | null
+          expected_result: string | null
+          fix_output: string | null
+          fix_output_type: string | null
+          fixed_at: string | null
+          id: string
+          page_url: string | null
+          reporter_email: string | null
+          reporter_user_id: string
+          repro_steps: string | null
+          screenshot_url: string | null
+          severity: string
+          status: string
+          system_area: string | null
+          updated_at: string
+          verification_evidence: string | null
+          verification_result: string | null
+          verification_steps: string | null
+          verified_at: string | null
+        }
+        Insert: {
+          actual_result?: string | null
+          company_id: string
+          created_at?: string
+          diagnosed_at?: string | null
+          expected_result?: string | null
+          fix_output?: string | null
+          fix_output_type?: string | null
+          fixed_at?: string | null
+          id?: string
+          page_url?: string | null
+          reporter_email?: string | null
+          reporter_user_id: string
+          repro_steps?: string | null
+          screenshot_url?: string | null
+          severity?: string
+          status?: string
+          system_area?: string | null
+          updated_at?: string
+          verification_evidence?: string | null
+          verification_result?: string | null
+          verification_steps?: string | null
+          verified_at?: string | null
+        }
+        Update: {
+          actual_result?: string | null
+          company_id?: string
+          created_at?: string
+          diagnosed_at?: string | null
+          expected_result?: string | null
+          fix_output?: string | null
+          fix_output_type?: string | null
+          fixed_at?: string | null
+          id?: string
+          page_url?: string | null
+          reporter_email?: string | null
+          reporter_user_id?: string
+          repro_steps?: string | null
+          screenshot_url?: string | null
+          severity?: string
+          status?: string
+          system_area?: string | null
+          updated_at?: string
+          verification_evidence?: string | null
+          verification_result?: string | null
+          verification_steps?: string | null
+          verified_at?: string | null
+        }
+        Relationships: []
+      }
       floor_stock: {
         Row: {
           bar_code: string

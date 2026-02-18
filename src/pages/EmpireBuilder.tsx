@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { Plus, ArrowUp, X, FileText, Image as ImageIcon, Archive, Globe, Boxes, Activity, Brain } from "lucide-react";
+import { Plus, ArrowUp, X, FileText, Image as ImageIcon, Archive, Globe, Boxes, Activity, Brain, Bug, ChevronDown, ChevronRight, Copy, CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
 import { Message } from "@/components/chat/ChatMessage";
 import { sendAgentMessage, ChatMessage as AgentChatMessage, AttachedFile } from "@/lib/agent";
 import { useChatSessions } from "@/hooks/useChatSessions";
@@ -14,6 +14,8 @@ import { analyzeZip } from "@/lib/zipAnalyzer";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { EmpireTopbar } from "@/components/empire/EmpireTopbar";
+import { Badge } from "@/components/ui/badge";
+import { useCompanyId } from "@/hooks/useCompanyId";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -57,6 +59,36 @@ interface MemoryEntry {
   created_at: string;
 }
 
+interface FixTicket {
+  id: string;
+  severity: string;
+  system_area: string | null;
+  status: string;
+  page_url: string | null;
+  repro_steps: string | null;
+  actual_result: string | null;
+  fix_output: string | null;
+  fix_output_type: string | null;
+  verification_result: string | null;
+  created_at: string;
+}
+
+const severityColor: Record<string, string> = {
+  critical: "bg-red-500/20 text-red-400 border-red-500/30",
+  high: "bg-orange-500/20 text-orange-400 border-orange-500/30",
+  medium: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
+  low: "bg-blue-500/20 text-blue-400 border-blue-500/30",
+};
+
+const statusColor: Record<string, string> = {
+  new: "bg-cyan-500/20 text-cyan-400",
+  in_progress: "bg-purple-500/20 text-purple-400",
+  fixed: "bg-emerald-500/20 text-emerald-400",
+  blocked: "bg-red-500/20 text-red-400",
+  verified: "bg-green-500/20 text-green-400",
+  failed: "bg-red-500/20 text-red-400",
+};
+
 export default function EmpireBuilder() {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -80,6 +112,12 @@ export default function EmpireBuilder() {
   // Memory state
   const [memories, setMemories] = useState<MemoryEntry[]>([]);
 
+  // Fix tickets state
+  const [fixTickets, setFixTickets] = useState<FixTicket[]>([]);
+  const [ticketsPanelOpen, setTicketsPanelOpen] = useState(false);
+  const [expandedTicket, setExpandedTicket] = useState<string | null>(null);
+  const { companyId } = useCompanyId();
+
   const { createSession, addMessage } = useChatSessions();
   const hasConversation = messages.length > 0;
 
@@ -92,6 +130,19 @@ export default function EmpireBuilder() {
       .limit(5)
       .then(({ data }) => { if (data) setMemories(data as MemoryEntry[]); });
   }, []);
+
+  // Fetch fix tickets
+  useEffect(() => {
+    if (!companyId) return;
+    supabase
+      .from("fix_tickets")
+      .select("id, severity, system_area, status, page_url, repro_steps, actual_result, fix_output, fix_output_type, verification_result, created_at")
+      .eq("company_id", companyId)
+      .in("status", ["new", "in_progress", "fixed", "blocked", "failed"])
+      .order("created_at", { ascending: false })
+      .limit(20)
+      .then(({ data }) => { if (data) setFixTickets(data as FixTicket[]); });
+  }, [companyId]);
 
   // Auto-resize textareas
   useEffect(() => {
@@ -304,6 +355,88 @@ export default function EmpireBuilder() {
                 <p className="text-xs text-white/30">No memories yet</p>
               )}
             </div>
+
+            {/* Fix Tickets Section */}
+            {fixTickets.length > 0 && (
+              <div className="w-full max-w-2xl mb-8 animate-fade-in" style={{ animationDelay: "100ms" }}>
+                <button
+                  onClick={() => setTicketsPanelOpen(!ticketsPanelOpen)}
+                  className="flex items-center justify-center gap-2 mb-3 mx-auto hover:opacity-80 transition-opacity"
+                >
+                  <Bug className="h-3.5 w-3.5 text-white/50" />
+                  <h2 className="text-xs font-semibold uppercase tracking-widest text-white/50">Fix Tickets</h2>
+                  <span className="text-[10px] bg-red-500/20 text-red-400 rounded-full px-2 py-0.5">
+                    {fixTickets.filter(t => ["new", "in_progress", "blocked", "failed"].includes(t.status)).length} open
+                  </span>
+                  {ticketsPanelOpen ? <ChevronDown className="h-3 w-3 text-white/40" /> : <ChevronRight className="h-3 w-3 text-white/40" />}
+                </button>
+                {ticketsPanelOpen && (
+                  <div className="space-y-2">
+                    {fixTickets.map((ticket) => (
+                      <div key={ticket.id} className="rounded-lg border border-white/10 bg-white/5 overflow-hidden">
+                        <button
+                          onClick={() => setExpandedTicket(expandedTicket === ticket.id ? null : ticket.id)}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-white/5 transition-colors"
+                        >
+                          <span className={cn("text-[10px] rounded px-1.5 py-0.5 border font-medium", severityColor[ticket.severity] || "bg-white/10 text-white/60")}>
+                            {ticket.severity}
+                          </span>
+                          <span className={cn("text-[10px] rounded px-1.5 py-0.5 font-medium", statusColor[ticket.status] || "bg-white/10 text-white/60")}>
+                            {ticket.status.replace("_", " ")}
+                          </span>
+                          {ticket.system_area && (
+                            <span className="text-[10px] text-white/40">{ticket.system_area}</span>
+                          )}
+                          <span className="text-xs text-white/60 truncate flex-1">
+                            {ticket.actual_result?.substring(0, 60) || ticket.repro_steps?.substring(0, 60) || "No description"}
+                          </span>
+                          {ticket.verification_result === "pass" && <CheckCircle2 className="h-3.5 w-3.5 text-green-400 flex-shrink-0" />}
+                          {ticket.verification_result === "fail" && <XCircle className="h-3.5 w-3.5 text-red-400 flex-shrink-0" />}
+                          {ticket.status === "fixed" && !ticket.verification_result && <AlertTriangle className="h-3.5 w-3.5 text-yellow-400 flex-shrink-0" />}
+                          {expandedTicket === ticket.id ? <ChevronDown className="h-3 w-3 text-white/40 flex-shrink-0" /> : <ChevronRight className="h-3 w-3 text-white/40 flex-shrink-0" />}
+                        </button>
+                        {expandedTicket === ticket.id && (
+                          <div className="px-3 pb-3 pt-1 border-t border-white/5 space-y-2 text-xs">
+                            {ticket.page_url && <div><span className="text-white/40">Page: </span><span className="text-white/70">{ticket.page_url}</span></div>}
+                            {ticket.repro_steps && <div><span className="text-white/40">Steps: </span><span className="text-white/70">{ticket.repro_steps}</span></div>}
+                            {ticket.actual_result && <div><span className="text-white/40">Result: </span><span className="text-white/70">{ticket.actual_result}</span></div>}
+                            {ticket.verification_result && (
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-white/40">Verification: </span>
+                                <Badge className={ticket.verification_result === "pass" ? "bg-green-500/20 text-green-400 border-green-500/30" : "bg-red-500/20 text-red-400 border-red-500/30"}>
+                                  {ticket.verification_result.toUpperCase()}
+                                </Badge>
+                              </div>
+                            )}
+                            {ticket.status === "fixed" && !ticket.verification_result && (
+                              <div className="flex items-center gap-1.5">
+                                <AlertTriangle className="h-3 w-3 text-yellow-400" />
+                                <span className="text-yellow-400">Unverified fix</span>
+                              </div>
+                            )}
+                            {ticket.fix_output && ticket.fix_output_type === "lovable_prompt" && (
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(ticket.fix_output || "");
+                                  toast.success("Lovable prompt copied!");
+                                }}
+                                className="flex items-center gap-1.5 px-2 py-1 rounded bg-white/10 hover:bg-white/15 text-white/70 transition-colors"
+                              >
+                                <Copy className="h-3 w-3" />
+                                <span>Copy Lovable Prompt</span>
+                              </button>
+                            )}
+                            <div className="text-white/30 text-[10px]">
+                              ID: {ticket.id.substring(0, 8)}… · {new Date(ticket.created_at).toLocaleDateString()}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Hero heading */}
             <h1 className="text-5xl sm:text-6xl font-extrabold tracking-tight animate-fade-in" style={{ animationDelay: "120ms" }}>
