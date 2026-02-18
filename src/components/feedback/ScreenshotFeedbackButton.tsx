@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from "react";
-import { Camera } from "lucide-react";
+import { Camera, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import html2canvas from "html2canvas";
 import { AnnotationOverlay } from "./AnnotationOverlay";
 import { useDraggablePosition } from "@/hooks/useDraggablePosition";
 
@@ -10,6 +11,7 @@ const BTN_SIZE = 40;
 export function ScreenshotFeedbackButton() {
   const [overlayOpen, setOverlayOpen] = useState(false);
   const [screenshot, setScreenshot] = useState("");
+  const [capturing, setCapturing] = useState(false);
   const cooldown = useRef(false);
 
   const { pos, handlers, wasDragged } = useDraggablePosition({
@@ -24,25 +26,20 @@ export function ScreenshotFeedbackButton() {
   const btnRef = useRef<HTMLButtonElement>(null);
 
   const capture = useCallback(async () => {
-    if (cooldown.current) return;
+    if (cooldown.current || capturing) return;
     cooldown.current = true;
+    setCapturing(true);
     setTimeout(() => { cooldown.current = false; }, THROTTLE_MS);
 
     try {
-      // Hide the feedback button during capture so it doesn't appear in screenshot
-      if (btnRef.current) btnRef.current.style.display = "none";
-
-      // Wait for fonts and rendering to complete
       await document.fonts.ready;
       await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 
-      // Capture from document.body to include portaled elements (Sheet, Dialog, etc.)
       const target = document.body;
 
-      const html2canvas = (await import("html2canvas")).default;
       const canvas = await html2canvas(target, {
         useCORS: true,
-        scale: window.devicePixelRatio || 1,
+        scale: 1,
         width: window.innerWidth,
         height: window.innerHeight,
         windowWidth: window.innerWidth,
@@ -55,9 +52,13 @@ export function ScreenshotFeedbackButton() {
         logging: false,
         allowTaint: true,
         ignoreElements: (el) => {
-          // Ignore feedback button and Vizzy floating button
           return el.getAttribute?.("data-feedback-btn") === "true" ||
             el.classList?.contains("floating-vizzy");
+        },
+        onclone: (clonedDoc) => {
+          const style = clonedDoc.createElement("style");
+          style.textContent = "*, *::before, *::after { animation: none !important; transition: none !important; }";
+          clonedDoc.head.appendChild(style);
         },
       });
       const dataUrl = canvas.toDataURL("image/png");
@@ -67,14 +68,12 @@ export function ScreenshotFeedbackButton() {
       console.error("Screenshot capture error:", err?.message, err?.stack);
       toast.error(`Failed to capture screen on ${window.location.pathname}`);
     } finally {
-      // Always restore button visibility
-      if (btnRef.current) btnRef.current.style.display = "";
+      setCapturing(false);
     }
-  }, []);
+  }, [capturing]);
 
   const handlePointerUp = useCallback((e: React.PointerEvent) => {
     handlers.onPointerUp(e);
-    // Only trigger capture on tap, not drag
     if (!wasDragged.current) {
       capture();
     }
@@ -93,7 +92,11 @@ export function ScreenshotFeedbackButton() {
         aria-label="Report a change"
         title="Screenshot Feedback"
       >
-        <Camera className="w-5 h-5 pointer-events-none" />
+        {capturing ? (
+          <Loader2 className="w-5 h-5 pointer-events-none animate-spin" />
+        ) : (
+          <Camera className="w-5 h-5 pointer-events-none" />
+        )}
       </button>
 
       {overlayOpen && (
