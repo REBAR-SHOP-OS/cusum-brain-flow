@@ -278,6 +278,7 @@ export default function Tasks() {
 
   const createTask = async () => {
     if (!newTitle.trim() || !createForEmployee) { toast.error("Title is required"); return; }
+    if (newDueDate && newDueDate < new Date().toISOString().split("T")[0]) { toast.error("Due date cannot be in the past"); return; }
     setCreating(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -511,7 +512,7 @@ export default function Tasks() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className="text-xs">Due Date</Label>
-                <Input type="date" value={newDueDate} onChange={e => setNewDueDate(e.target.value)} className="mt-1" />
+                <Input type="date" value={newDueDate} onChange={e => setNewDueDate(e.target.value)} min={new Date().toISOString().split("T")[0]} className="mt-1" />
               </div>
               <div>
                 <Label className="text-xs">Priority</Label>
