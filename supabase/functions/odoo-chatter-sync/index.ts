@@ -180,12 +180,25 @@ Deno.serve(async (req) => {
           });
         }
 
-        // Insert in chunks of 100, using upsert on odoo_message_id
-        for (let j = 0; j < rows.length; j += 100) {
-          const chunk = rows.slice(j, j + 100);
-          const { error } = await serviceClient
+        // Check existing odoo_message_ids to dedup
+        const msgIds = rows.map(r => r.odoo_message_id);
+        const existingMsgIds = new Set<number>();
+        for (let k = 0; k < msgIds.length; k += 100) {
+          const batch2 = msgIds.slice(k, k + 100);
+          const { data: existing } = await serviceClient
             .from("lead_activities")
-            .upsert(chunk, { onConflict: "odoo_message_id", ignoreDuplicates: true });
+            .select("odoo_message_id")
+            .in("odoo_message_id", batch2);
+          (existing || []).forEach((e: any) => existingMsgIds.add(e.odoo_message_id));
+        }
+
+        const newRows = rows.filter(r => !existingMsgIds.has(r.odoo_message_id));
+        messagesSkipped += rows.length - newRows.length;
+
+        // Insert in chunks of 100
+        for (let j = 0; j < newRows.length; j += 100) {
+          const chunk = newRows.slice(j, j + 100);
+          const { error } = await serviceClient.from("lead_activities").insert(chunk);
           if (error) {
             console.error("Insert error:", error.message);
             messageErrors += chunk.length;
