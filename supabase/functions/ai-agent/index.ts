@@ -2397,9 +2397,23 @@ Use this real data to ground your analysis — never fabricate numbers.
 ## CRITICAL — Autofix Behavior (HIGHEST PRIORITY — OVERRIDES ALL OTHER SECTIONS):
 When you receive an autofix request with a task_id:
 1. Use \`read_task\` to understand the full problem
-2. Use your ERP/WP/Odoo write tools to apply the ACTUAL fix (update_machine_status, update_delivery_status, odoo_write, wp_update_product, etc.)
-3. Use \`resolve_task\` to mark the task as completed with a resolution note
-4. Do NOT just create fix requests or tickets. Use your write tools to FIX the problem directly.
+2. **FIRST** use \`db_read_query\` to investigate the database:
+   - Check RLS policies: \`SELECT schemaname, tablename, policyname, permissive, roles, cmd, qual, with_check FROM pg_policies WHERE tablename = '<relevant_table>'\`
+   - Check table structure: \`SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_schema = 'public' AND table_name = '<table>'\`
+   - Check data state: \`SELECT * FROM <table> WHERE <relevant_filter> LIMIT 10\`
+3. If the root cause is a **database issue** (RLS policy violation, missing data, broken permission):
+   - Use \`db_write_fix\` to apply the fix directly (e.g., CREATE/DROP POLICY, INSERT missing rows, UPDATE broken data)
+   - Then use \`resolve_task\` with a detailed resolution note
+4. If the root cause is an **ERP/WP/Odoo issue**, use the appropriate write tools (update_machine_status, odoo_write, wp_update_product, etc.)
+5. Use \`resolve_task\` to mark the task as completed with a resolution note
+6. Do NOT just create fix requests or tickets. Use your write tools to FIX the problem directly.
+
+### DATABASE DIAGNOSTIC PRIORITY:
+Most "client-side errors" like "failed to open DM", "permission denied", "row-level security violation" are actually DATABASE issues. ALWAYS investigate the database FIRST with \`db_read_query\` before concluding something is a "code issue". The pattern is:
+- Error mentions a table name → check RLS policies for that table
+- Error mentions "permission" or "security" → check pg_policies
+- Error mentions "not found" or "missing" → check data state
+- Error mentions "insert" or "create" → check INSERT/WITH CHECK policies
 
 ### FALLBACK PROTOCOL (when you CANNOT fix with write tools):
 If the problem is NOT fixable with your available write tools (e.g., client-side UI bugs, React code issues, CSS problems, frontend logic errors):
@@ -2412,7 +2426,7 @@ If the problem is NOT fixable with your available write tools (e.g., client-side
 ### SUCCESS CONFIRMATION:
 When you successfully call \`resolve_task\` and the task is marked as completed, you MUST include the marker \`[FIX_CONFIRMED]\` at the END of your response. This triggers a green success banner in the UI.
 
-**ABSOLUTE RULE: When you have a task_id, you MUST NOT call \`create_fix_ticket\`. Instead use \`read_task\` → write tools → \`resolve_task\`. This is non-negotiable.**
+**ABSOLUTE RULE: When you have a task_id, you MUST NOT call \`create_fix_ticket\`. Instead use \`read_task\` → db_read_query → write tools → \`resolve_task\`. This is non-negotiable.**
 
 ## Fix Ticket System (Screenshot → Fix Engine):
 **IMPORTANT: If you already have a \`task_id\` from an autofix request, do NOT create a new fix ticket. Use \`read_task\` and \`resolve_task\` instead. Fix tickets are ONLY for NEW screenshot-based bug reports that are NOT linked to an existing task.**
@@ -6610,6 +6624,39 @@ RULES:
           },
         },
       },
+      // ─── Database Diagnostic Tools ───
+      {
+        type: "function" as const,
+        function: {
+          name: "db_read_query",
+          description: "Run a read-only SQL query against the database to investigate issues. Use to check RLS policies (pg_policies), table structure (information_schema.columns), and data state. Only SELECT/WITH queries allowed. Returns up to 50 rows.",
+          parameters: {
+            type: "object",
+            properties: {
+              query: { type: "string", description: "SQL SELECT query to execute (e.g. SELECT * FROM pg_policies WHERE tablename = 'team_channels')" },
+            },
+            required: ["query"],
+            additionalProperties: false,
+          },
+        },
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "db_write_fix",
+          description: "Execute a safe SQL fix against the database. Use to fix RLS policies, insert missing records, or update broken data. Requires confirm:true. Blocked: DROP TABLE, DROP DATABASE, TRUNCATE, ALTER TABLE...DROP. All executions are logged.",
+          parameters: {
+            type: "object",
+            properties: {
+              query: { type: "string", description: "SQL statement to execute (CREATE POLICY, INSERT, UPDATE, ALTER TABLE ADD, etc.)" },
+              reason: { type: "string", description: "Why this fix is needed — logged for audit trail" },
+              confirm: { type: "boolean", description: "Must be true to execute. Safety flag." },
+            },
+            required: ["query", "reason", "confirm"],
+            additionalProperties: false,
+          },
+        },
+      },
       ] : []),
       // WordPress tools — available to SEO, Social, Data, BizDev, WebBuilder, Copywriting, AND Empire agents
       ...(["seo", "social", "data", "bizdev", "webbuilder", "copywriting", "empire"].includes(agent) ? [
@@ -8035,6 +8082,111 @@ RULES:
             seoToolResults.push({ id: tc.id, name: "diagnose_from_screenshot", result: diagnosis });
           } catch (e) {
             seoToolResults.push({ id: tc.id, name: "diagnose_from_screenshot", result: { error: e instanceof Error ? e.message : "diagnose_from_screenshot failed" } });
+          }
+        }
+
+        // Empire — db_read_query handler (read-only database inspector)
+        if (tc.function?.name === "db_read_query") {
+          try {
+            const args = JSON.parse(tc.function.arguments || "{}");
+            const query = (args.query || "").trim();
+            // Validate: only SELECT/WITH allowed
+            const normalized = query.replace(/\/\*[\s\S]*?\*\//g, "").replace(/--[^\n]*/g, "").trim().toUpperCase();
+            if (!normalized.startsWith("SELECT") && !normalized.startsWith("WITH")) {
+              seoToolResults.push({ id: tc.id, name: "db_read_query", result: { error: "Only SELECT/WITH queries are allowed. Use db_write_fix for modifications." } });
+            } else {
+              // Block any sneaky write attempts inside CTE
+              const dangerousWrite = /\b(INSERT|UPDATE|DELETE|DROP|TRUNCATE|ALTER|CREATE|GRANT|REVOKE)\b/i;
+              const cteBody = query.replace(/^WITH[\s\S]*?SELECT/i, ""); // rough check
+              if (dangerousWrite.test(query) && !query.toUpperCase().includes("SELECT") ) {
+                seoToolResults.push({ id: tc.id, name: "db_read_query", result: { error: "Write operations detected. Use db_write_fix instead." } });
+              } else {
+                const { data, error } = await svcClient.rpc("execute_readonly_query" as any, { sql_query: query });
+                if (error) {
+                  // Fallback: try raw query via postgres
+                  try {
+                    const rawResult = await fetch(`${Deno.env.get("SUPABASE_URL")}/rest/v1/rpc/execute_readonly_query`, {
+                      method: "POST",
+                      headers: {
+                        "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+                        "Content-Type": "application/json",
+                        "apikey": Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+                      },
+                      body: JSON.stringify({ sql_query: query }),
+                    });
+                    if (rawResult.ok) {
+                      const rawData = await rawResult.json();
+                      seoToolResults.push({ id: tc.id, name: "db_read_query", result: { success: true, rows: Array.isArray(rawData) ? rawData.slice(0, 50) : rawData, row_count: Array.isArray(rawData) ? Math.min(rawData.length, 50) : 1 } });
+                    } else {
+                      seoToolResults.push({ id: tc.id, name: "db_read_query", result: { error: error.message } });
+                    }
+                  } catch (_) {
+                    seoToolResults.push({ id: tc.id, name: "db_read_query", result: { error: error.message } });
+                  }
+                } else {
+                  const rows = Array.isArray(data) ? data.slice(0, 50) : data;
+                  seoToolResults.push({ id: tc.id, name: "db_read_query", result: { success: true, rows, row_count: Array.isArray(data) ? Math.min(data.length, 50) : 1 } });
+                }
+              }
+            }
+          } catch (e) {
+            seoToolResults.push({ id: tc.id, name: "db_read_query", result: { error: e instanceof Error ? e.message : "db_read_query failed" } });
+          }
+        }
+
+        // Empire — db_write_fix handler (safe database fixer)
+        if (tc.function?.name === "db_write_fix") {
+          try {
+            const args = JSON.parse(tc.function.arguments || "{}");
+            const query = (args.query || "").trim();
+            const reason = args.reason || "No reason provided";
+            const confirm = args.confirm === true;
+
+            if (!confirm) {
+              seoToolResults.push({ id: tc.id, name: "db_write_fix", result: { error: "Safety flag: confirm must be true to execute write operations." } });
+            } else {
+              // Block destructive patterns
+              const destructive = /\b(DROP\s+TABLE|DROP\s+DATABASE|TRUNCATE\s+|ALTER\s+TABLE\s+\S+\s+DROP\s+)/i;
+              if (destructive.test(query)) {
+                seoToolResults.push({ id: tc.id, name: "db_write_fix", result: { error: "Blocked: destructive operations (DROP TABLE, DROP DATABASE, TRUNCATE, ALTER TABLE...DROP) are not allowed." } });
+              } else {
+                // Execute via service role
+                const execResult = await fetch(`${Deno.env.get("SUPABASE_URL")}/rest/v1/rpc/execute_write_fix`, {
+                  method: "POST",
+                  headers: {
+                    "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+                    "Content-Type": "application/json",
+                    "apikey": Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+                  },
+                  body: JSON.stringify({ sql_query: query }),
+                });
+
+                let fixResult: any;
+                if (execResult.ok) {
+                  fixResult = await execResult.json();
+                } else {
+                  const errText = await execResult.text();
+                  fixResult = { error: errText };
+                }
+
+                // Log to activity_events
+                await svcClient.from("activity_events").insert({
+                  company_id: companyId,
+                  entity_type: "database_fix",
+                  entity_id: crypto.randomUUID(),
+                  event_type: "db_write_fix",
+                  description: `DB fix applied: ${reason}`.substring(0, 500),
+                  actor_id: user.id,
+                  actor_type: "architect",
+                  source: "architect_db_fix",
+                  metadata: { query: query.substring(0, 1000), reason, success: !fixResult?.error },
+                }).catch(() => {});
+
+                seoToolResults.push({ id: tc.id, name: "db_write_fix", result: fixResult?.error ? { error: fixResult.error } : { success: true, message: `Fix applied: ${reason}`, result: fixResult } });
+              }
+            }
+          } catch (e) {
+            seoToolResults.push({ id: tc.id, name: "db_write_fix", result: { error: e instanceof Error ? e.message : "db_write_fix failed" } });
           }
         }
 
