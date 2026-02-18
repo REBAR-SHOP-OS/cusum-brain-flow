@@ -169,7 +169,7 @@ export default function EmpireBuilder() {
       setSearchParams({}, { replace: true });
       const taskRef = taskId ? `\n\n**Task ID:** \`${taskId}\`\nUse \`read_task\` to get full details, then fix the problem using your write tools, and finally call \`resolve_task\` to mark it completed.` : "";
       setTimeout(() => {
-        handleSend(`🔴 Auto-fix request — Fix this problem NOW:\n\n\`\`\`\n${errorMsg}\n\`\`\`${taskRef}\n\nDo NOT just create tickets. Use your ERP/WP/Odoo write tools to apply the actual fix, then resolve the task.`);
+        handleSend(`🔴 Auto-fix request — Fix this problem NOW:\n\n\`\`\`\n${errorMsg}\n\`\`\`${taskRef}\n\nIMPORTANT INSTRUCTIONS:\n- If you CAN fix it with your write tools → do it immediately, then call resolve_task.\n- If you CANNOT fix it with your tools, do NOT create a fix request or ticket.\n- Instead: (1) Ask me clarifying questions about the problem, (2) Provide specific actionable steps I can follow to fix it, (3) Keep helping until the problem is actually resolved.\n- Only use resolve_task when the problem is ACTUALLY fixed.\n- When resolve_task succeeds, include [FIX_CONFIRMED] in your response.`);
       }, 500);
     }
   }, [searchParams]);
@@ -547,7 +547,7 @@ export default function EmpireBuilder() {
                           <p className="whitespace-pre-wrap">{message.content}</p>
                         ) : (
                           <>
-                            <RichMarkdown content={message.content || ""} />
+                            <RichMarkdown content={(message.content || "").replace(/\[FIX_CONFIRMED\]/g, "")} />
                             {(() => {
                               const patches: { id: string; file: string; target: string; description?: string; content: string }[] = [];
                               const artifactRegex = /\{"type"\s*:\s*"patch"[^}]*"id"\s*:\s*"([^"]+)"[^}]*"file"\s*:\s*"([^"]+)"[^}]*"target"\s*:\s*"([^"]+)"[^}]*"content"\s*:\s*"((?:[^"\\]|\\.)*)"/g;
@@ -564,6 +564,12 @@ export default function EmpireBuilder() {
                                 <PatchReview key={p.id} patchId={p.id} filePath={p.file} targetSystem={p.target} description={p.description || ""} content={p.content} />
                               ));
                             })()}
+                            {(message.content || "").includes("[FIX_CONFIRMED]") && (
+                              <div className="mt-3 flex items-center gap-2.5 rounded-xl bg-gradient-to-r from-emerald-500/20 to-green-500/20 border border-emerald-500/30 px-4 py-3">
+                                <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+                                <span className="text-sm font-semibold text-emerald-300">✅ Fix completed successfully</span>
+                              </div>
+                            )}
                           </>
                         )}
                       </div>
