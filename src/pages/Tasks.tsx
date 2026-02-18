@@ -137,6 +137,7 @@ export default function Tasks() {
   const [employees, setEmployees] = useState<EmployeeProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentProfileId, setCurrentProfileId] = useState<string | null>(null);
 
   // Detail drawer
   const [selectedTask, setSelectedTask] = useState<TaskRow | null>(null);
@@ -158,8 +159,17 @@ export default function Tasks() {
 
   // Fetch current user ID once
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setCurrentUserId(data.user?.id ?? null);
+    supabase.auth.getUser().then(async ({ data }) => {
+      const uid = data.user?.id ?? null;
+      setCurrentUserId(uid);
+      if (uid) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("id")
+          .eq("user_id", uid)
+          .single();
+        setCurrentProfileId(profile?.id ?? null);
+      }
     });
   }, []);
 
@@ -171,7 +181,6 @@ export default function Tasks() {
         supabase
           .from("tasks")
           .select("*, created_by_profile:profiles!tasks_created_by_profile_id_fkey(id, full_name)")
-          .eq("created_by_profile_id", NEEL_PROFILE_ID)
           .order("created_at", { ascending: false }),
         supabase
           .from("profiles")
@@ -282,7 +291,7 @@ export default function Tasks() {
         priority: newPriority,
         status: "open",
         company_id: companyRes.data?.company_id,
-        created_by_profile_id: NEEL_PROFILE_ID,
+        created_by_profile_id: currentProfileId,
       } as any).select().single();
 
       if (error) throw error;
@@ -335,7 +344,7 @@ export default function Tasks() {
       <header className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-border shrink-0">
         <div>
           <h1 className="text-xl font-semibold">Employee Tasks</h1>
-          <p className="text-sm text-muted-foreground">{tasks.length} task{tasks.length !== 1 ? "s" : ""} by Neel</p>
+          <p className="text-sm text-muted-foreground">{tasks.length} task{tasks.length !== 1 ? "s" : ""}</p>
         </div>
         <Button variant="ghost" size="icon" onClick={loadData} disabled={loading}>
           <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
