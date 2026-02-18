@@ -4,8 +4,10 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { RichMarkdown } from "@/components/chat/RichMarkdown";
+import { useDraggablePosition } from "@/hooks/useDraggablePosition";
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-chat`;
+const BTN_SIZE = 56;
 
 interface Msg {
   id: string;
@@ -21,6 +23,15 @@ export function PublicChatWidget() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  const { pos, handlers, wasDragged } = useDraggablePosition({
+    storageKey: "chat-widget-pos",
+    btnSize: BTN_SIZE,
+    defaultPos: () => ({
+      x: typeof window !== "undefined" ? window.innerWidth - BTN_SIZE - 16 : 300,
+      y: typeof window !== "undefined" ? window.innerHeight - BTN_SIZE - 16 : 300,
+    }),
+  });
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -126,11 +137,26 @@ export function PublicChatWidget() {
     }
   };
 
+  const handleBubblePointerUp = useCallback((e: React.PointerEvent) => {
+    handlers.onPointerUp(e);
+    if (!wasDragged.current) {
+      setOpen((prev) => !prev);
+    }
+  }, [handlers, wasDragged]);
+
+  // Position chat panel above the bubble
+  const panelStyle: React.CSSProperties = {
+    position: "fixed",
+    left: Math.min(pos.x - 350 + BTN_SIZE, window.innerWidth - 360),
+    top: Math.max(pos.y - 530, 8),
+    zIndex: 50,
+  };
+
   return (
     <>
       {/* Chat panel */}
       {open && (
-        <div className="fixed bottom-20 right-4 z-50 w-[350px] sm:w-[400px] max-h-[520px] rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 fade-in duration-200 border border-border/50 bg-card">
+        <div style={panelStyle} className="w-[350px] sm:w-[400px] max-h-[520px] rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 fade-in duration-200 border border-border/50 bg-card">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 bg-primary text-primary-foreground">
             <div className="flex items-center gap-2.5">
@@ -240,18 +266,21 @@ export function PublicChatWidget() {
         </div>
       )}
 
-      {/* Floating bubble */}
+      {/* Floating bubble — draggable */}
       <button
-        onClick={() => setOpen((prev) => !prev)}
+        onPointerDown={handlers.onPointerDown}
+        onPointerMove={handlers.onPointerMove}
+        onPointerUp={handleBubblePointerUp}
         className={cn(
-          "fixed bottom-4 right-4 z-50 w-14 h-14 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center",
+          "fixed z-50 w-14 h-14 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center cursor-grab active:cursor-grabbing select-none",
           open
             ? "bg-muted text-muted-foreground hover:bg-muted/80"
             : "bg-primary text-primary-foreground hover:scale-105"
         )}
+        style={{ left: pos.x, top: pos.y, touchAction: "none" }}
         aria-label="Open chat"
       >
-        {open ? <X className="w-5 h-5" /> : <MessageCircle className="w-6 h-6" />}
+        {open ? <X className="w-5 h-5 pointer-events-none" /> : <MessageCircle className="w-6 h-6 pointer-events-none" />}
       </button>
     </>
   );

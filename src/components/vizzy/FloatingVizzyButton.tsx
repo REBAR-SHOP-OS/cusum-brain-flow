@@ -1,41 +1,14 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Mic } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuth } from "@/lib/auth";
 import { getUserPrimaryAgent } from "@/lib/userAgentMap";
+import { useDraggablePosition } from "@/hooks/useDraggablePosition";
 import assistantHelper from "@/assets/helpers/assistant-helper.png";
 
-const STORAGE_KEY = "vizzy-btn-pos";
 const BTN_SIZE = 56;
-const DRAG_THRESHOLD = 5;
-
 const TOOLTIP_KEY = "vizzy-btn-tooltip-shown";
-
-function getDefaultPos(isMobile: boolean) {
-  const x = typeof window !== "undefined" ? window.innerWidth - BTN_SIZE - 24 : 300;
-  const y = typeof window !== "undefined"
-    ? window.innerHeight - BTN_SIZE - (isMobile ? 80 : 24)
-    : 300;
-  return { x, y };
-}
-
-function loadPos(isMobile: boolean) {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const p = JSON.parse(raw);
-      if (typeof p.x === "number" && typeof p.y === "number") return p;
-    }
-  } catch {}
-  return getDefaultPos(isMobile);
-}
-
-function clamp(x: number, y: number) {
-  const maxX = window.innerWidth - BTN_SIZE;
-  const maxY = window.innerHeight - BTN_SIZE;
-  return { x: Math.max(0, Math.min(x, maxX)), y: Math.max(0, Math.min(y, maxY)) };
-}
 
 export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
   function FloatingVizzyButton(_props, ref) {
@@ -47,13 +20,17 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
     const avatarImg = agent?.image || assistantHelper;
     const agentName = agent?.name || "Vizzy";
 
-    const [pos, setPos] = useState(() => loadPos(isMobile));
     const [showTooltip, setShowTooltip] = useState(false);
     const [showActions, setShowActions] = useState(isMobile);
-    const dragging = useRef(false);
-    const startPointer = useRef({ x: 0, y: 0 });
-    const startPos = useRef({ x: 0, y: 0 });
-    const moved = useRef(false);
+
+    const { pos, handlers, wasDragged } = useDraggablePosition({
+      storageKey: "vizzy-btn-pos",
+      btnSize: BTN_SIZE,
+      defaultPos: (mobile) => ({
+        x: typeof window !== "undefined" ? window.innerWidth - BTN_SIZE - 24 : 300,
+        y: typeof window !== "undefined" ? window.innerHeight - BTN_SIZE - (mobile ? 80 : 24) : 300,
+      }),
+    });
 
     // Show tooltip on first use
     useEffect(() => {
@@ -67,44 +44,9 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
       }
     }, []);
 
-    // Re-clamp on resize
-    useEffect(() => {
-      const onResize = () => setPos((p: { x: number; y: number }) => clamp(p.x, p.y));
-      window.addEventListener("resize", onResize);
-      return () => window.removeEventListener("resize", onResize);
-    }, []);
-
-    const onPointerDown = useCallback((e: React.PointerEvent) => {
-      dragging.current = true;
-      moved.current = false;
-      startPointer.current = { x: e.clientX, y: e.clientY };
-      startPos.current = { ...pos };
-      (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    }, [pos]);
-
-    const onPointerMove = useCallback((e: React.PointerEvent) => {
-      if (!dragging.current) return;
-      const dx = e.clientX - startPointer.current.x;
-      const dy = e.clientY - startPointer.current.y;
-      if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
-        moved.current = true;
-      }
-      const newPos = clamp(startPos.current.x + dx, startPos.current.y + dy);
-      setPos(newPos);
-    }, []);
-
-    const onPointerUp = useCallback((e: React.PointerEvent) => {
-      if (!dragging.current) return;
-      dragging.current = false;
-
-      if (moved.current) {
-        const final = clamp(
-          startPos.current.x + e.clientX - startPointer.current.x,
-          startPos.current.y + e.clientY - startPointer.current.y
-        );
-        setPos(final);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(final));
-      } else {
+    const handlePointerUp = useCallback((e: React.PointerEvent) => {
+      handlers.onPointerUp(e);
+      if (!wasDragged.current) {
         // Tap → navigate to text chat
         if (location.pathname === "/chat") {
           navigate(-1);
@@ -112,13 +54,12 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
           navigate("/chat");
         }
       }
-
       // Hide tooltip after first interaction
       if (showTooltip) {
         setShowTooltip(false);
         localStorage.setItem(TOOLTIP_KEY, "1");
       }
-    }, [location.pathname, navigate, showTooltip]);
+    }, [handlers, wasDragged, location.pathname, navigate, showTooltip]);
 
     const onMicClick = useCallback((e: React.MouseEvent) => {
       e.stopPropagation();
@@ -153,9 +94,9 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
         {/* Main avatar button */}
         <button
           ref={ref}
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
+          onPointerDown={handlers.onPointerDown}
+          onPointerMove={handlers.onPointerMove}
+          onPointerUp={handlePointerUp}
           className="cursor-grab active:cursor-grabbing select-none"
           aria-label={`Open ${agentName} AI Assistant`}
         >
