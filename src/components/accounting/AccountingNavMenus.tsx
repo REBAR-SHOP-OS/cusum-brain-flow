@@ -45,6 +45,7 @@ const menus: Menu[] = [
     label: "Accounting",
     items: [
       { label: "Chart of Accounts", tab: "accounts" },
+      { label: "Budget Management", tab: "budgets" },
       { label: "AI Audit", tab: "audit" },
       { type: "separator" },
       { label: "Payroll Corrections", tab: "payroll" },
