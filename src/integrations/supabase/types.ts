@@ -8977,6 +8977,47 @@ export type Database = {
           },
         ]
       }
+      task_audit_log: {
+        Row: {
+          action: string
+          actor_user_id: string | null
+          created_at: string
+          field: string | null
+          id: string
+          new_value: string | null
+          old_value: string | null
+          task_id: string
+        }
+        Insert: {
+          action: string
+          actor_user_id?: string | null
+          created_at?: string
+          field?: string | null
+          id?: string
+          new_value?: string | null
+          old_value?: string | null
+          task_id: string
+        }
+        Update: {
+          action?: string
+          actor_user_id?: string | null
+          created_at?: string
+          field?: string | null
+          id?: string
+          new_value?: string | null
+          old_value?: string | null
+          task_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_audit_log_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tasks: {
         Row: {
           agent_type: string | null
@@ -8985,6 +9026,7 @@ export type Database = {
           company_id: string
           completed_at: string | null
           created_at: string
+          created_by_profile_id: string | null
           customer_id: string | null
           description: string | null
           due_date: string | null
@@ -9004,6 +9046,7 @@ export type Database = {
           company_id: string
           completed_at?: string | null
           created_at?: string
+          created_by_profile_id?: string | null
           customer_id?: string | null
           description?: string | null
           due_date?: string | null
@@ -9023,6 +9066,7 @@ export type Database = {
           company_id?: string
           completed_at?: string | null
           created_at?: string
+          created_by_profile_id?: string | null
           customer_id?: string | null
           description?: string | null
           due_date?: string | null
@@ -9036,6 +9080,20 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "tasks_created_by_profile_id_fkey"
+            columns: ["created_by_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_created_by_profile_id_fkey"
+            columns: ["created_by_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles_safe"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "tasks_customer_id_fkey"
             columns: ["customer_id"]
