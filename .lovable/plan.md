@@ -1,67 +1,42 @@
 
 
-# Fix: Screenshot Button - Two Critical Issues
+# Fix: Screenshot Under 2 Seconds -- Target Only Visible Content
 
-## Issue 1: Button Not Clickable When Lead Drawer is Open
+## Problem
+`html2canvas(document.body, ...)` clones the ENTIRE page DOM (2800+ elements including sidebar, nav, off-screen cards). Even with pre-hiding, the clone operation itself is slow and blocks the main thread.
 
-**Root cause**: Radix UI Dialog (used by the Sheet component for lead detail drawer) sets `pointer-events: none` on the `<body>` element when a dialog is open. This blocks the fixed-position camera button from receiving any click/pointer events, even though it's visually on top (z-9999).
+## Solution
+Change the capture target from `document.body` to `document.getElementById("main-content")` -- the `<main>` element that wraps only the page content. This immediately reduces the DOM to just what the user sees.
 
-**Fix**: Add `pointerEvents: "auto"` to the button's inline style. This overrides the inherited `pointer-events: none` from the body, making the button clickable regardless of whether a Sheet/Dialog is open.
+## File: `src/components/feedback/ScreenshotFeedbackButton.tsx`
 
-## Issue 2: Still Freezing for 40 Seconds on Pipeline
+### Changes:
 
-**Root cause**: Even with `onclone` trimming, html2canvas still has to:
-1. Clone the entire `document.body` DOM (2800+ elements) BEFORE `onclone` runs
-2. The cloning itself blocks the main thread
-3. The `Promise.race` timeout cannot fire while the main thread is blocked
+1. **Change capture target**: Replace `document.body` with `document.getElementById("main-content") || document.body` in both `captureOnce` calls
+2. **Keep pre-hide logic** for safety (still helps if main-content has many off-screen cards in scrollable columns)
+3. **Adjust `width`/`height`** to use the target element's dimensions instead of `window.innerWidth/Height`
+4. **Remove `onclone` heavy trimming** -- no longer needed since we're not capturing the full body
 
-**Fix**: Instead of relying on `onclone` alone, change the capture **target** from `document.body` to just the visible main content area. On the Pipeline page, there are portaled elements (the Sheet drawer) that we also want to capture. The solution:
-
-1. Before calling html2canvas, clone only the visible portions manually into a temporary container
-2. Or simpler: keep targeting `document.body` but make the trimming much more aggressive -- remove ALL off-screen elements, not just specific selectors
-3. Most importantly: reduce the timeout to 5 seconds AND add a pre-capture DOM count check -- if DOM has more than 1500 elements, aggressively simplify BEFORE calling html2canvas (not just in onclone)
-
-**Chosen approach**: Keep the current architecture but add a pre-capture step that hides off-screen heavy elements on the LIVE DOM momentarily (via `visibility: hidden; display: none`), captures, then restores them. This is faster than relying on `onclone` because html2canvas won't even clone those hidden elements.
-
-## Technical Changes
-
-**File: `src/components/feedback/ScreenshotFeedbackButton.tsx`**
-
-1. Add `pointerEvents: "auto"` to button inline style (line 140)
-2. Before `html2canvas()` call, add pre-capture DOM trimming:
-   - Query all heavy off-screen elements in the LIVE DOM
-   - Set `display: none` on them temporarily
-   - Run html2canvas (now with far fewer elements to clone)
-   - Restore all hidden elements immediately after
-3. This moves the performance optimization BEFORE the blocking clone step
+### Technical Detail
 
 ```text
-Changes summary:
+Current (slow):
+  html2canvas(document.body, opts)  // clones sidebar + nav + 2800 cards
 
-Button style (line 140):
-  style={{ left: pos.x, top: pos.y, touchAction: "none", pointerEvents: "auto" }}
-
-capture function:
-  // Before html2canvas call:
-  const hiddenEls: HTMLElement[] = [];
-  if (isHeavyPage) {
-    const heavySelectors = '[draggable="true"], [class*="card"], [class*="lead-"], tr, li';
-    document.body.querySelectorAll(heavySelectors).forEach((el) => {
-      const r = el.getBoundingClientRect();
-      if (r.bottom < -50 || r.top > vpH + 50 || r.right < -50 || r.left > vpW + 50) {
-        (el as HTMLElement).style.display = "none";
-        hiddenEls.push(el as HTMLElement);
-      }
-    });
-  }
-  
-  // ... html2canvas call ...
-  
-  // After capture (in finally block):
-  hiddenEls.forEach(el => el.style.display = "");
+Fixed (fast):
+  const target = document.getElementById("main-content") || document.body;
+  const rect = target.getBoundingClientRect();
+  // opts use rect.width, rect.height
+  html2canvas(target, opts)  // clones only visible pipeline area
 ```
 
-## No Other Changes
-- No database changes
-- No changes to Sheet component, LeadDetailDrawer, AppLayout, or any other file
-- Only ScreenshotFeedbackButton.tsx is modified
+The `<main id="main-content">` element already exists in `AppLayout.tsx` and wraps exactly the page content area (no sidebar, no top nav). This gives html2canvas a much smaller DOM tree to clone and render.
+
+### What stays the same
+- `pointerEvents: "auto"` on button (keeps it clickable over drawers)
+- `useCORS: true`, `allowTaint: false`
+- Retry logic with fallback
+- Timeout safety net (5s)
+- Pre-hide off-screen elements (still useful for heavy scroll areas)
+- No changes to any other file
+
