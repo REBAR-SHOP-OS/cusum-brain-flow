@@ -6891,6 +6891,8 @@ RULES:
     const toolCalls = choice?.message?.tool_calls;
     const emailResults: { success: boolean; to?: string; error?: string }[] = [];
     const seoToolResults: { id: string; name: string; result: any }[] = [];
+    let dbWriteCount = 0;
+    const MAX_DB_WRITES_PER_TURN = 3;
     if (toolCalls && toolCalls.length > 0) {
       for (const tc of toolCalls) {
         // Handle send_email tool calls
@@ -8090,21 +8092,20 @@ RULES:
           try {
             const args = JSON.parse(tc.function.arguments || "{}");
             const query = (args.query || "").trim();
+            if (query.length > 4000) {
+              seoToolResults.push({ id: tc.id, name: "db_read_query", result: { error: "Query exceeds 4000 character limit." } });
+            } else {
             // Validate: only SELECT/WITH allowed
             const normalized = query.replace(/\/\*[\s\S]*?\*\//g, "").replace(/--[^\n]*/g, "").trim().toUpperCase();
             if (!normalized.startsWith("SELECT") && !normalized.startsWith("WITH")) {
               seoToolResults.push({ id: tc.id, name: "db_read_query", result: { error: "Only SELECT/WITH queries are allowed. Use db_write_fix for modifications." } });
             } else {
-              // Block any sneaky write attempts inside CTE
-              // Guard: only block multi-statement injections (semicolon + write keyword)
-              // Don't flag SELECT queries that merely reference write keywords in pg_policies/filters/strings
               const hasMultiStatement = /;\s*(INSERT|UPDATE|DELETE|DROP|TRUNCATE|ALTER|CREATE|GRANT|REVOKE)\b/i.test(query);
               if (hasMultiStatement) {
                 seoToolResults.push({ id: tc.id, name: "db_read_query", result: { error: "Multi-statement write detected. Use db_write_fix for modifications." } });
               } else {
                 const { data, error } = await svcClient.rpc("execute_readonly_query" as any, { sql_query: query });
                 if (error) {
-                  // Fallback: try raw query via postgres
                   try {
                     const rawResult = await fetch(`${Deno.env.get("SUPABASE_URL")}/rest/v1/rpc/execute_readonly_query`, {
                       method: "POST",
@@ -8117,7 +8118,10 @@ RULES:
                     });
                     if (rawResult.ok) {
                       const rawData = await rawResult.json();
-                      seoToolResults.push({ id: tc.id, name: "db_read_query", result: { success: true, rows: Array.isArray(rawData) ? rawData.slice(0, 50) : rawData, row_count: Array.isArray(rawData) ? Math.min(rawData.length, 50) : 1 } });
+                      const rawRows = Array.isArray(rawData) ? rawData.slice(0, 50) : rawData;
+                      const rawSerialized = JSON.stringify(rawRows);
+                      const safeRawRows = rawSerialized.length > 8000 ? (Array.isArray(rawData) ? rawData.slice(0, 10) : rawData) : rawRows;
+                      seoToolResults.push({ id: tc.id, name: "db_read_query", result: { success: true, rows: safeRawRows, row_count: Array.isArray(rawData) ? Math.min(rawData.length, 50) : 1 } });
                     } else {
                       seoToolResults.push({ id: tc.id, name: "db_read_query", result: { error: error.message } });
                     }
@@ -8126,9 +8130,12 @@ RULES:
                   }
                 } else {
                   const rows = Array.isArray(data) ? data.slice(0, 50) : data;
-                  seoToolResults.push({ id: tc.id, name: "db_read_query", result: { success: true, rows, row_count: Array.isArray(data) ? Math.min(data.length, 50) : 1 } });
+                  const serialized = JSON.stringify(rows);
+                  const safeRows = serialized.length > 8000 ? (Array.isArray(data) ? data.slice(0, 10) : data) : rows;
+                  seoToolResults.push({ id: tc.id, name: "db_read_query", result: { success: true, rows: safeRows, row_count: Array.isArray(data) ? Math.min(data.length, 50) : 1 } });
                 }
               }
+            }
             }
           } catch (e) {
             seoToolResults.push({ id: tc.id, name: "db_read_query", result: { error: e instanceof Error ? e.message : "db_read_query failed" } });
@@ -8143,15 +8150,23 @@ RULES:
             const reason = args.reason || "No reason provided";
             const confirm = args.confirm === true;
 
-            if (!confirm) {
+            if (dbWriteCount >= MAX_DB_WRITES_PER_TURN) {
+              seoToolResults.push({ id: tc.id, name: "db_write_fix", result: { error: `Write throttle: max ${MAX_DB_WRITES_PER_TURN} writes per turn reached. Send a new message to continue.` } });
+            } else if (query.length > 4000) {
+              seoToolResults.push({ id: tc.id, name: "db_write_fix", result: { error: "Query exceeds 4000 character limit." } });
+            } else if (!confirm) {
               seoToolResults.push({ id: tc.id, name: "db_write_fix", result: { error: "Safety flag: confirm must be true to execute write operations." } });
             } else {
+              // Multi-statement guard
+              const stmts = query.replace(/--[^\n]*/g, "").split(";").filter((s: string) => s.trim().length > 0);
+              if (stmts.length > 1) {
+                seoToolResults.push({ id: tc.id, name: "db_write_fix", result: { error: "Only single SQL statements allowed. Split into separate db_write_fix calls." } });
+              } else {
               // Block destructive patterns
               const destructive = /\b(DROP\s+TABLE|DROP\s+DATABASE|TRUNCATE\s+|ALTER\s+TABLE\s+\S+\s+DROP\s+)/i;
               if (destructive.test(query)) {
                 seoToolResults.push({ id: tc.id, name: "db_write_fix", result: { error: "Blocked: destructive operations (DROP TABLE, DROP DATABASE, TRUNCATE, ALTER TABLE...DROP) are not allowed." } });
               } else {
-                // Execute via service role
                 const execResult = await fetch(`${Deno.env.get("SUPABASE_URL")}/rest/v1/rpc/execute_write_fix`, {
                   method: "POST",
                   headers: {
@@ -8170,7 +8185,6 @@ RULES:
                   fixResult = { error: errText };
                 }
 
-                // Log to activity_events
                 await svcClient.from("activity_events").insert({
                   company_id: companyId,
                   entity_type: "database_fix",
@@ -8183,7 +8197,9 @@ RULES:
                   metadata: { query: query.substring(0, 1000), reason, success: !fixResult?.error },
                 }).catch(() => {});
 
+                dbWriteCount++;
                 seoToolResults.push({ id: tc.id, name: "db_write_fix", result: fixResult?.error ? { error: fixResult.error } : { success: true, message: `Fix applied: ${reason}`, result: fixResult } });
+              }
               }
             }
           } catch (e) {
@@ -8509,6 +8525,9 @@ RULES:
               try {
                 const args = JSON.parse(tc.function.arguments || "{}");
                 const query = (args.query || "").trim();
+                if (query.length > 4000) {
+                  seoToolResults.push({ id: tc.id, name: "db_read_query", result: { error: "Query exceeds 4000 character limit." } });
+                } else {
                 const normalized = query.replace(/\/\*[\s\S]*?\*\//g, "").replace(/--[^\n]*/g, "").trim().toUpperCase();
                 if (!normalized.startsWith("SELECT") && !normalized.startsWith("WITH")) {
                   seoToolResults.push({ id: tc.id, name: "db_read_query", result: { error: "Only SELECT/WITH queries are allowed. Use db_write_fix for modifications." } });
@@ -8531,7 +8550,10 @@ RULES:
                         });
                         if (rawResult.ok) {
                           const rawData = await rawResult.json();
-                          seoToolResults.push({ id: tc.id, name: "db_read_query", result: { success: true, rows: Array.isArray(rawData) ? rawData.slice(0, 50) : rawData, row_count: Array.isArray(rawData) ? Math.min(rawData.length, 50) : 1 } });
+                          const rawRows = Array.isArray(rawData) ? rawData.slice(0, 50) : rawData;
+                          const rawSerialized = JSON.stringify(rawRows);
+                          const safeRawRows = rawSerialized.length > 8000 ? (Array.isArray(rawData) ? rawData.slice(0, 10) : rawData) : rawRows;
+                          seoToolResults.push({ id: tc.id, name: "db_read_query", result: { success: true, rows: safeRawRows, row_count: Array.isArray(rawData) ? Math.min(rawData.length, 50) : 1 } });
                         } else {
                           seoToolResults.push({ id: tc.id, name: "db_read_query", result: { error: error.message } });
                         }
@@ -8540,9 +8562,12 @@ RULES:
                       }
                     } else {
                       const rows = Array.isArray(data) ? data.slice(0, 50) : data;
-                      seoToolResults.push({ id: tc.id, name: "db_read_query", result: { success: true, rows, row_count: Array.isArray(data) ? Math.min(data.length, 50) : 1 } });
+                      const serialized = JSON.stringify(rows);
+                      const safeRows = serialized.length > 8000 ? (Array.isArray(data) ? data.slice(0, 10) : data) : rows;
+                      seoToolResults.push({ id: tc.id, name: "db_read_query", result: { success: true, rows: safeRows, row_count: Array.isArray(data) ? Math.min(data.length, 50) : 1 } });
                     }
                   }
+                }
                 }
               } catch (e) {
                 seoToolResults.push({ id: tc.id, name: "db_read_query", result: { error: e instanceof Error ? e.message : "db_read_query failed" } });
@@ -8556,9 +8581,17 @@ RULES:
                 const query = (args.query || "").trim();
                 const reason = args.reason || "No reason provided";
                 const confirm = args.confirm === true;
-                if (!confirm) {
+                if (dbWriteCount >= MAX_DB_WRITES_PER_TURN) {
+                  seoToolResults.push({ id: tc.id, name: "db_write_fix", result: { error: `Write throttle: max ${MAX_DB_WRITES_PER_TURN} writes per turn reached. Send a new message to continue.` } });
+                } else if (query.length > 4000) {
+                  seoToolResults.push({ id: tc.id, name: "db_write_fix", result: { error: "Query exceeds 4000 character limit." } });
+                } else if (!confirm) {
                   seoToolResults.push({ id: tc.id, name: "db_write_fix", result: { error: "Safety flag: confirm must be true to execute write operations." } });
                 } else {
+                  const stmts = query.replace(/--[^\n]*/g, "").split(";").filter((s: string) => s.trim().length > 0);
+                  if (stmts.length > 1) {
+                    seoToolResults.push({ id: tc.id, name: "db_write_fix", result: { error: "Only single SQL statements allowed. Split into separate db_write_fix calls." } });
+                  } else {
                   const destructive = /\b(DROP\s+TABLE|DROP\s+DATABASE|TRUNCATE\s+|ALTER\s+TABLE\s+\S+\s+DROP\s+)/i;
                   if (destructive.test(query)) {
                     seoToolResults.push({ id: tc.id, name: "db_write_fix", result: { error: "Blocked: destructive operations (DROP TABLE, DROP DATABASE, TRUNCATE, ALTER TABLE...DROP) are not allowed." } });
@@ -8581,7 +8614,9 @@ RULES:
                       actor_id: user.id, actor_type: "architect", source: "architect_db_fix",
                       metadata: { query: query.substring(0, 1000), reason, success: !fixResult?.error },
                     }).catch(() => {});
+                    dbWriteCount++;
                     seoToolResults.push({ id: tc.id, name: "db_write_fix", result: fixResult?.error ? { error: fixResult.error } : { success: true, message: `Fix applied: ${reason}`, result: fixResult } });
+                  }
                   }
                 }
               } catch (e) {
