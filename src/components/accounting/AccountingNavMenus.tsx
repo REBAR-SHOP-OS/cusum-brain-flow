@@ -60,6 +60,7 @@ const menus: Menu[] = [
       { type: "separator" },
       { type: "label", label: "HR" },
       { label: "Employee Contracts & Certs", tab: "employee-contracts" },
+      { label: "Recruitment Pipeline", tab: "recruitment" },
     ],
   },
   {
