@@ -14,6 +14,7 @@ interface LeadCardProps {
   onEdit: (lead: Lead) => void;
   onDelete: (id: string) => void;
   onClick: (lead: LeadWithCustomer) => void;
+  hasAIAction?: boolean;
 }
 
 // Odoo-style activity status: overdue=red, today=orange, future=green, none=grey
@@ -71,7 +72,7 @@ function getNameColor(name: string): string {
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
-export function LeadCard({ lead, onDragStart, onDragEnd, onEdit, onDelete, onClick }: LeadCardProps) {
+export function LeadCard({ lead, onDragStart, onDragEnd, onEdit, onDelete, onClick, hasAIAction = false }: LeadCardProps) {
   const stars = getPriorityStars(lead);
   const salesperson = getSalesperson(lead);
   const meta = lead.metadata as Record<string, unknown> | null;
@@ -89,7 +90,14 @@ export function LeadCard({ lead, onDragStart, onDragEnd, onEdit, onDelete, onCli
       onClick={() => onClick(lead)}
       className="cursor-grab active:cursor-grabbing hover:shadow-md transition-all"
     >
-      <CardContent className="p-3 space-y-1.5">
+      <CardContent className="p-3 space-y-1.5 relative">
+        {/* AI action indicator */}
+        {hasAIAction && (
+          <span
+            className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-orange-500 animate-pulse"
+            title="AI action pending"
+          />
+        )}
         {/* Title + email source badge */}
         <div className="flex items-start gap-1">
           <p className="font-medium text-sm leading-tight line-clamp-2 flex-1">{displayTitle}</p>

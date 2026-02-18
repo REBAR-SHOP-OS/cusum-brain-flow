@@ -4897,6 +4897,56 @@ export type Database = {
           },
         ]
       }
+      pipeline_ai_actions: {
+        Row: {
+          action_type: string
+          ai_reasoning: string | null
+          company_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          lead_id: string
+          priority: string
+          status: string
+          suggested_data: Json | null
+          updated_at: string
+        }
+        Insert: {
+          action_type: string
+          ai_reasoning?: string | null
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          lead_id: string
+          priority?: string
+          status?: string
+          suggested_data?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          action_type?: string
+          ai_reasoning?: string | null
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          lead_id?: string
+          priority?: string
+          status?: string
+          suggested_data?: Json | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pipeline_ai_actions_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pipeline_stage_order: {
         Row: {
           company_id: string

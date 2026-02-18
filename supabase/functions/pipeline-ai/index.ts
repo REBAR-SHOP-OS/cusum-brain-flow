@@ -416,6 +416,51 @@ ${odooSnapshot}`;
       });
     }
 
+    // ── autopilot_scan ──
+    if (action === "autopilot_scan") {
+      const statsJson = JSON.stringify(pipelineStats || {}, null, 2);
+      const scanPrompt = `You are analyzing the entire pipeline to identify leads that need attention. Stats:\n\n${statsJson}\n\nFor each lead that needs action, return a suggestion. Focus on:\n1. Stale leads (no update in 7+ days) → flag_stale\n2. Leads stuck too long in estimation stages → move_stage\n3. Hot leads without recent follow-up → send_followup\n4. Leads with no activity scheduled → set_reminder\n5. Leads that should be scored/re-scored → score_update\n\nReturn the top 10 most important suggestions.`;
+
+      const data = await callAI(
+        [{ role: "system", content: enrichedSystemPrompt }, { role: "user", content: scanPrompt }],
+        [{
+          type: "function",
+          function: {
+            name: "autopilot_suggestions",
+            description: "Return AI autopilot suggestions for pipeline leads",
+            parameters: {
+              type: "object",
+              properties: {
+                suggestions: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      lead_id: { type: "string", description: "UUID of the lead" },
+                      action_type: { type: "string", enum: ["move_stage", "send_followup", "set_reminder", "flag_stale", "score_update"] },
+                      priority: { type: "string", enum: ["critical", "high", "medium", "low"] },
+                      reasoning: { type: "string", description: "Why this action is suggested" },
+                      suggested_data: { type: "object", description: "Additional data like target_stage, email_draft, score, etc." },
+                    },
+                    required: ["lead_id", "action_type", "priority", "reasoning"],
+                    additionalProperties: false,
+                  },
+                },
+              },
+              required: ["suggestions"],
+              additionalProperties: false,
+            },
+          },
+        }],
+        { type: "function", function: { name: "autopilot_suggestions" } }
+      );
+
+      const result = extractToolResult(data) || { suggestions: [] };
+      return new Response(JSON.stringify(result), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // ── analyze (free-form) ──
     if (action === "analyze") {
       const prompt = `The user asks about this lead:\n\n${context}\n\nUser question: ${userMessage || "Give me a full analysis of this lead."}\n\nProvide a thorough, actionable answer. Use markdown formatting.`;

@@ -2,14 +2,18 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Plus, Mail, Loader2, Sparkles, RefreshCw, Pickaxe, MoreVertical } from "lucide-react";
+import { Plus, Mail, Loader2, Sparkles, RefreshCw, Pickaxe, MoreVertical, Bot } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { PipelineBoard } from "@/components/pipeline/PipelineBoard";
 import { LeadFormModal } from "@/components/pipeline/LeadFormModal";
 import { LeadDetailDrawer } from "@/components/pipeline/LeadDetailDrawer";
 import { PipelineFilters, DEFAULT_FILTERS, type PipelineFilterState, type GroupByOption } from "@/components/pipeline/PipelineFilters";
 import { PipelineAISheet } from "@/components/pipeline/PipelineAISheet";
+import { PipelineAIActions } from "@/components/pipeline/PipelineAIActions";
+import { usePipelineAI } from "@/hooks/usePipelineAI";
 import { useToast } from "@/hooks/use-toast";
 import { useUserRole } from "@/hooks/useUserRole";
 import { usePipelineStageOrder } from "@/hooks/usePipelineStageOrder";
@@ -77,6 +81,7 @@ export default function Pipeline() {
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isScanningRfq, setIsScanningRfq] = useState(false);
   const [isSyncingOdoo, setIsSyncingOdoo] = useState(false);
+  const [aiMode, setAiMode] = useState(() => localStorage.getItem("pipeline_ai_mode") === "true");
   
   const [pipelineFilters, setPipelineFilters] = useState<PipelineFilterState>({ ...DEFAULT_FILTERS });
   const [groupBy, setGroupBy] = useState<GroupByOption>("none");
@@ -86,8 +91,25 @@ export default function Pipeline() {
   const { orderedStages, saveOrder, canReorder } = usePipelineStageOrder();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  
+  // AI Autopilot hook
+  const {
+    actions: aiActions,
+    isLoading: aiLoading,
+    isScanning,
+    runScan,
+    approveAction,
+    dismissAction,
+    executeAction,
+    approveAll,
+    dismissAll,
+    pendingCount,
+  } = usePipelineAI(aiMode);
 
-  // Smart search: parse query, apply filter tokens, debounce remaining text
+  const toggleAiMode = (on: boolean) => {
+    setAiMode(on);
+    localStorage.setItem("pipeline_ai_mode", on.toString());
+  };
   useEffect(() => {
     const parsed = parseSmartSearch(searchQuery);
     setSmartResult(parsed);
@@ -369,6 +391,50 @@ export default function Pipeline() {
   };
 
 
+  // Build pipeline stats for AI scan
+  const pipelineStats = useMemo(() => {
+    const stats: Record<string, unknown> = {};
+    const stages = PIPELINE_STAGES.map((s) => {
+      const stageLeads = leadsByStage[s.id] || [];
+      return {
+        id: s.id,
+        label: s.label,
+        count: stageLeads.length,
+        totalRevenue: stageLeads.reduce((sum, l) => sum + ((l.expected_value as number) || 0), 0),
+        leads: stageLeads.slice(0, 5).map((l) => ({
+          id: l.id,
+          title: l.title,
+          customer: l.customers?.name || l.customers?.company_name || "Unknown",
+          updated_at: l.updated_at,
+          expected_value: l.expected_value,
+          stage: l.stage,
+        })),
+      };
+    });
+    stats.stages = stages;
+    stats.totalLeads = filteredLeads.length;
+    return stats;
+  }, [leadsByStage, filteredLeads]);
+
+  const handleExecuteAIAction = (action: any) => {
+    const data = action.suggested_data as Record<string, unknown>;
+    if (action.action_type === "move_stage" && data?.target_stage) {
+      executeAction({
+        actionId: action.id,
+        onExecute: async () => {
+          handleStageChange(action.lead_id, data.target_stage as string);
+        },
+      });
+    } else {
+      executeAction({
+        actionId: action.id,
+        onExecute: async () => {
+          // Generic execute — just mark as executed
+        },
+      });
+    }
+  };
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -384,7 +450,26 @@ export default function Pipeline() {
             </div>
           </div>
 
-          {/* Overflow actions menu — keeps header clean like Odoo */}
+          {/* AI Mode Toggle */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Manual</span>
+            <Switch
+              checked={aiMode}
+              onCheckedChange={toggleAiMode}
+              className="data-[state=checked]:bg-primary"
+            />
+            <div className="flex items-center gap-1">
+              <Bot className="w-3.5 h-3.5 text-primary" />
+              <span className="text-xs font-medium">AI</span>
+              {pendingCount > 0 && (
+                <Badge variant="destructive" className="text-[10px] h-4 px-1 ml-0.5">
+                  {pendingCount}
+                </Badge>
+              )}
+            </div>
+          </div>
+
+          {/* Overflow actions menu */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="sm" className="h-8 px-2">
@@ -430,19 +515,38 @@ export default function Pipeline() {
         />
       </header>
 
-      {/* Pipeline Board */}
-      <div className="flex-1 overflow-hidden">
-        <PipelineBoard
-          stages={orderedStages}
-          leadsByStage={leadsByStage}
-          isLoading={isLoading}
-          onStageChange={handleStageChange}
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-          onLeadClick={handleLeadClick}
-          canReorder={canReorder}
-          onReorder={saveOrder}
-        />
+      {/* Pipeline Board + AI Panel */}
+      <div className="flex-1 overflow-hidden flex">
+        <div className="flex-1 overflow-hidden">
+          <PipelineBoard
+            stages={orderedStages}
+            leadsByStage={leadsByStage}
+            isLoading={isLoading}
+            onStageChange={handleStageChange}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+            onLeadClick={handleLeadClick}
+            canReorder={canReorder}
+            onReorder={saveOrder}
+            aiMode={aiMode}
+            aiActionLeadIds={new Set(aiActions.filter(a => a.status === "pending").map(a => a.lead_id))}
+          />
+        </div>
+
+        {/* AI Autopilot Panel */}
+        {aiMode && (
+          <PipelineAIActions
+            actions={aiActions}
+            isLoading={aiLoading}
+            isScanning={isScanning}
+            onScan={() => runScan(pipelineStats)}
+            onApprove={approveAction}
+            onDismiss={dismissAction}
+            onApproveAll={approveAll}
+            onDismissAll={dismissAll}
+            onExecuteAction={handleExecuteAIAction}
+          />
+        )}
       </div>
 
       {/* Form Modal */}
