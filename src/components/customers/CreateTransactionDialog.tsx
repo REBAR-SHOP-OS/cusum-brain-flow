@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompanyId } from "@/hooks/useCompanyId";
@@ -17,6 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
+import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { Plus, Trash2, Loader2, ChevronDown } from "lucide-react";
 
@@ -71,11 +72,30 @@ const LABELS: Record<TransactionType, string> = {
 
 const TERMS_OPTIONS = ["Net 15", "Net 30", "Net 60", "Due on receipt"];
 
+const PAYMENT_METHODS = [
+  { value: "1", label: "Cash" },
+  { value: "2", label: "Check" },
+  { value: "3", label: "Credit Card" },
+  { value: "4", label: "E-Transfer" },
+  { value: "5", label: "Direct Deposit" },
+  { value: "other", label: "Other" },
+];
+
 const needsLineItems = (t: TransactionType) =>
   t !== "Payment";
 
 const showDetails = (t: TransactionType) =>
   t === "Invoice" || t === "Estimate";
+
+// ── Outstanding item row parsed from accounting_mirror ──
+interface OutstandingItem {
+  qbId: string;
+  entityType: string;
+  docNumber: string;
+  date: string;
+  originalAmount: number;
+  openBalance: number;
+}
 
 export function CreateTransactionDialog({
   open,
@@ -111,6 +131,11 @@ export function CreateTransactionDialog({
   const [poNumber, setPoNumber] = useState("");
   const [salesRep, setSalesRep] = useState("");
 
+  // Payment-specific state
+  const [paymentMethodValue, setPaymentMethodValue] = useState("");
+  const [outstandingFilter, setOutstandingFilter] = useState<"all" | "Invoice" | "CreditMemo">("all");
+  const [selectedItems, setSelectedItems] = useState<Record<string, number>>({}); // qbId -> applied amount
+
   // Fetch QB items for product picker
   const { data: qbItems } = useQuery({
     queryKey: ["qb_items_for_picker", companyId],
@@ -139,6 +164,79 @@ export function CreateTransactionDialog({
     enabled: !!companyId && open,
     staleTime: 5 * 60 * 1000,
   });
+
+  // Fetch outstanding invoices / credit memos for Payment type
+  const { data: outstandingRaw } = useQuery({
+    queryKey: ["outstanding-items", customerQbId, companyId],
+    queryFn: async () => {
+      if (!companyId) return [];
+      const { data, error } = await supabase
+        .from("accounting_mirror")
+        .select("quickbooks_id, entity_type, balance, data")
+        .eq("company_id", companyId)
+        .in("entity_type", ["Invoice", "CreditMemo"])
+        .gt("balance", 0);
+      if (error) throw error;
+      // Filter client-side by CustomerRef.value matching customerQbId
+      return (data || []).filter((row) => {
+        const d = row.data as Record<string, unknown>;
+        const custRef = d.CustomerRef as Record<string, unknown> | undefined;
+        return custRef?.value === customerQbId;
+      });
+    },
+    enabled: type === "Payment" && !!companyId && !!customerQbId && open,
+    staleTime: 30_000,
+  });
+
+  const outstandingItems = useMemo<OutstandingItem[]>(() => {
+    if (!outstandingRaw) return [];
+    return outstandingRaw.map((row) => {
+      const d = row.data as Record<string, unknown>;
+      return {
+        qbId: row.quickbooks_id,
+        entityType: row.entity_type,
+        docNumber: (d.DocNumber as string) || "—",
+        date: (d.TxnDate as string) || "",
+        originalAmount: (d.TotalAmt as number) || 0,
+        openBalance: row.balance ?? 0,
+      };
+    });
+  }, [outstandingRaw]);
+
+  const filteredOutstanding = useMemo(
+    () => outstandingFilter === "all"
+      ? outstandingItems
+      : outstandingItems.filter((i) => i.entityType === outstandingFilter),
+    [outstandingItems, outstandingFilter]
+  );
+
+  // Sync payment amount from selected items
+  const appliedTotal = useMemo(
+    () => Object.values(selectedItems).reduce((s, v) => s + v, 0),
+    [selectedItems]
+  );
+
+  useEffect(() => {
+    if (type === "Payment" && Object.keys(selectedItems).length > 0) {
+      setPaymentAmount(appliedTotal);
+    }
+  }, [appliedTotal, type, selectedItems]);
+
+  const toggleItem = (item: OutstandingItem) => {
+    setSelectedItems((prev) => {
+      const next = { ...prev };
+      if (next[item.qbId] !== undefined) {
+        delete next[item.qbId];
+      } else {
+        next[item.qbId] = item.openBalance;
+      }
+      return next;
+    });
+  };
+
+  const updateAppliedAmount = (qbId: string, amount: number) => {
+    setSelectedItems((prev) => ({ ...prev, [qbId]: amount }));
+  };
 
   const activeProducts = useMemo(() => qbItems || [], [qbItems]);
 
@@ -204,6 +302,15 @@ export function CreateTransactionDialog({
 
       if (type === "Payment") {
         body.totalAmount = paymentAmount;
+        if (paymentMethodValue) body.paymentMethod = paymentMethodValue;
+
+        // Build invoiceLines from selected outstanding items
+        const invoiceLines = Object.entries(selectedItems)
+          .filter(([, amt]) => amt > 0)
+          .map(([qbId, amt]) => ({ invoiceId: qbId, amount: amt }));
+        if (invoiceLines.length > 0) {
+          body.invoiceLines = invoiceLines;
+        }
       }
       if (needsLineItems(type) && taxEnabled && safeTaxRate > 0) {
         body.taxRate = safeTaxRate / 100;
@@ -262,6 +369,9 @@ export function CreateTransactionDialog({
       setPoNumber("");
       setSalesRep("");
       setDetailsOpen(false);
+      setPaymentMethodValue("");
+      setOutstandingFilter("all");
+      setSelectedItems({});
     } catch (err: any) {
       toast({
         title: "Failed to create transaction",
@@ -274,7 +384,6 @@ export function CreateTransactionDialog({
   };
 
   const hasProducts = activeProducts.length > 0;
-  // Column layout: Product?(140) | Desc(1fr) | SvcDate(100) | Qty(80) | UnitPrice(100) | Amount(90) | Del(36)
   const gridCols = hasProducts
     ? "grid-cols-[140px_1fr_100px_80px_100px_90px_36px]"
     : "grid-cols-[1fr_100px_80px_100px_90px_36px]";
@@ -290,18 +399,104 @@ export function CreateTransactionDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-2">
+          {/* ── Payment-specific: Payment Method + Outstanding Items ── */}
           {type === "Payment" && (
-            <div className="space-y-1.5">
-              <Label>Payment Amount ($)</Label>
-              <Input
-                type="number"
-                min={0}
-                step={0.01}
-                value={paymentAmount || ""}
-                onChange={(e) => setPaymentAmount(Number(e.target.value))}
-                placeholder="0.00"
-              />
-            </div>
+            <>
+              <div className="space-y-1.5">
+                <Label>Payment Method</Label>
+                <Select value={paymentMethodValue} onValueChange={setPaymentMethodValue}>
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="Select payment method…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PAYMENT_METHODS.map((m) => (
+                      <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Payment Amount ($)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  value={paymentAmount || ""}
+                  onChange={(e) => setPaymentAmount(Number(e.target.value))}
+                  placeholder="0.00"
+                />
+              </div>
+
+              {/* Outstanding Items */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>Outstanding Transactions</Label>
+                  <Select
+                    value={outstandingFilter}
+                    onValueChange={(v) => setOutstandingFilter(v as "all" | "Invoice" | "CreditMemo")}
+                  >
+                    <SelectTrigger className="h-8 w-[160px] text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Outstanding</SelectItem>
+                      <SelectItem value="Invoice">Invoices</SelectItem>
+                      <SelectItem value="CreditMemo">Credit Memos</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="border border-border rounded-lg overflow-hidden">
+                  {/* Header */}
+                  <div className="grid grid-cols-[28px_1fr_80px_70px_90px_90px] gap-2 px-3 py-2 bg-muted/50 text-xs font-medium text-muted-foreground">
+                    <span />
+                    <span>Date</span>
+                    <span>Type</span>
+                    <span>Doc #</span>
+                    <span className="text-right">Original</span>
+                    <span className="text-right">Applied</span>
+                  </div>
+                  {filteredOutstanding.length === 0 && (
+                    <div className="px-3 py-4 text-center text-sm text-muted-foreground">
+                      No outstanding items found
+                    </div>
+                  )}
+                  {filteredOutstanding.map((item) => {
+                    const isSelected = selectedItems[item.qbId] !== undefined;
+                    return (
+                      <div
+                        key={item.qbId}
+                        className="grid grid-cols-[28px_1fr_80px_70px_90px_90px] gap-2 px-3 py-1.5 border-t border-border items-center"
+                      >
+                        <Checkbox
+                          checked={isSelected}
+                          onCheckedChange={() => toggleItem(item)}
+                        />
+                        <span className="text-sm truncate">{item.date || "—"}</span>
+                        <span className="text-xs text-muted-foreground">{item.entityType === "CreditMemo" ? "Credit Memo" : "Invoice"}</span>
+                        <span className="text-sm">{item.docNumber}</span>
+                        <span className="text-sm text-right">${item.openBalance.toFixed(2)}</span>
+                        <Input
+                          type="number"
+                          min={0}
+                          step={0.01}
+                          className="h-7 text-xs text-right"
+                          disabled={!isSelected}
+                          value={isSelected ? selectedItems[item.qbId] : ""}
+                          onChange={(e) => updateAppliedAmount(item.qbId, Number(e.target.value))}
+                        />
+                      </div>
+                    );
+                  })}
+                  {filteredOutstanding.length > 0 && (
+                    <div className="flex items-center justify-end px-3 py-2 border-t border-border bg-muted/30">
+                      <span className="text-sm font-medium">Applied Total: ${appliedTotal.toFixed(2)}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
           )}
 
           {(type === "Invoice" || type === "Estimate") && (
