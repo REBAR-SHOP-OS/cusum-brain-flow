@@ -130,24 +130,14 @@ Has recording: ${meeting.recording_url ? "Yes" : "No"}
 ${fullContext || "No transcript or chat data available."}
 `;
 
-    // AI summarization
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
-
-    const aiResponse = await fetch(
-      "https://ai.gateway.lovable.dev/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
-          messages: [
-            {
-              role: "system",
-              content: `You are an AI meeting assistant for a steel/rebar manufacturing company.
+    // GPT-4o: complex structured JSON extraction from meeting context
+    const result = await callAI({
+      provider: "gpt",
+      model: "gpt-4o",
+      messages: [
+        {
+          role: "system",
+          content: `You are an AI meeting assistant for a steel/rebar manufacturing company.
 Generate a comprehensive CEO meeting report in JSON (no markdown fences):
 {
   "executiveSummary": "2-4 sentence high-level overview",
@@ -164,24 +154,16 @@ Rules:
 - Mark confidence on each action item (1.0 = explicitly stated, 0.5 = inferred)
 - If no clear data, be honest about what's missing
 - Focus on business-relevant takeaways`,
-            },
-            {
-              role: "user",
-              content: `Generate the CEO report for this meeting:\n\n${meetingContext}`,
-            },
-          ],
-          temperature: 0.4,
-        }),
-      }
-    );
+        },
+        {
+          role: "user",
+          content: `Generate the CEO report for this meeting:\n\n${meetingContext}`,
+        },
+      ],
+      temperature: 0.4,
+    });
 
-    if (!aiResponse.ok) {
-      const errText = await aiResponse.text();
-      throw new Error(`AI gateway error: ${aiResponse.status}`);
-    }
-
-    const aiData = await aiResponse.json();
-    const rawContent = aiData.choices?.[0]?.message?.content || "";
+    const rawContent = result.content;
 
     let parsed: any;
     try {

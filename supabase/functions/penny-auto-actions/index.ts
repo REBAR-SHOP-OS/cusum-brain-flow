@@ -232,7 +232,7 @@ serve(async (req) => {
   }
 });
 
-// AI-powered email draft generation via Lovable AI Gateway
+// AI-powered email draft generation — GPT for customer-facing writing
 async function generateAIDraft(
   customer: string,
   invoices: { docNumber: string; balance: number; daysOverdue: number }[],
@@ -240,31 +240,22 @@ async function generateAIDraft(
   maxDays: number,
   type: string,
 ): Promise<{ subject: string; body: string }> {
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  if (!LOVABLE_API_KEY) throw new Error("No API key");
-
+  const { callAI } = await import("../_shared/aiRouter.ts");
   const invoiceDetails = invoices.map(i => `Invoice #${i.docNumber}: $${i.balance.toLocaleString()}, ${i.daysOverdue} days overdue`).join("\n");
   const tone = type === "send_invoice" ? "firm but professional" : "friendly and polite";
 
-  const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "google/gemini-2.5-flash-lite",
-      messages: [
-        { role: "system", content: `You are an AR collections assistant for a Canadian rebar manufacturing company. Write ${tone} collection emails. Be concise. Output ONLY valid JSON with "subject" and "body" keys. The body should be plain text (no HTML).` },
-        { role: "user", content: `Write a collection email to ${customer} for:\n${invoiceDetails}\n\nTotal outstanding: $${totalAmount.toLocaleString()}\nOldest overdue: ${maxDays} days\n\nSign off as the Accounts Receivable team at Rebar.shop.` },
-      ],
-      temperature: 0.3,
-      max_tokens: 800,
-    }),
+  const result = await callAI({
+    provider: "gpt",
+    model: "gpt-4o-mini",
+    messages: [
+      { role: "system", content: `You are an AR collections assistant for a Canadian rebar manufacturing company. Write ${tone} collection emails. Be concise. Output ONLY valid JSON with "subject" and "body" keys. The body should be plain text (no HTML).` },
+      { role: "user", content: `Write a collection email to ${customer} for:\n${invoiceDetails}\n\nTotal outstanding: $${totalAmount.toLocaleString()}\nOldest overdue: ${maxDays} days\n\nSign off as the Accounts Receivable team at Rebar.shop.` },
+    ],
+    temperature: 0.3,
+    maxTokens: 800,
   });
 
-  if (!resp.ok) throw new Error(`AI gateway error: ${resp.status}`);
-  const data = await resp.json();
-  const content = data.choices?.[0]?.message?.content || "";
-  
-  // Parse JSON from response (handle markdown code blocks)
+  const content = result.content;
   const jsonMatch = content.match(/\{[\s\S]*\}/);
   if (jsonMatch) {
     const parsed = JSON.parse(jsonMatch[0]);
@@ -280,28 +271,21 @@ async function generateAICallScript(
   totalAmount: number,
   maxDays: number,
 ): Promise<string> {
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  if (!LOVABLE_API_KEY) throw new Error("No API key");
-
+  const { callAI } = await import("../_shared/aiRouter.ts");
   const invoiceDetails = invoices.map(i => `Invoice #${i.docNumber}: $${i.balance.toLocaleString()}, ${i.daysOverdue} days overdue`).join("\n");
 
-  const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "google/gemini-2.5-flash-lite",
-      messages: [
-        { role: "system", content: "You are an AR collections assistant for a Canadian rebar company. Write a brief, professional phone call script for collecting overdue payments. Include opening, key talking points, and voicemail script. Plain text only." },
-        { role: "user", content: `Write a call script for collecting from ${customer}:\n${invoiceDetails}\n\nTotal: $${totalAmount.toLocaleString()}\nOldest overdue: ${maxDays} days` },
-      ],
-      temperature: 0.3,
-      max_tokens: 600,
-    }),
+  const result = await callAI({
+    provider: "gpt",
+    model: "gpt-4o-mini",
+    messages: [
+      { role: "system", content: "You are an AR collections assistant for a Canadian rebar company. Write a brief, professional phone call script for collecting overdue payments. Include opening, key talking points, and voicemail script. Plain text only." },
+      { role: "user", content: `Write a call script for collecting from ${customer}:\n${invoiceDetails}\n\nTotal: $${totalAmount.toLocaleString()}\nOldest overdue: ${maxDays} days` },
+    ],
+    temperature: 0.3,
+    maxTokens: 600,
   });
 
-  if (!resp.ok) throw new Error(`AI gateway error: ${resp.status}`);
-  const data = await resp.json();
-  return data.choices?.[0]?.message?.content || generateCallScriptFallback(customer, invoices, totalAmount, maxDays);
+  return result.content || generateCallScriptFallback(customer, invoices, totalAmount, maxDays);
 }
 
 // Fallback templates (used when AI generation fails)
