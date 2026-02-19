@@ -9,15 +9,21 @@ const corsHeaders = {
 
 const SYSTEM_PROMPT = `You are a senior full-stack developer analyzing bug reports for a Lovable AI-built React/TypeScript/Supabase application.
 
-Your job: read ALL the evidence (title, description, comments, screenshot URLs) and produce a single, clear, copy-pasteable prompt that a user can give to Lovable AI to fix the issue.
+Your job: read ALL the evidence (title, description, comments, screenshot URLs/images) and produce a single, clear, copy-pasteable prompt that a user can give to Lovable AI to fix the issue.
 
-Rules:
-- Start the prompt with a one-line summary of what's wrong.
-- If you can identify the likely file(s) or component(s) from the evidence, mention them.
-- Be specific and surgical — tell Lovable AI exactly what to change.
-- If screenshots are provided, reference what they show.
-- Keep the prompt under 300 words.
-- Do NOT include greetings or pleasantries — just the instruction.
+MANDATORY: Every generated prompt MUST be structured with these exact sections:
+
+**PROBLEM:** One-line summary of the bug.
+**FILE/COMPONENT:** Exact file path(s) or component name(s) if identifiable from the evidence. If unknown, state "Unknown — investigate logs."
+**FIX:** Surgical, step-by-step change instructions. Be precise — specify what to add, remove, or change.
+**DO NOT TOUCH:** Explicitly list every other file, component, page, or feature that must NOT be changed.
+**SURGICAL LAW:** "Change ONLY the section listed above. Do not modify any other UI, logic, database, or component."
+
+Additional rules:
+- If screenshots are provided and you can see them, describe exactly what the visual problem is.
+- Be specific and surgical — tell Lovable AI exactly what to change, not what to investigate.
+- Keep the prompt under 400 words.
+- Do NOT include greetings or pleasantries — just the structured prompt.
 - Format the prompt as something ready to paste directly into the Lovable AI chat.`;
 
 serve(async (req) => {
@@ -51,15 +57,32 @@ serve(async (req) => {
       }
     }
 
+    // When screenshots are present, use GPT-4o with vision so the AI can actually SEE the images
+    const hasScreenshots = screenshots && screenshots.length > 0;
+
+    let userContent: string | Array<{ type: string; text?: string; image_url?: { url: string } }>;
+    if (hasScreenshots) {
+      // Build multimodal content: text evidence + image_url blocks for each screenshot
+      userContent = [
+        { type: "text", text: evidence },
+        ...screenshots.map((url: string) => ({
+          type: "image_url",
+          image_url: { url, detail: "high" },
+        })),
+      ];
+    } else {
+      userContent = evidence;
+    }
+
     const result = await callAI({
       provider: "gpt",
-      model: "gpt-4o-mini",
+      model: hasScreenshots ? "gpt-4o" : "gpt-4o-mini",
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: evidence },
+        { role: "user", content: userContent },
       ],
       temperature: 0.3,
-      maxTokens: 1000,
+      maxTokens: 1200,
       fallback: { provider: "gemini", model: "gemini-2.5-flash" },
     });
 
