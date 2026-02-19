@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildFullVizzyContext } from "../_shared/vizzyFullContext.ts";
 import { buildPageContext } from "../_shared/pageMap.ts";
 import { WPClient } from "../_shared/wpClient.ts";
+import { callAIStream, AIError } from "../_shared/aiRouter.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1005,13 +1006,6 @@ serve(async (req) => {
     try { parsedBody = await bodyClone.json(); } catch { parsedBody = {}; }
 
     if (parsedBody.publicMode && !authHeader) {
-      const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-      if (!LOVABLE_API_KEY) {
-        return new Response(JSON.stringify({ error: "AI not configured" }), {
-          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
       // Rate limit by IP
       const visitorIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
       const { data: allowed } = await supabase.rpc("check_rate_limit", {
@@ -1032,42 +1026,25 @@ Keep answers concise, friendly, and professional. You do NOT have access to any 
 If someone asks about placing an order or getting a quote, direct them to the contact form or tell them to call the office.
 Never reveal internal system details. Respond in the same language the user writes in.`;
 
-      const publicMessages = (parsedBody.messages || []).slice(-10); // limit context window
+      const publicMessages = (parsedBody.messages || []).slice(-10);
 
-      const aiController = new AbortController();
-      const aiTimeout = setTimeout(() => aiController.abort(), 30000);
-      let aiResponse: Response;
       try {
-        aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${LOVABLE_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "google/gemini-2.5-flash-lite",
-            messages: [{ role: "system", content: publicSystemPrompt }, ...publicMessages],
-            stream: true,
-          }),
-          signal: aiController.signal,
+        const aiResponse = await callAIStream({
+          provider: "gpt",
+          model: "gpt-4o-mini",
+          messages: [{ role: "system", content: publicSystemPrompt }, ...publicMessages],
+          signal: AbortSignal.timeout(30000),
         });
-      } catch (fetchErr: any) {
-        clearTimeout(aiTimeout);
-        return new Response(JSON.stringify({ error: "AI request failed" }), {
-          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+
+        return new Response(aiResponse.body, {
+          headers: { ...corsHeaders, "Content-Type": "text/event-stream", "Cache-Control": "no-cache" },
+        });
+      } catch (err: any) {
+        const status = err instanceof AIError ? err.status : 500;
+        return new Response(JSON.stringify({ error: err.message || "AI request failed" }), {
+          status, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      clearTimeout(aiTimeout);
-
-      if (!aiResponse.ok || !aiResponse.body) {
-        return new Response(JSON.stringify({ error: "AI gateway error" }), {
-          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      return new Response(aiResponse.body, {
-        headers: { ...corsHeaders, "Content-Type": "text/event-stream", "Cache-Control": "no-cache" },
-      });
     }
 
     // ═══ AUTHENTICATED MODE ═══
@@ -1266,62 +1243,27 @@ PROACTIVE INTELLIGENCE:
 - Describe what you see in detail and answer questions about the image content
 - For shop floor photos: identify machine status, rebar tags, quality issues, safety concerns
 - For screenshots: identify UI elements, errors, or data shown`;
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      return new Response(JSON.stringify({ error: "AI not configured" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
     // First call with tools (55s timeout to fail gracefully before edge function limit)
-    const aiController = new AbortController();
-    const aiTimeout = setTimeout(() => aiController.abort(), 55000);
+    // Use GPT-4o for main JARVIS call — best at structured tool use and reasoning
+    // If images attached, use Gemini for multimodal
+    const hasImages = imageUrls && imageUrls.length > 0;
+    const mainProvider = hasImages ? "gemini" as const : "gpt" as const;
+    const mainModel = hasImages ? "gemini-2.5-pro" : "gpt-4o";
     let aiResponse: Response;
     try {
-      aiResponse = await fetch(
-        "https://ai.gateway.lovable.dev/v1/chat/completions",
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${LOVABLE_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "google/gemini-3-pro-preview",
-            messages: [{ role: "system", content: systemPrompt }, ...buildMultimodalMessages(messages, imageUrls)],
-            tools: JARVIS_TOOLS,
-            stream: true,
-          }),
-          signal: aiController.signal,
-        }
-      );
-    } catch (fetchErr: any) {
-      clearTimeout(aiTimeout);
-      console.error("AI gateway fetch failed:", fetchErr.name, fetchErr.message);
-      const isTimeout = fetchErr.name === "AbortError";
-      return new Response(JSON.stringify({ error: isTimeout ? "AI request timed out. Try a simpler question." : `AI gateway error: ${fetchErr.message}` }), {
-        status: isTimeout ? 504 : 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      aiResponse = await callAIStream({
+        provider: mainProvider,
+        model: mainModel,
+        messages: [{ role: "system", content: systemPrompt }, ...buildMultimodalMessages(messages, imageUrls)],
+        tools: JARVIS_TOOLS,
+        signal: AbortSignal.timeout(55000),
       });
-    }
-    clearTimeout(aiTimeout);
-
-    if (!aiResponse.ok) {
-      if (aiResponse.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limited. Try again in a moment." }), {
-          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (aiResponse.status === 402) {
-        return new Response(JSON.stringify({ error: "AI credits exhausted." }), {
-          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      const errText = await aiResponse.text();
-      console.error("AI gateway error:", aiResponse.status, errText);
-      return new Response(JSON.stringify({ error: "AI gateway error" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    } catch (err: any) {
+      console.error("AI fetch failed:", err.name, err.message);
+      const status = err instanceof AIError ? err.status : (err.name === "AbortError" || err.name === "TimeoutError" ? 504 : 500);
+      const msg = (err.name === "AbortError" || err.name === "TimeoutError") ? "AI request timed out. Try a simpler question." : err.message;
+      return new Response(JSON.stringify({ error: msg }), {
+        status, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -1477,18 +1419,16 @@ PROACTIVE INTELLIGENCE:
             ...toolResults.map((tr: any) => ({ role: tr.role, tool_call_id: tr.tool_call_id, content: tr.content })),
           ];
 
-          const followController = new AbortController();
-          const followTimeout = setTimeout(() => followController.abort(), 25000);
+          // Follow-up: GPT-4o-mini for speed (summarizing tool results)
           let followUpResp: Response;
           try {
-            followUpResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-              method: "POST",
-              headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
-              body: JSON.stringify({ model: "google/gemini-3-flash-preview", messages: followUpMessages, stream: true }),
-              signal: followController.signal,
+            followUpResp = await callAIStream({
+              provider: "gpt",
+              model: "gpt-4o-mini",
+              messages: followUpMessages,
+              signal: AbortSignal.timeout(25000),
             });
           } catch (followErr: any) {
-            clearTimeout(followTimeout);
             console.error("Follow-up AI fetch failed:", followErr.name, followErr.message);
             // ── Graceful fallback: format raw tool results ──
             sendSSE("\n\n---\n\n");
@@ -1517,7 +1457,7 @@ PROACTIVE INTELLIGENCE:
             writer.close();
             return;
           }
-          clearTimeout(followTimeout);
+          
 
           if (!followUpResp.ok) {
             sendSSE(`\n\n_Tool data retrieved but AI summary failed. Raw data above._`);

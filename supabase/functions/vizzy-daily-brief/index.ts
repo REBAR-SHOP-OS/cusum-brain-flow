@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildFullVizzyContext } from "../_shared/vizzyFullContext.ts";
+import { callAI, AIError } from "../_shared/aiRouter.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -50,29 +51,18 @@ serve(async (req) => {
     }
 
     const context = await buildFullVizzyContext(supabase, user.id);
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      return new Response(JSON.stringify({ error: "AI not configured" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
 
     const hour = new Date().getHours();
     const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
-    const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          {
-            role: "system",
-            content: `You are JARVIS, the CEO's AI assistant. Generate a concise daily briefing.
+    // Gemini chosen: large context input (full business snapshot) is its strength
+    const result = await callAI({
+      provider: "gemini",
+      model: "gemini-2.5-flash",
+      messages: [
+        {
+          role: "system",
+          content: `You are JARVIS, the CEO's AI assistant. Generate a concise daily briefing.
 Use the live data below. Return exactly 5 bullet points covering:
 1. Most urgent item requiring attention
 2. Financial health (AR/AP, overdue items)
@@ -83,26 +73,15 @@ Use the live data below. Return exactly 5 bullet points covering:
 Format: Start with "${greeting}, boss." then 5 bullet points using markdown. Keep each bullet to 1-2 sentences max. Be direct and actionable. If there are saved memories/reminders, mention the most relevant one.
 
 Always respond in English for the daily briefing.`,
-          },
-          {
-            role: "user",
-            content: context,
-          },
-        ],
-      }),
+        },
+        {
+          role: "user",
+          content: context,
+        },
+      ],
     });
 
-    if (!resp.ok) {
-      const errText = await resp.text();
-      console.error("AI error:", resp.status, errText);
-      return new Response(JSON.stringify({ error: "AI error" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const aiData = await resp.json();
-    const briefing = aiData.choices?.[0]?.message?.content || "No briefing available.";
+    const briefing = result.content || "No briefing available.";
 
     return new Response(
       JSON.stringify({ briefing, generated_at: new Date().toISOString() }),
@@ -110,9 +89,10 @@ Always respond in English for the daily briefing.`,
     );
   } catch (e) {
     console.error("vizzy-daily-brief error:", e);
+    const status = e instanceof AIError ? e.status : 500;
     return new Response(
       JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
