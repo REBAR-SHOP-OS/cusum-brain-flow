@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useCompletedBundles, type CompletedBundle } from "@/hooks/useCompletedBundles";
+import { useCompletedBundles, type CompletedBundle, type CompletedBundleItem } from "@/hooks/useCompletedBundles";
 import { useLoadingChecklist } from "@/hooks/useLoadingChecklist";
 import { useDeliveryActions } from "@/hooks/useDeliveryActions";
 import { ReadyBundleList } from "@/components/dispatch/ReadyBundleList";
@@ -19,12 +19,16 @@ import {
   Truck,
   ImageIcon,
 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useCompanyId } from "@/hooks/useCompanyId";
 
 export default function LoadingStation() {
   const navigate = useNavigate();
   const { bundles, isLoading: bundlesLoading } = useCompletedBundles();
   const [selectedBundle, setSelectedBundle] = useState<CompletedBundle | null>(null);
   const { createDeliveryFromBundle, creating } = useDeliveryActions();
+  const { companyId } = useCompanyId();
 
   const {
     checklistMap,
@@ -35,16 +39,34 @@ export default function LoadingStation() {
     uploadPhoto,
   } = useLoadingChecklist(selectedBundle?.cutPlanId ?? null);
 
+  // Fetch ALL items for the selected cut plan (not just phase-filtered ones)
+  const { data: allPlanItems = [], isLoading: planItemsLoading } = useQuery({
+    queryKey: ["cut-plan-items-all", selectedBundle?.cutPlanId],
+    enabled: !!selectedBundle?.cutPlanId && !!companyId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("cut_plan_items")
+        .select("id, mark_number, drawing_ref, bar_code, cut_length_mm, total_pieces, asa_shape_code")
+        .eq("cut_plan_id", selectedBundle!.cutPlanId);
+      if (error) throw error;
+      return (data || []) as CompletedBundleItem[];
+    },
+  });
+
+  // Use all plan items when available, fall back to bundle items
+  const checklistItems: CompletedBundleItem[] =
+    allPlanItems.length > 0 ? allPlanItems : selectedBundle?.items ?? [];
+
   // Initialize checklist rows when bundle is selected
   useEffect(() => {
-    if (selectedBundle) {
-      const ids = selectedBundle.items.map((i) => i.id);
+    if (selectedBundle && checklistItems.length > 0) {
+      const ids = checklistItems.map((i) => i.id);
       initializeChecklist(ids);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedBundle?.cutPlanId]);
+  }, [selectedBundle?.cutPlanId, allPlanItems.length]);
 
-  const totalItems = selectedBundle?.items.length ?? 0;
+  const totalItems = checklistItems.length;
   const allLoaded = totalItems > 0 && loadedCount >= totalItems;
   const progressPct = totalItems > 0 ? Math.round((loadedCount / totalItems) * 100) : 0;
 
@@ -55,6 +77,7 @@ export default function LoadingStation() {
       navigate("/deliveries");
     }
   };
+
 
   return (
     <div className="flex flex-col h-full bg-background">
@@ -135,8 +158,12 @@ export default function LoadingStation() {
                 <div className="flex items-center justify-center h-32">
                   <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
                 </div>
+              ) : planItemsLoading ? (
+                <div className="flex items-center justify-center h-32">
+                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                </div>
               ) : (
-                selectedBundle.items.map((item) => {
+                checklistItems.map((item) => {
                   const checklist = checklistMap.get(item.id);
                   const isLoaded = checklist?.loaded ?? false;
                   const hasPhoto = !!checklist?.photo_path;
