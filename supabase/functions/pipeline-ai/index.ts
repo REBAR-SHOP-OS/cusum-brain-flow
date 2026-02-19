@@ -385,6 +385,71 @@ ${odooSnapshot}`;
     }
 
 
+    // ── next_best_action — single lead recommendation enriched with memory engine ──
+    if (action === "next_best_action") {
+      const scoring = lead ? {
+        win_prob: lead.win_prob_score || 0,
+        priority_score: lead.priority_score || 0,
+        confidence: lead.score_confidence || "low",
+      } : null;
+
+      const clientPerf = body.clientPerformance || null;
+      const validationWarnings = body.validationWarnings || 0;
+
+      let enrichedContext = context;
+      if (scoring) {
+        enrichedContext += `\n\nMemory Engine Scores:\n- Win Probability: ${scoring.win_prob}%\n- Priority Score: ${scoring.priority_score}/100\n- Score Confidence: ${scoring.confidence}`;
+      }
+      if (clientPerf) {
+        enrichedContext += `\nClient History: Win rate ${clientPerf.win_rate_pct || 0}%, Lifetime score ${clientPerf.client_lifetime_score || 0}, Reorder rate ${clientPerf.reorder_rate_pct || 0}%`;
+      }
+      if (validationWarnings > 0) {
+        enrichedContext += `\n⚠️ This lead has ${validationWarnings} sync validation warning(s) — data quality may need attention.`;
+      }
+
+      const nbaPrompt = `Analyze this lead and determine the single most impactful next action the sales team should take RIGHT NOW.
+
+${enrichedContext}
+
+Consider: stage progression velocity, win probability, client history, deal value, and data quality. Return ONE focused recommendation — not a list.`;
+
+      const data = await callAI(
+        [{ role: "system", content: enrichedSystemPrompt }, { role: "user", content: nbaPrompt }],
+        [{
+          type: "function",
+          function: {
+            name: "next_best_action",
+            description: "Return the single most impactful next action for this lead",
+            parameters: {
+              type: "object",
+              properties: {
+                action_type: { type: "string", enum: ["call", "email", "meeting", "stage_move", "follow_up", "escalate", "close_deal", "data_fix"] },
+                headline: { type: "string", description: "One-line action (max 60 chars)" },
+                reasoning: { type: "string", description: "Why this action, referencing specific data signals (2-3 sentences)" },
+                urgency: { type: "string", enum: ["now", "today", "this_week", "next_week"] },
+                confidence: { type: "number", description: "0-100 confidence in this recommendation" },
+              },
+              required: ["action_type", "headline", "reasoning", "urgency", "confidence"],
+              additionalProperties: false,
+            },
+          },
+        }],
+        { type: "function", function: { name: "next_best_action" } }
+      );
+
+      const result = extractToolResult(data) || {
+        action_type: "follow_up",
+        headline: "Follow up on this lead",
+        reasoning: "Unable to generate a specific recommendation.",
+        urgency: "this_week",
+        confidence: 30,
+      };
+
+      return new Response(JSON.stringify(result), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // ── draft_intro (cold introduction for AI prospects) ──
     if (action === "draft_intro") {
       const prompt = `Draft a cold introduction email for this prospect:\n\n${context}\n\nAdditional context from user: ${userMessage || ""}\n\nCRITICAL RULES:\n1. NEVER use placeholder text like [Sales Rep Name], [Your Name], [Company Name], or any bracketed tokens. NEVER.\n2. Address the recipient by their FIRST NAME ONLY (e.g., "Hi Sarah,").\n3. Open with a specific observation about their company or industry.\n4. Keep to 3-4 sentences max in the body. Be warm but direct — no filler like "I hope this finds you well".\n5. End with a soft call to action (e.g., "Would you be open to a brief conversation?").\n6. Sign off EXACTLY as: "Best regards,\\nThe rebar.shop Sales Team"\n7. Do NOT include any sender name other than "The rebar.shop Sales Team".`;
