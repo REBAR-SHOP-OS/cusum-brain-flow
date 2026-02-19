@@ -14,8 +14,6 @@ import {
   Clock,
   MessageSquare,
   Languages,
-  Globe,
-  Search,
 } from "lucide-react";
 import logoCoin from "@/assets/logo-coin.png";
 import { useAuth } from "@/lib/auth";
@@ -181,10 +179,6 @@ export default function Home() {
               { label: "Time Clock", icon: Clock, route: "/timeclock", gradient: "from-teal-500 via-emerald-500 to-cyan-500", emoji: "⏱" },
               { label: "Team Hub", icon: MessageSquare, route: "/team-hub", gradient: "from-indigo-500 via-purple-500 to-violet-500", emoji: "💬" },
               { label: "Transcribe", icon: Languages, route: "/transcribe", gradient: "from-pink-500 via-rose-500 to-red-500", emoji: "🎙️" },
-              ...(isAdmin ? [
-                { label: "Website", icon: Globe, route: "/website", gradient: "from-blue-500 via-cyan-500 to-teal-500", emoji: "🌐" },
-                { label: "SEO", icon: Search, route: "/seo", gradient: "from-green-500 via-emerald-500 to-lime-500", emoji: "🔍" },
-              ] : []),
             ].map((ws) => (
               <div
                 key={ws.label}
