@@ -70,6 +70,7 @@ import EmpireBuilder from "./pages/EmpireBuilder";
 import AutopilotDashboard from "./pages/AutopilotDashboard";
 import SupportInbox from "./pages/SupportInbox";
 import KnowledgeBasePublic from "./pages/KnowledgeBasePublic";
+import DriverDashboard from "./pages/DriverDashboard";
 
 import LiveChat from "./pages/LiveChat";
 import EmailMarketing from "./pages/EmailMarketing";
@@ -152,6 +153,7 @@ const App = () => (
                     <Route path="/shopfloor/inventory" element={<P><InventoryCountPage /></P>} />
                     
                     <Route path="/deliveries" element={<P><Deliveries /></P>} />
+                    <Route path="/driver" element={<P><DriverDashboard /></P>} />
                     <Route path="/timeclock" element={<P><TimeClock /></P>} />
                     <Route path="/transcribe" element={<P><Transcribe /></P>} />
                     <Route path="/transcribe/watch" element={<ProtectedRoute><TranscribeWatch /></ProtectedRoute>} />
