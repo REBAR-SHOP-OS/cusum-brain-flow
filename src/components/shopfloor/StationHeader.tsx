@@ -49,14 +49,14 @@ export function StationHeader({
   const mainTitle = titleParts.join(" ");
 
   return (
-    <header className="flex items-center justify-between px-4 py-3 bg-card border-b border-border">
+    <header className="flex items-start justify-between px-4 py-3 bg-card border-b border-border">
       {/* Left: Back + Title */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 min-w-0">
         <Button variant="ghost" size="icon" onClick={() => onBack ? onBack() : navigate(backTo)}>
           <ArrowLeft className="w-5 h-5" />
         </Button>
 
-        <h1 className="font-bold text-base sm:text-lg uppercase tracking-wide text-foreground">
+        <h1 className="font-bold text-base sm:text-lg uppercase tracking-wide text-foreground whitespace-normal break-words">
           {mainTitle}
         </h1>
       </div>
