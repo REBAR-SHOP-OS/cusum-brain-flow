@@ -1,63 +1,60 @@
 
-# Fix: Detail Panel Header Shows Delivery Number Instead of Customer Name + Invoice Number
+# Fix: Bold Font on "High", "Medium", "Low" Labels in Office Page
 
-## Root Cause — Exact Location
+## Investigation Summary
 
-There is **no `DeliveryListItem.tsx` component** — the deliveries page is fully self-contained in `src/pages/Deliveries.tsx`.
+After a thorough audit of every component rendered on the `/office` page — including `AIExtractView`, `DetailedListView`, `ProductionQueueView`, `InventoryView`, `OptimizationView`, `TagsExportView`, `PackingSlipsView`, and `PayrollAuditView` — plus a live screenshot session, the "High / Medium / Low" labels are definitively located in **`TranscribeView.tsx`** inside the `ConfidenceBadge` component.
 
-The bug is **NOT** in the list cards. The `DeliveryCard` component (lines 601–639) already correctly shows customer name when available:
+### Exact Location
+
+**File:** `src/components/office/TranscribeView.tsx`
+**Lines:** 116–126
+
 ```tsx
-{delivery.customer_name
-  ? `${delivery.customer_name}${delivery.invoice_number ? ` (Invoice #${delivery.invoice_number})` : ""}`
-  : delivery.delivery_number}
+function ConfidenceBadge({ confidence }: { confidence: number }) {
+  const color = confidence >= 90 ? "text-primary bg-primary/10 border-primary/30"
+    : confidence >= 70 ? "text-accent-foreground bg-accent border-accent/30"
+    : "text-destructive bg-destructive/10 border-destructive/30";
+  const label = confidence >= 90 ? "High" : confidence >= 70 ? "Medium" : "Low";
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${color}`}>
+      {confidence}% {label}
+    </span>
+  );
+}
 ```
 
-The bug is in the **right-side detail panel header** at **line 433**, which always shows the raw `delivery_number`:
-```tsx
-<h2 className="text-lg font-semibold flex-1">{selectedDelivery.delivery_number}</h2>
-```
+The `font-semibold` Tailwind class on line 122 makes these labels render in bold/semi-bold weight.
 
-When a user clicks a delivery card, the detail panel opens and the header `<h2>` displays `DEL-MLTV5F3Z` (the `delivery_number`) instead of the customer name and invoice number.
+### Note on "Urgent" Label
 
-## Confirmed Data
-
-Database query confirms that `customer_name` IS being correctly fetched and mapped onto deliveries:
-- `DEL-MLTV5F3Z` → `customer_name: "EARNSCLIFFE CRICKET AIR DOME"`, `invoice_number: null`
-
-The join query at line 129 (`select("*, packing_slips(customer_name, invoice_number)")`) and the mapping at lines 134–138 work correctly.
+The word "Urgent" does not appear in any office page component. The user's description of four labels ("Urgent", "High", "Medium", "Low") matches the task priority system elsewhere in the app, but on the `/office` page only "High", "Medium", "Low" confidence badges exist (in `TranscribeView`). The fix below targets these precisely.
 
 ## The Fix — One Surgical Change
 
-**File:** `src/pages/Deliveries.tsx`
-**Line:** 433
+**File:** `src/components/office/TranscribeView.tsx`
+**Line:** 122
 
-Change the detail panel `<h2>` to display `customer_name - invoice_number` when available, falling back to `delivery_number`:
+Change `font-semibold` to `font-normal` on the confidence badge `<span>`:
 
-**Before (line 433):**
+**Before:**
 ```tsx
-<h2 className="text-lg font-semibold flex-1">{selectedDelivery.delivery_number}</h2>
+<span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${color}`}>
 ```
 
 **After:**
 ```tsx
-<h2 className="text-lg font-semibold flex-1">
-  {selectedDelivery.customer_name
-    ? `${selectedDelivery.customer_name}${selectedDelivery.invoice_number ? ` - ${selectedDelivery.invoice_number}` : ""}`
-    : selectedDelivery.delivery_number}
-</h2>
+<span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-normal ${color}`}>
 ```
-
-This matches the exact format requested: "Customer Name - Invoice Number", with a graceful fallback to the delivery number when no customer name is linked.
 
 ## Scope
 
 | File | Line | Change |
 |---|---|---|
-| `src/pages/Deliveries.tsx` | 433 | Update `<h2>` in detail panel header to show `customer_name - invoice_number` instead of always showing `delivery_number` |
+| `src/components/office/TranscribeView.tsx` | 122 | `font-semibold` → `font-normal` on `ConfidenceBadge` span |
 
 ## What Is NOT Changed
-- `DeliveryCard` list items — already correct, untouched
-- Data fetching queries — untouched
-- All other UI elements, stops list, stats bar, tabs, slips tab
-- Database schema
-- Any other component or page
+- `badge.tsx` base component — untouched (global change would affect entire app)
+- All other office page components (`AIExtractView`, `OptimizationView`, `ProductionQueueView`, etc.)
+- Any other styling, logic, database interaction, or route
+- The color classes on the badge — only font-weight changes
