@@ -236,7 +236,7 @@ export default function EmpireBuilder() {
     }
     const fullContent = content + extraContext;
     const displayContent = pendingFiles.length > 0 ? `${content}\n\n📎 ${pendingFiles.length} file(s) attached` : content;
-    const userMsg: Message = { id: crypto.randomUUID(), role: "user", content: displayContent, timestamp: new Date() };
+    const userMsg: Message = { id: crypto.randomUUID(), role: "user", content: displayContent, timestamp: new Date(), files: attachedFiles.length > 0 ? attachedFiles.map(f => ({ name: f.name, url: f.url, type: "image", size: 0, path: f.url })) : undefined };
     setMessages((prev) => [...prev, userMsg]);
     setIsLoading(true);
     setValue("");
@@ -544,7 +544,16 @@ export default function EmpireBuilder() {
                           : "bg-white/5 backdrop-blur border border-white/10 text-white rounded-bl-md"
                       )}>
                         {isUser ? (
-                          <p className="whitespace-pre-wrap">{message.content}</p>
+                          <>
+                            <p className="whitespace-pre-wrap">{message.content}</p>
+                            {message.files?.filter(f => /image/i.test(f.type || f.name)).map((f, i) => (
+                              <img key={i} src={f.url} alt={f.name} className="mt-2 rounded-lg max-w-full max-h-64 object-contain border border-white/10" />
+                            ))}
+                            {(() => {
+                              const match = message.content.match(/Screenshot:\s*(https?:\/\/\S+)/);
+                              return match ? <img src={match[1]} alt="Screenshot" className="mt-2 rounded-lg max-w-full max-h-64 object-contain border border-white/10" /> : null;
+                            })()}
+                          </>
                         ) : (
                           <>
                             <RichMarkdown content={(message.content || "").replace(/\[FIX_CONFIRMED\]/g, "").replace(/\[STOP\]/g, "")} />
