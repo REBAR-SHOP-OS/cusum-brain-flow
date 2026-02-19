@@ -1,70 +1,47 @@
 
-# Fix: Missing "Delivery Date" Column in Tags & Export Table
+# Remove "Slip Number" Display from Deliveries Page — Slips Tab
 
-## Root Cause (Confirmed via Code Investigation)
+## What Was Found
 
-The `/office` page (`OfficePortal`) contains multiple sections. The table in question is in **Tags & Export** (`src/components/office/TagsExportView.tsx`), which renders a scrollable table with columns:
+After navigating to `/deliveries` and switching to the **Slips** tab, I can see the issue clearly. Each packing slip card currently displays:
 
-`DWG # | Item | Grade | Mark | Qty | Size | Type | Total Length | [A-R dims] | Weight | Picture | Customer | Ref | Add`
+- **Row 1:** `[📄 icon] PS-MLTV5F3Z` — this is the Slip Number
+- **Row 2:** `EARNSCLIFFE CRICKET AIR DOME • Feb 19, 2026` — customer name and date
 
-The **Delivery Date** column is entirely absent from this table.
-
-The data source is confirmed: `ExtractSession` (already fetched and stored in `selectedSession`) has a `target_eta` field which is the delivery/target date for the manifest. All rows in a session share the same session-level `target_eta`.
+The "Slip Number" (e.g., `PS-MLTV5F3Z`) is rendered in `src/pages/Deliveries.tsx` at lines 381–384 inside the Slips tab card layout.
 
 ## Scope
 
-**Single file, two additions:**
+**Single file, single block removal:**
 
 | File | Change |
 |------|--------|
-| `src/components/office/TagsExportView.tsx` | Add "Delivery Date" `<th>` to table header + `<td>` to each row |
+| `src/pages/Deliveries.tsx` | Remove the `<span>` containing the file icon and `{slip.slip_number}` from the slip card header |
 
-No other files are touched. No database changes. No schema changes. No CSV export header is changed (out of scope).
+No other files, no database, no other tabs, no other components are touched.
 
 ## The Fix
 
-**File:** `src/components/office/TagsExportView.tsx`
+**File:** `src/pages/Deliveries.tsx`  
+**Location:** Lines 381–384
 
-### Change 1 — Table header (line ~273, after the "Add" `<th>`)
-
-Currently (last column in `<thead>`):
+**Before:**
 ```tsx
-<th className="...">Add</th>
+<span className="font-medium flex items-center gap-2">
+  <FileText className="w-4 h-4" />
+  {slip.slip_number}
+</span>
 ```
 
-After:
-```tsx
-<th className="...">Add</th>
-<th className="text-[10px] font-bold tracking-widest text-primary uppercase text-left px-3 py-2 whitespace-nowrap">Delivery Date</th>
-```
-
-### Change 2 — Table row cell (line ~318, after the `row.address` `<td>`)
-
-Currently (last column in row):
-```tsx
-<td className="text-xs text-muted-foreground px-3 py-2.5">{row.address || "—"}</td>
-```
-
-After:
-```tsx
-<td className="text-xs text-muted-foreground px-3 py-2.5">{row.address || "—"}</td>
-<td className="text-xs text-muted-foreground px-3 py-2.5 whitespace-nowrap">
-  {selectedSession?.target_eta
-    ? new Date(selectedSession.target_eta).toLocaleDateString()
-    : "—"}
-</td>
-```
-
-The `selectedSession` variable is already in scope at the row-render level (it is defined at the top of the component and is accessible throughout the JSX).
+**After** — the entire `<span>` is removed. The card header `<div>` (line 380) will continue to hold the badge and delete button on the right side.
 
 ## What Is NOT Changed
 
-- `DetailedListView.tsx` — untouched
-- `ProductionQueueView.tsx` — untouched
-- `PackingSlipsView.tsx` — untouched
-- `AIExtractView.tsx` — untouched
-- `InventoryView.tsx` — untouched
-- CSV export headers — untouched (out of scope per the problem statement)
-- Database / schema — untouched
-- All other columns — untouched
-- Card view mode — untouched (only table view is affected)
+- Today, Upcoming, All tabs — untouched
+- Delivery cards layout — untouched
+- Slip card click behavior (opening the packing slip view) — untouched
+- `draft` badge — untouched
+- Delete (trash) button — untouched
+- Customer name and date on the second row — untouched
+- Database, API, queries — untouched
+- All other pages and components — untouched
