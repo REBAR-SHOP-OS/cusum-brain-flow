@@ -950,6 +950,74 @@ function extractMaxDateFromReport(rows: unknown[]): string | null {
   return maxDate || null;
 }
 
+/**
+ * Parse a TransactionList report (with `account` column) into a Map<accountName, count>.
+ */
+function groupReportCountByAccount(report: Record<string, unknown>): Map<string, number> {
+  const result = new Map<string, number>();
+  const columns = report?.Columns as Record<string, unknown> | undefined;
+  const colDefs = (columns?.Column as Array<{ ColTitle?: string }>) || [];
+  const accountColIdx = colDefs.findIndex(c => c.ColTitle === "Account");
+
+  function walk(rows: unknown[]) {
+    for (const row of rows) {
+      const r = row as Record<string, unknown>;
+      const nestedRows = (r?.Rows as Record<string, unknown>)?.Row as unknown[] | undefined;
+      if (nestedRows && Array.isArray(nestedRows)) {
+        walk(nestedRows);
+      } else if (r?.ColData) {
+        const cols = r.ColData as Array<{ value?: string }>;
+        const acctName = accountColIdx >= 0 ? cols[accountColIdx]?.value : undefined;
+        if (acctName) {
+          result.set(acctName, (result.get(acctName) || 0) + 1);
+        }
+      }
+    }
+  }
+
+  const reportRows = report?.Rows as Record<string, unknown> | undefined;
+  const rows = (reportRows?.Row as unknown[]) || [];
+  walk(rows);
+  return result;
+}
+
+/**
+ * Parse a TransactionList report (with `account` and `tx_date` columns)
+ * into a Map<accountName, latestDate>.
+ */
+function groupReportMaxDateByAccount(report: Record<string, unknown>): Map<string, string> {
+  const result = new Map<string, string>();
+  const columns = report?.Columns as Record<string, unknown> | undefined;
+  const colDefs = (columns?.Column as Array<{ ColTitle?: string }>) || [];
+  const accountColIdx = colDefs.findIndex(c => c.ColTitle === "Account");
+  const dateColIdx = colDefs.findIndex(c => c.ColTitle === "Date");
+
+  function walk(rows: unknown[]) {
+    for (const row of rows) {
+      const r = row as Record<string, unknown>;
+      const nestedRows = (r?.Rows as Record<string, unknown>)?.Row as unknown[] | undefined;
+      if (nestedRows && Array.isArray(nestedRows)) {
+        walk(nestedRows);
+      } else if (r?.ColData) {
+        const cols = r.ColData as Array<{ value?: string }>;
+        const acctName = accountColIdx >= 0 ? cols[accountColIdx]?.value : undefined;
+        const dateVal = dateColIdx >= 0 ? cols[dateColIdx]?.value : undefined;
+        if (acctName && dateVal) {
+          const existing = result.get(acctName);
+          if (!existing || dateVal > existing) {
+            result.set(acctName, dateVal);
+          }
+        }
+      }
+    }
+  }
+
+  const reportRows = report?.Rows as Record<string, unknown> | undefined;
+  const rows = (reportRows?.Row as unknown[]) || [];
+  walk(rows);
+  return result;
+}
+
 // ─── Sync Bank Activity ────────────────────────────────────────────
 
 async function handleSyncBankActivity(svc: SvcClient, companyId: string) {
@@ -994,43 +1062,44 @@ async function handleSyncBankActivity(svc: SvcClient, companyId: string) {
     console.warn(`[sync-bank-activity] Query API balance fetch failed, will use cached balances:`, e);
   }
 
+  // Fetch TWO bulk reports ONCE (with account column) then group in code
+  const unclearedByAccount = new Map<string, number>();
+  const reconDateByAccount = new Map<string, string>();
+
+  try {
+    const unclearedReport = await qbFetch(
+      config,
+      `reports/TransactionList?cleared=Uncleared&columns=tx_date,txn_type,account,subt_nat_amount`,
+      ctx,
+    ) as Record<string, unknown>;
+    const grouped = groupReportCountByAccount(unclearedReport);
+    for (const [k, v] of grouped) unclearedByAccount.set(k, v);
+    console.log(`[sync-bank-activity] Bulk uncleared report: ${unclearedByAccount.size} accounts, entries: ${JSON.stringify([...unclearedByAccount])}`);
+  } catch (e) {
+    console.warn(`[sync-bank-activity] Bulk uncleared report failed:`, e);
+  }
+
+  try {
+    const reconReport = await qbFetch(
+      config,
+      `reports/TransactionList?cleared=Reconciled&columns=tx_date,account`,
+      ctx,
+    ) as Record<string, unknown>;
+    const grouped = groupReportMaxDateByAccount(reconReport);
+    for (const [k, v] of grouped) reconDateByAccount.set(k, v);
+    console.log(`[sync-bank-activity] Bulk reconciled report: ${reconDateByAccount.size} accounts, dates: ${JSON.stringify([...reconDateByAccount])}`);
+  } catch (e) {
+    console.warn(`[sync-bank-activity] Bulk reconciled report failed:`, e);
+  }
+
   for (const account of bankAccounts) {
     try {
-      let unreconciledCount = 0;
-      let reconciledThroughDate: string | null = null;
-
       // Use live balance from Query API, fallback to cached
       const liveLedgerBalance = balanceMap.get(account.qb_id) ?? account.current_balance;
 
-      // Query unreconciled (uncleared) transactions count via TransactionList report
-      try {
-        const unreconReport = await qbFetch(
-          config,
-          `reports/TransactionList?account=${account.qb_id}&cleared=Uncleared&columns=tx_date,txn_type,doc_num,name,memo,subt_nat_amount`,
-          ctx,
-        ) as Record<string, unknown>;
-
-        const reportRows = unreconReport?.Rows as Record<string, unknown> | undefined;
-        const rows = (reportRows?.Row as unknown[]) || [];
-        unreconciledCount = countReportDataRows(rows);
-      } catch (e) {
-        console.warn(`[sync-bank-activity] Uncleared report failed for ${account.name}:`, e);
-      }
-
-      // Fix 3: Query reconciled transactions to find the latest reconciled date
-      try {
-        const reconReport = await qbFetch(
-          config,
-          `reports/TransactionList?account=${account.qb_id}&cleared=Reconciled&sort_order=descend&sort_by=tx_date&columns=tx_date`,
-          ctx,
-        ) as Record<string, unknown>;
-
-        const reportRows = reconReport?.Rows as Record<string, unknown> | undefined;
-        const rows = (reportRows?.Row as unknown[]) || [];
-        reconciledThroughDate = extractMaxDateFromReport(rows);
-      } catch (e) {
-        console.warn(`[sync-bank-activity] Reconciled report failed for ${account.name}:`, e);
-      }
+      // Look up from pre-fetched bulk maps by account name
+      const unreconciledCount = unclearedByAccount.get(account.name) || 0;
+      const reconciledThroughDate = reconDateByAccount.get(account.name) || null;
 
       // Upsert into qb_bank_activity, preserving manual bank_balance
       const { data: existing } = await svc
