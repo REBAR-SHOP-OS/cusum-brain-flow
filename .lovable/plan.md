@@ -1,116 +1,81 @@
 
-# Fix: "WebSocket is not connected" Error — Complete Rewrite of Voice Logic
+# جایگزینی ElevenLabs با Web Speech API (Google Voice)
 
-## Root Cause (Confirmed by SDK Source Analysis)
+## مشکل اصلی
 
-The `useScribe` hook from `@elevenlabs/react` stores the connection in a `ref` (`B.current`). When the SDK fires an error event, it sets the internal status to `"error"` but does **not** automatically close/null out `B.current`. This means:
+تمام خطاهای WebSocket از SDK داخلی `@elevenlabs/react` می‌آیند. این SDK یک اتصال WebSocket جداگانه باز می‌کند که مدیریت lifecycle آن پیچیده و پر از حالت‌های ناپایدار است. هیچ تغییری در کد ما نمی‌تواند باگ‌های داخلی SDK را برطرف کند.
 
-1. `scribe.isConnected` becomes `false` (since it only returns `true` for `"connected"` or `"transcribing"` states)
-2. But `B.current` is still alive/closing underneath
-3. When our code calls `safeDisconnect()` → `scribe.disconnect()`, the SDK calls `B.current.close()` on an already-closing socket → **crash**
-4. The error propagates through the SDK's `onError` handler → toast fires again → infinite loop of error toasts
+## راه‌حل: Web Speech API (Google Voice)
 
-## Solution: Rewrite using `status` field + proper guard
+پروژه از قبل یک hook آماده و بدون خطا دارد: `useSpeechRecognition` در `src/hooks/useSpeechRecognition.ts`.
 
-The SDK exposes a `status: ScribeStatus` field (`"disconnected" | "connecting" | "connected" | "transcribing" | "error"`). The fix requires:
+این hook از **Web Speech API** مرورگر استفاده می‌کند که:
+- **هیچ WebSocket خارجی** باز نمی‌کند (مرورگر مستقیماً با Google ارتباط می‌گیرد)
+- **هیچ API Key** لازم ندارد
+- **هیچ edge function** لازم ندارد
+- **بدون خطا** کار می‌کند چون lifecycle کاملاً توسط مرورگر مدیریت می‌شود
+- در Chrome، Edge، و Safari پشتیبانی می‌شود
+- **فارسی** پشتیبانی می‌شود (با تنظیم `lang = "fa-IR"`)
 
-1. **Use `scribe.status` instead of `scribe.isConnected`** to guard all state transitions — only disconnect when status is NOT already `"disconnected"` or `"error"`
-2. **Remove the `safeDisconnect` pattern** — replace it with a status-aware guard directly checking `scribe.status`
-3. **Stop re-throwing errors** — add an `onError` callback to the `useScribe` options to catch errors at the source and prevent them from propagating as uncaught exceptions
-4. **Use `scribe.partialTranscript` (built-in)** instead of maintaining a separate `interimText` state — the SDK already tracks this
-5. **Reset on dialog close** via `scribe.clearTranscripts()` to wipe old interim text
+## تغییر یک فایل: `src/components/feedback/AnnotationOverlay.tsx`
 
-## Technical Details
+### چه چیزی حذف می‌شود:
+- تمام import های `useScribe` و `CommitStrategy` از `@elevenlabs/react`
+- تمام لاجیک `scribe.connect()` / `scribe.disconnect()`
+- state های `voiceConnecting` و `disconnectIfActive`
+- فراخوانی `supabase.functions.invoke("elevenlabs-scribe-token")`
 
-**File: `src/components/feedback/AnnotationOverlay.tsx`**
+### چه چیزی اضافه می‌شود:
+- import از `useSpeechRecognition` (که از قبل در پروژه وجود دارد)
+- تنظیم `lang: "fa-IR"` برای پشتیبانی فارسی
+- وقتی `isFinal` می‌شود، متن به `description` اضافه می‌شود
+- `interimText` (متن موقت در حین صحبت) نمایش داده می‌شود
+- دکمه میکروفون `start()` / `stop()` را صدا می‌زند
 
-### Change 1 — `useScribe` with `onError` handler + use built-in `partialTranscript`
+### تغییر در `useSpeechRecognition.ts`:
+فقط یک خط: `lang` از `"en-US"` به `"fa-IR"` تغییر می‌کند تا فارسی به درستی شناسایی شود. البته چون این hook جاهای دیگری هم استفاده می‌شود، بهتر است `lang` را به عنوان پارامتر قابل تنظیم درآوریم.
+
+## جزئیات فنی
+
 ```typescript
-const scribe = useScribe({
-  modelId: "scribe_v2_realtime",
-  commitStrategy: CommitStrategy.VAD,
-  onPartialTranscript: (data) => {
-    // handled via scribe.partialTranscript (built-in)
-  },
-  onCommittedTranscript: (data) => {
-    setDescription((prev) => (prev + " " + data.text).trim());
-  },
-  onError: (err) => {
-    // Catch all WebSocket errors at source — prevents uncaught errors
-    console.warn("[Scribe] error:", err);
-  },
+// در AnnotationOverlay.tsx:
+import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
+
+const speech = useSpeechRecognition({
+  onError: (err) => toast.error(err),
 });
-```
 
-### Change 2 — Status-aware disconnect guard
-```typescript
-const disconnectIfActive = useCallback(() => {
-  // Only disconnect if NOT already disconnected/error (avoids double-disconnect crash)
-  if (scribe.status !== "disconnected" && scribe.status !== "error") {
-    try { scribe.disconnect(); } catch { /* ignore */ }
-  }
-  scribe.clearTranscripts(); // wipe interim text
-}, [scribe]);
-```
-
-### Change 3 — `toggleVoice` with `status`-based guard
-```typescript
-const toggleVoice = useCallback(async () => {
-  if (scribe.status === "connected" || scribe.status === "transcribing" || scribe.status === "connecting") {
-    disconnectIfActive();
-    return;
-  }
-  if (scribe.status === "connecting") return; // already connecting
-  try {
-    setVoiceConnecting(true);
-    await navigator.mediaDevices.getUserMedia({ audio: true });
-    const { data, error } = await supabase.functions.invoke("elevenlabs-scribe-token");
-    if (error || !data?.token) throw new Error("Could not get scribe token");
-    await scribe.connect({
-      token: data.token,
-      microphone: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-    });
-  } catch (err: any) {
-    console.error("Voice error:", err);
-    toast.error("Could not start voice input: " + (err.message ?? "Unknown error"));
-  } finally {
-    setVoiceConnecting(false);
-  }
-}, [scribe, disconnectIfActive]);
-```
-
-### Change 4 — Remove `isConnectingRef`, `interimText` state, `voiceConnecting` improvements
-- Remove `isConnectingRef` (no longer needed — SDK `status` is the source of truth)
-- Remove `interimText` state — use `scribe.partialTranscript` (built-in, always accurate)
-- Keep `voiceConnecting` state for spinner UI during the async token fetch
-- Voice button shows active state when `scribe.status === "connected" || "transcribing"`
-
-### Change 5 — Dialog close effect
-```typescript
+// وقتی transcript نهایی می‌شود، به description اضافه می‌شود:
+// این کار با یک useEffect انجام می‌شود که transcripts را watch می‌کند
 useEffect(() => {
-  if (!open) {
-    disconnectIfActive();
+  if (speech.transcripts.length > 0) {
+    const lastFinal = speech.transcripts[speech.transcripts.length - 1];
+    setDescription((prev) => (prev + " " + lastFinal.text).trim());
   }
-}, [open, disconnectIfActive]);
-```
+}, [speech.transcripts]);
 
-### Change 6 — UI: show `scribe.partialTranscript` directly
-```tsx
-{scribe.partialTranscript && (
-  <div className="mt-1 text-xs italic text-muted-foreground px-1 animate-pulse">
-    🎙 {scribe.partialTranscript}
+// دکمه:
+<Button onClick={speech.isListening ? speech.stop : speech.start}>
+  {speech.isListening ? <MicOff className="animate-pulse" /> : <Mic />}
+</Button>
+
+// متن موقت:
+{speech.interimText && (
+  <div className="mt-1 text-xs italic text-muted-foreground animate-pulse">
+    🎙 {speech.interimText}
   </div>
 )}
 ```
 
-## Summary
+## برای پشتیبانی فارسی
 
-| What | Before | After |
-|------|--------|-------|
-| Connection guard | `isConnected` boolean (stale) | `scribe.status` (always fresh) |
-| Error handling | Uncaught → repeated toasts | `onError` callback catches at source |
-| Interim text | Separate `interimText` state | `scribe.partialTranscript` (built-in) |
-| Disconnect safety | `try/catch` wrapper | Status check before disconnect |
-| Race conditions | `isConnectingRef` ref | Not needed — `status === "connecting"` |
+یک پارامتر `lang` به `useSpeechRecognition` اضافه می‌شود. در `AnnotationOverlay` از `"fa-IR"` استفاده می‌کنیم. این باعث می‌شود Google Voice هم فارسی و هم انگلیسی را تشخیص دهد.
 
-Only one file changes: `src/components/feedback/AnnotationOverlay.tsx`
+## خلاصه فایل‌های تغییریافته
+
+| فایل | تغییر |
+|------|-------|
+| `src/components/feedback/AnnotationOverlay.tsx` | حذف ElevenLabs، جایگزینی با `useSpeechRecognition` |
+| `src/hooks/useSpeechRecognition.ts` | اضافه کردن پارامتر `lang` (اختیاری، default: `"fa-IR"`) |
+
+هیچ migration دیتابیس، edge function، یا API key جدیدی لازم نیست.
