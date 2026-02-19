@@ -1,104 +1,126 @@
 
 
-## Full QuickBooks Banking Activity Sync
+## Phase 1 -- Stop the Bleeding (Same Day)
 
-### Problem
-The Banking Activity table currently uses the `bank_feed_balances` table which is manually seeded/edited. It does not mirror actual QuickBooks data for unreconciled counts, reconciled-through dates, or true ledger balances. The goal is to make ERP Banking Activity match the QuickBooks Banking screen exactly.
+### 1. Enable RLS on `accounting_mirror_customers`
 
-### Important: QuickBooks API Limitations
-QuickBooks Online API does **not** expose a direct "bank balance" (the real bank statement balance) or a "reconciled through" date endpoint. What we can derive:
-- **Ledger balance**: `Account.CurrentBalance` (already synced via `qb_accounts`)
-- **Unreconciled count**: By querying `TransactionList` report with `cleared=UnCleared` filter per bank account
-- **Reconciled-through date**: By querying `TransactionList` report with `cleared=Reconciled` and finding the max transaction date
-- **Bank balance**: Must remain manually entered (QB gets this from its own Yodlee/Plaid bank feed connection, not exposed via API)
+**Current state:** `relrowsecurity = false`, zero policies. Any authenticated user can read/write all customer financial data across companies.
 
-### Step 1: Create `qb_bank_activity` Table (Migration)
+**Fix:**
+- Enable RLS on the table
+- Add SELECT policy: `company_id = public.get_user_company_id(auth.uid())`
+- Add INSERT/UPDATE policy with same company scope
+- Add DELETE policy restricted to admin role
 
-New table to store QB-derived banking metadata per bank account:
+**Migration SQL:**
+```sql
+ALTER TABLE public.accounting_mirror_customers ENABLE ROW LEVEL SECURITY;
 
-```text
-qb_bank_activity
------------------
-id                      UUID (PK, default gen_random_uuid())
-company_id              UUID NOT NULL (FK profiles lookup)
-qb_account_id           TEXT NOT NULL (matches qb_accounts.qb_id)
-account_name            TEXT NOT NULL
-ledger_balance          NUMERIC NOT NULL DEFAULT 0
-bank_balance            NUMERIC (nullable -- manual entry only)
-unreconciled_count      INTEGER NOT NULL DEFAULT 0
-reconciled_through_date DATE (nullable)
-last_qb_sync_at         TIMESTAMPTZ
-updated_by              UUID (nullable, for manual bank balance edits)
-created_at              TIMESTAMPTZ DEFAULT now()
-updated_at              TIMESTAMPTZ DEFAULT now()
-UNIQUE(company_id, qb_account_id)
+CREATE POLICY "Company-scoped select" ON public.accounting_mirror_customers
+  FOR SELECT TO authenticated
+  USING (company_id = public.get_user_company_id(auth.uid()));
+
+CREATE POLICY "Company-scoped insert" ON public.accounting_mirror_customers
+  FOR INSERT TO authenticated
+  WITH CHECK (company_id = public.get_user_company_id(auth.uid()));
+
+CREATE POLICY "Company-scoped update" ON public.accounting_mirror_customers
+  FOR UPDATE TO authenticated
+  USING (company_id = public.get_user_company_id(auth.uid()));
+
+CREATE POLICY "Admin delete only" ON public.accounting_mirror_customers
+  FOR DELETE TO authenticated
+  USING (public.has_role(auth.uid(), 'admin'::app_role));
 ```
 
-RLS: enabled, company-scoped read/write for authenticated users.
+---
 
-### Step 2: Add `sync-bank-activity` Action to `qb-sync-engine`
+### 2. Fix TableRowActions React ref bug
 
-New action in `supabase/functions/qb-sync-engine/index.ts`:
+**Current state:** Lines 56 and 97 use plain `<button>` inside `<PopoverTrigger asChild>`. Radix requires `forwardRef` on `asChild` children.
 
-1. Query all Bank-type accounts from `qb_accounts` for the company
-2. For each bank account, call QB `TransactionList` report:
-   - `cleared=UnCleared` with `account={accountName}` to count unreconciled transactions
-   - `cleared=Reconciled` with `account={accountName}`, sorted by date desc, to get the latest reconciled transaction date
-3. Upsert results into `qb_bank_activity` with `ledger_balance` from `qb_accounts.current_balance`, `unreconciled_count`, and `reconciled_through_date`
-4. Preserve any existing `bank_balance` (manual entry) -- never overwrite it during sync
+**Fix:** Replace the two plain `<button>` elements with `React.forwardRef`-compatible components. The simplest approach is to use the existing shadcn `<Button>` component with `variant="ghost"` and `size="icon"` styling, which already supports ref forwarding. This eliminates the Radix ref warnings.
 
-### Step 3: Create `useQBBankActivity` Hook
+**File:** `src/components/accounting/TableRowActions.tsx`
+- Line 56-61: Replace `<button>` with `<Button variant="ghost" size="icon" ...>`
+- Line 97-102: Same replacement for the Reschedule trigger
 
-New hook `src/hooks/useQBBankActivity.ts`:
-- Fetches from `qb_bank_activity` table filtered by company_id
-- Provides `upsertBankBalance(qbAccountId, bankBalance)` for manual bank balance entry
-- Provides `triggerSync()` to call the sync engine with `action: "sync-bank-activity"`
-- Replaces `useBankFeedBalances` for the Banking Activity card
+---
 
-### Step 4: Update `BankAccountsCard.tsx`
+### 3. Deduplicate chat/QB refresh bug reports
 
-- Replace `BankFeedBalance` type with `QBBankActivity` type
-- Display `ledger_balance` in "In QuickBooks" column (from synced QB data)
-- Display `bank_balance` in "Bank Balance" column (manual, with pencil edit)
-- Display `unreconciled_count` directly from synced data
-- Display `reconciled_through_date` directly from synced data
-- Add a "Sync" button in the header to trigger the bank activity sync
+**Current state:** Three identical open entries in `vizzy_fix_requests`:
+- `dfb736a2` (Feb 18 15:38) -- oldest, keep as canonical
+- `7d5e1995` (Feb 18 15:52) -- duplicate
+- `98f891de` (Feb 18 16:39) -- duplicate
 
-### Step 5: Update `AccountingDashboard.tsx`
+**Fix:** Close the two newer duplicates by updating their status to `resolved` with a note linking to the canonical entry. No code change needed -- data operation only.
 
-- Replace `useBankFeedBalances` with `useQBBankActivity`
-- Remove the `seedIfMissing` logic (replaced by QB sync)
-- Pass new hook methods to `BankAccountsCard`
+---
 
-### Data Flow
+## Phase 2 -- Structural Security Hardening (This Week)
 
-```text
-QuickBooks API
-  |
-  v
-qb-sync-engine (action: sync-bank-activity)
-  |-- GET /reports/TransactionList?cleared=UnCleared&account=X  --> unreconciled_count
-  |-- GET /reports/TransactionList?cleared=Reconciled&account=X --> reconciled_through_date
-  |-- qb_accounts.current_balance                               --> ledger_balance
-  |
-  v
-qb_bank_activity table (Lovable Cloud DB)
-  |
-  v
-useQBBankActivity hook --> BankAccountsCard UI
-```
+### 4. Audit and fix Security Definer Views
 
-### Files Changed
-1. **New migration**: Create `qb_bank_activity` table with RLS
-2. **`supabase/functions/qb-sync-engine/index.ts`**: Add `handleSyncBankActivity` function and `sync-bank-activity` action
-3. **New file `src/hooks/useQBBankActivity.ts`**: Hook for reading/writing bank activity data
-4. **`src/components/accounting/BankAccountsCard.tsx`**: Rewire to use QB-mirrored data
-5. **`src/components/accounting/AccountingDashboard.tsx`**: Swap hooks, add sync trigger
+**Current state:** The linter flags a SECURITY DEFINER view. Four public views exist:
+- `profiles_safe` -- masks PII but has NO row filter (exposes all profiles)
+- `contacts_safe` -- uses `has_role()` for column masking
+- `user_meta_tokens_safe` -- filters by `auth.uid()`
+- `events` -- plain alias for `activity_events`
 
-### What Will Match QB Exactly
-- Ledger balance (In QuickBooks column) -- from `Account.CurrentBalance`
-- Unreconciled transaction count -- from TransactionList report
-- Reconciled-through date -- from latest reconciled transaction date
+The security definer view likely bypasses RLS on its source table, meaning any user querying it gets data as the view owner (superuser).
 
-### What Remains Manual
-- Bank Balance -- QB does not expose this via API (it comes from Yodlee/Plaid bank feeds internal to QB). Users can enter it via the pencil icon as before.
+**Fix:** Recreate the flagged view(s) with `SECURITY INVOKER` (Postgres 15+) or drop and replace with a function-based approach. The `profiles_safe` view is the most concerning since it has no row-level filter at all -- add a `WHERE company_id = get_user_company_id(auth.uid())` clause.
+
+---
+
+### 5. Lock OAuth token tables to service-role only
+
+**Current state:** Token tables use `USING (false)` SELECT policies ("No direct token reads") which technically works but is fragile -- if another policy is added, it could override. Gmail tokens still allow user INSERT/UPDATE.
+
+**Fix:**
+- Revoke all direct client access policies on `user_gmail_tokens`, `user_ringcentral_tokens`, `user_meta_tokens`
+- Replace with explicit deny-all for the `authenticated` role on SELECT/INSERT/UPDATE/DELETE
+- Edge functions use `service_role` key which bypasses RLS entirely, so they remain unaffected
+- Create a `get_my_gmail_status()` SECURITY DEFINER function (like existing `get_my_rc_status()`) so clients can check connection status without reading raw tokens
+
+---
+
+### 6. Fix company_id context propagation in ai-agent tool execution
+
+**Current state:** The `ai-agent` edge function retrieves `companyId` early (line ~4725) with a fallback to `a0000000-...`. However, some tool execution branches may not propagate this correctly, and hardcoded company IDs appear in multiple places (lines 4743, 4903, 5046, 5224).
+
+**Fix:**
+- Add a guard at tool execution entry: if `companyId` is null/undefined, fail the tool call with a clear error instead of silently proceeding
+- Replace all hardcoded `a0000000-...` references with the resolved `companyId` variable
+- Ensure `companyId` is passed into every tool handler that queries company-scoped tables
+
+**File:** `supabase/functions/ai-agent/index.ts`
+
+---
+
+## Phase 3 -- Permission Hygiene (Next Sprint)
+
+### 7. Role-based tightening (payroll, salaries, POs, quotes)
+
+Review and restrict RLS on sensitive financial tables (`employee_salaries`, `purchase_orders`, `quote_requests`) to appropriate roles only (admin, accounting). Currently these may be visible to all authenticated users within the company.
+
+### 8. Investigate system-backup multi-trigger issue
+
+The `system-backup` edge function appears to spawn redundant concurrent instances. Investigate whether the cron trigger or webhook is firing multiple times and add idempotency guards (e.g., check last backup timestamp before proceeding).
+
+---
+
+## Summary of Changes
+
+| Item | Type | Risk | Effort |
+|------|------|------|--------|
+| RLS on accounting_mirror_customers | Migration | Critical fix | 10 min |
+| TableRowActions ref bug | Code edit | Low risk | 5 min |
+| Deduplicate vizzy_fix_requests | Data operation | Zero risk | 2 min |
+| Security Definer View fix | Migration | Medium risk | 15 min |
+| OAuth token lockdown | Migration | Medium risk | 15 min |
+| company_id propagation fix | Edge function edit | Medium risk | 20 min |
+| Role-based tightening | Migration | Low risk | 30 min |
+| system-backup investigation | Investigation | N/A | TBD |
+
