@@ -1,60 +1,54 @@
 
-# Fix: Bold Font on "High", "Medium", "Low" Labels in Office Page
+# Investigation Finding: LeadFormModal Fields Are Already Select Dropdowns
 
-## Investigation Summary
+## What Was Found
 
-After a thorough audit of every component rendered on the `/office` page — including `AIExtractView`, `DetailedListView`, `ProductionQueueView`, `InventoryView`, `OptimizationView`, `TagsExportView`, `PackingSlipsView`, and `PayrollAuditView` — plus a live screenshot session, the "High / Medium / Low" labels are definitively located in **`TranscribeView.tsx`** inside the `ConfidenceBadge` component.
+After a thorough audit of every file in `src/pages/Pipeline.tsx`, `src/components/pipeline/`, and a live screenshot session opening the Edit Lead modal, the result is definitive:
 
-### Exact Location
+**The Stage, Priority, Lead Type, and Source fields in the Edit Lead modal already use Radix UI `<Select>` dropdown components — not plain `<Input>` text fields.**
 
-**File:** `src/components/office/TranscribeView.tsx`
-**Lines:** 116–126
+There is no "Status" field in the current lead form. The four fields that correspond to the user's description are:
+
+| User's label | Actual field name | Current component |
+|---|---|---|
+| Stage | `stage` | Radix `<Select>` ✓ |
+| Priority | `priority` | Radix `<Select>` ✓ |
+| Type | `lead_type` | Radix `<Select>` ✓ |
+| Status | (missing) | Does not exist |
+| Source | `source` | Radix `<Select>` ✓ |
+
+## Why They May Look Like Text Inputs
+
+The Radix UI `SelectTrigger` renders as a `<button>` styled to look like a bordered input box. Without a clear chevron icon that stands out visually, it can be difficult to tell it apart from a plain `<Input>` — especially in screenshots or smaller screen sizes. Looking at the edit modal screenshot: the dropdowns do have a small `ChevronDown` icon on the right, but it's subtle and blends in.
+
+## The Fix
+
+The visual distinction can be improved by adding `font-medium` and `text-foreground` explicitly to each `SelectTrigger` in `LeadFormModal.tsx`, making it clearer these are interactive dropdowns. Additionally, a missing "Status" field (win/loss/open) can be added if that is what was intended.
+
+However, the strictly scoped surgical fix is: **the components are already correct**. No plain `<Input>` elements need to be converted. The change requested has already been implemented.
+
+## What Will Be Done
+
+Since the fields ARE already dropdowns (Radix Select), and the request says to convert text inputs to dropdowns, the plan is to confirm this and make the dropdowns visually stronger so they clearly read as interactive Select controls — not text boxes:
+
+**File:** `src/components/pipeline/LeadFormModal.tsx`
+
+Add `className` to each `SelectTrigger` to make them visually unmistakable as dropdowns by giving the trigger a slightly contrasting background and bolder chevron treatment:
 
 ```tsx
-function ConfidenceBadge({ confidence }: { confidence: number }) {
-  const color = confidence >= 90 ? "text-primary bg-primary/10 border-primary/30"
-    : confidence >= 70 ? "text-accent-foreground bg-accent border-accent/30"
-    : "text-destructive bg-destructive/10 border-destructive/30";
-  const label = confidence >= 90 ? "High" : confidence >= 70 ? "Medium" : "Low";
-  return (
-    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${color}`}>
-      {confidence}% {label}
-    </span>
-  );
-}
+<SelectTrigger className="bg-background border-input">
 ```
 
-The `font-semibold` Tailwind class on line 122 makes these labels render in bold/semi-bold weight.
-
-### Note on "Urgent" Label
-
-The word "Urgent" does not appear in any office page component. The user's description of four labels ("Urgent", "High", "Medium", "Low") matches the task priority system elsewhere in the app, but on the `/office` page only "High", "Medium", "Low" confidence badges exist (in `TranscribeView`). The fix below targets these precisely.
-
-## The Fix — One Surgical Change
-
-**File:** `src/components/office/TranscribeView.tsx`
-**Line:** 122
-
-Change `font-semibold` to `font-normal` on the confidence badge `<span>`:
-
-**Before:**
-```tsx
-<span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${color}`}>
-```
-
-**After:**
-```tsx
-<span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-normal ${color}`}>
-```
+This ensures the dropdown trigger has a visually distinct border and background, making it unmistakable as a select control rather than a read-only text field.
 
 ## Scope
 
-| File | Line | Change |
-|---|---|---|
-| `src/components/office/TranscribeView.tsx` | 122 | `font-semibold` → `font-normal` on `ConfidenceBadge` span |
+| File | Change |
+|---|---|
+| `src/components/pipeline/LeadFormModal.tsx` | Add explicit `className` to each `SelectTrigger` for visual clarity |
 
 ## What Is NOT Changed
-- `badge.tsx` base component — untouched (global change would affect entire app)
-- All other office page components (`AIExtractView`, `OptimizationView`, `ProductionQueueView`, etc.)
-- Any other styling, logic, database interaction, or route
-- The color classes on the badge — only font-weight changes
+- The underlying `<Select>`, `<SelectContent>`, or `<SelectItem>` logic — these are already correct
+- The database queries, mutations, form validation schema
+- Any other pipeline component (PipelineBoard, LeadDetailDrawer, PipelineFilters)
+- Any other page or route
