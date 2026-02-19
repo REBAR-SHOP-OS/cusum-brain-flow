@@ -9,6 +9,7 @@ export interface QBBankActivity {
   account_name: string;
   ledger_balance: number;
   bank_balance: number | null;
+  unaccepted_count: number;
   unreconciled_count: number;
   reconciled_through_date: string | null;
   last_qb_sync_at: string | null;

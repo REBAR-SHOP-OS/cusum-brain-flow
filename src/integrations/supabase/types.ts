@@ -6880,6 +6880,7 @@ export type Database = {
           ledger_balance: number
           qb_account_id: string
           reconciled_through_date: string | null
+          unaccepted_count: number
           unreconciled_count: number
           updated_at: string
           updated_by: string | null
@@ -6894,6 +6895,7 @@ export type Database = {
           ledger_balance?: number
           qb_account_id: string
           reconciled_through_date?: string | null
+          unaccepted_count?: number
           unreconciled_count?: number
           updated_at?: string
           updated_by?: string | null
@@ -6908,6 +6910,7 @@ export type Database = {
           ledger_balance?: number
           qb_account_id?: string
           reconciled_through_date?: string | null
+          unaccepted_count?: number
           unreconciled_count?: number
           updated_at?: string
           updated_by?: string | null
