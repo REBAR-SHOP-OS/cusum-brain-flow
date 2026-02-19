@@ -1,4 +1,7 @@
+import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -31,6 +34,35 @@ export function ActiveProductionHub({ machines, activePlans = [] }: ActiveProduc
   );
 
   const allWorkingMachines = [...workingMachines, ...additionalMachines];
+
+  // Fetch aggregated progress from cut_plan_items
+  const planIds = activePlans.map(p => p.id);
+  const { data: itemAggregates } = useQuery({
+    queryKey: ["production-hub-progress", planIds],
+    enabled: planIds.length > 0,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("cut_plan_items")
+        .select("cut_plan_id, total_pieces, completed_pieces")
+        .in("cut_plan_id", planIds);
+      return data || [];
+    },
+  });
+
+  // Compute per-machine progress
+  const machineProgress = useMemo(() => {
+    const map = new Map<string, { total: number; completed: number }>();
+    if (!itemAggregates) return map;
+    for (const item of itemAggregates) {
+      const plan = activePlans.find(p => p.id === item.cut_plan_id);
+      if (!plan?.machine_id) continue;
+      const entry = map.get(plan.machine_id) || { total: 0, completed: 0 };
+      entry.total += item.total_pieces || 0;
+      entry.completed += item.completed_pieces || 0;
+      map.set(plan.machine_id, entry);
+    }
+    return map;
+  }, [itemAggregates, activePlans]);
 
   // Count plans per machine for display
   const plansByMachine = new Map<string, CutPlan[]>();
@@ -123,13 +155,22 @@ export function ActiveProductionHub({ machines, activePlans = [] }: ActiveProduc
               )}
 
               {/* Progress */}
-              <div className="space-y-1.5">
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span className="tracking-wider uppercase">Total Progress</span>
-                  <span>0%</span>
-                </div>
-                <Progress value={0} className="h-1.5" />
-              </div>
+              {(() => {
+                const prog = machineProgress.get(machine.id);
+                const pct = prog && prog.total > 0 ? Math.round((prog.completed / prog.total) * 100) : 0;
+                return (
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span className="tracking-wider uppercase">Total Progress</span>
+                      <span>{pct}%</span>
+                    </div>
+                    <Progress value={pct} className="h-1.5" />
+                    <p className="text-[10px] text-muted-foreground text-right mt-0.5">
+                      {prog?.completed || 0} / {prog?.total || 0} pieces
+                    </p>
+                  </div>
+                );
+              })()}
 
               {/* Actions */}
               <div className="flex items-center gap-2">
