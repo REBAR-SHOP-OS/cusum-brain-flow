@@ -38,13 +38,29 @@ export async function sendAgentMessage(
   attachedFiles?: AttachedFile[],
   pixelSlot?: number
 ): Promise<AgentResponse> {
-  const { data, error } = await supabase.functions.invoke("ai-agent", {
-    body: { agent, message, history, context, attachedFiles, pixelSlot },
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 55_000);
+
+  let data: unknown, invokeError: unknown;
+  try {
+    ({ data, error: invokeError } = await supabase.functions.invoke("ai-agent", {
+      body: { agent, message, history, context, attachedFiles, pixelSlot },
+      signal: controller.signal,
+    }));
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error("The request timed out — the agent is working on a complex task. Please try again in a moment.");
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+
+  const error = invokeError;
 
   if (error) {
     // Detect rate-limit errors from the edge function
-    const msg = error.message || "";
+    const msg = (error instanceof Error ? error.message : String(error)) || "";
     if (msg.includes("429") || msg.toLowerCase().includes("rate limit")) {
       throw new Error("Rate limit reached — please wait a moment before trying again.");
     }
