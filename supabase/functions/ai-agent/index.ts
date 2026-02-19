@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { callAI, callAIStream, AIError, type AIProvider, type AIMessage } from "../_shared/aiRouter.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -82,14 +83,10 @@ async function analyzeDocumentWithGemini(
 
     console.log(`Analyzing ${fileName} with Gemini Vision (${fileData.mimeType})...`);
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${Deno.env.get("LOVABLE_API_KEY")}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+    try {
+      const result = await callAI({
+        provider: "gemini",
+        model: "gemini-2.5-flash",
         messages: [
           {
             role: "user",
@@ -102,19 +99,14 @@ async function analyzeDocumentWithGemini(
             ],
           },
         ],
-        max_tokens: 8000,
+        maxTokens: 8000,
         temperature: 0.1,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Gemini Vision error:", errorText);
-      return { text: "", error: `Gemini Vision failed: ${response.status}` };
+      });
+      return { text: result.content };
+    } catch (err) {
+      console.error("Gemini Vision error:", err);
+      return { text: "", error: `Gemini Vision failed: ${err instanceof Error ? err.message : String(err)}` };
     }
-
-    const data = await response.json();
-    return { text: data.choices?.[0]?.message?.content || "" };
   } catch (error) {
     console.error("Document analysis error:", error);
     return { text: "", error: error instanceof Error ? error.message : "Analysis failed" };
@@ -4450,409 +4442,203 @@ function selectModel(agent: string, message: string, hasAttachments: boolean, hi
   maxTokens: number;
   temperature: number;
   reason: string;
+  provider: AIProvider;
   useUserGeminiKey?: boolean;
 } {
-  // Estimation with documents → Pro (best vision + reasoning for structural drawings)
+  // Estimation with documents → Gemini Pro (best vision + reasoning for structural drawings)
   if (agent === "estimation" && hasAttachments) {
     return {
-      model: "google/gemini-2.5-pro",
+      provider: "gemini",
+      model: "gemini-2.5-pro",
       maxTokens: 8000,
       temperature: 0.1,
       reason: "estimation+documents → Pro for vision+complex reasoning",
     };
   }
 
-  // Estimation without documents → Flash for quick Q&A, Pro for deep analysis
+  // Estimation without documents → GPT for quick Q&A, Gemini Pro for deep analysis
   if (agent === "estimation") {
     const isDeepAnalysis = /smart\s*estimate|full\s*auto|takeoff|calculate|weight|summary|changy/i.test(message);
     if (isDeepAnalysis || historyLength > 6) {
-      return {
-        model: "google/gemini-2.5-pro",
-        maxTokens: 6000,
-        temperature: 0.2,
-        reason: "estimation deep analysis → Pro for precision",
-      };
+      return { provider: "gemini", model: "gemini-2.5-pro", maxTokens: 6000, temperature: 0.2, reason: "estimation deep analysis → Gemini Pro for precision" };
     }
-    return {
-      model: "google/gemini-3-flash-preview",
-      maxTokens: 4000,
-      temperature: 0.3,
-      reason: "estimation quick Q&A → Flash for speed",
-    };
+    return { provider: "gpt", model: "gpt-4o-mini", maxTokens: 4000, temperature: 0.3, reason: "estimation quick Q&A → GPT-mini for speed" };
   }
 
-  // Accounting — financial precision matters
+  // Accounting — financial precision matters → GPT for structured reasoning
   if (agent === "accounting" || agent === "collections") {
     const isComplexFinancial = /report|aging|analysis|reconcil|audit|forecast|briefing|priority|attention today|drill into|P&L|profit.and.loss|balance.sheet|cash.flow|payment.velocity/i.test(message);
     const isCallRequest = /call\s|phone\s|dial\s|ring\s|reach out/i.test(message);
     if (isComplexFinancial) {
-      return {
-        model: "google/gemini-2.5-pro",
-        maxTokens: 5000,
-        temperature: 0.2,
-        reason: "accounting complex analysis/briefing → Pro for financial precision",
-      };
+      return { provider: "gpt", model: "gpt-4o", maxTokens: 5000, temperature: 0.2, reason: "accounting complex → GPT for financial precision" };
     }
     if (isCallRequest) {
-      return {
-        model: "google/gemini-2.5-flash",
-        maxTokens: 4000,
-        temperature: 0.3,
-        reason: "accounting call request → Flash for structured tag output",
-      };
+      return { provider: "gpt", model: "gpt-4o-mini", maxTokens: 4000, temperature: 0.3, reason: "accounting call → GPT-mini for structured output" };
     }
-    return {
-      model: "google/gemini-2.5-flash-lite",
-      maxTokens: 1500,
-      temperature: 0.4,
-      reason: "accounting simple query → Flash-Lite for speed+cost",
-    };
+    return { provider: "gpt", model: "gpt-4o-mini", maxTokens: 1500, temperature: 0.4, reason: "accounting simple → GPT-mini for speed" };
   }
 
-  // Social — creative content needs more freedom
+  // Social — creative content → GPT for nuanced writing
   if (agent === "social") {
     const isStrategyOrBulk = /strategy|calendar|week|month|campaign|plan/i.test(message);
     if (isStrategyOrBulk) {
-      return {
-        model: "google/gemini-3-flash-preview",
-        maxTokens: 3000,
-        temperature: 0.8,
-        reason: "social strategy → Flash-preview for creative planning",
-      };
+      return { provider: "gpt", model: "gpt-4o", maxTokens: 3000, temperature: 0.8, reason: "social strategy → GPT for creative planning" };
     }
-    return {
-      model: "google/gemini-2.5-flash",
-      maxTokens: 2000,
-      temperature: 0.9,
-      reason: "social content creation → Flash for creative output",
-    };
+    return { provider: "gpt", model: "gpt-4o-mini", maxTokens: 2000, temperature: 0.9, reason: "social content → GPT-mini for creative output" };
   }
 
-  // Sales — briefing/analysis vs pipeline actions vs quick checks
+  // Sales — briefing uses Gemini (large context), actions use GPT
   if (agent === "sales") {
     const isBriefing = /briefing|daily|morning|review|report|summary|kpi|performance|forecast/i.test(message);
     const isAnalysis = /pipeline\s*review|forecast|analysis|strategy|deal.*review|coaching|what.*should.*do/i.test(message);
     const isQuickCheck = /status|where|how.*many|count|check|update/i.test(message);
     if (isBriefing) {
-      return {
-        model: "google/gemini-2.5-pro",
-        maxTokens: 4500,
-        temperature: 0.2,
-        reason: "sales briefing → Pro for comprehensive pipeline synthesis",
-      };
+      return { provider: "gemini", model: "gemini-2.5-pro", maxTokens: 4500, temperature: 0.2, reason: "sales briefing → Gemini Pro for large context synthesis" };
     }
     if (isAnalysis) {
-      return {
-        model: "google/gemini-3-flash-preview",
-        maxTokens: 3000,
-        temperature: 0.4,
-        reason: "sales analysis/strategy → Flash-preview for balanced depth",
-      };
+      return { provider: "gpt", model: "gpt-4o", maxTokens: 3000, temperature: 0.4, reason: "sales analysis → GPT for strategic depth" };
     }
     if (isQuickCheck) {
-      return {
-        model: "google/gemini-2.5-flash-lite",
-        maxTokens: 1500,
-        temperature: 0.5,
-        reason: "sales quick check → Flash-Lite for speed",
-      };
+      return { provider: "gpt", model: "gpt-4o-mini", maxTokens: 1500, temperature: 0.5, reason: "sales quick check → GPT-mini for speed" };
     }
-    return {
-      model: "google/gemini-2.5-flash",
-      maxTokens: 2000,
-      temperature: 0.5,
-      reason: "sales default → Flash for balanced output",
-    };
+    return { provider: "gpt", model: "gpt-4o-mini", maxTokens: 2000, temperature: 0.5, reason: "sales default → GPT-mini balanced" };
   }
 
-  // Support — empathetic responses, moderate complexity
+  // Support — GPT for empathetic precision
   if (agent === "support") {
     const isComplex = /investigate|escalat|multiple|history|timeline/i.test(message);
     if (isComplex || historyLength > 8) {
-      return {
-        model: "google/gemini-3-flash-preview",
-        maxTokens: 2500,
-        temperature: 0.5,
-        reason: "support complex issue → Flash-preview for nuance",
-      };
+      return { provider: "gpt", model: "gpt-4o", maxTokens: 2500, temperature: 0.5, reason: "support complex → GPT for nuanced empathy" };
     }
-    return {
-      model: "google/gemini-2.5-flash-lite",
-      maxTokens: 1500,
-      temperature: 0.6,
-      reason: "support simple query → Flash-Lite for speed",
-    };
+    return { provider: "gpt", model: "gpt-4o-mini", maxTokens: 1500, temperature: 0.6, reason: "support simple → GPT-mini for speed" };
   }
 
-  // Shop Floor (Forge) — production-focused, practical
+  // Shop Floor (Forge) — production reasoning
   if (agent === "shopfloor") {
     const isComplex = /maintenance|bottleneck|cage|capacity|schedule|plan|scrap|waste|efficiency|throughput|risk|escalat|shortage/i.test(message);
     if (isComplex || historyLength > 6) {
-      return {
-        model: "google/gemini-2.5-pro",
-        maxTokens: 4000,
-        temperature: 0.2,
-        reason: "shopfloor complex analysis → Pro for multi-factor production reasoning",
-      };
+      return { provider: "gpt", model: "gpt-4o", maxTokens: 4000, temperature: 0.2, reason: "shopfloor complex → GPT for multi-factor reasoning" };
     }
-    return {
-      model: "google/gemini-2.5-flash-lite",
-      maxTokens: 1500,
-      temperature: 0.4,
-      reason: "shopfloor quick status → Flash-Lite for speed",
-    };
+    return { provider: "gpt", model: "gpt-4o-mini", maxTokens: 1500, temperature: 0.4, reason: "shopfloor quick → GPT-mini for speed" };
   }
 
-  // Delivery (Atlas) — logistics-focused with tiered routing
+  // Delivery (Atlas) — logistics
   if (agent === "delivery") {
     const isComplex = /route|optim|plan|multi.*stop|briefing|schedule|capacity|load.*plan/i.test(message);
     const isSimple = /where.*deliver|status.*del|track|eta|which.*driver/i.test(message);
     if (isComplex) {
-      return {
-        model: "google/gemini-2.5-pro",
-        maxTokens: 4000,
-        temperature: 0.2,
-        reason: "delivery complex (route/planning) → Pro for optimization",
-      };
+      return { provider: "gpt", model: "gpt-4o", maxTokens: 4000, temperature: 0.2, reason: "delivery complex → GPT for optimization" };
     }
     if (isSimple) {
-      return {
-        model: "google/gemini-2.5-flash-lite",
-        maxTokens: 1500,
-        temperature: 0.4,
-        reason: "delivery quick status → Flash-Lite for speed",
-      };
+      return { provider: "gpt", model: "gpt-4o-mini", maxTokens: 1500, temperature: 0.4, reason: "delivery quick → GPT-mini for speed" };
     }
-    return {
-      model: "google/gemini-2.5-flash",
-      maxTokens: 2000,
-      temperature: 0.4,
-      reason: "delivery → Flash for logistics precision",
-    };
+    return { provider: "gpt", model: "gpt-4o-mini", maxTokens: 2000, temperature: 0.4, reason: "delivery default → GPT-mini" };
   }
 
-  // Email (Relay) — inbox management
+  // Email (Relay) — writing precision
   if (agent === "email") {
     const isDraft = /draft|reply|compose|write|respond/i.test(message);
     if (isDraft) {
-      return {
-        model: "google/gemini-3-flash-preview",
-        maxTokens: 2500,
-        temperature: 0.5,
-        reason: "email drafting → Flash-preview for professional writing",
-      };
+      return { provider: "gpt", model: "gpt-4o", maxTokens: 2500, temperature: 0.5, reason: "email drafting → GPT for professional writing" };
     }
-    return {
-      model: "google/gemini-2.5-flash-lite",
-      maxTokens: 1500,
-      temperature: 0.4,
-      reason: "email summary → Flash-Lite for speed",
-    };
+    return { provider: "gpt", model: "gpt-4o-mini", maxTokens: 1500, temperature: 0.4, reason: "email summary → GPT-mini for speed" };
   }
 
-  // Data (Prism) — analytics-focused
+  // Data (Prism) — analytics → Gemini for large dataset context
   if (agent === "data") {
     const isDeep = /trend|analysis|report|forecast|anomaly|benchmark/i.test(message);
     if (isDeep) {
-      return {
-        model: "google/gemini-2.5-flash",
-        maxTokens: 3000,
-        temperature: 0.3,
-        reason: "data deep analysis → Flash for analytical precision",
-      };
+      return { provider: "gemini", model: "gemini-2.5-flash", maxTokens: 3000, temperature: 0.3, reason: "data analysis → Gemini Flash for large context analytics" };
     }
-    return {
-      model: "google/gemini-2.5-flash-lite",
-      maxTokens: 2000,
-      temperature: 0.4,
-      reason: "data quick query → Flash-Lite for speed",
-    };
+    return { provider: "gpt", model: "gpt-4o-mini", maxTokens: 2000, temperature: 0.4, reason: "data quick → GPT-mini for speed" };
   }
 
-  // Legal (Tally) — precision matters for legal advice
+  // Legal (Tally) — precision
   if (agent === "legal") {
     const isContract = /contract|lien|compliance|dispute|litigation|review|clause|indemnit/i.test(message);
     if (isContract || historyLength > 4) {
-      return {
-        model: "google/gemini-2.5-pro",
-        maxTokens: 4000,
-        temperature: 0.2,
-        reason: "legal contract/compliance analysis → Pro for precision",
-      };
+      return { provider: "gpt", model: "gpt-4o", maxTokens: 4000, temperature: 0.2, reason: "legal contract → GPT for precision" };
     }
-    return {
-      model: "google/gemini-2.5-flash",
-      maxTokens: 2500,
-      temperature: 0.3,
-      reason: "legal general question → Flash for balanced precision",
-    };
+    return { provider: "gpt", model: "gpt-4o-mini", maxTokens: 2500, temperature: 0.3, reason: "legal general → GPT-mini" };
   }
 
-  // Eisenhower — prioritization tasks
+  // Eisenhower — structured output
   if (agent === "eisenhower") {
     const isReport = /report|1|summary|boss|final/i.test(message);
     if (isReport) {
-      return {
-        model: "google/gemini-2.5-flash",
-        maxTokens: 3000,
-        temperature: 0.3,
-        reason: "eisenhower final report → Flash for structured output",
-      };
+      return { provider: "gpt", model: "gpt-4o-mini", maxTokens: 3000, temperature: 0.3, reason: "eisenhower report → GPT-mini for structured output" };
     }
-    return {
-      model: "google/gemini-2.5-flash-lite",
-      maxTokens: 2000,
-      temperature: 0.4,
-      reason: "eisenhower task categorization → Flash-Lite for speed",
-    };
+    return { provider: "gpt", model: "gpt-4o-mini", maxTokens: 2000, temperature: 0.4, reason: "eisenhower categorization → GPT-mini for speed" };
   }
 
-  // Copywriting — creative writing needs freedom
+  // Copywriting — creative writing → GPT
   if (agent === "copywriting") {
-    return {
-      model: "google/gemini-3-flash-preview",
-      maxTokens: 3000,
-      temperature: 0.7,
-      reason: "copywriting → Flash-preview for creative writing",
-    };
+    return { provider: "gpt", model: "gpt-4o", maxTokens: 3000, temperature: 0.7, reason: "copywriting → GPT for creative nuance" };
   }
 
-  // SEO — analytical + strategic
+  // SEO — analytical
   if (agent === "seo") {
-    return {
-      model: "google/gemini-3-flash-preview",
-      maxTokens: 3000,
-      temperature: 0.4,
-      reason: "SEO → Flash-preview for strategic analysis",
-    };
+    return { provider: "gpt", model: "gpt-4o", maxTokens: 3000, temperature: 0.4, reason: "SEO → GPT for strategic analysis" };
   }
 
-  // Business Development — strategic thinking
+  // Business Development — strategic
   if (agent === "bizdev") {
-    return {
-      model: "google/gemini-3-flash-preview",
-      maxTokens: 3000,
-      temperature: 0.5,
-      reason: "bizdev → Flash-preview for strategic planning",
-    };
+    return { provider: "gpt", model: "gpt-4o", maxTokens: 3000, temperature: 0.5, reason: "bizdev → GPT for strategic planning" };
   }
 
   // Talent/HR — professional writing
   if (agent === "talent") {
-    return {
-      model: "google/gemini-2.5-flash",
-      maxTokens: 2500,
-      temperature: 0.5,
-      reason: "talent/HR → Flash for professional writing",
-    };
+    return { provider: "gpt", model: "gpt-4o-mini", maxTokens: 2500, temperature: 0.5, reason: "talent/HR → GPT-mini for professional writing" };
   }
 
   // Web Builder — technical + creative
   if (agent === "webbuilder") {
-    return {
-      model: "google/gemini-3-flash-preview",
-      maxTokens: 3000,
-      temperature: 0.5,
-      reason: "webbuilder → Flash-preview for technical+creative",
-    };
+    return { provider: "gpt", model: "gpt-4o", maxTokens: 3000, temperature: 0.5, reason: "webbuilder → GPT for technical+creative" };
   }
 
-  // Commander — Sales Department Manager, always Pro-level for nuanced multi-factor analysis
+  // Commander — Sales Department Manager
   if (agent === "commander") {
     const isBriefing = /briefing|review|performance|team|weekly|meeting|report|summary|kpi|target/i.test(message);
     const isCoaching = /coach|deal|strategy|pricing|objection|close|negotiate|approach/i.test(message);
     if (isBriefing) {
-      return {
-        model: "google/gemini-2.5-pro",
-        maxTokens: 5000,
-        temperature: 0.3,
-        reason: "commander briefing/review → Pro for multi-factor synthesis",
-      };
+      return { provider: "gemini", model: "gemini-2.5-pro", maxTokens: 5000, temperature: 0.3, reason: "commander briefing → Gemini Pro for large context synthesis" };
     }
     if (isCoaching) {
-      return {
-        model: "google/gemini-2.5-pro",
-        maxTokens: 3000,
-        temperature: 0.4,
-        reason: "commander deal coaching → Pro for strategic nuance",
-      };
+      return { provider: "gpt", model: "gpt-4o", maxTokens: 3000, temperature: 0.4, reason: "commander coaching → GPT for strategic nuance" };
     }
-    return {
-      model: "google/gemini-2.5-flash",
-      maxTokens: 2000,
-      temperature: 0.5,
-      reason: "commander quick question → Flash for speed",
-    };
+    return { provider: "gpt", model: "gpt-4o-mini", maxTokens: 2000, temperature: 0.5, reason: "commander quick → GPT-mini for speed" };
   }
 
-  // Vizzy (Ops Commander) — tiered routing based on query complexity
+  // Vizzy (Ops Commander) — tiered routing
   if (agent === "assistant") {
     const isBriefing = /briefing|morning|daily|report|health|kpi|summary|performance|weekly/i.test(message);
     const isCallOrSMS = /call|phone|sms|text|ring|dial/i.test(message);
     const isEscalation = /escalat|urgent|critical|blocked|risk|alert/i.test(message);
     const isQuickQuestion = /who|what|where|when|how many|status|check/i.test(message) && message.length < 80;
-    
     if (isBriefing || isEscalation) {
-      return {
-        model: "google/gemini-2.5-pro",
-        maxTokens: 5000,
-        temperature: 0.2,
-        reason: "vizzy briefing/escalation → Pro for cross-department synthesis",
-      };
+      return { provider: "gemini", model: "gemini-2.5-pro", maxTokens: 5000, temperature: 0.2, reason: "vizzy briefing/escalation → Gemini Pro for cross-dept synthesis" };
     }
     if (isCallOrSMS) {
-      return {
-        model: "google/gemini-2.5-flash",
-        maxTokens: 2000,
-        temperature: 0.3,
-        reason: "vizzy call/SMS → Flash for quick action tag generation",
-      };
+      return { provider: "gpt", model: "gpt-4o-mini", maxTokens: 2000, temperature: 0.3, reason: "vizzy call/SMS → GPT-mini for quick action" };
     }
     if (isQuickQuestion) {
-      return {
-        model: "google/gemini-2.5-flash-lite",
-        maxTokens: 1500,
-        temperature: 0.4,
-        reason: "vizzy quick question → Flash-Lite for speed",
-      };
+      return { provider: "gpt", model: "gpt-4o-mini", maxTokens: 1500, temperature: 0.4, reason: "vizzy quick → GPT-mini for speed" };
     }
-    return {
-      model: "google/gemini-2.5-pro",
-      maxTokens: 4000,
-      temperature: 0.3,
-      reason: "vizzy default → Pro for reliable cross-domain reasoning",
-    };
+    return { provider: "gpt", model: "gpt-4o", maxTokens: 4000, temperature: 0.3, reason: "vizzy default → GPT for reliable reasoning" };
   }
 
-  // Empire (Architect) — uses user's Gemini API key by default, Pro-level for cross-platform diagnostics
+  // Empire (Architect) — always Gemini direct
   if (agent === "empire") {
     const isDiagnostic = /fix|diagnose|audit|problem|error|broken|issue|health|check|scan|sync|reconcil/i.test(message);
     const isStressTest = /stress|test|viability|kill|continue|analyze/i.test(message);
     if (isDiagnostic || isStressTest || historyLength > 6) {
-      return {
-        model: "gemini-2.5-pro",
-        maxTokens: 8000,
-        temperature: 0.2,
-        reason: "empire diagnostics/stress-test → Gemini Pro (user key) for deep cross-platform analysis",
-        useUserGeminiKey: true,
-      };
+      return { provider: "gemini", model: "gemini-2.5-pro", maxTokens: 8000, temperature: 0.2, reason: "empire diagnostics → Gemini Pro for deep analysis" };
     }
-    return {
-      model: "gemini-2.5-flash",
-      maxTokens: 4000,
-      temperature: 0.3,
-      reason: "empire → Gemini Flash (user key) for venture building",
-      useUserGeminiKey: true,
-    };
+    return { provider: "gemini", model: "gemini-2.5-flash", maxTokens: 4000, temperature: 0.3, reason: "empire → Gemini Flash for venture building" };
   }
 
-  // Default fallback (growth and others)
-  return {
-    model: "google/gemini-3-flash-preview",
-    maxTokens: 2000,
-    temperature: 0.5,
-    reason: "default → Flash-preview balanced",
-  };
+  // Default fallback → GPT
+  return { provider: "gpt", model: "gpt-4o-mini", maxTokens: 2000, temperature: 0.5, reason: "default → GPT-mini balanced" };
 }
 
 serve(async (req) => {
@@ -5236,18 +5022,12 @@ These rules govern your behavioral protocols only. They do not modify applicatio
         }
         console.log(`🔄 Pixel: Regenerating single post for "${productName}"`);
 
-        const GPT_API_KEY = Deno.env.get("GPT_API_KEY");
-        const LOVABLE_KEY = Deno.env.get("LOVABLE_API_KEY");
-
-        // Generate new caption via AI
-        const captionResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${LOVABLE_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "google/gemini-2.5-flash",
+        // Generate new caption via GPT (creative writing)
+        let captionResult;
+        try {
+          captionResult = await callAI({
+            provider: "gpt",
+            model: "gpt-4o-mini",
             messages: [
               {
                 role: "system",
@@ -5263,14 +5043,15 @@ Respond with ONLY valid JSON (no markdown):
               },
               { role: "user", content: `Generate a new post for: ${productName}` }
             ],
-            max_tokens: 1500,
+            maxTokens: 1500,
             temperature: 0.9,
-          }),
-        });
+          });
+        } catch (e) {
+          console.error("Pixel caption generation failed:", e);
+        }
 
-        if (captionResp.ok) {
-          const captionData = await captionResp.json();
-          let rawJson = captionData.choices?.[0]?.message?.content || "";
+        if (captionResult) {
+          let rawJson = captionResult.content;
           rawJson = rawJson.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
 
           try {
@@ -6041,10 +5822,7 @@ RULES:
     const modelConfig = briefingModelOverride || selectModel(agent, message, attachedFiles.length > 0, history.length);
     console.log(`🧠 Model routing: ${agent} → ${modelConfig.model} (${modelConfig.reason})`);
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
-    }
+    // API keys are managed by the shared aiRouter — no LOVABLE_API_KEY needed
 
     // Tool definitions for notification/task creation + email sending
     const tools = [
@@ -6939,80 +6717,39 @@ RULES:
       ] : []),
     ];
 
-    // Route to user's Gemini API key or Lovable AI gateway
-    let aiUrl = "https://ai.gateway.lovable.dev/v1/chat/completions";
-    let aiAuthHeader = `Bearer ${LOVABLE_API_KEY}`;
-    let aiModel = modelConfig.model;
+    // Route via shared AI router (GPT or Gemini based on selectModel)
+    console.log(`🔀 AI Router: ${modelConfig.provider}/${modelConfig.model} — ${modelConfig.reason}`);
 
-    if ((modelConfig as any).useUserGeminiKey) {
-      const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
-      if (GEMINI_API_KEY) {
-        aiUrl = `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions`;
-        aiAuthHeader = `Bearer ${GEMINI_API_KEY}`;
-        console.log(`🔑 Empire using user Gemini API key → ${aiModel}`);
-      } else {
-        // Fallback to Lovable AI gateway
-        aiModel = `google/${aiModel}`;
-        console.log(`⚠️ GEMINI_API_KEY not found, falling back to Lovable AI gateway → ${aiModel}`);
-      }
-    }
-
-    const aiRequestBody = JSON.stringify({
-      model: aiModel,
-      messages,
-      max_tokens: modelConfig.maxTokens,
-      temperature: modelConfig.temperature,
-      tools,
-      tool_choice: "auto",
-    });
-
-    let aiResponse: Response | null = null;
-    const maxRetries = 2;
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      aiResponse = await fetch(aiUrl, {
-        method: "POST",
-        headers: {
-          "Authorization": aiAuthHeader,
-          "Content-Type": "application/json",
-        },
-        body: aiRequestBody,
+    let aiResult;
+    try {
+      aiResult = await callAI({
+        provider: modelConfig.provider,
+        model: modelConfig.model,
+        messages: messages as AIMessage[],
+        maxTokens: modelConfig.maxTokens,
+        temperature: modelConfig.temperature,
+        tools,
+        toolChoice: "auto",
       });
-
-      if (aiResponse.ok) break;
-
-      if (aiResponse.status === 429) {
+    } catch (err) {
+      if (err instanceof AIError) {
         return new Response(
-          JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({ error: err.message }),
+          { status: err.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      if (aiResponse.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "AI credits exhausted. Please add credits to continue." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      // Retry on 500/503 (transient server errors)
-      if ((aiResponse.status === 500 || aiResponse.status === 503) && attempt < maxRetries) {
-        const errorText = await aiResponse.text();
-        console.warn(`AI Gateway error (attempt ${attempt + 1}/${maxRetries + 1}): ${aiResponse.status} - retrying in ${(attempt + 1) * 2}s...`);
-        await new Promise(r => setTimeout(r, (attempt + 1) * 2000));
-        continue;
-      }
-
-      const errorText = await aiResponse.text();
-      console.error("AI Gateway error:", aiResponse.status, errorText);
-      throw new Error("AI service temporarily unavailable");
+      throw err;
     }
 
-    if (!aiResponse || !aiResponse.ok) {
-      throw new Error("AI service temporarily unavailable after retries");
-    }
-
-    const aiData = await aiResponse.json();
-    const choice = aiData.choices?.[0];
+    const choice = aiResult.raw.choices?.[0];
     let reply = choice?.message?.content || "";
+    const aiModel = modelConfig.model;
+    const aiUrl = modelConfig.provider === "gemini" 
+      ? "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+      : "https://api.openai.com/v1/chat/completions";
+    const aiAuthHeader = modelConfig.provider === "gemini"
+      ? `Bearer ${Deno.env.get("GEMINI_API_KEY")}`
+      : `Bearer ${Deno.env.get("GPT_API_KEY")}`;
     const createdNotifications: { type: string; title: string; assigned_to_name?: string }[] = [];
 
     // Handle tool calls — create notifications and send emails
