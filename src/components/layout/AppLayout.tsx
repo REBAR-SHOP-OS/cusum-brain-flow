@@ -11,6 +11,7 @@ import { useFixRequestMonitor } from "@/hooks/useFixRequestMonitor";
 import { ChatPanelProvider } from "@/contexts/ChatPanelContext";
 import { DockChatProvider } from "@/contexts/DockChatContext";
 import { DockChatBar } from "@/components/chat/DockChatBar";
+import { useAuth } from "@/lib/auth";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -19,6 +20,9 @@ interface AppLayoutProps {
 export function AppLayout({ children }: AppLayoutProps) {
   // Background monitor — polls for user-actionable fix requests
   useFixRequestMonitor();
+
+  const { user } = useAuth();
+  const isInternal = (user?.email ?? "").endsWith("@rebar.shop");
 
   return (
     <RoleGuard>
@@ -62,8 +66,8 @@ export function AppLayout({ children }: AppLayoutProps) {
             {/* Floating Vizzy avatar — always visible for super admin */}
             <FloatingVizzyButton />
 
-            {/* Screenshot Feedback button */}
-            <ScreenshotFeedbackButton />
+            {/* Screenshot Feedback button — internal @rebar.shop users only */}
+            {isInternal && <ScreenshotFeedbackButton />}
 
             {/* Live Chat Widget — triggered by Vizzy button */}
             <LiveChatWidget />
