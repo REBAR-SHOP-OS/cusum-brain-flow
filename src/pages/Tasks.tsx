@@ -180,6 +180,10 @@ export default function Tasks() {
   const [fullScreenOpen, setFullScreenOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  // Approval flow state
+  const [reopenDialogOpen, setReopenDialogOpen] = useState(false);
+  const [reopenReason, setReopenReason] = useState("");
+
   // Fetch current user ID once
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data }) => {
@@ -387,8 +391,99 @@ export default function Tasks() {
     if (error) { toast.error(error.message); return; }
 
     await writeAudit(task.id, isCompleted ? "uncomplete" : "complete", "status", task.status || "open", newStatus);
+
+    // Create approval human_task for task owner when marked complete
+    if (!isCompleted && task.created_by_profile_id) {
+      try {
+        const { data: agent } = await supabase
+          .from("agents" as any)
+          .select("id")
+          .eq("code", "vizzy")
+          .single();
+
+        if (agent) {
+          await supabase.from("human_tasks" as any).insert({
+            agent_id: (agent as any).id,
+            company_id: task.company_id,
+            title: `Approve & Close: ${task.title}`,
+            description: `Task completed. Review and approve to close, or reopen with new evidence.`,
+            severity: "info",
+            category: "task_approval",
+            entity_type: "task",
+            entity_id: task.id,
+            assigned_to: task.created_by_profile_id,
+            status: "open",
+          });
+        }
+      } catch (e) {
+        console.error("Failed to create approval task", e);
+      }
+    }
+
     toast.success(isCompleted ? "Task reopened" : "Task completed");
     loadData();
+  };
+
+  const approveAndClose = async (task: TaskRow) => {
+    // Keep task as completed, resolve any open human_tasks for it
+    try {
+      await supabase
+        .from("human_tasks" as any)
+        .update({ status: "resolved", resolved_at: new Date().toISOString() })
+        .eq("entity_type", "task")
+        .eq("entity_id", task.id)
+        .eq("category", "task_approval")
+        .eq("status", "open");
+
+      await writeAudit(task.id, "approved_and_closed", "status", "completed", "completed");
+      toast.success("Task approved & closed");
+      loadData();
+    } catch (e: any) {
+      toast.error(e.message || "Failed to approve");
+    }
+  };
+
+  const reopenWithIssue = async (task: TaskRow, reason: string) => {
+    if (!reason.trim()) { toast.error("Please describe the issue"); return; }
+    try {
+      // Reopen task
+      await supabase.from("tasks").update({
+        status: "open",
+        completed_at: null,
+        updated_at: new Date().toISOString(),
+      }).eq("id", task.id);
+
+      // Add comment with the issue description
+      const { data: { user } } = await supabase.auth.getUser();
+      const companyRes = await supabase.from("profiles").select("company_id").eq("user_id", user?.id || "").single();
+      await supabase.from("task_comments" as any).insert({
+        task_id: task.id,
+        profile_id: currentProfileId,
+        content: `🔄 Reopened with issue:\n${reason}`,
+        company_id: companyRes.data?.company_id,
+      });
+
+      // Resolve the approval human_task
+      await supabase
+        .from("human_tasks" as any)
+        .update({ status: "resolved", resolved_at: new Date().toISOString() })
+        .eq("entity_type", "task")
+        .eq("entity_id", task.id)
+        .eq("category", "task_approval")
+        .eq("status", "open");
+
+      await writeAudit(task.id, "reopened_with_issue", "status", "completed", "open");
+      toast.success("Task reopened with issue — assignee notified");
+      setReopenDialogOpen(false);
+      setReopenReason("");
+      loadData();
+      // Refresh comments
+      if (selectedTask?.id === task.id) {
+        loadComments(task.id);
+      }
+    } catch (e: any) {
+      toast.error(e.message || "Failed to reopen");
+    }
   };
 
   const deleteTask = async (taskId: string) => {
@@ -798,10 +893,21 @@ export default function Tasks() {
               </div>
 
               {/* Actions */}
-              <div className="flex gap-2">
-                <Button size="sm" variant={selectedTask.status === "completed" ? "outline" : "default"} onClick={() => toggleComplete(selectedTask)} className="flex-1">
-                  {selectedTask.status === "completed" ? "Mark Incomplete" : "Mark Complete"}
-                </Button>
+              <div className="flex gap-2 flex-wrap">
+                {selectedTask.status === "completed" ? (
+                  <>
+                    <Button size="sm" className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => approveAndClose(selectedTask)}>
+                      <Check className="w-4 h-4" /> Approve & Close
+                    </Button>
+                    <Button size="sm" className="flex-1 bg-orange-500 hover:bg-orange-600 text-white" onClick={() => setReopenDialogOpen(true)}>
+                      <RefreshCw className="w-4 h-4" /> Reopen with Issue
+                    </Button>
+                  </>
+                ) : (
+                  <Button size="sm" variant="default" onClick={() => toggleComplete(selectedTask)} className="flex-1">
+                    Mark Complete
+                  </Button>
+                )}
                 <Button
                   size="sm"
                   className="bg-gradient-to-r from-orange-500 to-red-500 text-white hover:opacity-90"
@@ -816,6 +922,28 @@ export default function Tasks() {
                 </Button>
                 <Button size="sm" variant="destructive" onClick={() => { if (window.confirm("Delete this task?")) { supabase.from("tasks").delete().eq("id", selectedTask.id).then(({ error }) => { if (error) toast.error(error.message); else { toast.success("Task deleted"); setDrawerOpen(false); loadData(); } }); } }}>Delete</Button>
               </div>
+
+              {/* Reopen with Issue Dialog */}
+              <Dialog open={reopenDialogOpen} onOpenChange={setReopenDialogOpen}>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Reopen with Issue</DialogTitle>
+                    <DialogDescription>Describe what's wrong so the assignee can fix it with new evidence.</DialogDescription>
+                  </DialogHeader>
+                  <Textarea
+                    placeholder="Describe the issue or problem found..."
+                    value={reopenReason}
+                    onChange={e => setReopenReason(e.target.value)}
+                    className="min-h-[100px]"
+                  />
+                  <div className="flex gap-2 justify-end">
+                    <Button variant="outline" size="sm" onClick={() => setReopenDialogOpen(false)}>Cancel</Button>
+                    <Button size="sm" className="bg-orange-500 hover:bg-orange-600 text-white" onClick={() => selectedTask && reopenWithIssue(selectedTask, reopenReason)}>
+                      <RefreshCw className="w-4 h-4" /> Reopen Task
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
 
               {/* Audit Log */}
               <div>
