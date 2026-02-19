@@ -10694,6 +10694,13 @@ export type Database = {
       }
       execute_readonly_query: { Args: { sql_query: string }; Returns: Json }
       execute_write_fix: { Args: { sql_query: string }; Returns: Json }
+      get_my_gmail_status: {
+        Args: never
+        Returns: {
+          gmail_email: string
+          is_connected: boolean
+        }[]
+      }
       get_my_rc_status: {
         Args: never
         Returns: {
