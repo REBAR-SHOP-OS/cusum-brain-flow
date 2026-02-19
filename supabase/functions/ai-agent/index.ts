@@ -6754,6 +6754,7 @@ RULES:
         temperature: modelConfig.temperature,
         tools,
         toolChoice: "auto",
+        fallback: { provider: "gemini", model: "gemini-2.5-flash" },
       });
     } catch (err) {
       if (err instanceof AIError) {
