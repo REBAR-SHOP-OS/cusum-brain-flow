@@ -8,19 +8,7 @@ import { useNotifications, Notification } from "@/hooks/useNotifications";
 import { useNavigate } from "react-router-dom";
 import { formatDistanceToNow } from "date-fns";
 import { motion, AnimatePresence } from "framer-motion";
-
-function normalizeRoute(linkTo: string): string {
-  if (/^\/hr(\/|$)/.test(linkTo)) return "/timeclock";
-  if (/^\/estimation(\/|$)/.test(linkTo)) return "/pipeline";
-  if (/^\/(bills|invoicing)(\/|$)/.test(linkTo)) return "/accounting";
-  if (/^\/invoices(\/|$)/.test(linkTo)) return "/accounting";
-  if (/^\/accounting\/(bills|invoices)(\/|$)/.test(linkTo)) return "/accounting";
-  if (/^\/intelligence(\/|$)/.test(linkTo)) return "/brain";
-  if (/^\/inventory(\/|$)/.test(linkTo)) return "/shop-floor";
-  if (/^\/emails(\/|$)/.test(linkTo)) return "/inbox";
-  if (/^\/inbox\/[a-f0-9-]+$/i.test(linkTo)) return "/inbox";
-  return linkTo;
-}
+import { normalizeNotificationRoute } from "@/lib/notificationRouting";
 
 interface InboxPanelProps {
   isOpen: boolean;
@@ -221,9 +209,7 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
   const handleToggle = (item: Notification) => {
     if (item.status === "unread") markRead(item.id);
     if (item.linkTo) {
-      let dest = normalizeRoute(item.linkTo);
-      // To-do items should never land on /brain — fall back to /tasks
-      if (item.type === "todo" && dest === "/brain") dest = "/tasks";
+      const dest = normalizeNotificationRoute(item.linkTo, item.type);
       navigate(dest);
       onClose();
     } else {
