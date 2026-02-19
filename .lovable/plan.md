@@ -1,93 +1,40 @@
 
-# Add Drag-and-Drop & Ctrl+V Paste to ChatInput
+# Add Ctrl+V Paste Support to DockChatBox
 
-## What's Being Added
+## Current State
 
-Two file input methods will be added to the existing `ChatInput` component (`src/components/chat/ChatInput.tsx`):
+The `DockChatBox.tsx` component already has:
+- Drag-and-drop: `onDragOver`, `onDragLeave`, `onDrop` handlers on the outer container (lines 285-287)
+- Drop visual overlay: shown when `dragOver` state is true (lines 479-484)
+- `addFiles` helper function: shared logic for validating and queueing files (lines 139-150)
+- File input button (paperclip) working correctly
 
-1. **Drag & Drop** — Users can drag files from their desktop and drop them anywhere on the chat input area
-2. **Ctrl+V / Paste** — Users can paste images or files directly from their clipboard into the chat
+**What's missing: Ctrl+V / paste support on the input field.**
 
-Since `ChatInput` is shared across all agent workspaces (including Pixel/social, Gauge, Relay, etc.), this works for all agents automatically with no changes needed in pages.
+The input `<input>` element at line 457 only has `onChange` and `onKeyDown` — there is no `onPaste` handler, so pasting an image from clipboard does nothing.
 
----
+## The Fix — One Addition Only
 
-## Technical Details
+Add an `onPaste` handler to the `<input>` element at line 457-464:
 
-### Changes — `src/components/chat/ChatInput.tsx` only
-
-**1. Add `isDragOver` state**
-```ts
-const [isDragOver, setIsDragOver] = useState(false);
-```
-
-**2. Add drag event handlers**
-```ts
-const handleDragOver = (e: React.DragEvent) => {
-  e.preventDefault();
-  setIsDragOver(true);
-};
-const handleDragLeave = () => setIsDragOver(false);
-const handleDrop = (e: React.DragEvent) => {
-  e.preventDefault();
-  setIsDragOver(false);
-  if (e.dataTransfer.files?.length) processFiles(e.dataTransfer.files);
-};
-```
-
-**3. Extract file processing into shared `processFiles` function**
-
-The existing upload logic inside `handleFileSelect` will be refactored into a `processFiles(files: FileList)` function. Both the file `<input onChange>` and the new drag/paste handlers call this shared function — no logic duplication.
-
-**4. Add paste handler on the textarea**
-```ts
-const handlePaste = (e: React.ClipboardEvent) => {
+```tsx
+onPaste={(e) => {
   const files = e.clipboardData?.files;
   if (files?.length) {
     e.preventDefault();
-    processFiles(files);
+    addFiles(files);
   }
-  // If no files in clipboard, normal text paste proceeds naturally
-};
+}}
 ```
 
-**5. Apply drag visual feedback & event handlers to the outer container**
-
-The outer wrapper `div` gets the drag handlers and a conditional ring highlight:
-```tsx
-<div
-  onDragOver={handleDragOver}
-  onDragLeave={handleDragLeave}
-  onDrop={handleDrop}
-  className={cn(
-    "relative bg-secondary rounded-xl border border-border/50 shadow-sm ...",
-    isDragOver && "ring-2 ring-primary border-primary bg-primary/5"
-  )}
->
-```
-
-**6. Drop overlay text** — When dragging over, an overlay label appears inside the box:
-```tsx
-{isDragOver && (
-  <div className="absolute inset-0 bg-primary/10 rounded-xl flex items-center justify-center pointer-events-none z-10">
-    <p className="text-sm font-semibold text-primary">Drop files here</p>
-  </div>
-)}
-```
-
-**7. Add `onPaste` to the textarea**
-```tsx
-<textarea ... onPaste={handlePaste} />
-```
-
----
+When a user presses Ctrl+V:
+- If the clipboard contains files/images → `e.preventDefault()` stops default paste behavior, `addFiles()` queues them as pending files
+- If the clipboard contains only text → the handler does nothing, normal text paste proceeds naturally
 
 ## Scope
 
 | File | Change |
 |---|---|
-| `src/components/chat/ChatInput.tsx` | Add drag-and-drop + paste handlers, extract `processFiles`, visual feedback |
+| `src/components/chat/DockChatBox.tsx` | Add `onPaste` to the composer `<input>` element (line ~462) |
 
-No other files need changes — all agent pages (`AgentWorkspace.tsx`, `Inbox.tsx`, `Home.tsx`) already use `ChatInput` and will inherit the feature automatically.
-
-The `showFileUpload` prop still gates whether the paperclip button is shown, but drag-and-drop and paste will work **regardless** of `showFileUpload` so users always have a convenient way to attach files.
+No other changes needed. The existing `addFiles` function, pending file display, and upload logic already handle everything correctly.
