@@ -1,82 +1,63 @@
 
+# Fix: Display Screenshot Images in Empire Builder Chat
 
-# Packing Slip Redesign -- Header Fields + Table Columns
+## Problem
+When a screenshot feedback is sent to the Architect agent (via "Fix with ARIA" or the autofix flow), the screenshot URL is embedded as plain text in the message content (e.g., `Screenshot: https://...`). The Empire Builder chat renders user messages as plain text only -- images are never visually displayed. This means humans cannot visually audit/check the screenshot.
 
-## Current State
+## Solution
+Two changes to `src/pages/EmpireBuilder.tsx`:
 
-The `DeliveryPackingSlip` component currently shows:
-- Header: Customer, Ship To, Delivery #, Date
-- Table: Mark, Bar, Cut (mm), Shape, Qty
+### Change 1 -- Store attached file URLs in the message object
+When files are attached and sent (line 238-239), store the file URLs in the `Message` object so they can be rendered as images:
 
-## What the Request Asks For
+```tsx
+// Line 239: Add imageUrls to the message
+const imageUrls = attachedFiles
+  .filter(f => /\.(png|jpg|jpeg|gif|webp)$/i.test(f.name) || f.url.includes("image"))
+  .map(f => f.url);
+const userMsg: Message = {
+  id: crypto.randomUUID(),
+  role: "user",
+  content: displayContent,
+  timestamp: new Date(),
+  files: attachedFiles.map(f => ({ name: f.name, url: f.url, type: "image" })),
+};
+```
 
-**Header:** Customer, Ship To, Delivery #, Invoice #, Invoice Date, Scope, Delivery Date
-**Table columns:** DW#, Mark, Quantity, Size, Type, Total Length
+### Change 2 -- Render images inline in user messages
+In the message rendering block (lines 546-547), detect image URLs in message content AND render attached file images:
 
-## Data Availability Analysis
+```tsx
+{isUser ? (
+  <>
+    <p className="whitespace-pre-wrap">{message.content}</p>
+    {/* Render attached images */}
+    {message.files?.filter(f => /image/i.test(f.type || f.name)).map((f, i) => (
+      <img key={i} src={f.url} alt={f.name} className="mt-2 rounded-lg max-w-full max-h-64 object-contain" />
+    ))}
+    {/* Also render any Screenshot: URL found in autofix messages */}
+    {(() => {
+      const match = message.content.match(/Screenshot:\s*(https?:\/\/\S+)/);
+      return match ? <img src={match[1]} alt="Screenshot" className="mt-2 rounded-lg max-w-full max-h-64 object-contain border border-white/10" /> : null;
+    })()}
+  </>
+) : ( ... )}
+```
 
-| Requested Field | Available? | Source |
-|---|---|---|
-| Customer (company_name) | Yes | `cut_plan` -> `project` -> `customer.company_name` (or use existing `customer_name` on packing_slips) |
-| Ship To (site_address) | Yes | `cut_plan` -> `project.site_address` (currently not populated on packing_slips) |
-| Delivery # | Yes | Already shown |
-| Invoice # | NO | No `invoices` table exists in the DB |
-| Invoice Date | NO | Same -- no invoices table |
-| Scope | NO | No `scope_of_work` field on `projects` table |
-| Delivery Date | Yes | `deliveries.scheduled_date` |
-| DW# (Drawing Number) | Partially | `cut_plan_items.drawing_ref` exists but is NOT included in `items_json` snapshot |
-| Size (bar_code) | Yes | Already in items_json as `bar_code` (e.g., "10M", "15M") |
-| Type (Straight/Bent) | Derivable | If `asa_shape_code` is null -> "Straight", otherwise -> "Bent" |
-| Total Length | Derivable | `cut_length_mm` converted to meters (cut_length_mm / 1000) |
+### Change 3 -- Render screenshot in autofix messages
+The autofix handler (line 172) includes the screenshot URL as text. The rendering change in Change 2 will automatically detect `Screenshot: https://...` patterns and render them as visible images.
 
-## Plan
-
-### Step 1 -- Database: Add missing columns to `packing_slips`
-
-Add these nullable columns so the packing slip stores all header data at creation time:
-- `invoice_number TEXT` (manually entered or linked later)
-- `invoice_date DATE`
-- `scope TEXT`
-- `delivery_date DATE`
-- `site_address TEXT` (separate from `ship_to` for clarity)
-
-### Step 2 -- Update `useDeliveryActions.ts` to populate new fields
-
-When creating a packing slip from a bundle, fetch the related `project.site_address` via the cut_plan's `project_id` and store it in the `ship_to` field. Also store `delivery_date` from the delivery's `scheduled_date`.
-
-### Step 3 -- Update `items_json` snapshot to include `drawing_ref`
-
-In `useDeliveryActions.ts`, add `drawing_ref` to each item in the snapshot so the packing slip template can display the DW# column.
-
-### Step 4 -- Redesign `DeliveryPackingSlip.tsx`
-
-**New Header (7 fields in 2 rows):**
-Row 1: Customer | Ship To | Delivery # | Delivery Date
-Row 2: Invoice # | Invoice Date | Scope | Slip #
-
-**New Table Columns:**
-| DW# | Mark | Quantity | Size | Type | Total Length |
-|---|---|---|---|---|---|
-| drawing_ref | mark_number | total_pieces | bar_code | Straight/Bent | cut_length_mm / 1000 + " m" |
-
-**Footer total:** Sum of Quantity column
-
-### Step 5 -- Update `Deliveries.tsx` to pass new props
-
-When clicking a packing slip card, pass the additional fields (invoice_number, invoice_date, scope, delivery_date) from the slip data to the overlay component.
-
-## Files Changed
+## Technical Details
 
 | File | Change |
 |---|---|
-| Database migration | Add `invoice_number`, `invoice_date`, `scope`, `delivery_date` columns to `packing_slips` |
-| `src/hooks/useDeliveryActions.ts` | Include `drawing_ref` in items snapshot; populate `ship_to` from project; store `delivery_date` |
-| `src/components/delivery/DeliveryPackingSlip.tsx` | Redesign header to 7 fields; change table to DW#/Mark/Quantity/Size/Type/Total Length |
-| `src/pages/Deliveries.tsx` | Pass new packing slip fields to the overlay component |
+| `src/pages/EmpireBuilder.tsx` (lines 238-239) | Store `attachedFiles` in the message's `files` array |
+| `src/pages/EmpireBuilder.tsx` (lines 546-547) | Render attached images and auto-detect `Screenshot:` URLs as inline images |
 
-## Notes
+## Result
 
-- Invoice # and Scope will show as "--" until manually entered or a future invoicing module populates them
-- Existing packing slips will still render correctly (new columns are nullable, items without `drawing_ref` show "--")
-- No other pages or components are modified
-
+| Before | After |
+|---|---|
+| Screenshot URL shown as plain text | Screenshot rendered as a visible, clickable image |
+| Humans must copy-paste URL to view | Image visible inline for instant audit |
+| Attached images show only "X file(s) attached" text | Attached images displayed visually in the chat bubble |
