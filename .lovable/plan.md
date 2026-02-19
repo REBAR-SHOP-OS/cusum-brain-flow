@@ -1,60 +1,70 @@
 
-# Fix: Empty "Size" Field on Cutter Station Cards
+# Fix: Missing "Delivery Date" Column in Tags & Export Table
 
-## Investigation Summary
+## Root Cause (Confirmed via Code Investigation)
 
-After extensive exploration, the "Size" field on the cutter station production cards corresponds to the `bar_code` property displayed in `ProductionCard.tsx` at line 149. Currently it renders as:
+The `/office` page (`OfficePortal`) contains multiple sections. The table in question is in **Tags & Export** (`src/components/office/TagsExportView.tsx`), which renders a scrollable table with columns:
 
-```tsx
-<p className="text-sm font-bold text-foreground">{item.bar_code}</p>
-```
+`DWG # | Item | Grade | Mark | Qty | Size | Type | Total Length | [A-R dims] | Weight | Picture | Customer | Ref | Add`
 
-This displays the bar code value (e.g., "10M", "15M") **without a label** and without any fallback for empty/null values. While the database currently has no null `bar_code` entries, the field lacks:
-1. A descriptive "SIZE" label (like other fields such as "MARK / DWG" and "ORDER TARGET" have)
-2. A fallback display when the value might be empty
+The **Delivery Date** column is entirely absent from this table.
+
+The data source is confirmed: `ExtractSession` (already fetched and stored in `selectedSession`) has a `target_eta` field which is the delivery/target date for the manifest. All rows in a session share the same session-level `target_eta`.
 
 ## Scope
 
-**Single file, single modification:**
+**Single file, two additions:**
 
 | File | Change |
 |------|--------|
-| `src/components/shopfloor/ProductionCard.tsx` | Add "SIZE" label above `bar_code` value + add fallback for empty values |
+| `src/components/office/TagsExportView.tsx` | Add "Delivery Date" `<th>` to table header + `<td>` to each row |
 
-No other files are touched. No styling changes to other fields. No database changes.
+No other files are touched. No database changes. No schema changes. No CSV export header is changed (out of scope).
 
 ## The Fix
 
-**File:** `src/components/shopfloor/ProductionCard.tsx`  
-**Location:** Line 148-149
+**File:** `src/components/office/TagsExportView.tsx`
 
-Currently:
+### Change 1 — Table header (line ~273, after the "Add" `<th>`)
+
+Currently (last column in `<thead>`):
 ```tsx
-{/* Bar size */}
-<p className="text-sm font-bold text-foreground">{item.bar_code}</p>
+<th className="...">Add</th>
 ```
 
-After fix:
+After:
 ```tsx
-{/* Bar size */}
-<div>
-  <p className="text-[9px] text-muted-foreground font-medium tracking-[0.15em] uppercase">
-    Size
-  </p>
-  <p className="text-sm font-bold text-foreground">{item.bar_code || "—"}</p>
-</div>
+<th className="...">Add</th>
+<th className="text-[10px] font-bold tracking-widest text-primary uppercase text-left px-3 py-2 whitespace-nowrap">Delivery Date</th>
 ```
 
-This adds:
-- A "SIZE" micro-label above the value (matching the visual pattern of "MARK / DWG" and "ORDER TARGET" labels already used on the card)
-- A dash fallback ("—") if `bar_code` is ever null or empty, preventing a visually blank field
+### Change 2 — Table row cell (line ~318, after the `row.address` `<td>`)
+
+Currently (last column in row):
+```tsx
+<td className="text-xs text-muted-foreground px-3 py-2.5">{row.address || "—"}</td>
+```
+
+After:
+```tsx
+<td className="text-xs text-muted-foreground px-3 py-2.5">{row.address || "—"}</td>
+<td className="text-xs text-muted-foreground px-3 py-2.5 whitespace-nowrap">
+  {selectedSession?.target_eta
+    ? new Date(selectedSession.target_eta).toLocaleDateString()
+    : "—"}
+</td>
+```
+
+The `selectedSession` variable is already in scope at the row-render level (it is defined at the top of the component and is accessible throughout the JSX).
 
 ## What Is NOT Changed
 
-- `CutterStationView.tsx` -- untouched
-- `BenderStationView.tsx` -- untouched
-- `BarSizeGroup.tsx` -- untouched
-- `StationHeader.tsx` -- untouched
-- All other card fields (MARK / DWG, badge, shape diagram, progress) -- untouched
-- Database -- untouched
-- Styling of existing elements -- untouched
+- `DetailedListView.tsx` — untouched
+- `ProductionQueueView.tsx` — untouched
+- `PackingSlipsView.tsx` — untouched
+- `AIExtractView.tsx` — untouched
+- `InventoryView.tsx` — untouched
+- CSV export headers — untouched (out of scope per the problem statement)
+- Database / schema — untouched
+- All other columns — untouched
+- Card view mode — untouched (only table view is affected)
