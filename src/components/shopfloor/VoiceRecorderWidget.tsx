@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { Mic, MicOff, Copy, X, Loader2 } from "lucide-react";
+import { Mic, MicOff, Copy, X, Loader2, Radio, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
@@ -76,13 +76,39 @@ export function VoiceRecorderWidget() {
 
   if (status === "idle") {
     return (
-      <button
-        onClick={handleStart}
-        className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-primary/90 hover:bg-primary text-primary-foreground shadow-[0_0_30px_-5px_hsl(var(--primary)/0.5)] flex items-center justify-center transition-all hover:scale-105 active:scale-95"
-        title="Voice memo"
-      >
-        <Mic className="w-6 h-6" />
-      </button>
+      <div className="fixed bottom-6 right-6 z-50 flex flex-col items-center gap-2">
+        <button
+          onClick={handleStart}
+          className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-red-600 hover:bg-red-500 text-white shadow-[0_0_40px_-5px_rgba(220,38,38,0.5)] flex items-center justify-center transition-all hover:scale-105 active:scale-95"
+          title="Voice memo"
+        >
+          <Mic className="w-10 h-10" />
+        </button>
+        <span className="text-[10px] md:text-xs font-medium tracking-wider text-muted-foreground uppercase">Tap to speak</span>
+      </div>
+    );
+  }
+
+  if (status === "listening") {
+    return (
+      <div className="fixed bottom-6 right-6 z-50 flex flex-col items-center gap-3">
+        <div className="relative">
+          <span className="absolute inset-0 rounded-full bg-red-500 animate-ping opacity-40" />
+          <button
+            onClick={handleStop}
+            className="relative w-20 h-20 md:w-24 md:h-24 rounded-full bg-red-600 hover:bg-red-700 text-white shadow-[0_0_50px_-5px_rgba(220,38,38,0.6)] flex items-center justify-center transition-all active:scale-95"
+            title="Stop recording"
+          >
+            <Square className="w-10 h-10" />
+          </button>
+        </div>
+        <span className="text-[10px] md:text-xs font-bold tracking-widest text-red-500 uppercase animate-pulse">Recording…</span>
+        {liveText && (
+          <div className="w-72 md:w-80 rounded-xl border border-border/60 bg-card/80 backdrop-blur-md p-3 shadow-lg">
+            <p className="text-xs text-muted-foreground italic leading-relaxed">{liveText}</p>
+          </div>
+        )}
+      </div>
     );
   }
 
@@ -91,15 +117,9 @@ export function VoiceRecorderWidget() {
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border/40">
         <div className="flex items-center gap-2">
-          {status === "listening" && (
-            <span className="relative flex h-3 w-3">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75" />
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-destructive" />
-            </span>
-          )}
           {status === "processing" && <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />}
           <span className="text-xs font-bold tracking-wider text-foreground uppercase">
-            {status === "listening" ? "Listening…" : status === "processing" ? "Translating…" : "Translation"}
+            {status === "processing" ? "Translating…" : "Translation"}
           </span>
           {detectedLang && (
             <span className="text-[9px] tracking-widest text-primary/70 uppercase">{detectedLang}</span>
@@ -112,33 +132,7 @@ export function VoiceRecorderWidget() {
 
       {/* Body */}
       <div className="p-4 space-y-3 max-h-64 overflow-y-auto">
-        {status === "listening" && (
-          <>
-            {/* Pulse animation */}
-            <div className="flex items-center justify-center gap-1 py-2">
-              {[...Array(5)].map((_, i) => (
-                <div
-                  key={i}
-                  className="w-1 bg-primary rounded-full animate-pulse"
-                  style={{
-                    height: `${12 + Math.random() * 20}px`,
-                    animationDelay: `${i * 0.15}s`,
-                    animationDuration: "0.6s",
-                  }}
-                />
-              ))}
-            </div>
-            {liveText && (
-              <p className="text-xs text-muted-foreground italic leading-relaxed">{liveText}</p>
-            )}
-            <button
-              onClick={handleStop}
-              className="w-full py-2 rounded-lg bg-destructive/90 hover:bg-destructive text-destructive-foreground text-xs font-bold tracking-wider uppercase transition-colors flex items-center justify-center gap-2"
-            >
-              <MicOff className="w-4 h-4" /> Stop
-            </button>
-          </>
-        )}
+        {/* listening state is now handled as a separate FAB above */}
 
         {status === "processing" && (
           <div className="flex flex-col items-center gap-3 py-4">
