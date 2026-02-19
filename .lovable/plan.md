@@ -1,63 +1,60 @@
 
-# Fix: To-do Notifications Navigating to /brain Instead of /tasks
+# Fix: Empty "Size" Field on Cutter Station Cards
 
-## Root Cause (Confirmed via Database + Code Inspection)
+## Investigation Summary
 
-Two separate problems combine to cause this bug:
+After extensive exploration, the "Size" field on the cutter station production cards corresponds to the `bar_code` property displayed in `ProductionCard.tsx` at line 149. Currently it renders as:
 
-**Problem 1 — Bad data in the database:**
-Several to-do notifications have `link_to` set to `/brain` directly. These were inserted incorrectly by agents. When a user clicks them, `normalizeRoute` passes `/brain` through unchanged → user lands on `/brain`.
+```tsx
+<p className="text-sm font-bold text-foreground">{item.bar_code}</p>
+```
 
-**Problem 2 — normalizeRoute maps /intelligence → /brain:**
-One to-do has `link_to: /intelligence`, which `normalizeRoute` converts to `/brain`. Same wrong result.
+This displays the bar code value (e.g., "10M", "15M") **without a label** and without any fallback for empty/null values. While the database currently has no null `bar_code` entries, the field lacks:
+1. A descriptive "SIZE" label (like other fields such as "MARK / DWG" and "ORDER TARGET" have)
+2. A fallback display when the value might be empty
 
-## The Fix — Single File, Surgical
+## Scope
 
-**File:** `src/components/panels/InboxPanel.tsx`  
-**Change:** Two-line modification in `handleToggle` (around line 221–226)
+**Single file, single modification:**
+
+| File | Change |
+|------|--------|
+| `src/components/shopfloor/ProductionCard.tsx` | Add "SIZE" label above `bar_code` value + add fallback for empty values |
+
+No other files are touched. No styling changes to other fields. No database changes.
+
+## The Fix
+
+**File:** `src/components/shopfloor/ProductionCard.tsx`  
+**Location:** Line 148-149
 
 Currently:
-```typescript
-const handleToggle = (item: Notification) => {
-  if (item.status === "unread") markRead(item.id);
-  if (item.linkTo) {
-    navigate(normalizeRoute(item.linkTo));
-    onClose();
-  } else {
-    ...
-  }
-};
+```tsx
+{/* Bar size */}
+<p className="text-sm font-bold text-foreground">{item.bar_code}</p>
 ```
 
 After fix:
-```typescript
-const handleToggle = (item: Notification) => {
-  if (item.status === "unread") markRead(item.id);
-  if (item.linkTo) {
-    let dest = normalizeRoute(item.linkTo);
-    // To-do items should never land on /brain — fall back to /tasks
-    if (item.type === "todo" && dest === "/brain") dest = "/tasks";
-    navigate(dest);
-    onClose();
-  } else {
-    ...
-  }
-};
+```tsx
+{/* Bar size */}
+<div>
+  <p className="text-[9px] text-muted-foreground font-medium tracking-[0.15em] uppercase">
+    Size
+  </p>
+  <p className="text-sm font-bold text-foreground">{item.bar_code || "—"}</p>
+</div>
 ```
 
-## Why This Approach
+This adds:
+- A "SIZE" micro-label above the value (matching the visual pattern of "MARK / DWG" and "ORDER TARGET" labels already used on the card)
+- A dash fallback ("—") if `bar_code` is ever null or empty, preventing a visually blank field
 
-- Fixes both the bad-data case (`link_to: /brain`) and the mapped case (`/intelligence` → `/brain`) in one guard
-- Does **not** alter `normalizeRoute` itself — other notification types (regular notifications, ideas) that legitimately link to `/brain` remain unaffected
-- Scoped to `type === "todo"` only — zero impact on other tabs
-- No database changes, no schema changes, no styling changes
+## What Is NOT Changed
 
-## Scope Compliance
-
-| What | Status |
-|------|--------|
-| `InboxPanel.tsx` — `handleToggle` guard | ONLY change |
-| `normalizeRoute` function | Untouched |
-| `notifications` / `ideas` tab behavior | Untouched |
-| All other files | Untouched |
-| Database | Untouched |
+- `CutterStationView.tsx` -- untouched
+- `BenderStationView.tsx` -- untouched
+- `BarSizeGroup.tsx` -- untouched
+- `StationHeader.tsx` -- untouched
+- All other card fields (MARK / DWG, badge, shape diagram, progress) -- untouched
+- Database -- untouched
+- Styling of existing elements -- untouched
