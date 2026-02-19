@@ -38,6 +38,47 @@ export function AppSidebar() {
   const { hasAccess: isLinkedCustomer } = useCustomerPortalData();
   const isExternalEmployee = !isInternal && !!email && !isLinkedCustomer;
 
+  // AI bot account: only Dashboard + Shop Floor
+  if (email === "ai@rebar.shop") {
+    const aiNav: NavItem[] = [
+      { name: "Dashboard", href: "/home", icon: Home },
+      { name: "Shop Floor", href: "/shop-floor", icon: Factory },
+    ];
+    return (
+      <aside data-tour="sidebar" className="group/sidebar w-14 hover:w-48 shrink-0 bg-sidebar border-r border-sidebar-border flex flex-col h-full transition-all duration-200 ease-in-out overflow-hidden">
+        <ScrollArea className="flex-1 py-2">
+          <div className="flex flex-col gap-0.5 px-2 mt-2">
+            {aiNav.map((item) => {
+              const isActive = location.pathname === item.href || location.pathname.startsWith(item.href);
+              return (
+                <Tooltip key={item.name} delayDuration={200}>
+                  <TooltipTrigger asChild>
+                    <Link
+                      to={item.href}
+                      className={cn(
+                        "relative h-10 rounded-lg flex items-center gap-3 px-2 transition-colors whitespace-nowrap",
+                        "hover:bg-sidebar-accent",
+                        isActive ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-sidebar-foreground"
+                      )}
+                    >
+                      <item.icon className="w-[18px] h-[18px] shrink-0" />
+                      <span className="text-sm opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-200 overflow-hidden">
+                        {item.name}
+                      </span>
+                    </Link>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" className="text-xs group-hover/sidebar:hidden">
+                    {item.name}
+                  </TooltipContent>
+                </Tooltip>
+              );
+            })}
+          </div>
+        </ScrollArea>
+      </aside>
+    );
+  }
+
   // External employees get role-aware nav
   if (isExternalEmployee) {
     const hasOfficeRole = roles.includes("office" as any);
