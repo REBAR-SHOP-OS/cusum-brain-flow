@@ -378,10 +378,6 @@ export default function Deliveries() {
                       >
                         <CardContent className="p-4">
                           <div className="flex items-center justify-between mb-1">
-                             <span className="font-medium flex items-center gap-2">
-                               <FileText className="w-4 h-4" />
-                               {slip.slip_number}
-                             </span>
                              <div className="flex items-center gap-1.5">
                                <Badge className={
                                  slip.status === "delivered" ? "bg-primary/30 text-primary" :
