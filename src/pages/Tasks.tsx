@@ -139,7 +139,7 @@ function linkifyText(text: string | null) {
   const imageExtRegex = /\.(png|jpe?g|gif|webp)(\?[^\s]*)?$/i;
   const parts = text.split(urlRegex);
   return parts.map((part, i) => {
-    if (urlRegex.test(part)) {
+    if (/^https?:\/\//.test(part)) {
       if (imageExtRegex.test(part)) {
         return (
           <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="block my-2">
