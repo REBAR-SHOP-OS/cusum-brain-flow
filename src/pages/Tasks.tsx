@@ -853,7 +853,7 @@ export default function Tasks() {
                         {isInternal && (
                           <button
                             onClick={() => deleteAttachment(url, i)}
-                            className="opacity-0 group-hover/attachment:opacity-100 text-muted-foreground hover:text-destructive transition-opacity shrink-0"
+                            className="text-muted-foreground hover:text-destructive transition-colors shrink-0 ml-1"
                             title="Remove attachment"
                           >
                             <X className="w-3 h-3" />
