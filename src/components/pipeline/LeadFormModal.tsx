@@ -184,7 +184,7 @@ export function LeadFormModal({ open, onOpenChange, lead }: LeadFormModalProps) 
                   <FormLabel>Customer</FormLabel>
                   <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
-                      <SelectTrigger>
+                      <SelectTrigger className="bg-background border-input">
                         <SelectValue placeholder="Select customer..." />
                       </SelectTrigger>
                     </FormControl>
@@ -210,8 +210,8 @@ export function LeadFormModal({ open, onOpenChange, lead }: LeadFormModalProps) 
                     <FormLabel>Stage</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
-                        <SelectTrigger>
-                          <SelectValue />
+                      <SelectTrigger className="bg-background border-input">
+                           <SelectValue />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
@@ -235,8 +235,8 @@ export function LeadFormModal({ open, onOpenChange, lead }: LeadFormModalProps) 
                     <FormLabel>Priority</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
-                        <SelectTrigger>
-                          <SelectValue />
+                      <SelectTrigger className="bg-background border-input">
+                           <SelectValue />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
@@ -260,7 +260,7 @@ export function LeadFormModal({ open, onOpenChange, lead }: LeadFormModalProps) 
                     <FormLabel>Lead Type</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value || "opportunity"}>
                       <FormControl>
-                        <SelectTrigger>
+                      <SelectTrigger className="bg-background border-input">
                           <SelectValue />
                         </SelectTrigger>
                       </FormControl>
@@ -282,7 +282,7 @@ export function LeadFormModal({ open, onOpenChange, lead }: LeadFormModalProps) 
                     <FormLabel>Source</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value || ""}>
                       <FormControl>
-                        <SelectTrigger>
+                        <SelectTrigger className="bg-background border-input">
                           <SelectValue placeholder="Select source..." />
                         </SelectTrigger>
                       </FormControl>
