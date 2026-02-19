@@ -881,7 +881,7 @@ export default function Tasks() {
                 </div>
                 <div>
                   <span className="text-xs text-muted-foreground">Priority</span>
-                  <p className="mt-0.5"><Badge variant="secondary" className={cn("text-xs", PRIORITY_COLORS[selectedTask.priority || "medium"])}>{(selectedTask.priority || "medium").charAt(0).toUpperCase() + (selectedTask.priority || "medium").slice(1)}</Badge></p>
+                  <p className="mt-0.5"><Badge variant="secondary" className={cn("text-xs font-normal", PRIORITY_COLORS[selectedTask.priority || "medium"])}>{(selectedTask.priority || "medium").charAt(0).toUpperCase() + (selectedTask.priority || "medium").slice(1)}</Badge></p>
                 </div>
                 <div>
                   <span className="text-xs text-muted-foreground">Assigned To</span>
