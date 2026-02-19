@@ -47,11 +47,11 @@ export function AgentHistorySidebar({
       <div className="flex flex-col h-full">
         {/* Agent header with image - full width, cropped to fit */}
         <div className="relative">
-          <div className="w-full aspect-[4/3] overflow-hidden">
+          <div className="w-full aspect-[4/3] overflow-hidden bg-muted/30">
             <img
               src={agentImage}
               alt={agentName}
-              className="w-full h-full object-cover object-top"
+              className="w-full h-full object-contain object-top"
             />
           </div>
           {/* Settings gear - top right over image */}
