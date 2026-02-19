@@ -271,6 +271,7 @@ export function TagsExportView() {
                   <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-left px-3 py-2 whitespace-nowrap">Customer</th>
                   <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-left px-3 py-2 whitespace-nowrap">Ref</th>
                   <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-left px-3 py-2 whitespace-nowrap">Add</th>
+                  <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-left px-3 py-2 whitespace-nowrap">Delivery Date</th>
                 </tr>
               </thead>
               <tbody>
@@ -316,6 +317,11 @@ export function TagsExportView() {
                         <td className="text-xs text-muted-foreground px-3 py-2.5 whitespace-nowrap">{row.customer || "—"}</td>
                         <td className="text-xs text-muted-foreground px-3 py-2.5 whitespace-nowrap">{row.reference || "—"}</td>
                         <td className="text-xs text-muted-foreground px-3 py-2.5">{row.address || "—"}</td>
+                        <td className="text-xs text-muted-foreground px-3 py-2.5 whitespace-nowrap">
+                          {selectedSession?.target_eta
+                            ? new Date(selectedSession.target_eta).toLocaleDateString()
+                            : "—"}
+                        </td>
                       </tr>
                     );
                   })
