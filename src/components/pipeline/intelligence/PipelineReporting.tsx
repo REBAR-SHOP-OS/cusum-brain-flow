@@ -3,11 +3,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Download, FileSpreadsheet, Table2 } from "lucide-react";
-import { format } from "date-fns";
+import { Input } from "@/components/ui/input";
+import { Download, FileSpreadsheet, Table2, Calendar } from "lucide-react";
+import { format, subDays, isAfter, isBefore, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { PIPELINE_STAGES } from "@/pages/Pipeline";
+import * as XLSX from "xlsx";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Lead = Tables<"leads">;
@@ -18,6 +20,7 @@ interface Props {
 }
 
 type ReportType = "pipeline_summary" | "stage_breakdown" | "win_loss" | "stale_leads" | "sla_breaches";
+type ExportFormat = "csv" | "xlsx";
 
 const REPORT_TYPES: { value: ReportType; label: string; icon: React.ElementType }[] = [
   { value: "pipeline_summary", label: "Pipeline Summary", icon: Table2 },
@@ -46,18 +49,46 @@ function downloadCSV(rows: Record<string, any>[], filename: string) {
   a.download = `${filename}_${format(new Date(), "yyyy-MM-dd")}.csv`;
   a.click();
   URL.revokeObjectURL(url);
-  toast.success(`Exported ${rows.length} rows`);
+  toast.success(`Exported ${rows.length} rows as CSV`);
+}
+
+function downloadXLSX(rows: Record<string, any>[], filename: string) {
+  if (rows.length === 0) { toast.error("No data to export"); return; }
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Report");
+  XLSX.writeFile(wb, `${filename}_${format(new Date(), "yyyy-MM-dd")}.xlsx`);
+  toast.success(`Exported ${rows.length} rows as Excel`);
 }
 
 export function PipelineReporting({ leads, outcomes }: Props) {
   const [reportType, setReportType] = useState<ReportType>("pipeline_summary");
+  const [exportFormat, setExportFormat] = useState<ExportFormat>("csv");
+  const [dateFrom, setDateFrom] = useState(() => format(subDays(new Date(), 90), "yyyy-MM-dd"));
+  const [dateTo, setDateTo] = useState(() => format(new Date(), "yyyy-MM-dd"));
 
   const TERMINAL = new Set(["won", "lost", "loss", "merged", "archived_orphan"]);
 
+  // Filter leads by date range
+  const filteredLeads = useMemo(() => {
+    const from = parseISO(dateFrom);
+    const to = parseISO(dateTo);
+    return leads.filter(l => {
+      const d = parseISO(l.created_at);
+      return !isBefore(d, from) && !isAfter(d, to);
+    });
+  }, [leads, dateFrom, dateTo]);
+
+  const doExport = (rows: Record<string, any>[], filename: string) => {
+    if (exportFormat === "xlsx") downloadXLSX(rows, filename);
+    else downloadCSV(rows, filename);
+  };
+
   const generateReport = useCallback(() => {
+    const src = filteredLeads;
     switch (reportType) {
       case "pipeline_summary": {
-        const rows = leads.map(l => ({
+        const rows = src.map(l => ({
           Title: l.title,
           Stage: PIPELINE_STAGES.find(s => s.id === l.stage)?.label || l.stage,
           "Expected Value": l.expected_value || 0,
@@ -68,12 +99,12 @@ export function PipelineReporting({ leads, outcomes }: Props) {
           Created: format(new Date(l.created_at), "yyyy-MM-dd"),
           Updated: format(new Date(l.updated_at), "yyyy-MM-dd"),
         }));
-        downloadCSV(rows, "pipeline_summary");
+        doExport(rows, "pipeline_summary");
         break;
       }
       case "stage_breakdown": {
         const stageMap: Record<string, { count: number; value: number }> = {};
-        leads.forEach(l => {
+        src.forEach(l => {
           if (!stageMap[l.stage]) stageMap[l.stage] = { count: 0, value: 0 };
           stageMap[l.stage].count++;
           stageMap[l.stage].value += (l.expected_value as number) || 0;
@@ -84,12 +115,12 @@ export function PipelineReporting({ leads, outcomes }: Props) {
           "Total Value": Math.round(data.value),
           "Avg Value": data.count > 0 ? Math.round(data.value / data.count) : 0,
         }));
-        downloadCSV(rows, "stage_breakdown");
+        doExport(rows, "stage_breakdown");
         break;
       }
       case "win_loss": {
-        const wonLeads = leads.filter(l => l.stage === "won");
-        const lostLeads = leads.filter(l => l.stage === "lost" || l.stage === "loss");
+        const wonLeads = src.filter(l => l.stage === "won");
+        const lostLeads = src.filter(l => l.stage === "lost" || l.stage === "loss");
         const rows = [...wonLeads, ...lostLeads].map(l => ({
           Title: l.title,
           Outcome: l.stage === "won" ? "Won" : "Lost",
@@ -99,12 +130,12 @@ export function PipelineReporting({ leads, outcomes }: Props) {
           Closed: format(new Date(l.updated_at), "yyyy-MM-dd"),
           "Days to Close": Math.max(1, Math.round((new Date(l.updated_at).getTime() - new Date(l.created_at).getTime()) / 86400000)),
         }));
-        downloadCSV(rows, "win_loss_analysis");
+        doExport(rows, "win_loss_analysis");
         break;
       }
       case "stale_leads": {
         const now = new Date();
-        const stale = leads.filter(l => {
+        const stale = src.filter(l => {
           if (TERMINAL.has(l.stage)) return false;
           return (now.getTime() - new Date(l.updated_at).getTime()) / 86400000 >= 14;
         });
@@ -115,11 +146,11 @@ export function PipelineReporting({ leads, outcomes }: Props) {
           "Days Since Update": Math.round((now.getTime() - new Date(l.updated_at).getTime()) / 86400000),
           "Last Updated": format(new Date(l.updated_at), "yyyy-MM-dd"),
         }));
-        downloadCSV(rows, "stale_leads");
+        doExport(rows, "stale_leads");
         break;
       }
       case "sla_breaches": {
-        const breached = leads.filter(l => l.sla_breached === true);
+        const breached = src.filter(l => l.sla_breached === true);
         const rows = breached.map(l => ({
           Title: l.title,
           Stage: PIPELINE_STAGES.find(s => s.id === l.stage)?.label || l.stage,
@@ -128,38 +159,38 @@ export function PipelineReporting({ leads, outcomes }: Props) {
           "Escalated To": l.escalated_to || "",
           "Last Updated": format(new Date(l.updated_at), "yyyy-MM-dd"),
         }));
-        downloadCSV(rows, "sla_breaches");
+        doExport(rows, "sla_breaches");
         break;
       }
     }
-  }, [reportType, leads]);
+  }, [reportType, filteredLeads, exportFormat]);
 
   // Quick stats for the selected report type
   const quickStats = useMemo(() => {
     switch (reportType) {
       case "pipeline_summary":
-        return `${leads.length} leads • $${leads.reduce((s, l) => s + ((l.expected_value as number) || 0), 0).toLocaleString()} total value`;
+        return `${filteredLeads.length} leads • $${filteredLeads.reduce((s, l) => s + ((l.expected_value as number) || 0), 0).toLocaleString()} total value`;
       case "stage_breakdown": {
-        const stages = new Set(leads.map(l => l.stage));
+        const stages = new Set(filteredLeads.map(l => l.stage));
         return `${stages.size} stages with leads`;
       }
       case "win_loss": {
-        const won = leads.filter(l => l.stage === "won").length;
-        const lost = leads.filter(l => l.stage === "lost" || l.stage === "loss").length;
+        const won = filteredLeads.filter(l => l.stage === "won").length;
+        const lost = filteredLeads.filter(l => l.stage === "lost" || l.stage === "loss").length;
         return `${won} won • ${lost} lost • ${won + lost > 0 ? Math.round((won / (won + lost)) * 100) : 0}% win rate`;
       }
       case "stale_leads": {
-        const stale = leads.filter(l => !TERMINAL.has(l.stage) && (Date.now() - new Date(l.updated_at).getTime()) / 86400000 >= 14);
+        const stale = filteredLeads.filter(l => !TERMINAL.has(l.stage) && (Date.now() - new Date(l.updated_at).getTime()) / 86400000 >= 14);
         return `${stale.length} stale leads (14+ days)`;
       }
       case "sla_breaches": {
-        const breached = leads.filter(l => l.sla_breached === true);
+        const breached = filteredLeads.filter(l => l.sla_breached === true);
         return `${breached.length} breached leads`;
       }
       default:
         return "";
     }
-  }, [reportType, leads]);
+  }, [reportType, filteredLeads]);
 
   return (
     <div className="space-y-4">
@@ -171,7 +202,7 @@ export function PipelineReporting({ leads, outcomes }: Props) {
         </CardHeader>
         <CardContent>
           <div className="flex items-end gap-3 flex-wrap">
-            <div className="flex-1 min-w-[200px]">
+            <div className="flex-1 min-w-[160px]">
               <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Report Type</label>
               <Select value={reportType} onValueChange={v => setReportType(v as ReportType)}>
                 <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
@@ -182,8 +213,26 @@ export function PipelineReporting({ leads, outcomes }: Props) {
                 </SelectContent>
               </Select>
             </div>
+            <div>
+              <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">From</label>
+              <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="h-8 text-xs w-[130px]" />
+            </div>
+            <div>
+              <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">To</label>
+              <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="h-8 text-xs w-[130px]" />
+            </div>
+            <div>
+              <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Format</label>
+              <Select value={exportFormat} onValueChange={v => setExportFormat(v as ExportFormat)}>
+                <SelectTrigger className="h-8 text-xs w-[90px]"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="csv" className="text-xs">CSV</SelectItem>
+                  <SelectItem value="xlsx" className="text-xs">Excel</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <Button size="sm" onClick={generateReport} className="gap-1.5 h-8 text-xs">
-              <Download className="w-3 h-3" /> Export CSV
+              <Download className="w-3 h-3" /> Export
             </Button>
           </div>
           <p className="text-[11px] text-muted-foreground mt-2">{quickStats}</p>

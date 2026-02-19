@@ -11,7 +11,9 @@ import { ClientPerformanceDashboard } from "@/components/pipeline/intelligence/C
 import { PipelineAutomationRules } from "@/components/pipeline/intelligence/PipelineAutomationRules";
 import { PipelineReporting } from "@/components/pipeline/intelligence/PipelineReporting";
 import { LossPatternAnalysis } from "@/components/pipeline/intelligence/LossPatternAnalysis";
-import { Activity, Bell, BarChart3, TrendingUp, Shield, Users, Zap, FileSpreadsheet, XCircle } from "lucide-react";
+import { AICoachingDashboard } from "@/components/pipeline/intelligence/AICoachingDashboard";
+import { PipelineWebhooks } from "@/components/pipeline/intelligence/PipelineWebhooks";
+import { Activity, Bell, BarChart3, TrendingUp, Shield, Users, Zap, FileSpreadsheet, XCircle, Sparkles, Webhook } from "lucide-react";
 import { usePipelineRealtime } from "@/hooks/usePipelineRealtime";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -109,6 +111,12 @@ export default function PipelineIntelligence() {
             <TabsTrigger value="reports" className={tabClass}>
               <FileSpreadsheet className="w-3.5 h-3.5" /> Reports
             </TabsTrigger>
+            <TabsTrigger value="coaching" className={tabClass}>
+              <Sparkles className="w-3.5 h-3.5" /> AI Coach
+            </TabsTrigger>
+            <TabsTrigger value="webhooks" className={tabClass}>
+              <Webhook className="w-3.5 h-3.5" /> Webhooks
+            </TabsTrigger>
             <TabsTrigger value="sync" className={tabClass}>
               <Activity className="w-3.5 h-3.5" /> Sync
             </TabsTrigger>
@@ -139,6 +147,12 @@ export default function PipelineIntelligence() {
           </TabsContent>
           <TabsContent value="reports" className="mt-0 p-4 sm:p-6">
             <PipelineReporting leads={leads} outcomes={outcomes} />
+          </TabsContent>
+          <TabsContent value="coaching" className="mt-0 p-4 sm:p-6">
+            <AICoachingDashboard leads={leads} isLoading={isLoading} />
+          </TabsContent>
+          <TabsContent value="webhooks" className="mt-0 p-4 sm:p-6">
+            <PipelineWebhooks />
           </TabsContent>
           <TabsContent value="sync" className="mt-0 p-4 sm:p-6">
             <SyncHealthDashboard syncLogs={syncLogs} leads={leads} />
