@@ -1,26 +1,47 @@
 
-# Fix Unreconciled Count — Account Filter Not Working
 
-## Problem
+# Fix: "Unknown Customer" in Production Queue
 
-The `TransactionList` report does **not** support `account` as a filter parameter. QuickBooks silently ignores it, so all 4 bank accounts return the same 34 uncleared transactions (the total across ALL accounts).
+## Root Cause
 
-The same issue applies to the reconciled report — all accounts get the same result.
+Two customer records have `company_id = NULL`:
+- `49167c2f...` — "NORTHFLEET GROUP"
+- `c56f5215...` — "Northfleet Group"
 
-## Solution
+The RLS policy on the `customers` table requires `company_id = get_user_company_id(auth.uid())`. Since these two records have no company_id, they are invisible to the app, causing the "Unknown Customer (49167c2f)" fallback text.
 
-Instead of making 4 separate (broken) per-account report calls, fetch **one** `TransactionList` report with the `account` column included, then parse and group the results by account name in code.
+Both are also duplicates of existing "NORTHFLEET GROUP" / "Northfleet Group" customers that DO have the correct company_id.
 
-### Changes to `supabase/functions/qb-sync-engine/index.ts`
+## Fix
 
-1. **Before the per-account loop**, fetch two reports once:
-   - `reports/TransactionList?cleared=Uncleared&columns=tx_date,txn_type,account,subt_nat_amount` -- all uncleared transactions
-   - `reports/TransactionList?cleared=Reconciled&columns=tx_date,account` -- all reconciled transactions
+### 1. Data Fix (SQL migration)
 
-2. **Parse each report** into a `Map<accountName, count>` (for uncleared) and `Map<accountName, latestDate>` (for reconciled), by reading the `account` column from each leaf row's `ColData`.
+Update the two orphaned customers to set their `company_id` to `a0000000-0000-0000-0000-000000000001` (the company their projects belong to):
 
-3. **In the per-account loop**, look up `account.name` in these maps instead of making individual API calls.
+```text
+UPDATE customers
+SET company_id = 'a0000000-0000-0000-0000-000000000001'
+WHERE id IN (
+  '49167c2f-bb73-40b2-ba08-f72bc2cffed0',
+  'c56f5215-4ca1-418c-a408-20a17c89c850'
+)
+AND company_id IS NULL;
+```
 
-4. **Remove** the two per-account `qbFetch` report calls (lines 1006-1033).
+### 2. Preventive Fix (SQL migration)
 
-This reduces API calls from 2N+1 to 3 total (1 balance query + 2 reports), and actually filters correctly since we do the grouping in code.
+Add a NOT NULL constraint on `customers.company_id` to prevent this from happening again. Also add a validation trigger (or default) so that any future INSERT must include a `company_id`.
+
+```text
+ALTER TABLE customers
+ALTER COLUMN company_id SET NOT NULL;
+```
+
+This is a two-step migration: first backfill the NULLs, then add the constraint.
+
+### 3. Optional: Deduplicate Northfleet
+
+There are 7 customer records matching "Northfleet". You may want to consolidate them later, but that is a separate cleanup task and not required for this fix.
+
+No frontend code changes needed — once the data has the correct `company_id`, the existing code will resolve the names properly.
+
