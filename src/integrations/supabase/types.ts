@@ -3115,6 +3115,8 @@ export type Database = {
           created_by: string | null
           customer: string | null
           id: string
+          invoice_date: string | null
+          invoice_number: string | null
           manifest_type: string
           name: string
           site_address: string | null
@@ -3128,6 +3130,8 @@ export type Database = {
           created_by?: string | null
           customer?: string | null
           id?: string
+          invoice_date?: string | null
+          invoice_number?: string | null
           manifest_type?: string
           name: string
           site_address?: string | null
@@ -3141,6 +3145,8 @@ export type Database = {
           created_by?: string | null
           customer?: string | null
           id?: string
+          invoice_date?: string | null
+          invoice_number?: string | null
           manifest_type?: string
           name?: string
           site_address?: string | null

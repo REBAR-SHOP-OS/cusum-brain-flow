@@ -78,6 +78,8 @@ export function AIExtractView() {
   const [siteAddress, setSiteAddress] = useState("");
   const [targetEta, setTargetEta] = useState("");
   const [manifestType, setManifestType] = useState<ManifestType>("delivery");
+  const [invoiceNumber, setInvoiceNumber] = useState("");
+  const [invoiceDate, setInvoiceDate] = useState("");
 
   // Project & Barlist selection
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
@@ -276,6 +278,8 @@ export function AIExtractView() {
         siteAddress,
         manifestType,
         targetEta,
+        invoiceNumber,
+        invoiceDate,
         createdBy: user?.id,
       });
       setActiveSessionId(session.id);
@@ -405,6 +409,8 @@ export function AIExtractView() {
     setManifestName(session.name);
     setCustomer(session.customer || "");
     setSiteAddress(session.site_address || "");
+    setInvoiceNumber(session.invoice_number || "");
+    setInvoiceDate(session.invoice_date || "");
     setShowHistory(false);
   };
 
@@ -415,6 +421,8 @@ export function AIExtractView() {
     setCustomer("");
     setSiteAddress("");
     setTargetEta("");
+    setInvoiceNumber("");
+    setInvoiceDate("");
     setSelectedProjectId("");
     setSelectedBarlistId("");
     setCreateNewProject(false);
@@ -549,7 +557,7 @@ export function AIExtractView() {
             </div>
             <div>
               <h1 className="text-xl font-black italic text-foreground uppercase">
-                {activeSession ? "Extract Session" : "Initialize Manifest"}
+                {activeSession ? "Extract Session" : "Initialize Scope"}
               </h1>
               <p className="text-xs tracking-widest text-primary/70 uppercase">
                 {activeSession ? activeSession.name : "Identity Registration"}
@@ -850,7 +858,7 @@ export function AIExtractView() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase mb-1.5 block">
-                  Manifest Name <span className="text-destructive">*</span>
+                  Scope <span className="text-destructive">*</span>
                 </label>
                 <Input value={manifestName} onChange={(e) => setManifestName(e.target.value)}
                   className="bg-card border-border" placeholder="e.g. 23 HALFORD ROAD - HAB (3)" />
@@ -941,6 +949,20 @@ export function AIExtractView() {
                   Target ETA
                 </label>
                 <Input type="date" value={targetEta} onChange={(e) => setTargetEta(e.target.value)}
+                  className="bg-card border-border" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase mb-1.5 block">
+                  Invoice Number
+                </label>
+                <Input value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)}
+                  className="bg-card border-border" placeholder="e.g. INV-2026-001" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase mb-1.5 block">
+                  Invoice Date
+                </label>
+                <Input type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)}
                   className="bg-card border-border" />
               </div>
             </div>

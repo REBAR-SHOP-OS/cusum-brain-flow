@@ -11,6 +11,8 @@ export interface ExtractSession {
   site_address: string | null;
   manifest_type: string;
   target_eta: string | null;
+  invoice_number: string | null;
+  invoice_date: string | null;
   status: string;
   created_at: string;
   updated_at: string;
@@ -71,6 +73,8 @@ export async function createExtractSession(params: {
   siteAddress?: string;
   manifestType?: string;
   targetEta?: string;
+  invoiceNumber?: string;
+  invoiceDate?: string;
   createdBy?: string;
 }): Promise<ExtractSession> {
   const { data, error } = await supabase
@@ -82,6 +86,8 @@ export async function createExtractSession(params: {
       site_address: params.siteAddress || null,
       manifest_type: params.manifestType || "delivery",
       target_eta: params.targetEta || null,
+      invoice_number: params.invoiceNumber || null,
+      invoice_date: params.invoiceDate || null,
       created_by: params.createdBy || null,
     } as any)
     .select()
