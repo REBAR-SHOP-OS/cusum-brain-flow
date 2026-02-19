@@ -162,6 +162,8 @@ export default function Tasks() {
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [newComment, setNewComment] = useState("");
   const [submittingComment, setSubmittingComment] = useState(false);
+  const [commentFiles, setCommentFiles] = useState<{file: File, previewUrl: string}[]>([]);
+  const [uploadingCommentFiles, setUploadingCommentFiles] = useState(false);
 
   // Create modal
   const [createForEmployee, setCreateForEmployee] = useState<EmployeeProfile | null>(null);
@@ -293,23 +295,53 @@ export default function Tasks() {
     finally { setCommentsLoading(false); }
   };
 
+  const handleCommentPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = Array.from(e.clipboardData.items);
+    const imageItems = items.filter(item => item.type.startsWith("image/"));
+    if (imageItems.length === 0) return;
+    e.preventDefault();
+    const newFiles = imageItems.map(item => {
+      const blob = item.getAsFile()!;
+      const file = new File([blob], `comment-image-${Date.now()}.png`, { type: blob.type });
+      return { file, previewUrl: URL.createObjectURL(blob) };
+    });
+    setCommentFiles(prev => [...prev, ...newFiles]);
+  };
+
   const postComment = async () => {
-    if (!newComment.trim() || !selectedTask || !currentProfileId) return;
+    if (!newComment.trim() && commentFiles.length === 0) return;
+    if (!selectedTask || !currentProfileId) return;
     setSubmittingComment(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       const companyRes = await supabase.from("profiles").select("company_id").eq("user_id", user?.id || "").single();
+      let content = newComment.trim();
+
+      if (commentFiles.length > 0) {
+        setUploadingCommentFiles(true);
+        for (const { file } of commentFiles) {
+          const path = `${user?.id}/${crypto.randomUUID()}.png`;
+          const { error: uploadError } = await supabase.storage.from("estimation-files").upload(path, file);
+          if (!uploadError) {
+            const { data: { publicUrl } } = supabase.storage.from("estimation-files").getPublicUrl(path);
+            content += (content ? "\n" : "") + publicUrl;
+          }
+        }
+        setUploadingCommentFiles(false);
+      }
+
       const { error } = await supabase.from("task_comments").insert({
         task_id: selectedTask.id,
         profile_id: currentProfileId,
-        content: newComment.trim(),
+        content,
         company_id: companyRes.data?.company_id,
       } as any);
       if (error) throw error;
       setNewComment("");
+      setCommentFiles([]);
       loadComments(selectedTask.id);
     } catch (err: any) { toast.error(err.message); }
-    finally { setSubmittingComment(false); }
+    finally { setSubmittingComment(false); setUploadingCommentFiles(false); }
   };
 
   const deleteComment = async (commentId: string) => {
@@ -832,22 +864,44 @@ export default function Tasks() {
                             )}
                           </div>
                         </div>
-                        <p className="mt-1 text-foreground whitespace-pre-wrap">{c.content}</p>
+                        <div className="mt-1 text-foreground whitespace-pre-wrap">
+                          {c.content.split('\n').map((line, j) =>
+                            line.startsWith('https://') && /\.(png|jpg|jpeg|webp|gif)/i.test(line)
+                              ? <img key={j} src={line} className="mt-1 max-h-32 rounded cursor-pointer border border-border" onClick={() => window.open(line)} alt="comment attachment" />
+                              : <span key={j} className="block">{line}</span>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
                 )}
-                <div className="flex gap-2 mt-2 items-end">
-                  <Textarea
-                    value={newComment}
-                    onChange={e => setNewComment(e.target.value)}
-                    placeholder="Add a comment..."
-                    className="text-xs min-h-[72px] resize-none flex-1"
-                    onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); postComment(); } }}
-                  />
-                  <Button size="icon" className="h-8 w-8 shrink-0 mb-1" onClick={postComment} disabled={submittingComment || !newComment.trim()}>
-                    <Send className="w-3.5 h-3.5" />
-                  </Button>
+                <div className="flex flex-col gap-1 mt-2">
+                  {commentFiles.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mb-1">
+                      {commentFiles.map((cf, i) => (
+                        <div key={i} className="relative">
+                          <img src={cf.previewUrl} className="h-12 w-12 object-cover rounded border border-border" alt="paste preview" />
+                          <button onClick={() => setCommentFiles(prev => prev.filter((_, j) => j !== i))}
+                            className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground rounded-full w-4 h-4 flex items-center justify-center">
+                            <X className="w-2.5 h-2.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex gap-2 items-end">
+                    <Textarea
+                      value={newComment}
+                      onChange={e => setNewComment(e.target.value)}
+                      onPaste={handleCommentPaste}
+                      placeholder="Add a comment... (Ctrl+V to paste images)"
+                      className="text-xs min-h-[72px] resize-none flex-1"
+                      onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); postComment(); } }}
+                    />
+                    <Button size="icon" className="h-8 w-8 shrink-0 mb-1" onClick={postComment} disabled={submittingComment || uploadingCommentFiles || (!newComment.trim() && commentFiles.length === 0)}>
+                      {uploadingCommentFiles ? <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                    </Button>
+                  </div>
                 </div>
               </div>
 
