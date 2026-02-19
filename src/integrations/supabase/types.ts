@@ -9057,11 +9057,61 @@ export type Database = {
           },
         ]
       }
+      task_comments: {
+        Row: {
+          company_id: string
+          content: string
+          created_at: string
+          id: string
+          profile_id: string
+          task_id: string
+        }
+        Insert: {
+          company_id: string
+          content: string
+          created_at?: string
+          id?: string
+          profile_id: string
+          task_id: string
+        }
+        Update: {
+          company_id?: string
+          content?: string
+          created_at?: string
+          id?: string
+          profile_id?: string
+          task_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_comments_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_comments_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_comments_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tasks: {
         Row: {
           agent_type: string | null
           assigned_to: string | null
           attachment_url: string | null
+          attachment_urls: string[] | null
           company_id: string
           completed_at: string | null
           created_at: string
@@ -9082,6 +9132,7 @@ export type Database = {
           agent_type?: string | null
           assigned_to?: string | null
           attachment_url?: string | null
+          attachment_urls?: string[] | null
           company_id: string
           completed_at?: string | null
           created_at?: string
@@ -9102,6 +9153,7 @@ export type Database = {
           agent_type?: string | null
           assigned_to?: string | null
           attachment_url?: string | null
+          attachment_urls?: string[] | null
           company_id?: string
           completed_at?: string | null
           created_at?: string
