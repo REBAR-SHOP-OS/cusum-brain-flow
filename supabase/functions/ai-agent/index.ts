@@ -2328,6 +2328,29 @@ Before executing any writes, you MUST first output a structured plan:
 5. Rollback plan
 Then execute the plan step by step.
 
+TASK TYPE CLASSIFICATION (MANDATORY before any tool call):
+Before calling ANY tool, classify the task:
+
+| Type             | Scope                         | Tools to Use                  |
+|------------------|-------------------------------|-------------------------------|
+| UI_LAYOUT        | Page structure, grid, spacing | generate_patch                |
+| UI_STYLING       | CSS, responsive, images       | generate_patch                |
+| DATA_PERMISSION  | RLS, auth, access denied      | db_read_query → db_write_fix  |
+| DATABASE_SCHEMA  | Missing columns, tables       | db_read_query → db_write_fix  |
+| ERP_DATA         | Odoo/QB records, sync issues  | odoo_write, db_write_fix      |
+| TOOLING          | Tool bugs, integration errors | [STOP] + escalate             |
+
+Output format (required in first response):
+TASK_TYPE: <type>
+SCOPE: <page or module>
+TARGET: <specific element>
+DEVICE: <all | mobile | desktop> (if UI)
+
+Rules:
+- If TASK_TYPE is UI_LAYOUT or UI_STYLING, do NOT call db_read_query or ERP tools.
+- If TASK_TYPE is ERP_DATA, do NOT call generate_patch.
+- Misclassification wastes a tool turn. Classify correctly the first time.
+
 ERROR CLASSIFICATION (MANDATORY on any tool failure):
 When a tool returns an error, you MUST classify it before responding:
 
@@ -2345,6 +2368,17 @@ Rules:
 - If the same error repeats twice, classify as systemic. STOP and report: "Problem is systemic, not user input."
 - If you ask the same clarifying question twice, STOP and say: "I cannot proceed due to missing system capability, not missing user input."
 - NEVER explain an error without classifying it first.
+
+TOOL FAILURE vs. CLARITY FAILURE (MANDATORY distinction):
+If a task was clearly understood AND a tool failed:
+- Do NOT ask for clarification.
+- Instead: classify the failure source (TOOL_BUG, PERMISSION_MISSING, etc.)
+- Provide the exact missing dependency (file path, repo access, build environment).
+- STOP.
+
+The phrase "context incomplete" is BANNED unless you can prove the user's request was ambiguous.
+If the user said what page, what element, and what change — context is complete.
+A tool failure is NOT incomplete context.
 
 EXECUTION RECEIPTS (MANDATORY):
 You may NOT use the words "I found", "I checked", "I queried", "I verified", "I confirmed" unless you include the tool receipt in the same message:
@@ -2487,6 +2521,18 @@ If the problem is a UI string, label, layout, or frontend logic issue:
 - **Step 1:** Use \`generate_patch\` to produce a reviewable code diff with the exact fix
 - **Step 2:** If you can identify the file and line, provide the EXACT code change
 - **Step 3:** NEVER say "I cannot modify UI elements" — you CAN generate patches
+- **Step 4 (UI tasks only):** Before generating a patch, state what you expect to find:
+  * Current HTML structure (img tags, containers, classes)
+  * Current CSS properties (width, max-width, object-fit, srcset)
+  * Breakpoint coverage (@media queries)
+  Never patch blind. If you cannot inspect the component, say what file you need.
+- **Step 5:** Use structured patch format:
+  * file: exact path
+  * change_type: css | jsx | html
+  * before_snippet: what exists now (or "unknown — needs inspection")
+  * after_snippet: proposed change
+  * reason: why this fixes the issue
+  If you cannot fill file + after_snippet, STOP and request the missing info.
 
 If you truly cannot determine the file or produce a patch:
 - Ask ONE specific clarifying question (URL path, module name, or screenshot)
@@ -8035,7 +8081,7 @@ RULES:
               status: "new",
             }).select().single();
             // Log diagnostic access
-            await svcClient.from("activity_events").insert({
+            try { await svcClient.from("activity_events").insert({
               company_id: companyId,
               entity_type: "fix_ticket",
               entity_id: ticket?.id || crypto.randomUUID(),
@@ -8045,7 +8091,7 @@ RULES:
               actor_type: "architect",
               source: "architect_agent",
               metadata: { severity: args.severity, system_area: args.system_area },
-            }).catch(() => {});
+            }); } catch (_) { /* best-effort logging */ }
             seoToolResults.push({ id: tc.id, name: "create_fix_ticket", result: error ? { error: error.message } : { success: true, ticket_id: ticket?.id, message: `Fix ticket created: ${ticket?.id}` } });
           } catch (e) {
             seoToolResults.push({ id: tc.id, name: "create_fix_ticket", result: { error: e instanceof Error ? e.message : "Failed" } });
@@ -8066,7 +8112,7 @@ RULES:
             if (args.status === "in_progress" && !updates.diagnosed_at) updates.diagnosed_at = new Date().toISOString();
             const { data, error } = await svcClient.from("fix_tickets").update(updates).eq("id", args.ticket_id).select().single();
             // Log the update
-            await svcClient.from("activity_events").insert({
+            try { await svcClient.from("activity_events").insert({
               company_id: companyId,
               entity_type: "fix_ticket",
               entity_id: args.ticket_id,
@@ -8076,7 +8122,7 @@ RULES:
               actor_type: "architect",
               source: "architect_agent",
               metadata: { updates, verification_result: args.verification_result },
-            }).catch(() => {});
+            }); } catch (_) { /* best-effort logging */ }
             seoToolResults.push({ id: tc.id, name: "update_fix_ticket", result: error ? { error: error.message } : { success: true, ticket: data } });
           } catch (e) {
             seoToolResults.push({ id: tc.id, name: "update_fix_ticket", result: { error: e instanceof Error ? e.message : "Failed" } });
@@ -8169,7 +8215,7 @@ RULES:
             diagnosis.ticket_created = !ticketErr;
 
             // Log diagnostic access
-            await svcClient.from("activity_events").insert({
+            try { await svcClient.from("activity_events").insert({
               company_id: companyId,
               entity_type: "diagnostic",
               entity_id: ticket?.id || crypto.randomUUID(),
@@ -8179,7 +8225,7 @@ RULES:
               actor_type: "architect",
               source: "architect_agent",
               metadata: { screenshot_url: args.screenshot_url, systems_queried: ["activity_events", "accounting_mirror"] },
-            }).catch(() => {});
+            }); } catch (_) { /* best-effort logging */ }
 
             seoToolResults.push({ id: tc.id, name: "diagnose_from_screenshot", result: diagnosis });
           } catch (e) {
@@ -8291,7 +8337,7 @@ RULES:
                   fixResult = { truncated: true, message: "Write result truncated (exceeded 8000 chars)", preview: fixResultStr.substring(0, 2000) };
                 }
 
-                await svcClient.from("activity_events").insert({
+                try { await svcClient.from("activity_events").insert({
                   company_id: companyId,
                   entity_type: "database_fix",
                   entity_id: crypto.randomUUID(),
@@ -8301,7 +8347,7 @@ RULES:
                   actor_type: "architect",
                   source: "architect_db_fix",
                   metadata: { query: query.substring(0, 1000), reason, success: !fixResult?.error },
-                }).catch(() => {});
+                }); } catch (_) { /* best-effort logging */ }
 
                 dbWriteCount++;
                 seoToolResults.push({ id: tc.id, name: "db_write_fix", result: fixResult?.error ? { error: fixResult.error } : { success: true, message: `Fix applied: ${reason}`, result: fixResult } });
@@ -8602,12 +8648,12 @@ RULES:
                   actual_result: args.actual_result, severity: args.severity || "medium",
                   system_area: args.system_area || null, status: "new",
                 }).select().single();
-                await svcClient.from("activity_events").insert({
+                try { await svcClient.from("activity_events").insert({
                   company_id: companyId, entity_type: "fix_ticket", entity_id: ticket?.id || crypto.randomUUID(),
                   event_type: "fix_ticket_created", description: `Fix ticket created for ${args.system_area || "unknown"}: ${(args.actual_result || "").substring(0, 100)}`,
                   actor_id: user.id, actor_type: "architect", source: "architect_agent",
                   metadata: { severity: args.severity, system_area: args.system_area },
-                }).catch(() => {});
+                }); } catch (_) { /* best-effort logging */ }
                 seoToolResults.push({ id: tc.id, name: "create_fix_ticket", result: error ? { error: error.message } : { success: true, ticket_id: ticket?.id, message: `Fix ticket created: ${ticket?.id}` } });
               } catch (e) {
                 seoToolResults.push({ id: tc.id, name: "create_fix_ticket", result: { error: e instanceof Error ? e.message : "Failed" } });
@@ -8627,12 +8673,12 @@ RULES:
                 if (args.verification_evidence) updates.verification_evidence = args.verification_evidence;
                 if (args.status === "in_progress" && !updates.diagnosed_at) updates.diagnosed_at = new Date().toISOString();
                 const { data, error } = await svcClient.from("fix_tickets").update(updates).eq("id", args.ticket_id).select().single();
-                await svcClient.from("activity_events").insert({
+                try { await svcClient.from("activity_events").insert({
                   company_id: companyId, entity_type: "fix_ticket", entity_id: args.ticket_id,
                   event_type: "fix_ticket_updated", description: `Fix ticket ${args.ticket_id} updated: status=${args.status || "unchanged"}`,
                   actor_id: user.id, actor_type: "architect", source: "architect_agent",
                   metadata: { updates, verification_result: args.verification_result },
-                }).catch(() => {});
+                }); } catch (_) { /* best-effort logging */ }
                 seoToolResults.push({ id: tc.id, name: "update_fix_ticket", result: error ? { error: error.message } : { success: true, ticket: data } });
               } catch (e) {
                 seoToolResults.push({ id: tc.id, name: "update_fix_ticket", result: { error: e instanceof Error ? e.message : "Failed" } });
@@ -8745,12 +8791,12 @@ RULES:
                     if (fixResultStr.length > 8000) {
                       fixResult = { truncated: true, message: "Write result truncated (exceeded 8000 chars)", preview: fixResultStr.substring(0, 2000) };
                     }
-                    await svcClient.from("activity_events").insert({
+                    try { await svcClient.from("activity_events").insert({
                       company_id: companyId, entity_type: "database_fix", entity_id: crypto.randomUUID(),
                       event_type: "db_write_fix", description: `DB fix applied: ${reason}`.substring(0, 500),
                       actor_id: user.id, actor_type: "architect", source: "architect_db_fix",
                       metadata: { query: query.substring(0, 1000), reason, success: !fixResult?.error },
-                    }).catch(() => {});
+                    }); } catch (_) { /* best-effort logging */ }
                     dbWriteCount++;
                     seoToolResults.push({ id: tc.id, name: "db_write_fix", result: fixResult?.error ? { error: fixResult.error } : { success: true, message: `Fix applied: ${reason}`, result: fixResult } });
                   }
@@ -8809,6 +8855,9 @@ RULES:
                   const rowCount = r.result.row_count || (Array.isArray(r.result.rows) ? r.result.rows.length : 0);
                   if (rowCount === 0) return "Query returned no results.";
                   return `Query returned ${rowCount} row(s):\n\`\`\`json\n${JSON.stringify(r.result.rows, null, 2).substring(0, 2000)}\n\`\`\``;
+                }
+                if (r.name === "generate_patch" && r.result?.success) {
+                  return `Patch created for \`${r.result.artifact?.file || "unknown"}\`:\n- Patch ID: ${r.result.patch_id}\n- Status: Awaiting review\n- Description: ${r.result.message}`;
                 }
                 return r.result?.message || JSON.stringify(r.result).substring(0, 500);
               });
