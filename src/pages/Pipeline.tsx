@@ -90,6 +90,8 @@ export default function Pipeline() {
   const { toast } = useToast();
   const { isAdmin } = useUserRole();
   const { orderedStages, saveOrder, canReorder } = usePipelineStageOrder();
+
+  // Will be computed after leadsByStage is available — declared here, defined below
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   
@@ -277,36 +279,48 @@ export default function Pipeline() {
     };
 
     const grouped: Record<string, LeadWithCustomer[]> = {};
+    const knownStageIds = new Set(PIPELINE_STAGES.map(s => s.id));
+
+    const sortLeads = (list: LeadWithCustomer[]) =>
+      list.sort((a, b) => {
+        const actDiff = activityOrder[getActivityStatus(a)] - activityOrder[getActivityStatus(b)];
+        if (actDiff !== 0) return actDiff;
+        const getStars = (l: LeadWithCustomer) => {
+          const meta = l.metadata as Record<string, unknown> | null;
+          const hasOdooId = !!meta?.odoo_id;
+          const odooPriority = meta?.odoo_priority as string | undefined;
+          if (odooPriority !== undefined && odooPriority !== null) {
+            return Math.min(parseInt(odooPriority) || 0, 3);
+          }
+          if (hasOdooId) return 0;
+          if (l.priority === "high") return 3;
+          if (l.priority === "medium") return 2;
+          return 0;
+        };
+        const starDiff = getStars(b) - getStars(a);
+        if (starDiff !== 0) return starDiff;
+        return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+      });
+
     PIPELINE_STAGES.forEach((stage) => {
-      grouped[stage.id] = filteredLeads
-        .filter((lead) => lead.stage === stage.id)
-        .sort((a, b) => {
-          // Activity urgency first
-          const actDiff = activityOrder[getActivityStatus(a)] - activityOrder[getActivityStatus(b)];
-          if (actDiff !== 0) return actDiff;
-
-          // Then priority stars
-          const getStars = (l: LeadWithCustomer) => {
-            const meta = l.metadata as Record<string, unknown> | null;
-            const hasOdooId = !!meta?.odoo_id;
-            const odooPriority = meta?.odoo_priority as string | undefined;
-            if (odooPriority !== undefined && odooPriority !== null) {
-              return Math.min(parseInt(odooPriority) || 0, 3);
-            }
-            if (hasOdooId) return 0;
-            if (l.priority === "high") return 3;
-            if (l.priority === "medium") return 2;
-            return 0;
-          };
-          const starDiff = getStars(b) - getStars(a);
-          if (starDiff !== 0) return starDiff;
-
-          // Then recency
-          return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
-        });
+      grouped[stage.id] = sortLeads(filteredLeads.filter((lead) => lead.stage === stage.id));
     });
+
+    // Catch-all for leads with unmapped stages
+    const unmappedLeads = filteredLeads.filter(l => !knownStageIds.has(l.stage));
+    if (unmappedLeads.length > 0) {
+      grouped["__unmapped__"] = sortLeads(unmappedLeads);
+    }
+
     return grouped;
   }, [filteredLeads]);
+
+  const finalStages = useMemo(() => {
+    if (leadsByStage["__unmapped__"]?.length > 0) {
+      return [...orderedStages, { id: "__unmapped__", label: "Unmapped Stage", color: "bg-red-500" }];
+    }
+    return orderedStages;
+  }, [orderedStages, leadsByStage]);
 
   const handleEdit = (lead: Lead) => {
     setEditingLead(lead);
@@ -520,7 +534,7 @@ export default function Pipeline() {
       <div className="flex-1 overflow-hidden flex">
         <div className="flex-1 overflow-hidden">
           <PipelineBoard
-            stages={orderedStages}
+            stages={finalStages}
             leadsByStage={leadsByStage}
             isLoading={isLoading}
             onStageChange={handleStageChange}
