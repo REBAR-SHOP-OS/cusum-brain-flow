@@ -19,7 +19,7 @@ const crmNav = [
 ];
 
 const operationsNav = [
-  { name: "Employee Tasks", href: "/tasks", icon: CheckSquare },
+  { name: "Business Tasks", href: "/tasks", icon: CheckSquare },
   { name: "Shop Floor", href: "/shop-floor", icon: Factory },
   { name: "Deliveries", href: "/deliveries", icon: Truck },
 ];
