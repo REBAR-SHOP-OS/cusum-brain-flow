@@ -6,6 +6,7 @@ import { PIPELINE_STAGES } from "@/pages/Pipeline";
 import { differenceInCalendarDays, subDays, format, startOfMonth, endOfMonth, eachMonthOfInterval, subMonths } from "date-fns";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, CartesianGrid } from "recharts";
 import { cn } from "@/lib/utils";
+import { PipelineActivityFeed } from "./PipelineActivityFeed";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Lead = Tables<"leads">;
@@ -181,6 +182,8 @@ export function PipelineAnalyticsDashboard({ leads, outcomes, isLoading }: Props
           </div>
         </CardContent>
       </Card>
+      {/* Activity Feed */}
+      <PipelineActivityFeed />
     </div>
   );
 }

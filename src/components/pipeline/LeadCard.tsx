@@ -1,5 +1,5 @@
-import { Star, AlignJustify, Mail, Brain } from "lucide-react";
-import { differenceInDays } from "date-fns";
+import { Star, AlignJustify, Mail, Brain, Clock } from "lucide-react";
+import { differenceInDays, differenceInHours, formatDistanceToNowStrict } from "date-fns";
 import { cn } from "@/lib/utils";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -71,6 +71,17 @@ function getNameColor(name: string): string {
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
+// SLA countdown helper
+function getSlaInfo(lead: Lead): { label: string; urgent: boolean; breached: boolean } | null {
+  if (!lead.sla_deadline || lead.stage === "won" || lead.stage === "lost") return null;
+  if (lead.sla_breached) return { label: "SLA Breached", urgent: true, breached: true };
+  const hoursLeft = differenceInHours(new Date(lead.sla_deadline), new Date());
+  if (hoursLeft < 0) return { label: "SLA Breached", urgent: true, breached: true };
+  if (hoursLeft <= 4) return { label: `${hoursLeft}h left`, urgent: true, breached: false };
+  const dist = formatDistanceToNowStrict(new Date(lead.sla_deadline), { addSuffix: false });
+  return { label: dist, urgent: hoursLeft <= 12, breached: false };
+}
+
 export function LeadCard({ lead, onDragStart, onDragEnd, onEdit, onDelete, onClick, hasAIAction = false }: LeadCardProps) {
   const stars = getPriorityStars(lead);
   const salesperson = getSalesperson(lead);
@@ -82,6 +93,7 @@ export function LeadCard({ lead, onDragStart, onDragEnd, onEdit, onDelete, onCli
   const isEmailSource = lead.source?.startsWith("Email") || lead.source === "rfq_scan";
   const winProb = lead.win_prob_score as number | null;
   const scoreConfidence = lead.score_confidence as string | null;
+  const slaInfo = getSlaInfo(lead);
 
   return (
     <div
@@ -111,6 +123,19 @@ export function LeadCard({ lead, onDragStart, onDragEnd, onEdit, onDelete, onCli
       {/* Customer name */}
       {customerName && (
         <p className="text-xs text-muted-foreground truncate mt-0.5">{customerName}</p>
+      )}
+
+      {/* SLA countdown timer */}
+      {slaInfo && (
+        <div className={cn(
+          "flex items-center gap-1 mt-1 text-[10px] font-medium px-1.5 py-0.5 rounded-sm w-fit",
+          slaInfo.breached ? "bg-destructive/15 text-destructive" :
+          slaInfo.urgent ? "bg-orange-500/15 text-orange-600 dark:text-orange-400" :
+          "bg-muted text-muted-foreground"
+        )}>
+          <Clock className="w-2.5 h-2.5" />
+          {slaInfo.label}
+        </div>
       )}
 
       {/* Bottom row: stars, activity dot, win prob, revenue, salesperson */}
