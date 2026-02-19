@@ -37,6 +37,8 @@ export interface AIRequestOptions {
   stream?: boolean;
   /** AbortSignal for timeouts */
   signal?: AbortSignal;
+  /** Fallback provider+model if primary returns 429 after retries */
+  fallback?: { provider: AIProvider; model: string };
 }
 
 export interface AIResult {
@@ -85,6 +87,20 @@ const DEFAULT_MODELS: Record<AIProvider, string> = {
 export async function callAI(opts: AIRequestOptions): Promise<AIResult> {
   const provider = opts.provider || "gpt";
   const model = opts.model || DEFAULT_MODELS[provider];
+
+  try {
+    return await _callAISingle(provider, model, opts);
+  } catch (e) {
+    // If 429 and fallback is configured, try the fallback provider
+    if (e instanceof AIError && e.status === 429 && opts.fallback) {
+      console.warn(`AI ${model} rate-limited after retries, falling back to ${opts.fallback.provider}/${opts.fallback.model}`);
+      return await _callAISingle(opts.fallback.provider, opts.fallback.model, opts);
+    }
+    throw e;
+  }
+}
+
+async function _callAISingle(provider: AIProvider, model: string, opts: AIRequestOptions): Promise<AIResult> {
   const { url, apiKey } = getProviderConfig(provider);
 
   const body: Record<string, unknown> = {
@@ -101,7 +117,6 @@ export async function callAI(opts: AIRequestOptions): Promise<AIResult> {
   const response = await fetchWithRetry(url, apiKey, body, opts.signal);
 
   if (opts.stream) {
-    // For streaming, caller should use callAIStream instead
     throw new Error("Use callAIStream() for streaming requests");
   }
 
@@ -147,7 +162,7 @@ async function fetchWithRetry(
   apiKey: string,
   body: Record<string, unknown>,
   signal?: AbortSignal,
-  maxRetries = 2
+  maxRetries = 3
 ): Promise<Response> {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const response = await fetch(url, {
@@ -162,10 +177,7 @@ async function fetchWithRetry(
 
     if (response.ok) return response;
 
-    // Non-retryable errors
-    if (response.status === 429) {
-      throw new AIError("Rate limit exceeded. Please try again in a moment.", 429);
-    }
+    // Auth / billing errors — never retry
     if (response.status === 401 || response.status === 403) {
       throw new AIError("AI API authentication failed. Check API key.", response.status);
     }
@@ -173,10 +185,23 @@ async function fetchWithRetry(
       throw new AIError("AI API billing issue. Check your account.", 402);
     }
 
-    // Retryable errors (500, 503)
+    // Rate limit (429) — retry with backoff, respect Retry-After header
+    if (response.status === 429) {
+      if (attempt < maxRetries) {
+        const retryAfter = response.headers.get("Retry-After");
+        const delay = retryAfter ? Math.min(parseInt(retryAfter, 10) * 1000, 15000) : (attempt + 1) * 3000;
+        console.warn(`AI ${body.model} 429 rate-limited (attempt ${attempt + 1}/${maxRetries + 1}) — waiting ${delay}ms...`);
+        await response.text(); // drain body
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      throw new AIError("Rate limit exceeded after retries. Please try again in a moment.", 429);
+    }
+
+    // Server errors (500, 503) — retry with backoff
     if ((response.status === 500 || response.status === 503) && attempt < maxRetries) {
-      const errText = await response.text();
       console.warn(`AI ${body.model} error (attempt ${attempt + 1}/${maxRetries + 1}): ${response.status} — retrying...`);
+      await response.text(); // drain body
       await new Promise(r => setTimeout(r, (attempt + 1) * 2000));
       continue;
     }
