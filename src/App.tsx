@@ -57,6 +57,7 @@ import TeamHub from "./pages/TeamHub";
 import NotFound from "./pages/NotFound";
 import ClearanceStation from "./pages/ClearanceStation";
 import AccountingWorkspace from "./pages/AccountingWorkspace";
+import AccountingHealth from "./pages/AccountingHealth";
 import CustomerAction from "./pages/CustomerAction";
 import CustomerPortal from "./pages/CustomerPortal";
 import CEOPortal from "./pages/CEOPortal";
@@ -133,6 +134,7 @@ const App = () => (
 
                     {/* Accounting */}
                     <Route path="/accounting" element={<P><AccountingWorkspace /></P>} />
+                    <Route path="/accounting/health" element={<P><AccountingHealth /></P>} />
                     <Route path="/customer-action/:customerId" element={<P><CustomerAction /></P>} />
 
                     {/* AI Agents */}
