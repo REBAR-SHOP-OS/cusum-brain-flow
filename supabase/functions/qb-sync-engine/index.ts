@@ -1007,6 +1007,7 @@ async function handleSyncBankActivity(svc: SvcClient, companyId: string) {
         account_name: account.name,
         ledger_balance: account.current_balance,
         unreconciled_count: unreconciledCount,
+        unaccepted_count: 0,
         reconciled_through_date: reconciledThroughDate,
         last_qb_sync_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),

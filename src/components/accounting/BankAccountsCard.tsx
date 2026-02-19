@@ -62,7 +62,7 @@ export function BankAccountsCard({ accounts, getActivity, upsertBankBalance, onN
         <CollapsibleContent>
           <div className="flex items-center justify-between px-5 pb-3">
             <p className="text-xs text-muted-foreground">
-              Synced from QuickBooks. Bank balance is manual entry.
+              Estimate the effort to bring these accounts up to date.
             </p>
             <Button
               size="sm"
@@ -89,6 +89,9 @@ export function BankAccountsCard({ accounts, getActivity, upsertBankBalance, onN
                   In QuickBooks
                 </TableHead>
                 <TableHead className="text-[10px] font-bold tracking-wider uppercase text-muted-foreground text-right">
+                  Unaccepted
+                </TableHead>
+                <TableHead className="text-[10px] font-bold tracking-wider uppercase text-muted-foreground text-right">
                   Unreconciled
                 </TableHead>
                 <TableHead className="text-[10px] font-bold tracking-wider uppercase text-muted-foreground text-right">
@@ -109,15 +112,13 @@ export function BankAccountsCard({ accounts, getActivity, upsertBankBalance, onN
                   >
                     {/* Account name */}
                     <TableCell>
-                      <div className="flex items-start gap-3">
-                        <div className="flex-shrink-0 w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center mt-0.5">
-                          <Landmark className="w-3.5 h-3.5 text-primary" />
-                        </div>
+                      <div className="flex items-start gap-2">
+                        <Landmark className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
                         <div className="min-w-0">
                           <p className="text-sm font-semibold truncate">{account.Name}</p>
                           {!activity?.last_qb_sync_at && (
                             <p className="text-[11px] italic text-muted-foreground">
-                              Not yet synced. Click "Sync QB" to pull data.
+                              No bank data. QuickBooks transactions only.
                             </p>
                           )}
                         </div>
@@ -175,6 +176,15 @@ export function BankAccountsCard({ accounts, getActivity, upsertBankBalance, onN
                     {/* In QuickBooks (ledger balance from QB sync) */}
                     <TableCell className="text-right text-sm tabular-nums font-medium">
                       {activity ? fmt(activity.ledger_balance) : fmt(account.CurrentBalance)}
+                    </TableCell>
+
+                    {/* Unaccepted (from QB bank feed sync) */}
+                    <TableCell className="text-right text-sm tabular-nums">
+                      {activity?.last_qb_sync_at ? (
+                        <span>{activity.unaccepted_count}</span>
+                      ) : (
+                        <span className="text-muted-foreground">--</span>
+                      )}
                     </TableCell>
 
                     {/* Unreconciled (from QB report sync) */}
