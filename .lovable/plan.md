@@ -1,52 +1,61 @@
 
-# Fix: `toolLoopIterations is not defined` Crashing AI Agent
+
+# Fix: Architect Agent Still Deflecting on Code Change Requests
 
 ## Problem
 
-The edge function logs show a fatal error:
+The screenshot shows the Architect saying "I cannot add a new AI user interface to the pipeline, as that requires a code change." This violates the anti-deflection rules we already added, because:
+
+1. **Loophole at lines 2283-2284**: The phrase "Only create vizzy_fix_requests for issues requiring frontend code changes that are outside your tool capabilities" gives the agent an escape hatch. It interprets feature requests as "outside tool capabilities" and deflects instead of using `generate_patch`.
+
+2. **Missing feature-request handling**: The anti-deflection rules cover "I cannot modify" but don't explicitly cover "this requires a code change" -- which is the exact phrase the agent used in the screenshot.
+
+## Changes
+
+### 1. Close the Loophole (lines 2283-2284)
+**File:** `supabase/functions/ai-agent/index.ts`
+
+Replace:
 ```
-Agent error: ReferenceError: toolLoopIterations is not defined
-    at Server.<anonymous> (file:///...ai-agent/index.ts:10515:9)
-```
-
-This crashes the ENTIRE agent response, returning a non-2xx status code to the frontend, which displays "Edge Function returned a non-2xx status code."
-
-## Root Cause
-
-The recent empty-reply fallback change (line 8739) references `toolLoopIterations` in the `console.warn`, but that variable is declared at line 8346 inside a nested block scope. The fallback at line 8738 is OUTSIDE that block, so the variable does not exist there.
-
-```text
-Line 8346:  let toolLoopIterations = 0;   // <-- inside nested block
-Line 8735:  }                             // <-- block ends here
-Line 8738:  if (reply === ... "") {        // <-- OUTSIDE the block
-Line 8741:    toolLoopIterations,          // <-- ReferenceError!
+Only create vizzy_fix_requests for issues requiring frontend code changes
+that are outside your tool capabilities.
 ```
 
-Every time the agent produces an empty reply (which can happen for many reasons), this crash fires instead of the recovery message.
-
-## Fix
-
-**File:** `supabase/functions/ai-agent/index.ts` (lines 8739-8743)
-
-Replace the `console.warn` to remove the undefined variable reference:
-
-```javascript
-console.warn("Empty reply fallback triggered", { 
-  agent, 
-  messageLength: message?.length 
-});
+With:
+```
+For ANY code or UI change request: use generate_patch to produce a reviewable diff FIRST.
+Only create vizzy_fix_requests if generate_patch cannot produce a valid patch AND you have exhausted all tool options.
 ```
 
-Simply remove `toolLoopIterations` from the log object. The `agent` and `messageLength` fields provide sufficient debugging context.
+### 2. Add "requires a code change" to the Forbidden Phrases (line 2470-2473)
+**File:** `supabase/functions/ai-agent/index.ts`
 
-## Files Modified
+Add to the existing forbidden phrases list:
+```
+- "This requires a code change"
+- "as that requires a code change"
+```
 
-| File | Change |
-|------|--------|
-| `supabase/functions/ai-agent/index.ts` | Remove `toolLoopIterations` from console.warn at line 8741 |
+### 3. Add Feature Request Routing Rule (after line 2300)
+**File:** `supabase/functions/ai-agent/index.ts`
+
+Add a new rule after the existing anti-deflection rule:
+```
+- When the user requests a NEW FEATURE (e.g., "add AI to pipeline", "add a dashboard widget", "create a new page"): use generate_patch to produce a code diff implementing it. You are a Code Engineer — feature requests ARE your job. Never classify them as "outside your capabilities."
+```
+
+## Technical Details
+
+| File | Lines | Change |
+|------|-------|--------|
+| `supabase/functions/ai-agent/index.ts` | 2283-2284 | Close loophole: require generate_patch before fix_requests |
+| `supabase/functions/ai-agent/index.ts` | 2300 | Add feature request routing rule |
+| `supabase/functions/ai-agent/index.ts` | 2470-2473 | Add "requires a code change" to forbidden phrases |
 
 ## What This Fixes
 
-- The AI agent will stop crashing with "Edge Function returned a non-2xx status code"
-- The actionable recovery message will actually display when the model returns empty
-- All agent functionality (including the DM fix task) will work again
+- The agent will no longer say "this requires a code change" and stop
+- Feature requests like "add AI to pipeline" will trigger Code Engineer Mode and produce a patch
+- The loophole that allowed the agent to classify requests as "outside tool capabilities" is closed
+- The agent must attempt `generate_patch` before creating any fix request
+
