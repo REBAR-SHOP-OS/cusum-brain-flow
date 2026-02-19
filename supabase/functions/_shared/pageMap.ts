@@ -18,7 +18,7 @@ export const PAGE_MAP: Record<string, { name: string; description: string }> = {
   "/shopfloor/pool": { name: "Pool View", description: "Unassigned work items waiting to be picked up by operators" },
   "/shopfloor/pickup": { name: "Pickup Station", description: "Completed items ready for pickup and delivery assignment" },
   "/shopfloor/clearance": { name: "Clearance Station", description: "Material clearance verification with photo evidence and tag scans" },
-  "/shopfloor/live-monitor": { name: "Live Monitor", description: "Real-time production monitoring — machine status, throughput, alerts" },
+  
   "/deliveries": { name: "Deliveries", description: "Route planning, delivery stops, proof-of-delivery (photo + signature), driver assignments" },
   "/timeclock": { name: "Time Clock", description: "Employee check-in/out with face recognition, shift tracking, attendance" },
   "/team-hub": { name: "Team Hub", description: "Team directory, presence, roles, quick messaging" },

@@ -45,7 +45,7 @@ const deprecatedItems: CleanupItem[] = [
 ];
 
 const techDebt: CleanupItem[] = [
-  { label: "LiveMonitor.tsx is 244 lines", detail: "Contains inline StatCard component. Consider extracting to separate file.", severity: "debt" },
+  
   { label: "InboxView.tsx is large", detail: "Contains email rendering, AI toolbar, and settings in one file. Consider splitting into smaller composables.", severity: "debt" },
   { label: "Edge functions lack shared validation middleware", detail: "Each edge function re-implements auth checks and CORS. Extract a shared handler wrapper.", severity: "debt" },
   { label: "Event writing is duplicated", detail: "Multiple edge functions write to events table with slightly different metadata formats. Standardize event schema and create a shared writeEvent utility.", severity: "debt" },

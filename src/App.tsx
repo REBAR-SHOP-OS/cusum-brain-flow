@@ -24,7 +24,7 @@ import LeadScoring from "./pages/LeadScoring";
 import Customers from "./pages/Customers";
 import ShopFloor from "./pages/ShopFloor";
 import LoadingStation from "./pages/LoadingStation";
-import LiveMonitor from "./pages/LiveMonitor";
+
 import CutterPlanning from "./pages/CutterPlanning";
 import StationDashboard from "./pages/StationDashboard";
 import StationView from "./pages/StationView";
@@ -150,7 +150,7 @@ const App = () => (
                     <Route path="/shopfloor/pickup" element={<P><PickupStation /></P>} />
                     <Route path="/shopfloor/clearance" element={<P><ClearanceStation /></P>} />
                     <Route path="/shopfloor/inventory" element={<P><InventoryCountPage /></P>} />
-                    <Route path="/shopfloor/live-monitor" element={<P><LiveMonitor /></P>} />
+                    
                     <Route path="/deliveries" element={<P><Deliveries /></P>} />
                     <Route path="/timeclock" element={<P><TimeClock /></P>} />
                     <Route path="/transcribe" element={<P><Transcribe /></P>} />
