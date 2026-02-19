@@ -1,92 +1,123 @@
 
-# Investigation: "Size" Field Empty on `/shopfloor/station/[id]`
+# Fix: To-Do Notifications Navigating to `/brain`
 
-## What Was Found
+## Root Cause — Two Bug Locations
 
-### Complete Audit of All "Size" Fields Across Shopfloor
+### Bug 1 (Primary): `useNotifications.ts` — realtime toast "View" button
 
-After reading every relevant file in `src/components/shopfloor/`, `src/pages/StationView.tsx`, `src/hooks/useStationData.ts`, and supporting components, here is every place "Size" is displayed on the station page:
+**File:** `src/hooks/useNotifications.ts`, line 217
 
-| Component | Label | Value Expression | Fallback |
-|---|---|---|---|
-| `ProductionCard.tsx` line 153 | "Size" | `{item.bar_code}` | `"—"` via `\|\| "—"` |
-| `BenderStationView.tsx` line 228 | "Bar Size" | `{currentItem.bar_code}` | none |
-| `CutEngine.tsx` line 101 | "Bar Size" | `{barCode}` | none |
+When a new notification arrives via realtime, a toast with a "View" button is shown using:
+```ts
+onClick: () => { window.location.href = newRow.link_to; }
+```
 
-### Root Cause
+This uses `window.location.href` directly — **it bypasses `normalizeRoute` and the todo-guard entirely**. The 6 active todo records in the database all have `link_to = "/brain"`. When any of them arrives via realtime and the user clicks "View", they land on `/brain`.
 
-The "Size" display in `ProductionCard.tsx` uses `{item.bar_code || "—"}`, which correctly shows a dash when `bar_code` is falsy. However, **`BenderStationView.tsx` (line 229) and `CutEngine.tsx` (line 101) render `bar_code` with NO fallback guard**. If `bar_code` is an empty string `""` (which is falsy but doesn't trigger `|| "—"`), the field renders visually blank.
+### Bug 2 (Secondary): `InboxPanel.tsx` — guard only covers exact `/brain` string
 
-More critically: the **bender query** in `useStationData.ts` (line ~57) fetches items using a joined select:
+**File:** `src/components/panels/InboxPanel.tsx`, line 226
+
+The existing guard in `handleToggle`:
+```ts
+if (item.type === "todo" && dest === "/brain") dest = "/tasks";
+```
+
+This correctly handles `link_to = "/brain"` for items in the inbox panel. However, the same guard logic does **not** cover `idea` type items, which could also have problematic `link_to` values pointing to deprecated routes.
+
+## The Fix — Two Surgical Changes
+
+### Change 1: `src/hooks/useNotifications.ts`
+
+Extract the same route-normalization and type-guard logic into the toast "View" click handler so it matches the behavior of `handleToggle` in InboxPanel:
+
+**Before (line 215–218):**
+```ts
+action: newRow.link_to ? {
+  label: "View",
+  onClick: () => { window.location.href = newRow.link_to; },
+} : undefined,
+```
+
+**After:**
+```ts
+action: newRow.link_to ? {
+  label: "View",
+  onClick: () => {
+    let dest = newRow.link_to as string;
+    // Normalize legacy routes
+    if (/^\/hr(\/|$)/.test(dest)) dest = "/timeclock";
+    else if (/^\/estimation(\/|$)/.test(dest)) dest = "/pipeline";
+    else if (/^\/(bills|invoicing)(\/|$)/.test(dest)) dest = "/accounting";
+    else if (/^\/invoices(\/|$)/.test(dest)) dest = "/accounting";
+    else if (/^\/accounting\/(bills|invoices)(\/|$)/.test(dest)) dest = "/accounting";
+    else if (/^\/intelligence(\/|$)/.test(dest)) dest = "/brain";
+    else if (/^\/inventory(\/|$)/.test(dest)) dest = "/shop-floor";
+    else if (/^\/emails(\/|$)/.test(dest)) dest = "/inbox";
+    else if (/^\/inbox\/[a-f0-9-]+$/i.test(dest)) dest = "/inbox";
+    // To-do items must never land on /brain
+    if (newRow.type === "todo" && dest === "/brain") dest = "/tasks";
+    window.location.href = dest;
+  },
+} : undefined,
+```
+
+A cleaner implementation is to move `normalizeRoute` out of `InboxPanel.tsx` into a shared utility (e.g., `src/lib/notificationRouting.ts`) and import it from both files. This avoids duplicating the regex map.
+
+### Change 2: `src/components/panels/InboxPanel.tsx`
+
+Move `normalizeRoute` to the shared utility file and import it, keeping `handleToggle` logic identical. This ensures the single source of truth for the route-normalization rules.
+
+## Implementation Plan
+
+### Step 1 — Create shared utility `src/lib/notificationRouting.ts`
 
 ```ts
-.select("*, cut_plans!inner(id, name, project_name, company_id)")
+export function normalizeNotificationRoute(linkTo: string, type?: string): string {
+  let dest = linkTo;
+  if (/^\/hr(\/|$)/.test(dest)) dest = "/timeclock";
+  else if (/^\/estimation(\/|$)/.test(dest)) dest = "/pipeline";
+  else if (/^\/(bills|invoicing)(\/|$)/.test(dest)) dest = "/accounting";
+  else if (/^\/invoices(\/|$)/.test(dest)) dest = "/accounting";
+  else if (/^\/accounting\/(bills|invoices)(\/|$)/.test(dest)) dest = "/accounting";
+  else if (/^\/intelligence(\/|$)/.test(dest)) dest = "/brain";
+  else if (/^\/inventory(\/|$)/.test(dest)) dest = "/shop-floor";
+  else if (/^\/emails(\/|$)/.test(dest)) dest = "/inbox";
+  else if (/^\/inbox\/[a-f0-9-]+$/i.test(dest)) dest = "/inbox";
+  // To-do items must never land on /brain
+  if (type === "todo" && dest === "/brain") dest = "/tasks";
+  return dest;
+}
 ```
 
-The `bar_code` column comes from `cut_plan_items` directly — but the `phase` filter `.or("phase.eq.cut_done,phase.eq.bending")` and the mapping code at line ~69 spreads `...item` which includes `bar_code`. This is correct and should work.
+### Step 2 — Update `src/components/panels/InboxPanel.tsx`
 
-The most likely cause for a visually blank "Size" field: the `bar_code` value in the database record is an **empty string `""`** rather than `null`. With `{currentItem.bar_code}` (no fallback), an empty string renders as nothing visible.
+- Remove the local `normalizeRoute` function (lines 12–23)
+- Import `normalizeNotificationRoute` from `@/lib/notificationRouting`
+- Update `handleToggle` to call `normalizeNotificationRoute(item.linkTo, item.type)` instead of the two-step `normalizeRoute` + guard
 
-### The Fix — Two Files, Surgical Only
+### Step 3 — Update `src/hooks/useNotifications.ts`
 
-**1. `src/components/shopfloor/BenderStationView.tsx` — line 229**
+- Import `normalizeNotificationRoute` from `@/lib/notificationRouting`
+- Replace the toast "View" `onClick` with:
+  ```ts
+  onClick: () => {
+    const dest = normalizeNotificationRoute(newRow.link_to, newRow.type);
+    window.location.href = dest;
+  },
+  ```
 
-Add a fallback `|| "—"` to the bar_code display:
+## Scope
 
-Before:
-```tsx
-<p className="text-2xl sm:text-3xl font-black text-foreground">{currentItem.bar_code}</p>
-```
+| File | Change |
+|---|---|
+| `src/lib/notificationRouting.ts` | NEW — shared route normalization + todo guard function |
+| `src/components/panels/InboxPanel.tsx` | Remove local `normalizeRoute`, import shared utility, simplify `handleToggle` |
+| `src/hooks/useNotifications.ts` | Import shared utility, apply in toast "View" `onClick` |
 
-After:
-```tsx
-<p className="text-2xl sm:text-3xl font-black text-foreground">{currentItem.bar_code || "—"}</p>
-```
-
-**2. `src/components/shopfloor/CutEngine.tsx` — line 101**
-
-Add a fallback to the Bar Size display in the CutEngine panel:
-
-Before:
-```tsx
-<p className="text-lg font-black font-mono">{barCode}</p>
-```
-
-After:
-```tsx
-<p className="text-lg font-black font-mono">{barCode || "—"}</p>
-```
-
-**3. `src/hooks/useStationData.ts` — defensive mapping**
-
-Add an explicit `bar_code` check in the bender item mapping (line ~69–74) to ensure empty strings are normalized:
-
-Before:
-```ts
-return (items || []).map((item: Record<string, unknown>) => ({
-  ...item,
-  ...
-})) as StationItem[];
-```
-
-After:
-```ts
-return (items || []).map((item: Record<string, unknown>) => ({
-  ...item,
-  bar_code: (item.bar_code as string) || "",
-  ...
-})) as StationItem[];
-```
-
-### Scope
-
-| File | Line | Change |
-|---|---|---|
-| `src/components/shopfloor/BenderStationView.tsx` | 229 | Add `\|\| "—"` fallback to bar_code display under "Bar Size" label |
-| `src/components/shopfloor/CutEngine.tsx` | 101 | Add `\|\| "—"` fallback to barCode display under "Bar Size" label |
-
-### What Is NOT Changed
-- `ProductionCard.tsx` — already has `\|\| "—"` fallback, untouched
-- `useStationData.ts` data fetching queries — untouched
-- Database schema — untouched
-- Any other component, page, logic, or route
+## What Is NOT Changed
+- Database schema or data
+- Any other component, page, hook, or route
+- All other toast logic
+- Authentication, permissions, or user role logic
+- Any shopfloor, accounting, or other module code
