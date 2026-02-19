@@ -96,7 +96,9 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
   // when idle, use whatever the DB/realtime says
   const effectiveCompleted = completedAtRunStart != null
     ? completedAtRunStart + slotTracker.totalCutsDone
-    : completedPieces;
+    : slotTracker.slots.length > 0
+      ? completedPieces + slotTracker.totalCutsDone   // running but no snapshot → use DB base + local progress
+      : completedPieces;
 
   const remainingPieces = totalPieces - effectiveCompleted;
   const barsStillNeeded = computedPiecesPerBar > 0 ? Math.ceil(remainingPieces / computedPiecesPerBar) : 0;
@@ -215,9 +217,9 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
   const handleRecordStroke = useCallback(() => {
     // Count active bars BEFORE the stroke (this is how many pieces this stroke produces)
     const activeBars = slotTracker.slots.filter(s => s.status === "active").length;
-    slotTracker.recordStroke();
-
     const newCutsDone = slotTracker.totalCutsDone + activeBars;
+
+    slotTracker.recordStroke();
 
     // ── Persist progress to DB after every stroke ──
     if (currentItem && completedAtRunStart !== null) {
