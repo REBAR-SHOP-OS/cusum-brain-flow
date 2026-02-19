@@ -5572,11 +5572,16 @@ export type Database = {
           created_at: string
           customer_name: string | null
           cut_plan_id: string | null
+          delivery_date: string | null
           delivery_id: string | null
           id: string
+          invoice_date: string | null
+          invoice_number: string | null
           items_json: Json
+          scope: string | null
           ship_to: string | null
           signature_path: string | null
+          site_address: string | null
           site_photo_path: string | null
           slip_number: string
           status: string
@@ -5587,11 +5592,16 @@ export type Database = {
           created_at?: string
           customer_name?: string | null
           cut_plan_id?: string | null
+          delivery_date?: string | null
           delivery_id?: string | null
           id?: string
+          invoice_date?: string | null
+          invoice_number?: string | null
           items_json?: Json
+          scope?: string | null
           ship_to?: string | null
           signature_path?: string | null
+          site_address?: string | null
           site_photo_path?: string | null
           slip_number: string
           status?: string
@@ -5602,11 +5612,16 @@ export type Database = {
           created_at?: string
           customer_name?: string | null
           cut_plan_id?: string | null
+          delivery_date?: string | null
           delivery_id?: string | null
           id?: string
+          invoice_date?: string | null
+          invoice_number?: string | null
           items_json?: Json
+          scope?: string | null
           ship_to?: string | null
           signature_path?: string | null
+          site_address?: string | null
           site_photo_path?: string | null
           slip_number?: string
           status?: string

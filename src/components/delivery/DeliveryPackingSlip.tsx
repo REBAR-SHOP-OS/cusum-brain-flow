@@ -5,6 +5,7 @@ import { format } from "date-fns";
 
 interface PackingSlipItem {
   mark_number: string | null;
+  drawing_ref?: string | null;
   bar_code: string;
   cut_length_mm: number;
   total_pieces: number;
@@ -19,6 +20,11 @@ interface DeliveryPackingSlipProps {
   date: string;
   items: PackingSlipItem[];
   onClose: () => void;
+  invoiceNumber?: string;
+  invoiceDate?: string;
+  scope?: string;
+  deliveryDate?: string;
+  siteAddress?: string;
 }
 
 export function DeliveryPackingSlip({
@@ -29,10 +35,16 @@ export function DeliveryPackingSlip({
   date,
   items,
   onClose,
+  invoiceNumber,
+  invoiceDate,
+  scope,
+  deliveryDate,
+  siteAddress,
 }: DeliveryPackingSlipProps) {
   const handlePrint = () => window.print();
 
-  const totalPieces = items.reduce((s, i) => s + i.total_pieces, 0);
+  const totalQty = items.reduce((s, i) => s + i.total_pieces, 0);
+  const displayShipTo = siteAddress || shipTo;
 
   return (
     <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-start justify-center overflow-y-auto py-8">
@@ -58,54 +70,79 @@ export function DeliveryPackingSlip({
           <h2 className="text-2xl font-black text-gray-900">Packing Slip</h2>
         </div>
 
-        {/* Info grid */}
-        <div className="grid grid-cols-4 gap-4 mb-6 p-4 bg-gray-50 rounded-lg text-sm">
+        {/* Info grid - Row 1 */}
+        <div className="grid grid-cols-4 gap-4 mb-2 p-4 bg-gray-50 rounded-t-lg text-sm">
           <div>
             <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Customer</p>
             <p className="font-semibold">{customerName}</p>
           </div>
           <div>
             <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Ship To</p>
-            <p className="font-semibold">{shipTo || "—"}</p>
+            <p className="font-semibold">{displayShipTo || "—"}</p>
           </div>
           <div>
             <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Delivery #</p>
             <p className="font-semibold">{deliveryNumber}</p>
           </div>
           <div>
-            <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Date</p>
-            <p className="font-semibold">{format(new Date(date), "MMM d, yyyy")}</p>
+            <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Delivery Date</p>
+            <p className="font-semibold">
+              {deliveryDate ? format(new Date(deliveryDate), "MMM d, yyyy") : format(new Date(date), "MMM d, yyyy")}
+            </p>
           </div>
         </div>
 
-        <p className="text-xs text-gray-500 mb-2">Slip #: {slipNumber}</p>
+        {/* Info grid - Row 2 */}
+        <div className="grid grid-cols-4 gap-4 mb-6 p-4 bg-gray-50 rounded-b-lg text-sm">
+          <div>
+            <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Invoice #</p>
+            <p className="font-semibold">{invoiceNumber || "—"}</p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Invoice Date</p>
+            <p className="font-semibold">
+              {invoiceDate ? format(new Date(invoiceDate), "MMM d, yyyy") : "—"}
+            </p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Scope</p>
+            <p className="font-semibold">{scope || "—"}</p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Slip #</p>
+            <p className="font-semibold">{slipNumber}</p>
+          </div>
+        </div>
 
         {/* Items table */}
         <table className="w-full text-sm mb-6">
           <thead>
             <tr className="border-b-2 border-gray-900">
+              <th className="text-left py-2 font-bold w-24">DW#</th>
               <th className="text-left py-2 font-bold w-24">Mark</th>
-              <th className="text-left py-2 font-bold w-20">Bar</th>
-              <th className="text-right py-2 font-bold w-28">Cut (mm)</th>
-              <th className="text-left py-2 font-bold w-20">Shape</th>
-              <th className="text-right py-2 font-bold w-20">Qty</th>
+              <th className="text-right py-2 font-bold w-20">Quantity</th>
+              <th className="text-left py-2 font-bold w-20">Size</th>
+              <th className="text-left py-2 font-bold w-20">Type</th>
+              <th className="text-right py-2 font-bold w-28">Total Length</th>
             </tr>
           </thead>
           <tbody>
             {items.map((item, idx) => (
               <tr key={idx} className="border-b border-gray-200">
+                <td className="py-3 text-gray-700">{item.drawing_ref || "—"}</td>
                 <td className="py-3 text-gray-700">{item.mark_number || "—"}</td>
-                <td className="py-3 text-gray-600">{item.bar_code}</td>
-                <td className="py-3 text-right tabular-nums">{item.cut_length_mm}</td>
-                <td className="py-3 text-gray-600">{item.asa_shape_code || "—"}</td>
                 <td className="py-3 text-right tabular-nums font-medium">{item.total_pieces}</td>
+                <td className="py-3 text-gray-600">{item.bar_code}</td>
+                <td className="py-3 text-gray-600">{item.asa_shape_code ? "Bent" : "Straight"}</td>
+                <td className="py-3 text-right tabular-nums">{(item.cut_length_mm / 1000).toFixed(2)} m</td>
               </tr>
             ))}
           </tbody>
           <tfoot>
             <tr className="border-t-2 border-gray-900">
-              <td colSpan={4} className="py-2 font-bold text-right">Total Pieces</td>
-              <td className="py-2 text-right font-bold tabular-nums">{totalPieces}</td>
+              <td colSpan={2} className="py-2 font-bold text-right">Total</td>
+              <td className="py-2 text-right font-bold tabular-nums">{totalQty}</td>
+              <td colSpan={3}></td>
             </tr>
           </tfoot>
         </table>

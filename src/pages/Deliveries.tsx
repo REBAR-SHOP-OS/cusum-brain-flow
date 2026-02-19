@@ -92,6 +92,11 @@ export default function Deliveries() {
     shipTo?: string;
     date: string;
     items: any[];
+    invoiceNumber?: string;
+    invoiceDate?: string;
+    scope?: string;
+    deliveryDate?: string;
+    siteAddress?: string;
   } | null>(null);
   const { user } = useAuth();
   const { isField } = useUserRole();
@@ -358,6 +363,11 @@ export default function Deliveries() {
                           customerName: slip.customer_name || "—",
                           date: slip.created_at,
                           items: slip.items_json || [],
+                          invoiceNumber: slip.invoice_number,
+                          invoiceDate: slip.invoice_date,
+                          scope: slip.scope,
+                          deliveryDate: slip.delivery_date,
+                          siteAddress: slip.site_address,
                         })}
                       >
                         <CardContent className="p-4">
@@ -512,6 +522,11 @@ export default function Deliveries() {
             date={showPackingSlip.date}
             items={showPackingSlip.items}
             onClose={() => setShowPackingSlip(null)}
+            invoiceNumber={showPackingSlip.invoiceNumber}
+            invoiceDate={showPackingSlip.invoiceDate}
+            scope={showPackingSlip.scope}
+            deliveryDate={showPackingSlip.deliveryDate}
+            siteAddress={showPackingSlip.siteAddress}
           />
         )}
       </div>

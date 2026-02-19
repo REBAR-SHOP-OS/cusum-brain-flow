@@ -21,6 +21,8 @@ export function useDeliveryActions() {
       const deliveryNumber = `DEL-${Date.now().toString(36).toUpperCase()}`;
       const slipNumber = `PS-${Date.now().toString(36).toUpperCase()}`;
 
+      const scheduledDate = new Date().toISOString().split("T")[0];
+
       // 1. Create delivery
       const { data: delivery, error: delErr } = await supabase
         .from("deliveries")
@@ -28,7 +30,7 @@ export function useDeliveryActions() {
           company_id: companyId,
           delivery_number: deliveryNumber,
           status: "pending",
-          scheduled_date: new Date().toISOString().split("T")[0],
+          scheduled_date: scheduledDate,
           cut_plan_id: bundle.cutPlanId,
         } as any)
         .select()
@@ -48,9 +50,28 @@ export function useDeliveryActions() {
 
       if (stopErr) throw stopErr;
 
-      // 3. Build items snapshot
+      // 2b. Fetch project site_address via cut_plan
+      let siteAddress: string | null = null;
+      try {
+        const { data: cpData } = await supabase
+          .from("cut_plans")
+          .select("project_id")
+          .eq("id", bundle.cutPlanId)
+          .single();
+        if (cpData?.project_id) {
+          const { data: proj } = await supabase
+            .from("projects")
+            .select("site_address")
+            .eq("id", cpData.project_id)
+            .single();
+          siteAddress = (proj as any)?.site_address ?? null;
+        }
+      } catch { /* non-critical */ }
+
+      // 3. Build items snapshot (includes drawing_ref for DW# column)
       const itemsSnapshot = bundle.items.map((item) => ({
         mark_number: item.mark_number,
+        drawing_ref: item.drawing_ref,
         bar_code: item.bar_code,
         cut_length_mm: item.cut_length_mm,
         total_pieces: item.total_pieces,
@@ -68,6 +89,8 @@ export function useDeliveryActions() {
           customer_name: bundle.projectName,
           items_json: itemsSnapshot,
           status: "draft",
+          delivery_date: scheduledDate,
+          site_address: siteAddress,
         })
         .select()
         .single();
