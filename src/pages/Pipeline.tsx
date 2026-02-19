@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,12 @@ import { usePipelineStageOrder } from "@/hooks/usePipelineStageOrder";
 import type { Tables } from "@/integrations/supabase/types";
 import { startOfDay, startOfWeek, startOfMonth, startOfQuarter, startOfYear, subDays, differenceInCalendarDays } from "date-fns";
 import { parseSmartSearch, type SmartSearchResult } from "@/lib/smartSearchParser";
+import { getRequiredGates, type GateType } from "@/lib/pipelineTransitionGates";
+import { usePipelineMemory } from "@/hooks/usePipelineMemory";
+import { QualificationGateModal } from "@/components/pipeline/gates/QualificationGateModal";
+import { PricingGateModal } from "@/components/pipeline/gates/PricingGateModal";
+import { LossGateModal } from "@/components/pipeline/gates/LossGateModal";
+import { DeliveryGateModal } from "@/components/pipeline/gates/DeliveryGateModal";
 
 type Lead = Tables<"leads">;
 type LeadWithCustomer = Lead & { customers: { name: string; company_name: string | null } | null };
@@ -83,6 +89,14 @@ export default function Pipeline() {
   const [isScanningRfq, setIsScanningRfq] = useState(false);
   const [isSyncingOdoo, setIsSyncingOdoo] = useState(false);
   const [aiMode, setAiMode] = useState(() => localStorage.getItem("pipeline_ai_mode") === "true");
+
+  // ── Gate state for transition-gated memory capture ──
+  const [pendingTransition, setPendingTransition] = useState<{ leadId: string; targetStage: string; lead: LeadWithCustomer | null } | null>(null);
+  const [activeGates, setActiveGates] = useState<GateType[]>([]);
+  const [currentGateIndex, setCurrentGateIndex] = useState(0);
+
+  // Look up memory for the lead pending a gated transition
+  const { memory: pendingMemory } = usePipelineMemory(pendingTransition?.leadId ?? null);
   
   const [pipelineFilters, setPipelineFilters] = useState<PipelineFilterState>({ ...DEFAULT_FILTERS });
   const [groupBy, setGroupBy] = useState<GroupByOption>("none");
@@ -340,12 +354,73 @@ export default function Pipeline() {
     setEditingLead(null);
   };
 
-  const handleStageChange = (leadId: string, newStage: string) => {
+  const handleStageChange = useCallback((leadId: string, newStage: string) => {
+    // Find the lead to get company_id / customer_id for gate modals
+    const lead = leads.find((l) => l.id === leadId) ?? null;
+
+    // Check if this transition requires memory gates
+    // Use a quick synchronous check — we re-check after memory loads
+    const gates = getRequiredGates(newStage, { hasQualification: false, hasPricing: false, hasLoss: false, hasOutcome: false });
+
+    if (gates.length > 0) {
+      // Open gate flow — set pending transition, will check actual memory in effect
+      setPendingTransition({ leadId, targetStage: newStage, lead });
+      return;
+    }
+
+    // No gates needed — proceed directly
     updateStageMutation.mutate({ id: leadId, stage: newStage });
-    // Update selected lead in drawer if open
     if (selectedLead?.id === leadId) {
       setSelectedLead((prev) => prev ? { ...prev, stage: newStage } : null);
     }
+  }, [leads, selectedLead, updateStageMutation]);
+
+  // Effect: when pendingTransition is set and memory loads, determine which gates are actually needed
+  useEffect(() => {
+    if (!pendingTransition) return;
+    const gates = getRequiredGates(pendingTransition.targetStage, pendingMemory);
+    if (gates.length === 0) {
+      // All memory already exists — proceed with transition
+      updateStageMutation.mutate({ id: pendingTransition.leadId, stage: pendingTransition.targetStage });
+      if (selectedLead?.id === pendingTransition.leadId) {
+        setSelectedLead((prev) => prev ? { ...prev, stage: pendingTransition.targetStage } : null);
+      }
+      setPendingTransition(null);
+      setActiveGates([]);
+      setCurrentGateIndex(0);
+    } else {
+      setActiveGates(gates.map((g) => g.type));
+      setCurrentGateIndex(0);
+    }
+  }, [pendingTransition, pendingMemory]);
+
+  const currentGate = activeGates[currentGateIndex] ?? null;
+  const pendingLead = pendingTransition?.lead;
+  const pendingCompanyId = (pendingLead as any)?.company_id ?? "";
+  const pendingCustomerId = (pendingLead as any)?.customer_id ?? null;
+
+  const handleGateComplete = () => {
+    if (currentGateIndex < activeGates.length - 1) {
+      // Move to next gate
+      setCurrentGateIndex((i) => i + 1);
+    } else {
+      // All gates passed — proceed with transition
+      if (pendingTransition) {
+        updateStageMutation.mutate({ id: pendingTransition.leadId, stage: pendingTransition.targetStage });
+        if (selectedLead?.id === pendingTransition.leadId) {
+          setSelectedLead((prev) => prev ? { ...prev, stage: pendingTransition.targetStage } : null);
+        }
+      }
+      setPendingTransition(null);
+      setActiveGates([]);
+      setCurrentGateIndex(0);
+    }
+  };
+
+  const handleGateCancel = () => {
+    setPendingTransition(null);
+    setActiveGates([]);
+    setCurrentGateIndex(0);
   };
 
   const handleLeadClick = (lead: LeadWithCustomer) => {
@@ -587,6 +662,41 @@ export default function Pipeline() {
         onOpenChange={setIsAISheetOpen}
         leads={filteredLeads}
       />
+
+      {/* ── Pipeline Memory Gate Modals ── */}
+      {pendingTransition && pendingCompanyId && (
+        <>
+          <QualificationGateModal
+            open={currentGate === "qualification"}
+            onOpenChange={(open) => { if (!open) handleGateCancel(); }}
+            leadId={pendingTransition.leadId}
+            companyId={pendingCompanyId}
+            onComplete={handleGateComplete}
+          />
+          <PricingGateModal
+            open={currentGate === "pricing"}
+            onOpenChange={(open) => { if (!open) handleGateCancel(); }}
+            leadId={pendingTransition.leadId}
+            companyId={pendingCompanyId}
+            onComplete={handleGateComplete}
+          />
+          <LossGateModal
+            open={currentGate === "loss"}
+            onOpenChange={(open) => { if (!open) handleGateCancel(); }}
+            leadId={pendingTransition.leadId}
+            companyId={pendingCompanyId}
+            onComplete={handleGateComplete}
+          />
+          <DeliveryGateModal
+            open={currentGate === "delivery"}
+            onOpenChange={(open) => { if (!open) handleGateCancel(); }}
+            leadId={pendingTransition.leadId}
+            companyId={pendingCompanyId}
+            customerId={pendingCustomerId}
+            onComplete={handleGateComplete}
+          />
+        </>
+      )}
     </div>
   );
 }
