@@ -1674,7 +1674,7 @@ export type Database = {
           billing_province: string | null
           billing_street1: string | null
           billing_street2: string | null
-          company_id: string | null
+          company_id: string
           company_name: string | null
           created_at: string
           credit_limit: number | null
@@ -1712,7 +1712,7 @@ export type Database = {
           billing_province?: string | null
           billing_street1?: string | null
           billing_street2?: string | null
-          company_id?: string | null
+          company_id: string
           company_name?: string | null
           created_at?: string
           credit_limit?: number | null
@@ -1750,7 +1750,7 @@ export type Database = {
           billing_province?: string | null
           billing_street1?: string | null
           billing_street2?: string | null
-          company_id?: string | null
+          company_id?: string
           company_name?: string | null
           created_at?: string
           credit_limit?: number | null
