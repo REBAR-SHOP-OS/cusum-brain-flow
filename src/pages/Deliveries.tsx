@@ -27,8 +27,10 @@ import {
   ArrowLeft,
   Camera,
   FileWarning,
-  FileText
+  FileText,
+  Trash2
 } from "lucide-react";
+import { toast } from "sonner";
 import { format } from "date-fns";
 
 interface Delivery {
@@ -95,6 +97,7 @@ export default function Deliveries() {
   const { isField } = useUserRole();
   const { companyId } = useCompanyId();
   const queryClient = useQueryClient();
+  const [deletingSlipId, setDeletingSlipId] = useState<string | null>(null);
 
   // Get current user's profile name for driver mode filtering
   const { data: myProfile } = useQuery({
@@ -182,6 +185,22 @@ export default function Deliveries() {
 
   const refreshStops = () => {
     queryClient.invalidateQueries({ queryKey: ["delivery-stops", selectedDelivery?.id, companyId] });
+  };
+
+  const deleteSlip = async (slipId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDeletingSlipId(slipId);
+    const { error } = await supabase
+      .from("packing_slips" as any)
+      .delete()
+      .eq("id", slipId)
+      .eq("status", "draft");
+    setDeletingSlipId(null);
+    if (error) {
+      toast.error("Failed to delete: " + error.message);
+    } else {
+      queryClient.invalidateQueries({ queryKey: ["packing-slips"] });
+    }
   };
 
   // Fix 6: Realtime subscriptions
@@ -343,18 +362,34 @@ export default function Deliveries() {
                       >
                         <CardContent className="p-4">
                           <div className="flex items-center justify-between mb-1">
-                            <span className="font-medium flex items-center gap-2">
-                              <FileText className="w-4 h-4" />
-                              {slip.slip_number}
-                            </span>
-                            <Badge className={
-                              slip.status === "delivered" ? "bg-primary/30 text-primary" :
-                              slip.status === "archived" ? "bg-muted text-muted-foreground" :
-                              "bg-accent/20 text-accent-foreground"
-                            }>
-                              {slip.status}
-                            </Badge>
-                          </div>
+                             <span className="font-medium flex items-center gap-2">
+                               <FileText className="w-4 h-4" />
+                               {slip.slip_number}
+                             </span>
+                             <div className="flex items-center gap-1.5">
+                               <Badge className={
+                                 slip.status === "delivered" ? "bg-primary/30 text-primary" :
+                                 slip.status === "archived" ? "bg-muted text-muted-foreground" :
+                                 "bg-accent/20 text-accent-foreground"
+                               }>
+                                 {slip.status}
+                               </Badge>
+                               {slip.status === "draft" && (
+                                 <Button
+                                   variant="ghost"
+                                   size="icon"
+                                   className="h-6 w-6 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                   onClick={(e) => deleteSlip(slip.id, e)}
+                                   disabled={deletingSlipId === slip.id}
+                                 >
+                                   {deletingSlipId === slip.id
+                                     ? <Loader2 className="w-3 h-3 animate-spin" />
+                                     : <Trash2 className="w-3 h-3" />
+                                   }
+                                 </Button>
+                               )}
+                             </div>
+                           </div>
                           <div className="text-sm text-muted-foreground">
                             {slip.customer_name || "No customer"} • {format(new Date(slip.created_at), "MMM d, yyyy")}
                           </div>
