@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { EmailTemplatesDrawer } from "./EmailTemplatesDrawer";
+import { AISuggestButton } from "@/components/ui/AISuggestButton";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import type { InboxEmail } from "./InboxEmailList";
 import type { ReplyMode } from "./EmailActionBar";
@@ -244,6 +245,17 @@ export function EmailReplyComposer({ email, mode, onClose }: EmailReplyComposerP
 
       {/* Text Area */}
       <div className="px-4 py-1 overflow-y-auto flex-1 min-h-0">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-xs text-muted-foreground">Message</span>
+          <AISuggestButton
+            contextType="email"
+            context={`Subject: ${email.subject}\nFrom: ${email.sender} <${email.senderEmail}>\nOriginal message: ${(email.body || email.preview || "").slice(0, 500)}`}
+            currentText={replyText}
+            onSuggestion={(text) => setReplyText(text)}
+            label="Suggest"
+            disabled={drafting || sending}
+          />
+        </div>
         <SmartTextarea
           value={replyText}
           onChange={(e) => setReplyText(e.target.value)}
