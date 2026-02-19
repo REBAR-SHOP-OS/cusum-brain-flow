@@ -1,131 +1,103 @@
 
-# Fix: "Pieces Cut" Counter Stays at 0 on Shopfloor Station Page
+# Fix: Packing Slip Header Incorrect Data on /deliveries Page
 
-## Root Cause
+## Root Cause Analysis
 
-The bug has two connected parts, both in `src/components/shopfloor/CutterStationView.tsx`.
+After examining the code and live database, the issues are located in **two files only**:
 
-### Part 1 — Missing guard on `effectiveCompleted` when machine was already running on mount
+### Issue 1 — `src/pages/Deliveries.tsx` (lines 160–172 and 362–377)
 
-The "Pieces Done" stat card (line 507) shows `effectiveCompleted`, computed as:
+The packing slips query uses `select("*")` on the `packing_slips` table, which does **not join the `deliveries` table**. As a result, `delivery_number` (e.g. `DEL-MLTV5F3Z`) is never fetched — only `slip_number` (e.g. `PS-MLTV5F3Z`) is available.
 
-```ts
-const effectiveCompleted = completedAtRunStart != null
-  ? completedAtRunStart + slotTracker.totalCutsDone
-  : completedPieces;   // ← fallback when completedAtRunStart is null
-```
+When the slip card is clicked to open the packing slip viewer (lines 366–377), `deliveryNumber` is incorrectly set to `slip.slip_number` instead of the actual delivery number.
 
-`completedAtRunStart` is only set when the operator clicks **LOCK & START** in the current browser session (line 147). If the machine is already in `running` status in the database when the page loads, then:
-- `machineIsRunning` = `true` (because `machine.status === "running"`)
-- `isRunning` = `false` (local state, not yet started)
-- `completedAtRunStart` = `null`
-- The SlotTracker also has no slots (`slots.length === 0`)
+Database reality (confirmed with live data):
 
-So `effectiveCompleted` falls back to `completedPieces` from the database, which only refreshes on the background polling interval (every ~10s), not in real-time after strokes.
+| Field | DB Column | Current State |
+|---|---|---|
+| Customer | `packing_slips.customer_name` | Populated correctly |
+| Ship To | `packing_slips.site_address` | Populated on some slips |
+| Delivery # | `deliveries.delivery_number` (via join) | NOT fetched |
+| Invoice # | `packing_slips.invoice_number` | Null on existing slips |
+| Invoice Date | `packing_slips.invoice_date` | Null on existing slips |
+| Scope | `packing_slips.scope` | Null on existing slips |
+| Delivery Date | `packing_slips.delivery_date` | Populated correctly |
 
-### Part 2 — Stale `totalCutsDone` read immediately after `recordStroke()`
+### Issue 2 — `src/components/delivery/DeliveryPackingSlip.tsx` (line 85)
 
-In `handleRecordStroke` (line 220):
+The "Delivery #" field in the template currently renders only `{deliveryNumber}`. It must be changed to show the concatenated format: `[Invoice Number] - [Delivery Number]` (falling back gracefully if invoice number is absent).
 
-```ts
-slotTracker.recordStroke();                                        // setState — async
-const newCutsDone = slotTracker.totalCutsDone + activeBars;       // ← reads OLD stale value
-```
+### Product Table Status
 
-`recordStroke()` updates React state asynchronously. The line immediately after still reads the pre-stroke `totalCutsDone`. This causes the DB persist (line 224) to write an incorrect accumulated total — it adds `activeBars` to the stale value instead of the true new total.
-
-**Concrete example:**
-- After stroke 1: `slotTracker.totalCutsDone` = 0 (stale), `activeBars` = 3 → writes `completedAtRunStart + 3`
-- After stroke 2: `slotTracker.totalCutsDone` = 3 (now updated), `activeBars` = 3 → writes `completedAtRunStart + 6` ✓
-
-So the DB write is off by exactly one stroke cycle. The display recovers on the next render. But if `completedAtRunStart` is `null`, nothing displays correctly at all.
-
-## The Fix
-
-**File:** `src/components/shopfloor/CutterStationView.tsx`  
-**Two targeted changes only:**
+The table columns in `DeliveryPackingSlip.tsx` are **already correct**: DW#, Mark, Quantity, Size, Type, Total Length — in the exact required order. No changes needed here.
 
 ---
 
-### Fix 1 — Correct the stale read in `handleRecordStroke`
+## Exact Changes
 
-Instead of reading `slotTracker.totalCutsDone` after `recordStroke()` (stale), compute the new total **before** calling `recordStroke()` and use that:
+### File 1: `src/pages/Deliveries.tsx`
 
-**Before (lines 215–235):**
+**Change A — Update the packing slips query to join deliveries (lines 164–168):**
+
+Change `select("*")` to also fetch `delivery_number` via the foreign key join to `deliveries`:
+
 ```ts
-const handleRecordStroke = useCallback(() => {
-  const activeBars = slotTracker.slots.filter(s => s.status === "active").length;
-  slotTracker.recordStroke();
+// Before
+.select("*")
 
-  const newCutsDone = slotTracker.totalCutsDone + activeBars;   // ← stale
-
-  if (currentItem && completedAtRunStart !== null) {
-    const newCompleted = Math.min(completedAtRunStart + newCutsDone, totalPieces);
-    ...
-  }
-  ...
-}, [...]);
+// After
+.select("*, deliveries(delivery_number)")
 ```
 
-**After:**
+Then map the result to expose `delivery_number` on each slip object.
+
+**Change B — Fix the `setShowPackingSlip` call (lines 366–377):**
+
+- Pass `deliveryNumber` from the joined `slip.deliveries?.delivery_number` instead of `slip.slip_number`
+- Pass `shipTo` from `slip.ship_to` (currently missing from the call)
+
 ```ts
-const handleRecordStroke = useCallback(() => {
-  const activeBars = slotTracker.slots.filter(s => s.status === "active").length;
-  const newCutsDone = slotTracker.totalCutsDone + activeBars;   // ← computed BEFORE recordStroke
+// Before
+deliveryNumber: slip.slip_number,  // WRONG — was the slip #
+// shipTo was never passed
 
-  slotTracker.recordStroke();
-
-  if (currentItem && completedAtRunStart !== null) {
-    const newCompleted = Math.min(completedAtRunStart + newCutsDone, totalPieces);
-    ...
-  }
-  ...
-}, [...]);
+// After
+deliveryNumber: slip.deliveries?.delivery_number || slip.slip_number,
+shipTo: slip.ship_to,  // ADD this
 ```
 
-This is a **2-line reorder** — move `newCutsDone` before `recordStroke()`.
+### File 2: `src/components/delivery/DeliveryPackingSlip.tsx`
 
----
+**Change — Update "Delivery #" label to show concatenated format (line 85):**
 
-### Fix 2 — Guard `effectiveCompleted` when slots exist but `completedAtRunStart` is null
+```tsx
+// Before
+<p className="font-semibold">{deliveryNumber}</p>
 
-When the slot tracker has active slots (meaning a run is in progress), but `completedAtRunStart` is null (e.g., page was refreshed mid-run), fall back to `completedPieces + slotTracker.totalCutsDone` instead of just `completedPieces`:
-
-**Before (lines 97–99):**
-```ts
-const effectiveCompleted = completedAtRunStart != null
-  ? completedAtRunStart + slotTracker.totalCutsDone
-  : completedPieces;
+// After
+<p className="font-semibold">
+  {invoiceNumber ? `${invoiceNumber} - ${deliveryNumber}` : deliveryNumber}
+</p>
 ```
-
-**After:**
-```ts
-const effectiveCompleted = completedAtRunStart != null
-  ? completedAtRunStart + slotTracker.totalCutsDone
-  : slotTracker.slots.length > 0
-    ? completedPieces + slotTracker.totalCutsDone   // running but no snapshot → use DB base + local progress
-    : completedPieces;
-```
-
-This ensures that even if the operator's session was interrupted and they resumed, the counter still increments correctly as they record strokes.
 
 ---
 
 ## Scope
 
-| File | Lines Changed | Type |
-|------|--------------|------|
-| `src/components/shopfloor/CutterStationView.tsx` | ~97–99 (3 lines) | effectiveCompleted fallback |
-| `src/components/shopfloor/CutterStationView.tsx` | ~217–220 (2 lines reorder) | newCutsDone before recordStroke |
+| File | Lines | Change Type |
+|---|---|---|
+| `src/pages/Deliveries.tsx` | 164–168 (query) | Add join to deliveries |
+| `src/pages/Deliveries.tsx` | 366–377 (setShowPackingSlip) | Fix deliveryNumber source, add shipTo |
+| `src/components/delivery/DeliveryPackingSlip.tsx` | 85 | Concatenate invoice + delivery # |
 
-**Total: 1 file, 2 micro-changes. No other files, components, database, or UI elements are touched.**
+**No other files. No database changes. No other UI elements. No other components.**
 
 ## What Is NOT Changed
 
-- `SlotTracker.tsx` — untouched
-- `useSlotTracker.ts` — untouched
-- `CutEngine.tsx` — untouched
+- All delivery tabs (Today, Upcoming, All) — untouched
+- Packing slip cards list layout — untouched
+- Delete button, status badge — untouched
+- Signature area, footer, header branding — untouched
+- Product table columns — already correct, untouched
+- All other pages and components — untouched
 - Database schema — untouched
-- All other pages — untouched
-- All other stat cards (Pcs/Bar, Bars Needed, This Run) — untouched
-- The SlotTracker component's own display — untouched (already correct)
