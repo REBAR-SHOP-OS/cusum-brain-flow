@@ -1,62 +1,60 @@
 
+# Fix: Replace "I couldn't process that request" with Actionable Error Recovery
 
-# Fix: Architect Agent Deflection / "I Cannot" Problem
+## Problem
+
+The screenshot shows the Architect agent responding with "I couldn't process that request" -- a dead-end message that provides no help. This is NOT an LLM prompt issue. It is a **hardcoded fallback** at line 8739 of the edge function that triggers when the AI model returns an empty reply (e.g., after tool calls exhaust all output tokens or an internal loop exits without generating text).
+
+The anti-deflection rules in the system prompt cannot prevent this because the message is injected by code AFTER the model finishes.
 
 ## Root Cause
 
-The FALLBACK PROTOCOL (lines 2458-2464) lists "React code issues, CSS problems, frontend logic errors" as things the agent cannot fix. This triggers BEFORE the agent considers using its `generate_patch` tool (line 2516) or Code Engineer Mode. Result: the agent gives up on UI changes it COULD handle via patch generation or exact code instructions.
-
-The screenshot proves it: the agent says "I cannot directly modify ERP UI elements" instead of using `generate_patch` to produce a reviewable diff for the string change.
-
----
-
-## Changes
-
-### 1. Rewrite FALLBACK PROTOCOL to Eliminate Premature Deflection
-**File:** `supabase/functions/ai-agent/index.ts` (lines 2458-2464)
-
-Replace the current fallback with a mandatory tool-exhaustion rule:
-
 ```
-### FALLBACK PROTOCOL (when direct database/API write tools do not apply):
-If the problem is a UI string, label, layout, or frontend logic issue:
-- **Step 1:** Use `generate_patch` to produce a reviewable code diff with the exact fix
-- **Step 2:** If you can identify the file and line, provide the EXACT code change
-- **Step 3:** NEVER say "I cannot modify UI elements" — you CAN generate patches
-
-If you truly cannot determine the file or produce a patch:
-- Ask ONE specific clarifying question (URL path, module name, or screenshot)
-- Do NOT list generic developer steps
-- Do NOT say "a developer would need to..."
-
-You are FORBIDDEN from saying:
-- "I cannot directly modify..."
-- "This would require a developer..."
-- "I don't have the ability to..."
-Instead: investigate with tools, produce a patch, or ask a precise question.
+// Line 8737-8740
+if (reply === null || reply === undefined || reply.trim() === "") {
+  reply = "I couldn't process that request.";
+}
 ```
 
-### 2. Add Anti-Deflection Rule to EXECUTION DISCIPLINE Block
-**File:** `supabase/functions/ai-agent/index.ts` (line 2299, after existing absolute rules)
+When the tool loop completes but no text reply was extracted, this fallback fires. Common triggers:
+- Model used all output tokens on tool calls with no final text
+- Tool loop hit max iterations without producing a reply
+- Model returned only tool calls in the final turn
 
-Add one new absolute rule:
+## Fix
+
+### 1. Replace the generic fallback with a helpful recovery message
+**File:** `supabase/functions/ai-agent/index.ts` (lines 8737-8740)
+
+Replace the fallback with a context-aware message that:
+- Acknowledges the issue honestly
+- Asks the user to rephrase or provide more detail
+- Includes what the agent was trying to do (the original message) for context
+
+New fallback:
 
 ```
-- You are FORBIDDEN from saying "I cannot", "I don't have the ability", or "This requires a developer". You have generate_patch, db_write_fix, and Code Engineer Mode. Use them or ask ONE specific question.
+if (reply === null || reply === undefined || reply.trim() === "") {
+  reply = "[STOP]\n\nI ran into an issue processing your request. This can happen when the task is complex or context is incomplete.\n\n**To move forward, please help me with:**\n1. Can you rephrase or simplify what you need?\n2. If this is about a specific record, provide the exact ID or name\n3. If this is a UI change, describe the exact page and element\n\nI have full read/write tools available -- I just need clearer input to use them effectively.";
+}
 ```
 
-### 3. Elevate Code Engineer Mode Priority
-**File:** `supabase/functions/ai-agent/index.ts` (lines 2516-2527)
+This ensures:
+- The `[STOP]` marker triggers the amber "Architect is blocked" banner in the UI
+- The user gets specific, actionable next steps
+- The agent never appears to give up or deflect
 
-Move the Code Engineer Mode instructions to appear BEFORE the fallback protocol (right after the autofix section at line 2469), so the agent considers patch generation before falling back. Add a trigger rule:
+### 2. Add logging for empty-reply incidents
+**File:** `supabase/functions/ai-agent/index.ts` (same block)
+
+Add a `console.warn` before the fallback so empty-reply events are visible in edge function logs for debugging:
 
 ```
-## Code Engineer Mode (AUTO-ACTIVATES for UI/code changes):
-When the user asks to rename, change text, fix layout, modify styling, update labels, or any frontend change:
-1. Use `generate_patch` to produce a reviewable unified diff
-2. Use `validate_code` to check the patch
-3. Present the patch for review
-This mode activates AUTOMATICALLY for any request involving UI text, labels, or component changes. You do NOT need the user to say "generate patch".
+console.warn("Empty reply fallback triggered", { 
+  agent, 
+  toolLoopIterations, 
+  messageLength: message?.length 
+});
 ```
 
 ---
@@ -65,11 +63,13 @@ This mode activates AUTOMATICALLY for any request involving UI text, labels, or 
 
 | File | Change |
 |------|--------|
-| `supabase/functions/ai-agent/index.ts` | Rewrite fallback protocol, add anti-deflection rule, elevate Code Engineer Mode |
+| `supabase/functions/ai-agent/index.ts` | Replace generic fallback message with actionable recovery + logging |
+
+## No Database Changes Required
 
 ## What This Fixes
 
-- Agent will no longer say "I cannot modify ERP UI elements"
-- String/label rename requests will trigger `generate_patch` automatically
-- The "I cannot" / "a developer would need to" deflection pattern is explicitly forbidden
-- Code Engineer Mode activates for UI changes without requiring magic keywords
+- Eliminates the dead-end "I couldn't process that request" message
+- Triggers the amber STOP banner so the user knows the agent needs input
+- Provides 3 specific ways to help the agent proceed
+- Adds observability via logging for future debugging
