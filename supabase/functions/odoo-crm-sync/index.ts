@@ -1,38 +1,9 @@
 import { corsHeaders, requireAuth, json } from "../_shared/auth.ts";
-
-const STAGE_MAP: Record<string, string> = {
-  "New": "new",
-  "Telephonic Enquiries": "telephonic_enquiries",
-  "Qualified": "qualified",
-  "RFI": "rfi",
-  "Addendums": "addendums",
-  "Estimation-Ben": "estimation_ben",
-  "Estimation-Karthick(Mavericks)": "estimation_karthick",
-  "Estimation-Others": "estimation_others",
-  "Estimation Partha": "estimation_partha",
-  "QC - Ben": "qc_ben",
-  "Hot Enquiries": "hot_enquiries",
-  "Quotation Priority": "quotation_priority",
-  "Quotation Bids": "quotation_bids",
-  "Shop Drawing": "shop_drawing",
-  "Shop Drawing Sent for Approval": "shop_drawing_approval",
-  "Fabrication In Shop": "fabrication_in_shop",
-  "Ready To Dispatch/Pickup": "ready_to_dispatch",
-  "Delivered/Pickup Done": "delivered_pickup_done",
-  "Out for Delivery": "out_for_delivery",
-  "Won": "won",
-  "Loss": "loss",
-  "Merged": "merged",
-  "No rebars(Our of Scope)": "no_rebars_out_of_scope",
-  "Temp: IR/VAM": "temp_ir_vam",
-  "Migration-Others": "migration_others",
-  "Dreamers": "dreamers",
-  "Archived": "archived_orphan",
-  "Orphan": "archived_orphan",
-};
-
-const TERMINAL_STAGES = new Set(["won", "lost", "loss", "merged", "no_rebars_out_of_scope", "delivered_pickup_done"]);
-const ACTIVE_STAGES = new Set(Object.values(STAGE_MAP).filter(s => !TERMINAL_STAGES.has(s)));
+import {
+  STAGE_MAP, TERMINAL_STAGES, ACTIVE_STAGES,
+  validateOdooLead, persistValidationWarnings, summarizeWarnings,
+  type ValidationWarning,
+} from "../_shared/odoo-validation.ts";
 
 const FIELDS = [
   "id", "name", "stage_id", "email_from", "phone", "contact_name",
@@ -156,6 +127,7 @@ Deno.serve(async (req) => {
       .single();
 
     const companyId = sampleLead?.company_id || "a0000000-0000-0000-0000-000000000001";
+    const syncRunAt = new Date().toISOString();
 
     // Load ALL existing odoo_sync leads with pagination (Supabase caps at 1000/query)
     const allExisting: Array<{ id: string; metadata: unknown; stage: string; customer_id: string | null }> = [];
@@ -174,6 +146,11 @@ Deno.serve(async (req) => {
       from += PAGE;
     }
     console.log(`Loaded ${allExisting.length} existing odoo_sync leads for dedup`);
+
+    // Collect all validation warnings across the sync
+    const allValidationWarnings: ValidationWarning[] = [];
+    // Build lead_id map for validation log persistence
+    const leadIdByOdooId = new Map<string, string>();
 
     // Build map keeping only the most-recently-synced record per odoo_id
     const odooIdMap = new Map<string, { id: string; syncedAt: string; stage: string; customer_id: string | null }>();
@@ -208,6 +185,16 @@ Deno.serve(async (req) => {
     // Clean up any duplicates found during map loading
     if (victimIds.length > 0) {
       console.log(`Dedup: deleting ${victimIds.length} duplicate leads (rollback logged)`);
+      // Log duplicate validation warnings
+      for (const v of victimSnapshots) {
+        const meta = (allExisting.find(l => l.id === v.id)?.metadata as Record<string, unknown>) || {};
+        const odooId = (meta.odoo_id as string) || "unknown";
+        allValidationWarnings.push({
+          odoo_id: odooId, severity: "warning", validation_type: "duplicate_detected",
+          message: `Duplicate ERP lead deleted (survivor: ${v.survivorId})`,
+          auto_fixed: true, fix_applied: "Duplicate removed, rollback logged",
+        });
+      }
       for (let i = 0; i < victimIds.length; i += 50) {
         const batch = victimIds.slice(i, i + 50);
         await serviceClient.from("leads").delete().in("id", batch);
@@ -222,6 +209,13 @@ Deno.serve(async (req) => {
         const stageName = Array.isArray(ol.stage_id) ? ol.stage_id[1] : String(ol.stage_id || "");
         const erpStage = STAGE_MAP[stageName] || "new";
         const salesperson = Array.isArray(ol.user_id) ? ol.user_id[1] : null;
+
+        const existingEntry = odooIdMap.get(odooId);
+        const previousStage = existingEntry?.stage || null;
+
+        // === PRE-SYNC VALIDATION ===
+        const leadWarnings = validateOdooLead(ol, erpStage, previousStage);
+        allValidationWarnings.push(...leadWarnings);
 
         const metadata: Record<string, unknown> = {
           odoo_id: odooId,
@@ -238,16 +232,16 @@ Deno.serve(async (req) => {
           odoo_type: ol.type || null,
           odoo_date_deadline: ol.date_deadline || null,
           synced_at: new Date().toISOString(),
+          validation_warnings: leadWarnings.length,
         };
 
         // Map Odoo date_deadline to expected_close_date for activity color bar
         const dateDeadline = ol.date_deadline || null;
 
-        const existingEntry = odooIdMap.get(odooId);
         const existingId = existingEntry?.id;
 
         // Normalize probability: won=100, lost=0, others=Odoo ML value
-        const normalizedProb = erpStage === "won" ? 100 : erpStage === "lost" ? 0 : Math.round(Number(ol.probability) || 0);
+        const normalizedProb = erpStage === "won" ? 100 : erpStage === "lost" || erpStage === "loss" ? 0 : Math.round(Number(ol.probability) || 0);
 
         // Resolve customer for contact linkage enforcement
         const customerName = ol.partner_name || ol.contact_name || "Unknown";
@@ -282,8 +276,10 @@ Deno.serve(async (req) => {
         }
 
         if (existingId) {
+          // Track lead_id for validation log
+          leadIdByOdooId.set(odooId, existingId);
+
           // Detect stage change for timeline parity
-          const previousStage = existingEntry?.stage;
           if (previousStage && previousStage !== erpStage) {
             await insertLeadEvent(serviceClient, existingId, "stage_changed", {
               from: previousStage,
@@ -369,8 +365,9 @@ Deno.serve(async (req) => {
           if (error) { console.error(`Insert error for odoo_id ${odooId}:`, error); errors++; }
           else {
             created++;
-            // Log creation event
+            // Track lead_id for validation log
             if (newLead) {
+              leadIdByOdooId.set(odooId, newLead.id);
               await insertLeadEvent(serviceClient, newLead.id, "stage_changed", {
                 from: null,
                 to: erpStage,
@@ -401,10 +398,17 @@ Deno.serve(async (req) => {
 
     let reconciled = 0;
     if (staleLeads.length > 0 && mode === "full") {
-      // In full mode we already fetched everything — any ERP lead whose odoo_id
-      // is NOT in the result means Odoo deleted it or changed its type.
-      // Mark these as "lost" to keep counts accurate.
       console.log(`Reconciliation: ${staleLeads.length} ERP leads not found in Odoo full fetch`);
+      // Log stale leads as validation warnings
+      for (const sl of staleLeads) {
+        const meta = sl.metadata as Record<string, unknown> | null;
+        allValidationWarnings.push({
+          odoo_id: (meta?.odoo_id as string) || "unknown",
+          severity: "warning", validation_type: "stale_lead",
+          message: "ERP lead not found in Odoo full fetch — may be deleted or type-changed",
+          auto_fixed: false,
+        });
+      }
     } else if (staleLeads.length > 0) {
       // Incremental mode: do targeted lookups for stale leads
       const staleOdooIds = staleLeads.map(l => (l.metadata as Record<string, unknown>)?.odoo_id as string).filter(Boolean);
@@ -432,6 +436,12 @@ Deno.serve(async (req) => {
               await insertLeadEvent(serviceClient, existing.id, "stage_changed", {
                 from: existing.stage, to: erpStage, odoo_stage: stageName, source: "reconciliation",
               });
+              allValidationWarnings.push({
+                odoo_id: odooId, severity: "info", validation_type: "drift_detected",
+                message: `Reconciliation fixed drift: ${existing.stage} → ${erpStage}`,
+                field_name: "stage", field_value: `${existing.stage} → ${erpStage}`,
+                auto_fixed: true, fix_applied: "Stage updated via reconciliation",
+              });
               reconciled++;
             }
           }
@@ -441,7 +451,18 @@ Deno.serve(async (req) => {
       }
     }
 
-    return json({ created, updated, skipped, errors, reconciled, total: leads.length, dedup_deleted: victimIds.length, mode });
+    // === Persist validation warnings ===
+    const validationSummary = summarizeWarnings(allValidationWarnings);
+    console.log(`Validation summary:`, JSON.stringify(validationSummary));
+    await persistValidationWarnings(serviceClient, allValidationWarnings, companyId, syncRunAt, leadIdByOdooId);
+
+    return json({
+      created, updated, skipped, errors, reconciled,
+      total: leads.length,
+      dedup_deleted: victimIds.length,
+      mode,
+      validation: validationSummary,
+    });
   } catch (err) {
     if (err instanceof Response) return err;
     console.error("Sync error:", err);
