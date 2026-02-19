@@ -109,7 +109,27 @@ export function useOpenDM() {
         _target_profile_id: targetProfileId,
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error("[DM Creation Failed]", {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          myProfileId: myProfile.id,
+          targetProfileId,
+        });
+        throw new Error(
+          error.message === "new row violates row-level security policy"
+            ? "Unable to start this conversation. Please contact an admin."
+            : `DM creation failed: ${error.message}`
+        );
+      }
+
+      if (!data) {
+        console.error("[DM Creation] RPC returned null", { myProfileId: myProfile.id, targetProfileId });
+        throw new Error("DM channel was not created. Please try again.");
+      }
+
       return { id: data as string, existed: false };
     },
     onSuccess: () => {
