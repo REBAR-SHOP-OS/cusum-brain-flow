@@ -6394,6 +6394,60 @@ export type Database = {
           },
         ]
       }
+      pipeline_automation_rules: {
+        Row: {
+          action_params: Json
+          action_type: string
+          company_id: string
+          created_at: string
+          created_by: string | null
+          description: string | null
+          enabled: boolean
+          execution_count: number
+          id: string
+          last_executed_at: string | null
+          name: string
+          priority: number
+          trigger_conditions: Json
+          trigger_event: string
+          updated_at: string
+        }
+        Insert: {
+          action_params?: Json
+          action_type: string
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          enabled?: boolean
+          execution_count?: number
+          id?: string
+          last_executed_at?: string | null
+          name: string
+          priority?: number
+          trigger_conditions?: Json
+          trigger_event: string
+          updated_at?: string
+        }
+        Update: {
+          action_params?: Json
+          action_type?: string
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          enabled?: boolean
+          execution_count?: number
+          id?: string
+          last_executed_at?: string | null
+          name?: string
+          priority?: number
+          trigger_conditions?: Json
+          trigger_event?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       pipeline_stage_order: {
         Row: {
           company_id: string
