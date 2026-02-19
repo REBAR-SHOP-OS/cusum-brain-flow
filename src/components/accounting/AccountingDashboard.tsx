@@ -8,6 +8,7 @@ import {
 import type { QBAccount } from "@/hooks/useQuickBooksData";
 import { usePennyQueue } from "@/hooks/usePennyQueue";
 import { useBankFeedBalances } from "@/hooks/useBankFeedBalances";
+import { BankAccountsCard } from "@/components/accounting/BankAccountsCard";
 import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
 import { useMemo } from "react";
 
@@ -171,70 +172,6 @@ function BillsCard({ data, onNavigate }: Props) {
 }
 BillsCard.displayName = "BillsCard";
 
-function BankAccountCard({
-  name,
-  balance,
-  icon = "checking",
-  subAccounts,
-  bankFeedBalance,
-  onNavigate,
-}: {
-  name: string;
-  balance: number;
-  icon?: "checking" | "savings";
-  subAccounts?: QBAccount[];
-  bankFeedBalance?: number | null;
-  onNavigate: () => void;
-}) {
-  const Icon = icon === "savings" ? PiggyBank : Wallet;
-  const accentColor = icon === "savings" ? "text-success" : "text-primary";
-  const hasDiscrepancy = bankFeedBalance != null && Math.abs(bankFeedBalance - balance) > 0.01;
-
-  return (
-    <Card className="cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all" onClick={onNavigate}>
-      <CardContent className="p-5">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <Icon className={`w-4 h-4 ${accentColor}`} />
-            <h3 className={`font-semibold text-sm ${accentColor}`}>{name}</h3>
-          </div>
-          {hasDiscrepancy && (
-            <AlertTriangle className="w-4 h-4 text-warning" />
-          )}
-        </div>
-
-        <div className="space-y-1">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Book Balance</span>
-            <span className="font-semibold tabular-nums text-lg">{fmt(balance)}</span>
-          </div>
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Bank Balance</span>
-            <span className={`font-semibold tabular-nums ${bankFeedBalance != null ? (hasDiscrepancy ? "text-warning" : "") : "text-muted-foreground text-xs"}`}>
-              {bankFeedBalance != null ? fmt(bankFeedBalance) : "—"}
-            </span>
-          </div>
-        </div>
-
-        {subAccounts && subAccounts.length > 1 && (
-          <div className="space-y-1 mt-2 border-t pt-2">
-            {subAccounts.map((a) => (
-              <div key={a.Id} className="flex justify-between text-xs text-muted-foreground">
-                <span className="truncate mr-2">{a.Name}</span>
-                <span className="tabular-nums font-medium">{fmt(a.CurrentBalance)}</span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <Button size="sm" variant="outline" className={`text-xs mt-2 ${accentColor}`} onClick={(e) => { e.stopPropagation(); onNavigate(); }}>
-          View Transactions
-        </Button>
-      </CardContent>
-    </Card>
-  );
-}
-BankAccountCard.displayName = "BankAccountCard";
 
 function CashCard({ data, onNavigate }: Props) {
   const totalPayments = data.payments.reduce((s, p) => s + p.TotalAmt, 0);
@@ -313,55 +250,16 @@ PennyQueueCard.displayName = "PennyQueueCard";
 
 export function AccountingDashboard({ data, onNavigate }: Props) {
   const bankAccounts = data.accounts.filter((a) => a.AccountType === "Bank" && a.Active);
-  const checkingAccounts = bankAccounts.filter((a) => a.AccountSubType !== "Savings");
-  const savingsAccounts = bankAccounts.filter((a) => a.AccountSubType === "Savings");
-
-  const totalChecking = checkingAccounts.reduce((s, a) => s + a.CurrentBalance, 0);
-  const totalSavings = savingsAccounts.reduce((s, a) => s + a.CurrentBalance, 0);
-
   const { getBalance } = useBankFeedBalances();
-
-  // Sum bank feed balances for multi-account cards
-  const checkingBankTotal = checkingAccounts.reduce((s, a) => {
-    const b = getBalance(a.Id);
-    return b ? s + b.bank_balance : s;
-  }, 0);
-  const hasAnyCheckingBank = checkingAccounts.some((a) => getBalance(a.Id));
-
-  const savingsBankTotal = savingsAccounts.reduce((s, a) => {
-    const b = getBalance(a.Id);
-    return b ? s + b.bank_balance : s;
-  }, 0);
-  const hasAnySavingsBank = savingsAccounts.some((a) => getBalance(a.Id));
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
       <InvoicesCard data={data} onNavigate={onNavigate} />
       <BillsCard data={data} onNavigate={onNavigate} />
 
-      <BankAccountCard
-        name={checkingAccounts.length === 1 ? checkingAccounts[0].Name : "Checking"}
-        balance={checkingAccounts.length === 1 ? checkingAccounts[0].CurrentBalance : totalChecking}
-        icon="checking"
-        subAccounts={checkingAccounts.length > 1 ? checkingAccounts : undefined}
-        bankFeedBalance={
-          checkingAccounts.length === 1
-            ? getBalance(checkingAccounts[0].Id)?.bank_balance ?? null
-            : hasAnyCheckingBank ? checkingBankTotal : null
-        }
-        onNavigate={() => onNavigate("accounts")}
-      />
-
-      <BankAccountCard
-        name={savingsAccounts.length === 1 ? savingsAccounts[0].Name : "Savings"}
-        balance={savingsAccounts.length === 1 ? savingsAccounts[0].CurrentBalance : totalSavings}
-        icon="savings"
-        subAccounts={savingsAccounts.length > 1 ? savingsAccounts : undefined}
-        bankFeedBalance={
-          savingsAccounts.length === 1
-            ? getBalance(savingsAccounts[0].Id)?.bank_balance ?? null
-            : hasAnySavingsBank ? savingsBankTotal : null
-        }
+      <BankAccountsCard
+        accounts={bankAccounts}
+        getBalance={getBalance}
         onNavigate={() => onNavigate("accounts")}
       />
 
