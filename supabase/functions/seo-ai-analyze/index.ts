@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { decryptToken } from "../_shared/tokenEncryption.ts";
+import { callAI, AIError } from "../_shared/aiRouter.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -15,10 +16,8 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
-    if (!lovableApiKey) throw new Error("LOVABLE_API_KEY not configured");
-
     const supabase = createClient(supabaseUrl, serviceKey);
+
     const { domain_id } = await req.json();
     if (!domain_id) {
       return new Response(JSON.stringify({ error: "domain_id required" }), {
@@ -288,22 +287,17 @@ Deno.serve(async (req) => {
     const topKeywords = gscKeywords.slice(0, 100);
     const topPages = gscPages.slice(0, 50);
 
-    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${lovableApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          {
-            role: "system",
-            content: `You are an SEO analyst for ${domain.domain}. Analyze the GSC + GA data and produce structured insights. Be specific with numbers and actionable recommendations.`,
-          },
-          {
-            role: "user",
-            content: `Analyze this SEO data for ${domain.domain}:
+    const aiResult = await callAI({
+      provider: "gemini",
+      model: "gemini-2.5-flash",
+      messages: [
+        {
+          role: "system",
+          content: `You are an SEO analyst for ${domain.domain}. Analyze the GSC + GA data and produce structured insights. Be specific with numbers and actionable recommendations.`,
+        },
+        {
+          role: "user",
+          content: `Analyze this SEO data for ${domain.domain}:
 
 TOP KEYWORDS (28d):
 ${JSON.stringify(topKeywords, null, 1)}
@@ -318,116 +312,93 @@ For each keyword, classify intent and score opportunity (0-100).
 For each page, score SEO health (0-100).
 Identify top insights: opportunities, risks, wins.
 Suggest specific tasks with expected impact.`,
-          },
-        ],
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: "seo_analysis_results",
-              description: "Return structured SEO analysis results",
-              parameters: {
-                type: "object",
-                properties: {
-                  keyword_analysis: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        keyword: { type: "string" },
-                        intent: { type: "string", enum: ["informational", "navigational", "transactional", "commercial"] },
-                        topic_cluster: { type: "string" },
-                        trend_score: { type: "number" },
-                        opportunity_score: { type: "number" },
-                        status: { type: "string", enum: ["winner", "stagnant", "declining", "opportunity"] },
-                      },
-                      required: ["keyword", "intent", "opportunity_score", "status"],
+        },
+      ],
+      tools: [
+        {
+          type: "function",
+          function: {
+            name: "seo_analysis_results",
+            description: "Return structured SEO analysis results",
+            parameters: {
+              type: "object",
+              properties: {
+                keyword_analysis: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      keyword: { type: "string" },
+                      intent: { type: "string", enum: ["informational", "navigational", "transactional", "commercial"] },
+                      topic_cluster: { type: "string" },
+                      trend_score: { type: "number" },
+                      opportunity_score: { type: "number" },
+                      status: { type: "string", enum: ["winner", "stagnant", "declining", "opportunity"] },
                     },
-                  },
-                  page_analysis: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        url: { type: "string" },
-                        seo_score: { type: "number" },
-                        recommendations: {
-                          type: "array",
-                          items: {
-                            type: "object",
-                            properties: {
-                              type: { type: "string" },
-                              suggestion: { type: "string" },
-                            },
-                            required: ["type", "suggestion"],
-                          },
-                        },
-                      },
-                      required: ["url", "seo_score"],
-                    },
-                  },
-                  insights: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        entity_type: { type: "string", enum: ["keyword", "page"] },
-                        entity_ref: { type: "string" },
-                        insight_type: { type: "string", enum: ["opportunity", "risk", "win", "action"] },
-                        explanation: { type: "string" },
-                        confidence: { type: "number" },
-                      },
-                      required: ["entity_type", "insight_type", "explanation", "confidence"],
-                    },
-                  },
-                  tasks: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        title: { type: "string" },
-                        description: { type: "string" },
-                        task_type: { type: "string", enum: ["content", "technical", "internal_link"] },
-                        priority: { type: "string", enum: ["low", "medium", "high", "critical"] },
-                        expected_impact: { type: "string" },
-                        entity_url: { type: "string" },
-                      },
-                      required: ["title", "task_type", "priority"],
-                    },
+                    required: ["keyword", "intent", "opportunity_score", "status"],
                   },
                 },
-                required: ["keyword_analysis", "page_analysis", "insights", "tasks"],
+                page_analysis: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      url: { type: "string" },
+                      seo_score: { type: "number" },
+                      recommendations: {
+                        type: "array",
+                        items: {
+                          type: "object",
+                          properties: {
+                            type: { type: "string" },
+                            suggestion: { type: "string" },
+                          },
+                          required: ["type", "suggestion"],
+                        },
+                      },
+                    },
+                    required: ["url", "seo_score"],
+                  },
+                },
+                insights: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      entity_type: { type: "string", enum: ["keyword", "page"] },
+                      entity_ref: { type: "string" },
+                      insight_type: { type: "string", enum: ["opportunity", "risk", "win", "action"] },
+                      explanation: { type: "string" },
+                      confidence: { type: "number" },
+                    },
+                    required: ["entity_type", "insight_type", "explanation", "confidence"],
+                  },
+                },
+                tasks: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      title: { type: "string" },
+                      description: { type: "string" },
+                      task_type: { type: "string", enum: ["content", "technical", "internal_link"] },
+                      priority: { type: "string", enum: ["low", "medium", "high", "critical"] },
+                      expected_impact: { type: "string" },
+                      entity_url: { type: "string" },
+                    },
+                    required: ["title", "task_type", "priority"],
+                  },
+                },
               },
+              required: ["keyword_analysis", "page_analysis", "insights", "tasks"],
             },
           },
-        ],
-        tool_choice: { type: "function", function: { name: "seo_analysis_results" } },
-      }),
+        },
+      ],
+      toolChoice: { type: "function", function: { name: "seo_analysis_results" } },
     });
 
-    if (!aiResponse.ok) {
-      const errText = await aiResponse.text();
-      console.error("AI gateway error:", aiResponse.status, errText);
-      if (aiResponse.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded, try again later" }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (aiResponse.status === 402) {
-        return new Response(JSON.stringify({ error: "AI credits exhausted" }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      return new Response(JSON.stringify({ error: "AI analysis failed" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const aiData = await aiResponse.json();
-    const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
+    const toolCall = aiResult.toolCalls?.[0];
     if (!toolCall?.function?.arguments) {
       console.error("No tool call in AI response");
       return new Response(JSON.stringify({ error: "AI returned no structured data" }), {

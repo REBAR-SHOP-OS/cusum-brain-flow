@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { WPClient } from "../_shared/wpClient.ts";
+import { callAI, AIError } from "../_shared/aiRouter.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -16,9 +17,6 @@ const ALLOWED_ACTIONS = [
 ];
 
 async function analyzeTask(task: any): Promise<any> {
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
-
   const systemPrompt = `You are an SEO task execution planner for a WordPress/WooCommerce site (rebar.shop).
 Analyze the given SEO task and determine if it can be auto-executed via WordPress REST API.
 
@@ -50,100 +48,80 @@ For wp_update_meta, the WordPress REST API uses Yoast SEO fields or similar — 
 
 Analyze this task and determine if it can be auto-executed.`;
 
-  const response = await fetch(
-    "https://ai.gateway.lovable.dev/v1/chat/completions",
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: "propose_execution_plan",
-              description:
-                "Propose whether the task can be auto-executed and the plan.",
-              parameters: {
-                type: "object",
-                properties: {
-                  can_execute: {
-                    type: "boolean",
-                    description: "Whether this task can be auto-executed",
-                  },
-                  plan_summary: {
-                    type: "string",
-                    description:
-                      "Brief summary of what will be done (if can_execute=true) or why it cannot be automated",
-                  },
-                  actions: {
-                    type: "array",
-                    description:
-                      "List of actions to execute (only if can_execute=true)",
-                    items: {
-                      type: "object",
-                      properties: {
-                        type: {
-                          type: "string",
-                          enum: ALLOWED_ACTIONS,
-                        },
-                        target: {
-                          type: "string",
-                          description: "Target page/post URL path",
-                        },
-                        field: {
-                          type: "string",
-                          description:
-                            "Field to update (e.g. meta_description, meta_title, content)",
-                        },
-                        value: {
-                          type: "string",
-                          description: "New value to set",
-                        },
-                      },
-                      required: ["type", "target"],
-                      additionalProperties: false,
+  const aiResult = await callAI({
+    provider: "gemini",
+    model: "gemini-3-flash-preview",
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt },
+    ],
+    tools: [
+      {
+        type: "function",
+        function: {
+          name: "propose_execution_plan",
+          description:
+            "Propose whether the task can be auto-executed and the plan.",
+          parameters: {
+            type: "object",
+            properties: {
+              can_execute: {
+                type: "boolean",
+                description: "Whether this task can be auto-executed",
+              },
+              plan_summary: {
+                type: "string",
+                description:
+                  "Brief summary of what will be done (if can_execute=true) or why it cannot be automated",
+              },
+              actions: {
+                type: "array",
+                description:
+                  "List of actions to execute (only if can_execute=true)",
+                items: {
+                  type: "object",
+                  properties: {
+                    type: {
+                      type: "string",
+                      enum: ALLOWED_ACTIONS,
+                    },
+                    target: {
+                      type: "string",
+                      description: "Target page/post URL path",
+                    },
+                    field: {
+                      type: "string",
+                      description:
+                        "Field to update (e.g. meta_description, meta_title, content)",
+                    },
+                    value: {
+                      type: "string",
+                      description: "New value to set",
                     },
                   },
-                  human_steps: {
-                    type: "string",
-                    description:
-                      "Step-by-step instructions for human (only if can_execute=false)",
-                  },
+                  required: ["type", "target"],
+                  additionalProperties: false,
                 },
-                required: ["can_execute", "plan_summary"],
-                additionalProperties: false,
+              },
+              human_steps: {
+                type: "string",
+                description:
+                  "Step-by-step instructions for human (only if can_execute=false)",
               },
             },
+            required: ["can_execute", "plan_summary"],
+            additionalProperties: false,
           },
-        ],
-        tool_choice: {
-          type: "function",
-          function: { name: "propose_execution_plan" },
         },
-      }),
-    }
-  );
+      },
+    ],
+    toolChoice: {
+      type: "function",
+      function: { name: "propose_execution_plan" },
+    },
+  });
 
-  if (!response.ok) {
-    const errText = await response.text();
-    console.error("AI gateway error:", response.status, errText);
-    if (response.status === 429)
-      throw new Error("Rate limited — please try again later.");
-    if (response.status === 402)
-      throw new Error("AI credits exhausted — please add funds.");
-    throw new Error("AI analysis failed");
-  }
-
-  const data = await response.json();
-  const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
+  const toolCall = aiResult.toolCalls?.[0];
   if (!toolCall) throw new Error("AI did not return a structured plan");
 
   return JSON.parse(toolCall.function.arguments);

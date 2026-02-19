@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { callAI, AIError } from "../_shared/aiRouter.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -19,10 +20,8 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
-    if (!lovableApiKey) throw new Error("LOVABLE_API_KEY not configured");
-
     const supabase = createClient(supabaseUrl, serviceKey);
+
     const { domain_id } = await req.json();
     if (!domain_id) {
       return new Response(JSON.stringify({ error: "domain_id required" }), {
@@ -231,22 +230,17 @@ Deno.serve(async (req) => {
 
     const existingKwList = Array.from(existingKeywords.keys()).slice(0, 100).join(", ");
 
-    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${lovableApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          {
-            role: "system",
-            content: `You are an SEO keyword extraction specialist for a rebar/steel manufacturing company (${domain.domain}). Extract keyword phrases from internal business data. Focus on commercial and product-related terms that potential customers would search for. Normalize variations (e.g., "rebar cutting" and "cut rebar" → "rebar cutting"). Deduplicate across sources.`,
-          },
-          {
-            role: "user",
-            content: `Extract SEO keyword phrases from these internal ERP data sources. Each keyword should be 2-5 words, relevant to what customers might search for.
+    const aiResult = await callAI({
+      provider: "gemini",
+      model: "gemini-2.5-flash",
+      messages: [
+        {
+          role: "system",
+          content: `You are an SEO keyword extraction specialist for a rebar/steel manufacturing company (${domain.domain}). Extract keyword phrases from internal business data. Focus on commercial and product-related terms that potential customers would search for. Normalize variations (e.g., "rebar cutting" and "cut rebar" → "rebar cutting"). Deduplicate across sources.`,
+        },
+        {
+          role: "user",
+          content: `Extract SEO keyword phrases from these internal ERP data sources. Each keyword should be 2-5 words, relevant to what customers might search for.
 
 EXISTING GSC KEYWORDS (for reference, merge with these if overlap): ${existingKwList || "none yet"}
 
@@ -259,56 +253,43 @@ For each keyword:
 - Classify search intent
 - Provide a short sample_context showing where it was found
 - Score opportunity (0-100): how likely this keyword can drive traffic`,
-          },
-        ],
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: "harvest_keywords",
-              description: "Return extracted and deduplicated keywords from ERP sources",
-              parameters: {
-                type: "object",
-                properties: {
-                  keywords: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        keyword: { type: "string", description: "Normalized keyword phrase (2-5 words)" },
-                        sources: { type: "array", items: { type: "string" }, description: "Source names that contributed" },
-                        intent: { type: "string", enum: ["informational", "navigational", "transactional", "commercial"] },
-                        topic_cluster: { type: "string", description: "Topic group name" },
-                        business_relevance: { type: "number", description: "0-100 business value score" },
-                        opportunity_score: { type: "number", description: "0-100 SEO opportunity" },
-                        sample_context: { type: "string", description: "Short snippet showing where keyword was found" },
-                      },
-                      required: ["keyword", "sources", "intent", "business_relevance", "opportunity_score"],
+        },
+      ],
+      tools: [
+        {
+          type: "function",
+          function: {
+            name: "harvest_keywords",
+            description: "Return extracted and deduplicated keywords from ERP sources",
+            parameters: {
+              type: "object",
+              properties: {
+                keywords: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      keyword: { type: "string", description: "Normalized keyword phrase (2-5 words)" },
+                      sources: { type: "array", items: { type: "string" }, description: "Source names that contributed" },
+                      intent: { type: "string", enum: ["informational", "navigational", "transactional", "commercial"] },
+                      topic_cluster: { type: "string", description: "Topic group name" },
+                      business_relevance: { type: "number", description: "0-100 business value score" },
+                      opportunity_score: { type: "number", description: "0-100 SEO opportunity" },
+                      sample_context: { type: "string", description: "Short snippet showing where keyword was found" },
                     },
+                    required: ["keyword", "sources", "intent", "business_relevance", "opportunity_score"],
                   },
                 },
-                required: ["keywords"],
               },
+              required: ["keywords"],
             },
           },
-        ],
-        tool_choice: { type: "function", function: { name: "harvest_keywords" } },
-      }),
+        },
+      ],
+      toolChoice: { type: "function", function: { name: "harvest_keywords" } },
     });
 
-    if (!aiResponse.ok) {
-      const errText = await aiResponse.text();
-      console.error("AI gateway error:", aiResponse.status, errText);
-      const status = aiResponse.status === 429 ? 429 : aiResponse.status === 402 ? 402 : 500;
-      const msg = status === 429 ? "Rate limit exceeded" : status === 402 ? "AI credits exhausted" : "AI harvest failed";
-      return new Response(JSON.stringify({ error: msg }), {
-        status,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const aiData = await aiResponse.json();
-    const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
+    const toolCall = aiResult.toolCalls?.[0];
     if (!toolCall?.function?.arguments) {
       return new Response(JSON.stringify({ error: "AI returned no structured data" }), {
         status: 500,
