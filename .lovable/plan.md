@@ -1,87 +1,125 @@
 
-# Fix: Screenshot Captures Only Visible Viewport — Content Truncated
+# Fix: Duplicate Contacts on /customers Page
 
-## Root Cause
+## Root Cause — Confirmed via Database Analysis
 
-**File:** `src/components/feedback/ScreenshotFeedbackButton.tsx`
+### The Database Problem
+The `contacts` table has **no unique constraint** preventing duplicate entries for the same contact under the same customer. Only a primary key index exists. There is no guard on `(customer_id, email)` or `(customer_id, phone)`.
 
-The `capture()` function computes dimensions using `getBoundingClientRect()`:
+This means the `process-rfq-emails` edge function (which checks for an existing contact but can race) and `import-crm-data` have been inserting new contact rows every time they run for the same customer — resulting in:
+- **385 customers** with duplicate contacts
+- **10,648 duplicate contact pairs** in live data
+- One customer alone has **59 identical contact records**
 
+### The UI Problem
+`CustomerDetail.tsx` (line 194–199) queries:
 ```ts
-const rect = target.getBoundingClientRect();
-// ...
-width: rect.width,
-height: rect.height,
-x: rect.left,
-y: rect.top,
+.from("contacts")
+.select("*")
+.eq("customer_id", customer.id)
+.eq("is_primary", true)
+.maybeSingle()   // ← BREAKS silently when multiple rows returned
+```
+And `Customers.tsx` (line 51–55) queries:
+```ts
+.from("contacts")
+.select("customer_id, phone")
+.eq("is_primary", true)   // ← Multiple "primary" contacts exist
+.not("phone", "is", null)
+```
+Since all duplicates have `is_primary = true`, the phone/contact shown per customer is arbitrary and the `.maybeSingle()` may return null if the PostgREST response contains more than one row.
+
+## The Fix — Two-Part, Surgical
+
+### Part 1: Database Migration (SQL only — no schema file edits)
+This migration does three things in strict order:
+
+**Step A** — Delete true duplicates (keep the oldest record per customer+email group):
+```sql
+DELETE FROM contacts
+WHERE id NOT IN (
+  SELECT DISTINCT ON (customer_id, LOWER(TRIM(email)))
+    id
+  FROM contacts
+  WHERE email IS NOT NULL AND customer_id IS NOT NULL
+  ORDER BY customer_id, LOWER(TRIM(email)), created_at ASC
+)
+AND email IS NOT NULL
+AND customer_id IS NOT NULL;
 ```
 
-`getBoundingClientRect()` returns only the **visible** bounding box of the element on screen — not its full scrollable content. So if `#main-content` is 900px tall on screen but contains 2400px of scrollable content, the canvas is only told to be 900px tall. Everything below/to the right of the scroll position is clipped.
+**Step B** — For any remaining duplicates sharing the same phone (no email), keep oldest:
+```sql
+DELETE FROM contacts
+WHERE id NOT IN (
+  SELECT DISTINCT ON (customer_id, phone)
+    id
+  FROM contacts
+  WHERE phone IS NOT NULL AND email IS NULL AND customer_id IS NOT NULL
+  ORDER BY customer_id, phone, created_at ASC
+)
+AND phone IS NOT NULL AND email IS NULL AND customer_id IS NOT NULL;
+```
 
-## The Fix — One File Only: `src/components/feedback/ScreenshotFeedbackButton.tsx`
+**Step C** — Add a partial unique index to prevent future email duplicates:
+```sql
+CREATE UNIQUE INDEX contacts_unique_customer_email
+  ON contacts (customer_id, LOWER(TRIM(email)))
+  WHERE email IS NOT NULL AND customer_id IS NOT NULL;
+```
 
-Replace the `rect`-based width/height/x/y with the element's **full scroll dimensions** (`scrollWidth`, `scrollHeight`, `scrollLeft`, `scrollTop`). This tells `html2canvas` to render the complete document, not just what's currently visible.
+This index is partial (only where email is not null) so contacts without emails are not constrained.
 
-### For the `hasOverlay` branch (dialog/drawer open):
-No change needed — dialogs always use `window.innerWidth/Height` which is correct for modal capture.
-
-### For the normal (non-overlay) branch — the broken path:
+### Part 2: Frontend Hardening — `src/components/customers/CustomerDetail.tsx` only
+Change the `primaryContact` query (lines ~191–201) from `.maybeSingle()` to a safe `.limit(1)` with explicit ordering, so it never silently fails when duplicates exist:
 
 **Before:**
 ```ts
-const rect = hasOverlay
-  ? { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight }
-  : target.getBoundingClientRect();
-
-const baseOpts = {
-  width: rect.width,
-  height: rect.height,
-  x: rect.left,
-  y: rect.top,
-  scrollX: 0,
-  scrollY: 0,
-  windowWidth: window.innerWidth,
-  windowHeight: window.innerHeight,
-  ...
-};
+const { data: primaryContact } = useQuery({
+  queryKey: ["primary_contact", customer.id],
+  queryFn: async () => {
+    const { data, error } = await supabase
+      .from("contacts")
+      .select("*")
+      .eq("customer_id", customer.id)
+      .eq("is_primary", true)
+      .maybeSingle();
+    if (error) throw error;
+    return data;
+  },
+});
 ```
 
 **After:**
 ```ts
-// For overlay path: use viewport dimensions (unchanged)
-// For normal path: use the full scroll dimensions of the target element
-const isOverlay = !!hasOverlay;
-
-const captureWidth  = isOverlay ? window.innerWidth  : target.scrollWidth;
-const captureHeight = isOverlay ? window.innerHeight : target.scrollHeight;
-const captureX      = isOverlay ? 0 : target.getBoundingClientRect().left + target.scrollLeft;
-const captureY      = isOverlay ? 0 : target.getBoundingClientRect().top  + target.scrollTop;
-
-const baseOpts = {
-  width:        captureWidth,
-  height:       captureHeight,
-  windowWidth:  Math.max(window.innerWidth,  captureWidth),
-  windowHeight: Math.max(window.innerHeight, captureHeight),
-  x:            captureX,
-  y:            captureY,
-  scrollX:      -target.scrollLeft,
-  scrollY:      -target.scrollTop,
-  ...
-};
+const { data: primaryContact } = useQuery({
+  queryKey: ["primary_contact", customer.id],
+  queryFn: async () => {
+    const { data, error } = await supabase
+      .from("contacts")
+      .select("*")
+      .eq("customer_id", customer.id)
+      .eq("is_primary", true)
+      .order("created_at", { ascending: true })
+      .limit(1);
+    if (error) throw error;
+    return data?.[0] ?? null;
+  },
+});
 ```
 
-**Key details:**
-- `scrollWidth` / `scrollHeight` — the **full** content dimensions including off-screen content.
-- `scrollX: -target.scrollLeft` / `scrollY: -target.scrollTop` — tells html2canvas to offset the canvas origin to include content scrolled above/to the left of the current viewport.
-- `windowWidth/windowHeight` clamped to at least the capture size — prevents html2canvas from clipping the canvas to the window boundary.
+This returns the original/oldest primary contact reliably even if stale duplicates survive the migration.
 
 ## Scope
 
-| File | Lines | Change |
+| Layer | Target | Change |
 |---|---|---|
-| `src/components/feedback/ScreenshotFeedbackButton.tsx` | 37–53 | Replace `getBoundingClientRect`-based dimensions with `scrollWidth`/`scrollHeight`-based dimensions |
+| Database migration | `contacts` table | Deduplicate existing rows + add partial unique index on (customer_id, email) |
+| Frontend | `src/components/customers/CustomerDetail.tsx` | `.maybeSingle()` → `.order().limit(1)` for primary contact query |
 
 ## What Is NOT Changed
-- `AnnotationOverlay.tsx` — untouched
-- Dialog/overlay capture path — logic preserved, only the non-overlay path is corrected
-- All other components, pages, database, edge functions — untouched
+- `Customers.tsx` — untouched (the `primaryContacts` query fetches all `is_primary=true` contacts across all customers, but only uses one per `customer_id` via the `phoneMap` — which will correctly pick the first match after deduplication)
+- `CustomerTable.tsx` — untouched
+- `CustomerFormModal.tsx` — untouched
+- `process-rfq-emails` edge function — untouched (the unique index will prevent future duplicates at the DB level)
+- All other pages, components, tables — untouched
