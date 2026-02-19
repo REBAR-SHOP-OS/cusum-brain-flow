@@ -11,7 +11,7 @@ const primaryNav = [
   { name: "Home", href: "/home", icon: Home },
   { name: "Inbox", href: "/inbox", icon: Inbox },
   { name: "Tasks", href: "/tasks", icon: CheckSquare },
-  { name: "Floor", href: "/shop-floor", icon: Factory },
+  { name: "Driver", href: "/driver", icon: Truck },
   { name: "More", href: "#more", icon: Menu },
 ];
 
