@@ -1,93 +1,71 @@
 
-# Fix: SMS Threads Showing as Separate List Entries on /inbox
+# Fix: Kanban Column Cards Not Sorted by Time
 
-## Root Cause — Confirmed
+## Root Cause
 
-The database query confirms this clearly. The `communications` table holds individual SMS messages, each as its own row, sharing a `thread_id` from RingCentral's `conversationId`. For example:
+In `src/components/inbox/InboxKanbanBoard.tsx`, the `emailsByLabel` grouping loop simply `.push()` each item into its column bucket in the order it arrives from the parent `allEmails` array. There is no sort step within each column. So cards appear in whatever order they were mapped from the database, not newest-first within each column.
 
-- Thread `8488319220902744000` → **13+ individual rows** (one SMS conversation with +14169909049)
-- Thread `3257733667530446300` → **3+ individual rows** (one SMS conversation with +12895271076)
-- Thread `8488365758606774000` → **2 rows** (one SMS conversation with +15198070753)
+The `InboxEmail` object already carries a `fullDate` field (formatted as `"MMM d, h:mm a"` — e.g., `"Feb 18, 12:35 PM"`). This is sufficient for comparison-based sorting within the same day, but a raw `receivedAt` ISO timestamp on the email object would be more reliable.
 
-The `useCommunications` hook fetches all rows flat (no grouping). The `InboxView.allEmails` `useMemo` then maps each row 1:1 to a list item. No deduplication or thread-collapsing step exists anywhere.
-
-**The fix is entirely client-side** — one new `useMemo` step added to `InboxView.tsx` that collapses SMS rows by `thread_id` before the list renders. No database changes, no hook changes, no other files touched.
+Looking at `InboxView.tsx` line 300: `comm.receivedAt` is available when building the mapped object. The `fullDate` string is parseable (e.g., `new Date("Feb 18, 12:35 PM")`) within the current year and is used elsewhere (line 378) for the 48h nudge check — confirming it works for comparison.
 
 ## What Will Be Changed
 
-**File:** `src/components/inbox/InboxView.tsx`
+**File:** `src/components/inbox/InboxKanbanBoard.tsx`
 
-**Where:** Inside the `allEmails` `useMemo` (lines 294–337), **after** the existing `.map()` that converts communications to `InboxEmail` objects.
+**Where:** Lines 57–67, the column-bucketing block inside `InboxKanbanBoard`.
 
-### The Grouping Logic
+**Change:** After all emails are distributed into their column buckets, sort each column's array by `fullDate` descending (newest first) before rendering.
 
-After mapping all communications to `InboxEmail` objects, a new pass groups SMS entries by their `threadId`:
-
-1. Build a `Map<threadId, InboxEmail[]>` — collect all SMS items that share a `threadId`.
-2. For each group, keep the **most recent** item (already first since the query orders by `received_at DESC`).
-3. Set the representative item's `preview` to the most recent SMS text.
-4. Set `isUnread = true` on the representative if **any** message in the group is unread.
-5. Append a message count badge to `subject` when the group has >1 message (e.g., "Hey call me (4 messages)").
-6. Non-SMS items (email, call) and SMS items with no `threadId` pass through unchanged.
-
-### Exact Code Change
-
-**Before** (line ~336, end of `allEmails` useMemo):
+### Before (lines 57–67):
 
 ```tsx
-  }, [communications]);
+const emailsByLabel: Record<...> = {};
+KANBAN_COLUMNS.forEach((col) => {
+  emailsByLabel[col.value] = [];
+});
+emails.forEach((email) => {
+  if (emailsByLabel[email.label]) {
+    emailsByLabel[email.label].push(email);
+  } else {
+    emailsByLabel["To Respond"]?.push(email);
+  }
+});
 ```
 
-**After** — add the SMS thread-collapsing step before the `return`:
+### After:
 
 ```tsx
-  // Collapse SMS messages that share the same threadId into one list entry
-  const smsThreadMap = new Map<string, typeof mapped[number][]>();
-  const result: typeof mapped = [];
-
-  for (const item of mapped) {
-    if (item.commType === "sms" && item.threadId) {
-      const key = item.threadId;
-      if (!smsThreadMap.has(key)) smsThreadMap.set(key, []);
-      smsThreadMap.get(key)!.push(item);
-    } else {
-      result.push(item);
-    }
+const emailsByLabel: Record<...> = {};
+KANBAN_COLUMNS.forEach((col) => {
+  emailsByLabel[col.value] = [];
+});
+emails.forEach((email) => {
+  if (emailsByLabel[email.label]) {
+    emailsByLabel[email.label].push(email);
+  } else {
+    emailsByLabel["To Respond"]?.push(email);
   }
+});
 
-  // For each SMS thread, emit one representative entry (most recent first, 
-  // since the DB query orders by received_at DESC)
-  for (const [, group] of smsThreadMap) {
-    const representative = group[0]; // most recent
-    const hasUnread = group.some((m) => m.isUnread);
-    const count = group.length;
-    result.push({
-      ...representative,
-      isUnread: hasUnread,
-      subject: count > 1
-        ? `${representative.preview || "SMS message"} (${count} messages)`
-        : representative.preview || "SMS message",
-      preview: representative.preview || "",
-    });
-  }
-
-  return result;
-  }, [communications]);
+// Sort each column newest-first
+KANBAN_COLUMNS.forEach((col) => {
+  emailsByLabel[col.value].sort((a, b) => {
+    const ta = a.fullDate ? new Date(a.fullDate).getTime() : 0;
+    const tb = b.fullDate ? new Date(b.fullDate).getTime() : 0;
+    return tb - ta; // descending
+  });
+});
 ```
 
-## What Is NOT Changed
-
-- `useCommunications.ts` — the data fetching hook is untouched
-- The database schema, RLS policies, or any edge functions
-- The `InboxEmailList`, `SwipeableEmailItem`, or any other list/viewer component
-- Email or call entries — only SMS items with a matching `threadId` are grouped
-- The `InboxDetailView` thread-loading logic (already fetches by `thread_id` correctly for the detail view)
-- Any sorting, filtering, search, or labeling logic — the collapsed entries participate normally in all existing filters
-
-## Scope Summary
+## Scope
 
 | File | Lines affected | Change |
 |---|---|---|
-| `src/components/inbox/InboxView.tsx` | ~294–337 (allEmails useMemo) | Add SMS thread-collapsing step after the `.map()` |
+| `src/components/inbox/InboxKanbanBoard.tsx` | ~57–67 (bucketing block) | Add per-column `.sort()` by `fullDate` descending after all pushes |
 
-One file. One `useMemo`. No backend changes.
+## What Is NOT Changed
+- `InboxView.tsx` — the `allEmails` useMemo, the SMS thread collapsing, or any other logic
+- `InboxEmailList.tsx` — the list view is unaffected
+- Any database queries, edge functions, or other components
+- The `fullDate` field itself — it's already populated correctly; we're just using it for an in-place sort
