@@ -11,6 +11,7 @@ import { Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
+import { GateStepIndicator } from "./GateStepIndicator";
 
 interface PricingGateModalProps {
   open: boolean;
@@ -18,12 +19,14 @@ interface PricingGateModalProps {
   leadId: string;
   companyId: string;
   onComplete: () => void;
+  gateStep?: number;
+  gateTotalSteps?: number;
 }
 
 const PRIORITIES = ["Low", "Medium", "High"] as const;
 
 export function PricingGateModal({
-  open, onOpenChange, leadId, companyId, onComplete,
+  open, onOpenChange, leadId, companyId, onComplete, gateStep = 0, gateTotalSteps = 1,
 }: PricingGateModalProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -70,6 +73,7 @@ export function PricingGateModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
+          <GateStepIndicator current={gateStep} total={gateTotalSteps} />
           <DialogTitle>Pricing Intelligence</DialogTitle>
           <DialogDescription>
             Capture quote pricing details before submitting this bid.

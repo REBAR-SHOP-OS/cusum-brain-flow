@@ -22,6 +22,7 @@ import { startOfDay, startOfWeek, startOfMonth, startOfQuarter, startOfYear, sub
 import { parseSmartSearch, type SmartSearchResult } from "@/lib/smartSearchParser";
 import { getRequiredGates, type GateType } from "@/lib/pipelineTransitionGates";
 import { usePipelineMemory } from "@/hooks/usePipelineMemory";
+import { logPipelineTransition } from "@/lib/logPipelineTransition";
 import { QualificationGateModal } from "@/components/pipeline/gates/QualificationGateModal";
 import { PricingGateModal } from "@/components/pipeline/gates/PricingGateModal";
 import { LossGateModal } from "@/components/pipeline/gates/LossGateModal";
@@ -188,9 +189,21 @@ export default function Pipeline() {
   });
 
   const updateStageMutation = useMutation({
-    mutationFn: async ({ id, stage }: { id: string; stage: string }) => {
+    mutationFn: async ({ id, stage, fromStage }: { id: string; stage: string; fromStage?: string }) => {
+      const lead = leads.find((l) => l.id === id);
+      const companyId = (lead as any)?.company_id;
       const { error } = await supabase.from("leads").update({ stage }).eq("id", id);
       if (error) throw error;
+      // Fire-and-forget audit log
+      if (companyId) {
+        logPipelineTransition({
+          leadId: id,
+          companyId,
+          fromStage: fromStage ?? lead?.stage ?? null,
+          toStage: stage,
+          result: "allowed",
+        });
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["leads"] });
@@ -368,8 +381,7 @@ export default function Pipeline() {
       return;
     }
 
-    // No gates needed — proceed directly
-    updateStageMutation.mutate({ id: leadId, stage: newStage });
+    updateStageMutation.mutate({ id: leadId, stage: newStage, fromStage: lead?.stage });
     if (selectedLead?.id === leadId) {
       setSelectedLead((prev) => prev ? { ...prev, stage: newStage } : null);
     }
@@ -381,7 +393,7 @@ export default function Pipeline() {
     const gates = getRequiredGates(pendingTransition.targetStage, pendingMemory);
     if (gates.length === 0) {
       // All memory already exists — proceed with transition
-      updateStageMutation.mutate({ id: pendingTransition.leadId, stage: pendingTransition.targetStage });
+      updateStageMutation.mutate({ id: pendingTransition.leadId, stage: pendingTransition.targetStage, fromStage: pendingTransition.lead?.stage });
       if (selectedLead?.id === pendingTransition.leadId) {
         setSelectedLead((prev) => prev ? { ...prev, stage: pendingTransition.targetStage } : null);
       }
@@ -406,7 +418,7 @@ export default function Pipeline() {
     } else {
       // All gates passed — proceed with transition
       if (pendingTransition) {
-        updateStageMutation.mutate({ id: pendingTransition.leadId, stage: pendingTransition.targetStage });
+        updateStageMutation.mutate({ id: pendingTransition.leadId, stage: pendingTransition.targetStage, fromStage: pendingTransition.lead?.stage });
         if (selectedLead?.id === pendingTransition.leadId) {
           setSelectedLead((prev) => prev ? { ...prev, stage: pendingTransition.targetStage } : null);
         }
@@ -672,6 +684,8 @@ export default function Pipeline() {
             leadId={pendingTransition.leadId}
             companyId={pendingCompanyId}
             onComplete={handleGateComplete}
+            gateStep={currentGateIndex}
+            gateTotalSteps={activeGates.length}
           />
           <PricingGateModal
             open={currentGate === "pricing"}
@@ -679,6 +693,28 @@ export default function Pipeline() {
             leadId={pendingTransition.leadId}
             companyId={pendingCompanyId}
             onComplete={handleGateComplete}
+            gateStep={currentGateIndex}
+            gateTotalSteps={activeGates.length}
+          />
+          <LossGateModal
+            open={currentGate === "loss"}
+            onOpenChange={(open) => { if (!open) handleGateCancel(); }}
+            leadId={pendingTransition.leadId}
+            companyId={pendingCompanyId}
+            onComplete={handleGateComplete}
+            gateStep={currentGateIndex}
+            gateTotalSteps={activeGates.length}
+          />
+          <DeliveryGateModal
+            open={currentGate === "delivery"}
+            onOpenChange={(open) => { if (!open) handleGateCancel(); }}
+            leadId={pendingTransition.leadId}
+            companyId={pendingCompanyId}
+            customerId={pendingCustomerId}
+            onComplete={handleGateComplete}
+            gateStep={currentGateIndex}
+            gateTotalSteps={activeGates.length}
+            expectedValue={pendingLead?.expected_value ?? null}
           />
           <LossGateModal
             open={currentGate === "loss"}

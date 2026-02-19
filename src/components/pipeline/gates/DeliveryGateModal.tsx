@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
+import { GateStepIndicator } from "./GateStepIndicator";
 
 interface DeliveryGateModalProps {
   open: boolean;
@@ -20,12 +21,15 @@ interface DeliveryGateModalProps {
   companyId: string;
   customerId?: string | null;
   onComplete: () => void;
+  gateStep?: number;
+  gateTotalSteps?: number;
+  expectedValue?: number | null;
 }
 
 const REORDER_OPTIONS = ["Low", "Medium", "High"] as const;
 
 export function DeliveryGateModal({
-  open, onOpenChange, leadId, companyId, customerId, onComplete,
+  open, onOpenChange, leadId, companyId, customerId, onComplete, gateStep = 0, gateTotalSteps = 1, expectedValue,
 }: DeliveryGateModalProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -36,6 +40,13 @@ export function DeliveryGateModal({
   const [delayOccurred, setDelayOccurred] = useState(false);
   const [satisfaction, setSatisfaction] = useState(0);
   const [reorderProbability, setReorderProbability] = useState<string>("");
+
+  // Pre-fill revenue from lead's expected_value when modal opens
+  useEffect(() => {
+    if (open && expectedValue && !finalRevenue) {
+      setFinalRevenue(String(expectedValue));
+    }
+  }, [open, expectedValue]);
 
   const computedMargin = finalRevenue && Number(finalRevenue) > 0 && finalCost
     ? ((Number(finalRevenue) - Number(finalCost)) / Number(finalRevenue) * 100).toFixed(1)
@@ -77,6 +88,7 @@ export function DeliveryGateModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
+          <GateStepIndicator current={gateStep} total={gateTotalSteps} />
           <DialogTitle>Delivery Performance</DialogTitle>
           <DialogDescription>
             Capture final delivery metrics and client satisfaction before closing.

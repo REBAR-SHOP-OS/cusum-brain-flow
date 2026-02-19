@@ -11,6 +11,7 @@ import { Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
+import { GateStepIndicator } from "./GateStepIndicator";
 
 interface QualificationGateModalProps {
   open: boolean;
@@ -18,12 +19,14 @@ interface QualificationGateModalProps {
   leadId: string;
   companyId: string;
   onComplete: () => void;
+  gateStep?: number;
+  gateTotalSteps?: number;
 }
 
 const PROJECT_TYPES = ["Residential", "Commercial", "Infrastructure", "Industrial"] as const;
 
 export function QualificationGateModal({
-  open, onOpenChange, leadId, companyId, onComplete,
+  open, onOpenChange, leadId, companyId, onComplete, gateStep = 0, gateTotalSteps = 1,
 }: QualificationGateModalProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -70,6 +73,7 @@ export function QualificationGateModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
+          <GateStepIndicator current={gateStep} total={gateTotalSteps} />
           <DialogTitle>Qualification Memory</DialogTitle>
           <DialogDescription>
             Capture project details before moving to quotation stage.
