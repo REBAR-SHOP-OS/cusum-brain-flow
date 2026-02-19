@@ -480,33 +480,31 @@ Rules:
 - Include specific project names, values, and deadlines from the data
 - Eisenhower should synthesize tasks, overdue items, and calls into a priority matrix`;
 
-      const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-      if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+      const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+      if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY not configured");
 
-      const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-3-flash-preview",
-          messages: [
-            { role: "system", content: benSystemPrompt },
-            { role: "user", content: `Generate Ben's daily digest for ${targetDate}.\n\n${benContext}` },
-          ],
-          temperature: 0.7,
-        }),
-      });
+      const aiResponse = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [
+              { role: "user", parts: [{ text: `${benSystemPrompt}\n\nGenerate Ben's daily digest for ${targetDate}.\n\n${benContext}` }] },
+            ],
+            generationConfig: { temperature: 0.7 },
+          }),
+        }
+      );
 
       if (!aiResponse.ok) {
         const errText = await aiResponse.text();
         console.error("AI error for Ben digest:", aiResponse.status, errText);
-        throw new Error(`AI gateway error: ${aiResponse.status}`);
+        throw new Error(`Gemini API error: ${aiResponse.status}`);
       }
 
       const aiData = await aiResponse.json();
-      const rawContent = aiData.choices?.[0]?.message?.content || "";
+      const rawContent = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
       let digest;
       try {
         const cleaned = rawContent.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
@@ -959,10 +957,10 @@ ${mailboxReports.length > 0
 }
 `;
 
-    // ── Call Lovable AI ───────────────────────────────────────────────
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    // ── Call Gemini AI ───────────────────────────────────────────────
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+    if (!GEMINI_API_KEY) {
+      throw new Error("GEMINI_API_KEY is not configured");
     }
 
     const systemPrompt = `You are a smart Daily Digest AI assistant for a steel/rebar manufacturing company called Rebar.shop. 
@@ -1095,23 +1093,15 @@ Rules:
 - Social media digest should identify best performing content types`;
 
     const aiResponse = await fetch(
-      "https://ai.gateway.lovable.dev/v1/chat/completions",
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
       {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "google/gemini-3-flash-preview",
-          messages: [
-            { role: "system", content: systemPrompt },
-            {
-              role: "user",
-              content: `Generate the daily digest for ${targetDate}.\n\n${dataContext}`,
-            },
+          contents: [
+            { role: "user", parts: [{ text: `${systemPrompt}\n\nGenerate the daily digest for ${targetDate}.\n\n${dataContext}` }] },
           ],
-          temperature: 0.7,
+          generationConfig: { temperature: 0.7 },
         }),
       }
     );
@@ -1123,19 +1113,13 @@ Rules:
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      if (aiResponse.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "AI credits exhausted, please add funds." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
       const errText = await aiResponse.text();
-      console.error("AI gateway error:", aiResponse.status, errText);
-      throw new Error(`AI gateway error: ${aiResponse.status}`);
+      console.error("Gemini API error:", aiResponse.status, errText);
+      throw new Error(`Gemini API error: ${aiResponse.status}`);
     }
 
     const aiData = await aiResponse.json();
-    const rawContent = aiData.choices?.[0]?.message?.content || "";
+    const rawContent = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
     // Parse the JSON response (strip markdown fences if present)
     let digest;
