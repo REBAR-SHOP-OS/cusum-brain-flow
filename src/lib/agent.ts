@@ -43,7 +43,21 @@ export async function sendAgentMessage(
   });
 
   if (error) {
-    throw new Error(error.message || "Failed to get agent response");
+    // Detect rate-limit errors from the edge function
+    const msg = error.message || "";
+    if (msg.includes("429") || msg.toLowerCase().includes("rate limit")) {
+      throw new Error("Rate limit reached — please wait a moment before trying again.");
+    }
+    throw new Error(msg || "Failed to get agent response");
+  }
+
+  // Also check if data itself contains an error (edge function returned 200 with error body)
+  if (data && typeof data === "object" && "error" in data && !("reply" in data)) {
+    const errMsg = (data as any).error;
+    if (typeof errMsg === "string" && errMsg.toLowerCase().includes("rate limit")) {
+      throw new Error("Rate limit reached — please wait a moment before trying again.");
+    }
+    throw new Error(errMsg || "Agent returned an error");
   }
 
   return data as AgentResponse;
