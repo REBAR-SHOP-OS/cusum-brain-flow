@@ -53,12 +53,14 @@ export function TableRowActions({ rowText, callbacks }: TableRowActionsProps) {
         {/* Email with subject + body */}
         <Popover open={emailOpen} onOpenChange={setEmailOpen}>
           <PopoverTrigger asChild>
-            <button
+            <Button
+              variant="ghost"
+              size="icon"
               title="Email"
-              className={cn(btnClass, "hover:text-primary")}
+              className={cn("w-6 h-6 text-muted-foreground hover:text-primary")}
             >
               <Mail className="w-3 h-3" />
-            </button>
+            </Button>
           </PopoverTrigger>
           <PopoverContent className="w-72 p-3" side="top" align="start">
             <p className="text-xs font-medium mb-2">Compose email</p>
@@ -94,12 +96,14 @@ export function TableRowActions({ rowText, callbacks }: TableRowActionsProps) {
         {/* Reschedule with reason */}
         <Popover open={rescheduleOpen} onOpenChange={setRescheduleOpen}>
           <PopoverTrigger asChild>
-            <button
+            <Button
+              variant="ghost"
+              size="icon"
               title="Reschedule"
-              className={cn(btnClass, "hover:text-amber-500")}
+              className={cn("w-6 h-6 text-muted-foreground hover:text-amber-500")}
             >
               <CalendarClock className="w-3 h-3" />
-            </button>
+            </Button>
           </PopoverTrigger>
           <PopoverContent className="w-72 p-3" side="top" align="start">
             <p className="text-xs font-medium mb-2">Reschedule activity</p>
