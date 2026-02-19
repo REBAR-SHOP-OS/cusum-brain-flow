@@ -146,7 +146,12 @@ export function ProductionCard({
           </Badge>
 
           {/* Bar size */}
-          <p className="text-sm font-bold text-foreground">{item.bar_code}</p>
+          <div>
+            <p className="text-[9px] text-muted-foreground font-medium tracking-[0.15em] uppercase">
+              Size
+            </p>
+            <p className="text-sm font-bold text-foreground">{item.bar_code || "—"}</p>
+          </div>
 
           {/* Center: shape image or length display */}
           <div className="flex items-center justify-center min-h-[110px] bg-muted/20 rounded-lg border border-border/50">
