@@ -43,6 +43,8 @@ interface Delivery {
   notes: string | null;
   created_at: string;
   stops?: DeliveryStop[];
+  customer_name?: string | null;
+  invoice_number?: string | null;
 }
 
 interface DeliveryStop {
@@ -124,12 +126,16 @@ export default function Deliveries() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("deliveries")
-        .select("*")
+        .select("*, packing_slips(customer_name, invoice_number)")
         .eq("company_id", companyId!)
         .order("scheduled_date", { ascending: true });
       
       if (error) throw error;
-      return data as Delivery[];
+      return (data || []).map((d: any) => ({
+        ...d,
+        customer_name: d.packing_slips?.[0]?.customer_name ?? null,
+        invoice_number: d.packing_slips?.[0]?.invoice_number ?? null,
+      })) as Delivery[];
     },
   });
 
@@ -607,7 +613,11 @@ function DeliveryCard({ delivery, isSelected, onClick }: DeliveryCardProps) {
     >
       <CardContent className="p-4">
         <div className="flex items-center justify-between mb-2">
-          <span className="font-medium">{delivery.delivery_number}</span>
+          <span className="font-medium">
+            {delivery.customer_name
+              ? `${delivery.customer_name}${delivery.invoice_number ? ` (Invoice #${delivery.invoice_number})` : ""}`
+              : delivery.delivery_number}
+          </span>
           <Badge className={statusColors[status]}>
             {status}
           </Badge>
