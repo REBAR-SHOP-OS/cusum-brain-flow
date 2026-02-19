@@ -1,96 +1,42 @@
 
 
-## Add Task Comments, Attachments, and Refined RLS to Tasks
+## Fix Screenshot Tool Memory Crash on Heavy Pages
 
-This plan implements the Architect agent's schema changes for the tasks system: a new comments table, multi-attachment support, and creator/assignee-aware RLS policies.
+### Problem
+The screenshot feedback button (camera icon) crashes the page on heavy views like the Kanban pipeline. The root cause is in `ScreenshotFeedbackButton.tsx` lines 65-89:
 
-### Current State
+1. `target.querySelectorAll("*")` iterates every single DOM element inside `#main-content` -- on a Kanban board with 2800+ cards this means tens of thousands of elements
+2. For each scrollable container found, it then loops through all children checking bounding rects -- triggering forced layout reflows
+3. A second pass at line 82 queries again for `tr, li, [class*="card"]` elements
+4. All of this happens synchronously on the main thread, causing memory spikes and page freezes
 
-- **tasks table**: Already has `attachment_url` (single text), `created_by_profile_id`, `assigned_to`, `company_id`
-- **RLS**: Company-scoped (read/update for all users, insert for all users, delete for admins only)
-- **task_comments table**: Does not exist
+### Solution
 
----
+Rewrite the DOM trimming strategy to be lightweight and targeted:
 
-### Step 1: Add `attachment_urls` column to `tasks`
+**File: `src/components/feedback/ScreenshotFeedbackButton.tsx`**
 
-Add a `text[]` array column for multiple attachments (keep existing `attachment_url` for backward compatibility).
+1. **Replace generic `querySelectorAll("*")` with targeted selectors** -- only look for known heavy containers (scroll areas, kanban columns, table bodies) instead of every element in the DOM
+2. **Cap the trimming depth** -- only process direct children of scroll containers, not deeply nested elements
+3. **Use `visibility: hidden` instead of `display: none`** -- avoids layout reflow cascades
+4. **Add an element count pre-check** -- if the DOM has more than 3000 visible elements, skip html2canvas entirely and fall back to a simpler approach (capture only the viewport via a reduced-scope clone)
+5. **Wrap the trimming in a try/catch with a fast timeout** -- if trimming itself takes more than 500ms, abort and use fallback
 
-```sql
-ALTER TABLE public.tasks ADD COLUMN attachment_urls text[] DEFAULT '{}';
+### Technical Details
+
+The revised `capture` function will:
+
+```
+1. Count elements: target.querySelectorAll("*").length
+2. If count > 3000 (heavy page):
+   - Find top-level scroll containers only (max depth 3)
+   - For each, hide children outside viewport using visibility:hidden
+   - Force scale to 0.4, imageTimeout to 0
+   - Set a 3-second hard timeout
+3. If count <= 3000 (normal page):
+   - Keep existing logic with minor cleanup
+4. Restore all hidden elements in finally block (same as current)
 ```
 
-### Step 2: Create `task_comments` table
-
-```sql
-CREATE TABLE public.task_comments (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  task_id uuid NOT NULL REFERENCES public.tasks(id) ON DELETE CASCADE,
-  profile_id uuid NOT NULL REFERENCES public.profiles(id),
-  content text NOT NULL,
-  company_id uuid NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
-
-ALTER TABLE public.task_comments ENABLE ROW LEVEL SECURITY;
-```
-
-RLS policies for task_comments:
-- **SELECT**: Users can read comments on tasks in their company
-- **INSERT**: Users can add comments (must set their own profile_id)
-- **DELETE**: Users can delete their own comments
-
-### Step 3: Refine RLS on `tasks`
-
-Replace the broad update/delete policies with creator/assignee-aware ones:
-
-- **DROP** existing "Users update tasks in company" and "Admins delete tasks in company"
-- **New UPDATE policy**: Creators can update all fields; assignees can update status only (handled at app level since Postgres RLS can't restrict columns -- policy allows update if creator OR assignee)
-- **New DELETE policy**: Task creators and admins can delete
-
-```sql
--- Drop old policies
-DROP POLICY "Users update tasks in company" ON public.tasks;
-DROP POLICY "Admins delete tasks in company" ON public.tasks;
-
--- Creator or assignee can update
-CREATE POLICY "Creator or assignee update tasks"
-ON public.tasks FOR UPDATE TO authenticated
-USING (
-  company_id = get_user_company_id(auth.uid())
-  AND (
-    created_by_profile_id = (SELECT id FROM public.profiles WHERE user_id = auth.uid() LIMIT 1)
-    OR assigned_to = (SELECT id FROM public.profiles WHERE user_id = auth.uid() LIMIT 1)
-    OR has_role(auth.uid(), 'admin'::app_role)
-  )
-);
-
--- Creator or admin can delete
-CREATE POLICY "Creator or admin delete tasks"
-ON public.tasks FOR DELETE TO authenticated
-USING (
-  company_id = get_user_company_id(auth.uid())
-  AND (
-    created_by_profile_id = (SELECT id FROM public.profiles WHERE user_id = auth.uid() LIMIT 1)
-    OR has_role(auth.uid(), 'admin'::app_role)
-  )
-);
-```
-
-### Step 4: Update frontend code
-
-- Update `useHumanTasks.ts` or task-related components to use `attachment_urls` array
-- Add a comments section UI to the task detail view (fetching from `task_comments`)
-
----
-
-### Technical Summary
-
-| Change | Target | Detail |
-|--------|--------|--------|
-| New column | `tasks.attachment_urls` | `text[]` for multiple file URLs |
-| New table | `task_comments` | Comments with profile_id, task_id, company_id |
-| RLS revision | `tasks` UPDATE | Creator, assignee, or admin |
-| RLS revision | `tasks` DELETE | Creator or admin (was admin-only) |
-| New RLS | `task_comments` | Company-scoped read, self-insert, self-delete |
+This prevents the recursive DOM walking that causes the crash while still producing a usable screenshot.
 
