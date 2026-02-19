@@ -6,6 +6,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { SmartTextarea } from "@/components/ui/SmartTextarea";
+import { AISuggestButton } from "@/components/ui/AISuggestButton";
 
 export interface TableRowActionCallbacks {
   onCall: (rowText: string) => void;
@@ -70,6 +71,16 @@ export function TableRowActions({ rowText, callbacks }: TableRowActionsProps) {
               placeholder="Subject line"
               className="h-8 text-xs mb-2"
             />
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs text-muted-foreground">Body</span>
+              <AISuggestButton
+                contextType="email"
+                context={`Row context: ${rowText}\nSubject: ${emailSubject}`}
+                currentText={emailBody}
+                onSuggestion={(text) => setEmailBody(text)}
+                compact={true}
+              />
+            </div>
             <SmartTextarea
               value={emailBody}
               onChange={(e) => setEmailBody(e.target.value)}

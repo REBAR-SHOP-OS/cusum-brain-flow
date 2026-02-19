@@ -11,6 +11,7 @@ import { SmartTextarea } from "@/components/ui/SmartTextarea";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { EmailTemplatesDrawer } from "./EmailTemplatesDrawer";
+import { AISuggestButton } from "@/components/ui/AISuggestButton";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import {
   Send,
@@ -317,6 +318,17 @@ export function ComposeEmailDialog({ open, onOpenChange }: ComposeEmailDialogPro
 
         {/* Body */}
         <div className="px-4 py-2">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs text-muted-foreground">Body</span>
+            <AISuggestButton
+              contextType="email"
+              context={`To: ${to}\nSubject: ${subject}`}
+              currentText={body}
+              onSuggestion={(text) => setBody(text)}
+              label="Suggest"
+              disabled={drafting || sending}
+            />
+          </div>
           <SmartTextarea
             value={body}
             onChange={(e) => setBody(e.target.value)}
