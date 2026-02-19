@@ -226,7 +226,7 @@ export function BenderStationView({ machine, items, canWrite, initialIndex = 0, 
           <Card className="bg-card border border-border">
             <CardContent className="p-4 text-center">
               <p className="text-[9px] text-muted-foreground tracking-[0.15em] uppercase mb-1">Bar Size</p>
-              <p className="text-2xl sm:text-3xl font-black text-foreground">{currentItem.bar_code}</p>
+              <p className="text-2xl sm:text-3xl font-black text-foreground">{currentItem.bar_code || "—"}</p>
             </CardContent>
           </Card>
           <Card className="bg-card border border-border">
