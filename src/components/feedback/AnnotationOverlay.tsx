@@ -29,68 +29,82 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl }: Props) {
   const [sending, setSending] = useState(false);
   const [hasDrawn, setHasDrawn] = useState(false);
   const [history, setHistory] = useState<ImageData[]>([]);
-  const [interimText, setInterimText] = useState("");
   const [voiceConnecting, setVoiceConnecting] = useState(false);
-  const isConnectingRef = useRef(false);
   const { companyId } = useCompanyId();
 
   // ElevenLabs Realtime Scribe — auto-detects language including Farsi
   const scribe = useScribe({
     modelId: "scribe_v2_realtime",
     commitStrategy: CommitStrategy.VAD,
-    onPartialTranscript: (data) => {
-      setInterimText(data.text);
-    },
     onCommittedTranscript: (data) => {
       setDescription((prev) => (prev + " " + data.text).trim());
-      setInterimText("");
+    },
+    onError: (err) => {
+      // Catch all WebSocket errors at source — prevents uncaught/repeated errors
+      console.warn("[Scribe] error:", err);
     },
   });
 
-  const isVoiceActive = scribe.isConnected;
-
-  const safeDisconnect = useCallback(() => {
-    try {
-      if (!isConnectingRef.current) {
+  // Status-aware disconnect — only disconnect if NOT already disconnected/error
+  const disconnectIfActive = useCallback(() => {
+    if (scribe.status !== "disconnected" && scribe.status !== "error") {
+      try {
         scribe.disconnect();
+      } catch {
+        // ignore
       }
-    } catch {
-      // WebSocket already closed — ignore
     }
-    setInterimText("");
+    try {
+      scribe.clearTranscripts();
+    } catch {
+      // ignore
+    }
   }, [scribe]);
 
+  const isVoiceActive =
+    scribe.status === "connected" || scribe.status === "transcribing";
+
   const toggleVoice = useCallback(async () => {
-    if (isVoiceActive || isConnectingRef.current) {
-      safeDisconnect();
+    // If already active or connecting, stop
+    if (
+      scribe.status === "connected" ||
+      scribe.status === "transcribing" ||
+      scribe.status === "connecting"
+    ) {
+      disconnectIfActive();
       return;
     }
     try {
-      isConnectingRef.current = true;
       setVoiceConnecting(true);
       await navigator.mediaDevices.getUserMedia({ audio: true });
-      const { data, error } = await supabase.functions.invoke("elevenlabs-scribe-token");
+      const { data, error } = await supabase.functions.invoke(
+        "elevenlabs-scribe-token"
+      );
       if (error || !data?.token) throw new Error("Could not get scribe token");
       await scribe.connect({
         token: data.token,
-        microphone: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        microphone: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
       });
     } catch (err: any) {
       console.error("Voice error:", err);
-      safeDisconnect();
-      toast.error("Could not start voice input: " + (err.message ?? "Unknown error"));
+      toast.error(
+        "Could not start voice input: " + (err.message ?? "Unknown error")
+      );
     } finally {
-      isConnectingRef.current = false;
       setVoiceConnecting(false);
     }
-  }, [isVoiceActive, scribe, safeDisconnect]);
+  }, [scribe, disconnectIfActive]);
 
   // Stop voice when dialog closes
   useEffect(() => {
-    if (!open && isVoiceActive) {
-      safeDisconnect();
+    if (!open) {
+      disconnectIfActive();
     }
-  }, [open, isVoiceActive, safeDisconnect]);
+  }, [open, disconnectIfActive]);
 
   // Load background image once
   useEffect(() => {
@@ -118,35 +132,47 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl }: Props) {
     const scaleY = canvas.height / rect.height;
     if ("touches" in e) {
       const t = e.touches[0];
-      return { x: (t.clientX - rect.left) * scaleX, y: (t.clientY - rect.top) * scaleY };
+      return {
+        x: (t.clientX - rect.left) * scaleX,
+        y: (t.clientY - rect.top) * scaleY,
+      };
     }
-    return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
+    return {
+      x: (e.clientX - rect.left) * scaleX,
+      y: (e.clientY - rect.top) * scaleY,
+    };
   }, []);
 
-  const startDraw = useCallback((e: React.MouseEvent | React.TouchEvent) => {
-    e.preventDefault();
-    const ctx = canvasRef.current?.getContext("2d");
-    if (!ctx) return;
-    const pos = getPos(e);
-    ctx.strokeStyle = color;
-    ctx.lineWidth = LINE_WIDTH;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    ctx.beginPath();
-    ctx.moveTo(pos.x, pos.y);
-    setIsDrawing(true);
-  }, [color, getPos]);
+  const startDraw = useCallback(
+    (e: React.MouseEvent | React.TouchEvent) => {
+      e.preventDefault();
+      const ctx = canvasRef.current?.getContext("2d");
+      if (!ctx) return;
+      const pos = getPos(e);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = LINE_WIDTH;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.beginPath();
+      ctx.moveTo(pos.x, pos.y);
+      setIsDrawing(true);
+    },
+    [color, getPos]
+  );
 
-  const draw = useCallback((e: React.MouseEvent | React.TouchEvent) => {
-    e.preventDefault();
-    if (!isDrawing) return;
-    const ctx = canvasRef.current?.getContext("2d");
-    if (!ctx) return;
-    const pos = getPos(e);
-    ctx.lineTo(pos.x, pos.y);
-    ctx.stroke();
-    setHasDrawn(true);
-  }, [isDrawing, getPos]);
+  const draw = useCallback(
+    (e: React.MouseEvent | React.TouchEvent) => {
+      e.preventDefault();
+      if (!isDrawing) return;
+      const ctx = canvasRef.current?.getContext("2d");
+      if (!ctx) return;
+      const pos = getPos(e);
+      ctx.lineTo(pos.x, pos.y);
+      ctx.stroke();
+      setHasDrawn(true);
+    },
+    [isDrawing, getPos]
+  );
 
   const stopDraw = useCallback(() => {
     if (!isDrawing) return;
@@ -154,7 +180,10 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl }: Props) {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx) return;
-    setHistory(prev => [...prev, ctx.getImageData(0, 0, canvas.width, canvas.height)]);
+    setHistory((prev) => [
+      ...prev,
+      ctx.getImageData(0, 0, canvas.width, canvas.height),
+    ]);
   }, [isDrawing]);
 
   const undo = useCallback(() => {
@@ -184,9 +213,7 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl }: Props) {
   const handleSend = useCallback(async () => {
     if (!canSend || sending) return;
     // Stop voice recording if active
-    if (isVoiceActive) {
-      safeDisconnect();
-    }
+    disconnectIfActive();
     setSending(true);
     try {
       const canvas = canvasRef.current;
@@ -194,7 +221,10 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl }: Props) {
 
       // Export canvas as blob
       const blob = await new Promise<Blob>((res, rej) =>
-        canvas.toBlob(b => (b ? res(b) : rej(new Error("toBlob failed"))), "image/png")
+        canvas.toBlob(
+          (b) => (b ? res(b) : rej(new Error("toBlob failed"))),
+          "image/png"
+        )
       );
 
       const ts = Date.now();
@@ -210,7 +240,9 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl }: Props) {
         .getPublicUrl(path);
       const publicUrl = urlData.publicUrl;
 
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       const userId = user?.id;
 
       // Look up submitter's profile
@@ -234,7 +266,9 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl }: Props) {
       // Create tasks for both assignees
       for (const profileId of [SATTAR_PROFILE_ID, RADIN_PROFILE_ID]) {
         const { error: taskErr } = await supabase.from("tasks").insert({
-          title: `Feedback: ${description.trim().slice(0, 80) || "Screenshot annotation"}`,
+          title: `Feedback: ${
+            description.trim().slice(0, 80) || "Screenshot annotation"
+          }`,
           description: `${description.trim()}\n\nFrom: ${submitterName}\nPage: ${pagePath}\nScreenshot: ${publicUrl}`,
           status: "pending",
           priority: "high",
@@ -259,19 +293,24 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl }: Props) {
 
         const lang = (targetProf.preferred_language as string) || "en";
         let notifTitle = "📸 Screenshot Feedback";
-        let notifDesc = description.trim().slice(0, 200) || "New annotated screenshot";
+        let notifDesc =
+          description.trim().slice(0, 200) || "New annotated screenshot";
 
         // Translate if recipient's language is not English
         if (lang !== "en") {
           try {
-            const { data: translated } = await supabase.functions.invoke("translate-message", {
-              body: {
-                text: notifTitle + "\n" + notifDesc,
-                sourceLang: "en",
-                targetLangs: [lang],
-              },
-            });
-            const translatedText: string | undefined = translated?.translations?.[lang];
+            const { data: translated } = await supabase.functions.invoke(
+              "translate-message",
+              {
+                body: {
+                  text: notifTitle + "\n" + notifDesc,
+                  sourceLang: "en",
+                  targetLangs: [lang],
+                },
+              }
+            );
+            const translatedText: string | undefined =
+              translated?.translations?.[lang];
             if (translatedText) {
               const parts = translatedText.split("\n");
               notifTitle = parts[0] ?? notifTitle;
@@ -306,29 +345,37 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl }: Props) {
     } finally {
       setSending(false);
     }
-  }, [canSend, sending, companyId, description, onClose, isVoiceActive, safeDisconnect]);
+  }, [canSend, sending, companyId, description, onClose, disconnectIfActive]);
 
   return (
-    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-[95vw] w-[95vw] max-h-[95vh] h-[95vh] flex flex-col p-3 gap-2">
-        <DialogTitle className="text-sm font-semibold">Annotate & Describe the Change</DialogTitle>
+        <DialogTitle className="text-sm font-semibold">
+          Annotate & Describe the Change
+        </DialogTitle>
 
         {/* Toolbar */}
         <div className="flex items-center gap-2 flex-wrap">
-          {COLORS.map(c => (
+          {COLORS.map((c) => (
             <button
               key={c}
               onClick={() => setColor(c)}
               className="w-6 h-6 rounded-full border-2 transition-transform"
               style={{
                 backgroundColor: c,
-                borderColor: color === c ? "hsl(var(--foreground))" : "transparent",
+                borderColor:
+                  color === c ? "hsl(var(--foreground))" : "transparent",
                 transform: color === c ? "scale(1.2)" : "scale(1)",
               }}
               aria-label={`Color ${c}`}
             />
           ))}
-          <Button variant="ghost" size="sm" onClick={undo} disabled={history.length <= 1}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={undo}
+            disabled={history.length <= 1}
+          >
             <Undo2 className="w-4 h-4 mr-1" /> Undo
           </Button>
           <Button variant="ghost" size="sm" onClick={clearAll}>
@@ -357,13 +404,13 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl }: Props) {
             <Textarea
               placeholder="What change do you need? (or use voice input)"
               value={description}
-              onChange={e => setDescription(e.target.value)}
+              onChange={(e) => setDescription(e.target.value)}
               className="min-h-[60px] max-h-[100px] w-full"
             />
-            {/* Interim voice transcript */}
-            {interimText && (
-              <div className="mt-1 text-xs italic text-muted-foreground px-1">
-                🎙 {interimText}
+            {/* Live partial transcript from SDK */}
+            {scribe.partialTranscript && (
+              <div className="mt-1 text-xs italic text-muted-foreground px-1 animate-pulse">
+                🎙 {scribe.partialTranscript}
               </div>
             )}
           </div>
@@ -374,11 +421,15 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl }: Props) {
             variant={isVoiceActive ? "destructive" : "outline"}
             size="icon"
             onClick={toggleVoice}
-            disabled={voiceConnecting}
-            title={isVoiceActive ? "Stop voice input" : "Start voice input (supports Farsi, English & 99+ languages)"}
+            disabled={voiceConnecting || scribe.status === "connecting"}
+            title={
+              isVoiceActive
+                ? "Stop voice input"
+                : "Start voice input (supports Farsi, English & 99+ languages)"
+            }
             className="shrink-0"
           >
-            {voiceConnecting ? (
+            {voiceConnecting || scribe.status === "connecting" ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : isVoiceActive ? (
               <MicOff className="w-4 h-4 animate-pulse" />
@@ -388,8 +439,16 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl }: Props) {
           </Button>
 
           {/* Send button */}
-          <Button onClick={handleSend} disabled={!canSend || sending} className="shrink-0">
-            {sending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Send className="w-4 h-4 mr-1" />}
+          <Button
+            onClick={handleSend}
+            disabled={!canSend || sending}
+            className="shrink-0"
+          >
+            {sending ? (
+              <Loader2 className="w-4 h-4 animate-spin mr-1" />
+            ) : (
+              <Send className="w-4 h-4 mr-1" />
+            )}
             Send
           </Button>
         </div>
