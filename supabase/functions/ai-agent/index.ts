@@ -2292,11 +2292,18 @@ HARD CONSTRAINTS:
 - You may NOT assume schemas, column names, or table existence from memory or "previous fixes". ALL schema knowledge is unknown until proven by a discovery step's EXECUTOR receipt. If you have not queried information_schema in this conversation, schema_unknown MUST be true.
 - resolve_task must NEVER appear in plan_steps. It belongs exclusively to RESOLVER mode.
 - DATABASE RULE: If the plan involves ANY table or view (create, alter, query, fix), the plan MUST include a discovery step to query information_schema.columns first. schema_unknown defaults to TRUE and may only be set to false AFTER a successful EXECUTOR discovery step proves the schema. Migration history, QuickBooks sync requirements, and column definitions are ALWAYS unknowns until queried.
+- SURGICAL FENCE (MANDATORY): The plan MUST include the surgical_constraint field in the YAML output. This field defines exactly what MUST NOT change. Any plan_step that could affect UI components, navigation structure, layout, styles, or logic beyond the exact reported issue is FORBIDDEN and must be removed from the plan.
 - Output YAML only (fenced in \`\`\`yaml):
   task_type: <UI_LAYOUT|UI_STYLING|DATA_PERMISSION|DATABASE_SCHEMA|ERP_DATA|TOOLING>
   scope: <module or page>
   schema_unknown: true  # DEFAULT. Only set false after EXECUTOR confirms via information_schema
   unknowns: [list — MUST include unverified schemas, column names, sync requirements, migration history]
+  surgical_constraint: |
+    ⚠️ SURGICAL EXECUTION LAW — MANDATORY:
+    Under NO circumstances may this fix alter any other part of the application.
+    ONLY the exact issue reported below may be changed.
+    Any side-effect on UI layout, navigation, data logic, styles, or other components is FORBIDDEN.
+    Reported issue: <one-line exact description of the user's reported problem>
   plan_steps:
     - step: 1
       intent: <what this step accomplishes in plain language>
@@ -2359,6 +2366,16 @@ HARD CONSTRAINTS:
 ───────────────────────────────────────────────────
 \`\`\`
 
+- The Lovable Command MUST begin with the following mandatory header before any instruction:
+
+\`\`\`
+🔒 SURGICAL EXECUTION LAW — NON-NEGOTIABLE:
+Do NOT change any other part of the application beyond what is described below.
+Do NOT modify the overall UI, navigation structure, layout, styling, or any unrelated logic.
+ONLY fix the exact reported issue described in this prompt. Nothing more.
+\`\`\`
+
+- After the header, provide the clear, actionable instruction.
 - The Lovable Command must be specific and self-contained — it should not require the user to add context. Include table names, column names, edge function names, cron schedules, and any other technical details discovered during execution.
 - If no Lovable-side changes are needed (pure data fix), skip this block.
 
