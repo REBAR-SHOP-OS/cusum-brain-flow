@@ -28,7 +28,15 @@ function loadPos(key: string, btnSize: number, customDefault?: (isMobile: boolea
     const raw = localStorage.getItem(key);
     if (raw) {
       const p = JSON.parse(raw);
-      if (typeof p.x === "number" && typeof p.y === "number") return p;
+      if (typeof p.x === "number" && typeof p.y === "number") {
+        const maxX = window.innerWidth - btnSize;
+        const maxY = window.innerHeight - btnSize;
+        if (p.x < 0 || p.y < 0 || p.x > maxX || p.y > maxY) {
+          localStorage.removeItem(key);
+          return customDefault ? customDefault(false) : getDefault(btnSize);
+        }
+        return p;
+      }
     }
   } catch {}
   return customDefault ? customDefault(false) : getDefault(btnSize);
