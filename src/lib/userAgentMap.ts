@@ -53,9 +53,9 @@ const userAgentMappings: Record<string, UserAgentMapping> = {
     ],
   },
   "radin@rebar.shop": {
-    agentKey: "support",
+    agentKey: "social",
     userRole: "ai_manager",
-    heroText: "How can **Relay** assist you today?",
+    heroText: "How can **Pixel** assist you today?",
     quickActions: [
       { title: "System status", prompt: "Give me a system health overview — any errors, failed syncs, or agent issues in the last 24 hours.", icon: "Activity", category: "Systems" },
       { title: "AI agent activity", prompt: "Show me a summary of all AI agent sessions today — who used which agent, and what actions were taken.", icon: "Bot", category: "AI" },
