@@ -6686,7 +6686,7 @@ RULES:
         type: "function" as const,
         function: {
           name: "db_read_query",
-          description: "Run a read-only SQL query against the database to investigate issues. Use to check RLS policies (pg_policies), table structure (information_schema.columns), and data state. Only SELECT/WITH queries allowed. Returns up to 50 rows.",
+          description: "Run a read-only SQL query against the database to investigate issues. Use to check RLS policies (pg_policies), table structure (information_schema.columns), and data state. Only SELECT/WITH queries allowed. Do NOT include trailing semicolons. Returns up to 50 rows.",
           parameters: {
             type: "object",
             properties: {
@@ -8164,7 +8164,7 @@ RULES:
         if (tc.function?.name === "db_read_query") {
           try {
             const args = JSON.parse(tc.function.arguments || "{}");
-            const query = (args.query || "").trim();
+            const query = (args.query || "").trim().replace(/;+$/, "");
             if (query.length > 4000) {
               seoToolResults.push({ id: tc.id, name: "db_read_query", result: { error: "Query exceeds 4000 character limit." } });
             } else {
@@ -8348,6 +8348,7 @@ RULES:
 
       // Multi-turn tool call loop: keep processing until AI returns text or max iterations
       let toolLoopIterations = 0;
+      let consecutiveToolErrors = 0;
       const MAX_TOOL_ITERATIONS = 5;
       let lastAssistantMsg = choice.message;
       let lastToolCalls = toolCalls;
@@ -8612,7 +8613,7 @@ RULES:
             if (tc.function?.name === "db_read_query") {
               try {
                 const args = JSON.parse(tc.function.arguments || "{}");
-                const query = (args.query || "").trim();
+                const query = (args.query || "").trim().replace(/;+$/, "");
                 if (query.length > 4000) {
                   seoToolResults.push({ id: tc.id, name: "db_read_query", result: { error: "Query exceeds 4000 character limit." } });
                 } else {
@@ -8721,6 +8722,20 @@ RULES:
             if (!handledNames.includes(tc.function?.name)) {
               seoToolResults.push({ id: tc.id, name: tc.function?.name || "unknown", result: { success: true, message: "Processed" } });
             }
+          }
+
+          // Circuit breaker: stop after 2 consecutive rounds where ALL tools errored
+          const allFailed = seoToolResults.length > 0 && seoToolResults.every(r => r.result?.error);
+          if (allFailed) {
+            consecutiveToolErrors++;
+            if (consecutiveToolErrors >= 2) {
+              reply = "[STOP]\n\nMy database queries failed twice consecutively. The errors were:\n" +
+                seoToolResults.map(r => `- ${r.result.error}`).join("\n") +
+                "\n\nPlease help me by rephrasing your request, providing specific table/record names, or describing what you need.";
+              break;
+            }
+          } else {
+            consecutiveToolErrors = 0;
           }
 
           // Update for next iteration
