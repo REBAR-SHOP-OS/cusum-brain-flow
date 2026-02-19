@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { requireAuth, corsHeaders, json } from "../_shared/auth.ts";
+import { callAI, AIError } from "../_shared/aiRouter.ts";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -42,11 +43,6 @@ serve(async (req) => {
       return json({ error: "Failed to create batch" }, 500);
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      return json({ error: "AI not configured" }, 500);
-    }
-
     const systemPrompt = `You are an expert B2B lead researcher for rebar.shop — a Canadian rebar fabrication company based in Ontario.
 
 Your job is to generate 50 highly targeted, realistic lead prospects for rebar fabrication services in Ontario, Canada.
@@ -77,76 +73,53 @@ IMPORTANT: Every prospect MUST include a realistic phone number with an Ontario 
 
 Make prospects diverse across industries, cities, and company sizes. Include both large firms and mid-market companies.`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: `Generate exactly 50 lead prospects for rebar fabrication services in ${targetRegion}. Return them using the tool.` },
-        ],
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: "return_prospects",
-              description: "Return an array of 50 lead prospects",
-              parameters: {
-                type: "object",
-                properties: {
-                  prospects: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        company_name: { type: "string" },
-                        contact_name: { type: "string" },
-                        contact_title: { type: "string" },
-                        email: { type: "string" },
-                        phone: { type: "string" },
-                        city: { type: "string" },
-                        industry: { type: "string" },
-                        estimated_value: { type: "number", description: "Annual rebar procurement value in CAD" },
-                        fit_reason: { type: "string" },
-                        intro_angle: { type: "string" },
-                      },
-                      required: ["company_name", "contact_name", "contact_title", "email", "phone", "city", "industry", "fit_reason", "intro_angle"],
-                      additionalProperties: false,
+    const result = await callAI({
+      provider: "gemini",
+      model: "gemini-2.5-flash",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: `Generate exactly 50 lead prospects for rebar fabrication services in ${targetRegion}. Return them using the tool.` },
+      ],
+      tools: [
+        {
+          type: "function",
+          function: {
+            name: "return_prospects",
+            description: "Return an array of 50 lead prospects",
+            parameters: {
+              type: "object",
+              properties: {
+                prospects: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      company_name: { type: "string" },
+                      contact_name: { type: "string" },
+                      contact_title: { type: "string" },
+                      email: { type: "string" },
+                      phone: { type: "string" },
+                      city: { type: "string" },
+                      industry: { type: "string" },
+                      estimated_value: { type: "number", description: "Annual rebar procurement value in CAD" },
+                      fit_reason: { type: "string" },
+                      intro_angle: { type: "string" },
                     },
+                    required: ["company_name", "contact_name", "contact_title", "email", "phone", "city", "industry", "fit_reason", "intro_angle"],
+                    additionalProperties: false,
                   },
                 },
-                required: ["prospects"],
-                additionalProperties: false,
               },
+              required: ["prospects"],
+              additionalProperties: false,
             },
           },
-        ],
-        tool_choice: { type: "function", function: { name: "return_prospects" } },
-      }),
+        },
+      ],
+      toolChoice: { type: "function", function: { name: "return_prospects" } },
     });
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error("AI gateway error:", response.status, errText);
-
-      // Update batch as failed
-      await serviceClient.from("prospect_batches").update({ status: "archived" }).eq("id", batch.id);
-
-      if (response.status === 429) {
-        return json({ error: "Rate limited — please try again in a minute" }, 429);
-      }
-      if (response.status === 402) {
-        return json({ error: "AI credits exhausted — please add credits" }, 402);
-      }
-      return json({ error: "AI generation failed" }, 500);
-    }
-
-    const aiData = await response.json();
-    const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
+    const toolCall = result.toolCalls?.[0];
     let prospects: any[] = [];
 
     if (toolCall?.function?.arguments) {
@@ -196,6 +169,9 @@ Make prospects diverse across industries, cities, and company sizes. Include bot
     return json({ batchId: batch.id, count: prospects.length });
   } catch (e) {
     if (e instanceof Response) return e;
+    if (e instanceof AIError) {
+      return json({ error: e.message }, e.status);
+    }
     console.error("prospect-leads error:", e);
     return json({ error: e instanceof Error ? e.message : "Unknown error" }, 500);
   }

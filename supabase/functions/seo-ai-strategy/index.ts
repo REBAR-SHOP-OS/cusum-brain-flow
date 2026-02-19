@@ -69,22 +69,17 @@ Deno.serve(async (req) => {
     const lowScorePages = pages.filter((p: any) => p.seo_score && p.seo_score < 50);
     const highImpLowCtr = keywords.filter((k: any) => k.impressions_28d > 100 && k.ctr < 0.02);
 
-    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${lovableApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-pro",
-        messages: [
-          {
-            role: "system",
-            content: `You are a strategic SEO advisor for ${domain.domain}. Create a weekly SEO roadmap with specific, actionable tasks. Each task must have clear expected impact. Do NOT create tasks that duplicate existing open tasks.`,
-          },
-          {
-            role: "user",
-            content: `Weekly strategy analysis for ${domain.domain}:
+    const result = await callAI({
+      provider: "gemini",
+      model: "gemini-2.5-pro",
+      messages: [
+        {
+          role: "system",
+          content: `You are a strategic SEO advisor for ${domain.domain}. Create a weekly SEO roadmap with specific, actionable tasks. Each task must have clear expected impact. Do NOT create tasks that duplicate existing open tasks.`,
+        },
+        {
+          role: "user",
+          content: `Weekly strategy analysis for ${domain.domain}:
 
 KEYWORDS NEAR TOP 3 (positions 3-5, push to #1-3):
 ${JSON.stringify(nearTop3.slice(0, 20), null, 1)}
@@ -102,66 +97,43 @@ EXISTING OPEN TASKS (do not duplicate):
 ${JSON.stringify(existingTasks, null, 1)}
 
 Generate 5-10 high-impact strategic tasks.`,
-          },
-        ],
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: "weekly_strategy_tasks",
-              description: "Return weekly strategic SEO tasks",
-              parameters: {
-                type: "object",
-                properties: {
-                  tasks: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        title: { type: "string" },
-                        description: { type: "string" },
-                        task_type: { type: "string", enum: ["content", "technical", "internal_link"] },
-                        priority: { type: "string", enum: ["low", "medium", "high", "critical"] },
-                        expected_impact: { type: "string" },
-                        entity_url: { type: "string" },
-                        ai_reasoning: { type: "string" },
-                      },
-                      required: ["title", "description", "task_type", "priority", "expected_impact", "ai_reasoning"],
+        },
+      ],
+      tools: [
+        {
+          type: "function",
+          function: {
+            name: "weekly_strategy_tasks",
+            description: "Return weekly strategic SEO tasks",
+            parameters: {
+              type: "object",
+              properties: {
+                tasks: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      title: { type: "string" },
+                      description: { type: "string" },
+                      task_type: { type: "string", enum: ["content", "technical", "internal_link"] },
+                      priority: { type: "string", enum: ["low", "medium", "high", "critical"] },
+                      expected_impact: { type: "string" },
+                      entity_url: { type: "string" },
+                      ai_reasoning: { type: "string" },
                     },
+                    required: ["title", "description", "task_type", "priority", "expected_impact", "ai_reasoning"],
                   },
                 },
-                required: ["tasks"],
               },
+              required: ["tasks"],
             },
           },
-        ],
-        tool_choice: { type: "function", function: { name: "weekly_strategy_tasks" } },
-      }),
+        },
+      ],
+      toolChoice: { type: "function", function: { name: "weekly_strategy_tasks" } },
     });
 
-    if (!aiResponse.ok) {
-      const errText = await aiResponse.text();
-      console.error("AI strategy error:", aiResponse.status, errText);
-      if (aiResponse.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded" }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (aiResponse.status === 402) {
-        return new Response(JSON.stringify({ error: "AI credits exhausted" }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      return new Response(JSON.stringify({ error: "AI strategy failed" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const aiData = await aiResponse.json();
-    const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
+    const toolCall = result.toolCalls?.[0];
     if (!toolCall?.function?.arguments) {
       return new Response(JSON.stringify({ error: "AI returned no tasks" }), {
         status: 500,
@@ -195,6 +167,11 @@ Generate 5-10 high-impact strategic tasks.`,
     );
   } catch (err) {
     console.error("seo-ai-strategy error:", err);
+    if (err instanceof AIError) {
+      return new Response(JSON.stringify({ error: err.message }), {
+        status: err.status, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     return new Response(
       JSON.stringify({ error: err instanceof Error ? err.message : "Internal error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

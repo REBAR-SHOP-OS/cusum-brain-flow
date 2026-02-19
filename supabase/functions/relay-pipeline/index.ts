@@ -1,8 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireAuth, corsHeaders } from "../_shared/auth.ts";
-
-const AI_GATEWAY = "https://ai.gateway.lovable.dev/v1/chat/completions";
+import { callAI, AIError } from "../_shared/aiRouter.ts";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -36,9 +35,6 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
     const body = await req.json();
     const action = body.action || "process";
@@ -80,49 +76,38 @@ serve(async (req) => {
         // ── Layer 1: Classify ──
         let classification: { category: string; urgency: string; action_required: boolean; reason: string };
         try {
-          const classifyResp = await fetch(AI_GATEWAY, {
-            method: "POST",
-            headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
-            body: JSON.stringify({
-              model: "google/gemini-2.5-flash-lite",
-              messages: [
-                { role: "system", content: "You classify inbound business emails for a rebar/steel manufacturing company." },
-                { role: "user", content: `Classify this email.\n\nFrom: ${from}\nSubject: ${subject}\n\n${emailBody.slice(0, 2000)}` },
-              ],
-              tools: [{
-                type: "function",
-                function: {
-                  name: "classify_email",
-                  description: "Classify the email into a category",
-                  parameters: {
-                    type: "object",
-                    properties: {
-                      category: { type: "string", enum: ["RFQ", "Active Customer", "Payment", "Vendor", "Internal", "Marketing", "Spam"] },
-                      urgency: { type: "string", enum: ["high", "medium", "low"] },
-                      action_required: { type: "boolean" },
-                      reason: { type: "string" },
-                    },
-                    required: ["category", "urgency", "action_required", "reason"],
-                    additionalProperties: false,
+          const classifyResult = await callAI({
+            provider: "gpt",
+            model: "gpt-4o-mini",
+            messages: [
+              { role: "system", content: "You classify inbound business emails for a rebar/steel manufacturing company." },
+              { role: "user", content: `Classify this email.\n\nFrom: ${from}\nSubject: ${subject}\n\n${emailBody.slice(0, 2000)}` },
+            ],
+            tools: [{
+              type: "function",
+              function: {
+                name: "classify_email",
+                description: "Classify the email into a category",
+                parameters: {
+                  type: "object",
+                  properties: {
+                    category: { type: "string", enum: ["RFQ", "Active Customer", "Payment", "Vendor", "Internal", "Marketing", "Spam"] },
+                    urgency: { type: "string", enum: ["high", "medium", "low"] },
+                    action_required: { type: "boolean" },
+                    reason: { type: "string" },
                   },
+                  required: ["category", "urgency", "action_required", "reason"],
+                  additionalProperties: false,
                 },
-              }],
-              tool_choice: { type: "function", function: { name: "classify_email" } },
-            }),
+              },
+            }],
+            toolChoice: { type: "function", function: { name: "classify_email" } },
           });
 
-          if (!classifyResp.ok) {
-            console.error("Classify error:", classifyResp.status, await classifyResp.text());
-            // Mark as processed with error to avoid infinite retry
-            await svc.from("communications").update({ ai_processed_at: new Date().toISOString() }).eq("id", email.id);
-            continue;
-          }
-
-          const classifyData = await classifyResp.json();
-          const toolCall = classifyData.choices?.[0]?.message?.tool_calls?.[0];
+          const toolCall = classifyResult.toolCalls?.[0];
           classification = JSON.parse(toolCall?.function?.arguments || '{"category":"Internal","urgency":"low","action_required":false,"reason":"parse error"}');
         } catch (e) {
-          console.error("Classify parse error:", e);
+          console.error("Classify error:", e);
           await svc.from("communications").update({ ai_processed_at: new Date().toISOString() }).eq("id", email.id);
           continue;
         }
@@ -150,44 +135,38 @@ serve(async (req) => {
         };
 
         try {
-          const priorityResp = await fetch(AI_GATEWAY, {
-            method: "POST",
-            headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
-            body: JSON.stringify({
-              model: "google/gemini-2.5-flash-lite",
-              messages: [
-                { role: "system", content: "You extract priority data from business emails for a rebar manufacturing company. Be concise." },
-                { role: "user", content: `Extract priority data.\n\nFrom: ${from}\nSubject: ${subject}\nCategory: ${classification.category}\n\n${emailBody.slice(0, 2000)}` },
-              ],
-              tools: [{
-                type: "function",
-                function: {
-                  name: "extract_priority",
-                  description: "Extract priority information from the email",
-                  parameters: {
-                    type: "object",
-                    properties: {
-                      action: { type: "string", description: "One-sentence required action" },
-                      deadline: { type: "string", description: "Deadline if mentioned, null otherwise" },
-                      risk_level: { type: "string", enum: ["none", "low", "medium", "high"] },
-                      opportunity_value: { type: "string", description: "Dollar estimate if sales opportunity, null otherwise" },
-                      next_step: { type: "string", description: "Suggested next step" },
-                    },
-                    required: ["action", "risk_level", "next_step"],
-                    additionalProperties: false,
+          const priorityResult = await callAI({
+            provider: "gpt",
+            model: "gpt-4o-mini",
+            messages: [
+              { role: "system", content: "You extract priority data from business emails for a rebar manufacturing company. Be concise." },
+              { role: "user", content: `Extract priority data.\n\nFrom: ${from}\nSubject: ${subject}\nCategory: ${classification.category}\n\n${emailBody.slice(0, 2000)}` },
+            ],
+            tools: [{
+              type: "function",
+              function: {
+                name: "extract_priority",
+                description: "Extract priority information from the email",
+                parameters: {
+                  type: "object",
+                  properties: {
+                    action: { type: "string", description: "One-sentence required action" },
+                    deadline: { type: "string", description: "Deadline if mentioned, null otherwise" },
+                    risk_level: { type: "string", enum: ["none", "low", "medium", "high"] },
+                    opportunity_value: { type: "string", description: "Dollar estimate if sales opportunity, null otherwise" },
+                    next_step: { type: "string", description: "Suggested next step" },
                   },
+                  required: ["action", "risk_level", "next_step"],
+                  additionalProperties: false,
                 },
-              }],
-              tool_choice: { type: "function", function: { name: "extract_priority" } },
-            }),
+              },
+            }],
+            toolChoice: { type: "function", function: { name: "extract_priority" } },
           });
 
-          if (priorityResp.ok) {
-            const pData = await priorityResp.json();
-            const pToolCall = pData.choices?.[0]?.message?.tool_calls?.[0];
-            if (pToolCall) {
-              priorityData = JSON.parse(pToolCall.function.arguments);
-            }
+          const pToolCall = priorityResult.toolCalls?.[0];
+          if (pToolCall) {
+            priorityData = JSON.parse(pToolCall.function.arguments);
           }
         } catch (e) {
           console.error("Priority parse error:", e);
@@ -197,30 +176,23 @@ serve(async (req) => {
         let draft: string | null = null;
         if (classification.action_required) {
           try {
-            const draftResp = await fetch(AI_GATEWAY, {
-              method: "POST",
-              headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
-              body: JSON.stringify({
-                model: "google/gemini-2.5-flash-lite",
-                messages: [
-                  {
-                    role: "system",
-                    content: `You are Cassie, an AI email assistant for ${userName}${titleLine} at Rebar.Shop (Ontario Rebars Ltd.). Draft professional, concise replies. Sign off with "Best regards,\\n${userName}". Do NOT include any email signature block.`,
-                  },
-                  {
-                    role: "user",
-                    content: `Draft a reply:\n\nFrom: ${from}\nSubject: ${subject}\n\n${emailBody.slice(0, 3000)}\n\nWrite only the reply text.`,
-                  },
-                ],
-                max_tokens: 800,
-                temperature: 0.4,
-              }),
+            const draftResult = await callAI({
+              provider: "gpt",
+              model: "gpt-4o-mini",
+              messages: [
+                {
+                  role: "system",
+                  content: `You are Cassie, an AI email assistant for ${userName}${titleLine} at Rebar.Shop (Ontario Rebars Ltd.). Draft professional, concise replies. Sign off with "Best regards,\\n${userName}". Do NOT include any email signature block.`,
+                },
+                {
+                  role: "user",
+                  content: `Draft a reply:\n\nFrom: ${from}\nSubject: ${subject}\n\n${emailBody.slice(0, 3000)}\n\nWrite only the reply text.`,
+                },
+              ],
+              maxTokens: 800,
+              temperature: 0.4,
             });
-
-            if (draftResp.ok) {
-              const draftData = await draftResp.json();
-              draft = draftData.choices?.[0]?.message?.content || null;
-            }
+            draft = draftResult.content || null;
           } catch (e) {
             console.error("Draft error:", e);
           }
@@ -234,7 +206,6 @@ serve(async (req) => {
 
         if (shouldAlert) {
           try {
-            // Check if alert already exists
             const { count } = await svc
               .from("comms_alerts")
               .select("id", { count: "exact", head: true })
@@ -308,25 +279,18 @@ serve(async (req) => {
 
       const emailBody = (comm.metadata as any)?.body || comm.body_preview || "";
 
-      const summaryResp = await fetch(AI_GATEWAY, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash-lite",
-          messages: [
-            { role: "system", content: "Summarize this email thread in 2 concise sentences. Focus on what was discussed and the outcome." },
-            { role: "user", content: `Subject: ${comm.subject}\nFrom: ${comm.from_address}\n\n${threadContext || emailBody.slice(0, 2000)}` },
-          ],
-          max_tokens: 200,
-          temperature: 0.3,
-        }),
+      const summaryResult = await callAI({
+        provider: "gpt",
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: "Summarize this email thread in 2 concise sentences. Focus on what was discussed and the outcome." },
+          { role: "user", content: `Subject: ${comm.subject}\nFrom: ${comm.from_address}\n\n${threadContext || emailBody.slice(0, 2000)}` },
+        ],
+        maxTokens: 200,
+        temperature: 0.3,
       });
 
-      let resolvedSummary = "Thread resolved.";
-      if (summaryResp.ok) {
-        const sData = await summaryResp.json();
-        resolvedSummary = sData.choices?.[0]?.message?.content || resolvedSummary;
-      }
+      const resolvedSummary = summaryResult.content || "Thread resolved.";
 
       await svc.from("communications").update({
         resolved_at: new Date().toISOString(),
@@ -370,28 +334,21 @@ serve(async (req) => {
       const highUrgency = recent?.filter((r: any) => r.ai_urgency === "high").length || 0;
       const resolved = recent?.filter((r: any) => r.resolved_at).length || 0;
 
-      const briefResp = await fetch(AI_GATEWAY, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash-lite",
-          messages: [
-            { role: "system", content: "Generate a concise daily email brief for a rebar manufacturing company CEO. Use bullet points. Be direct." },
-            {
-              role: "user",
-              content: `Generate today's Relay Brief:\n\nStats (last 24h):\n- Total inbound: ${total}\n- RFQs: ${rfqs}\n- Payments/Invoices: ${payments}\n- Active Customer: ${activeCustomer}\n- Spam/Marketing: ${spam}\n- Action required (open): ${actionRequired}\n- High urgency: ${highUrgency}\n- Resolved: ${resolved}\n\nTop subjects:\n${(recent || []).filter((r: any) => r.ai_urgency === "high").slice(0, 5).map((r: any) => `- ${r.subject} (from ${r.from_address})`).join("\n")}`,
-            },
-          ],
-          max_tokens: 500,
-          temperature: 0.3,
-        }),
+      const briefResult = await callAI({
+        provider: "gpt",
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: "Generate a concise daily email brief for a rebar manufacturing company CEO. Use bullet points. Be direct." },
+          {
+            role: "user",
+            content: `Generate today's Relay Brief:\n\nStats (last 24h):\n- Total inbound: ${total}\n- RFQs: ${rfqs}\n- Payments/Invoices: ${payments}\n- Active Customer: ${activeCustomer}\n- Spam/Marketing: ${spam}\n- Action required (open): ${actionRequired}\n- High urgency: ${highUrgency}\n- Resolved: ${resolved}\n\nTop subjects:\n${(recent || []).filter((r: any) => r.ai_urgency === "high").slice(0, 5).map((r: any) => `- ${r.subject} (from ${r.from_address})`).join("\n")}`,
+          },
+        ],
+        maxTokens: 500,
+        temperature: 0.3,
       });
 
-      let briefText = `Relay Brief: ${total} inbound, ${rfqs} RFQs, ${actionRequired} need action.`;
-      if (briefResp.ok) {
-        const bData = await briefResp.json();
-        briefText = bData.choices?.[0]?.message?.content || briefText;
-      }
+      const briefText = briefResult.content || `Relay Brief: ${total} inbound, ${rfqs} RFQs, ${actionRequired} need action.`;
 
       return new Response(JSON.stringify({
         brief: briefText,
@@ -406,6 +363,12 @@ serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
+    if (error instanceof AIError) {
+      return new Response(JSON.stringify({ error: error.message }), {
+        status: error.status,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     console.error("relay-pipeline error:", error);
     return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }), {
       status: 500,
