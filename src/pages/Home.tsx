@@ -48,6 +48,7 @@ const agentKeyToSuggestion: Record<string, { code: string; name: string }> = {
   estimating: { code: "gauge", name: "Gauge" },
   support: { code: "haven", name: "Haven" },
   email: { code: "relay", name: "Relay" },
+  social: { code: "pixel", name: "Pixel" },
 };
 
 interface Helper {
@@ -151,7 +152,7 @@ export default function Home() {
           <div className="w-full">
             <ChatInput
               onSend={handleSend}
-              placeholder={mapping ? `Ask ${mapping.agentKey === "assistant" ? "Vizzy" : mapping.agentKey === "shopfloor" ? "Forge" : "Gauge"} anything...` : "Ask anything about your business..."}
+              placeholder={mapping ? `Ask ${agentKeyToSuggestion[mapping.agentKey]?.name ?? mapping.agentKey} anything...` : "Ask anything about your business..."}
               showFileUpload
               
             />
@@ -234,7 +235,7 @@ const HelperCard = React.forwardRef<HTMLDivElement, { helper: Helper; isPrimary?
         </div>
         <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-1 pt-4 sm:relative sm:bg-transparent sm:p-3 sm:pt-3">
           <h3 className="font-bold text-[10px] sm:text-base leading-tight truncate text-white sm:text-foreground">{helper.name}</h3>
-          <p className="text-[8px] sm:text-sm text-white/70 sm:text-muted-foreground truncate">{helper.role}</p>
+          <p className="text-[8px] sm:text-sm text-white/70 sm:text-foreground/60 truncate">{helper.role}</p>
           {isPrimary && <span className="text-[7px] sm:text-xs text-primary font-medium">Your Agent</span>}
         </div>
       </div>
