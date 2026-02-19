@@ -1,46 +1,63 @@
 
-# Fix: Priority Tags Too Bold on /office Tasks Page
+# Add "Driver" to Desktop Sidebar Navigation
+
+## Current State
+
+The `/driver` route, `DriverDashboard` page, and mobile bottom nav tab were already added in a previous change. The mobile nav (`MobileNavV2`) already shows "Driver" for mobile users.
+
+The **desktop sidebar** (`AppSidebar.tsx`) is the only navigation surface missing a "Driver" entry. It has no reference to `/driver` anywhere.
 
 ## Scope
-Single file: `src/pages/Tasks.tsx`
-One line only (line 884). No other files, no database, no other components touched.
 
-## Root Cause
+**Single file, single addition:**
 
-The `Badge` component (`src/components/ui/badge.tsx`) has `font-semibold` hardcoded in its base `cva` class string:
+| File | Change |
+|------|--------|
+| `src/components/layout/AppSidebar.tsx` | Add one `NavItem` for Driver under the "Logistics" group |
 
-```
-"inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ..."
-```
-
-Every `<Badge>` in the app inherits this weight. The priority tag on line 884 of `Tasks.tsx` renders as:
-
-```tsx
-<Badge variant="secondary" className={cn("text-xs", PRIORITY_COLORS[selectedTask.priority || "medium"])}>
-  High   ← appears as "High" in bold/semibold
-</Badge>
-```
-
-Since `font-semibold` is in the base class, it wins unless explicitly overridden on this individual badge.
-
-The user sees "Urgent" / "High Priority" tags rendered heavier than intended. Note: the priority values stored are `high`, `medium`, `low` — the badge shows `"High"`, `"Medium"`, `"Low"` (capitalized). The user's screenshot likely shows these.
+No other files are touched. No styling changes. No database changes. No logic changes.
 
 ## The Fix
 
-Add `font-normal` to the `className` of the priority badge on line 884. Tailwind's specificity means the last matching utility wins, and `font-normal` will override `font-semibold` from the base Badge class:
+The "Logistics" group in `AppSidebar.tsx` currently contains:
 
-```diff
-- <Badge variant="secondary" className={cn("text-xs", PRIORITY_COLORS[selectedTask.priority || "medium"])}>
-+ <Badge variant="secondary" className={cn("text-xs font-normal", PRIORITY_COLORS[selectedTask.priority || "medium"])}>
+```
+Logistics
+├── Deliveries  → /deliveries   (roles: admin, field, office)
+└── Inventory   → /office       (roles: admin, office, workshop)
 ```
 
-## Summary
+One new item will be inserted after "Deliveries":
 
-| File | Line | Change |
-|------|------|--------|
-| `src/pages/Tasks.tsx` | 884 | Add `font-normal` to priority Badge className |
+```
+Logistics
+├── Deliveries  → /deliveries   (roles: admin, field, office)
+├── Driver      → /driver       (roles: admin, field, office)   ← NEW
+└── Inventory   → /office       (roles: admin, office, workshop)
+```
 
-## No Other Changes
-- The Badge component itself (`badge.tsx`) is NOT touched — changing it would affect badges throughout the entire app
-- No other files, no database, no UI layout or logic altered
-- This is a one-token addition to a single className string
+- Icon: `Truck` (already imported at line 3)
+- Roles: `["admin", "field", "office"]` — mirrors Deliveries, since drivers are field/admin users
+- Lock reason: `"Requires Field or Office role"` — consistent with Deliveries
+- `tourId`: `"nav-driver"` — consistent naming convention
+
+## Technical Detail
+
+The change is a single object insertion in the `navGroups` array at lines 171–175 of `AppSidebar.tsx`:
+
+```diff
+  { name: "Deliveries", href: "/deliveries", icon: Truck, roles: ["admin", "field", "office"], lockReason: "Requires Field or Office role", tourId: "nav-deliveries" },
++ { name: "Driver", href: "/driver", icon: Truck, roles: ["admin", "field", "office"], lockReason: "Requires Field or Office role", tourId: "nav-driver" },
+  { name: "Inventory", href: "/office", icon: Package, ... },
+```
+
+The `Truck` icon is already imported — no new import needed.
+
+## What Is NOT Changed
+
+- `MobileNavV2.tsx` — already has Driver tab, untouched
+- `App.tsx` — route already exists, untouched
+- `DriverDashboard.tsx` — page already exists, untouched
+- All other nav groups (Office, Production, QA, System) — untouched
+- All existing Logistics items (Deliveries, Inventory) — untouched
+- Styling, logic, database — untouched
