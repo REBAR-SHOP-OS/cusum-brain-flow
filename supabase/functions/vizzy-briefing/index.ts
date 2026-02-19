@@ -1,9 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { requireAuth, corsHeaders, json } from "../_shared/auth.ts";
+import { callAI, AIError } from "../_shared/aiRouter.ts";
 
 /**
- * Uses Gemini 3 Pro to compress the massive Vizzy business context
+ * Uses Gemini to compress the massive Vizzy business context
  * into a concise, intelligent briefing for the AI assistant.
+ * Gemini chosen here: large context input (4000+ words) is its strength.
  */
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -18,21 +20,10 @@ serve(async (req) => {
       return json({ error: "rawContext string is required" }, 400);
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      // Fallback: return raw context if no API key
-      console.warn("LOVABLE_API_KEY not set, returning raw context");
-      return json({ briefing: rawContext });
-    }
-
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-pro-preview",
+    try {
+      const result = await callAI({
+        provider: "gemini",
+        model: "gemini-2.5-flash",
         messages: [
           {
             role: "system",
@@ -55,22 +46,14 @@ RULES:
             content: rawContext,
           },
         ],
-      }),
-    });
+      });
 
-    if (!response.ok) {
-      if (response.status === 429 || response.status === 402) {
-        console.warn("Gemini rate limited, returning raw context");
-        return json({ briefing: rawContext });
-      }
-      console.error("Gemini error:", response.status);
+      return json({ briefing: result.content || rawContext });
+    } catch (aiErr: any) {
+      // Fallback: return raw context on any AI error
+      console.warn("AI error, returning raw context:", aiErr.message);
       return json({ briefing: rawContext });
     }
-
-    const data = await response.json();
-    const briefing = data.choices?.[0]?.message?.content || rawContext;
-
-    return json({ briefing });
   } catch (e) {
     if (e instanceof Response) return e;
     console.error("vizzy-briefing error:", e);
