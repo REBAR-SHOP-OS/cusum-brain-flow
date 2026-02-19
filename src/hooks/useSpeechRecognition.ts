@@ -11,6 +11,7 @@ interface UseSpeechRecognitionOptions {
   onError?: (error: string) => void;
   onSilenceEnd?: () => void;
   silenceTimeout?: number; // ms after last final result before firing onSilenceEnd (default 1500)
+  lang?: string; // BCP-47 language tag, e.g. "fa-IR", "en-US"
 }
 
 interface UseSpeechRecognitionReturn {
@@ -54,7 +55,7 @@ export function useSpeechRecognition(options?: UseSpeechRecognitionOptions): Use
     const recognition = new SpeechRecognitionAPI();
     recognition.continuous = true;
     recognition.interimResults = true;
-    recognition.lang = "en-US";
+    recognition.lang = optionsRef.current?.lang ?? "fa-IR";
 
     recognition.onstart = () => setIsListening(true);
 

@@ -6,7 +6,7 @@ import { Undo2, Trash2, Send, Loader2, Mic, MicOff } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useCompanyId } from "@/hooks/useCompanyId";
-import { useScribe, CommitStrategy } from "@elevenlabs/react";
+import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 
 const COLORS = ["#ef4444", "#3b82f6", "#eab308"] as const;
 const LINE_WIDTH = 3;
@@ -29,82 +29,34 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl }: Props) {
   const [sending, setSending] = useState(false);
   const [hasDrawn, setHasDrawn] = useState(false);
   const [history, setHistory] = useState<ImageData[]>([]);
-  const [voiceConnecting, setVoiceConnecting] = useState(false);
   const { companyId } = useCompanyId();
 
-  // ElevenLabs Realtime Scribe — auto-detects language including Farsi
-  const scribe = useScribe({
-    modelId: "scribe_v2_realtime",
-    commitStrategy: CommitStrategy.VAD,
-    onCommittedTranscript: (data) => {
-      setDescription((prev) => (prev + " " + data.text).trim());
-    },
-    onError: (err) => {
-      // Catch all WebSocket errors at source — prevents uncaught/repeated errors
-      console.warn("[Scribe] error:", err);
-    },
+  // Web Speech API — Google Voice, supports Farsi + English, no WebSocket errors
+  const speech = useSpeechRecognition({
+    lang: "fa-IR",
+    onError: (err) => toast.error(err),
   });
 
-  // Status-aware disconnect — only disconnect if NOT already disconnected/error
-  const disconnectIfActive = useCallback(() => {
-    if (scribe.status !== "disconnected" && scribe.status !== "error") {
-      try {
-        scribe.disconnect();
-      } catch {
-        // ignore
+  // Track already-appended transcript IDs to avoid double-appending
+  const appendedIdsRef = useRef<Set<string>>(new Set());
+
+  // Append new final transcripts to description
+  useEffect(() => {
+    for (const t of speech.transcripts) {
+      if (!appendedIdsRef.current.has(t.id)) {
+        appendedIdsRef.current.add(t.id);
+        setDescription((prev) => (prev ? prev + " " + t.text : t.text).trim());
       }
     }
-    try {
-      scribe.clearTranscripts();
-    } catch {
-      // ignore
-    }
-  }, [scribe]);
-
-  const isVoiceActive =
-    scribe.status === "connected" || scribe.status === "transcribing";
-
-  const toggleVoice = useCallback(async () => {
-    // If already active or connecting, stop
-    if (
-      scribe.status === "connected" ||
-      scribe.status === "transcribing" ||
-      scribe.status === "connecting"
-    ) {
-      disconnectIfActive();
-      return;
-    }
-    try {
-      setVoiceConnecting(true);
-      await navigator.mediaDevices.getUserMedia({ audio: true });
-      const { data, error } = await supabase.functions.invoke(
-        "elevenlabs-scribe-token"
-      );
-      if (error || !data?.token) throw new Error("Could not get scribe token");
-      await scribe.connect({
-        token: data.token,
-        microphone: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      });
-    } catch (err: any) {
-      console.error("Voice error:", err);
-      toast.error(
-        "Could not start voice input: " + (err.message ?? "Unknown error")
-      );
-    } finally {
-      setVoiceConnecting(false);
-    }
-  }, [scribe, disconnectIfActive]);
+  }, [speech.transcripts]);
 
   // Stop voice when dialog closes
   useEffect(() => {
     if (!open) {
-      disconnectIfActive();
+      speech.stop();
+      appendedIdsRef.current.clear();
     }
-  }, [open, disconnectIfActive]);
+  }, [open, speech.stop]);
 
   // Load background image once
   useEffect(() => {
@@ -213,7 +165,7 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl }: Props) {
   const handleSend = useCallback(async () => {
     if (!canSend || sending) return;
     // Stop voice recording if active
-    disconnectIfActive();
+    speech.stop();
     setSending(true);
     try {
       const canvas = canvasRef.current;
@@ -338,6 +290,7 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl }: Props) {
       setDescription("");
       setHasDrawn(false);
       setHistory([]);
+      appendedIdsRef.current.clear();
       onClose();
     } catch (err: any) {
       console.error("Feedback send error:", err);
@@ -345,7 +298,15 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl }: Props) {
     } finally {
       setSending(false);
     }
-  }, [canSend, sending, companyId, description, onClose, disconnectIfActive]);
+  }, [canSend, sending, companyId, description, onClose, speech.stop]);
+
+  const toggleVoice = useCallback(() => {
+    if (speech.isListening) {
+      speech.stop();
+    } else {
+      speech.start();
+    }
+  }, [speech.isListening, speech.start, speech.stop]);
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -402,15 +363,15 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl }: Props) {
         <div className="flex gap-2 items-end">
           <div className="flex-1">
             <Textarea
-              placeholder="What change do you need? (or use voice input)"
+              placeholder="توضیح تغییر مورد نیاز را بنویسید یا با میکروفون بگویید..."
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className="min-h-[60px] max-h-[100px] w-full"
             />
-            {/* Live partial transcript from SDK */}
-            {scribe.partialTranscript && (
+            {/* Live interim text from Web Speech API */}
+            {speech.interimText && (
               <div className="mt-1 text-xs italic text-muted-foreground px-1 animate-pulse">
-                🎙 {scribe.partialTranscript}
+                🎙 {speech.interimText}
               </div>
             )}
           </div>
@@ -418,20 +379,20 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl }: Props) {
           {/* Voice button */}
           <Button
             type="button"
-            variant={isVoiceActive ? "destructive" : "outline"}
+            variant={speech.isListening ? "destructive" : "outline"}
             size="icon"
             onClick={toggleVoice}
-            disabled={voiceConnecting || scribe.status === "connecting"}
+            disabled={!speech.isSupported}
             title={
-              isVoiceActive
+              !speech.isSupported
+                ? "Voice input not supported in this browser"
+                : speech.isListening
                 ? "Stop voice input"
-                : "Start voice input (supports Farsi, English & 99+ languages)"
+                : "Start voice input (supports Farsi & English)"
             }
             className="shrink-0"
           >
-            {voiceConnecting || scribe.status === "connecting" ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : isVoiceActive ? (
+            {speech.isListening ? (
               <MicOff className="w-4 h-4 animate-pulse" />
             ) : (
               <Mic className="w-4 h-4" />
