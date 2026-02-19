@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { useMyProfile } from "@/hooks/useTeamChat";
+import { toast } from "sonner";
 
 /**
  * Reusable helper: get the current user's company_id from their profile.
@@ -110,24 +111,46 @@ export function useOpenDM() {
       });
 
       if (error) {
+        const correlationId = Math.random().toString(36).substring(2, 9);
+        const companyId = (myProfile as any)?.company_id ?? "unknown";
+
         console.error("[DM Creation Failed]", {
-          code: error.code,
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          myProfileId: myProfile.id,
-          targetProfileId,
+          correlationId,
+          authUserId: user.id,
+          my_profile_id: myProfile.id,
+          target_profile_id: targetProfileId,
+          active_company_id: companyId,
+          rpc_name: "create_dm_channel",
+          error: {
+            message: error.message,
+            code: error.code,
+            details: error.details,
+            hint: error.hint,
+          },
         });
-        throw new Error(
+
+        const userMsg =
           error.message === "new row violates row-level security policy"
-            ? "Unable to start this conversation. Please contact an admin."
-            : `DM creation failed: ${error.message}`
-        );
+            ? `Unable to start this conversation. Please contact an admin. (Ref: ${correlationId})`
+            : `DM creation failed: ${error.message} (Ref: ${correlationId})`;
+
+        toast.error(userMsg, {
+          description: `Error code: ${error.code ?? "unknown"} · Ref: ${correlationId}`,
+          duration: 10000,
+        });
+
+        throw new Error(userMsg);
       }
 
       if (!data) {
-        console.error("[DM Creation] RPC returned null", { myProfileId: myProfile.id, targetProfileId });
-        throw new Error("DM channel was not created. Please try again.");
+        const correlationId = Math.random().toString(36).substring(2, 9);
+        console.error("[DM Creation] RPC returned null", {
+          correlationId,
+          myProfileId: myProfile.id,
+          targetProfileId,
+        });
+        toast.error(`DM channel was not created. (Ref: ${correlationId})`, { duration: 8000 });
+        throw new Error(`DM channel was not created. Please try again. (Ref: ${correlationId})`);
       }
 
       return { id: data as string, existed: false };
