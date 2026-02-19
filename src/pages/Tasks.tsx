@@ -202,6 +202,26 @@ export default function Tasks() {
     setPendingFiles(prev => [...prev, ...files]);
     e.target.value = "";
   };
+
+  const handleDescPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = Array.from(e.clipboardData.items);
+    const imageItems = items.filter(item => item.type.startsWith("image/"));
+    if (imageItems.length === 0) return;
+    e.preventDefault();
+    const newFiles: File[] = [];
+    imageItems.forEach(item => {
+      const blob = item.getAsFile();
+      if (blob) {
+        const fileName = `pasted-image-${Date.now()}.png`;
+        const file = new File([blob], fileName, { type: blob.type });
+        newFiles.push(file);
+      }
+    });
+    if (newFiles.length > 0) {
+      setPendingFiles(prev => [...prev, ...newFiles]);
+      toast.success(`${newFiles.length} image(s) added from clipboard`);
+    }
+  };
   const removeFile = (index: number) => {
     setPendingFiles(prev => prev.filter((_, i) => i !== index));
   };
@@ -634,7 +654,7 @@ export default function Tasks() {
             </div>
             <div>
               <Label className="text-xs">Description</Label>
-              <textarea value={newDesc} onChange={e => setNewDesc(e.target.value)} placeholder="Optional description" className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[80px] resize-y" />
+              <textarea value={newDesc} onChange={e => setNewDesc(e.target.value)} onPaste={handleDescPaste} placeholder="Optional description — Ctrl+V to paste images" className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[80px] resize-y" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -653,28 +673,28 @@ export default function Tasks() {
                 </Select>
               </div>
             </div>
-            {isInternal && (
-              <div>
-                <Label className="text-xs">Attachments</Label>
+            <div>
+              <Label className="text-xs">Attachments</Label>
+              {isInternal && (
                 <label className="mt-1 flex items-center gap-2 cursor-pointer rounded-md border border-dashed border-input px-3 py-2 text-xs text-muted-foreground hover:bg-muted/40 transition-colors">
                   <Paperclip className="w-3.5 h-3.5 shrink-0" />
                   {pendingFiles.length > 0 ? `${pendingFiles.length} file(s) selected` : "Click to attach files"}
                   <input type="file" multiple className="sr-only" onChange={handleFilePick} />
                 </label>
-                {pendingFiles.length > 0 && (
-                  <div className="mt-1 space-y-1">
-                    {pendingFiles.map((f, i) => (
-                      <div key={i} className="flex items-center justify-between text-xs text-muted-foreground bg-muted/30 rounded px-2 py-1">
-                        <span className="truncate">{f.name}</span>
-                        <button onClick={() => removeFile(i)} type="button">
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+              )}
+              {pendingFiles.length > 0 && (
+                <div className="mt-1 space-y-1">
+                  {pendingFiles.map((f, i) => (
+                    <div key={i} className="flex items-center justify-between text-xs text-muted-foreground bg-muted/30 rounded px-2 py-1">
+                      <span className="truncate">{f.name}</span>
+                      <button onClick={() => removeFile(i)} type="button">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
             <Button onClick={createTask} disabled={creating || uploadingFiles} className="w-full">
               {creating || uploadingFiles ? "Creating..." : "Create Task"}
             </Button>
