@@ -163,7 +163,7 @@ export default function Deliveries() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("packing_slips" as any)
-        .select("*")
+        .select("*, deliveries(delivery_number)")
         .eq("company_id", companyId!)
         .order("created_at", { ascending: false });
       if (error) throw error;
@@ -365,7 +365,7 @@ export default function Deliveries() {
                         className="cursor-pointer hover:bg-muted/30 transition-colors"
                         onClick={() => setShowPackingSlip({
                           slipNumber: slip.slip_number,
-                          deliveryNumber: slip.slip_number,
+                          deliveryNumber: slip.deliveries?.delivery_number || slip.slip_number,
                           customerName: slip.customer_name || "—",
                           date: slip.created_at,
                           items: slip.items_json || [],
@@ -374,6 +374,7 @@ export default function Deliveries() {
                           scope: slip.scope,
                           deliveryDate: slip.delivery_date,
                           siteAddress: slip.site_address,
+                          shipTo: slip.ship_to,
                         })}
                       >
                         <CardContent className="p-4">
