@@ -1193,6 +1193,68 @@ export type Database = {
           },
         ]
       }
+      client_performance_memory: {
+        Row: {
+          avg_delay_rate: number | null
+          avg_margin_pct: number | null
+          avg_satisfaction: number | null
+          client_lifetime_score: number | null
+          company_id: string
+          created_at: string
+          customer_id: string
+          id: string
+          last_recalculated_at: string | null
+          reorder_rate_pct: number | null
+          total_lost_leads: number
+          total_revenue: number
+          total_won_leads: number
+          updated_at: string
+          win_rate_pct: number | null
+        }
+        Insert: {
+          avg_delay_rate?: number | null
+          avg_margin_pct?: number | null
+          avg_satisfaction?: number | null
+          client_lifetime_score?: number | null
+          company_id: string
+          created_at?: string
+          customer_id: string
+          id?: string
+          last_recalculated_at?: string | null
+          reorder_rate_pct?: number | null
+          total_lost_leads?: number
+          total_revenue?: number
+          total_won_leads?: number
+          updated_at?: string
+          win_rate_pct?: number | null
+        }
+        Update: {
+          avg_delay_rate?: number | null
+          avg_margin_pct?: number | null
+          avg_satisfaction?: number | null
+          client_lifetime_score?: number | null
+          company_id?: string
+          created_at?: string
+          customer_id?: string
+          id?: string
+          last_recalculated_at?: string | null
+          reorder_rate_pct?: number | null
+          total_lost_leads?: number
+          total_revenue?: number
+          total_won_leads?: number
+          updated_at?: string
+          win_rate_pct?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_performance_memory_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: true
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       code_patches: {
         Row: {
           company_id: string
@@ -4444,6 +4506,240 @@ export type Database = {
           },
         ]
       }
+      lead_loss_memory: {
+        Row: {
+          captured_at: string
+          captured_by: string | null
+          company_id: string
+          competitor_name: string | null
+          created_at: string
+          id: string
+          lead_id: string
+          loss_reason: string
+          updated_at: string
+          winning_price: number | null
+          winning_price_known: boolean
+        }
+        Insert: {
+          captured_at?: string
+          captured_by?: string | null
+          company_id: string
+          competitor_name?: string | null
+          created_at?: string
+          id?: string
+          lead_id: string
+          loss_reason: string
+          updated_at?: string
+          winning_price?: number | null
+          winning_price_known?: boolean
+        }
+        Update: {
+          captured_at?: string
+          captured_by?: string | null
+          company_id?: string
+          competitor_name?: string | null
+          created_at?: string
+          id?: string
+          lead_id?: string
+          loss_reason?: string
+          updated_at?: string
+          winning_price?: number | null
+          winning_price_known?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_loss_memory_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: true
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lead_outcome_memory: {
+        Row: {
+          actual_margin_pct: number | null
+          captured_at: string
+          captured_by: string | null
+          client_satisfaction: number
+          company_id: string
+          created_at: string
+          customer_id: string | null
+          delay_occurred: boolean
+          final_cost: number
+          final_revenue: number
+          id: string
+          lead_id: string
+          reorder_probability: string
+          updated_at: string
+        }
+        Insert: {
+          actual_margin_pct?: number | null
+          captured_at?: string
+          captured_by?: string | null
+          client_satisfaction: number
+          company_id: string
+          created_at?: string
+          customer_id?: string | null
+          delay_occurred: boolean
+          final_cost: number
+          final_revenue: number
+          id?: string
+          lead_id: string
+          reorder_probability: string
+          updated_at?: string
+        }
+        Update: {
+          actual_margin_pct?: number | null
+          captured_at?: string
+          captured_by?: string | null
+          client_satisfaction?: number
+          company_id?: string
+          created_at?: string
+          customer_id?: string | null
+          delay_occurred?: boolean
+          final_cost?: number
+          final_revenue?: number
+          id?: string
+          lead_id?: string
+          reorder_probability?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_outcome_memory_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_outcome_memory_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: true
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lead_qualification_memory: {
+        Row: {
+          budget_known: boolean
+          captured_at: string
+          captured_by: string | null
+          company_id: string
+          competitors_involved: boolean
+          created_at: string
+          deadline: string
+          decision_maker_identified: boolean
+          estimated_tonnage: number
+          id: string
+          lead_id: string
+          project_type: string
+          repeat_customer: boolean
+          updated_at: string
+        }
+        Insert: {
+          budget_known: boolean
+          captured_at?: string
+          captured_by?: string | null
+          company_id: string
+          competitors_involved: boolean
+          created_at?: string
+          deadline: string
+          decision_maker_identified: boolean
+          estimated_tonnage: number
+          id?: string
+          lead_id: string
+          project_type: string
+          repeat_customer: boolean
+          updated_at?: string
+        }
+        Update: {
+          budget_known?: boolean
+          captured_at?: string
+          captured_by?: string | null
+          company_id?: string
+          competitors_involved?: boolean
+          created_at?: string
+          deadline?: string
+          decision_maker_identified?: boolean
+          estimated_tonnage?: number
+          id?: string
+          lead_id?: string
+          project_type?: string
+          repeat_customer?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_qualification_memory_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: true
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lead_quote_memory: {
+        Row: {
+          company_id: string
+          created_at: string
+          id: string
+          is_current: boolean
+          lead_id: string
+          material_cost_snapshot: number
+          notes: string | null
+          quoted_price: number
+          revision_number: number
+          strategic_priority: string
+          submission_time: string
+          submitted_by: string | null
+          target_margin_pct: number
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          id?: string
+          is_current?: boolean
+          lead_id: string
+          material_cost_snapshot: number
+          notes?: string | null
+          quoted_price: number
+          revision_number?: number
+          strategic_priority: string
+          submission_time?: string
+          submitted_by?: string | null
+          target_margin_pct: number
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          id?: string
+          is_current?: boolean
+          lead_id?: string
+          material_cost_snapshot?: number
+          notes?: string | null
+          quoted_price?: number
+          revision_number?: number
+          strategic_priority?: string
+          submission_time?: string
+          submitted_by?: string | null
+          target_margin_pct?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_quote_memory_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lead_scoring_rules: {
         Row: {
           company_id: string
@@ -4502,8 +4798,10 @@ export type Database = {
           metadata: Json | null
           notes: string | null
           priority: string | null
+          priority_score: number | null
           probability: number | null
           quote_id: string | null
+          score_confidence: string | null
           score_updated_at: string | null
           sla_breached: boolean
           sla_deadline: string | null
@@ -4512,6 +4810,7 @@ export type Database = {
           stage: string
           title: string
           updated_at: string
+          win_prob_score: number | null
         }
         Insert: {
           assigned_to?: string | null
@@ -4528,8 +4827,10 @@ export type Database = {
           metadata?: Json | null
           notes?: string | null
           priority?: string | null
+          priority_score?: number | null
           probability?: number | null
           quote_id?: string | null
+          score_confidence?: string | null
           score_updated_at?: string | null
           sla_breached?: boolean
           sla_deadline?: string | null
@@ -4538,6 +4839,7 @@ export type Database = {
           stage?: string
           title: string
           updated_at?: string
+          win_prob_score?: number | null
         }
         Update: {
           assigned_to?: string | null
@@ -4554,8 +4856,10 @@ export type Database = {
           metadata?: Json | null
           notes?: string | null
           priority?: string | null
+          priority_score?: number | null
           probability?: number | null
           quote_id?: string | null
+          score_confidence?: string | null
           score_updated_at?: string | null
           sla_breached?: boolean
           sla_deadline?: string | null
@@ -4564,6 +4868,7 @@ export type Database = {
           stage?: string
           title?: string
           updated_at?: string
+          win_prob_score?: number | null
         }
         Relationships: [
           {
@@ -6112,6 +6417,56 @@ export type Database = {
           updated_by?: string | null
         }
         Relationships: []
+      }
+      pipeline_transition_log: {
+        Row: {
+          block_reason_code: string | null
+          block_reason_detail: Json | null
+          company_id: string
+          created_at: string
+          from_stage: string | null
+          id: string
+          lead_id: string
+          to_stage: string
+          transition_result: string
+          triggered_by: string
+          user_id: string | null
+        }
+        Insert: {
+          block_reason_code?: string | null
+          block_reason_detail?: Json | null
+          company_id: string
+          created_at?: string
+          from_stage?: string | null
+          id?: string
+          lead_id: string
+          to_stage: string
+          transition_result: string
+          triggered_by: string
+          user_id?: string | null
+        }
+        Update: {
+          block_reason_code?: string | null
+          block_reason_detail?: Json | null
+          company_id?: string
+          created_at?: string
+          from_stage?: string | null
+          id?: string
+          lead_id?: string
+          to_stage?: string
+          transition_result?: string
+          triggered_by?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pipeline_transition_log_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       production_tasks: {
         Row: {
