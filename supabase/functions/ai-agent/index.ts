@@ -2871,7 +2871,7 @@ async function fetchQuickBooksLiveContext(supabase: ReturnType<typeof createClie
   }
 }
 
-async function fetchContext(supabase: ReturnType<typeof createClient>, agent: string, userId?: string, userEmail?: string, userRolesList?: string[], svcClient?: ReturnType<typeof createClient>) {
+async function fetchContext(supabase: ReturnType<typeof createClient>, agent: string, userId?: string, userEmail?: string, userRolesList?: string[], svcClient?: ReturnType<typeof createClient>, companyId?: string) {
 
   const context: Record<string, unknown> = {};
 
@@ -4831,9 +4831,10 @@ serve(async (req) => {
     );
     const { data: userProfile } = await svcClient
       .from("profiles")
-      .select("full_name, email")
+      .select("full_name, email, company_id")
       .eq("user_id", user.id)
       .maybeSingle();
+    const companyId = userProfile?.company_id || "a0000000-0000-0000-0000-000000000001";
     const userFullName = userProfile?.full_name || user.email?.split("@")[0] || "there";
     const userFirstName = userFullName.split(" ")[0];
     const userEmail = userProfile?.email || user.email || "";
@@ -4874,7 +4875,7 @@ serve(async (req) => {
       });
     }
 
-    const dbContext = await fetchContext(supabase, agent, user.id, userEmail, roles, svcClient);
+    const dbContext = await fetchContext(supabase, agent, user.id, userEmail, roles, svcClient, companyId);
     const mergedContext = { ...dbContext, ...userContext };
 
     // Get validation rules for OCR validation
