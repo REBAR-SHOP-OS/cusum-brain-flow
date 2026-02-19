@@ -1,34 +1,50 @@
 
 
-# Mirror Banking Activity to QuickBooks -- Exact Layout Match
+# Fix Banking Activity — Correct Bank Balance Wiring
 
-## Current State
-The data values in the ERP now match QuickBooks correctly. The remaining work is to make the **layout and formatting** an exact mirror of QB.
+## The Problem
 
-## Differences to Fix
+The `bank_balance` column in `qb_bank_activity` was seeded with **ledger balances** (QuickBooks `CurrentBalance`) instead of actual bank statement balances. The sync engine then preserves these wrong values on every sync, so they never get corrected.
 
-| Element | QuickBooks | ERP (Current) |
-|---------|-----------|---------------|
-| Columns | 6 (Accounts, Bank Balance, In QuickBooks, Unaccepted, Unreconciled, Reconciled Through) | 5 (missing Unaccepted) |
-| Unreconciled format | Shows as plain number (e.g. "34") | Shows as plain number -- OK |
-| Reconciled Through | "Never reconciled" | "Never reconciled" -- OK |
-| Account icon | House/bank icon | Round circle with Landmark icon -- needs simplification |
-| Subtitle | "Estimate the effort to bring these accounts up to date." | "Synced from QuickBooks. Bank balance is manual entry." |
+In QuickBooks, only **BMO BUSINESS** has a bank feed with a real bank balance. The other accounts (PETTY CASH, CUSTOMER REFUND, BMO SAVINGS) show "--" for bank balance because they have no connected bank feed.
 
-## Changes
+## Data Fix
 
-### 1. Database: Add `unaccepted_count` column
-Add integer column to `qb_bank_activity` with default 0. The sync engine already exists and will be updated to populate this.
+Clear all wrong `bank_balance` values so the table starts clean. Only BMO BUSINESS should have a bank balance, and it needs to be manually entered ($14,971.54 per your earlier screenshot).
 
-### 2. Frontend: `BankAccountsCard.tsx`
-- Add "Unaccepted" column header between "In QuickBooks" and "Unreconciled"
-- Add unaccepted count cell for each row
-- Change subtitle to "Estimate the effort to bring these accounts up to date."
-- Remove the round primary-colored circle around the Landmark icon (keep just the icon)
+```
+UPDATE qb_bank_activity SET bank_balance = NULL;
+UPDATE qb_bank_activity SET bank_balance = 14971.54 WHERE qb_account_id = '54';
+```
 
-### 3. Hook: `useQBBankActivity.ts`
-- Add `unaccepted_count: number` to the `QBBankActivity` interface
+## Code Fix — Sync Engine
 
-### 4. Sync Engine: `qb-sync-engine/index.ts`
-- Add `unaccepted_count` field to the upsert payload (currently defaults to 0, will be populated when QB API provides the data)
+The current sync engine (line 1016-1018 of `qb-sync-engine/index.ts`) has this logic:
+
+```
+// Preserve existing bank_balance if present
+if (existing?.bank_balance != null) {
+  upsertRow.bank_balance = existing.bank_balance;
+}
+```
+
+This is correct behavior (preserve manual entries). But the problem was the initial seed data was wrong. After the data fix above, this logic will work correctly going forward because:
+- Accounts without a bank feed will have `bank_balance = NULL` (shows "--")
+- Only manually entered values will be preserved
+
+No code changes needed in the sync engine.
+
+## Frontend Fix — BankAccountsCard.tsx
+
+Currently the Bank Balance column shows the QB `CurrentBalance` as a fallback when no activity row exists. This fallback is wrong — if there's no `bank_balance` entry, it should show "--", not the ledger balance.
+
+Update the fallback in the Bank Balance cell: when `activity?.bank_balance` is null, always show "--" instead of falling back to `account.CurrentBalance`.
+
+## Summary of Changes
+
+| Change | Type | Detail |
+|--------|------|--------|
+| Reset `bank_balance` for all accounts | Data fix (SQL) | Set all to NULL, then set BMO BUSINESS to $14,971.54 |
+| Remove ledger fallback in Bank Balance column | Frontend fix | Show "--" when `bank_balance` is null, never fall back to `CurrentBalance` |
+| No sync engine changes needed | None | The preserve logic is correct once data is fixed |
 
