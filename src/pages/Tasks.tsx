@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   CheckSquare, Plus, RefreshCw, Copy, Check, Maximize2, Minus, Sparkles,
+  MessageSquare, Paperclip, Send, Trash2, ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -48,6 +49,16 @@ interface AuditEntry {
   new_value: string | null;
   actor_user_id: string | null;
   created_at: string;
+}
+
+interface TaskComment {
+  id: string;
+  task_id: string;
+  profile_id: string;
+  content: string;
+  company_id: string;
+  created_at: string;
+  profile?: { full_name: string | null } | null;
 }
 
 interface EmployeeProfile {
@@ -146,6 +157,10 @@ export default function Tasks() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
   const [auditLoading, setAuditLoading] = useState(false);
+  const [comments, setComments] = useState<TaskComment[]>([]);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [newComment, setNewComment] = useState("");
+  const [submittingComment, setSubmittingComment] = useState(false);
 
   // Create modal
   const [createForEmployee, setCreateForEmployee] = useState<EmployeeProfile | null>(null);
@@ -226,6 +241,45 @@ export default function Tasks() {
       setAuditLog((data as AuditEntry[]) || []);
     } catch { setAuditLog([]); }
     finally { setAuditLoading(false); }
+  };
+
+  const loadComments = async (taskId: string) => {
+    setCommentsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("task_comments")
+        .select("*, profile:profiles!task_comments_profile_id_fkey(full_name)")
+        .eq("task_id", taskId)
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      setComments((data as any) || []);
+    } catch { setComments([]); }
+    finally { setCommentsLoading(false); }
+  };
+
+  const postComment = async () => {
+    if (!newComment.trim() || !selectedTask || !currentProfileId) return;
+    setSubmittingComment(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const companyRes = await supabase.from("profiles").select("company_id").eq("user_id", user?.id || "").single();
+      const { error } = await supabase.from("task_comments").insert({
+        task_id: selectedTask.id,
+        profile_id: currentProfileId,
+        content: newComment.trim(),
+        company_id: companyRes.data?.company_id,
+      } as any);
+      if (error) throw error;
+      setNewComment("");
+      loadComments(selectedTask.id);
+    } catch (err: any) { toast.error(err.message); }
+    finally { setSubmittingComment(false); }
+  };
+
+  const deleteComment = async (commentId: string) => {
+    const { error } = await supabase.from("task_comments").delete().eq("id", commentId);
+    if (error) { toast.error(error.message); return; }
+    if (selectedTask) loadComments(selectedTask.id);
   };
 
   // ─── Group tasks by employee ──────────────────────────
@@ -337,7 +391,9 @@ export default function Tasks() {
   const openDrawer = (task: TaskRow) => {
     setSelectedTask(task);
     setDrawerOpen(true);
+    setNewComment("");
     loadAudit(task.id);
+    loadComments(task.id);
   };
 
   // ─── Render ───────────────────────────────────────────
@@ -641,16 +697,66 @@ export default function Tasks() {
                 )}
               </div>
 
-              {/* Placeholders */}
-              <div className="space-y-3 border-t border-border pt-3">
-                <div>
-                  <h4 className="text-xs font-medium text-muted-foreground">Comments</h4>
-                  <p className="text-xs text-muted-foreground mt-1">Coming soon</p>
+              {/* Comments Section */}
+              <div className="border-t border-border pt-3">
+                <h4 className="text-xs font-medium text-muted-foreground flex items-center gap-1 mb-2">
+                  <MessageSquare className="w-3 h-3" /> Comments ({comments.length})
+                </h4>
+                {commentsLoading ? (
+                  <p className="text-xs text-muted-foreground">Loading...</p>
+                ) : comments.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No comments yet</p>
+                ) : (
+                  <div className="space-y-2 max-h-[25vh] overflow-y-auto mb-2">
+                    {comments.map(c => (
+                      <div key={c.id} className="text-xs bg-muted/40 rounded-md p-2 group/comment">
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium">{(c as any).profile?.full_name || "Unknown"}</span>
+                          <div className="flex items-center gap-1">
+                            <span className="text-muted-foreground">{format(new Date(c.created_at), "MMM d, HH:mm")}</span>
+                            {c.profile_id === currentProfileId && (
+                              <button onClick={() => deleteComment(c.id)} className="opacity-0 group-hover/comment:opacity-100 text-muted-foreground hover:text-destructive transition-opacity">
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        <p className="mt-1 text-foreground whitespace-pre-wrap">{c.content}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="flex gap-2 mt-2">
+                  <Input
+                    value={newComment}
+                    onChange={e => setNewComment(e.target.value)}
+                    placeholder="Add a comment..."
+                    className="text-xs h-8"
+                    onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); postComment(); } }}
+                  />
+                  <Button size="icon" className="h-8 w-8 shrink-0" onClick={postComment} disabled={submittingComment || !newComment.trim()}>
+                    <Send className="w-3.5 h-3.5" />
+                  </Button>
                 </div>
-                <div>
-                  <h4 className="text-xs font-medium text-muted-foreground">Attachments</h4>
-                  <p className="text-xs text-muted-foreground mt-1">Coming soon</p>
-                </div>
+              </div>
+
+              {/* Attachments Section */}
+              <div className="border-t border-border pt-3">
+                <h4 className="text-xs font-medium text-muted-foreground flex items-center gap-1 mb-2">
+                  <Paperclip className="w-3 h-3" /> Attachments
+                </h4>
+                {(selectedTask as any)?.attachment_urls?.length > 0 ? (
+                  <div className="space-y-1">
+                    {((selectedTask as any).attachment_urls as string[]).map((url, i) => (
+                      <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-xs text-primary hover:underline truncate">
+                        <ExternalLink className="w-3 h-3 shrink-0" />
+                        {url.split("/").pop() || `Attachment ${i + 1}`}
+                      </a>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">No attachments</p>
+                )}
               </div>
             </div>
           )}
