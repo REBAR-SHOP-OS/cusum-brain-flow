@@ -29,6 +29,8 @@ const formSchema = z.object({
   priority: z.string(),
   lead_type: z.string().optional(),
   notes: z.string().optional(),
+  assigned_to: z.string().optional(),
+  territory: z.string().optional(),
 });
 
 type FormData = z.infer<typeof formSchema>;
@@ -70,6 +72,8 @@ export function LeadFormModal({ open, onOpenChange, lead }: LeadFormModalProps) 
       priority: "medium",
       lead_type: "opportunity",
       notes: "",
+      assigned_to: "",
+      territory: "",
     },
   });
 
@@ -89,6 +93,8 @@ export function LeadFormModal({ open, onOpenChange, lead }: LeadFormModalProps) 
         priority: lead.priority || "medium",
         lead_type: (lead.metadata as Record<string, unknown>)?.lead_type as string || "opportunity",
         notes: lead.notes || "",
+        assigned_to: lead.assigned_to || "",
+        territory: (lead as any).territory || "",
       });
     } else {
       form.reset({
@@ -103,6 +109,8 @@ export function LeadFormModal({ open, onOpenChange, lead }: LeadFormModalProps) 
         priority: "medium",
         lead_type: "opportunity",
         notes: "",
+        assigned_to: "",
+        territory: "",
       });
     }
   }, [lead, form]);
@@ -122,7 +130,9 @@ export function LeadFormModal({ open, onOpenChange, lead }: LeadFormModalProps) 
         priority: data.priority,
         notes: data.notes || null,
         metadata: { ...existingMeta, lead_type: data.lead_type },
-      };
+        assigned_to: data.assigned_to || null,
+        territory: data.territory || null,
+      } as any;
 
       if (lead) {
         const { error } = await supabase
@@ -348,6 +358,35 @@ export function LeadFormModal({ open, onOpenChange, lead }: LeadFormModalProps) 
               )}
             />
 
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="assigned_to"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Assigned To</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Rep name or ID..." {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="territory"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Territory</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g. West Coast" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
 
             <FormField
               control={form.control}

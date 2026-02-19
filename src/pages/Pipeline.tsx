@@ -7,6 +7,9 @@ import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Plus, Mail, Loader2, Sparkles, RefreshCw, Pickaxe, MoreVertical, Bot, BarChart3 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { usePipelineBulkActions } from "@/hooks/usePipelineBulkActions";
+import { PipelineBulkBar } from "@/components/pipeline/PipelineBulkBar";
+import { usePipelineKeyboardShortcuts } from "@/hooks/usePipelineKeyboardShortcuts";
 import { PipelineBoard } from "@/components/pipeline/PipelineBoard";
 import { LeadFormModal } from "@/components/pipeline/LeadFormModal";
 import { LeadDetailDrawer } from "@/components/pipeline/LeadDetailDrawer";
@@ -106,10 +109,29 @@ export default function Pipeline() {
   const { isAdmin } = useUserRole();
   const { orderedStages, saveOrder, canReorder } = usePipelineStageOrder();
 
-  // Will be computed after leadsByStage is available — declared here, defined below
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  
+
+  // Bulk actions
+  const bulk = usePipelineBulkActions();
+
+  // Keyboard shortcuts (filteredLeads ref used lazily via callback)
+  const filteredLeadsRef = useRef<LeadWithCustomer[]>([]);
+  usePipelineKeyboardShortcuts({
+    onSearch: () => {
+      const input = document.querySelector<HTMLInputElement>('input[placeholder*="Search"]');
+      input?.focus();
+    },
+    onNewLead: () => setIsFormOpen(true),
+    onEscape: () => {
+      bulk.clearSelection();
+      setIsDetailOpen(false);
+    },
+    onSelectAll: () => {
+      bulk.selectAll(filteredLeadsRef.current.map(l => l.id));
+    },
+  });
+
   // AI Autopilot hook
   const {
     actions: aiActions,
@@ -293,6 +315,9 @@ export default function Pipeline() {
       return true;
     });
   }, [leads, pipelineFilters, smartResult]);
+
+  // Keep ref in sync for keyboard shortcuts
+  filteredLeadsRef.current = filteredLeads;
 
   const leadsByStage = useMemo(() => {
     const activityOrder: Record<string, number> = { overdue: 0, today: 1, planned: 2, none: 3 };
@@ -737,6 +762,16 @@ export default function Pipeline() {
           />
         </>
       )}
+
+      {/* Bulk Actions Bar */}
+      <PipelineBulkBar
+        count={bulk.selectionCount}
+        onMove={bulk.bulkMove}
+        onDelete={bulk.bulkDelete}
+        onClear={bulk.clearSelection}
+        isMoving={bulk.isMoving}
+        isDeleting={bulk.isDeleting}
+      />
     </div>
   );
 }
