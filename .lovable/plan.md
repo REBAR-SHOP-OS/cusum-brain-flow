@@ -1,58 +1,36 @@
 
-# Fix: Office Details Form Overflowing Right Edge
+# Fix: "Edit" Button on /office Causes 404
 
 ## Scope
-Single file: `src/components/office/AIExtractView.tsx`
-No database changes. No other files touched.
+Single file: `src/components/office/ProductionQueueView.tsx`  
+One line only. No database changes. No other files touched.
 
-## Problem Analysis
+## Root Cause
 
-Three spots in `AIExtractView.tsx` cause content to extend beyond the visible screen on a 10" tablet:
-
-### 1. Root container (line 551)
-```tsx
-<div className="p-6 space-y-6 max-w-[95vw] mx-auto">
+In `ProductionQueueView.tsx` line 197, the Edit button navigates to:
 ```
-`max-w-[95vw]` is a viewport-relative max-width but does not prevent inner flex children from overflowing the `ScrollArea`. The div needs `w-full min-w-0 overflow-hidden` to actually constrain children.
-
-### 2. Header row (line 553)
-```tsx
-<div className="flex items-center justify-between">
+/cutter-planning?planId=${id}
 ```
-The right side of this row contains three things inline: a History button, a "+ New" button, and a Delivery/Pickup toggle button group. On a tablet with a sidebar, these ~280px of buttons can push the row past the container edge.
 
-**Fix**: Add `flex-wrap gap-y-2` so the right group drops to a new line when needed.
-
-### 3. Pipeline status steps (line 639)
-```tsx
-<div className="flex items-center gap-1">
-  {/* 6 labeled steps + 5 arrows */}
+However, the route registered in `App.tsx` for CutterPlanning is:
 ```
-Six labeled pills (`Uploaded → Extracting → Extracted → Mapped → Validated → Approved`) plus five arrow icons at `px-3` padding each = roughly 500+ px. On a tablet this wraps or overflows.
+/shopfloor/cutter
+```
 
-**Fix**: Add `flex-wrap gap-y-1` so steps wrap to a second line gracefully instead of pushing past the edge.
+There is no `/cutter-planning` route defined anywhere in the app — navigating to it produces a 404 (NotFound page).
 
-## Changes (surgical — one file only)
+## The Fix
 
-### Change 1 — Root container div (line 551)
+Change the navigate target from the non-existent `/cutter-planning` to the correct `/shopfloor/cutter`:
+
 ```diff
-- <div className="p-6 space-y-6 max-w-[95vw] mx-auto">
-+ <div className="p-6 space-y-6 w-full max-w-full overflow-hidden">
+- onEditPlan={(id) => navigate(`/cutter-planning?planId=${id}`)}
++ onEditPlan={(id) => navigate(`/shopfloor/cutter?planId=${id}`)}
 ```
 
-### Change 2 — Header flex row (line 553)
-```diff
-- <div className="flex items-center justify-between">
-+ <div className="flex flex-wrap items-center justify-between gap-y-2">
-```
+The `?planId=${id}` query parameter is preserved — `CutterPlanning.tsx` already reads it via `useSearchParams` to pre-select the plan.
 
-### Change 3 — Pipeline steps row (line 639)
-```diff
-- <div className="flex items-center gap-1">
-+ <div className="flex flex-wrap items-center gap-1">
-```
-
-## No other changes
+## No Other Changes
 - No other files modified
 - No database changes
-- No UI logic, component structure, or styling outside these three lines is altered
+- No UI layout, component structure, or styling is altered
