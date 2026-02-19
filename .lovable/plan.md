@@ -1,123 +1,63 @@
 
-# Fix: To-Do Notifications Navigating to `/brain`
+# Fix: Detail Panel Header Shows Delivery Number Instead of Customer Name + Invoice Number
 
-## Root Cause — Two Bug Locations
+## Root Cause — Exact Location
 
-### Bug 1 (Primary): `useNotifications.ts` — realtime toast "View" button
+There is **no `DeliveryListItem.tsx` component** — the deliveries page is fully self-contained in `src/pages/Deliveries.tsx`.
 
-**File:** `src/hooks/useNotifications.ts`, line 217
-
-When a new notification arrives via realtime, a toast with a "View" button is shown using:
-```ts
-onClick: () => { window.location.href = newRow.link_to; }
+The bug is **NOT** in the list cards. The `DeliveryCard` component (lines 601–639) already correctly shows customer name when available:
+```tsx
+{delivery.customer_name
+  ? `${delivery.customer_name}${delivery.invoice_number ? ` (Invoice #${delivery.invoice_number})` : ""}`
+  : delivery.delivery_number}
 ```
 
-This uses `window.location.href` directly — **it bypasses `normalizeRoute` and the todo-guard entirely**. The 6 active todo records in the database all have `link_to = "/brain"`. When any of them arrives via realtime and the user clicks "View", they land on `/brain`.
-
-### Bug 2 (Secondary): `InboxPanel.tsx` — guard only covers exact `/brain` string
-
-**File:** `src/components/panels/InboxPanel.tsx`, line 226
-
-The existing guard in `handleToggle`:
-```ts
-if (item.type === "todo" && dest === "/brain") dest = "/tasks";
+The bug is in the **right-side detail panel header** at **line 433**, which always shows the raw `delivery_number`:
+```tsx
+<h2 className="text-lg font-semibold flex-1">{selectedDelivery.delivery_number}</h2>
 ```
 
-This correctly handles `link_to = "/brain"` for items in the inbox panel. However, the same guard logic does **not** cover `idea` type items, which could also have problematic `link_to` values pointing to deprecated routes.
+When a user clicks a delivery card, the detail panel opens and the header `<h2>` displays `DEL-MLTV5F3Z` (the `delivery_number`) instead of the customer name and invoice number.
 
-## The Fix — Two Surgical Changes
+## Confirmed Data
 
-### Change 1: `src/hooks/useNotifications.ts`
+Database query confirms that `customer_name` IS being correctly fetched and mapped onto deliveries:
+- `DEL-MLTV5F3Z` → `customer_name: "EARNSCLIFFE CRICKET AIR DOME"`, `invoice_number: null`
 
-Extract the same route-normalization and type-guard logic into the toast "View" click handler so it matches the behavior of `handleToggle` in InboxPanel:
+The join query at line 129 (`select("*, packing_slips(customer_name, invoice_number)")`) and the mapping at lines 134–138 work correctly.
 
-**Before (line 215–218):**
-```ts
-action: newRow.link_to ? {
-  label: "View",
-  onClick: () => { window.location.href = newRow.link_to; },
-} : undefined,
+## The Fix — One Surgical Change
+
+**File:** `src/pages/Deliveries.tsx`
+**Line:** 433
+
+Change the detail panel `<h2>` to display `customer_name - invoice_number` when available, falling back to `delivery_number`:
+
+**Before (line 433):**
+```tsx
+<h2 className="text-lg font-semibold flex-1">{selectedDelivery.delivery_number}</h2>
 ```
 
 **After:**
-```ts
-action: newRow.link_to ? {
-  label: "View",
-  onClick: () => {
-    let dest = newRow.link_to as string;
-    // Normalize legacy routes
-    if (/^\/hr(\/|$)/.test(dest)) dest = "/timeclock";
-    else if (/^\/estimation(\/|$)/.test(dest)) dest = "/pipeline";
-    else if (/^\/(bills|invoicing)(\/|$)/.test(dest)) dest = "/accounting";
-    else if (/^\/invoices(\/|$)/.test(dest)) dest = "/accounting";
-    else if (/^\/accounting\/(bills|invoices)(\/|$)/.test(dest)) dest = "/accounting";
-    else if (/^\/intelligence(\/|$)/.test(dest)) dest = "/brain";
-    else if (/^\/inventory(\/|$)/.test(dest)) dest = "/shop-floor";
-    else if (/^\/emails(\/|$)/.test(dest)) dest = "/inbox";
-    else if (/^\/inbox\/[a-f0-9-]+$/i.test(dest)) dest = "/inbox";
-    // To-do items must never land on /brain
-    if (newRow.type === "todo" && dest === "/brain") dest = "/tasks";
-    window.location.href = dest;
-  },
-} : undefined,
+```tsx
+<h2 className="text-lg font-semibold flex-1">
+  {selectedDelivery.customer_name
+    ? `${selectedDelivery.customer_name}${selectedDelivery.invoice_number ? ` - ${selectedDelivery.invoice_number}` : ""}`
+    : selectedDelivery.delivery_number}
+</h2>
 ```
 
-A cleaner implementation is to move `normalizeRoute` out of `InboxPanel.tsx` into a shared utility (e.g., `src/lib/notificationRouting.ts`) and import it from both files. This avoids duplicating the regex map.
-
-### Change 2: `src/components/panels/InboxPanel.tsx`
-
-Move `normalizeRoute` to the shared utility file and import it, keeping `handleToggle` logic identical. This ensures the single source of truth for the route-normalization rules.
-
-## Implementation Plan
-
-### Step 1 — Create shared utility `src/lib/notificationRouting.ts`
-
-```ts
-export function normalizeNotificationRoute(linkTo: string, type?: string): string {
-  let dest = linkTo;
-  if (/^\/hr(\/|$)/.test(dest)) dest = "/timeclock";
-  else if (/^\/estimation(\/|$)/.test(dest)) dest = "/pipeline";
-  else if (/^\/(bills|invoicing)(\/|$)/.test(dest)) dest = "/accounting";
-  else if (/^\/invoices(\/|$)/.test(dest)) dest = "/accounting";
-  else if (/^\/accounting\/(bills|invoices)(\/|$)/.test(dest)) dest = "/accounting";
-  else if (/^\/intelligence(\/|$)/.test(dest)) dest = "/brain";
-  else if (/^\/inventory(\/|$)/.test(dest)) dest = "/shop-floor";
-  else if (/^\/emails(\/|$)/.test(dest)) dest = "/inbox";
-  else if (/^\/inbox\/[a-f0-9-]+$/i.test(dest)) dest = "/inbox";
-  // To-do items must never land on /brain
-  if (type === "todo" && dest === "/brain") dest = "/tasks";
-  return dest;
-}
-```
-
-### Step 2 — Update `src/components/panels/InboxPanel.tsx`
-
-- Remove the local `normalizeRoute` function (lines 12–23)
-- Import `normalizeNotificationRoute` from `@/lib/notificationRouting`
-- Update `handleToggle` to call `normalizeNotificationRoute(item.linkTo, item.type)` instead of the two-step `normalizeRoute` + guard
-
-### Step 3 — Update `src/hooks/useNotifications.ts`
-
-- Import `normalizeNotificationRoute` from `@/lib/notificationRouting`
-- Replace the toast "View" `onClick` with:
-  ```ts
-  onClick: () => {
-    const dest = normalizeNotificationRoute(newRow.link_to, newRow.type);
-    window.location.href = dest;
-  },
-  ```
+This matches the exact format requested: "Customer Name - Invoice Number", with a graceful fallback to the delivery number when no customer name is linked.
 
 ## Scope
 
-| File | Change |
-|---|---|
-| `src/lib/notificationRouting.ts` | NEW — shared route normalization + todo guard function |
-| `src/components/panels/InboxPanel.tsx` | Remove local `normalizeRoute`, import shared utility, simplify `handleToggle` |
-| `src/hooks/useNotifications.ts` | Import shared utility, apply in toast "View" `onClick` |
+| File | Line | Change |
+|---|---|---|
+| `src/pages/Deliveries.tsx` | 433 | Update `<h2>` in detail panel header to show `customer_name - invoice_number` instead of always showing `delivery_number` |
 
 ## What Is NOT Changed
-- Database schema or data
-- Any other component, page, hook, or route
-- All other toast logic
-- Authentication, permissions, or user role logic
-- Any shopfloor, accounting, or other module code
+- `DeliveryCard` list items — already correct, untouched
+- Data fetching queries — untouched
+- All other UI elements, stops list, stats bar, tabs, slips tab
+- Database schema
+- Any other component or page
