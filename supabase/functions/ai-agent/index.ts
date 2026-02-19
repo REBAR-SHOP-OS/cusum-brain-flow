@@ -2293,7 +2293,7 @@ that are outside your tool capabilities.
 You are an EXECUTION AGENT, not a narrator.
 
 ABSOLUTE RULES:
-- You may NOT say "I found", "I checked", "I inspected", or "I verified" without including tool output or query results in the same response.
+- You may NOT say "I found", "I checked", "I inspected", "I verified", "I investigated", "I confirmed", or "I reviewed" without including tool output or query results in the same response.
 - If a WRITE tool call fails, STOP immediately. Do NOT analyze further. Report: what you attempted, the exact error, the minimal missing requirement.
 - If you lack permissions, context (e.g. company_id), or tools, STOP and request ONLY the exact missing item.
 - You are forbidden from speculative reasoning after a failed execution.
@@ -6656,8 +6656,11 @@ RULES:
             type: "object",
             properties: {
               task_id: { type: "string", description: "The task UUID to resolve" },
-              resolution_note: { type: "string", description: "What was done to fix the problem" },
+              resolution_note: { type: "string", description: "What was done to fix the problem. MUST contain evidence keywords (e.g. updated, inserted, deleted, fixed, verified, rows_affected)." },
               new_status: { type: "string", enum: ["completed", "in_progress"], description: "New task status (default: completed)" },
+              before_evidence: { type: "string", description: "State before the fix (e.g. query output showing the bad state)" },
+              after_evidence: { type: "string", description: "Verification output proving the fix worked" },
+              regression_guard: { type: "string", description: "What prevents recurrence (policy, test, constraint, monitor)" },
             },
             required: ["task_id", "resolution_note"],
             additionalProperties: false,
@@ -7587,6 +7590,12 @@ RULES:
               seoToolResults.push({ id: tc.id, name: "resolve_task", result: { error: "Resolution note must be at least 20 characters with specific evidence of the fix applied." } });
               continue;
             }
+            // Evidence keyword validation
+            const evidenceKeywords = /\b(updated|inserted|deleted|created|fixed|removed|added|changed|applied|rows_affected|verified|confirmed\s+via\s+query|row|column|set|where)\b/i;
+            if (!evidenceKeywords.test(args.resolution_note)) {
+              seoToolResults.push({ id: tc.id, name: "resolve_task", result: { error: "Resolution note must contain at least one evidence keyword (e.g. updated, inserted, deleted, fixed, verified, rows_affected). Vague resolutions are rejected." } });
+              continue;
+            }
             const newStatus = args.new_status || "completed";
             const { data, error } = await svcClient.from("tasks").update({
               status: newStatus,
@@ -7594,7 +7603,7 @@ RULES:
               resolution_note: args.resolution_note,
             }).eq("id", args.task_id).select().single();
 
-            // Log resolution in activity_events
+            // Log resolution in activity_events with evidence fields
             if (!error) {
               await svcClient.from("activity_events").insert({
                 company_id: companyId,
@@ -7605,7 +7614,13 @@ RULES:
                 actor_id: user.id,
                 actor_type: "architect",
                 source: "architect_autofix",
-                metadata: { new_status: newStatus, resolution_note: args.resolution_note },
+                metadata: {
+                  new_status: newStatus,
+                  resolution_note: args.resolution_note,
+                  before_evidence: args.before_evidence || null,
+                  after_evidence: args.after_evidence || null,
+                  regression_guard: args.regression_guard || null,
+                },
               }).catch(() => {});
             }
 
@@ -8207,9 +8222,9 @@ RULES:
                 seoToolResults.push({ id: tc.id, name: "db_write_fix", result: { error: "Only single SQL statements allowed. Split into separate db_write_fix calls." } });
               } else {
               // Block destructive patterns
-              const destructive = /\b(DROP\s+TABLE|DROP\s+DATABASE|TRUNCATE\s+|ALTER\s+TABLE\s+\S+\s+DROP\s+)/i;
+              const destructive = /\b(DROP\s+TABLE|DROP\s+DATABASE|TRUNCATE\s+|ALTER\s+TABLE\s+\S+\s+DROP\s+|GRANT\s+|REVOKE\s+)/i;
               if (destructive.test(query)) {
-                seoToolResults.push({ id: tc.id, name: "db_write_fix", result: { error: "Blocked: destructive operations (DROP TABLE, DROP DATABASE, TRUNCATE, ALTER TABLE...DROP) are not allowed." } });
+                seoToolResults.push({ id: tc.id, name: "db_write_fix", result: { error: "Blocked: destructive/privilege operations (DROP TABLE, DROP DATABASE, TRUNCATE, ALTER TABLE...DROP, GRANT, REVOKE) are not allowed." } });
               } else {
                 const execResult = await fetch(`${Deno.env.get("SUPABASE_URL")}/rest/v1/rpc/execute_write_fix`, {
                   method: "POST",
@@ -8227,6 +8242,12 @@ RULES:
                 } else {
                   const errText = await execResult.text();
                   fixResult = { error: errText };
+                }
+
+                // Safe serialization: truncate large write results
+                const fixResultStr = JSON.stringify(fixResult);
+                if (fixResultStr.length > 8000) {
+                  fixResult = { truncated: true, message: "Write result truncated (exceeded 8000 chars)", preview: fixResultStr.substring(0, 2000) };
                 }
 
                 await svcClient.from("activity_events").insert({
@@ -8415,6 +8436,11 @@ RULES:
                   seoToolResults.push({ id: tc.id, name: "resolve_task", result: { error: "Resolution note must be at least 20 characters with specific evidence of the fix applied." } });
                   continue;
                 }
+                const evidenceKeywords = /\b(updated|inserted|deleted|created|fixed|removed|added|changed|applied|rows_affected|verified|confirmed\s+via\s+query|row|column|set|where)\b/i;
+                if (!evidenceKeywords.test(args.resolution_note)) {
+                  seoToolResults.push({ id: tc.id, name: "resolve_task", result: { error: "Resolution note must contain at least one evidence keyword (e.g. updated, inserted, deleted, fixed, verified, rows_affected). Vague resolutions are rejected." } });
+                  continue;
+                }
                 const newStatus = args.new_status || "completed";
                 const { data, error } = await svcClient.from("tasks").update({
                   status: newStatus,
@@ -8426,7 +8452,7 @@ RULES:
                     company_id: companyId, entity_type: "task", entity_id: args.task_id,
                     event_type: "task_resolved", description: `Task resolved by Architect: ${args.resolution_note}`,
                     actor_id: user.id, actor_type: "architect", source: "architect_autofix",
-                    metadata: { new_status: newStatus, resolution_note: args.resolution_note },
+                    metadata: { new_status: newStatus, resolution_note: args.resolution_note, before_evidence: args.before_evidence || null, after_evidence: args.after_evidence || null, regression_guard: args.regression_guard || null },
                   }).catch(() => {});
                 }
                 seoToolResults.push({ id: tc.id, name: "resolve_task", result: error ? { error: error.message } : { success: true, message: `Task ${newStatus}`, data } });
@@ -8640,9 +8666,9 @@ RULES:
                   if (stmts.length > 1) {
                     seoToolResults.push({ id: tc.id, name: "db_write_fix", result: { error: "Only single SQL statements allowed. Split into separate db_write_fix calls." } });
                   } else {
-                  const destructive = /\b(DROP\s+TABLE|DROP\s+DATABASE|TRUNCATE\s+|ALTER\s+TABLE\s+\S+\s+DROP\s+)/i;
+                  const destructive = /\b(DROP\s+TABLE|DROP\s+DATABASE|TRUNCATE\s+|ALTER\s+TABLE\s+\S+\s+DROP\s+|GRANT\s+|REVOKE\s+)/i;
                   if (destructive.test(query)) {
-                    seoToolResults.push({ id: tc.id, name: "db_write_fix", result: { error: "Blocked: destructive operations (DROP TABLE, DROP DATABASE, TRUNCATE, ALTER TABLE...DROP) are not allowed." } });
+                    seoToolResults.push({ id: tc.id, name: "db_write_fix", result: { error: "Blocked: destructive/privilege operations (DROP TABLE, DROP DATABASE, TRUNCATE, ALTER TABLE...DROP, GRANT, REVOKE) are not allowed." } });
                   } else {
                     const execResult = await fetch(`${Deno.env.get("SUPABASE_URL")}/rest/v1/rpc/execute_write_fix`, {
                       method: "POST",
@@ -8656,6 +8682,11 @@ RULES:
                     let fixResult: any;
                     if (execResult.ok) { fixResult = await execResult.json(); }
                     else { const errText = await execResult.text(); fixResult = { error: errText }; }
+                    // Safe serialization: truncate large write results
+                    const fixResultStr = JSON.stringify(fixResult);
+                    if (fixResultStr.length > 8000) {
+                      fixResult = { truncated: true, message: "Write result truncated (exceeded 8000 chars)", preview: fixResultStr.substring(0, 2000) };
+                    }
                     await svcClient.from("activity_events").insert({
                       company_id: companyId, entity_type: "database_fix", entity_id: crypto.randomUUID(),
                       event_type: "db_write_fix", description: `DB fix applied: ${reason}`.substring(0, 500),
