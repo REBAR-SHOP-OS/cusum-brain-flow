@@ -27,6 +27,8 @@ const STAGE_MAP: Record<string, string> = {
   "Temp: IR/VAM": "temp_ir_vam",
   "Migration-Others": "migration_others",
   "Dreamers": "dreamers",
+  "Archived": "archived_orphan",
+  "Orphan": "archived_orphan",
 };
 
 const TERMINAL_STAGES = new Set(["won", "lost", "loss", "merged", "no_rebars_out_of_scope", "delivered_pickup_done"]);
@@ -121,12 +123,29 @@ Deno.serve(async (req) => {
       console.log("Full sync: fetching ALL opportunities");
     }
 
-    const leads = await odooRpc(odooUrl, odooDB, odooKey, "crm.lead", "search_read", [
+    // Get total count first for transparency and pagination guard
+    const totalCount = await odooRpc(odooUrl, odooDB, odooKey, "crm.lead", "search_count", [
       [domain],
-      { fields: FIELDS },
     ]);
+    console.log(`Odoo reports ${totalCount} total opportunities`);
 
-    console.log(`Fetched ${leads.length} opportunities from Odoo`);
+    // Paginated fetch — batch=500 to stay well within Odoo server caps
+    const BATCH = 500;
+    const leads: Record<string, unknown>[] = [];
+    let offset = 0;
+    while (offset < totalCount) {
+      const batch = await odooRpc(odooUrl, odooDB, odooKey, "crm.lead", "search_read", [
+        [domain],
+        { fields: FIELDS, limit: BATCH, offset },
+      ]);
+      if (!batch || batch.length === 0) break;
+      leads.push(...batch);
+      offset += batch.length;
+      console.log(`Fetched ${leads.length} / ${totalCount} opportunities`);
+      if (batch.length < BATCH) break; // last page
+    }
+
+    console.log(`Fetched ${leads.length} opportunities from Odoo (expected ${totalCount})`);
 
     // Get company_id from first existing odoo_sync lead
     const { data: sampleLead } = await serviceClient
