@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { playMockingjayWhistle } from "@/lib/notificationSound";
 import { requestNotificationPermission, showBrowserNotification, registerPushSubscription } from "@/lib/browserNotification";
+import { normalizeNotificationRoute } from "@/lib/notificationRouting";
 import { toast } from "sonner";
 
 export interface Notification {
@@ -212,9 +213,12 @@ export function useNotifications() {
               toast(newRow.title, {
                 description: newRow.description || undefined,
                 duration: 8000,
-                action: newRow.link_to ? {
+            action: newRow.link_to ? {
                   label: "View",
-                  onClick: () => { window.location.href = newRow.link_to; },
+                  onClick: () => {
+                    const dest = normalizeNotificationRoute(newRow.link_to, newRow.type);
+                    window.location.href = dest;
+                  },
                 } : undefined,
               });
             }
