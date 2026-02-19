@@ -1,61 +1,55 @@
 
-
-# Fix: Architect Agent Still Deflecting on Code Change Requests
+# Fix: `companyId is not defined` — Declare Missing Variable
 
 ## Problem
 
-The screenshot shows the Architect saying "I cannot add a new AI user interface to the pipeline, as that requires a code change." This violates the anti-deflection rules we already added, because:
+The `companyId` variable is used throughout the `ai-agent` edge function (in tool handlers like `generate_patch`, `resolve_task`, context fetching, and database queries) but is **never declared**. This causes a fatal `ReferenceError` crash whenever any of those code paths execute.
 
-1. **Loophole at lines 2283-2284**: The phrase "Only create vizzy_fix_requests for issues requiring frontend code changes that are outside your tool capabilities" gives the agent an escape hatch. It interprets feature requests as "outside tool capabilities" and deflects instead of using `generate_patch`.
+## Root Cause
 
-2. **Missing feature-request handling**: The anti-deflection rules cover "I cannot modify" but don't explicitly cover "this requires a code change" -- which is the exact phrase the agent used in the screenshot.
+At line 4834, the profile query only selects `full_name` and `email`:
 
-## Changes
-
-### 1. Close the Loophole (lines 2283-2284)
-**File:** `supabase/functions/ai-agent/index.ts`
-
-Replace:
 ```
-Only create vizzy_fix_requests for issues requiring frontend code changes
-that are outside your tool capabilities.
+.select("full_name, email")   // company_id NOT included
 ```
 
-With:
-```
-For ANY code or UI change request: use generate_patch to produce a reviewable diff FIRST.
-Only create vizzy_fix_requests if generate_patch cannot produce a valid patch AND you have exhausted all tool options.
-```
+No `companyId` variable is ever created from this result, so every reference to it crashes.
 
-### 2. Add "requires a code change" to the Forbidden Phrases (line 2470-2473)
-**File:** `supabase/functions/ai-agent/index.ts`
+## Changes (1 file, 3 edits)
 
-Add to the existing forbidden phrases list:
-```
-- "This requires a code change"
-- "as that requires a code change"
-```
+### Edit 1: Add `company_id` to profile select and declare `companyId` (lines 4832-4837)
 
-### 3. Add Feature Request Routing Rule (after line 2300)
-**File:** `supabase/functions/ai-agent/index.ts`
+Replace the profile fetch block to include `company_id` and create the variable:
 
-Add a new rule after the existing anti-deflection rule:
-```
-- When the user requests a NEW FEATURE (e.g., "add AI to pipeline", "add a dashboard widget", "create a new page"): use generate_patch to produce a code diff implementing it. You are a Code Engineer — feature requests ARE your job. Never classify them as "outside your capabilities."
+```javascript
+const { data: userProfile } = await svcClient
+  .from("profiles")
+  .select("full_name, email, company_id")
+  .eq("user_id", user.id)
+  .maybeSingle();
+const companyId = userProfile?.company_id || "a0000000-0000-0000-0000-000000000001";
+const userFullName = userProfile?.full_name || user.email?.split("@")[0] || "there";
 ```
 
-## Technical Details
+The fallback UUID matches the default company assigned by the `handle_new_user` trigger.
 
-| File | Lines | Change |
-|------|-------|--------|
-| `supabase/functions/ai-agent/index.ts` | 2283-2284 | Close loophole: require generate_patch before fix_requests |
-| `supabase/functions/ai-agent/index.ts` | 2300 | Add feature request routing rule |
-| `supabase/functions/ai-agent/index.ts` | 2470-2473 | Add "requires a code change" to forbidden phrases |
+### Edit 2: Add `companyId` parameter to `fetchContext` signature (line 2874)
+
+```javascript
+async function fetchContext(supabase, agent, userId, userEmail, userRolesList, svcClient, companyId)
+```
+
+This allows company-scoped queries inside `fetchContext` to use the variable.
+
+### Edit 3: Pass `companyId` in the `fetchContext` call (line 4877)
+
+```javascript
+const dbContext = await fetchContext(supabase, agent, user.id, userEmail, roles, svcClient, companyId);
+```
 
 ## What This Fixes
 
-- The agent will no longer say "this requires a code change" and stop
-- Feature requests like "add AI to pipeline" will trigger Code Engineer Mode and produce a patch
-- The loophole that allowed the agent to classify requests as "outside tool capabilities" is closed
-- The agent must attempt `generate_patch` before creating any fix request
-
+- `generate_patch` will work (needs `company_id` for the `code_patches` table insert)
+- `resolve_task` will work (no more crash before reaching task resolution)
+- All company-scoped context fetching (accounting, orders, ventures, deliveries, etc.) will return correct data
+- The Architect agent will no longer be blocked by this error
