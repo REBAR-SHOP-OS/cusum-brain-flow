@@ -914,6 +914,129 @@ async function handleSyncEntity(svc: SvcClient, companyId: string, entityType: s
   return { entity_type: entityType, synced, errors, duration_ms: duration };
 }
 
+// ─── Sync Bank Activity ────────────────────────────────────────────
+
+async function handleSyncBankActivity(svc: SvcClient, companyId: string) {
+  const t0 = Date.now();
+  const conn = await getCompanyQBConfig(svc, companyId);
+  if (!conn) throw new Error("QuickBooks not connected for this company");
+
+  const { config, ctx } = conn;
+  const errors: string[] = [];
+
+  // Get all active Bank-type accounts from qb_accounts
+  const { data: bankAccounts } = await svc
+    .from("qb_accounts")
+    .select("qb_id, name, current_balance")
+    .eq("company_id", companyId)
+    .eq("account_type", "Bank")
+    .eq("is_active", true);
+
+  if (!bankAccounts || bankAccounts.length === 0) {
+    return { synced: 0, message: "No bank accounts found" };
+  }
+
+  let synced = 0;
+
+  for (const account of bankAccounts) {
+    try {
+      let unreconciledCount = 0;
+      let reconciledThroughDate: string | null = null;
+
+      // Query unreconciled (uncleared) transactions count via TransactionList report
+      try {
+        const unreconReport = await qbFetch(
+          config,
+          `reports/TransactionList?cleared=Uncleared&account=${encodeURIComponent(account.name)}&columns=tx_date,txn_type,doc_num,name,memo,subt_nat_amount`,
+          ctx,
+        ) as Record<string, unknown>;
+
+        const reportRows = unreconReport?.Rows as Record<string, unknown> | undefined;
+        const rows = (reportRows?.Row as unknown[]) || [];
+        unreconciledCount = rows.length;
+      } catch (e) {
+        console.warn(`[sync-bank-activity] Uncleared report failed for ${account.name}:`, e);
+      }
+
+      // Query reconciled transactions to find the latest reconciled date
+      try {
+        const reconReport = await qbFetch(
+          config,
+          `reports/TransactionList?cleared=Reconciled&account=${encodeURIComponent(account.name)}&sort_order=descend&sort_by=tx_date&columns=tx_date&limit=1`,
+          ctx,
+        ) as Record<string, unknown>;
+
+        const reportRows = reconReport?.Rows as Record<string, unknown> | undefined;
+        const rows = (reportRows?.Row as unknown[]) || [];
+        if (rows.length > 0) {
+          // Extract the latest transaction date from the first row
+          const firstRow = rows[0] as Record<string, unknown>;
+          const colData = (firstRow?.ColData as Array<{ value?: string }>) || [];
+          if (colData.length > 0 && colData[0]?.value) {
+            reconciledThroughDate = colData[0].value;
+          }
+        }
+
+        // If no rows from report, try to find max date across all reconciled transactions
+        if (!reconciledThroughDate && rows.length > 0) {
+          let maxDate = "";
+          for (const row of rows) {
+            const r = row as Record<string, unknown>;
+            const cols = (r?.ColData as Array<{ value?: string }>) || [];
+            if (cols[0]?.value && cols[0].value > maxDate) {
+              maxDate = cols[0].value;
+            }
+          }
+          if (maxDate) reconciledThroughDate = maxDate;
+        }
+      } catch (e) {
+        console.warn(`[sync-bank-activity] Reconciled report failed for ${account.name}:`, e);
+      }
+
+      // Upsert into qb_bank_activity, preserving manual bank_balance
+      const { data: existing } = await svc
+        .from("qb_bank_activity")
+        .select("bank_balance")
+        .eq("company_id", companyId)
+        .eq("qb_account_id", account.qb_id)
+        .maybeSingle();
+
+      const upsertRow: Record<string, unknown> = {
+        company_id: companyId,
+        qb_account_id: account.qb_id,
+        account_name: account.name,
+        ledger_balance: account.current_balance,
+        unreconciled_count: unreconciledCount,
+        reconciled_through_date: reconciledThroughDate,
+        last_qb_sync_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      // Preserve existing bank_balance if present
+      if (existing?.bank_balance != null) {
+        upsertRow.bank_balance = existing.bank_balance;
+      }
+
+      const { error } = await svc
+        .from("qb_bank_activity")
+        .upsert(upsertRow, { onConflict: "company_id,qb_account_id" });
+
+      if (error) {
+        errors.push(`${account.name}: ${error.message}`);
+      } else {
+        synced++;
+      }
+    } catch (e) {
+      errors.push(`${account.name}: ${e}`);
+    }
+  }
+
+  const duration = Date.now() - t0;
+  await logSync(svc, companyId, "bank_activity", "sync-bank-activity", synced, errors.length, errors, duration);
+
+  return { synced, errors, duration_ms: duration, total_accounts: bankAccounts.length };
+}
+
 // ─── Main Handler ──────────────────────────────────────────────────
 
 function jsonRes(data: unknown, status = 200) {
@@ -976,6 +1099,8 @@ serve(async (req) => {
         return jsonRes(await handleReconcile(svc, companyId));
       case "sync-entity":
         return jsonRes(await handleSyncEntity(svc, companyId, body.entity_type));
+      case "sync-bank-activity":
+        return jsonRes(await handleSyncBankActivity(svc, companyId));
       default:
         return jsonRes({ error: `Unknown action: ${action}` }, 400);
     }
