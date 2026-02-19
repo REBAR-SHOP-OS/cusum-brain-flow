@@ -4996,6 +4996,7 @@ These rules govern your behavioral protocols only. They do not modify applicatio
     let pixelImageResults: { slot: string; theme: string; product: string; caption: string; hashtags: string; imageUrl: string }[] = [];
     
     if (agent === "social") {
+      const LOVABLE_KEY = Deno.env.get("LOVABLE_API_KEY");
       const trimmedMsg = message.trim();
       
       // === REGENERATE SINGLE POST (random or specific) ===
@@ -5204,19 +5205,13 @@ Respond with ONLY valid JSON (no markdown):
         }
         
         // Step 1: Generate 1 post prompt + caption via AI
-        const LOVABLE_KEY = Deno.env.get("LOVABLE_API_KEY");
-        const promptGenResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${LOVABLE_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "google/gemini-2.5-flash",
-            messages: [
-              {
-                role: "system",
-                content: `You are Pixel, the social media manager for Rebar.shop — an AI-driven rebar fabrication company in Ontario, Canada.
+        const promptGenResult = await callAI({
+          provider: "gemini",
+          model: "gemini-2.5-flash",
+          messages: [
+            {
+              role: "system",
+              content: `You are Pixel, social media manager for Rebar.shop — AI-driven rebar fabrication in Ontario, Canada.
                 
 Generate exactly ONE social media post for this specific time slot:
 - Slot: ${targetSlot.slot}
@@ -5245,17 +5240,15 @@ You MUST respond with ONLY valid JSON (no markdown, no code blocks) in this exac
   "hashtags": "#RebarShop #Construction ...",
   "image_prompt": "A detailed prompt for image generation featuring the product with REBAR.SHOP logo overlay, ..."
 }`
-              },
-              { role: "user", content: `Generate 1 post for slot ${targetSlot.slot} (${targetSlot.time}) on: ${message}` }
-            ],
-            max_tokens: 2000,
-            temperature: 0.9,
-          }),
+            },
+            { role: "user", content: `Generate 1 post for slot ${targetSlot.slot} (${targetSlot.time}) on: ${message}` }
+          ],
+          maxTokens: 2000,
+          temperature: 0.9,
         });
         
-        if (promptGenResponse.ok) {
-          const promptGenData = await promptGenResponse.json();
-          let rawContent = promptGenData.choices?.[0]?.message?.content || "";
+        if (promptGenResult.content) {
+          let rawContent = promptGenResult.content;
           rawContent = rawContent.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
           
           try {
