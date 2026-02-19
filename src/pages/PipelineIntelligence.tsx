@@ -1,13 +1,16 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 import { supabase } from "@/integrations/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SyncHealthDashboard } from "@/components/pipeline/intelligence/SyncHealthDashboard";
 import { PipelineAlerts } from "@/components/pipeline/intelligence/PipelineAlerts";
 import { PipelineAnalyticsDashboard } from "@/components/pipeline/intelligence/PipelineAnalyticsDashboard";
 import { PipelineForecast } from "@/components/pipeline/intelligence/PipelineForecast";
-import { Activity, Bell, BarChart3, TrendingUp } from "lucide-react";
+import { SLAEnforcementDashboard } from "@/components/pipeline/intelligence/SLAEnforcementDashboard";
+import { ClientPerformanceDashboard } from "@/components/pipeline/intelligence/ClientPerformanceDashboard";
+import { PipelineAutomationRules } from "@/components/pipeline/intelligence/PipelineAutomationRules";
+import { PipelineReporting } from "@/components/pipeline/intelligence/PipelineReporting";
+import { Activity, Bell, BarChart3, TrendingUp, Shield, Users, Zap, FileSpreadsheet } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Lead = Tables<"leads">;
@@ -54,7 +57,6 @@ export default function PipelineIntelligence() {
     },
   });
 
-  // Derive outcomes from leads (won/lost stages) instead of separate table
   const outcomes = useMemo(() => {
     return leads
       .filter(l => l.stage === "won" || l.stage === "lost" || l.stage === "loss")
@@ -66,29 +68,43 @@ export default function PipelineIntelligence() {
       }));
   }, [leads]);
 
+  const tabClass = "data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none px-1 pb-2 text-[13px] gap-1.5";
+
   return (
     <div className="flex flex-col h-full">
       <header className="px-4 sm:px-6 py-3 border-b border-border shrink-0 bg-background">
         <h1 className="text-lg font-bold text-foreground">Pipeline Intelligence</h1>
         <p className="text-xs text-muted-foreground mt-0.5">
-          Sync health, proactive alerts, analytics &amp; AI forecasting
+          Analytics, forecasting, SLA enforcement, client performance, automation &amp; exports
         </p>
       </header>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
-        <div className="border-b border-border px-4 sm:px-6 bg-background">
-          <TabsList className="bg-transparent h-9 p-0 gap-4">
-            <TabsTrigger value="analytics" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none px-1 pb-2 text-[13px] gap-1.5">
+        <div className="border-b border-border px-4 sm:px-6 bg-background overflow-x-auto">
+          <TabsList className="bg-transparent h-9 p-0 gap-3">
+            <TabsTrigger value="analytics" className={tabClass}>
               <BarChart3 className="w-3.5 h-3.5" /> Analytics
             </TabsTrigger>
-            <TabsTrigger value="forecast" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none px-1 pb-2 text-[13px] gap-1.5">
+            <TabsTrigger value="forecast" className={tabClass}>
               <TrendingUp className="w-3.5 h-3.5" /> Forecast
             </TabsTrigger>
-            <TabsTrigger value="alerts" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none px-1 pb-2 text-[13px] gap-1.5">
+            <TabsTrigger value="sla" className={tabClass}>
+              <Shield className="w-3.5 h-3.5" /> SLA
+            </TabsTrigger>
+            <TabsTrigger value="clients" className={tabClass}>
+              <Users className="w-3.5 h-3.5" /> Clients
+            </TabsTrigger>
+            <TabsTrigger value="alerts" className={tabClass}>
               <Bell className="w-3.5 h-3.5" /> Alerts
             </TabsTrigger>
-            <TabsTrigger value="sync" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none px-1 pb-2 text-[13px] gap-1.5">
-              <Activity className="w-3.5 h-3.5" /> Sync Health
+            <TabsTrigger value="automation" className={tabClass}>
+              <Zap className="w-3.5 h-3.5" /> Automation
+            </TabsTrigger>
+            <TabsTrigger value="reports" className={tabClass}>
+              <FileSpreadsheet className="w-3.5 h-3.5" /> Reports
+            </TabsTrigger>
+            <TabsTrigger value="sync" className={tabClass}>
+              <Activity className="w-3.5 h-3.5" /> Sync
             </TabsTrigger>
           </TabsList>
         </div>
@@ -100,8 +116,20 @@ export default function PipelineIntelligence() {
           <TabsContent value="forecast" className="mt-0 p-4 sm:p-6">
             <PipelineForecast leads={leads} outcomes={outcomes} isLoading={isLoading} />
           </TabsContent>
+          <TabsContent value="sla" className="mt-0 p-4 sm:p-6">
+            <SLAEnforcementDashboard leads={leads} />
+          </TabsContent>
+          <TabsContent value="clients" className="mt-0 p-4 sm:p-6">
+            <ClientPerformanceDashboard />
+          </TabsContent>
           <TabsContent value="alerts" className="mt-0 p-4 sm:p-6">
             <PipelineAlerts leads={leads} />
+          </TabsContent>
+          <TabsContent value="automation" className="mt-0 p-4 sm:p-6">
+            <PipelineAutomationRules />
+          </TabsContent>
+          <TabsContent value="reports" className="mt-0 p-4 sm:p-6">
+            <PipelineReporting leads={leads} outcomes={outcomes} />
           </TabsContent>
           <TabsContent value="sync" className="mt-0 p-4 sm:p-6">
             <SyncHealthDashboard syncLogs={syncLogs} leads={leads} />
