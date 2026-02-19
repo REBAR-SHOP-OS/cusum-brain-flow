@@ -221,7 +221,10 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
   const handleToggle = (item: Notification) => {
     if (item.status === "unread") markRead(item.id);
     if (item.linkTo) {
-      navigate(normalizeRoute(item.linkTo));
+      let dest = normalizeRoute(item.linkTo);
+      // To-do items should never land on /brain — fall back to /tasks
+      if (item.type === "todo" && dest === "/brain") dest = "/tasks";
+      navigate(dest);
       onClose();
     } else {
       setExpandedId((prev) => (prev === item.id ? null : item.id));
