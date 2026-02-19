@@ -1,63 +1,63 @@
 
-# Add "Driver" to Desktop Sidebar Navigation
+# Fix: To-do Notifications Navigating to /brain Instead of /tasks
 
-## Current State
+## Root Cause (Confirmed via Database + Code Inspection)
 
-The `/driver` route, `DriverDashboard` page, and mobile bottom nav tab were already added in a previous change. The mobile nav (`MobileNavV2`) already shows "Driver" for mobile users.
+Two separate problems combine to cause this bug:
 
-The **desktop sidebar** (`AppSidebar.tsx`) is the only navigation surface missing a "Driver" entry. It has no reference to `/driver` anywhere.
+**Problem 1 — Bad data in the database:**
+Several to-do notifications have `link_to` set to `/brain` directly. These were inserted incorrectly by agents. When a user clicks them, `normalizeRoute` passes `/brain` through unchanged → user lands on `/brain`.
 
-## Scope
+**Problem 2 — normalizeRoute maps /intelligence → /brain:**
+One to-do has `link_to: /intelligence`, which `normalizeRoute` converts to `/brain`. Same wrong result.
 
-**Single file, single addition:**
+## The Fix — Single File, Surgical
 
-| File | Change |
+**File:** `src/components/panels/InboxPanel.tsx`  
+**Change:** Two-line modification in `handleToggle` (around line 221–226)
+
+Currently:
+```typescript
+const handleToggle = (item: Notification) => {
+  if (item.status === "unread") markRead(item.id);
+  if (item.linkTo) {
+    navigate(normalizeRoute(item.linkTo));
+    onClose();
+  } else {
+    ...
+  }
+};
+```
+
+After fix:
+```typescript
+const handleToggle = (item: Notification) => {
+  if (item.status === "unread") markRead(item.id);
+  if (item.linkTo) {
+    let dest = normalizeRoute(item.linkTo);
+    // To-do items should never land on /brain — fall back to /tasks
+    if (item.type === "todo" && dest === "/brain") dest = "/tasks";
+    navigate(dest);
+    onClose();
+  } else {
+    ...
+  }
+};
+```
+
+## Why This Approach
+
+- Fixes both the bad-data case (`link_to: /brain`) and the mapped case (`/intelligence` → `/brain`) in one guard
+- Does **not** alter `normalizeRoute` itself — other notification types (regular notifications, ideas) that legitimately link to `/brain` remain unaffected
+- Scoped to `type === "todo"` only — zero impact on other tabs
+- No database changes, no schema changes, no styling changes
+
+## Scope Compliance
+
+| What | Status |
 |------|--------|
-| `src/components/layout/AppSidebar.tsx` | Add one `NavItem` for Driver under the "Logistics" group |
-
-No other files are touched. No styling changes. No database changes. No logic changes.
-
-## The Fix
-
-The "Logistics" group in `AppSidebar.tsx` currently contains:
-
-```
-Logistics
-├── Deliveries  → /deliveries   (roles: admin, field, office)
-└── Inventory   → /office       (roles: admin, office, workshop)
-```
-
-One new item will be inserted after "Deliveries":
-
-```
-Logistics
-├── Deliveries  → /deliveries   (roles: admin, field, office)
-├── Driver      → /driver       (roles: admin, field, office)   ← NEW
-└── Inventory   → /office       (roles: admin, office, workshop)
-```
-
-- Icon: `Truck` (already imported at line 3)
-- Roles: `["admin", "field", "office"]` — mirrors Deliveries, since drivers are field/admin users
-- Lock reason: `"Requires Field or Office role"` — consistent with Deliveries
-- `tourId`: `"nav-driver"` — consistent naming convention
-
-## Technical Detail
-
-The change is a single object insertion in the `navGroups` array at lines 171–175 of `AppSidebar.tsx`:
-
-```diff
-  { name: "Deliveries", href: "/deliveries", icon: Truck, roles: ["admin", "field", "office"], lockReason: "Requires Field or Office role", tourId: "nav-deliveries" },
-+ { name: "Driver", href: "/driver", icon: Truck, roles: ["admin", "field", "office"], lockReason: "Requires Field or Office role", tourId: "nav-driver" },
-  { name: "Inventory", href: "/office", icon: Package, ... },
-```
-
-The `Truck` icon is already imported — no new import needed.
-
-## What Is NOT Changed
-
-- `MobileNavV2.tsx` — already has Driver tab, untouched
-- `App.tsx` — route already exists, untouched
-- `DriverDashboard.tsx` — page already exists, untouched
-- All other nav groups (Office, Production, QA, System) — untouched
-- All existing Logistics items (Deliveries, Inventory) — untouched
-- Styling, logic, database — untouched
+| `InboxPanel.tsx` — `handleToggle` guard | ONLY change |
+| `normalizeRoute` function | Untouched |
+| `notifications` / `ideas` tab behavior | Untouched |
+| All other files | Untouched |
+| Database | Untouched |
