@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireAuth, corsHeaders } from "../_shared/auth.ts";
+import { callAI, AIError } from "../_shared/aiRouter.ts";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -16,23 +17,13 @@ serve(async (req) => {
       throw new Error("meetingId and transcript are required");
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
-
-    const aiResponse = await fetch(
-      "https://ai.gateway.lovable.dev/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-3-flash-preview",
-          messages: [
-            {
-              role: "system",
-              content: `You are a live meeting note-taker for a manufacturing company. Analyze the transcript and produce structured notes in JSON (no markdown fences):
+    const result = await callAI({
+      provider: "gpt",
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: `You are a live meeting note-taker for a manufacturing company. Analyze the transcript and produce structured notes in JSON (no markdown fences):
 {
   "keyPoints": ["Array of key discussion points so far"],
   "decisions": ["Array of decisions made"],
@@ -44,24 +35,16 @@ serve(async (req) => {
 ${previousNotes ? `Previous notes from earlier in this meeting (build on these, don't repeat):\n${JSON.stringify(previousNotes)}` : "This is the first analysis of this meeting."}
 
 Be concise. Focus on actionable items. If you can identify who said what, attribute it.`,
-            },
-            {
-              role: "user",
-              content: `Live meeting transcript:\n\n${transcript}`,
-            },
-          ],
-          temperature: 0.3,
-        }),
-      }
-    );
+        },
+        {
+          role: "user",
+          content: `Live meeting transcript:\n\n${transcript}`,
+        },
+      ],
+      temperature: 0.3,
+    });
 
-    if (!aiResponse.ok) {
-      const errText = await aiResponse.text();
-      throw new Error(`AI gateway error: ${aiResponse.status} - ${errText}`);
-    }
-
-    const aiData = await aiResponse.json();
-    const rawContent = aiData.choices?.[0]?.message?.content || "";
+    const rawContent = result.content;
 
     let parsed;
     try {
@@ -82,6 +65,11 @@ Be concise. Focus on actionable items. If you can identify who said what, attrib
     });
   } catch (error) {
     console.error("Meeting live notes error:", error);
+    if (error instanceof AIError) {
+      return new Response(JSON.stringify({ error: error.message }), {
+        status: error.status, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

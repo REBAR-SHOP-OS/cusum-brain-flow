@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { callAI, AIError } from "../_shared/aiRouter.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -122,13 +123,6 @@ serve(async (req) => {
     const body = await req.json();
     const { platforms = ["facebook", "instagram", "linkedin"], customInstructions = "", scheduledDate } = body;
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      return new Response(JSON.stringify({ error: "AI not configured" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
@@ -201,102 +195,63 @@ Return an array of 5 objects:
   }
 ]`;
 
-      const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-3-flash-preview",
+      try {
+        const aiResult = await callAI({
+          provider: "gemini",
+          model: "gemini-2.5-flash",
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: `Generate today's 5 ${platform} posts. Make them fresh, data-driven, and platform-optimized.` },
           ],
-        }),
-      });
+        });
 
-      if (!aiResponse.ok) {
-        if (aiResponse.status === 429) {
-          return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }), {
-            status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+        const rawContent = aiResult.content;
+
+        let generatedPosts: any[] = [];
+        try {
+          const jsonMatch = rawContent.match(/\[[\s\S]*\]/);
+          generatedPosts = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(rawContent);
+        } catch {
+          console.error(`Failed to parse AI response for ${platform}:`, rawContent);
+          continue;
         }
-        if (aiResponse.status === 402) {
-          return new Response(JSON.stringify({ error: "AI credits exhausted. Please add funds." }), {
-            status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-        console.error("AI error for platform", platform, await aiResponse.text());
-        continue;
-      }
 
-      const aiData = await aiResponse.json();
-      const rawContent = aiData.choices?.[0]?.message?.content || "";
+        if (!Array.isArray(generatedPosts) || generatedPosts.length === 0) continue;
 
-      let generatedPosts: any[] = [];
-      try {
-        const jsonMatch = rawContent.match(/\[[\s\S]*\]/);
-        generatedPosts = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(rawContent);
-      } catch {
-        console.error(`Failed to parse AI response for ${platform}:`, rawContent);
-        continue;
-      }
+        // Generate images using Gemini image model via gateway (image generation not supported by aiRouter)
+        for (let i = 0; i < generatedPosts.length; i++) {
+          const post = generatedPosts[i];
+          const slot = TIME_SLOTS[i] || TIME_SLOTS[0];
+          let imageUrl: string | null = null;
 
-      if (!Array.isArray(generatedPosts) || generatedPosts.length === 0) continue;
+          if (post.image_prompt) {
+            try {
+              const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+              if (LOVABLE_API_KEY) {
+                const imgResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+                  method: "POST",
+                  headers: {
+                    Authorization: `Bearer ${LOVABLE_API_KEY}`,
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    model: "google/gemini-3-pro-image-preview",
+                    messages: [{
+                      role: "user",
+                      content: `Generate a professional social media image for ${platform}: ${post.image_prompt}. Must include REBAR.SHOP logo. Realistic construction photography, minimalist aesthetic, high quality.`,
+                    }],
+                    modalities: ["image", "text"],
+                  }),
+                });
 
-      // Generate images using correct model
-      for (let i = 0; i < generatedPosts.length; i++) {
-        const post = generatedPosts[i];
-        const slot = TIME_SLOTS[i] || TIME_SLOTS[0];
-        let imageUrl: string | null = null;
-
-        if (post.image_prompt) {
-          try {
-            const imgResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${LOVABLE_API_KEY}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                model: "google/gemini-3-pro-image-preview",
-                messages: [{
-                  role: "user",
-                  content: `Generate a professional social media image for ${platform}: ${post.image_prompt}. Must include REBAR.SHOP logo. Realistic construction photography, minimalist aesthetic, high quality.`,
-                }],
-                modalities: ["image", "text"],
-              }),
-            });
-
-            if (imgResponse.ok) {
-              const imgData = await imgResponse.json();
-              // Handle new image response format
-              const images = imgData.choices?.[0]?.message?.images;
-              if (images && images.length > 0) {
-                const imageDataUrl = images[0].image_url?.url;
-                if (imageDataUrl) {
-                  // Upload base64 to social-images bucket
-                  const base64Data = imageDataUrl.replace(/^data:image\/\w+;base64,/, "");
-                  const imageBytes = Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0));
-                  const imagePath = `auto/${platform}/${Date.now()}-${Math.random().toString(36).slice(2)}.png`;
-                  const { error: uploadError } = await supabaseAdmin.storage
-                    .from("social-images")
-                    .upload(imagePath, imageBytes, { contentType: "image/png" });
-                  if (!uploadError) {
-                    const { data: urlData } = supabaseAdmin.storage.from("social-images").getPublicUrl(imagePath);
-                    imageUrl = urlData.publicUrl;
-                  } else {
-                    console.error("Upload error:", uploadError);
-                  }
-                }
-              } else {
-                // Fallback: check old format (parts)
-                const parts = imgData.choices?.[0]?.message?.parts;
-                if (parts) {
-                  for (const part of parts) {
-                    if (part.inline_data?.data) {
-                      const imageBytes = Uint8Array.from(atob(part.inline_data.data), (c) => c.charCodeAt(0));
+                if (imgResponse.ok) {
+                  const imgData = await imgResponse.json();
+                  const images = imgData.choices?.[0]?.message?.images;
+                  if (images && images.length > 0) {
+                    const imageDataUrl = images[0].image_url?.url;
+                    if (imageDataUrl) {
+                      const base64Data = imageDataUrl.replace(/^data:image\/\w+;base64,/, "");
+                      const imageBytes = Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0));
                       const imagePath = `auto/${platform}/${Date.now()}-${Math.random().toString(36).slice(2)}.png`;
                       const { error: uploadError } = await supabaseAdmin.storage
                         .from("social-images")
@@ -305,45 +260,70 @@ Return an array of 5 objects:
                         const { data: urlData } = supabaseAdmin.storage.from("social-images").getPublicUrl(imagePath);
                         imageUrl = urlData.publicUrl;
                       }
-                      break;
+                    }
+                  } else {
+                    const parts = imgData.choices?.[0]?.message?.parts;
+                    if (parts) {
+                      for (const part of parts) {
+                        if (part.inline_data?.data) {
+                          const imageBytes = Uint8Array.from(atob(part.inline_data.data), (c) => c.charCodeAt(0));
+                          const imagePath = `auto/${platform}/${Date.now()}-${Math.random().toString(36).slice(2)}.png`;
+                          const { error: uploadError } = await supabaseAdmin.storage
+                            .from("social-images")
+                            .upload(imagePath, imageBytes, { contentType: "image/png" });
+                          if (!uploadError) {
+                            const { data: urlData } = supabaseAdmin.storage.from("social-images").getPublicUrl(imagePath);
+                            imageUrl = urlData.publicUrl;
+                          }
+                          break;
+                        }
+                      }
                     }
                   }
                 }
               }
+            } catch (imgErr) {
+              console.error("Image generation failed (non-critical):", imgErr);
             }
-          } catch (imgErr) {
-            console.error("Image generation failed (non-critical):", imgErr);
           }
+
+          const scheduledAt = buildScheduledDate(postDate, slot.hour, slot.minute);
+
+          const { data: insertedPost, error: insertError } = await supabaseAdmin
+            .from("social_posts")
+            .insert({
+              user_id: userId,
+              platform,
+              title: post.title || "Untitled",
+              content: post.content || "",
+              hashtags: post.hashtags || [],
+              image_url: imageUrl,
+              status: "draft",
+              scheduled_date: scheduledAt,
+            })
+            .select()
+            .single();
+
+          if (insertError) {
+            console.error("Failed to insert post:", insertError);
+            continue;
+          }
+
+          allCreatedPosts.push({
+            ...insertedPost,
+            time_slot: post.time_slot,
+            product: post.product,
+            farsi_translation: post.farsi_translation,
+          });
         }
-
-        const scheduledAt = buildScheduledDate(postDate, slot.hour, slot.minute);
-
-        const { data: insertedPost, error: insertError } = await supabaseAdmin
-          .from("social_posts")
-          .insert({
-            user_id: userId,
-            platform,
-            title: post.title || "Untitled",
-            content: post.content || "",
-            hashtags: post.hashtags || [],
-            image_url: imageUrl,
-            status: "draft",
-            scheduled_date: scheduledAt,
-          })
-          .select()
-          .single();
-
-        if (insertError) {
-          console.error("Failed to insert post:", insertError);
-          continue;
+      } catch (e) {
+        if (e instanceof AIError) {
+          return new Response(JSON.stringify({ error: e.message }), {
+            status: e.status, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
         }
-
-        allCreatedPosts.push({
-          ...insertedPost,
-          time_slot: post.time_slot,
-          product: post.product,
-          farsi_translation: post.farsi_translation,
-        });
+        console.error("AI error for platform", platform, e);
+        continue;
       }
     }
 

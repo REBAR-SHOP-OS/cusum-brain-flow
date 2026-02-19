@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { WPClient } from "../_shared/wpClient.ts";
+import { callAIStream } from "../_shared/aiRouter.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -966,9 +967,6 @@ serve(async (req) => {
 
     const systemPrompt = buildSystemPrompt(current_page);
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
-
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
@@ -977,53 +975,23 @@ serve(async (req) => {
     try { wp = new WPClient(); } catch { /* WP not configured */ }
 
     // ─── First AI Call (with tools) ───
-    const firstResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [{ role: "system", content: systemPrompt }, ...trimmed],
-        tools,
-        stream: true,
-      }),
+    const firstResponse = await callAIStream({
+      provider: "gemini",
+      model: "gemini-2.5-flash",
+      messages: [{ role: "system", content: systemPrompt }, ...trimmed],
+      tools,
+      stream: true,
     });
-
-    if (!firstResponse.ok) {
-      const status = firstResponse.status;
-      if (status === 429) {
-        return new Response(JSON.stringify({ error: "Service is busy. Please try again." }), {
-          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (status === 402) {
-        return new Response(JSON.stringify({ error: "Service temporarily unavailable." }), {
-          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      console.error("AI gateway error:", status, await firstResponse.text());
-      return new Response(JSON.stringify({ error: "Chat service temporarily unavailable" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
 
     const firstResult = await bufferStreamForToolCalls(firstResponse);
 
     // ─── No tool calls → stream directly ───
     if (firstResult.toolCalls.length === 0) {
-      const streamResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-3-flash-preview",
-          messages: [{ role: "system", content: systemPrompt }, ...trimmed],
-          stream: true,
-        }),
+      const streamResponse = await callAIStream({
+        provider: "gemini",
+        model: "gemini-2.5-flash",
+        messages: [{ role: "system", content: systemPrompt }, ...trimmed],
+        stream: true,
       });
 
       return new Response(streamResponse.body, {
@@ -1059,17 +1027,11 @@ serve(async (req) => {
       ...toolResults,
     ];
 
-    const finalResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: followUpMessages,
-        stream: true,
-      }),
+    const finalResponse = await callAIStream({
+      provider: "gemini",
+      model: "gemini-2.5-flash",
+      messages: followUpMessages,
+      stream: true,
     });
 
     if (!finalResponse.ok) {

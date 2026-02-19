@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireAuth, corsHeaders } from "../_shared/auth.ts";
+import { callAI, AIError } from "../_shared/aiRouter.ts";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -8,8 +9,8 @@ serve(async (req) => {
   try {
     // Auth guard — accept service role key (for cron) or authenticated user
     const authHeader = req.headers.get("Authorization") || "";
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-    const isServiceRole = authHeader === `Bearer ${serviceKey}`;
+    const svcKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    const isServiceRole = authHeader === `Bearer ${svcKey}`;
     if (!isServiceRole) {
       try { await requireAuth(req); } catch (res) { if (res instanceof Response) return res; throw res; }
     }
@@ -122,7 +123,6 @@ serve(async (req) => {
         aiSessions,
       };
     }).filter((e) => 
-      // Only include employees with any activity
       e.emailsSent + e.emailsReceived + e.callsMade + e.tasksCompleted + e.tasksPending +
       e.leadsWorked + e.ordersCreated + e.workOrdersHandled + e.teamMessages + e.aiSessions > 0
       || e.hoursWorked !== null
@@ -136,9 +136,6 @@ serve(async (req) => {
     const totalMeetings = meetings.length;
 
     // 4. Generate AI summary
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
-
     const dataContext = `
 === DAILY TEAM REPORT FOR ${today} ===
 
@@ -165,11 +162,12 @@ MEETINGS:
 ${meetings.map((m: any) => `- ${m.title} (${Math.round((m.duration_seconds || 0) / 60)}min)${m.ai_summary ? `: ${m.ai_summary}` : ""}`).join("\n") || "None"}
 `;
 
-    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash-lite",
+    let summaryText = `📊 Team Report ${today}: ${employeeSummaries.length} active employees, ${totalOrders} orders ($${totalOrderValue.toLocaleString()}), ${completedDeliveries}/${totalDeliveries} deliveries completed.`;
+
+    try {
+      const aiResult = await callAI({
+        provider: "gpt",
+        model: "gpt-4o-mini",
         messages: [
           {
             role: "system",
@@ -183,18 +181,11 @@ Keep it punchy, use emojis sparingly. No JSON, just plain text.`,
           { role: "user", content: dataContext },
         ],
         temperature: 0.5,
-        max_tokens: 300,
-      }),
-    });
-
-    let summaryText = `📊 Team Report ${today}: ${employeeSummaries.length} active employees, ${totalOrders} orders ($${totalOrderValue.toLocaleString()}), ${completedDeliveries}/${totalDeliveries} deliveries completed.`;
-
-    if (aiResponse.ok) {
-      const aiData = await aiResponse.json();
-      const content = aiData.choices?.[0]?.message?.content?.trim();
-      if (content) summaryText = content;
-    } else {
-      console.warn("AI summary failed, using fallback:", aiResponse.status);
+        maxTokens: 300,
+      });
+      if (aiResult.content) summaryText = aiResult.content;
+    } catch (e) {
+      console.warn("AI summary failed, using fallback:", e);
     }
 
     // 5. Find admin users to notify
@@ -236,8 +227,6 @@ Keep it punchy, use emojis sparingly. No JSON, just plain text.`,
       console.error("Failed to insert notifications:", insertErr);
       throw new Error("Failed to create notification");
     }
-
-    
 
     return new Response(
       JSON.stringify({ ok: true, adminsNotified: adminUserIds.length, employeesReported: employeeSummaries.length }),

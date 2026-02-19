@@ -325,11 +325,10 @@ async function dispatchAlert(
     }
   } else if (channel === "slack") {
     // Slack via connector gateway
-    const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
     const slackApiKey = Deno.env.get("SLACK_API_KEY");
     const slackChannel = rule.slack_channel || "#alerts";
 
-    if (!lovableApiKey || !slackApiKey) {
+    if (!slackApiKey) {
       console.warn("Slack not configured, skipping");
       await supabase.from("alert_dispatch_log").insert({
         company_id,
@@ -347,11 +346,10 @@ async function dispatchAlert(
       const priorityEmoji = priority === "critical" ? "🔴" : priority === "high" ? "🟠" : "🔵";
       const text = `${priorityEmoji} *${title}*\n${message}${link_to ? `\n<${link_to}|View Details>` : ""}`;
 
-      const resp = await fetch(`${GATEWAY_URL}/chat.postMessage`, {
+      const resp = await fetch(`https://slack.com/api/chat.postMessage`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${lovableApiKey}`,
-          "X-Connection-Api-Key": slackApiKey,
+          Authorization: `Bearer ${slackApiKey}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
