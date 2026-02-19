@@ -59,7 +59,7 @@ export function AppSidebar() {
         { name: "Deliveries", href: "/deliveries", icon: Truck },
         { name: "Time Clock", href: "/timeclock", icon: Clock },
         { name: "Team Hub", href: "/team-hub", icon: MessageSquare },
-        { name: "Employee Tasks", href: "/tasks", icon: CheckSquare },
+        { name: "Business Tasks", href: "/tasks", icon: CheckSquare },
       ];
     } else {
       // External workshop: minimal access
@@ -141,7 +141,7 @@ export function AppSidebar() {
       label: "System",
       items: [
         { name: "Inbox", href: "/inbox", icon: Inbox, badge: unreadCount || undefined, tourId: "nav-inbox" },
-        { name: "Employee Tasks", href: "/tasks", icon: CheckSquare, tourId: "nav-tasks" },
+        { name: "Business Tasks", href: "/tasks", icon: CheckSquare, tourId: "nav-tasks" },
         { name: "Settings", href: "/settings", icon: Settings, tourId: "nav-settings" },
         { name: "Admin Panel", href: "/admin", icon: Shield, roles: ["admin"], lockReason: "Requires Admin role", tourId: "nav-admin" },
       ],
