@@ -14,12 +14,14 @@ import {
 import {
   Building, Mail, Phone, Calendar, DollarSign, Pencil, Trash2,
   TrendingUp, Clock, User, Star, Archive, X, FileText, ClipboardList, Brain, Target, ShieldCheck,
+  Sparkles, Loader2,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { PIPELINE_STAGES } from "@/pages/Pipeline";
 import { useUserRole } from "@/hooks/useUserRole";
 import { OdooChatter } from "./OdooChatter";
+import { useLeadRecommendation, getActionIcon, getUrgencyConfig } from "@/hooks/useLeadRecommendation";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Lead = Tables<"leads">;
@@ -59,6 +61,7 @@ export function LeadDetailDrawer({
 }: LeadDetailDrawerProps) {
   const { isAdmin } = useUserRole();
   const [activeTab, setActiveTab] = useState<"notes" | "chatter" | "activities">("chatter");
+  const { data: recommendation, isLoading: recLoading } = useLeadRecommendation(lead, open);
 
   if (!lead) return null;
 
@@ -253,7 +256,40 @@ export function LeadDetailDrawer({
             </div>
           )}
 
-        {/* Tabs — Odoo underline style */}
+          {/* AI Next Best Action */}
+          {(recommendation || recLoading) && (
+            <div className="col-span-2 mt-1 pt-2 border-t border-border/50">
+              <span className="text-[11px] text-muted-foreground font-medium flex items-center gap-1 mb-1.5">
+                <Sparkles className="w-3 h-3" /> Next Best Action
+              </span>
+              {recLoading ? (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Analyzing lead...
+                </div>
+              ) : recommendation ? (
+                <div className="bg-muted/50 rounded-sm px-3 py-2">
+                  <div className="flex items-start gap-2">
+                    <span className="text-base mt-0.5">{getActionIcon(recommendation.action_type)}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] font-semibold leading-tight">{recommendation.headline}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">{recommendation.reasoning}</p>
+                      <div className="flex items-center gap-2 mt-1.5">
+                        <span className={cn("text-[10px] font-semibold", getUrgencyConfig(recommendation.urgency).class)}>
+                          {getUrgencyConfig(recommendation.urgency).label}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground">
+                          {recommendation.confidence}% confidence
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          )}
+
+
         <div className="border-b border-border bg-background">
           <div className="flex">
             {(["notes", "chatter", "activities"] as const).map((tab) => (
