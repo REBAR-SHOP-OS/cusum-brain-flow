@@ -10,7 +10,7 @@ import { usePennyQueue } from "@/hooks/usePennyQueue";
 import { useBankFeedBalances } from "@/hooks/useBankFeedBalances";
 import { BankAccountsCard } from "@/components/accounting/BankAccountsCard";
 import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
-import { useMemo } from "react";
+import { useMemo, useEffect } from "react";
 
 interface Props {
   data: ReturnType<typeof useQuickBooksData>;
@@ -250,7 +250,14 @@ PennyQueueCard.displayName = "PennyQueueCard";
 
 export function AccountingDashboard({ data, onNavigate }: Props) {
   const bankAccounts = data.accounts.filter((a) => a.AccountType === "Bank" && a.Active);
-  const { getBalance } = useBankFeedBalances();
+  const { getBalance, upsertBalance, seedIfMissing } = useBankFeedBalances();
+
+  // Auto-seed bank balances from QB CurrentBalance on first load
+  useEffect(() => {
+    if (bankAccounts.length > 0) {
+      seedIfMissing(bankAccounts.map((a) => ({ id: a.Id, name: a.Name, balance: a.CurrentBalance })));
+    }
+  }, [bankAccounts.length, seedIfMissing]);
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
@@ -261,6 +268,7 @@ export function AccountingDashboard({ data, onNavigate }: Props) {
         <BankAccountsCard
           accounts={bankAccounts}
           getBalance={getBalance}
+          upsertBalance={upsertBalance}
           onNavigate={() => onNavigate("accounts")}
         />
       </div>
