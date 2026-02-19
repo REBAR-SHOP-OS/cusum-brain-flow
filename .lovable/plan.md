@@ -1,40 +1,39 @@
 
 
-## Fix: Upstream AI API 429 Rate Limit Handling
+## Add Real Bank Balance to Banking Activity Table
 
 ### Problem
+The Banking Activity table shows "--" for all bank balances because the `bank_feed_balances` table is empty. QuickBooks API does not expose the actual bank feed balance (the real balance from your bank). It only provides `CurrentBalance` (the book balance already shown in "In QuickBooks" column). The bank balance shown in QuickBooks comes from its internal bank feed connection, which is not accessible via API.
 
-The "Edge Function returned a non-2xx status code" error shown on Penny's chat is caused by OpenAI's GPT-4o API returning a 429 (rate limit) response. The current `aiRouter.ts` treats 429 as non-retryable and immediately throws, which surfaces the error to the user.
+### Solution (Two Parts)
 
-### Solution
+**1. Auto-seed bank balances from QuickBooks during data load**
+When QuickBooks data loads, automatically call `list-bank-accounts` and store each bank account's `CurrentBalance` into `bank_feed_balances` as the initial bank balance. This gives a starting point instead of showing "--".
 
-Two changes:
+**2. Add inline edit to Banking Activity table**
+Add a pencil icon on the Bank Balance column (same pattern as Chart of Accounts) so users can manually update the real bank balance for any account directly from the Banking Activity table. This lets users correct the balance to match what the actual bank shows.
 
-1. **Add retry-with-backoff for upstream 429 errors** in `supabase/functions/_shared/aiRouter.ts`
-   - Instead of throwing immediately on 429, retry up to 3 times with exponential backoff (2s, 4s, 8s)
-   - Parse the `Retry-After` header from the upstream API if available and use it as the delay
-   - Only throw after all retries are exhausted
+### Technical Steps
 
-2. **Add fallback model routing** in `aiRouter.ts`
-   - If GPT-4o returns 429 after retries, automatically fall back to Gemini 2.5 Flash for the accounting agent
-   - This ensures the user always gets a response even if one provider is rate-limited
+**File: `src/components/accounting/BankAccountsCard.tsx`**
+- Add `upsertBalance` to props (from `useBankFeedBalances`)
+- Add inline edit state (editing account ID, edit value)
+- Show pencil icon next to Bank Balance for each row
+- On click: show input field; on Enter/confirm: call `upsertBalance`
+- When no feed exists yet, show a "+" button to add a bank balance
 
-### Technical Details
+**File: `src/components/accounting/AccountingDashboard.tsx`**
+- Pass `upsertBalance` from `useBankFeedBalances` down to `BankAccountsCard`
 
-**File: `supabase/functions/_shared/aiRouter.ts`**
+**File: `src/hooks/useQuickBooksData.ts`**
+- After loading accounts, auto-seed `bank_feed_balances` for bank-type accounts that don't already have an entry
+- Call `upsertBalance` for each bank account using `CurrentBalance` as initial value (only if no existing entry)
 
-Update `fetchWithRetry` function (around line 145-190):
+**File: `src/hooks/useBankFeedBalances.ts`**
+- Add a `seedIfMissing` function that only inserts if no row exists for that account (avoids overwriting manual edits)
 
-- Move the 429 check from the "non-retryable" section into the retry loop
-- Add exponential backoff: wait `(attempt + 1) * 3000` ms before retrying on 429
-- After exhausting retries on 429, throw the AIError as before
-- Add a `fallbackProvider` option to `callAI` that tries an alternate model if the primary fails with 429
-
-**File: `supabase/functions/ai-agent/index.ts`**
-
-- No changes needed -- the aiRouter fix handles it transparently
-
-### Deployment
-
-Redeploy the `ai-agent` edge function after updating the shared router (it imports from `_shared/aiRouter.ts`).
-
+### User Workflow After Implementation
+1. Banking Activity table auto-populates Bank Balance with QB book balance on first load
+2. User sees actual values instead of "--"
+3. User can click the pencil icon to update any bank balance to match the real bank statement
+4. Manual edits persist and are not overwritten by future syncs
