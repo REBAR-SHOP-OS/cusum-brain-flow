@@ -4,7 +4,7 @@ import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
 import {
   CheckCircle2, AlertTriangle, Info, TrendingUp, TrendingDown,
-  Minus, ArrowRight, RefreshCw, Download
+  Minus, ArrowRight, RefreshCw, Download, Copy
 } from "lucide-react";
 import { BriefingActionButtons } from "@/components/accounting/BriefingActionButtons";
 import { TableRowActions, type TableRowActionCallbacks } from "@/components/accounting/TableRowActions";
@@ -211,12 +211,25 @@ export function RichMarkdown({ content, className, onRegenerateImage, onActionIt
 
           // ── Code blocks ──
           code: ({ className: codeClassName, children, ...props }) => {
-            const isBlock = codeClassName?.includes("language-");
+            const text = String(children ?? "");
+            const isBlock = codeClassName?.includes("language-") || text.includes("\n");
+            const isLovableCommand = text.trimStart().startsWith("📋 Lovable Command");
             if (isBlock) {
               return (
                 <div className="my-3 rounded-lg overflow-hidden border border-border/50">
-                  <div className="bg-muted/80 px-3 py-1 text-[10px] uppercase tracking-wider text-muted-foreground font-bold border-b border-border/50">
-                    {codeClassName?.replace("language-", "") || "code"}
+                  <div className="bg-muted/80 px-3 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground font-bold border-b border-border/50 flex items-center justify-between">
+                    <span>
+                      {isLovableCommand
+                        ? "📋 Lovable Command"
+                        : (codeClassName?.replace("language-", "") || "code")}
+                    </span>
+                    <button
+                      onClick={() => navigator.clipboard.writeText(text)}
+                      className="ml-2 flex items-center gap-1 px-2 py-0.5 rounded bg-primary/20 hover:bg-primary/30 text-primary text-[10px] font-bold transition-colors"
+                    >
+                      <Copy className="w-2.5 h-2.5" />
+                      Copy
+                    </button>
                   </div>
                   <pre className="bg-muted/40 p-3 overflow-x-auto max-w-full scrollbar-thin">
                     <code className="text-xs font-mono text-foreground/90 whitespace-pre [overflow-wrap:normal]">{children}</code>
