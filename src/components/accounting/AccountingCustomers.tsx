@@ -108,7 +108,11 @@ export function AccountingCustomers({ data }: Props) {
   );
 
   const enriched = filtered.map((c) => {
-    const custInvoices = invoices.filter(i => i.CustomerRef?.value === c.Id);
+    const custInvoices = invoices.filter(i => {
+      const refVal = i.CustomerRef?.value;
+      if (!refVal) return false;
+      return String(refVal) === String(c.Id);
+    });
     const openBalance = custInvoices.reduce((sum, i) => sum + (i.Balance || 0), 0);
     const overdue = custInvoices.filter(i => i.Balance > 0 && new Date(i.DueDate) < new Date()).length;
     return { ...c, openBalance, overdue, invoiceCount: custInvoices.length };

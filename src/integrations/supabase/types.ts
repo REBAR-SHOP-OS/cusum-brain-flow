@@ -10542,6 +10542,32 @@ export type Database = {
       }
     }
     Functions: {
+      accounting_health_customer_debug: {
+        Args: { p_company_id: string; p_customer_qb_id: string }
+        Returns: {
+          invoice_count: number
+          invoices: Json
+          total_open_balance: number
+        }[]
+      }
+      accounting_health_summary: {
+        Args: { p_company_id: string }
+        Returns: {
+          last_invoice_updated_at: string
+          missing_customer_qb_id_count: number
+          null_balance_count: number
+          open_balance_count: number
+          total_invoices: number
+        }[]
+      }
+      accounting_health_top_customers: {
+        Args: { p_company_id: string; p_limit?: number }
+        Returns: {
+          customer_qb_id: string
+          open_balance: number
+          open_invoice_count: number
+        }[]
+      }
       acquire_autopilot_lock: {
         Args: { _company_id: string; _lock_uuid: string; _run_id: string }
         Returns: number
