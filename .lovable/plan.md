@@ -1,46 +1,35 @@
 
 
-# Fix: Delivery Date Empty in Packing Slips
+# Delete `/shopfloor/live-monitor` Page and All Related Files
 
-## Problem Identified
-The `delivery_date` column in the `packing_slips` table is `null` for all records. Despite the code in `useDeliveryActions.ts` (line 92) attempting to set `delivery_date: scheduledDate`, the value is not being persisted -- likely due to the `as any` type cast bypassing type checks and the column being silently dropped by the Supabase client.
+## Summary
+Complete removal of the Live Monitor standalone page and all components used exclusively by it.
 
-The `DeliveryPackingSlip` component already has a fallback (showing `created_at` when `delivery_date` is null), so a date is displayed -- but it is the **creation date**, not the actual **delivery/scheduled date**.
+## Files to DELETE (5 files)
 
-## Root Cause
-In `src/hooks/useDeliveryActions.ts`, line 83:
-```typescript
-.from("packing_slips" as any)
-```
-The `as any` cast means TypeScript cannot validate the insert payload. The `delivery_date` field is typed as `date` in the DB but the insert may work fine -- the real issue is that `scheduledDate` on line 24 is set correctly (`new Date().toISOString().split("T")[0]`) but the existing records in the database already have `null`, suggesting the insert did succeed without that field in an older version of the code, or the `as any` caused a mismatch.
+| File | Reason |
+|------|--------|
+| `src/pages/LiveMonitor.tsx` | The page itself |
+| `src/components/shopfloor/LiveMachineCard.tsx` | Only used by LiveMonitor |
+| `src/components/shopfloor/ProjectLanesView.tsx` | Only used by LiveMonitor |
+| `src/components/shopfloor/MachineFilters.tsx` | Only used by LiveMonitor |
+| `src/pages/CleanupReport.tsx` | Contains a reference to LiveMonitor -- only the text reference, will be updated not deleted |
 
-Additionally, the `/office` page's `PackingSlipsView` does NOT display a "Delivery Date" field at all -- the prompt was likely about the Deliveries page packing slip overlay.
-
-## Scope
-**ONLY** `src/hooks/useDeliveryActions.ts` will be verified/confirmed. No other files change.
-
-The insert code already correctly passes `delivery_date: scheduledDate` (line 92). The `DeliveryPackingSlip` component already renders it correctly with a fallback (line 90). No code change is actually needed -- the fix is to **backfill existing null records** in the database.
-
-## Fix: Database Backfill
-
-Run a migration to update existing `packing_slips` records that have `null` `delivery_date` to use their `created_at` date as the delivery date:
-
-```sql
-UPDATE packing_slips 
-SET delivery_date = created_at::date 
-WHERE delivery_date IS NULL;
-```
-
-This ensures all existing packing slips display the correct date, and future slips will already have `delivery_date` set by the existing code.
-
-## Files Changed
+## Files to EDIT (3 files)
 
 | File | Change |
 |------|--------|
-| Database migration | Backfill `delivery_date` from `created_at` for existing null records |
+| `src/App.tsx` | Remove the `import LiveMonitor` line and the `/shopfloor/live-monitor` route |
+| `src/components/layout/AppSidebar.tsx` | Remove the "Live Monitor" nav item from the QA section |
+| `supabase/functions/_shared/pageMap.ts` | Remove the `/shopfloor/live-monitor` entry |
 
-## What Does NOT Change
-- `DeliveryPackingSlip.tsx` -- already handles the field correctly
-- `useDeliveryActions.ts` -- already inserts `delivery_date`
-- `PackingSlipsView.tsx` (office) -- not related
-- Any other UI, logic, or component
+## What will NOT be touched
+- `src/hooks/useLiveMonitorData.ts` -- still used by `StationView`, `StationDashboard`, `TransferMachineDialog`
+- `src/hooks/useLiveMonitorStats.ts` -- still used by `LiveMonitorView` in AdminPanel
+- `src/components/office/LiveMonitorView.tsx` -- still used by AdminPanel tab
+- AdminPanel's "Live Monitor" tab -- this is a separate embedded view, not the standalone page
+- No database changes, no other UI changes
+
+## Technical Detail: CleanupReport.tsx
+Line 48 contains a text reference: `"LiveMonitor.tsx is 244 lines"`. This cleanup item will be removed since the file no longer exists.
+
