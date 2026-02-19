@@ -184,6 +184,12 @@ export default function Tasks() {
   const [reopenDialogOpen, setReopenDialogOpen] = useState(false);
   const [reopenReason, setReopenReason] = useState("");
 
+  // Generate Fix Prompt state
+  const [fixPromptOpen, setFixPromptOpen] = useState(false);
+  const [fixPrompt, setFixPrompt] = useState("");
+  const [fixLoading, setFixLoading] = useState(false);
+  const [fixCopied, setFixCopied] = useState(false);
+
   // Fetch current user ID once
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data }) => {
@@ -911,14 +917,48 @@ export default function Tasks() {
                 <Button
                   size="sm"
                   className="bg-gradient-to-r from-orange-500 to-red-500 text-white hover:opacity-90"
-                  onClick={() => {
-                    const desc = `${selectedTask.title}\n\n${selectedTask.description || ""}`;
-                    const payload = encodeURIComponent(desc.slice(0, 500));
-                    navigate(`/empire?autofix=${payload}&task_id=${selectedTask.id}`);
+                  disabled={fixLoading}
+                  onClick={async () => {
+                    setFixLoading(true);
+                    try {
+                      const commentTexts = comments.map(c => {
+                        let text = c.content;
+                        if (c.profile?.full_name) text = `[${c.profile.full_name}] ${text}`;
+                        return text;
+                      });
+                      // Extract screenshot URLs from comments
+                      const urlRegex = /(https?:\/\/[^\s]+\.(png|jpg|jpeg|gif|webp|svg)[^\s]*)/gi;
+                      const screenshots: string[] = [];
+                      for (const c of comments) {
+                        const matches = c.content.match(urlRegex);
+                        if (matches) screenshots.push(...matches);
+                      }
+                      if (selectedTask.description) {
+                        const descMatches = selectedTask.description.match(urlRegex);
+                        if (descMatches) screenshots.push(...descMatches);
+                      }
+
+                      const { data, error } = await supabase.functions.invoke("generate-fix-prompt", {
+                        body: {
+                          title: selectedTask.title,
+                          description: selectedTask.description || "",
+                          comments: commentTexts,
+                          screenshots,
+                        },
+                      });
+                      if (error) throw error;
+                      setFixPrompt(data.prompt || "No prompt generated.");
+                      setFixPromptOpen(true);
+                      setFixCopied(false);
+                    } catch (e: any) {
+                      toast.error(e.message || "Failed to generate fix prompt");
+                    } finally {
+                      setFixLoading(false);
+                    }
                   }}
                 >
                   <Sparkles className="w-4 h-4" />
-                  Auto Fix
+                  {fixLoading ? "Generating..." : "Generate Fix"}
                 </Button>
                 <Button size="sm" variant="destructive" onClick={() => { if (window.confirm("Delete this task?")) { supabase.from("tasks").delete().eq("id", selectedTask.id).then(({ error }) => { if (error) toast.error(error.message); else { toast.success("Task deleted"); setDrawerOpen(false); loadData(); } }); } }}>Delete</Button>
               </div>
@@ -940,6 +980,34 @@ export default function Tasks() {
                     <Button variant="outline" size="sm" onClick={() => setReopenDialogOpen(false)}>Cancel</Button>
                     <Button size="sm" className="bg-orange-500 hover:bg-orange-600 text-white" onClick={() => selectedTask && reopenWithIssue(selectedTask, reopenReason)}>
                       <RefreshCw className="w-4 h-4" /> Reopen Task
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+
+              {/* Generate Fix Prompt Dialog */}
+              <Dialog open={fixPromptOpen} onOpenChange={setFixPromptOpen}>
+                <DialogContent className="max-w-lg">
+                  <DialogHeader>
+                    <DialogTitle>Generated Fix Prompt</DialogTitle>
+                    <DialogDescription>Copy this prompt and paste it into Lovable AI chat to fix the issue.</DialogDescription>
+                  </DialogHeader>
+                  <div className="bg-muted rounded-lg p-4 max-h-[50vh] overflow-y-auto">
+                    <pre className="text-sm whitespace-pre-wrap font-mono text-foreground">{fixPrompt}</pre>
+                  </div>
+                  <div className="flex gap-2 justify-end">
+                    <Button variant="outline" size="sm" onClick={() => setFixPromptOpen(false)}>Close</Button>
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        navigator.clipboard.writeText(fixPrompt);
+                        setFixCopied(true);
+                        toast.success("Prompt copied to clipboard!");
+                        setTimeout(() => setFixCopied(false), 2000);
+                      }}
+                    >
+                      {fixCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                      {fixCopied ? "Copied!" : "Copy Prompt"}
                     </Button>
                   </div>
                 </DialogContent>
