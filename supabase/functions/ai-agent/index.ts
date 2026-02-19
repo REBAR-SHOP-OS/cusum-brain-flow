@@ -7619,23 +7619,25 @@ RULES:
 
             // Log resolution in activity_events with evidence fields
             if (!error) {
-              await svcClient.from("activity_events").insert({
-                company_id: companyId,
-                entity_type: "task",
-                entity_id: args.task_id,
-                event_type: "task_resolved",
-                description: `Task resolved by Architect: ${args.resolution_note}`,
-                actor_id: user.id,
-                actor_type: "architect",
-                source: "architect_autofix",
-                metadata: {
-                  new_status: newStatus,
-                  resolution_note: args.resolution_note,
-                  before_evidence: args.before_evidence || null,
-                  after_evidence: args.after_evidence || null,
-                  regression_guard: args.regression_guard || null,
-                },
-              }).catch(() => {});
+              try {
+                await svcClient.from("activity_events").insert({
+                  company_id: companyId,
+                  entity_type: "task",
+                  entity_id: args.task_id,
+                  event_type: "task_resolved",
+                  description: `Task resolved by Architect: ${args.resolution_note}`,
+                  actor_id: user.id,
+                  actor_type: "architect",
+                  source: "architect_autofix",
+                  metadata: {
+                    new_status: newStatus,
+                    resolution_note: args.resolution_note,
+                    before_evidence: args.before_evidence || null,
+                    after_evidence: args.after_evidence || null,
+                    regression_guard: args.regression_guard || null,
+                  },
+                });
+              } catch (_) { /* activity log is best-effort */ }
             }
 
             seoToolResults.push({ id: tc.id, name: "resolve_task", result: error ? { error: error.message } : { success: true, message: `Task ${newStatus}: ${args.resolution_note}`, data } });
@@ -8463,12 +8465,14 @@ RULES:
                   resolution_note: args.resolution_note,
                 }).eq("id", args.task_id).select().single();
                 if (!error) {
-                  await svcClient.from("activity_events").insert({
-                    company_id: companyId, entity_type: "task", entity_id: args.task_id,
-                    event_type: "task_resolved", description: `Task resolved by Architect: ${args.resolution_note}`,
-                    actor_id: user.id, actor_type: "architect", source: "architect_autofix",
-                    metadata: { new_status: newStatus, resolution_note: args.resolution_note, before_evidence: args.before_evidence || null, after_evidence: args.after_evidence || null, regression_guard: args.regression_guard || null },
-                  }).catch(() => {});
+                  try {
+                    await svcClient.from("activity_events").insert({
+                      company_id: companyId, entity_type: "task", entity_id: args.task_id,
+                      event_type: "task_resolved", description: `Task resolved by Architect: ${args.resolution_note}`,
+                      actor_id: user.id, actor_type: "architect", source: "architect_autofix",
+                      metadata: { new_status: newStatus, resolution_note: args.resolution_note, before_evidence: args.before_evidence || null, after_evidence: args.after_evidence || null, regression_guard: args.regression_guard || null },
+                    });
+                  } catch (_) { /* best-effort */ }
                 }
                 seoToolResults.push({ id: tc.id, name: "resolve_task", result: error ? { error: error.message } : { success: true, message: `Task ${newStatus}`, data } });
               } catch (e) { seoToolResults.push({ id: tc.id, name: "resolve_task", result: { error: e instanceof Error ? e.message : "Failed" } }); }
