@@ -194,7 +194,7 @@ export function ProductionQueueView() {
               key={node.customerId || "unassigned"}
               node={node}
               onDeletePlan={deletePlan}
-              onEditPlan={(id) => navigate(`/cutter-planning?planId=${id}`)}
+              onEditPlan={(id) => navigate(`/shopfloor/cutter?planId=${id}`)}
               onDeleteBarlist={handleDeleteBarlist}
               onDeleteProject={handleDeleteProject}
               onDeleteCustomer={() => handleDeleteCustomer(node)}
