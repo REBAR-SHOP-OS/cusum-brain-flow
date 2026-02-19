@@ -1,54 +1,82 @@
 
 
-# Fix: Screenshot Feedback Button Not Visible for neel@rebar.shop
+# Packing Slip Redesign -- Header Fields + Table Columns
 
-## Problem
-User neel@rebar.shop cannot see the screenshot feedback button (camera icon). The code logic is correct -- their email passes the `@rebar.shop` check -- but the button may be invisible due to:
-1. Previously dragged off-screen position saved in localStorage
-2. Poor contrast on dark pages like `/empire`
+## Current State
 
-## Solution
-Two defensive fixes in `src/components/feedback/ScreenshotFeedbackButton.tsx`:
+The `DeliveryPackingSlip` component currently shows:
+- Header: Customer, Ship To, Delivery #, Date
+- Table: Mark, Bar, Cut (mm), Shape, Qty
 
-### Fix 1 -- Validate saved position on mount
-Add a safety check that re-clamps the button position on every mount (not just resize), ensuring it's always within the visible viewport. This handles the case where the user switched devices or the saved position is stale.
+## What the Request Asks For
 
-### Fix 2 -- Add visible ring/outline for dark pages
-Add a subtle light ring (`ring-1 ring-white/30`) to the button so it's clearly visible against dark backgrounds like the Empire Builder page.
+**Header:** Customer, Ship To, Delivery #, Invoice #, Invoice Date, Scope, Delivery Date
+**Table columns:** DW#, Mark, Quantity, Size, Type, Total Length
 
-## Technical Details
+## Data Availability Analysis
 
-**File: `src/components/feedback/ScreenshotFeedbackButton.tsx`**
+| Requested Field | Available? | Source |
+|---|---|---|
+| Customer (company_name) | Yes | `cut_plan` -> `project` -> `customer.company_name` (or use existing `customer_name` on packing_slips) |
+| Ship To (site_address) | Yes | `cut_plan` -> `project.site_address` (currently not populated on packing_slips) |
+| Delivery # | Yes | Already shown |
+| Invoice # | NO | No `invoices` table exists in the DB |
+| Invoice Date | NO | Same -- no invoices table |
+| Scope | NO | No `scope_of_work` field on `projects` table |
+| Delivery Date | Yes | `deliveries.scheduled_date` |
+| DW# (Drawing Number) | Partially | `cut_plan_items.drawing_ref` exists but is NOT included in `items_json` snapshot |
+| Size (bar_code) | Yes | Already in items_json as `bar_code` (e.g., "10M", "15M") |
+| Type (Straight/Bent) | Derivable | If `asa_shape_code` is null -> "Straight", otherwise -> "Bent" |
+| Total Length | Derivable | `cut_length_mm` converted to meters (cut_length_mm / 1000) |
 
-1. After the `useDraggablePosition` hook returns `pos`, add a `useEffect` that re-clamps the position to the current viewport on mount:
-```tsx
-useEffect(() => {
-  const maxX = window.innerWidth - BTN_SIZE;
-  const maxY = window.innerHeight - BTN_SIZE;
-  if (pos.x > maxX || pos.y > maxY || pos.x < 0 || pos.y < 0) {
-    // Position is off-screen, reset to default
-    const defaultX = window.innerWidth - BTN_SIZE - 24;
-    const defaultY = window.innerHeight - BTN_SIZE - 96;
-    localStorage.removeItem("feedback-btn-pos");
-  }
-}, []);
-```
+## Plan
 
-2. Add a visible ring to the button className:
-```
-"ring-1 ring-white/30"
-```
-This ensures the button is visible on both light and dark pages.
+### Step 1 -- Database: Add missing columns to `packing_slips`
 
-**File: `src/hooks/useDraggablePosition.ts`**
+Add these nullable columns so the packing slip stores all header data at creation time:
+- `invoice_number TEXT` (manually entered or linked later)
+- `invoice_date DATE`
+- `scope TEXT`
+- `delivery_date DATE`
+- `site_address TEXT` (separate from `ship_to` for clarity)
 
-Add a `resetPos` function that can be called to reset the position externally, or better yet, validate on initialization in `loadPos`:
-- In the `loadPos` function, after parsing the stored position, check if it's within the current viewport bounds. If not, return the default position and clear the stored value.
+### Step 2 -- Update `useDeliveryActions.ts` to populate new fields
+
+When creating a packing slip from a bundle, fetch the related `project.site_address` via the cut_plan's `project_id` and store it in the `ship_to` field. Also store `delivery_date` from the delivery's `scheduled_date`.
+
+### Step 3 -- Update `items_json` snapshot to include `drawing_ref`
+
+In `useDeliveryActions.ts`, add `drawing_ref` to each item in the snapshot so the packing slip template can display the DW# column.
+
+### Step 4 -- Redesign `DeliveryPackingSlip.tsx`
+
+**New Header (7 fields in 2 rows):**
+Row 1: Customer | Ship To | Delivery # | Delivery Date
+Row 2: Invoice # | Invoice Date | Scope | Slip #
+
+**New Table Columns:**
+| DW# | Mark | Quantity | Size | Type | Total Length |
+|---|---|---|---|---|---|
+| drawing_ref | mark_number | total_pieces | bar_code | Straight/Bent | cut_length_mm / 1000 + " m" |
+
+**Footer total:** Sum of Quantity column
+
+### Step 5 -- Update `Deliveries.tsx` to pass new props
+
+When clicking a packing slip card, pass the additional fields (invoice_number, invoice_date, scope, delivery_date) from the slip data to the overlay component.
 
 ## Files Changed
 
 | File | Change |
 |---|---|
-| `src/hooks/useDraggablePosition.ts` | Validate stored position is within viewport bounds on load; discard if off-screen |
-| `src/components/feedback/ScreenshotFeedbackButton.tsx` | Add `ring-1 ring-white/30` to button for visibility on dark pages |
+| Database migration | Add `invoice_number`, `invoice_date`, `scope`, `delivery_date` columns to `packing_slips` |
+| `src/hooks/useDeliveryActions.ts` | Include `drawing_ref` in items snapshot; populate `ship_to` from project; store `delivery_date` |
+| `src/components/delivery/DeliveryPackingSlip.tsx` | Redesign header to 7 fields; change table to DW#/Mark/Quantity/Size/Type/Total Length |
+| `src/pages/Deliveries.tsx` | Pass new packing slip fields to the overlay component |
+
+## Notes
+
+- Invoice # and Scope will show as "--" until manually entered or a future invoicing module populates them
+- Existing packing slips will still render correctly (new columns are nullable, items without `drawing_ref` show "--")
+- No other pages or components are modified
 
