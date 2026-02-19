@@ -113,6 +113,35 @@ export function useLeadScoring() {
         const score = computeScore(lead, rulesList);
         if (score !== lead.computed_score) {
           await supabase.from("leads").update({ computed_score: score, score_updated_at: new Date().toISOString() }).eq("id", lead.id);
+
+          // Record score history
+          if (companyId) {
+            const factors: Record<string, number> = {};
+            for (const rule of rulesList) {
+              if (!rule.enabled) continue;
+              const val = String(lead[rule.field_name as keyof typeof lead] ?? "");
+              let match = false;
+              switch (rule.operator) {
+                case "equals": match = val === rule.field_value; break;
+                case "not_equals": match = val !== rule.field_value; break;
+                case "contains": match = val.toLowerCase().includes(rule.field_value.toLowerCase()); break;
+                case "greater_than": match = parseFloat(val) > parseFloat(rule.field_value); break;
+                case "less_than": match = parseFloat(val) < parseFloat(rule.field_value); break;
+                case "is_set": match = !!val && val !== "null" && val !== "undefined"; break;
+                case "is_not_set": match = !val || val === "null" || val === "undefined"; break;
+              }
+              if (match) factors[rule.name] = rule.score_points;
+            }
+
+            await supabase.from("lead_score_history").insert({
+              lead_id: lead.id,
+              company_id: companyId,
+              score,
+              win_probability: (lead as any).win_prob_score ?? null,
+              priority_score: (lead as any).priority_score ?? null,
+              score_factors: factors,
+            });
+          }
         }
       }
     },

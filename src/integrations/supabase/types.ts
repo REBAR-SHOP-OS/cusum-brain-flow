@@ -4418,6 +4418,59 @@ export type Database = {
           },
         ]
       }
+      lead_communications: {
+        Row: {
+          body_preview: string | null
+          comm_type: string
+          company_id: string
+          contact_email: string | null
+          contact_name: string | null
+          created_at: string
+          created_by: string | null
+          direction: string
+          id: string
+          lead_id: string
+          metadata: Json | null
+          subject: string | null
+        }
+        Insert: {
+          body_preview?: string | null
+          comm_type: string
+          company_id: string
+          contact_email?: string | null
+          contact_name?: string | null
+          created_at?: string
+          created_by?: string | null
+          direction: string
+          id?: string
+          lead_id: string
+          metadata?: Json | null
+          subject?: string | null
+        }
+        Update: {
+          body_preview?: string | null
+          comm_type?: string
+          company_id?: string
+          contact_email?: string | null
+          contact_name?: string | null
+          created_at?: string
+          created_by?: string | null
+          direction?: string
+          id?: string
+          lead_id?: string
+          metadata?: Json | null
+          subject?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_communications_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lead_events: {
         Row: {
           created_at: string
@@ -4733,6 +4786,50 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "lead_quote_memory_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lead_score_history: {
+        Row: {
+          company_id: string
+          created_at: string
+          id: string
+          lead_id: string
+          model_version: string
+          priority_score: number | null
+          score: number
+          score_factors: Json | null
+          win_probability: number | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          id?: string
+          lead_id: string
+          model_version?: string
+          priority_score?: number | null
+          score?: number
+          score_factors?: Json | null
+          win_probability?: number | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          id?: string
+          lead_id?: string
+          model_version?: string
+          priority_score?: number | null
+          score?: number
+          score_factors?: Json | null
+          win_probability?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_score_history_lead_id_fkey"
             columns: ["lead_id"]
             isOneToOne: false
             referencedRelation: "leads"
@@ -5603,6 +5700,48 @@ export type Database = {
           migrated?: number
           remaining?: number
           status?: string
+        }
+        Relationships: []
+      }
+      notification_preferences: {
+        Row: {
+          company_id: string
+          created_at: string
+          email_enabled: boolean
+          id: string
+          muted_categories: string[]
+          push_enabled: boolean
+          quiet_hours_end: string | null
+          quiet_hours_start: string | null
+          sound_enabled: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          email_enabled?: boolean
+          id?: string
+          muted_categories?: string[]
+          push_enabled?: boolean
+          quiet_hours_end?: string | null
+          quiet_hours_start?: string | null
+          sound_enabled?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          email_enabled?: boolean
+          id?: string
+          muted_categories?: string[]
+          push_enabled?: boolean
+          quiet_hours_end?: string | null
+          quiet_hours_start?: string | null
+          sound_enabled?: boolean
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }

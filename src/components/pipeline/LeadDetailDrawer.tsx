@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ScheduledActivities } from "./ScheduledActivities";
+import { LeadActivityTimeline } from "./LeadActivityTimeline";
+import { AddCommunicationDialog } from "./AddCommunicationDialog";
 import { Progress } from "@/components/ui/progress";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -14,7 +16,7 @@ import {
 import {
   Building, Mail, Phone, Calendar, DollarSign, Pencil, Trash2,
   TrendingUp, Clock, User, Star, Archive, X, FileText, ClipboardList, Brain, Target, ShieldCheck,
-  Sparkles, Loader2,
+  Sparkles, Loader2, Plus, MessageSquare,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -51,6 +53,18 @@ function getInitials(name: string): string {
     .slice(0, 2);
 }
 
+function AddCommButton({ leadId }: { leadId: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button variant="outline" size="sm" className="h-6 text-[11px] gap-1" onClick={() => setOpen(true)}>
+        <Plus className="w-3 h-3" /> Log
+      </Button>
+      <AddCommunicationDialog open={open} onOpenChange={setOpen} leadId={leadId} />
+    </>
+  );
+}
+
 export function LeadDetailDrawer({
   lead,
   open,
@@ -60,7 +74,7 @@ export function LeadDetailDrawer({
   onStageChange,
 }: LeadDetailDrawerProps) {
   const { isAdmin } = useUserRole();
-  const [activeTab, setActiveTab] = useState<"notes" | "chatter" | "activities">("chatter");
+  const [activeTab, setActiveTab] = useState<"notes" | "chatter" | "activities" | "timeline">("chatter");
   const { data: recommendation, isLoading: recLoading } = useLeadRecommendation(lead, open);
 
   if (!lead) return null;
@@ -292,7 +306,7 @@ export function LeadDetailDrawer({
 
         <div className="border-b border-border bg-background">
           <div className="flex">
-            {(["notes", "chatter", "activities"] as const).map((tab) => (
+          {(["notes", "chatter", "activities", "timeline"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -345,6 +359,18 @@ export function LeadDetailDrawer({
           {activeTab === "activities" && (
             <div className="p-4">
               <ScheduledActivities entityType="lead" entityId={lead.id} />
+            </div>
+          )}
+
+          {activeTab === "timeline" && (
+            <div className="p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-xs font-semibold flex items-center gap-1">
+                  <MessageSquare className="w-3 h-3" /> Communication Timeline
+                </h4>
+                <AddCommButton leadId={lead.id} />
+              </div>
+              <LeadActivityTimeline leadId={lead.id} />
             </div>
           )}
         </div>

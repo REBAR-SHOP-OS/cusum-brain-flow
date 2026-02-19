@@ -1,14 +1,16 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import { X, ChevronRight, ChevronDown, Loader2, Check, Bell, CheckSquare, Lightbulb, AlertTriangle } from "lucide-react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { X, ChevronRight, ChevronDown, Loader2, Check, Bell, CheckSquare, Lightbulb, AlertTriangle, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useNotifications, Notification } from "@/hooks/useNotifications";
 import { useNavigate } from "react-router-dom";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow, isToday, isYesterday, format } from "date-fns";
 import { motion, AnimatePresence } from "framer-motion";
 import { normalizeNotificationRoute } from "@/lib/notificationRouting";
+import { NotificationPreferences } from "@/components/notifications/NotificationPreferences";
+import { NotificationFilters } from "@/components/notifications/NotificationFilters";
 
 interface InboxPanelProps {
   isOpen: boolean;
@@ -158,6 +160,9 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
   const navigate = useNavigate();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>("notifications");
+  const [prefsOpen, setPrefsOpen] = useState(false);
+  const [filterSearch, setFilterSearch] = useState("");
+  const [filterPriority, setFilterPriority] = useState("all");
   const panelRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -245,10 +250,38 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
     ideas: ideas.filter((n) => n.status === "unread").length,
   };
 
-  const activeItems = allItems[activeTab];
+  // Apply search + priority filter
+  const filteredItems = useMemo(() => {
+    let items = allItems[activeTab];
+    if (filterSearch) {
+      const q = filterSearch.toLowerCase();
+      items = items.filter(n => n.title.toLowerCase().includes(q) || n.description?.toLowerCase().includes(q));
+    }
+    if (filterPriority !== "all") {
+      items = items.filter(n => n.priority === filterPriority);
+    }
+    return items;
+  }, [allItems, activeTab, filterSearch, filterPriority]);
+
+  // Group by date
+  const groupedItems = useMemo(() => {
+    const groups: { label: string; items: Notification[] }[] = [];
+    const map = new Map<string, Notification[]>();
+    for (const item of filteredItems) {
+      const d = new Date(item.createdAt);
+      const key = isToday(d) ? "Today" : isYesterday(d) ? "Yesterday" : format(d, "MMM d, yyyy");
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(item);
+    }
+    for (const [label, items] of map) groups.push({ label, items });
+    return groups;
+  }, [filteredItems]);
+
+  const activeItems = filteredItems;
   const unreadInTab = unreadCounts[activeTab];
 
   return (
+    <>
     <AnimatePresence>
       {isOpen && (
         <>
@@ -286,9 +319,14 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
                   </span>
                 )}
               </h2>
-              <Button ref={closeButtonRef} variant="ghost" size="icon" onClick={onClose} aria-label="Close inbox" className="focus-visible:ring-2 focus-visible:ring-primary">
-                <X className="w-4 h-4" />
-              </Button>
+              <div className="flex items-center gap-1">
+                <Button variant="ghost" size="icon" onClick={() => setPrefsOpen(true)} aria-label="Notification settings" className="h-8 w-8">
+                  <Settings className="w-4 h-4" />
+                </Button>
+                <Button ref={closeButtonRef} variant="ghost" size="icon" onClick={onClose} aria-label="Close inbox" className="focus-visible:ring-2 focus-visible:ring-primary">
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
             </div>
 
             {/* Tab bar */}
@@ -316,6 +354,14 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
               ))}
             </div>
 
+            {/* Filter bar */}
+            <NotificationFilters
+              search={filterSearch}
+              onSearchChange={setFilterSearch}
+              priorityFilter={filterPriority}
+              onPriorityChange={setFilterPriority}
+            />
+
             {loading ? (
               <div className="flex-1 flex items-center justify-center">
                 <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
@@ -323,7 +369,6 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
             ) : (
               <ScrollArea className="flex-1">
                 <div className="p-4 space-y-2" role="tabpanel" aria-label={`${activeTab} list`}>
-                  {/* Tab header actions — shown for all tabs */}
                   {activeItems.length > 0 && (
                     <div className="flex items-center justify-end gap-2 mb-1">
                       {unreadInTab > 0 && (
@@ -340,16 +385,21 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
                   {activeItems.length === 0 ? (
                     <EmptyState tab={activeTab} />
                   ) : (
-                    activeItems.map((item) => (
-                      <NotificationItem
-                        key={item.id}
-                        item={item}
-                        isExpanded={expandedId === item.id}
-                        onToggle={() => handleToggle(item)}
-                        onDismiss={(e) => handleDismiss(e, item.id)}
-                        onAction={activeTab === "todos" ? (e) => handleAction(e, item.id) : undefined}
-                        showCheckmark={activeTab === "todos"}
-                      />
+                    groupedItems.map((group) => (
+                      <div key={group.label}>
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mt-2 mb-1">{group.label}</p>
+                        {group.items.map((item) => (
+                          <NotificationItem
+                            key={item.id}
+                            item={item}
+                            isExpanded={expandedId === item.id}
+                            onToggle={() => handleToggle(item)}
+                            onDismiss={(e) => handleDismiss(e, item.id)}
+                            onAction={activeTab === "todos" ? (e) => handleAction(e, item.id) : undefined}
+                            showCheckmark={activeTab === "todos"}
+                          />
+                        ))}
+                      </div>
                     ))
                   )}
                 </div>
@@ -359,5 +409,8 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
         </>
       )}
     </AnimatePresence>
+
+    <NotificationPreferences open={prefsOpen} onOpenChange={setPrefsOpen} />
+    </>
   );
 }

@@ -1,7 +1,8 @@
 import { Star, AlignJustify, Mail, Brain, Clock } from "lucide-react";
-import { differenceInDays, differenceInHours, formatDistanceToNowStrict } from "date-fns";
+import { differenceInDays, differenceInHours, formatDistanceToNowStrict, differenceInCalendarDays } from "date-fns";
 import { cn } from "@/lib/utils";
 import type { Tables } from "@/integrations/supabase/types";
+import { LeadScoreBreakdown } from "./LeadScoreBreakdown";
 
 type Lead = Tables<"leads">;
 type LeadWithCustomer = Lead & { customers: { name: string; company_name: string | null } | null };
@@ -94,6 +95,7 @@ export function LeadCard({ lead, onDragStart, onDragEnd, onEdit, onDelete, onCli
   const winProb = lead.win_prob_score as number | null;
   const scoreConfidence = lead.score_confidence as string | null;
   const slaInfo = getSlaInfo(lead);
+  const isStale = differenceInCalendarDays(new Date(), new Date(lead.updated_at)) >= 7 && lead.stage !== "won" && lead.stage !== "lost";
 
   return (
     <div
@@ -101,7 +103,10 @@ export function LeadCard({ lead, onDragStart, onDragEnd, onEdit, onDelete, onCli
       onDragStart={(e) => onDragStart(e, lead.id)}
       onDragEnd={onDragEnd}
       onClick={() => onClick(lead)}
-      className="cursor-pointer bg-background border border-border rounded-sm p-2.5 hover:shadow-sm transition-shadow relative"
+      className={cn(
+        "cursor-pointer bg-background border border-border rounded-sm p-2.5 hover:shadow-sm transition-shadow relative min-h-[44px]",
+        isStale && "ring-1 ring-amber-400/50"
+      )}
     >
       {/* AI action indicator */}
       {hasAIAction && (
@@ -161,20 +166,23 @@ export function LeadCard({ lead, onDragStart, onDragEnd, onEdit, onDelete, onCli
             </span>
           )}
 
-          {/* Win probability badge */}
+          {/* Win probability badge with score breakdown */}
           {winProb != null && winProb > 0 && (
-            <span
-              title={`Win probability: ${winProb}% (${scoreConfidence || 'low'} confidence)`}
-              className={cn(
-                "inline-flex items-center gap-0.5 text-[10px] font-semibold px-1 py-0 rounded",
-                winProb >= 60 ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-                  : winProb >= 35 ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
-                  : "bg-muted text-muted-foreground"
-              )}
-            >
-              <Brain className="w-2.5 h-2.5" />
-              {Math.round(winProb)}%
-            </span>
+            <LeadScoreBreakdown leadId={lead.id} winProb={winProb} scoreConfidence={scoreConfidence}>
+              <span
+                title={`Win probability: ${winProb}% (${scoreConfidence || 'low'} confidence)`}
+                className={cn(
+                  "inline-flex items-center gap-0.5 text-[10px] font-semibold px-1 py-0 rounded cursor-pointer",
+                  winProb >= 60 ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                    : winProb >= 35 ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                    : "bg-muted text-muted-foreground"
+                )}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Brain className="w-2.5 h-2.5" />
+                {Math.round(winProb)}%
+              </span>
+            </LeadScoreBreakdown>
           )}
         </div>
 
