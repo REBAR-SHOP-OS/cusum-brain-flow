@@ -155,7 +155,7 @@ export function ProductionCard({
 
           {/* Center: shape image or length display */}
           <div className="flex items-center justify-center min-h-[110px] bg-muted/20 rounded-lg border border-border/50">
-            {isBend && item.asa_shape_code ? (
+            {isBend && item.asa_shape_code && (item.phase === "bending" || item.bend_completed_pieces > 0) ? (
               shapeImageUrl ? (
                 <img
                   src={shapeImageUrl}

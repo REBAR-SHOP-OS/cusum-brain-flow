@@ -200,11 +200,13 @@ export function BenderStationView({ machine, items, canWrite, initialIndex = 0, 
         </div>
 
         {/* Shape code badge */}
-        <div className="flex justify-start mb-4">
-          <Badge className="bg-muted text-foreground border border-border font-mono text-sm px-3 py-1">
-            {currentItem.asa_shape_code || "—"}
-          </Badge>
-        </div>
+        {(currentItem.phase === "bending" || (currentItem.bend_completed_pieces ?? 0) > 0) && (
+          <div className="flex justify-start mb-4">
+            <Badge className="bg-muted text-foreground border border-border font-mono text-sm px-3 py-1">
+              {currentItem.asa_shape_code || "—"}
+            </Badge>
+          </div>
+        )}
 
         {/* Large shape diagram area */}
         <div className="flex justify-center py-4 mb-6">
