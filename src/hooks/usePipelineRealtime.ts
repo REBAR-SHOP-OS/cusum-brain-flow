@@ -49,6 +49,13 @@ export function usePipelineRealtime() {
           queryClient.invalidateQueries({ queryKey: ["pipeline-leads"] });
         }
       )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "pipeline_transition_log" },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["pipeline-activity-feed"] });
+        }
+      )
       .subscribe();
 
     channelRef.current = channel;
