@@ -13,13 +13,13 @@ import brandLogo from "@/assets/brand-logo.png";
 const crmNav = [
   { name: "Home", href: "/home", icon: Home },
   { name: "Inbox", href: "/inbox", icon: Inbox },
+  { name: "Business Tasks", href: "/tasks", icon: CheckSquare },
   { name: "Phonecalls", href: "/phonecalls", icon: Phone },
   { name: "Pipeline", href: "/pipeline", icon: Kanban },
   { name: "Customers", href: "/customers", icon: Users },
 ];
 
 const operationsNav = [
-  { name: "Business Tasks", href: "/tasks", icon: CheckSquare },
   { name: "Shop Floor", href: "/shop-floor", icon: Factory },
   { name: "Deliveries", href: "/deliveries", icon: Truck },
 ];
