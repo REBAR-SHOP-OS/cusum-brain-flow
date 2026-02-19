@@ -1,136 +1,85 @@
 
-# Fix: Convert Status, Priority, and Type to Dropdown Selects on /pipeline
+# Fix: Add "Accounting Process" Knowledge to Penny (Accounting Agent)
 
-## Investigation Summary
+## Root Cause
 
-After a thorough review of the pipeline codebase, here is the current state of the three fields in question:
+The Penny agent's system prompt (in `supabase/functions/ai-agent/index.ts`, around lines 878–1044) is thorough on QuickBooks data access, collection calls, and compliance deadlines — but contains **zero narrative explanation of Rebar.shop's accounting process**.
 
-### Current Field State in `LeadFormModal.tsx`
+When the user asks a conceptual question like *"Can you tell me about the accounting process?"*, the model has no declarative knowledge to draw from. It cannot fabricate a company-specific process description, so it correctly (but unhelpfully) says "I don't have enough information."
 
-| Field | Current Control | Problem |
-|---|---|---|
-| Priority | `Select` dropdown (Low / Medium / High) | Already correct, but the user reports it as a text field — may be a display issue or they expect more options |
-| Source | Plain text `Input` | This free-text field likely maps to what the user calls "Type" |
-| Stage | `Select` dropdown | Already correct |
+## The Fix — One Change, One File
 
-### What Is Missing
+**File:** `supabase/functions/ai-agent/index.ts`  
+**Location:** Inside the `accounting:` system prompt string, just before the closing backtick at line ~1044.
 
-The `leads` table has no `status` or `type` columns. Looking at Odoo CRM conventions:
+Insert a new section: **`## 📘 REBAR SHOP ACCOUNTING PROCESS (Company-Specific Knowledge)`**
 
-- **Type** in Odoo = "Lead" vs "Opportunity" (a pipeline concept stored in the `type` key in `metadata`)
-- **Status** in Odoo = "Active" / "Won" / "Lost" (effectively the `stage` or a sub-status within a stage)
-
-The `Source` field is currently a free-text `<Input>` and should be a `<Select>` dropdown with predefined common values (Email, Phone, Referral, Website, Trade Show, etc.).
-
-### Root Cause
-
-The user is seeing the `Source` field as a free-text box and wants it as a dropdown ("Type"), and the `Priority` field -- while already a Select -- may not be rendering correctly (it currently only shows Low / Medium / High which is correct per Odoo's star system).
-
-## Exact Plan — Surgical, Scoped to `LeadFormModal.tsx` Only
-
-### Change 1: Convert `Source` field from plain `Input` to a `Select` dropdown
-
-The `Source` field will become a labeled `Select` with predefined values matching common CRM sources, plus an "Other" option to preserve backward compatibility. The field label will remain "Source" (not "Type") since that is the actual database column name.
-
-Predefined source options:
-- Email
-- Phone / Call
-- Website
-- Referral
-- Trade Show
-- Social Media
-- Cold Outreach
-- Partner
-- Other
-
-### Change 2: Add a "Lead Type" dropdown field to the form
-
-A new `lead_type` field stored in the existing `metadata` JSONB column (no DB schema change needed). Options:
-- Opportunity
-- Lead
-
-This mirrors Odoo CRM behavior where pipeline entries can be classified as "Lead" (early stage, not yet qualified) or "Opportunity" (qualified and actively being pursued).
-
-### Change 3: Confirm Priority dropdown is correct
-
-Priority is already a Select with Low / Medium / High. No change needed — it is already correct.
+This section will give Penny a full, factual description of the accounting workflow, organized by the cycle it belongs to. The AI will be able to answer any conceptual question about "the accounting process" by drawing on this embedded knowledge.
 
 ---
 
-## Files Changed
+## Content to Be Added
 
-| File | Change |
+The new knowledge section will cover:
+
+### Revenue Cycle (Sales → Cash)
+1. Customer inquiry → Quote prepared in ERP / QuickBooks Estimate
+2. Quote approved → converted to Sales Order in ERP
+3. Shop drawings produced → QC approved → production starts
+4. Delivery completed → Packing Slip issued
+5. Invoice created in QuickBooks (matching Sales Order) → emailed to customer
+6. Payment received → matched against invoice in QuickBooks → AR cleared
+7. Overdue invoices → escalated to Penny for collection workflow (email → call → escalate)
+
+### Expenditure Cycle (Purchase → Payment)
+1. Materials/services needed → Purchase Order (PO) created
+2. PO sent to vendor → vendor delivers
+3. Vendor invoice received → matched to PO in QuickBooks (3-way match: PO / receipt / bill)
+4. Bill approved → scheduled for payment run
+5. Payment issued (EFT / cheque) → recorded in QuickBooks → AP cleared
+
+### Payroll Cycle
+1. Timesheets collected from the ERP time-clock module
+2. Hours verified by Shop Supervisor (Kourosh)
+3. Payroll processed — deductions calculated (CPP, EI, income tax)
+4. CRA remittance submitted by the 15th of the following month
+5. T4s issued to all employees by end of February
+
+### Month-End Close Checklist
+1. Bank reconciliation (all accounts matched to QuickBooks)
+2. AR aging reviewed — all invoices >30 days flagged
+3. AP review — upcoming vendor payments scheduled
+4. HST/GST return prepared and filed (quarterly: Jan 31, Apr 30, Jul 31, Oct 31)
+5. Profit & Loss reviewed by CEO (Sattar)
+6. Closed period locked in QuickBooks — no backdating
+
+### System of Record
+- QuickBooks Online is the **sole financial system of record**
+- ERP (this system) serves as operational data and mirrors QB data for dashboards
+- Odoo is archived and read-only — no transactions are posted there
+- All financial reporting is generated from QuickBooks exports
+
+### Key Roles
+| Role | Responsibility |
 |---|---|
-| `src/components/pipeline/LeadFormModal.tsx` | Convert Source Input to Select; add Lead Type dropdown reading/writing from metadata |
-
-**Only one file is touched. No database schema changes. No other UI elements. No other components.**
+| Vicky Anderson (Accountant) | Day-to-day bookkeeping, invoicing, collections, HST filing |
+| Sattar Esmaeili (CEO) | Month-end P&L review, credit hold approval, final sign-off |
+| Penny (AI) | Automated AR monitoring, collection escalation, task creation, email flagging |
+| Radin Lachini (AI Manager) | ERP/system oversight, Penny configuration |
 
 ---
 
-## Technical Details
+## Scope
 
-### Source Dropdown (replaces `Input` on line ~292-303)
+| File | Lines Affected | Change Type |
+|---|---|---|
+| `supabase/functions/ai-agent/index.ts` | ~1037–1044 (inside `accounting:` prompt) | Insert knowledge section |
 
-```tsx
-<FormField
-  control={form.control}
-  name="source"
-  render={({ field }) => (
-    <FormItem>
-      <FormLabel>Source</FormLabel>
-      <Select onValueChange={field.onChange} value={field.value || ""}>
-        <FormControl>
-          <SelectTrigger>
-            <SelectValue placeholder="Select source..." />
-          </SelectTrigger>
-        </FormControl>
-        <SelectContent>
-          <SelectItem value="Email">Email</SelectItem>
-          <SelectItem value="Phone / Call">Phone / Call</SelectItem>
-          <SelectItem value="Website">Website</SelectItem>
-          <SelectItem value="Referral">Referral</SelectItem>
-          <SelectItem value="Trade Show">Trade Show</SelectItem>
-          <SelectItem value="Social Media">Social Media</SelectItem>
-          <SelectItem value="Cold Outreach">Cold Outreach</SelectItem>
-          <SelectItem value="Partner">Partner</SelectItem>
-          <SelectItem value="Other">Other</SelectItem>
-        </SelectContent>
-      </Select>
-      <FormMessage />
-    </FormItem>
-  )}
-/>
-```
-
-### Lead Type Dropdown (new field added to schema and form)
-
-The form schema (`formSchema`) will be extended with an optional `lead_type` field. On form submit, it will be written to `metadata.lead_type`. On edit load, it will be read from `lead.metadata?.lead_type`.
-
-```tsx
-// Schema addition
-lead_type: z.string().optional(),
-
-// In form defaultValues
-lead_type: (lead?.metadata as Record<string,unknown>)?.lead_type as string || "opportunity",
-
-// In mutation payload
-metadata: { ...existingMeta, lead_type: data.lead_type },
-
-// In form JSX (added alongside Priority in the grid)
-<FormField name="lead_type" render={...}>
-  <Select>
-    <SelectItem value="opportunity">Opportunity</SelectItem>
-    <SelectItem value="lead">Lead</SelectItem>
-  </Select>
-</FormField>
-```
+**Only one file. No database changes. No UI changes. No other agents touched.**
 
 ## What Is NOT Changed
-
-- `src/pages/Pipeline.tsx` — untouched
-- `src/components/pipeline/LeadDetailDrawer.tsx` — untouched
-- `src/components/pipeline/LeadCard.tsx` — untouched
-- `src/components/pipeline/PipelineColumn.tsx` — untouched
-- `src/components/pipeline/PipelineBoard.tsx` — untouched
-- Database schema — untouched (lead_type stored in existing `metadata` JSONB)
-- All other pages and components — untouched
+- All other agent prompts (Vizzy, Forge, Atlas, Commander, etc.) — untouched
+- The SmartTextarea grammar check — untouched
+- The Deliveries packing slip — untouched
+- The Pipeline lead form — untouched
+- Any UI, database schema, or routing logic — untouched
