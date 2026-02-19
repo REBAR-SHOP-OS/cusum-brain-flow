@@ -430,7 +430,11 @@ export default function Deliveries() {
                   >
                     <ArrowLeft className="w-4 h-4" />
                   </Button>
-                  <h2 className="text-lg font-semibold flex-1">{selectedDelivery.delivery_number}</h2>
+                  <h2 className="text-lg font-semibold flex-1">
+                    {selectedDelivery.customer_name
+                      ? `${selectedDelivery.customer_name}${selectedDelivery.invoice_number ? ` - ${selectedDelivery.invoice_number}` : ""}`
+                      : selectedDelivery.delivery_number}
+                  </h2>
                   <Badge className={statusColors[selectedDelivery.status || "pending"]}>
                     {selectedDelivery.status || "pending"}
                   </Badge>
