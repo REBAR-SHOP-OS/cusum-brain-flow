@@ -82,7 +82,9 @@ export function DeliveryPackingSlip({
           </div>
           <div>
             <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Delivery #</p>
-            <p className="font-semibold">{deliveryNumber}</p>
+            <p className="font-semibold">
+              {invoiceNumber ? `${invoiceNumber} - ${deliveryNumber}` : deliveryNumber}
+            </p>
           </div>
           <div>
             <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Delivery Date</p>
