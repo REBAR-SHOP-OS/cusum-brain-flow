@@ -9,7 +9,7 @@ import { useCompanyId } from "@/hooks/useCompanyId";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 
 const COLORS = ["#ef4444", "#3b82f6", "#eab308"] as const;
-const LINE_WIDTH = 3;
+const LINE_WIDTH = 8;
 
 const SATTAR_PROFILE_ID = "ee659c5c-20e1-4bf5-a01d-dedd886a4ad7";
 const RADIN_PROFILE_ID = "5d948a66-619b-4ee1-b5e3-063194db7171";
@@ -102,7 +102,10 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl }: Props) {
       if (!ctx) return;
       const pos = getPos(e);
       ctx.strokeStyle = color;
-      ctx.lineWidth = LINE_WIDTH;
+      const canvasEl = canvasRef.current!;
+      const rect = canvasEl.getBoundingClientRect();
+      const scale = canvasEl.width / rect.width;
+      ctx.lineWidth = Math.max(LINE_WIDTH, Math.round(4 * scale));
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
       ctx.beginPath();
