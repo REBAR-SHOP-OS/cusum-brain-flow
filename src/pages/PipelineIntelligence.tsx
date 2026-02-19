@@ -10,7 +10,9 @@ import { SLAEnforcementDashboard } from "@/components/pipeline/intelligence/SLAE
 import { ClientPerformanceDashboard } from "@/components/pipeline/intelligence/ClientPerformanceDashboard";
 import { PipelineAutomationRules } from "@/components/pipeline/intelligence/PipelineAutomationRules";
 import { PipelineReporting } from "@/components/pipeline/intelligence/PipelineReporting";
-import { Activity, Bell, BarChart3, TrendingUp, Shield, Users, Zap, FileSpreadsheet } from "lucide-react";
+import { LossPatternAnalysis } from "@/components/pipeline/intelligence/LossPatternAnalysis";
+import { Activity, Bell, BarChart3, TrendingUp, Shield, Users, Zap, FileSpreadsheet, XCircle } from "lucide-react";
+import { usePipelineRealtime } from "@/hooks/usePipelineRealtime";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Lead = Tables<"leads">;
@@ -18,6 +20,7 @@ type LeadWithCustomer = Lead & { customers: { name: string; company_name: string
 
 export default function PipelineIntelligence() {
   const [activeTab, setActiveTab] = useState("analytics");
+  usePipelineRealtime();
 
   const { data: leads = [], isLoading } = useQuery({
     queryKey: ["pipeline-intelligence-leads"],
@@ -97,6 +100,9 @@ export default function PipelineIntelligence() {
             <TabsTrigger value="alerts" className={tabClass}>
               <Bell className="w-3.5 h-3.5" /> Alerts
             </TabsTrigger>
+            <TabsTrigger value="losses" className={tabClass}>
+              <XCircle className="w-3.5 h-3.5" /> Losses
+            </TabsTrigger>
             <TabsTrigger value="automation" className={tabClass}>
               <Zap className="w-3.5 h-3.5" /> Automation
             </TabsTrigger>
@@ -124,6 +130,9 @@ export default function PipelineIntelligence() {
           </TabsContent>
           <TabsContent value="alerts" className="mt-0 p-4 sm:p-6">
             <PipelineAlerts leads={leads} />
+          </TabsContent>
+          <TabsContent value="losses" className="mt-0 p-4 sm:p-6">
+            <LossPatternAnalysis leads={leads} />
           </TabsContent>
           <TabsContent value="automation" className="mt-0 p-4 sm:p-6">
             <PipelineAutomationRules />
