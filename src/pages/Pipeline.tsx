@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -30,6 +31,8 @@ import { QualificationGateModal } from "@/components/pipeline/gates/Qualificatio
 import { PricingGateModal } from "@/components/pipeline/gates/PricingGateModal";
 import { LossGateModal } from "@/components/pipeline/gates/LossGateModal";
 import { DeliveryGateModal } from "@/components/pipeline/gates/DeliveryGateModal";
+import { MobilePipelineView } from "@/components/pipeline/MobilePipelineView";
+import { KeyboardShortcutHelp } from "@/components/pipeline/KeyboardShortcutHelp";
 
 type Lead = Tables<"leads">;
 type LeadWithCustomer = Lead & { customers: { name: string; company_name: string | null } | null };
@@ -93,6 +96,8 @@ export default function Pipeline() {
   const [isScanningRfq, setIsScanningRfq] = useState(false);
   const [isSyncingOdoo, setIsSyncingOdoo] = useState(false);
   const [aiMode, setAiMode] = useState(() => localStorage.getItem("pipeline_ai_mode") === "true");
+  const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
+  const isMobile = useMediaQuery("(max-width: 768px)");
 
   // ── Gate state for transition-gated memory capture ──
   const [pendingTransition, setPendingTransition] = useState<{ leadId: string; targetStage: string; lead: LeadWithCustomer | null } | null>(null);
@@ -130,6 +135,7 @@ export default function Pipeline() {
     onSelectAll: () => {
       bulk.selectAll(filteredLeadsRef.current.map(l => l.id));
     },
+    onHelp: () => setShortcutHelpOpen(true),
   });
 
   // AI Autopilot hook
@@ -649,19 +655,31 @@ export default function Pipeline() {
       {/* Pipeline Board + AI Panel */}
       <div className="flex-1 overflow-hidden flex">
         <div className="flex-1 overflow-hidden">
-          <PipelineBoard
-            stages={finalStages}
-            leadsByStage={leadsByStage}
-            isLoading={isLoading}
-            onStageChange={handleStageChange}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
-            onLeadClick={handleLeadClick}
-            canReorder={canReorder}
-            onReorder={saveOrder}
-            aiMode={aiMode}
-            aiActionLeadIds={new Set(aiActions.filter(a => a.status === "pending").map(a => a.lead_id))}
-          />
+          {isMobile ? (
+            <MobilePipelineView
+              stages={finalStages}
+              leadsByStage={leadsByStage}
+              isLoading={isLoading}
+              onStageChange={handleStageChange}
+              onLeadClick={handleLeadClick}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+            />
+          ) : (
+            <PipelineBoard
+              stages={finalStages}
+              leadsByStage={leadsByStage}
+              isLoading={isLoading}
+              onStageChange={handleStageChange}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+              onLeadClick={handleLeadClick}
+              canReorder={canReorder}
+              onReorder={saveOrder}
+              aiMode={aiMode}
+              aiActionLeadIds={new Set(aiActions.filter(a => a.status === "pending").map(a => a.lead_id))}
+            />
+          )}
         </div>
 
         {/* AI Autopilot Panel */}
@@ -772,6 +790,9 @@ export default function Pipeline() {
         isMoving={bulk.isMoving}
         isDeleting={bulk.isDeleting}
       />
+
+      {/* Keyboard Shortcut Help */}
+      <KeyboardShortcutHelp open={shortcutHelpOpen} onOpenChange={setShortcutHelpOpen} />
     </div>
   );
 }

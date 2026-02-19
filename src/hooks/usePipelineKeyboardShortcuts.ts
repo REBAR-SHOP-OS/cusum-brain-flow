@@ -5,6 +5,7 @@ interface ShortcutHandlers {
   onNewLead: () => void;
   onEscape: () => void;
   onSelectAll?: () => void;
+  onHelp?: () => void;
 }
 
 /**
@@ -38,6 +39,9 @@ export function usePipelineKeyboardShortcuts(handlers: ShortcutHandlers) {
       } else if ((e.ctrlKey || e.metaKey) && e.key === "a" && handlers.onSelectAll) {
         e.preventDefault();
         handlers.onSelectAll();
+      } else if (e.key === "?" && handlers.onHelp) {
+        e.preventDefault();
+        handlers.onHelp();
       }
     },
     [handlers]
