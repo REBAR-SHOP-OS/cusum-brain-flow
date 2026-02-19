@@ -547,7 +547,7 @@ export default function EmpireBuilder() {
                           <p className="whitespace-pre-wrap">{message.content}</p>
                         ) : (
                           <>
-                            <RichMarkdown content={(message.content || "").replace(/\[FIX_CONFIRMED\]/g, "")} />
+                            <RichMarkdown content={(message.content || "").replace(/\[FIX_CONFIRMED\]/g, "").replace(/\[STOP\]/g, "")} />
                             {(() => {
                               const patches: { id: string; file: string; target: string; description?: string; content: string }[] = [];
                               const artifactRegex = /\{"type"\s*:\s*"patch"[^}]*"id"\s*:\s*"([^"]+)"[^}]*"file"\s*:\s*"([^"]+)"[^}]*"target"\s*:\s*"([^"]+)"[^}]*"content"\s*:\s*"((?:[^"\\]|\\.)*)"/g;
@@ -568,6 +568,12 @@ export default function EmpireBuilder() {
                               <div className="mt-3 flex items-center gap-2.5 rounded-xl bg-gradient-to-r from-emerald-500/20 to-green-500/20 border border-emerald-500/30 px-4 py-3">
                                 <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0" />
                                 <span className="text-sm font-semibold text-emerald-300">✅ Fix completed successfully</span>
+                              </div>
+                            )}
+                            {(message.content || "").includes("[STOP]") && (
+                              <div className="mt-3 flex items-center gap-2.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-yellow-500/20 border border-amber-500/30 px-4 py-3">
+                                <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0" />
+                                <span className="text-sm font-semibold text-amber-300">⚠️ Architect is blocked — awaiting your input</span>
                               </div>
                             )}
                           </>
