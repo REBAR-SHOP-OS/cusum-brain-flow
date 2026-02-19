@@ -78,12 +78,13 @@ export default function Customers() {
   const { data: quoteStats } = useQuery({
     queryKey: ["quote_stats"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error, count } = await supabase
         .from("quotes")
-        .select("id, total_amount, status");
+        .select("total_amount", { count: "exact", head: false })
+        .not("status", "in", '("rejected","expired")');
       if (error) throw error;
-      const active = (data || []).filter((q) => q.status !== "rejected" && q.status !== "expired");
-      return { count: active.length, total: active.reduce((s, q) => s + (q.total_amount ?? 0), 0) };
+      const total = (data || []).reduce((s, q) => s + (q.total_amount ?? 0), 0);
+      return { count: count ?? 0, total };
     },
   });
 
