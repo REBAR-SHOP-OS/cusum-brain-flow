@@ -229,8 +229,8 @@ const HelperCard = React.forwardRef<HTMLDivElement, { helper: Helper; isPrimary?
       onClick={onClick}
     >
       <div className="relative">
-        <div className="aspect-square overflow-hidden bg-muted">
-          <img src={helper.image} alt={`${helper.name} – ${helper.role}`} className="w-full h-full object-cover object-top" />
+        <div className="aspect-square overflow-hidden bg-muted/50">
+          <img src={helper.image} alt={`${helper.name} – ${helper.role}`} className="w-full h-full object-contain object-top" />
         </div>
         <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-1 pt-4 sm:relative sm:bg-transparent sm:p-3 sm:pt-3">
           <h3 className="font-bold text-[10px] sm:text-base leading-tight truncate text-white sm:text-foreground">{helper.name}</h3>
