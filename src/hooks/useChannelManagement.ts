@@ -144,10 +144,14 @@ export function useOpenDM() {
 
       if (!data) {
         const correlationId = Math.random().toString(36).substring(2, 9);
+        const companyId = (myProfile as any)?.company_id ?? "unknown";
         console.error("[DM Creation] RPC returned null", {
           correlationId,
-          myProfileId: myProfile.id,
-          targetProfileId,
+          authUserId: user.id,
+          my_profile_id: myProfile.id,
+          target_profile_id: targetProfileId,
+          active_company_id: companyId,
+          rpc_name: "create_dm_channel",
         });
         toast.error(`DM channel was not created. (Ref: ${correlationId})`, { duration: 8000 });
         throw new Error(`DM channel was not created. Please try again. (Ref: ${correlationId})`);
