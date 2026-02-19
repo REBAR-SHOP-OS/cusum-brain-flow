@@ -1,4 +1,4 @@
-import { Star, AlignJustify, Mail } from "lucide-react";
+import { Star, AlignJustify, Mail, Brain } from "lucide-react";
 import { differenceInDays } from "date-fns";
 import { cn } from "@/lib/utils";
 import type { Tables } from "@/integrations/supabase/types";
@@ -80,6 +80,8 @@ export function LeadCard({ lead, onDragStart, onDragEnd, onEdit, onDelete, onCli
   const displayTitle = lead.title.replace(/^S\d+,\s*/, "");
   const activity = getActivityStatus(lead);
   const isEmailSource = lead.source?.startsWith("Email") || lead.source === "rfq_scan";
+  const winProb = lead.win_prob_score as number | null;
+  const scoreConfidence = lead.score_confidence as string | null;
 
   return (
     <div
@@ -111,7 +113,7 @@ export function LeadCard({ lead, onDragStart, onDragEnd, onEdit, onDelete, onCli
         <p className="text-xs text-muted-foreground truncate mt-0.5">{customerName}</p>
       )}
 
-      {/* Bottom row: stars, activity dot, revenue, salesperson */}
+      {/* Bottom row: stars, activity dot, win prob, revenue, salesperson */}
       <div className="flex items-center justify-between mt-2">
         <div className="flex items-center gap-2">
           {/* Star rating */}
@@ -131,6 +133,22 @@ export function LeadCard({ lead, onDragStart, onDragEnd, onEdit, onDelete, onCli
           {activity && (
             <span title={activity.label}>
               <AlignJustify className={cn("w-3 h-3", activity.color)} />
+            </span>
+          )}
+
+          {/* Win probability badge */}
+          {winProb != null && winProb > 0 && (
+            <span
+              title={`Win probability: ${winProb}% (${scoreConfidence || 'low'} confidence)`}
+              className={cn(
+                "inline-flex items-center gap-0.5 text-[10px] font-semibold px-1 py-0 rounded",
+                winProb >= 60 ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                  : winProb >= 35 ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                  : "bg-muted text-muted-foreground"
+              )}
+            >
+              <Brain className="w-2.5 h-2.5" />
+              {Math.round(winProb)}%
             </span>
           )}
         </div>

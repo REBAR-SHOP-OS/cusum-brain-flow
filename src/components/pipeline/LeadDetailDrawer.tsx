@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Building, Mail, Phone, Calendar, DollarSign, Pencil, Trash2,
-  TrendingUp, Clock, User, Star, Archive, X, FileText, ClipboardList,
+  TrendingUp, Clock, User, Star, Archive, X, FileText, ClipboardList, Brain, Target, ShieldCheck,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -74,6 +74,10 @@ export function LeadDetailDrawer({
   const salesperson = (meta.odoo_salesperson as string) || null;
   const probability = (meta.odoo_probability as number) ?? lead.probability ?? 0;
   const revenue = (meta.odoo_revenue as number) ?? lead.expected_value ?? 0;
+  const winProb = lead.win_prob_score as number | null;
+  const priorityScore = lead.priority_score as number | null;
+  const scoreConfidence = lead.score_confidence as string | null;
+  const hasScoring = winProb != null && winProb > 0;
 
   const contactName = odooContact || lead.customers?.name || null;
   const companyName = lead.customers?.company_name || null;
@@ -210,7 +214,44 @@ export function LeadDetailDrawer({
               </div>
             )}
           </div>
-        </div>
+          </div>
+
+          {/* AI Scoring Section */}
+          {hasScoring && (
+            <div className="col-span-2 mt-1 pt-2 border-t border-border/50">
+              <span className="text-[11px] text-muted-foreground font-medium flex items-center gap-1 mb-1.5">
+                <Brain className="w-3 h-3" /> Memory Intelligence
+              </span>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-muted/50 rounded-sm px-2 py-1.5 text-center">
+                  <p className={cn(
+                    "text-sm font-bold",
+                    winProb! >= 60 ? "text-emerald-600 dark:text-emerald-400"
+                      : winProb! >= 35 ? "text-amber-600 dark:text-amber-400"
+                      : "text-muted-foreground"
+                  )}>
+                    {Math.round(winProb!)}%
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">Win Prob</p>
+                </div>
+                <div className="bg-muted/50 rounded-sm px-2 py-1.5 text-center">
+                  <p className="text-sm font-bold text-foreground">{Math.round(priorityScore ?? 0)}</p>
+                  <p className="text-[10px] text-muted-foreground">Priority</p>
+                </div>
+                <div className="bg-muted/50 rounded-sm px-2 py-1.5 text-center">
+                  <p className={cn(
+                    "text-sm font-bold capitalize",
+                    scoreConfidence === "high" ? "text-emerald-600 dark:text-emerald-400"
+                      : scoreConfidence === "medium" ? "text-amber-600 dark:text-amber-400"
+                      : "text-muted-foreground"
+                  )}>
+                    {scoreConfidence || "—"}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">Confidence</p>
+                </div>
+              </div>
+            </div>
+          )}
 
         {/* Tabs — Odoo underline style */}
         <div className="border-b border-border bg-background">
