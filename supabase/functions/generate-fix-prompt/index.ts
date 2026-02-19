@@ -57,18 +57,34 @@ serve(async (req) => {
       }
     }
 
-    // When screenshots are present, use GPT-4o with vision so the AI can actually SEE the images
+    // When screenshots are present, fetch them server-side and convert to base64
+    // (GPT-4o vision cannot access authenticated Supabase storage URLs directly)
     const hasScreenshots = screenshots && screenshots.length > 0;
 
     let userContent: string | Array<{ type: string; text?: string; image_url?: { url: string } }>;
     if (hasScreenshots) {
-      // Build multimodal content: text evidence + image_url blocks for each screenshot
+      // Fetch each screenshot and convert to base64 data URL
+      const imageBlocks: Array<{ type: string; image_url?: { url: string } }> = [];
+      for (const url of screenshots) {
+        try {
+          const imgResp = await fetch(url);
+          if (imgResp.ok) {
+            const arrayBuffer = await imgResp.arrayBuffer();
+            const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+            const contentType = imgResp.headers.get("content-type") || "image/png";
+            imageBlocks.push({
+              type: "image_url",
+              image_url: { url: `data:${contentType};base64,${base64}` },
+            });
+          }
+        } catch (imgErr) {
+          console.warn("Failed to fetch screenshot:", url, imgErr);
+        }
+      }
+
       userContent = [
         { type: "text", text: evidence },
-        ...screenshots.map((url: string) => ({
-          type: "image_url",
-          image_url: { url, detail: "high" },
-        })),
+        ...imageBlocks,
       ];
     } else {
       userContent = evidence;
