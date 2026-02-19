@@ -31,8 +31,13 @@ export function ScreenshotFeedbackButton() {
     setCapturing(true);
     setTimeout(() => { cooldown.current = false; }, THROTTLE_MS);
 
-    const target = document.getElementById("main-content") || document.body;
-    const rect = target.getBoundingClientRect();
+    const hasOverlay = document.querySelector(
+      '[data-radix-dialog-overlay], [role="dialog"], [data-state="open"][data-radix-dialog-content], [vaul-drawer]'
+    );
+    const target = hasOverlay ? document.body : (document.getElementById("main-content") || document.body);
+    const rect = hasOverlay
+      ? { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight }
+      : target.getBoundingClientRect();
 
     const baseOpts = {
       useCORS: true,
