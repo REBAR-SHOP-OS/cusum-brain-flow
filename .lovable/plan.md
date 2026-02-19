@@ -1,152 +1,86 @@
 
-# اطمینان از دریافت اعلان‌ها به زبان ترجیحی هر کاربر
 
-## محدوده اجرا (Scope)
-**فقط و فقط** فایل‌های زیر تغییر می‌کنند:
-- `supabase/functions/notify-on-message/index.ts`
-- `supabase/functions/_shared/notifyTranslate.ts` (فایل جدید shared utility)
+# Fix: "0 pieces" / "0%" Stuck Counter in Active Production Hub
 
-هیچ بخش دیگری از اپلیکیشن — هیچ UI، هیچ صفحه، هیچ جدول دیتابیس — تغییر نمی‌کند.
+## Problem
+In `src/components/shopfloor/ActiveProductionHub.tsx`, lines 128-131, the progress display is **hardcoded to 0**:
 
----
-
-## تحلیل مشکل
-
-### وضعیت فعلی (مشکل)
-
-در `notify-on-message/index.ts`:
-
-**برای Team Messages:**
-```
-title  = "Kourosh Zand in #general"        ← یک متن برای همه
-preview = "سلام، وقت داری؟"               ← یک متن برای همه
-→ همه اعضای کانال (از جمله کاربران فارسی‌زبان) همین را دریافت می‌کنند
+```tsx
+<span>0%</span>
+<Progress value={0} className="h-1.5" />
 ```
 
-**برای Support Messages:**
-```
-title  = "Support: John Doe"              ← یک متن برای همه
-preview = "I need help with..."           ← یک متن برای همه
-→ همه admin/office users همین را دریافت می‌کنند
-```
+No matter how many pieces are cut, the UI always shows "0%". The component receives `activePlans` (which is `CutPlan[]`) but `CutPlan` does not include `total_pieces` or `completed_pieces` -- those live in `cut_plan_items`. The component never fetches or calculates actual progress.
 
-تابع `preferred_language` را از profiles نمی‌خواند و هیچ ترجمه‌ای انجام نمی‌دهد.
+## Scope
+**ONLY** `src/components/shopfloor/ActiveProductionHub.tsx` will be modified. Nothing else.
 
-### الگوی صحیح (که قبلاً در `notify-feedback-owner` پیاده‌سازی شده)
+## Solution
 
-`notify-feedback-owner` این کار را به درستی انجام می‌دهد:
-1. زبان ترجیحی کاربر را از `profiles.preferred_language` می‌خواند
-2. اگر زبان انگلیسی نبود، `translate-message` edge function را صدا می‌زند
-3. اعلان را به زبان کاربر ذخیره می‌کند
+### Step 1 -- Fetch aggregated progress per machine
 
----
-
-## راه‌حل: Shared Translation Utility + Per-User Localization
-
-### تغییر ۱ — فایل جدید: `supabase/functions/_shared/notifyTranslate.ts`
-
-یک utility مشترک ایجاد می‌کنیم تا:
-- متن اعلان (title + body) را به زبان هدف ترجمه کند
-- از `translate-message` edge function استفاده کند (که از قبل وجود دارد و با gemini-2.5-flash-lite کار می‌کند)
-- در صورت شکست ترجمه، متن انگلیسی را برگرداند (fallback)
+Add a `useQuery` inside `ActiveProductionHub` that fetches `cut_plan_items` for all active plan IDs, aggregating `total_pieces` and `completed_pieces`:
 
 ```typescript
-export async function translateNotification(
-  supabaseUrl: string,
-  serviceKey: string,
-  title: string,
-  body: string,
-  targetLang: string  // e.g., "fa", "en", "es"
-): Promise<{ title: string; body: string }>
+const planIds = activePlans.map(p => p.id);
+const { data: itemAggregates } = useQuery({
+  queryKey: ["production-hub-progress", planIds],
+  enabled: planIds.length > 0,
+  queryFn: async () => {
+    const { data } = await supabase
+      .from("cut_plan_items")
+      .select("cut_plan_id, total_pieces, completed_pieces")
+      .in("cut_plan_id", planIds);
+    return data || [];
+  },
+});
 ```
 
-نکته: چون `translate-message` نیاز به Auth دارد، از `serviceKey` در header استفاده می‌کنیم (همان روشی که `notify-feedback-owner` استفاده می‌کند).
+### Step 2 -- Compute per-machine progress
 
-### تغییر ۲ — `notify-on-message/index.ts`
-
-#### در `handleTeamMessage`:
-
-فعلاً profiles را اینگونه می‌خواند:
-```typescript
-const { data: profiles } = await svc
-  .from("profiles")
-  .select("id, user_id")   // ← فقط id و user_id
-  .in("id", profileIds);
-```
-
-تغییر: `preferred_language` هم اضافه می‌شود:
-```typescript
-const { data: profiles } = await svc
-  .from("profiles")
-  .select("id, user_id, preferred_language")
-  .in("id", profileIds);
-```
-
-سپس به جای یک batch insert یکسان برای همه، برای هر کاربر با زبان غیر-انگلیسی ترجمه انجام می‌دهیم:
+Group the aggregated items by `machine_id` (via plan mapping) and compute percentage:
 
 ```typescript
-// Group by language → translate once per language
-const byLang = groupByLanguage(profiles);
-for (const [lang, langProfiles] of Object.entries(byLang)) {
-  let { title: localTitle, body: localBody } = { title, body: preview };
-  if (lang !== "en") {
-    ({ title: localTitle, body: localBody } = await translateNotification(
-      supabaseUrl, serviceKey, title, preview, lang
-    ));
-  }
-  const rows = langProfiles.map(p => ({
-    user_id: p.user_id,
-    title: localTitle,
-    description: localBody,
-    ...
-  }));
-  await svc.from("notifications").insert(rows);
+// Build: machineId -> { total, completed }
+const machineProgress = new Map<string, { total: number; completed: number }>();
+for (const item of itemAggregates) {
+  const plan = activePlans.find(p => p.id === item.cut_plan_id);
+  if (!plan?.machine_id) continue;
+  const entry = machineProgress.get(plan.machine_id) || { total: 0, completed: 0 };
+  entry.total += item.total_pieces || 0;
+  entry.completed += item.completed_pieces || 0;
+  machineProgress.set(plan.machine_id, entry);
 }
 ```
 
-#### در `handleSupportMessage`:
+### Step 3 -- Replace hardcoded 0 with computed values
 
-فعلاً `companyProfiles` را بدون `preferred_language` می‌گیرد:
-```typescript
-const { data: companyProfiles } = await svc
-  .from("profiles")
-  .select("user_id")   // ← فقط user_id
-  ...
+Replace:
+```tsx
+<span>0%</span>
+<Progress value={0} className="h-1.5" />
 ```
 
-تغییر: `preferred_language` هم اضافه می‌شود و همان الگوی گروه‌بندی بر اساس زبان اعمال می‌شود.
+With:
+```tsx
+const prog = machineProgress.get(machine.id);
+const pct = prog && prog.total > 0 ? Math.round((prog.completed / prog.total) * 100) : 0;
 
----
+<span>{pct}%</span>
+<Progress value={pct} className="h-1.5" />
+// Show pieces count below
+<p className="text-[10px] text-muted-foreground text-right mt-0.5">
+  {prog?.completed || 0} / {prog?.total || 0} pieces
+</p>
+```
 
-## جزئیات فنی مهم
+## Files Changed
+| File | Change |
+|------|--------|
+| `src/components/shopfloor/ActiveProductionHub.tsx` | Add useQuery for cut_plan_items aggregation, compute per-machine progress, replace hardcoded 0% |
 
-### گروه‌بندی بر اساس زبان (بهینه‌سازی)
-به جای اینکه برای هر کاربر یک ترجمه جداگانه فراخوانی شود (که هزینه بالایی دارد)، کاربران بر اساس `preferred_language` گروه‌بندی می‌شوند:
-- کاربران انگلیسی: بدون فراخوانی API
-- کاربران فارسی: یک بار ترجمه → برای همه فارسی‌زبانان استفاده می‌شود
-- کاربران عربی: یک بار ترجمه → و الی آخر
-
-این روش تعداد API calls را به حداقل می‌رساند.
-
-### Fallback امن
-اگر ترجمه به هر دلیلی شکست بخورد (network error، rate limit)، متن انگلیسی اصلی استفاده می‌شود. اعلان همیشه ارسال می‌شود.
-
-### Default Language
-کاربرانی که `preferred_language` ندارند (null)، به عنوان `"en"` در نظر گرفته می‌شوند.
-
----
-
-## خلاصه فایل‌های تغییریافته
-
-| فایل | نوع تغییر |
-|------|-----------|
-| `supabase/functions/_shared/notifyTranslate.ts` | ایجاد جدید — shared translation utility |
-| `supabase/functions/notify-on-message/index.ts` | ویرایش — اضافه کردن preferred_language + ترجمه per-user |
-
-## آنچه تغییر نمی‌کند
-- هیچ UI یا صفحه‌ای
-- هیچ جدول دیتابیس
-- سایر edge functions
-- `push-on-notify`, `notify-feedback-owner`, `alert-router`, `daily-team-report`
-- ساختار notifications table
-- هیچ منطق دیگری در اپلیکیشن
+## What Does NOT Change
+- CutterStationView, BenderStationView, CutEngine, SlotTracker
+- StationDashboard layout, header, Live Queue section
+- Database schema, edge functions, RLS policies
+- Any other page or component
