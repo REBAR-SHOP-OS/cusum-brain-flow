@@ -1,49 +1,82 @@
 
-# Add File Attachment to Task Creation Dialog (rebar.shop Users Only)
+# Implement File Attachment in Tasks (Previously Unimplemented)
 
-## Current State
+## What Happened
 
-The Task page (`src/pages/Tasks.tsx`) already has:
-- `attachment_urls` (text array) column on the `tasks` table — confirmed in the DB schema
-- An Attachments section in the task detail drawer (lines 743-760) that **displays** existing URLs but has no upload button
-- The Create Task dialog (lines 554-592) with Title, Description, Due Date, Priority — **no file upload**
-- The `clearance-photos` bucket exists and is already used for task-related uploads
+The plan was approved previously but the code was never written to `Tasks.tsx`. The file is currently at 780 lines with zero attachment upload logic. This plan implements it now.
 
-**What's missing:** A file picker in the Create Task dialog, visible only to `@rebar.shop` users.
+## Confirmed Current State of Tasks.tsx
 
-## Scope — Only `src/pages/Tasks.tsx`
+- Lines 165-171: No `currentUserEmail`, `pendingFiles`, or `uploadingFiles` state
+- Lines 178-191: Only captures `user_id` and `profile_id` — no email
+- Lines 554-592: Create Task Dialog has Title, Description, Due Date, Priority only — no file picker
+- Lines 335-374: `createTask()` has no upload logic
+- Lines 744-760: Attachments section exists in drawer but is display-only with no upload button
 
-### Change 1: Capture user email
-In the `useEffect` (line 178-191) that already fetches `user?.id`, also read `user?.email` and store it:
+## All Changes — Only `src/pages/Tasks.tsx`
 
+### 1. Add `X` to lucide-react imports (line 4)
+Currently: `CheckSquare, Plus, RefreshCw, Copy, Check, Maximize2, Minus, Sparkles, MessageSquare, Paperclip, Send, Trash2, ExternalLink`
+Add: `X` to the list
+
+### 2. Add state variables (after line 171)
 ```ts
 const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
-// inside the useEffect:
-setCurrentUserEmail(data.user?.email ?? null);
-```
-
-Then derive once:
-```ts
-const isInternal = (currentUserEmail ?? "").endsWith("@rebar.shop");
-```
-
----
-
-### Change 2: File state for the Create Task dialog
-Add three new state variables alongside the existing create-modal states (lines 165-171):
-
-```ts
 const [pendingFiles, setPendingFiles] = useState<File[]>([]);
 const [uploadingFiles, setUploadingFiles] = useState(false);
 ```
 
-Reset them when the dialog closes (alongside `setNewTitle("")` etc.).
+### 3. Capture user email in the existing useEffect (lines 178-191)
+```ts
+// After setCurrentUserId(uid):
+setCurrentUserEmail(data.user?.email ?? null);
+```
 
----
+### 4. Derive isInternal (after the useEffect, before loadData)
+```ts
+const isInternal = (currentUserEmail ?? "").endsWith("@rebar.shop");
+```
 
-### Change 3: File picker UI in the Create Task dialog
-Inside the dialog (after the Due Date / Priority grid, before the Create Task button), add a section that only renders when `isInternal`:
+### 5. Add file handlers (before createTask function)
+```ts
+const handleFilePick = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const files = Array.from(e.target.files || []);
+  setPendingFiles(prev => [...prev, ...files]);
+  e.target.value = "";
+};
+const removeFile = (index: number) => {
+  setPendingFiles(prev => prev.filter((_, i) => i !== index));
+};
+```
 
+### 6. Modify createTask() to upload files after insert (lines 354-371)
+After `await writeAudit(...)`, add upload logic:
+```ts
+// Upload pending files
+if (pendingFiles.length > 0) {
+  setUploadingFiles(true);
+  const urls: string[] = [];
+  for (const file of pendingFiles) {
+    const path = `task-attachments/${data.id}/${Date.now()}-${file.name}`;
+    const { error: upErr } = await supabase.storage
+      .from("clearance-photos").upload(path, file);
+    if (!upErr) {
+      const { data: signed } = await supabase.storage
+        .from("clearance-photos")
+        .createSignedUrl(path, 60 * 60 * 24 * 365);
+      if (signed?.signedUrl) urls.push(signed.signedUrl);
+    }
+  }
+  if (urls.length > 0) {
+    await supabase.from("tasks").update({ attachment_urls: urls } as any).eq("id", data.id);
+  }
+  setPendingFiles([]);
+  setUploadingFiles(false);
+}
+```
+Also reset `setPendingFiles([])` in the cleanup at line 370.
+
+### 7. Add file picker UI in Create Task Dialog (after the priority grid, before the Create Task button — line 587)
 ```tsx
 {isInternal && (
   <div>
@@ -58,7 +91,9 @@ Inside the dialog (after the Due Date / Priority grid, before the Create Task bu
         {pendingFiles.map((f, i) => (
           <div key={i} className="flex items-center justify-between text-xs text-muted-foreground bg-muted/30 rounded px-2 py-1">
             <span className="truncate">{f.name}</span>
-            <button onClick={() => removeFile(i)} type="button"><X className="w-3 h-3" /></button>
+            <button onClick={() => removeFile(i)} type="button">
+              <X className="w-3 h-3" />
+            </button>
           </div>
         ))}
       </div>
@@ -66,59 +101,22 @@ Inside the dialog (after the Due Date / Priority grid, before the Create Task bu
   </div>
 )}
 ```
+Update Create Task button to show uploading state: `{creating || uploadingFiles ? "Creating..." : "Create Task"}`
 
-Add `X` to existing lucide imports (already imported: `Paperclip`).
-
----
-
-### Change 4: Upload logic inside `createTask()`
-After the task row is inserted and its `id` is known (line 352 — `.select().single()`), if `pendingFiles.length > 0`:
-
-```ts
-// Upload each file to clearance-photos/task-attachments/{taskId}/
-const urls: string[] = [];
-for (const file of pendingFiles) {
-  const path = `task-attachments/${data.id}/${Date.now()}-${file.name}`;
-  const { error: upErr } = await supabase.storage.from("clearance-photos").upload(path, file);
-  if (!upErr) {
-    const { data: signed } = await supabase.storage.from("clearance-photos").createSignedUrl(path, 60 * 60 * 24 * 365); // 1 year
-    if (signed?.signedUrl) urls.push(signed.signedUrl);
-  }
-}
-// Patch the task with attachment_urls
-if (urls.length > 0) {
-  await supabase.from("tasks").update({ attachment_urls: urls } as any).eq("id", data.id);
-}
-```
-
----
-
-### Change 5: Upload button in the detail drawer (bonus, same file)
-In the Attachments section of the detail drawer (line 744-760), add an upload button also gated by `isInternal`:
-
+### 8. Add Upload button in drawer Attachments section (line 757-759)
+Replace the "No attachments" paragraph with:
 ```tsx
 {isInternal && (
-  <label className="flex items-center gap-1.5 text-xs text-primary cursor-pointer hover:underline">
+  <label className="flex items-center gap-1.5 text-xs text-primary cursor-pointer hover:underline mt-1">
     <Paperclip className="w-3 h-3" /> Upload file
     <input type="file" multiple className="sr-only" onChange={handleDrawerUpload} />
   </label>
 )}
+{((selectedTask as any)?.attachment_urls?.length === 0 || !(selectedTask as any)?.attachment_urls) && (
+  <p className="text-xs text-muted-foreground">No attachments</p>
+)}
 ```
 
-The `handleDrawerUpload` function uploads files to `task-attachments/{selectedTask.id}/...`, appends signed URLs to the existing `attachment_urls` array, and calls `loadData()` to refresh.
+Add `handleDrawerUpload` function that uploads to `clearance-photos`, appends new signed URLs to the existing `attachment_urls` array, and refreshes the drawer.
 
----
-
-## Summary of Changes
-
-| Location | What changes |
-|---|---|
-| State declarations (~line 165) | Add `currentUserEmail`, `pendingFiles`, `uploadingFiles` |
-| `useEffect` (~line 179) | Capture `data.user?.email` |
-| `isInternal` constant | Derived from `currentUserEmail` |
-| `createTask()` (~line 335) | After insert: upload files, patch `attachment_urls`, reset `pendingFiles` |
-| Create Task dialog (~line 585) | File picker section (gated by `isInternal`) |
-| Detail drawer Attachments (~line 757) | Upload button (gated by `isInternal`) |
-| Imports | Add `X` from lucide-react |
-
-**No other files are modified. No DB migrations needed (`attachment_urls` column already exists). No new storage buckets needed (`clearance-photos` already exists).**
+## No DB changes. No new storage buckets. attachment_urls column already exists.
