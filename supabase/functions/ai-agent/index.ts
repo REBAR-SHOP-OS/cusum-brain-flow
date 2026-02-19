@@ -4749,11 +4749,11 @@ serve(async (req) => {
     }
     const stripSendCapabilities = agentDraftOnly || globalNoAct;
 
-    // Rate limit: 10 requests per 60 seconds per user
+    // Rate limit: 30 requests per 60 seconds per user
     const { data: allowed } = await svcClient.rpc("check_rate_limit", {
       _user_id: user.id,
       _function_name: "ai-agent",
-      _max_requests: 10,
+      _max_requests: 30,
       _window_seconds: 60,
     });
     if (allowed === false) {
