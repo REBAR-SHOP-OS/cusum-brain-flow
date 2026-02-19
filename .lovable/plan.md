@@ -1,50 +1,61 @@
 
 
-# Fix Banking Activity — Correct Bank Balance Wiring
+# Fix Banking Activity — Wrong Numbers (3 Issues)
 
-## The Problem
+## Problems Identified
 
-The `bank_balance` column in `qb_bank_activity` was seeded with **ledger balances** (QuickBooks `CurrentBalance`) instead of actual bank statement balances. The sync engine then preserves these wrong values on every sync, so they never get corrected.
+The screenshot from QuickBooks shows three values that don't match the ERP:
 
-In QuickBooks, only **BMO BUSINESS** has a bank feed with a real bank balance. The other accounts (PETTY CASH, CUSTOMER REFUND, BMO SAVINGS) show "--" for bank balance because they have no connected bank feed.
+| Field | QuickBooks Shows | ERP Shows | Root Cause |
+|-------|-----------------|-----------|------------|
+| In QuickBooks | $22,037.53 | $32,035.28 | Using stale cached balance from `qb_accounts` table instead of fetching live from QB API |
+| Unreconciled | 977 transactions | 34 | Counting section headers instead of actual transaction rows (QB reports nest rows inside sections) |
+| Reconciled Through | 31/10/2025 | -- (nil) | Report query likely failing or returning grouped structure that isn't being parsed correctly |
 
-## Data Fix
+---
 
-Clear all wrong `bank_balance` values so the table starts clean. Only BMO BUSINESS should have a bank balance, and it needs to be manually entered ($14,971.54 per your earlier screenshot).
+## Fix 1: Ledger Balance — Fetch Live from QB API
 
-```
-UPDATE qb_bank_activity SET bank_balance = NULL;
-UPDATE qb_bank_activity SET bank_balance = 14971.54 WHERE qb_account_id = '54';
-```
+**Current**: Line 1008 uses `account.current_balance` from the cached `qb_accounts` table, which may be stale.
 
-## Code Fix — Sync Engine
+**Fix**: During the bank-activity sync, fetch each bank account directly from the QB API (`Account/{id}`) to get the real-time `CurrentBalance`, instead of relying on the cached table.
 
-The current sync engine (line 1016-1018 of `qb-sync-engine/index.ts`) has this logic:
+---
 
-```
-// Preserve existing bank_balance if present
-if (existing?.bank_balance != null) {
-  upsertRow.bank_balance = existing.bank_balance;
-}
-```
+## Fix 2: Unreconciled Count — Recursively Count Transaction Rows
 
-This is correct behavior (preserve manual entries). But the problem was the initial seed data was wrong. After the data fix above, this logic will work correctly going forward because:
-- Accounts without a bank feed will have `bank_balance = NULL` (shows "--")
-- Only manually entered values will be preserved
+**Current**: Line 956 does `unreconciledCount = rows.length` which counts top-level elements. But QB TransactionList reports group transactions into sections, where each section has nested `Rows.Row` arrays containing the actual transactions.
 
-No code changes needed in the sync engine.
+**Fix**: Add a recursive row counter that walks the nested report structure (same pattern already used in `quickbooks-oauth/index.ts` at line 1559) to count only leaf data rows (those with `ColData`), not section headers.
 
-## Frontend Fix — BankAccountsCard.tsx
+---
 
-Currently the Bank Balance column shows the QB `CurrentBalance` as a fallback when no activity row exists. This fallback is wrong — if there's no `bank_balance` entry, it should show "--", not the ledger balance.
+## Fix 3: Reconciled Through Date — Fix Report Parsing
 
-Update the fallback in the Bank Balance cell: when `activity?.bank_balance` is null, always show "--" instead of falling back to `account.CurrentBalance`.
+**Current**: The reconciled report query uses `limit=1` which is not a valid QB report parameter, and it tries to parse just the first row's `ColData` — but that first "row" is likely a section header, not a data row.
 
-## Summary of Changes
+**Fix**: Remove the invalid `limit=1` parameter. Recursively walk all reconciled transaction rows to extract dates from `ColData`, then find the maximum date as the "reconciled through" date.
 
-| Change | Type | Detail |
-|--------|------|--------|
-| Reset `bank_balance` for all accounts | Data fix (SQL) | Set all to NULL, then set BMO BUSINESS to $14,971.54 |
-| Remove ledger fallback in Bank Balance column | Frontend fix | Show "--" when `bank_balance` is null, never fall back to `CurrentBalance` |
-| No sync engine changes needed | None | The preserve logic is correct once data is fixed |
+---
+
+## Technical Changes
+
+### File: `supabase/functions/qb-sync-engine/index.ts`
+
+1. Add a helper function `countReportDataRows(rows)` that recursively counts leaf rows (rows with `ColData` but no nested `Rows.Row`)
+
+2. Add a helper function `extractMaxDateFromReport(rows)` that recursively walks all leaf rows and finds the maximum date value
+
+3. Update the unreconciled section (~line 948-959):
+   - Replace `rows.length` with `countReportDataRows(rows)`
+
+4. Update the ledger balance fetch (~line 941-1008):
+   - Before the upsert, fetch the account from QB API: `Account/${account.qb_id}`
+   - Use the live `CurrentBalance` instead of the cached `account.current_balance`
+
+5. Update the reconciled section (~line 962-994):
+   - Remove invalid `limit=1` parameter
+   - Use `extractMaxDateFromReport(rows)` to find the latest reconciled date
+
+No database or frontend changes needed — the issue is entirely in the sync engine's data collection logic.
 
