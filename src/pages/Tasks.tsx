@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   CheckSquare, Plus, RefreshCw, Copy, Check, Maximize2, Minus, Sparkles,
@@ -134,6 +134,50 @@ function sortTasks(tasks: TaskRow[]): TaskRow[] {
   return [...active, ...completed];
 }
 
+async function copyImageToClipboard(url: string) {
+  try {
+    const resp = await fetch(url);
+    const blob = await resp.blob();
+    const imgBlob = blob.type.startsWith("image/") ? blob : new Blob([blob], { type: "image/png" });
+    await navigator.clipboard.write([new ClipboardItem({ [imgBlob.type]: imgBlob })]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function ImageWithCopy({ src }: { src: string }) {
+  const [copiedImg, setCopiedImg] = React.useState(false);
+  const handleCopy = async () => {
+    const ok = await copyImageToClipboard(src);
+    if (ok) {
+      setCopiedImg(true);
+      setTimeout(() => setCopiedImg(false), 2000);
+    } else {
+      // fallback: copy URL
+      navigator.clipboard.writeText(src);
+      setCopiedImg(true);
+      setTimeout(() => setCopiedImg(false), 2000);
+    }
+  };
+  return (
+    <span className="block my-2 relative group/img">
+      <a href={src} target="_blank" rel="noopener noreferrer">
+        <img src={src} alt="Screenshot" className="max-w-full h-auto rounded-lg border border-border" loading="lazy" />
+      </a>
+      <button
+        onClick={handleCopy}
+        title={copiedImg ? "Copied!" : "Copy image"}
+        className="absolute top-1 right-1 bg-background/80 border border-border rounded p-1 opacity-0 group-hover/img:opacity-100 transition-opacity hover:bg-muted"
+      >
+        {copiedImg
+          ? <Check className="w-3 h-3 text-green-500" />
+          : <Copy className="w-3 h-3 text-muted-foreground" />}
+      </button>
+    </span>
+  );
+}
+
 function linkifyText(text: string | null) {
   if (!text) return null;
   const urlRegex = /(https?:\/\/[^\s]+)/g;
@@ -142,17 +186,14 @@ function linkifyText(text: string | null) {
   return parts.map((part, i) => {
     if (/^https?:\/\//.test(part)) {
       if (imageExtRegex.test(part)) {
-        return (
-          <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="block my-2">
-            <img src={part} alt="Screenshot" className="max-w-full h-auto rounded-lg border border-border" loading="lazy" />
-          </a>
-        );
+        return <ImageWithCopy key={i} src={part} />;
       }
       return <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-primary underline break-all">{part}</a>;
     }
     return <span key={i}>{part}</span>;
   });
 }
+
 
 // ─── Component ──────────────────────────────────────────
 export default function Tasks() {
