@@ -8738,7 +8738,6 @@ RULES:
     if (reply === null || reply === undefined || reply.trim() === "") {
       console.warn("Empty reply fallback triggered", { 
         agent, 
-        toolLoopIterations, 
         messageLength: message?.length 
       });
       reply = "[STOP]\n\nI ran into an issue processing your request. This can happen when the task is complex or context is incomplete.\n\n**To move forward, please help me with:**\n1. Can you rephrase or simplify what you need?\n2. If this is about a specific record, provide the exact ID or name\n3. If this is a UI change, describe the exact page and element\n\nI have full read/write tools available -- I just need clearer input to use them effectively.";
