@@ -9351,6 +9351,54 @@ export type Database = {
         }
         Relationships: []
       }
+      sync_validation_log: {
+        Row: {
+          auto_fixed: boolean
+          company_id: string
+          created_at: string
+          field_name: string | null
+          field_value: string | null
+          fix_applied: string | null
+          id: string
+          lead_id: string | null
+          message: string
+          odoo_id: string
+          severity: string
+          sync_run_at: string
+          validation_type: string
+        }
+        Insert: {
+          auto_fixed?: boolean
+          company_id: string
+          created_at?: string
+          field_name?: string | null
+          field_value?: string | null
+          fix_applied?: string | null
+          id?: string
+          lead_id?: string | null
+          message: string
+          odoo_id: string
+          severity?: string
+          sync_run_at?: string
+          validation_type: string
+        }
+        Update: {
+          auto_fixed?: boolean
+          company_id?: string
+          created_at?: string
+          field_name?: string | null
+          field_value?: string | null
+          fix_applied?: string | null
+          id?: string
+          lead_id?: string | null
+          message?: string
+          odoo_id?: string
+          severity?: string
+          sync_run_at?: string
+          validation_type?: string
+        }
+        Relationships: []
+      }
       system_backups: {
         Row: {
           backup_type: string
