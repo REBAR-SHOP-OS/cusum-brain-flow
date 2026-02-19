@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { callAI } from "../_shared/aiRouter.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -110,11 +111,6 @@ async function analyzeWithGemini(
   fromNumber: string,
   toNumber: string
 ): Promise<any> {
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  if (!LOVABLE_API_KEY) {
-    throw new Error("LOVABLE_API_KEY not configured");
-  }
-
   const systemPrompt = `You are a call analysis assistant. You will receive an audio recording of a phone call.
 Your task is to:
 1. Transcribe the conversation with speaker identification (label speakers as "0", "1", etc.)
@@ -136,42 +132,23 @@ Return your analysis using the provided tool.`;
       parameters: {
         type: "object",
         properties: {
-          transcript: {
-            type: "string",
-            description: "Full text transcription of the call",
-          },
+          transcript: { type: "string", description: "Full text transcription of the call" },
           utterances: {
             type: "array",
             description: "Individual utterances with speaker identification",
             items: {
               type: "object",
               properties: {
-                speakerId: {
-                  type: "string",
-                  description: "Speaker identifier: '0' for first speaker, '1' for second, etc.",
-                },
-                text: {
-                  type: "string",
-                  description: "What was said",
-                },
+                speakerId: { type: "string", description: "Speaker identifier: '0' for first speaker, '1' for second, etc." },
+                text: { type: "string", description: "What was said" },
               },
               required: ["speakerId", "text"],
               additionalProperties: false,
             },
           },
-          quickSummary: {
-            type: "string",
-            description: "2-3 sentence summary of the call",
-          },
-          detailedSummary: {
-            type: "string",
-            description: "1-2 paragraph detailed summary",
-          },
-          keyHighlights: {
-            type: "array",
-            description: "Key quotes or moments from the call",
-            items: { type: "string" },
-          },
+          quickSummary: { type: "string", description: "2-3 sentence summary of the call" },
+          detailedSummary: { type: "string", description: "1-2 paragraph detailed summary" },
+          keyHighlights: { type: "array", description: "Key quotes or moments from the call", items: { type: "string" } },
           speakers: {
             type: "array",
             description: "Insights for each speaker",
@@ -179,27 +156,15 @@ Return your analysis using the provided tool.`;
               type: "object",
               properties: {
                 speakerId: { type: "string" },
-                sentiment: {
-                  type: "string",
-                  enum: ["positive", "neutral", "negative", "mixed"],
-                },
-                talkRatio: {
-                  type: "number",
-                  description: "Approximate percentage of time this speaker talked (0-1)",
-                },
-                energy: {
-                  type: "string",
-                  enum: ["high", "medium", "low"],
-                },
+                sentiment: { type: "string", enum: ["positive", "neutral", "negative", "mixed"] },
+                talkRatio: { type: "number", description: "Approximate percentage of time this speaker talked (0-1)" },
+                energy: { type: "string", enum: ["high", "medium", "low"] },
               },
               required: ["speakerId", "sentiment", "talkRatio"],
               additionalProperties: false,
             },
           },
-          overallSentiment: {
-            type: "string",
-            enum: ["positive", "neutral", "negative", "mixed"],
-          },
+          overallSentiment: { type: "string", enum: ["positive", "neutral", "negative", "mixed"] },
           tasks: {
             type: "array",
             description: "Actionable tasks extracted from the conversation. Only genuine action items.",
@@ -208,26 +173,14 @@ Return your analysis using the provided tool.`;
               properties: {
                 title: { type: "string" },
                 description: { type: "string" },
-                priority: {
-                  type: "string",
-                  enum: ["high", "medium", "low"],
-                },
+                priority: { type: "string", enum: ["high", "medium", "low"] },
               },
               required: ["title", "description", "priority"],
               additionalProperties: false,
             },
           },
         },
-        required: [
-          "transcript",
-          "utterances",
-          "quickSummary",
-          "detailedSummary",
-          "keyHighlights",
-          "speakers",
-          "overallSentiment",
-          "tasks",
-        ],
+        required: ["transcript", "utterances", "quickSummary", "detailedSummary", "keyHighlights", "speakers", "overallSentiment", "tasks"],
         additionalProperties: false,
       },
     },
@@ -235,55 +188,28 @@ Return your analysis using the provided tool.`;
 
   const audioDataUri = `data:${mimeType};base64,${audioBase64}`;
 
-  const aiResponse = await fetch(
-    "https://ai.gateway.lovable.dev/v1/chat/completions",
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: systemPrompt },
-          {
-            role: "user",
-            content: [
-              { type: "text", text: userPrompt },
-              {
-                type: "image_url",
-                image_url: { url: audioDataUri },
-              },
-            ],
-          },
+  const result = await callAI({
+    provider: "gemini",
+    model: "gemini-2.5-flash",
+    messages: [
+      { role: "system", content: systemPrompt },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: userPrompt },
+          { type: "image_url", image_url: { url: audioDataUri } },
         ],
-        tools: [analysisToolSchema],
-        tool_choice: {
-          type: "function",
-          function: { name: "call_analysis_result" },
-        },
-        temperature: 0.2,
-      }),
-    }
-  );
+      },
+    ],
+    tools: [analysisToolSchema],
+    toolChoice: { type: "function", function: { name: "call_analysis_result" } },
+    temperature: 0.2,
+  });
 
-  if (!aiResponse.ok) {
-    const errText = await aiResponse.text();
-    throw new Error(`AI analysis failed [${aiResponse.status}]: ${errText}`);
-  }
-
-  const aiData = await aiResponse.json();
-
-  // Extract tool call result
-  const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
+  const toolCall = result.toolCalls[0];
   if (!toolCall?.function?.arguments) {
     // Fallback: try to parse from content
-    const content = aiData.choices?.[0]?.message?.content || "";
-    const cleaned = content
-      .replace(/```json\n?/g, "")
-      .replace(/```\n?/g, "")
-      .trim();
+    const cleaned = result.content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
     try {
       return JSON.parse(cleaned);
     } catch {

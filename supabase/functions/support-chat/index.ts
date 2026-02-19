@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { callAI } from "../_shared/aiRouter.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -373,33 +374,17 @@ async function triggerAiReply(supabase: any, convo: any, visitorMessage: string,
     })),
   ];
 
-  const apiKey = Deno.env.get("LOVABLE_API_KEY");
-  if (!apiKey) {
-    console.error("LOVABLE_API_KEY not set, skipping AI reply");
-    return;
-  }
-
-  const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "google/gemini-3-flash-preview",
+  try {
+    const result = await callAI({
+      provider: "gpt",
+      model: "gpt-4o-mini",
       messages,
-      stream: false,
-    }),
-  });
-
-  if (!aiResponse.ok) {
-    const errText = await aiResponse.text();
-    console.error("AI gateway error:", aiResponse.status, errText);
+    });
+    var reply: string | undefined = result.content;
+  } catch (aiErr) {
+    console.error("AI reply error:", aiErr);
     return;
   }
-
-  const aiData = await aiResponse.json();
-  const reply = aiData.choices?.[0]?.message?.content;
 
   if (!reply) return;
 
@@ -429,26 +414,16 @@ Generate a warm, contextual welcome message (2-3 sentences max). If they're on a
 
 If the visitor asks to speak to a real person at any point, let them know a team member will be with them shortly and that the sales team has been notified.`;
 
-  const apiKey = Deno.env.get("LOVABLE_API_KEY");
-  if (!apiKey) return;
-
-  const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "google/gemini-3-flash-preview",
+  try {
+    const result = await callAI({
+      provider: "gpt",
+      model: "gpt-4o-mini",
       messages: [{ role: "user", content: greetingPrompt }],
-      stream: false,
-    }),
-  });
-
-  if (!aiResponse.ok) return;
-
-  const aiData = await aiResponse.json();
-  const reply = aiData.choices?.[0]?.message?.content;
+    });
+    var reply: string | undefined = result.content;
+  } catch {
+    return;
+  }
   if (!reply) return;
 
   await supabase.from("support_messages").insert({

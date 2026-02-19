@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { callAI } from "../_shared/aiRouter.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -278,12 +279,9 @@ serve(async (req) => {
       }
     }
 
-    // Build trending summary using AI
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     let trendingSummary = "";
-    if (LOVABLE_API_KEY) {
-      try {
-        const summaryPrompt = `Based on this business data for Rebar.shop (rebar fabrication company in Ontario), write a 3-sentence business intelligence summary for social media content creation:
+    try {
+      const summaryPrompt = `Based on this business data for Rebar.shop (rebar fabrication company in Ontario), write a 3-sentence business intelligence summary for social media content creation:
 - ${orders.length} orders in last 30 days, total revenue: $${totalRevenue.toLocaleString()}
 - Top leads: ${leads.map((l: any) => `${l.title} ($${l.value})`).join(", ")}
 - Customer inquiries: ${customerQuestions.slice(0, 5).join("; ")}
@@ -292,26 +290,15 @@ serve(async (req) => {
 
 Focus on what content topics would resonate most and what products/services to highlight.`;
 
-        const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${LOVABLE_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "google/gemini-2.5-flash-lite",
-            messages: [{ role: "user", content: summaryPrompt }],
-            max_tokens: 300,
-          }),
-        });
-
-        if (aiRes.ok) {
-          const aiData = await aiRes.json();
-          trendingSummary = aiData.choices?.[0]?.message?.content || "";
-        }
-      } catch (e) {
-        console.error("AI summary error:", e);
-      }
+      const aiResult = await callAI({
+        provider: "gpt",
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: summaryPrompt }],
+        maxTokens: 300,
+      });
+      trendingSummary = aiResult.content || "";
+    } catch (e) {
+      console.error("AI summary error:", e);
     }
 
     const report: BusinessInsightReport = {

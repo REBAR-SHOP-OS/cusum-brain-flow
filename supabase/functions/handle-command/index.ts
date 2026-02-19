@@ -1,13 +1,47 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireAuth, corsHeaders } from "../_shared/auth.ts";
+import { callAI, AIError } from "../_shared/aiRouter.ts";
 import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
 
 interface CommandRequest {
   input: string;
 }
 
-// ... keep existing code (parseIntent function)
+function parseIntent(input: string) {
+  const inputLower = input.toLowerCase();
+  let intent = "ai_ask"; // Default intent
+
+  if (inputLower.startsWith("navigate to")) {
+    intent = "navigate";
+    const page = input.substring("navigate to".length).trim();
+    return { intent: "navigate", params: { page } };
+  }
+
+  if (inputLower.startsWith("show") && inputLower.includes("machines")) {
+    intent = "query_machines";
+    const statusMatch = inputLower.match(/(idle|active|stopped)/);
+    const status = statusMatch ? statusMatch[0] : "idle";
+    return { intent: "query_machines", params: { status } };
+  }
+
+  if (inputLower.includes("stock levels") || inputLower.includes("inventory")) {
+    intent = "query_inventory";
+    return { intent: "query_inventory", params: {} };
+  }
+
+  if (inputLower.includes("work orders") || inputLower.includes("orders")) {
+    intent = "query_orders";
+    return { intent: "query_orders", params: {} };
+  }
+
+  if (inputLower.includes("next suggestion")) {
+    intent = "suggest_next";
+    return { intent: "suggest_next", params: {} };
+  }
+
+  return { intent, params: {} };
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -107,22 +141,10 @@ serve(async (req) => {
       }
 
       case "ai_ask": {
-        // Use Lovable AI for freeform questions
-        const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-        if (!LOVABLE_API_KEY) {
-          resultMessage = "AI not configured. Try a specific command like 'show idle machines' or 'check stock levels'.";
-          result = "failed";
-          break;
-        }
-
-        const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${LOVABLE_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "google/gemini-3-flash-preview",
+        try {
+          const aiResult = await callAI({
+            provider: "gpt",
+            model: "gpt-4o-mini",
             messages: [
               {
                 role: "system",
@@ -130,17 +152,14 @@ serve(async (req) => {
               },
               { role: "user", content: input },
             ],
-          }),
-        });
-
-        if (aiResponse.ok) {
-          const aiData = await aiResponse.json();
-          resultMessage = aiData.choices?.[0]?.message?.content || "No response from AI.";
-        } else if (aiResponse.status === 429) {
-          resultMessage = "Too many requests. Please try again in a moment.";
-          result = "failed";
-        } else {
-          resultMessage = "AI is temporarily unavailable. Try a specific command instead.";
+          });
+          resultMessage = aiResult.content || "No response from AI.";
+        } catch (aiErr) {
+          if (aiErr instanceof AIError && aiErr.status === 429) {
+            resultMessage = "Too many requests. Please try again in a moment.";
+          } else {
+            resultMessage = "AI is temporarily unavailable. Try a specific command instead.";
+          }
           result = "failed";
         }
         break;
