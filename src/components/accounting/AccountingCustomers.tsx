@@ -11,6 +11,7 @@ import { Users, Search, Loader2, Plus } from "lucide-react";
 import { CustomerDetail } from "@/components/customers/CustomerDetail";
 import { CustomerFormModal } from "@/components/customers/CustomerFormModal";
 import { useToast } from "@/hooks/use-toast";
+import { useCompanyId } from "@/hooks/useCompanyId";
 import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -24,7 +25,8 @@ const fmt = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
 
 export function AccountingCustomers({ data }: Props) {
-  const { customers, invoices } = data;
+  const { customers } = data;
+  const { companyId } = useCompanyId();
   const [search, setSearch] = useState("");
   const [selectedQbId, setSelectedQbId] = useState<string | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -33,14 +35,34 @@ export function AccountingCustomers({ data }: Props) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  // Fetch aggregated balances from the DB via RPC
+  const { data: balanceMap } = useQuery({
+    queryKey: ["qb_customer_balances", companyId],
+    enabled: !!companyId,
+    queryFn: async () => {
+      const { data: rows, error } = await supabase.rpc("get_qb_customer_balances", {
+        p_company_id: companyId!,
+      });
+      if (error) throw error;
+      const map = new Map<string, { openBalance: number; invoiceCount: number }>();
+      for (const r of rows ?? []) {
+        if (r.customer_qb_id) {
+          map.set(String(r.customer_qb_id), {
+            openBalance: Number(r.open_balance),
+            invoiceCount: Number(r.open_invoice_count),
+          });
+        }
+      }
+      return map;
+    },
+    staleTime: 1000 * 60 * 2,
+  });
+
   // Delete mutation — also soft-deletes from qb_customers mirror
   const deleteMutation = useMutation({
     mutationFn: async ({ id, quickbooks_id }: { id: string; quickbooks_id: string | null }) => {
-      // 1. Delete from local customers table
       const { error } = await supabase.from("customers").delete().eq("id", id);
       if (error) throw error;
-
-      // 2. Guard: only touch qb_customers if quickbooks_id exists
       if (quickbooks_id) {
         const { error: mirrorErr } = await supabase
           .from("qb_customers")
@@ -48,17 +70,16 @@ export function AccountingCustomers({ data }: Props) {
           .eq("qb_id", quickbooks_id);
         if (mirrorErr) {
           console.warn("Failed to soft-delete qb_customers mirror row:", mirrorErr.message);
-          // Non-fatal: local delete succeeded, mirror will be stale but not blocking
         }
       }
     },
     onSuccess: (_data, variables) => {
-      // Optimistic: add to local deletedQbIds set so row vanishes instantly
       if (variables.quickbooks_id) {
         setDeletedQbIds((prev) => new Set(prev).add(variables.quickbooks_id!));
       }
       queryClient.invalidateQueries({ queryKey: ["customers"] });
       queryClient.invalidateQueries({ queryKey: ["local_customer_by_qb"] });
+      queryClient.invalidateQueries({ queryKey: ["qb_customer_balances"] });
       setSelectedQbId(null);
       toast({ title: "Customer deleted" });
     },
@@ -67,7 +88,7 @@ export function AccountingCustomers({ data }: Props) {
     },
   });
 
-  // Callback after CustomerFormModal saves — sync display fields to qb_customers mirror
+  // Callback after CustomerFormModal saves
   const handleFormSaved = useCallback(async (savedCustomer: Customer | null) => {
     if (!savedCustomer?.quickbooks_id) return;
     const { error } = await supabase
@@ -80,7 +101,6 @@ export function AccountingCustomers({ data }: Props) {
     if (error) {
       console.warn("Failed to sync qb_customers mirror after edit:", error.message);
     }
-    // Invalidate the local customer query so the sheet refreshes
     queryClient.invalidateQueries({ queryKey: ["local_customer_by_qb"] });
   }, [queryClient]);
 
@@ -108,14 +128,13 @@ export function AccountingCustomers({ data }: Props) {
   );
 
   const enriched = filtered.map((c) => {
-    const custInvoices = invoices.filter(i => {
-      const refVal = i.CustomerRef?.value;
-      if (!refVal) return false;
-      return String(refVal) === String(c.Id);
-    });
-    const openBalance = custInvoices.reduce((sum, i) => sum + (i.Balance || 0), 0);
-    const overdue = custInvoices.filter(i => i.Balance > 0 && new Date(i.DueDate) < new Date()).length;
-    return { ...c, openBalance, overdue, invoiceCount: custInvoices.length };
+    const bal = balanceMap?.get(String(c.Id));
+    return {
+      ...c,
+      openBalance: bal?.openBalance ?? 0,
+      overdue: 0, // overdue requires due-date logic not in the RPC; kept for UI compat
+      invoiceCount: bal?.invoiceCount ?? 0,
+    };
   });
 
   enriched.sort((a, b) => a.DisplayName.localeCompare(b.DisplayName, undefined, { sensitivity: 'base' }));

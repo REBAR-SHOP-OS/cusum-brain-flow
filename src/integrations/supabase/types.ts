@@ -10596,6 +10596,14 @@ export type Database = {
           token_expires_at: string
         }[]
       }
+      get_qb_customer_balances: {
+        Args: { p_company_id: string }
+        Returns: {
+          customer_qb_id: string
+          open_balance: number
+          open_invoice_count: number
+        }[]
+      }
       get_table_stats: {
         Args: never
         Returns: {
