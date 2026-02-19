@@ -147,6 +147,21 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl }: Props) {
       const { data: { user } } = await supabase.auth.getUser();
       const userId = user?.id;
 
+      // Look up submitter's profile
+      let submitterProfileId: string | null = null;
+      let submitterName = "Unknown";
+      if (userId) {
+        const { data: prof } = await supabase
+          .from("profiles")
+          .select("id, full_name")
+          .eq("user_id", userId)
+          .maybeSingle();
+        if (prof) {
+          submitterProfileId = prof.id;
+          submitterName = prof.full_name || "Unknown";
+        }
+      }
+
       // Get current page for context
       const pagePath = window.location.pathname;
 
@@ -154,12 +169,13 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl }: Props) {
       for (const profileId of [SATTAR_PROFILE_ID, RADIN_PROFILE_ID]) {
         const { error: taskErr } = await supabase.from("tasks").insert({
           title: `Feedback: ${description.trim().slice(0, 80) || "Screenshot annotation"}`,
-          description: `${description.trim()}\n\nPage: ${pagePath}\nScreenshot: ${publicUrl}`,
+          description: `${description.trim()}\n\nFrom: ${submitterName}\nPage: ${pagePath}\nScreenshot: ${publicUrl}`,
           status: "pending",
           priority: "high",
           assigned_to: profileId,
           company_id: companyId ?? "a0000000-0000-0000-0000-000000000001",
-          
+          created_by_profile_id: submitterProfileId,
+          source: "screenshot_feedback",
           attachment_url: publicUrl,
         } as any);
         if (taskErr) throw taskErr;
