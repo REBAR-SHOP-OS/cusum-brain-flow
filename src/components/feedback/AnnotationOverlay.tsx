@@ -363,7 +363,7 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl }: Props) {
         <div className="flex gap-2 items-end">
           <div className="flex-1">
             <Textarea
-              placeholder="توضیح تغییر مورد نیاز را بنویسید یا با میکروفون بگویید..."
+              placeholder="Describe the change needed, or use the microphone..."
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className="min-h-[60px] max-h-[100px] w-full"
