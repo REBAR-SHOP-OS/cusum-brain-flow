@@ -35,22 +35,26 @@ export function ScreenshotFeedbackButton() {
       '[data-radix-dialog-overlay], [role="dialog"], [data-state="open"][data-radix-dialog-content], [vaul-drawer]'
     );
     const target = hasOverlay ? document.body : (document.getElementById("main-content") || document.body);
-    const rect = hasOverlay
-      ? { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight }
-      : target.getBoundingClientRect();
+    const isOverlay = !!hasOverlay;
+
+    const captureWidth  = isOverlay ? window.innerWidth  : target.scrollWidth;
+    const captureHeight = isOverlay ? window.innerHeight : target.scrollHeight;
+    const targetRect    = isOverlay ? null : target.getBoundingClientRect();
+    const captureX      = isOverlay ? 0 : (targetRect!.left + target.scrollLeft);
+    const captureY      = isOverlay ? 0 : (targetRect!.top  + target.scrollTop);
 
     const baseOpts = {
       useCORS: true,
       allowTaint: false,
       scale: 1,
-      width: rect.width,
-      height: rect.height,
-      windowWidth: window.innerWidth,
-      windowHeight: window.innerHeight,
-      x: rect.left,
-      y: rect.top,
-      scrollX: 0,
-      scrollY: 0,
+      width: captureWidth,
+      height: captureHeight,
+      windowWidth: Math.max(window.innerWidth, captureWidth),
+      windowHeight: Math.max(window.innerHeight, captureHeight),
+      x: captureX,
+      y: captureY,
+      scrollX: isOverlay ? 0 : -target.scrollLeft,
+      scrollY: isOverlay ? 0 : -target.scrollTop,
       backgroundColor: getComputedStyle(document.documentElement).backgroundColor || "#0f172a",
       logging: false,
       ignoreElements: (el: Element) => {
