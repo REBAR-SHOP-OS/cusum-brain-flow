@@ -1,7 +1,6 @@
 import { Link } from "react-router-dom";
 import { 
   Factory, 
-  LayoutGrid, 
   ShieldCheck, 
   Send, 
   PackageCheck,
@@ -21,11 +20,6 @@ interface HubCard {
 }
 
 const hubCards: HubCard[] = [
-  {
-    label: "OFFICE",
-    icon: <LayoutGrid className="w-7 h-7" />,
-    to: "/office",
-  },
   {
     label: "MATERIAL POOL",
     subtitle: "STAGING & FLOW",
