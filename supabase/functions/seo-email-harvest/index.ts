@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { callAI, AIError } from "../_shared/aiRouter.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -37,10 +38,8 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
-    if (!lovableApiKey) throw new Error("LOVABLE_API_KEY not configured");
-
     const supabase = createClient(supabaseUrl, serviceKey);
+
     const { domain_id } = await req.json();
     if (!domain_id) {
       return new Response(JSON.stringify({ error: "domain_id required" }), {
@@ -130,91 +129,73 @@ Deno.serve(async (req) => {
     );
 
     // AI extraction
-    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${lovableApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          {
-            role: "system",
-            content: `You are an SEO data extraction specialist. Parse SEO tool report emails (from Semrush, Wincher, Yoast, Ahrefs, Moz) and extract structured keyword ranking data and SEO issues. Focus on:
+    const aiResult = await callAI({
+      provider: "gemini",
+      model: "gemini-3-flash-preview",
+      messages: [
+        {
+          role: "system",
+          content: `You are an SEO data extraction specialist. Parse SEO tool report emails (from Semrush, Wincher, Yoast, Ahrefs, Moz) and extract structured keyword ranking data and SEO issues. Focus on:
 - Keyword + position pairs (current ranking position)
 - Position changes (gained/lost positions)
 - SEO site issues (broken links, missing meta, redirects, crawl errors)
 - Domain: ${domain.domain}
 Extract CONCRETE data points, not general observations.`,
-          },
-          {
-            role: "user",
-            content: `Extract SEO keywords with rankings and site issues from these tool report emails:\n\n${emailBlocks.join("\n\n---\n\n")}`,
-          },
-        ],
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: "extract_seo_data",
-              description: "Return extracted keywords and SEO issues from tool report emails",
-              parameters: {
-                type: "object",
-                properties: {
-                  keywords: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        keyword: { type: "string", description: "Keyword phrase" },
-                        position: { type: "number", description: "Current ranking position (1-100+)" },
-                        position_change: { type: "number", description: "Position change (positive = improved)" },
-                        tool_source: { type: "string", description: "semrush, wincher, yoast, ahrefs, moz" },
-                        intent: { type: "string", enum: ["informational", "navigational", "transactional", "commercial"] },
-                        business_relevance: { type: "number", description: "0-100" },
-                        sample_context: { type: "string", description: "Context from the report" },
-                      },
-                      required: ["keyword", "tool_source"],
+        },
+        {
+          role: "user",
+          content: `Extract SEO keywords with rankings and site issues from these tool report emails:\n\n${emailBlocks.join("\n\n---\n\n")}`,
+        },
+      ],
+      tools: [
+        {
+          type: "function",
+          function: {
+            name: "extract_seo_data",
+            description: "Return extracted keywords and SEO issues from tool report emails",
+            parameters: {
+              type: "object",
+              properties: {
+                keywords: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      keyword: { type: "string", description: "Keyword phrase" },
+                      position: { type: "number", description: "Current ranking position (1-100+)" },
+                      position_change: { type: "number", description: "Position change (positive = improved)" },
+                      tool_source: { type: "string", description: "semrush, wincher, yoast, ahrefs, moz" },
+                      intent: { type: "string", enum: ["informational", "navigational", "transactional", "commercial"] },
+                      business_relevance: { type: "number", description: "0-100" },
+                      sample_context: { type: "string", description: "Context from the report" },
                     },
-                  },
-                  issues: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        issue_type: { type: "string", description: "broken_link, missing_meta, redirect, crawl_error, etc." },
-                        severity: { type: "string", enum: ["critical", "warning", "info"] },
-                        page_url: { type: "string", description: "Affected page URL if available" },
-                        description: { type: "string", description: "Issue description" },
-                        tool_source: { type: "string" },
-                      },
-                      required: ["issue_type", "description", "tool_source"],
-                    },
+                    required: ["keyword", "tool_source"],
                   },
                 },
-                required: ["keywords", "issues"],
+                issues: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      issue_type: { type: "string", description: "broken_link, missing_meta, redirect, crawl_error, etc." },
+                      severity: { type: "string", enum: ["critical", "warning", "info"] },
+                      page_url: { type: "string", description: "Affected page URL if available" },
+                      description: { type: "string", description: "Issue description" },
+                      tool_source: { type: "string" },
+                    },
+                    required: ["issue_type", "description", "tool_source"],
+                  },
+                },
               },
+              required: ["keywords", "issues"],
             },
           },
-        ],
-        tool_choice: { type: "function", function: { name: "extract_seo_data" } },
-      }),
+        },
+      ],
+      toolChoice: { type: "function", function: { name: "extract_seo_data" } },
     });
 
-    if (!aiResponse.ok) {
-      const errText = await aiResponse.text();
-      console.error("AI gateway error:", aiResponse.status, errText);
-      const status = aiResponse.status === 429 ? 429 : aiResponse.status === 402 ? 402 : 500;
-      const msg = status === 429 ? "Rate limit exceeded" : status === 402 ? "AI credits exhausted" : "AI extraction failed";
-      return new Response(JSON.stringify({ error: msg }), {
-        status,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const aiData = await aiResponse.json();
-    const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
+    const toolCall = aiResult.toolCalls?.[0];
     if (!toolCall?.function?.arguments) {
       return new Response(JSON.stringify({ error: "AI returned no structured data" }), {
         status: 500,
