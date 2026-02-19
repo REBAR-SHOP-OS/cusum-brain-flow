@@ -6869,6 +6869,51 @@ export type Database = {
         }
         Relationships: []
       }
+      qb_bank_activity: {
+        Row: {
+          account_name: string
+          bank_balance: number | null
+          company_id: string
+          created_at: string
+          id: string
+          last_qb_sync_at: string | null
+          ledger_balance: number
+          qb_account_id: string
+          reconciled_through_date: string | null
+          unreconciled_count: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          account_name: string
+          bank_balance?: number | null
+          company_id: string
+          created_at?: string
+          id?: string
+          last_qb_sync_at?: string | null
+          ledger_balance?: number
+          qb_account_id: string
+          reconciled_through_date?: string | null
+          unreconciled_count?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          account_name?: string
+          bank_balance?: number | null
+          company_id?: string
+          created_at?: string
+          id?: string
+          last_qb_sync_at?: string | null
+          ledger_balance?: number
+          qb_account_id?: string
+          reconciled_through_date?: string | null
+          unreconciled_count?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       qb_company_info: {
         Row: {
           company_id: string
