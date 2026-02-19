@@ -1,68 +1,40 @@
 
 
-## Replicate QuickBooks "Banking Activity" Table Layout
+## Fix: Upstream AI API 429 Rate Limit Handling
 
-### What Changes
+### Problem
 
-Replace the current compact card-style `BankAccountsCard` with a full-width table that matches the QuickBooks "Banking Activity" section exactly.
+The "Edge Function returned a non-2xx status code" error shown on Penny's chat is caused by OpenAI's GPT-4o API returning a 429 (rate limit) response. The current `aiRouter.ts` treats 429 as non-retryable and immediately throws, which surfaces the error to the user.
 
-### Target Layout (from QB screenshot)
+### Solution
 
-- Collapsible header: chevron + "BANKING ACTIVITY" title
-- Subtitle: "Estimate the effort to bring these accounts up to date."
-- Table with 6 columns:
-  - **ACCOUNTS (N)** -- account name + subtitle for accounts without bank data
-  - **BANK BALANCE** -- from bank_feed_balances, or "--" if none
-  - **IN QUICKBOOKS** -- the QB CurrentBalance
-  - **UNACCEPTED** -- transaction count or "--"
-  - **UNRECONCILED** -- transaction count
-  - **RECONCILED THROUGH** -- date or "Never reconciled"
-- Accounts without bank feed data show italic "No bank data. QuickBooks transactions only." under the name and "--" for Bank Balance, Unaccepted columns
+Two changes:
 
-### Data Sources
+1. **Add retry-with-backoff for upstream 429 errors** in `supabase/functions/_shared/aiRouter.ts`
+   - Instead of throwing immediately on 429, retry up to 3 times with exponential backoff (2s, 4s, 8s)
+   - Parse the `Retry-After` header from the upstream API if available and use it as the delay
+   - Only throw after all retries are exhausted
 
-- **Bank Balance**: `bank_feed_balances` table (existing `getBalance`)
-- **In QuickBooks**: `QBAccount.CurrentBalance`
-- **Unaccepted / Unreconciled / Reconciled Through**: These columns need data from `reconciliation_matches` table, grouped by `bank_account_id`. We will query counts of matches by status. For accounts with no reconciliation data, show "--" or "Never reconciled".
+2. **Add fallback model routing** in `aiRouter.ts`
+   - If GPT-4o returns 429 after retries, automatically fall back to Gemini 2.5 Flash for the accounting agent
+   - This ensures the user always gets a response even if one provider is rate-limited
 
-### Technical Steps
+### Technical Details
 
-**1. Add columns to `bank_feed_balances` table** (database migration)
+**File: `supabase/functions/_shared/aiRouter.ts`**
 
-Add three new nullable columns to store these QB-sourced stats:
-- `unaccepted_count` (integer, default null)
-- `unreconciled_count` (integer, default null)  
-- `reconciled_through` (date, default null)
+Update `fetchWithRetry` function (around line 145-190):
 
-**2. Update `useBankFeedBalances` hook**
+- Move the 429 check from the "non-retryable" section into the retry loop
+- Add exponential backoff: wait `(attempt + 1) * 3000` ms before retrying on 429
+- After exhausting retries on 429, throw the AIError as before
+- Add a `fallbackProvider` option to `callAI` that tries an alternate model if the primary fails with 429
 
-- Add the new fields to the `BankFeedBalance` interface
-- No query changes needed (already selects `*`)
+**File: `supabase/functions/ai-agent/index.ts`**
 
-**3. Rewrite `BankAccountsCard` component**
+- No changes needed -- the aiRouter fix handles it transparently
 
-Replace the card layout with a full-width table:
-- Collapsible section using Radix Collapsible (already installed)
-- Header row with column titles matching QB exactly
-- Each account as a table row with proper alignment
-- "--" placeholders for missing data
-- "No bank data. QuickBooks transactions only." italic subtitle for accounts without feed
-- "Never reconciled" for accounts without reconciliation date
-- Transaction counts derived from reconciliation_matches query
+### Deployment
 
-**4. Derive unreconciled/unaccepted counts from `reconciliation_matches`**
+Redeploy the `ai-agent` edge function after updating the shared router (it imports from `_shared/aiRouter.ts`).
 
-Add a query in the component (or a new hook) that groups `reconciliation_matches` by `bank_account_id` and `status` to compute:
-- Unaccepted = count where status = 'pending'
-- Unreconciled = total count of all matches for that account
-
-**5. Update `AccountingDashboard` grid**
-
-Make the BankAccountsCard span the full width of the grid (`col-span-full`) since it's now a wide table, not a narrow card.
-
-### Files Changed
-
-- `src/components/accounting/BankAccountsCard.tsx` -- full rewrite to table layout
-- `src/components/accounting/AccountingDashboard.tsx` -- adjust grid span
-- `src/hooks/useBankFeedBalances.ts` -- add new fields to interface
-- Database migration: add columns to `bank_feed_balances`
