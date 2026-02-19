@@ -58,6 +58,45 @@ export type Database = {
           },
         ]
       }
+      accounting_mirror_customers: {
+        Row: {
+          balance: number | null
+          company_id: string
+          created_at: string
+          display_name: string | null
+          id: string
+          last_synced_at: string | null
+          open_balance: number | null
+          qb_customer_id: string | null
+          total_revenue: number | null
+          updated_at: string
+        }
+        Insert: {
+          balance?: number | null
+          company_id: string
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          last_synced_at?: string | null
+          open_balance?: number | null
+          qb_customer_id?: string | null
+          total_revenue?: number | null
+          updated_at?: string
+        }
+        Update: {
+          balance?: number | null
+          company_id?: string
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          last_synced_at?: string | null
+          open_balance?: number | null
+          qb_customer_id?: string | null
+          total_revenue?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       activity_events: {
         Row: {
           actor_id: string | null
