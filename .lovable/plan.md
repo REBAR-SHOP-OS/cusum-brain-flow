@@ -1,26 +1,20 @@
 
-# Render Screenshot URLs as Inline Images in Task Descriptions
+# Fix: Replace Persian Placeholder Text with English in AnnotationOverlay
 
 ## Problem
-In the task detail drawer, screenshot URLs in the description (e.g., `Screenshot: https://...clearance-photos/...1234.png`) are displayed as raw clickable links instead of inline images. Users want to see the actual screenshot preview directly.
+In `src/components/feedback/AnnotationOverlay.tsx` (line 366), the `Textarea` placeholder is hardcoded in Persian:
+```
+"توضیح تغییر مورد نیاز را بنویسید یا با میکروفون بگویید..."
+```
+This violates the rule that all app UI text must remain in English. Only AI chat responses should adapt to the user's language.
 
-## Solution
-Modify the `linkifyText` function in `src/pages/Tasks.tsx` to detect image URLs (ending in `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`) and render them as clickable `<img>` elements instead of text links.
+## Fix
+Change the placeholder to English:
+```
+"Describe the change needed, or use the microphone..."
+```
 
-## Technical Details
-
-**File:** `src/pages/Tasks.tsx`  
-**Function:** `linkifyText` (lines 136-145)
-
-**Current behavior:** All URLs are rendered as `<a>` links with the full URL as text.
-
-**New behavior:** URLs ending in common image extensions (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`) will be rendered as:
-- A clickable `<img>` tag showing the image preview
-- Wrapped in an `<a>` tag so clicking opens the full image in a new tab
-- Styled with rounded corners, max-width constraint, and a small margin
-
-All other URLs remain as text links (no change).
-
-**Change scope:**
-- Only the `linkifyText` function (lines 136-145) in `src/pages/Tasks.tsx`
-- No other files, components, or logic affected
+## Scope
+- **File:** `src/components/feedback/AnnotationOverlay.tsx`
+- **Line:** 366 only
+- No other files, logic, or components touched.
