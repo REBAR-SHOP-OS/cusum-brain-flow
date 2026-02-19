@@ -154,7 +154,7 @@ export function ScreenshotFeedbackButton() {
         onPointerDown={handlers.onPointerDown}
         onPointerMove={handlers.onPointerMove}
         onPointerUp={handlePointerUp}
-        className="fixed z-[9999] w-10 h-10 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center hover:scale-110 transition-transform cursor-grab active:cursor-grabbing select-none"
+        className="fixed z-[9999] w-10 h-10 rounded-full bg-primary text-primary-foreground shadow-lg ring-1 ring-white/30 flex items-center justify-center hover:scale-110 transition-transform cursor-grab active:cursor-grabbing select-none"
         style={{ left: pos.x, top: pos.y, touchAction: "none", pointerEvents: "auto" }}
         aria-label="Report a change"
         title="Screenshot Feedback"
