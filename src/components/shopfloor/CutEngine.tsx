@@ -98,7 +98,7 @@ export function CutEngine({
       {/* Bar code display */}
       <div className={cn("text-center py-2 rounded-lg border", borderClasses, cardBg)}>
         <p className={cn("text-[10px] tracking-wider uppercase", mutedClasses)}>Bar Size</p>
-        <p className="text-lg font-black font-mono">{barCode}</p>
+        <p className="text-lg font-black font-mono">{barCode || "—"}</p>
       </div>
 
       {/* Stock length selector */}
