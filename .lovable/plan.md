@@ -1,49 +1,93 @@
 
-# Two Fixes: Radin's Agent + Helper Card Subtitle Color
+# Add Drag-and-Drop & Ctrl+V Paste to ChatInput
 
-## Fix 1: radin@rebar.shop — Wrong Agent & Hero Text
+## What's Being Added
 
-**File:** `src/lib/userAgentMap.ts`
+Two file input methods will be added to the existing `ChatInput` component (`src/components/chat/ChatInput.tsx`):
 
-The mapping for `radin@rebar.shop` currently has:
-- `agentKey: "support"` → routes to Haven (wrong)
-- `heroText: "How can **Relay** assist you today?"` → shows "Relay" in the hero (wrong)
+1. **Drag & Drop** — Users can drag files from their desktop and drop them anywhere on the chat input area
+2. **Ctrl+V / Paste** — Users can paste images or files directly from their clipboard into the chat
 
-The correct agent for Radin is **Pixel** (Social Media). Changes needed:
+Since `ChatInput` is shared across all agent workspaces (including Pixel/social, Gauge, Relay, etc.), this works for all agents automatically with no changes needed in pages.
 
-- `agentKey: "support"` → `agentKey: "social"`
-- `heroText` → `"How can **Pixel** assist you today?"`
+---
 
-**File:** `src/pages/Home.tsx`
+## Technical Details
 
-The `agentKeyToSuggestion` map (line 43) already has `assistant`, `accounting`, `shopfloor`, `sales`, `estimating`, `support`, `email` — but is missing `"social"`. Need to add:
+### Changes — `src/components/chat/ChatInput.tsx` only
+
+**1. Add `isDragOver` state**
 ```ts
-social: { code: "pixel", name: "Pixel" },
+const [isDragOver, setIsDragOver] = useState(false);
 ```
 
-Also the `ChatInput` placeholder (line 154) has a hardcoded conditional that only handles `assistant`, `shopfloor`, and falls back to `gauge`. Need to make it aware of `social` → show "Ask Pixel anything..."
+**2. Add drag event handlers**
+```ts
+const handleDragOver = (e: React.DragEvent) => {
+  e.preventDefault();
+  setIsDragOver(true);
+};
+const handleDragLeave = () => setIsDragOver(false);
+const handleDrop = (e: React.DragEvent) => {
+  e.preventDefault();
+  setIsDragOver(false);
+  if (e.dataTransfer.files?.length) processFiles(e.dataTransfer.files);
+};
+```
+
+**3. Extract file processing into shared `processFiles` function**
+
+The existing upload logic inside `handleFileSelect` will be refactored into a `processFiles(files: FileList)` function. Both the file `<input onChange>` and the new drag/paste handlers call this shared function — no logic duplication.
+
+**4. Add paste handler on the textarea**
+```ts
+const handlePaste = (e: React.ClipboardEvent) => {
+  const files = e.clipboardData?.files;
+  if (files?.length) {
+    e.preventDefault();
+    processFiles(files);
+  }
+  // If no files in clipboard, normal text paste proceeds naturally
+};
+```
+
+**5. Apply drag visual feedback & event handlers to the outer container**
+
+The outer wrapper `div` gets the drag handlers and a conditional ring highlight:
+```tsx
+<div
+  onDragOver={handleDragOver}
+  onDragLeave={handleDragLeave}
+  onDrop={handleDrop}
+  className={cn(
+    "relative bg-secondary rounded-xl border border-border/50 shadow-sm ...",
+    isDragOver && "ring-2 ring-primary border-primary bg-primary/5"
+  )}
+>
+```
+
+**6. Drop overlay text** — When dragging over, an overlay label appears inside the box:
+```tsx
+{isDragOver && (
+  <div className="absolute inset-0 bg-primary/10 rounded-xl flex items-center justify-center pointer-events-none z-10">
+    <p className="text-sm font-semibold text-primary">Drop files here</p>
+  </div>
+)}
+```
+
+**7. Add `onPaste` to the textarea**
+```tsx
+<textarea ... onPaste={handlePaste} />
+```
 
 ---
 
-## Fix 2: Helper Card Subtitle (Role) Color Visibility
+## Scope
 
-**File:** `src/pages/Home.tsx` — `HelperCard` component (line 237)
+| File | Change |
+|---|---|
+| `src/components/chat/ChatInput.tsx` | Add drag-and-drop + paste handlers, extract `processFiles`, visual feedback |
 
-Current desktop role text: `sm:text-muted-foreground`
+No other files need changes — all agent pages (`AgentWorkspace.tsx`, `Inbox.tsx`, `Home.tsx`) already use `ChatInput` and will inherit the feature automatically.
 
-`text-muted-foreground` uses the CSS variable `--muted-foreground` which in many themes resolves to a very light gray, making it hard to read against a white/light card background.
-
-**Fix:** Change to `sm:text-foreground/60` — this uses the primary foreground color at 60% opacity, which is always readable regardless of the active theme (light or dark).
-
-No other parts of the app are touched.
-
----
-
-## Technical Summary
-
-| File | Line(s) | Change |
-|---|---|---|
-| `src/lib/userAgentMap.ts` | 56–58 | `agentKey: "social"`, update heroText to Pixel |
-| `src/pages/Home.tsx` | 43–51 | Add `social: { code: "pixel", name: "Pixel" }` to map |
-| `src/pages/Home.tsx` | 154 | Fix placeholder to handle "social" agentKey |
-| `src/pages/Home.tsx` | 237 | `sm:text-muted-foreground` → `sm:text-foreground/60` |
+The `showFileUpload` prop still gates whether the paperclip button is shown, but drag-and-drop and paste will work **regardless** of `showFileUpload` so users always have a convenient way to attach files.
