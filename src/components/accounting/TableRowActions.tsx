@@ -5,7 +5,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import { SmartTextarea } from "@/components/ui/SmartTextarea";
 
 export interface TableRowActionCallbacks {
   onCall: (rowText: string) => void;
@@ -70,7 +70,7 @@ export function TableRowActions({ rowText, callbacks }: TableRowActionsProps) {
               placeholder="Subject line"
               className="h-8 text-xs mb-2"
             />
-            <Textarea
+            <SmartTextarea
               value={emailBody}
               onChange={(e) => setEmailBody(e.target.value)}
               placeholder="Message body..."

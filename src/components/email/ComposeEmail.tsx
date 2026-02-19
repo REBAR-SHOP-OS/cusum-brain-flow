@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Mail, Send, X, Sparkles, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { SmartTextarea } from "@/components/ui/SmartTextarea";
 import { Label } from "@/components/ui/label";
 import { sendGmailMessage } from "@/lib/gmail";
 import { useToast } from "@/hooks/use-toast";
@@ -186,7 +186,7 @@ Email body: ${replyTo.originalBody.substring(0, 1000)}`,
 
           <div className="space-y-2">
             <Label htmlFor="body">Message</Label>
-            <Textarea
+          <SmartTextarea
               id="body"
               placeholder="Write your message..."
               value={body}

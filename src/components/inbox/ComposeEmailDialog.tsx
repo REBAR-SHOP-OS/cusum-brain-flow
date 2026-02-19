@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { SmartTextarea } from "@/components/ui/SmartTextarea";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { EmailTemplatesDrawer } from "./EmailTemplatesDrawer";
@@ -317,7 +317,7 @@ export function ComposeEmailDialog({ open, onOpenChange }: ComposeEmailDialogPro
 
         {/* Body */}
         <div className="px-4 py-2">
-          <Textarea
+          <SmartTextarea
             value={body}
             onChange={(e) => setBody(e.target.value)}
             placeholder="Write your email..."

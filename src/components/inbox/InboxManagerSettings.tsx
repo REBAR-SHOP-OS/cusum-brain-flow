@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { X, HelpCircle, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import { SmartTextarea } from "@/components/ui/SmartTextarea";
 import { cn } from "@/lib/utils";
 
 interface InboxManagerSettingsProps {
@@ -56,7 +56,7 @@ export function InboxManagerSettings({
         {/* Custom Instructions */}
         <div className="space-y-3">
           <h3 className="font-medium">Custom Instructions</h3>
-          <Textarea
+          <SmartTextarea
             value={instructions}
             onChange={(e) => setInstructions(e.target.value)}
             className="min-h-[120px] bg-white/5 border-white/10 text-white placeholder:text-white/40 resize-none"
