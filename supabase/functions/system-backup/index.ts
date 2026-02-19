@@ -133,17 +133,18 @@ serve(async (req) => {
   // ACTION: run (create backup)
   // ==========================================================
   if (action === "run") {
-    // Throttle: max 1 backup per 5 minutes
-    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    // Idempotency: scheduled backups throttle at 11h, manual at 5min
+    const throttleMs = isScheduled ? 11 * 60 * 60 * 1000 : 5 * 60 * 1000;
+    const throttleSince = new Date(Date.now() - throttleMs).toISOString();
     const { data: recent } = await serviceClient
       .from("system_backups")
       .select("id, started_at")
-      .gte("started_at", fiveMinAgo)
+      .gte("started_at", throttleSince)
       .in("status", ["pending", "running", "success"])
       .limit(1);
 
     if (recent && recent.length > 0) {
-      return json({ error: "Throttled: a backup was already run recently. Wait 5 minutes." }, 429);
+      return json({ error: "Throttled: a backup was already run recently.", skipped: true }, 429);
     }
 
     // Insert pending row
