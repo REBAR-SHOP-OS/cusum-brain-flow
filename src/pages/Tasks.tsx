@@ -926,16 +926,27 @@ export default function Tasks() {
                         if (c.profile?.full_name) text = `[${c.profile.full_name}] ${text}`;
                         return text;
                       });
-                      // Extract screenshot URLs from comments
-                      const urlRegex = /(https?:\/\/[^\s]+\.(png|jpg|jpeg|gif|webp|svg)[^\s]*)/gi;
+                      // Extract screenshot URLs — first parse structured "Screenshot: <url>" lines
                       const screenshots: string[] = [];
+                      const screenshotLineRegex = /Screenshot:\s*(https?:\/\/[^\s]+)/gi;
+                      let lineMatch: RegExpExecArray | null;
+                      const descText = selectedTask.description || "";
+                      while ((lineMatch = screenshotLineRegex.exec(descText)) !== null) {
+                        screenshots.push(lineMatch[1]);
+                      }
+                      // Fallback: generic image URL regex in description + comments
+                      const urlRegex = /(https?:\/\/[^\s]+\.(png|jpg|jpeg|gif|webp|svg)[^\s]*)/gi;
+                      const descGenericMatches = descText.match(urlRegex) || [];
+                      for (const url of descGenericMatches) {
+                        if (!screenshots.includes(url)) screenshots.push(url);
+                      }
                       for (const c of comments) {
                         const matches = c.content.match(urlRegex);
-                        if (matches) screenshots.push(...matches);
-                      }
-                      if (selectedTask.description) {
-                        const descMatches = selectedTask.description.match(urlRegex);
-                        if (descMatches) screenshots.push(...descMatches);
+                        if (matches) {
+                          for (const url of matches) {
+                            if (!screenshots.includes(url)) screenshots.push(url);
+                          }
+                        }
                       }
 
                       const { data, error } = await supabase.functions.invoke("generate-fix-prompt", {
@@ -960,6 +971,7 @@ export default function Tasks() {
                   <Sparkles className="w-4 h-4" />
                   {fixLoading ? "Generating..." : "Generate Fix"}
                 </Button>
+
                 <Button size="sm" variant="destructive" onClick={() => { if (window.confirm("Delete this task?")) { supabase.from("tasks").delete().eq("id", selectedTask.id).then(({ error }) => { if (error) toast.error(error.message); else { toast.success("Task deleted"); setDrawerOpen(false); loadData(); } }); } }}>Delete</Button>
               </div>
 
@@ -990,7 +1002,22 @@ export default function Tasks() {
                 <DialogContent className="max-w-lg">
                   <DialogHeader>
                     <DialogTitle>Generated Fix Prompt</DialogTitle>
-                    <DialogDescription>Copy this prompt and paste it into Lovable AI chat to fix the issue.</DialogDescription>
+                    <DialogDescription className="flex items-center gap-2">
+                      Copy this prompt and paste it into Lovable AI chat to fix the issue.
+                      {(() => {
+                        const urlRegex = /(https?:\/\/[^\s]+\.(png|jpg|jpeg|gif|webp|svg)[^\s]*)/gi;
+                        const screenshotLineRegex = /Screenshot:\s*(https?:\/\/[^\s]+)/gi;
+                        const found = new Set<string>();
+                        const desc = selectedTask?.description || "";
+                        let m: RegExpExecArray | null;
+                        while ((m = screenshotLineRegex.exec(desc)) !== null) found.add(m[1]);
+                        (desc.match(urlRegex) || []).forEach(u => found.add(u));
+                        comments.forEach(c => (c.content.match(urlRegex) || []).forEach(u => found.add(u)));
+                        return found.size > 0 ? (
+                          <span className="text-xs text-muted-foreground ml-1">📎 {found.size} screenshot(s) detected — using vision AI</span>
+                        ) : null;
+                      })()}
+                    </DialogDescription>
                   </DialogHeader>
                   <div className="bg-muted rounded-lg p-4 max-h-[50vh] overflow-y-auto">
                     <pre className="text-sm whitespace-pre-wrap font-mono text-foreground">{fixPrompt}</pre>
