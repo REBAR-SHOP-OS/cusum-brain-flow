@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireAuth, corsHeaders } from "../_shared/auth.ts";
+import { callAI } from "../_shared/aiRouter.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -193,38 +194,32 @@ Deno.serve(async (req) => {
     // Generate AI notes via Lovable AI
     let aiNotesMap: Record<string, string> = {};
     try {
-      const lovableKey = Deno.env.get("LOVABLE_API_KEY");
-      if (lovableKey && aiPrompts.length > 0) {
+      if (aiPrompts.length > 0) {
         const batchPrompt = aiPrompts
           .map((p) => `--- ${p.profileName} (${p.profileId}) ---\n${p.summaryText}`)
           .join("\n\n");
 
-        const aiRes = await fetch("https://api.lovable.dev/v1/chat/completions", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${lovableKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify({
-            model: "google/gemini-2.5-flash",
-            messages: [
-              {
-                role: "system",
-                content:
-                  "You are a payroll auditor. For each employee below, write 1-2 SHORT actionable audit notes. Focus on exceptions and anomalies. If clean, say 'Clean week — no issues.' Return format: one line per employee: PROFILE_ID|note text",
-              },
-              { role: "user", content: batchPrompt },
-            ],
-            temperature: 0.3,
-          }),
+        const aiResult = await callAI({
+          provider: "gpt",
+          model: "gpt-4o-mini",
+          messages: [
+            {
+              role: "system",
+              content:
+                "You are a payroll auditor. For each employee below, write 1-2 SHORT actionable audit notes. Focus on exceptions and anomalies. If clean, say 'Clean week — no issues.' Return format: one line per employee: PROFILE_ID|note text",
+            },
+            { role: "user", content: batchPrompt },
+          ],
+          temperature: 0.3,
         });
-        if (aiRes.ok) {
-          const aiData = await aiRes.json();
-          const content = aiData.choices?.[0]?.message?.content || "";
-          for (const line of content.split("\n")) {
-            const pipeIdx = line.indexOf("|");
-            if (pipeIdx > 0) {
-              const pid = line.substring(0, pipeIdx).trim();
-              const note = line.substring(pipeIdx + 1).trim();
-              aiNotesMap[pid] = note;
-            }
+
+        const content = aiResult.content || "";
+        for (const line of content.split("\n")) {
+          const pipeIdx = line.indexOf("|");
+          if (pipeIdx > 0) {
+            const pid = line.substring(0, pipeIdx).trim();
+            const note = line.substring(pipeIdx + 1).trim();
+            aiNotesMap[pid] = note;
           }
         }
       }

@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { callAI, AIError } from "../_shared/aiRouter.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -40,7 +41,6 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Get profile
     const { data: profile } = await supabaseAdmin
       .from("profiles")
       .select("id, company_id")
@@ -90,20 +90,7 @@ RULES:
 KNOWLEDGE:
 ${knowledgeContext || "No knowledge entries available."}
 
-AUDIENCE SIZE: ~${contactCount || 0} contacts with email addresses.
-
-Return a JSON object with this exact structure:
-{
-  "title": "campaign title",
-  "subject_line": "subject under 60 chars",
-  "preview_text": "preview text under 100 chars",
-  "body_html": "full HTML email body with {{unsubscribe_url}} placeholder",
-  "body_text": "plain text version",
-  "segment_rules": { "description": "who this targets" },
-  "estimated_recipients": number,
-  "scheduled_recommendation": "when to send and why",
-  "variants": [{ "subject_line": "variant subject", "reason": "why this variant" }]
-}`;
+AUDIENCE SIZE: ~${contactCount || 0} contacts with email addresses.`;
 
     const userPrompt = `Campaign type: ${campaign_type || "newsletter"}
 Brief: ${brief || "General marketing campaign"}
@@ -111,73 +98,43 @@ ${title ? `Suggested title: ${title}` : ""}
 
 Generate a complete email campaign draft.`;
 
-    // Call Lovable AI Gateway
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
-
-    const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        tools: [{
-          type: "function",
-          function: {
-            name: "create_campaign_draft",
-            description: "Create an email campaign draft with all required fields.",
-            parameters: {
-              type: "object",
-              properties: {
-                title: { type: "string" },
-                subject_line: { type: "string" },
-                preview_text: { type: "string" },
-                body_html: { type: "string" },
-                body_text: { type: "string" },
-                segment_rules: { type: "object" },
-                estimated_recipients: { type: "number" },
-                scheduled_recommendation: { type: "string" },
-              },
-              required: ["title", "subject_line", "body_html", "body_text", "estimated_recipients"],
-              additionalProperties: false,
+    const result = await callAI({
+      provider: "gpt",
+      model: "gpt-4o",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      tools: [{
+        type: "function",
+        function: {
+          name: "create_campaign_draft",
+          description: "Create an email campaign draft with all required fields.",
+          parameters: {
+            type: "object",
+            properties: {
+              title: { type: "string" },
+              subject_line: { type: "string" },
+              preview_text: { type: "string" },
+              body_html: { type: "string" },
+              body_text: { type: "string" },
+              segment_rules: { type: "object" },
+              estimated_recipients: { type: "number" },
+              scheduled_recommendation: { type: "string" },
             },
+            required: ["title", "subject_line", "body_html", "body_text", "estimated_recipients"],
+            additionalProperties: false,
           },
-        }],
-        tool_choice: { type: "function", function: { name: "create_campaign_draft" } },
-      }),
+        },
+      }],
+      toolChoice: { type: "function", function: { name: "create_campaign_draft" } },
     });
 
-    if (!aiResp.ok) {
-      const status = aiResp.status;
-      if (status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. Try again shortly." }), {
-          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (status === 402) {
-        return new Response(JSON.stringify({ error: "AI credits exhausted. Please add credits." }), {
-          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      throw new Error(`AI gateway error: ${status}`);
-    }
-
-    const aiData = await aiResp.json();
-    const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
-
     let draft: any;
-    if (toolCall?.function?.arguments) {
-      draft = JSON.parse(toolCall.function.arguments);
+    if (result.toolCalls.length > 0) {
+      draft = JSON.parse(result.toolCalls[0].function.arguments);
     } else {
-      // Fallback: try to parse content as JSON
-      const content = aiData.choices?.[0]?.message?.content || "";
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      const jsonMatch = result.content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         draft = JSON.parse(jsonMatch[0]);
       } else {
@@ -217,6 +174,11 @@ Generate a complete email campaign draft.`;
     });
   } catch (e) {
     console.error("email-campaign-generate error:", e);
+    if (e instanceof AIError) {
+      return new Response(JSON.stringify({ error: e.message }), {
+        status: e.status, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

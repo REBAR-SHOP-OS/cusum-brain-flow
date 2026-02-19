@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireAuth, corsHeaders } from "../_shared/auth.ts";
+import { callAI, AIError } from "../_shared/aiRouter.ts";
 import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
 
 serve(async (req) => {
@@ -32,8 +33,7 @@ serve(async (req) => {
     }
     const { capturedImageBase64, companyId } = parsed.data;
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+    // AI keys loaded via aiRouter
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -161,15 +161,12 @@ RULES:
       },
     });
 
-    // Call Lovable AI with vision + tool calling for structured output
-    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+    // Call AI with vision + tool calling for structured output
+    let aiResult;
+    try {
+      aiResult = await callAI({
+        provider: "gemini",
+        model: "gemini-2.5-flash",
         messages: [
           {
             role: "user",
@@ -215,36 +212,26 @@ RULES:
             },
           },
         ],
-        tool_choice: {
+        toolChoice: {
           type: "function",
           function: { name: "face_match_result" },
         },
-      }),
-    });
-
-    if (!aiResponse.ok) {
-      if (aiResponse.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limited, try again shortly." }), {
-          status: 429,
+      });
+    } catch (aiErr) {
+      if (aiErr instanceof AIError) {
+        return new Response(JSON.stringify({ error: aiErr.message }), {
+          status: aiErr.status,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      if (aiResponse.status === 402) {
-        return new Response(JSON.stringify({ error: "AI credits exhausted." }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      const errText = await aiResponse.text();
-      console.error("AI error:", aiResponse.status, errText);
+      console.error("AI error:", aiErr);
       return new Response(JSON.stringify({ error: "AI recognition failed" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const aiData = await aiResponse.json();
-    const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
+    const toolCall = aiResult.toolCalls[0];
 
     if (!toolCall) {
       return new Response(
@@ -253,23 +240,23 @@ RULES:
       );
     }
 
-    const result = JSON.parse(toolCall.function.arguments);
+    const resultData = JSON.parse(toolCall.function.arguments);
     const isMatched =
-      result.matched_profile_id &&
-      result.matched_profile_id !== "null" &&
-      result.confidence >= 50;
+      resultData.matched_profile_id &&
+      resultData.matched_profile_id !== "null" &&
+      resultData.confidence >= 50;
 
     const matchedProfile = isMatched
-      ? profileMap.get(result.matched_profile_id)
+      ? profileMap.get(resultData.matched_profile_id)
       : null;
 
     return new Response(
       JSON.stringify({
         matched: isMatched,
-        profile_id: isMatched ? result.matched_profile_id : null,
-        name: isMatched ? result.matched_name : null,
-        confidence: result.confidence,
-        reason: result.reason,
+        profile_id: isMatched ? resultData.matched_profile_id : null,
+        name: isMatched ? resultData.matched_name : null,
+        confidence: resultData.confidence,
+        reason: resultData.reason,
         avatar_url: matchedProfile?.avatar || null,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }

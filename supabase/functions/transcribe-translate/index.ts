@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { requireAuth, corsHeaders, json } from "../_shared/auth.ts";
+import { callAI, AIError } from "../_shared/aiRouter.ts";
 
 const DIARIZATION_INSTRUCTION = `
 SPEAKER DIARIZATION:
@@ -127,8 +128,7 @@ serve(async (req) => {
 
   try {
     const auth = await requireAuth(req);
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+    // AI keys loaded via aiRouter
 
     const contentType = req.headers.get("content-type") || "";
 
@@ -201,26 +201,22 @@ serve(async (req) => {
           { role: "user", content: text },
         ];
 
-        const ppResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${LOVABLE_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ model: "google/gemini-3-flash-preview", messages: ppMessages }),
-        });
-
-        if (!ppResponse.ok) {
-          if (ppResponse.status === 429) return json({ error: "Rate limit exceeded. Please try again later." }, 429);
-          if (ppResponse.status === 402) return json({ error: "AI credits exhausted. Please add funds." }, 402);
-          const errText = await ppResponse.text();
-          console.error("AI gateway error (post-process):", ppResponse.status, errText);
+        try {
+          const ppResult = await callAI({
+            provider: "gpt",
+            model: "gpt-4o-mini",
+            messages: ppMessages,
+          });
+          const result = ppResult.content || "";
+          return json({ result, original: text, postProcess });
+        } catch (aiErr) {
+          if (aiErr instanceof AIError) {
+            if (aiErr.status === 429) return json({ error: "Rate limit exceeded. Please try again later." }, 429);
+            if (aiErr.status === 402) return json({ error: "AI credits exhausted. Please add funds." }, 402);
+          }
+          console.error("AI error (post-process):", aiErr);
           return json({ error: "AI processing failed" }, 500);
         }
-
-        const ppData = await ppResponse.json();
-        const result = ppData.choices?.[0]?.message?.content || "";
-        return json({ result, original: text, postProcess });
       }
     }
 
@@ -278,25 +274,23 @@ serve(async (req) => {
     }
 
     // ===== PASS 1: Translate with gemini-2.5-pro =====
-    const pass1Response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ model: "google/gemini-2.5-pro", messages }),
-    });
-
-    if (!pass1Response.ok) {
-      if (pass1Response.status === 429) return json({ error: "Rate limit exceeded. Please try again later." }, 429);
-      if (pass1Response.status === 402) return json({ error: "AI credits exhausted. Please add funds." }, 402);
-      const errText = await pass1Response.text();
-      console.error("AI gateway error (pass 1):", pass1Response.status, errText);
+    let pass1Result;
+    try {
+      pass1Result = await callAI({
+        provider: "gemini",
+        model: "gemini-2.5-pro",
+        messages,
+      });
+    } catch (aiErr) {
+      if (aiErr instanceof AIError) {
+        if (aiErr.status === 429) return json({ error: "Rate limit exceeded. Please try again later." }, 429);
+        if (aiErr.status === 402) return json({ error: "AI credits exhausted. Please add funds." }, 402);
+      }
+      console.error("AI error (pass 1):", aiErr);
       return json({ error: "AI processing failed" }, 500);
     }
 
-    const pass1Data = await pass1Response.json();
-    const rawContent = pass1Data.choices?.[0]?.message?.content || "";
+    const rawContent = pass1Result.content;
 
     let parsed: any;
     try {

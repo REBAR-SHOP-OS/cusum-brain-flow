@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { callAI } from "../_shared/aiRouter.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -253,9 +254,6 @@ async function analyzeEmailWithAI(
   from: string,
   body: string
 ): Promise<LeadExtraction> {
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
-
   const prompt = `You are an AI assistant for REBAR SHOP — a rebar fabrication company in Ontario, Canada. Analyze this email and determine if it's a legitimate business lead.
 
 EMAIL:
@@ -284,55 +282,42 @@ NAMING CONVENTION: Create a short project name like "Halford Avenue Project" or 
 
 Extract the sender's COMPANY NAME as precisely as possible. Look in email signature, domain, body text. Use full legal/trade name if visible (e.g., "BRONTE CONSTRUCTION (2220742 Ontario Ltd.)" not just "Bronte").`;
 
-  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${LOVABLE_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
-      messages: [{ role: "user", content: prompt }],
-      tools: [
-        {
-          type: "function",
-          function: {
-            name: "suggest_lead",
-            description: "Extract lead information from an email",
-            parameters: {
-              type: "object",
-              properties: {
-                is_lead: { type: "boolean", description: "Whether this email is a legitimate business lead/RFQ" },
-                title: { type: "string", description: "Short project/opportunity name (e.g., 'Halford Avenue Project', 'TTC College Pole Bases')" },
-                project_name: { type: "string", description: "Full project/site name if mentioned" },
-                description: { type: "string", description: "Brief summary of what the customer is requesting" },
-                sender_name: { type: "string", description: "Full name of the person who sent the email" },
-                sender_company: { type: "string", description: "Company name of the sender — use full legal/trade name from signature if available" },
-                sender_email: { type: "string", description: "Email address of the sender" },
-                sender_phone: { type: "string", description: "Phone number from signature if available, empty string otherwise" },
-                city: { type: "string", description: "City or location of the project if mentioned, empty string otherwise" },
-                expected_value: { type: "number", description: "Estimated deal value in dollars if mentioned or estimatable, null otherwise" },
-                priority: { type: "string", enum: ["low", "medium", "high"], description: "Priority based on urgency, deal size, and specificity" },
-                reason: { type: "string", description: "Brief reason for the classification decision" },
-              },
-              required: ["is_lead", "title", "project_name", "description", "sender_name", "sender_company", "sender_email", "sender_phone", "city", "priority", "reason"],
-              additionalProperties: false,
+  const result = await callAI({
+    provider: "gpt",
+    model: "gpt-4o-mini",
+    messages: [{ role: "user", content: prompt }],
+    tools: [
+      {
+        type: "function",
+        function: {
+          name: "suggest_lead",
+          description: "Extract lead information from an email",
+          parameters: {
+            type: "object",
+            properties: {
+              is_lead: { type: "boolean", description: "Whether this email is a legitimate business lead/RFQ" },
+              title: { type: "string", description: "Short project/opportunity name (e.g., 'Halford Avenue Project', 'TTC College Pole Bases')" },
+              project_name: { type: "string", description: "Full project/site name if mentioned" },
+              description: { type: "string", description: "Brief summary of what the customer is requesting" },
+              sender_name: { type: "string", description: "Full name of the person who sent the email" },
+              sender_company: { type: "string", description: "Company name of the sender — use full legal/trade name from signature if available" },
+              sender_email: { type: "string", description: "Email address of the sender" },
+              sender_phone: { type: "string", description: "Phone number from signature if available, empty string otherwise" },
+              city: { type: "string", description: "City or location of the project if mentioned, empty string otherwise" },
+              expected_value: { type: "number", description: "Estimated deal value in dollars if mentioned or estimatable, null otherwise" },
+              priority: { type: "string", enum: ["low", "medium", "high"], description: "Priority based on urgency, deal size, and specificity" },
+              reason: { type: "string", description: "Brief reason for the classification decision" },
             },
+            required: ["is_lead", "title", "project_name", "description", "sender_name", "sender_company", "sender_email", "sender_phone", "city", "priority", "reason"],
+            additionalProperties: false,
           },
         },
-      ],
-      tool_choice: { type: "function", function: { name: "suggest_lead" } },
-    }),
+      },
+    ],
+    toolChoice: { type: "function", function: { name: "suggest_lead" } },
   });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error("AI analysis failed:", response.status, errorText);
-    throw new Error(`AI analysis failed: ${response.status}`);
-  }
-
-  const data = await response.json();
-  const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
+  const toolCall = result.toolCalls[0];
   if (!toolCall?.function?.arguments) throw new Error("AI did not return structured output");
 
   return JSON.parse(toolCall.function.arguments) as LeadExtraction;
