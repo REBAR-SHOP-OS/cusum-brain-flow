@@ -135,7 +135,7 @@ export function AppSidebar() {
     {
       label: "QA",
       items: [
-        { name: "Live Monitor", href: "/shopfloor/live-monitor", icon: Activity, roles: ["admin", "office"], lockReason: "Requires Office role", tourId: "nav-live-monitor" },
+        
         { name: "Diagnostics", href: "/admin/data-audit", icon: Terminal, roles: ["admin"], lockReason: "Requires Admin role", tourId: "nav-diagnostics" },
       ],
     },
