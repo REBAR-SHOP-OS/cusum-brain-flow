@@ -68,6 +68,7 @@ import WebsiteManager from "./pages/WebsiteManager";
 import SeoModule from "./pages/SeoModule";
 import EmpireBuilder from "./pages/EmpireBuilder";
 import AutopilotDashboard from "./pages/AutopilotDashboard";
+import PipelineIntelligence from "./pages/PipelineIntelligence";
 import SupportInbox from "./pages/SupportInbox";
 import KnowledgeBasePublic from "./pages/KnowledgeBasePublic";
 import DriverDashboard from "./pages/DriverDashboard";
@@ -130,6 +131,7 @@ const App = () => (
                     {/* Sales */}
                     <Route path="/pipeline" element={<P><Pipeline /></P>} />
                     <Route path="/lead-scoring" element={<P><LeadScoring /></P>} />
+                    <Route path="/pipeline/intelligence" element={<P><PipelineIntelligence /></P>} />
                     <Route path="/prospecting" element={<P><Prospecting /></P>} />
                     <Route path="/customers" element={<P><Customers /></P>} />
 
