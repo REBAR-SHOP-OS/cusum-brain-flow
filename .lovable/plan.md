@@ -1,39 +1,32 @@
 
-
-## Add Real Bank Balance to Banking Activity Table
+## Fix: Add Gemini Fallback to Penny's AI Agent Call
 
 ### Problem
-The Banking Activity table shows "--" for all bank balances because the `bank_feed_balances` table is empty. QuickBooks API does not expose the actual bank feed balance (the real balance from your bank). It only provides `CurrentBalance` (the book balance already shown in "In QuickBooks" column). The bank balance shown in QuickBooks comes from its internal bank feed connection, which is not accessible via API.
+The logs show GPT-4o is rate-limited (429) and retries exhaust without success. The `callAI` call in `ai-agent/index.ts` (line 6749) does not include the `fallback` option that was added to the aiRouter, so the fallback to Gemini never triggers.
 
-### Solution (Two Parts)
-
-**1. Auto-seed bank balances from QuickBooks during data load**
-When QuickBooks data loads, automatically call `list-bank-accounts` and store each bank account's `CurrentBalance` into `bank_feed_balances` as the initial bank balance. This gives a starting point instead of showing "--".
-
-**2. Add inline edit to Banking Activity table**
-Add a pencil icon on the Bank Balance column (same pattern as Chart of Accounts) so users can manually update the real bank balance for any account directly from the Banking Activity table. This lets users correct the balance to match what the actual bank shows.
+### Solution
+Add `fallback: { provider: "gemini", model: "gemini-2.5-flash" }` to the main `callAI` invocation in the ai-agent edge function. This way, when GPT-4o is rate-limited after retries, the request automatically falls back to Gemini instead of throwing an error to the user.
 
 ### Technical Steps
 
-**File: `src/components/accounting/BankAccountsCard.tsx`**
-- Add `upsertBalance` to props (from `useBankFeedBalances`)
-- Add inline edit state (editing account ID, edit value)
-- Show pencil icon next to Bank Balance for each row
-- On click: show input field; on Enter/confirm: call `upsertBalance`
-- When no feed exists yet, show a "+" button to add a bank balance
+**File: `supabase/functions/ai-agent/index.ts` (line ~6749)**
 
-**File: `src/components/accounting/AccountingDashboard.tsx`**
-- Pass `upsertBalance` from `useBankFeedBalances` down to `BankAccountsCard`
+Add the fallback parameter to the callAI options:
 
-**File: `src/hooks/useQuickBooksData.ts`**
-- After loading accounts, auto-seed `bank_feed_balances` for bank-type accounts that don't already have an entry
-- Call `upsertBalance` for each bank account using `CurrentBalance` as initial value (only if no existing entry)
+```typescript
+aiResult = await callAI({
+  provider: modelConfig.provider,
+  model: modelConfig.model,
+  messages: messages as AIMessage[],
+  maxTokens: modelConfig.maxTokens,
+  temperature: modelConfig.temperature,
+  tools,
+  toolChoice: "auto",
+  fallback: { provider: "gemini", model: "gemini-2.5-flash" },
+});
+```
 
-**File: `src/hooks/useBankFeedBalances.ts`**
-- Add a `seedIfMissing` function that only inserts if no row exists for that account (avoids overwriting manual edits)
+**Deployment**: Redeploy the `ai-agent` edge function.
 
-### User Workflow After Implementation
-1. Banking Activity table auto-populates Bank Balance with QB book balance on first load
-2. User sees actual values instead of "--"
-3. User can click the pencil icon to update any bank balance to match the real bank statement
-4. Manual edits persist and are not overwritten by future syncs
+### Result
+When GPT-4o is rate-limited, Penny will seamlessly fall back to Gemini 2.5 Flash instead of showing the "Edge Function returned a non-2xx status code" error. Users will never see 429 errors again.
