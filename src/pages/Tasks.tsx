@@ -2,12 +2,13 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   CheckSquare, Plus, RefreshCw, Copy, Check, Maximize2, Minus, Sparkles,
-  MessageSquare, Paperclip, Send, Trash2, ExternalLink, X,
+  MessageSquare, Paperclip, Send, Trash2, ExternalLink, X, Upload,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import {
@@ -431,6 +432,16 @@ export default function Tasks() {
     }
   };
 
+  const deleteAttachment = async (url: string, index: number) => {
+    if (!selectedTask) return;
+    const existingUrls: string[] = (selectedTask as any).attachment_urls || [];
+    const updatedUrls = existingUrls.filter((_, i) => i !== index);
+    await supabase.from("tasks").update({ attachment_urls: updatedUrls } as any).eq("id", selectedTask.id);
+    setSelectedTask(prev => prev ? { ...prev, attachment_urls: updatedUrls } as any : prev);
+    toast.success("Attachment removed");
+    loadData();
+  };
+
   const copyToClipboard = async (text: string | null) => {
     if (!text) return;
     try {
@@ -806,15 +817,15 @@ export default function Tasks() {
                     ))}
                   </div>
                 )}
-                <div className="flex gap-2 mt-2">
-                  <Input
+                <div className="flex gap-2 mt-2 items-end">
+                  <Textarea
                     value={newComment}
                     onChange={e => setNewComment(e.target.value)}
                     placeholder="Add a comment..."
-                    className="text-xs h-8"
+                    className="text-xs min-h-[72px] resize-none flex-1"
                     onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); postComment(); } }}
                   />
-                  <Button size="icon" className="h-8 w-8 shrink-0" onClick={postComment} disabled={submittingComment || !newComment.trim()}>
+                  <Button size="icon" className="h-8 w-8 shrink-0 mb-1" onClick={postComment} disabled={submittingComment || !newComment.trim()}>
                     <Send className="w-3.5 h-3.5" />
                   </Button>
                 </div>
@@ -824,32 +835,35 @@ export default function Tasks() {
               <div className="border-t border-border pt-3">
                 <h4 className="text-xs font-medium text-muted-foreground flex items-center gap-1 mb-2">
                   <Paperclip className="w-3 h-3" /> Attachments
+                  {isInternal && (
+                    <label className="ml-auto cursor-pointer text-muted-foreground hover:text-primary transition-colors" title="Upload file">
+                      <Upload className="w-3.5 h-3.5" />
+                      <input type="file" multiple className="sr-only" onChange={handleDrawerUpload} />
+                    </label>
+                  )}
                 </h4>
-                {isInternal && (
-                  <label className="flex items-center gap-1.5 text-xs text-primary cursor-pointer hover:underline mb-2">
-                    <Paperclip className="w-3 h-3" /> Upload file
-                    <input type="file" multiple className="sr-only" onChange={handleDrawerUpload} />
-                  </label>
-                )}
                 {(selectedTask as any)?.attachment_urls?.length > 0 ? (
                   <div className="space-y-1">
                     {((selectedTask as any).attachment_urls as string[]).map((url, i) => (
-                      <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-xs text-primary hover:underline truncate">
-                        <ExternalLink className="w-3 h-3 shrink-0" />
-                        {url.split("/").pop() || `Attachment ${i + 1}`}
-                      </a>
+                      <div key={i} className="flex items-center gap-1 group/attachment">
+                        <a href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-xs text-primary hover:underline truncate flex-1">
+                          <ExternalLink className="w-3 h-3 shrink-0" />
+                          {url.split("/").pop()?.split("?")[0] || `Attachment ${i + 1}`}
+                        </a>
+                        {isInternal && (
+                          <button
+                            onClick={() => deleteAttachment(url, i)}
+                            className="opacity-0 group-hover/attachment:opacity-100 text-muted-foreground hover:text-destructive transition-opacity shrink-0"
+                            title="Remove attachment"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
                     ))}
                   </div>
                 ) : (
-                  <>
-                    {isInternal && (
-                      <label className="flex items-center gap-1.5 text-xs text-primary cursor-pointer hover:underline mt-1">
-                        <Paperclip className="w-3 h-3" /> Upload file
-                        <input type="file" multiple className="sr-only" onChange={handleDrawerUpload} />
-                      </label>
-                    )}
-                    <p className="text-xs text-muted-foreground mt-1">No attachments</p>
-                  </>
+                  <p className="text-xs text-muted-foreground">No attachments</p>
                 )}
               </div>
             </div>
