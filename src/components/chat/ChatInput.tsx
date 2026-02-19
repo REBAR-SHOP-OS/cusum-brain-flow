@@ -49,6 +49,7 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [showFormatting, setShowFormatting] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
   const [slashOpen, setSlashOpen] = useState(false);
   const [slashFilter, setSlashFilter] = useState("");
   const [slashIndex, setSlashIndex] = useState(0);
@@ -164,9 +165,8 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
     }
   }, [speech, toast]);
 
-  // File upload logic
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
+  // Shared file processing logic
+  const processFiles = async (files: FileList) => {
     if (!files || files.length === 0) return;
 
     setIsUploading(true);
@@ -202,6 +202,38 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
+  };
+
+  // File upload logic
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) await processFiles(e.target.files);
+  };
+
+  // Drag-and-drop handlers
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+  const handleDragLeave = (e: React.DragEvent) => {
+    // Only clear if leaving the container entirely
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setIsDragOver(false);
+    }
+  };
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    if (e.dataTransfer.files?.length) processFiles(e.dataTransfer.files);
+  };
+
+  // Paste handler (Ctrl+V with files/images)
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const files = e.clipboardData?.files;
+    if (files?.length) {
+      e.preventDefault();
+      processFiles(files);
+    }
+    // If no files in clipboard, normal text paste proceeds naturally
   };
 
   const removeFile = async (index: number) => {
@@ -286,7 +318,20 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
         )}
 
         {/* Main input container */}
-        <div className="relative bg-secondary rounded-xl border border-border/50 shadow-sm transition-shadow focus-within:shadow-md focus-within:border-primary/30">
+        <div
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          className={cn(
+            "relative bg-secondary rounded-xl border border-border/50 shadow-sm transition-shadow focus-within:shadow-md focus-within:border-primary/30",
+            isDragOver && "ring-2 ring-primary border-primary bg-primary/5"
+          )}
+        >
+          {isDragOver && (
+            <div className="absolute inset-0 bg-primary/10 rounded-xl flex items-center justify-center pointer-events-none z-10">
+              <p className="text-sm font-semibold text-primary">Drop files here</p>
+            </div>
+          )}
           {/* Formatting toolbar */}
           <FormattingToolbar onFormat={handleFormat} disabled={disabled} visible={showFormatting} />
 
@@ -315,6 +360,7 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
               value={value}
               onChange={(e) => handleValueChange(e.target.value)}
               onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
               placeholder={placeholder}
               disabled={disabled || isUploading}
               rows={1}
