@@ -632,6 +632,9 @@ export type Database = {
           company_id: string
           id: string
           last_updated: string | null
+          reconciled_through: string | null
+          unaccepted_count: number | null
+          unreconciled_count: number | null
           updated_by: string | null
         }
         Insert: {
@@ -641,6 +644,9 @@ export type Database = {
           company_id: string
           id?: string
           last_updated?: string | null
+          reconciled_through?: string | null
+          unaccepted_count?: number | null
+          unreconciled_count?: number | null
           updated_by?: string | null
         }
         Update: {
@@ -650,6 +656,9 @@ export type Database = {
           company_id?: string
           id?: string
           last_updated?: string | null
+          reconciled_through?: string | null
+          unaccepted_count?: number | null
+          unreconciled_count?: number | null
           updated_by?: string | null
         }
         Relationships: []

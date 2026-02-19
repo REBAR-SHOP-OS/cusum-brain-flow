@@ -257,11 +257,13 @@ export function AccountingDashboard({ data, onNavigate }: Props) {
       <InvoicesCard data={data} onNavigate={onNavigate} />
       <BillsCard data={data} onNavigate={onNavigate} />
 
-      <BankAccountsCard
-        accounts={bankAccounts}
-        getBalance={getBalance}
-        onNavigate={() => onNavigate("accounts")}
-      />
+      <div className="col-span-full">
+        <BankAccountsCard
+          accounts={bankAccounts}
+          getBalance={getBalance}
+          onNavigate={() => onNavigate("accounts")}
+        />
+      </div>
 
       <CashCard data={data} onNavigate={onNavigate} />
       <PennyQueueCard onNavigate={onNavigate} />
