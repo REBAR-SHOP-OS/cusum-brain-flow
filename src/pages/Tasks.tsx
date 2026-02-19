@@ -217,7 +217,8 @@ export default function Tasks() {
     });
   }, []);
 
-  const isInternal = (currentUserEmail ?? "").endsWith("@rebar.shop");
+  const authResolved = currentUserEmail !== null;
+  const isInternal = authResolved && currentUserEmail.endsWith("@rebar.shop");
 
   const handleFilePick = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -827,7 +828,7 @@ export default function Tasks() {
                 </Select>
               </div>
             </div>
-            {isInternal && (
+            {authResolved && isInternal && (
               <div>
                 <Label className="text-xs">Attachments</Label>
                 <label className="mt-1 flex items-center gap-2 cursor-pointer rounded-md border border-dashed border-input px-3 py-2 text-xs text-muted-foreground hover:bg-muted/40 transition-colors">
@@ -1166,7 +1167,7 @@ export default function Tasks() {
               <div className="border-t border-border pt-3">
                 <h4 className="text-xs font-medium text-muted-foreground flex items-center gap-1 mb-2">
                   <Paperclip className="w-3 h-3" /> Attachments
-                  {isInternal && (
+                  {authResolved && isInternal && (
                     <label className="ml-auto cursor-pointer text-muted-foreground hover:text-primary transition-colors" title="Upload file">
                       <Upload className="w-3.5 h-3.5" />
                       <input type="file" multiple className="sr-only" onChange={handleDrawerUpload} />
@@ -1181,7 +1182,7 @@ export default function Tasks() {
                           <ExternalLink className="w-3 h-3 shrink-0" />
                           {url.split("/").pop()?.split("?")[0] || `Attachment ${i + 1}`}
                         </a>
-                        {isInternal && (
+                        {authResolved && isInternal && (
                           <button
                             onClick={() => deleteAttachment(url, i)}
                             className="text-muted-foreground hover:text-destructive transition-colors shrink-0 ml-1"
