@@ -1,40 +1,79 @@
 
-# Add Ctrl+V Paste Support to DockChatBox
+# Pipeline Full Visibility Fix
 
-## Current State
+## Root Cause Analysis
 
-The `DockChatBox.tsx` component already has:
-- Drag-and-drop: `onDragOver`, `onDragLeave`, `onDrop` handlers on the outer container (lines 285-287)
-- Drop visual overlay: shown when `dragOver` state is true (lines 479-484)
-- `addFiles` helper function: shared logic for validating and queueing files (lines 139-150)
-- File input button (paperclip) working correctly
+After querying the database directly:
+- **2816 total leads** exist in the DB — exactly matching Odoo's count shown in the screenshot
+- The data is NOT missing from the database
+- **43 leads have stage `"archived_orphan"`** — a stage that does NOT exist in `PIPELINE_STAGES` in `Pipeline.tsx` — these cards are silently invisible on the board because the board only renders columns for known stages
+- The Odoo sync edge function calls `search_read` without paginating (`offset`/`limit` loop) — fragile if Odoo applies its default server-side cap in the future
+- No hidden user-based domain filters exist ✓
+- Sync mode `full` is accessible from the menu but not restricted to admin-only
 
-**What's missing: Ctrl+V / paste support on the input field.**
+---
 
-The input `<input>` element at line 457 only has `onChange` and `onKeyDown` — there is no `onPaste` handler, so pasting an image from clipboard does nothing.
+## Deliverables — What Gets Fixed
 
-## The Fix — One Addition Only
+### Fix 1: Add "archived_orphan" Stage to Pipeline Board
+**File:** `src/pages/Pipeline.tsx` — `PIPELINE_STAGES` constant
 
-Add an `onPaste` handler to the `<input>` element at line 457-464:
+Add the missing stage:
+```ts
+{ id: "archived_orphan", label: "Archived / Orphan", color: "bg-zinc-700" }
+```
+This makes the 43 currently-invisible leads appear in their own column.
 
-```tsx
-onPaste={(e) => {
-  const files = e.clipboardData?.files;
-  if (files?.length) {
-    e.preventDefault();
-    addFiles(files);
-  }
-}}
+Also add to the `STAGE_MAP` in the edge function so future syncs respect this stage label:
+**File:** `supabase/functions/odoo-crm-sync/index.ts`
+
+---
+
+### Fix 2: Paginated Odoo Fetch (Prevents Future Data Loss)
+**File:** `supabase/functions/odoo-crm-sync/index.ts`
+
+Replace the single unbounded `search_read` call with a paginated loop:
+
+```
+1. Call search_count to get total records in domain → logs the expected total
+2. Loop with BATCH=500, offset 0, 500, 1000... until all fetched
+3. Merge all batches into one array
+4. Log "Fetched X / Y expected" for transparency
 ```
 
-When a user presses Ctrl+V:
-- If the clipboard contains files/images → `e.preventDefault()` stops default paste behavior, `addFiles()` queues them as pending files
-- If the clipboard contains only text → the handler does nothing, normal text paste proceeds naturally
+This ensures all current and future leads are synced regardless of Odoo's server limit.
 
-## Scope
+---
 
-| File | Change |
-|---|---|
-| `src/components/chat/DockChatBox.tsx` | Add `onPaste` to the composer `<input>` element (line ~462) |
+### Fix 3: Restrict "Odoo Sync" to Admin-Only
+**File:** `src/pages/Pipeline.tsx` — the dropdown menu
 
-No other changes needed. The existing `addFiles` function, pending file display, and upload logic already handle everything correctly.
+The `isAdmin` variable is already available in the component. Add a conditional to hide the "Odoo Sync" dropdown item for non-admins:
+```tsx
+{isAdmin && (
+  <DropdownMenuItem onClick={handleOdooSync} ...>
+    ...Odoo Sync (Full)
+  </DropdownMenuItem>
+)}
+```
+
+---
+
+## Summary of Changes
+
+| File | Change | Leads Impacted |
+|---|---|---|
+| `src/pages/Pipeline.tsx` | Add `archived_orphan` to `PIPELINE_STAGES` | +43 visible cards |
+| `supabase/functions/odoo-crm-sync/index.ts` | Add `"Archived"/"Orphan"` to STAGE_MAP | Future sync parity |
+| `supabase/functions/odoo-crm-sync/index.ts` | Replace single `search_read` with paginated loop (batch=500) | Prevents future data loss |
+| `src/pages/Pipeline.tsx` | Restrict "Odoo Sync" menu item to `isAdmin` only | Security hardening |
+
+## Domain & Pagination Details (Required Deliverables)
+
+- **Domain used:** `[["type", "=", "opportunity"]]` for full sync — no user_id filter, no hidden scope
+- **Pagination:** `search_count` first → then loop `search_read` with `offset += 500` until `offset >= total`
+- **Records confirmed in DB:** 2816 (matches Odoo)
+- **Records currently invisible:** 43 (stage `archived_orphan` not in board columns)
+- **No records are truncated or deleted** by this fix
+
+No other part of the application is touched.
