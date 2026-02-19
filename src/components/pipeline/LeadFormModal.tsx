@@ -27,6 +27,7 @@ const formSchema = z.object({
   expected_close_date: z.string().optional(),
   source: z.string().optional(),
   priority: z.string(),
+  lead_type: z.string().optional(),
   notes: z.string().optional(),
 });
 
@@ -67,6 +68,7 @@ export function LeadFormModal({ open, onOpenChange, lead }: LeadFormModalProps) 
       expected_close_date: "",
       source: "",
       priority: "medium",
+      lead_type: "opportunity",
       notes: "",
     },
   });
@@ -85,6 +87,7 @@ export function LeadFormModal({ open, onOpenChange, lead }: LeadFormModalProps) 
           : "",
         source: lead.source || "",
         priority: lead.priority || "medium",
+        lead_type: (lead.metadata as Record<string, unknown>)?.lead_type as string || "opportunity",
         notes: lead.notes || "",
       });
     } else {
@@ -98,6 +101,7 @@ export function LeadFormModal({ open, onOpenChange, lead }: LeadFormModalProps) 
         expected_close_date: "",
         source: "",
         priority: "medium",
+        lead_type: "opportunity",
         notes: "",
       });
     }
@@ -105,6 +109,7 @@ export function LeadFormModal({ open, onOpenChange, lead }: LeadFormModalProps) 
 
   const mutation = useMutation({
     mutationFn: async (data: FormData) => {
+      const existingMeta = (lead?.metadata as Record<string, unknown>) || {};
       const payload = {
         title: data.title,
         description: data.description || null,
@@ -116,6 +121,7 @@ export function LeadFormModal({ open, onOpenChange, lead }: LeadFormModalProps) 
         source: data.source || null,
         priority: data.priority,
         notes: data.notes || null,
+        metadata: { ...existingMeta, lead_type: data.lead_type },
       };
 
       if (lead) {
@@ -248,6 +254,59 @@ export function LeadFormModal({ open, onOpenChange, lead }: LeadFormModalProps) 
             <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
+                name="lead_type"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Lead Type</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value || "opportunity"}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="opportunity">Opportunity</SelectItem>
+                        <SelectItem value="lead">Lead</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="source"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Source</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value || ""}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select source..." />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="Email">Email</SelectItem>
+                        <SelectItem value="Phone / Call">Phone / Call</SelectItem>
+                        <SelectItem value="Website">Website</SelectItem>
+                        <SelectItem value="Referral">Referral</SelectItem>
+                        <SelectItem value="Trade Show">Trade Show</SelectItem>
+                        <SelectItem value="Social Media">Social Media</SelectItem>
+                        <SelectItem value="Cold Outreach">Cold Outreach</SelectItem>
+                        <SelectItem value="Partner">Partner</SelectItem>
+                        <SelectItem value="Other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
                 name="expected_value"
                 render={({ field }) => (
                   <FormItem>
@@ -289,19 +348,6 @@ export function LeadFormModal({ open, onOpenChange, lead }: LeadFormModalProps) 
               )}
             />
 
-            <FormField
-              control={form.control}
-              name="source"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Source</FormLabel>
-                  <FormControl>
-                    <Input placeholder="e.g., Website, Referral, Trade Show..." {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
 
             <FormField
               control={form.control}
