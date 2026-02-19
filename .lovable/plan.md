@@ -1,60 +1,60 @@
 
-# Fix: Annotation Strokes Invisible / Too Thin on Feedback Screenshot
+# Fix: Screenshot Images Not Loading in Task Details
 
 ## Scope
-Single file: `src/components/feedback/AnnotationOverlay.tsx`
-Two constants only. No other files, no database, no other components touched.
+- Database: Make the `clearance-photos` storage bucket public
+- Code: `src/pages/Tasks.tsx` — fix a regex bug in `linkifyText` that can cause URL detection to fail intermittently
+- No other files, components, or UI touched
 
 ## Root Cause
 
-The canvas is loaded at its **natural image resolution** (e.g. 1920×1080 from html2canvas) but displayed CSS-scaled down to fit the dialog (≈900px wide on a 10" tablet).
+The feedback tool uploads screenshots to the `clearance-photos` storage bucket and stores a "public URL" in the task description. However, the bucket is configured as **private** (`public: false`).
 
-The stroke is drawn using `LINE_WIDTH = 3` in **canvas pixel space**. Due to the scale-down:
-
-```
-visible_stroke = LINE_WIDTH × (display_width / canvas_width)
-               = 3 × (900 / 1920)
-               ≈ 1.4 px
+When the task detail view tries to render the image using that URL, the storage API returns:
+```json
+{"statusCode":"404","error":"Bucket not found","message":"Bucket not found"}
 ```
 
-A 1.4px red line on a busy screenshot is nearly invisible. This is the exact cause of the reported issue.
-
-Additionally, `lineCap: "round"` and `lineJoin: "round"` are already set correctly — only the thickness needs fixing.
+This is why the screenshot appears as a broken image icon with the alt text "Screenshot" — exactly what the user sees.
 
 ## The Fix
 
-### Change 1 — Increase `LINE_WIDTH` constant (line 12)
-```diff
-- const LINE_WIDTH = 3;
-+ const LINE_WIDTH = 8;
-```
-An 8px canvas-space stroke renders at `8 × (900/1920)` ≈ **3.75px** on screen — bold and clearly visible on any screenshot.
+### Change 1 — Make `clearance-photos` bucket public (database migration)
 
-### Change 2 — Add a minimum stroke enforcer in `startDraw` (line 104)
-To make strokes scale-aware regardless of screenshot size, compute a minimum effective width based on the current canvas-to-display ratio:
+The bucket already has a SELECT RLS policy ("Authenticated users can view clearance photos"), but since the description stores permanent URLs using `getPublicUrl()`, the bucket itself must allow public reads.
 
-```diff
-  ctx.strokeStyle = color;
-- ctx.lineWidth = LINE_WIDTH;
-+ const canvas = canvasRef.current!;
-+ const rect = canvas.getBoundingClientRect();
-+ const scale = canvas.width / rect.width;
-+ ctx.lineWidth = Math.max(LINE_WIDTH, Math.round(4 * scale));
+```sql
+UPDATE storage.buckets
+SET public = true
+WHERE id = 'clearance-photos';
 ```
 
-This ensures:
-- On a 1920px canvas displayed at 900px: `scale = 2.13` → lineWidth = `max(8, 9)` = **9px** (≈4.2px visible)
-- On a 500px canvas displayed at 500px: `scale = 1` → lineWidth = `max(8, 4)` = **8px** (8px visible)
-- The rendered stroke is always at least ~4px thick on screen regardless of screenshot resolution
+This makes all existing and future screenshot URLs work immediately — no code changes needed for the upload flow.
 
-## Summary of Changes
+### Change 2 — Fix regex bug in `linkifyText` (src/pages/Tasks.tsx, line 138-142)
 
-| Line | Change |
+The `urlRegex` is created with the `g` (global) flag and then reused in a `test()` call inside a loop. The global flag causes `lastIndex` to persist between calls, which can make every other URL fail detection. Fix: use a fresh regex for the test.
+
+```diff
+  function linkifyText(text: string | null) {
+    if (!text) return null;
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const imageExtRegex = /\.(png|jpe?g|gif|webp)(\?[^\s]*)?$/i;
+    const parts = text.split(urlRegex);
+    return parts.map((part, i) => {
+-     if (urlRegex.test(part)) {
++     if (/^https?:\/\//.test(part)) {
+        if (imageExtRegex.test(part)) {
+```
+
+## Summary
+
+| What | Change |
 |------|--------|
-| 12 | `LINE_WIDTH = 3` → `LINE_WIDTH = 8` |
-| 104–106 | Replace `ctx.lineWidth = LINE_WIDTH` with scale-aware computation |
+| Storage bucket | `clearance-photos` set to `public = true` |
+| `Tasks.tsx` line 142 | Replace `urlRegex.test(part)` with `/^https?:\/\//.test(part)` to avoid global regex state bug |
 
 ## No Other Changes
 - No other files modified
-- No database changes
-- No UI layout, component structure, or feature logic outside these two spots is altered
+- No other UI, logic, or database schema altered
+- Upload flow in `AnnotationOverlay.tsx` already uses `getPublicUrl()` correctly — it just needs the bucket to actually be public
