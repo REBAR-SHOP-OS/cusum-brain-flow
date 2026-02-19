@@ -1,46 +1,68 @@
 
 
-## Replicate QuickBooks "BANK ACCOUNTS" Card on Dashboard
+## Replicate QuickBooks "Banking Activity" Table Layout
 
 ### What Changes
 
-Replace the two separate BankAccountCard components (Checking + Savings) with a single unified "BANK ACCOUNTS" card that matches the QuickBooks layout exactly.
+Replace the current compact card-style `BankAccountsCard` with a full-width table that matches the QuickBooks "Banking Activity" section exactly.
 
-### QuickBooks Layout to Replicate
+### Target Layout (from QB screenshot)
 
-- Header: "BANK ACCOUNTS" (uppercase, bold) with "As of today" on the right
-- Top summary: "Today's bank balance" label with large total dollar amount and info icon
-- Account list: Each account as a row with:
-  - Blue circle bank icon on the left
-  - Account name in bold (e.g., "PETTY CASH", "BMO BUSINESS - 3434-199151...")
-  - For accounts with bank feed data: two lines showing "Bank balance $X" and "In QuickBooks $Y" with "Updated X hours ago" timestamp and a green "Reviewed" badge
-  - For accounts without bank feed: single line "In QuickBooks" with balance on the right
-- Footer: "Go to registers" link with dropdown arrow, gear icon, and three-dot menu
+- Collapsible header: chevron + "BANKING ACTIVITY" title
+- Subtitle: "Estimate the effort to bring these accounts up to date."
+- Table with 6 columns:
+  - **ACCOUNTS (N)** -- account name + subtitle for accounts without bank data
+  - **BANK BALANCE** -- from bank_feed_balances, or "--" if none
+  - **IN QUICKBOOKS** -- the QB CurrentBalance
+  - **UNACCEPTED** -- transaction count or "--"
+  - **UNRECONCILED** -- transaction count
+  - **RECONCILED THROUGH** -- date or "Never reconciled"
+- Accounts without bank feed data show italic "No bank data. QuickBooks transactions only." under the name and "--" for Bank Balance, Unaccepted columns
 
-### Technical Details
+### Data Sources
 
-**File: `src/components/accounting/AccountingDashboard.tsx`**
+- **Bank Balance**: `bank_feed_balances` table (existing `getBalance`)
+- **In QuickBooks**: `QBAccount.CurrentBalance`
+- **Unaccepted / Unreconciled / Reconciled Through**: These columns need data from `reconciliation_matches` table, grouped by `bank_account_id`. We will query counts of matches by status. For accounts with no reconciliation data, show "--" or "Never reconciled".
 
-1. **Remove** the existing `BankAccountCard` component (lines 174-237)
-2. **Create** a new `BankAccountsCard` component that:
-   - Takes all bank accounts (both checking and savings) as a flat list
-   - Renders the QB-style header with "BANK ACCOUNTS" and "As of today"
-   - Shows "Today's bank balance" with the sum of all bank balances (preferring bank feed balance when available, falling back to QB book balance)
-   - Lists each account row with:
-     - A blue circle with a `Landmark` (bank) icon
-     - Account name in uppercase bold
-     - If bank feed balance exists: "Bank balance" + amount, "In QuickBooks" + QB amount, "Updated X ago" using `date-fns` `formatDistanceToNow`, green checkmark "Reviewed" badge
-     - If no bank feed: "In QuickBooks" label + QB balance only
-   - Footer with "Go to registers" button linking to the accounts tab
+### Technical Steps
 
-3. **Update** the dashboard grid (lines 337-370):
-   - Replace the two `BankAccountCard` calls with a single `<BankAccountsCard>` spanning full width on the grid row
-   - Pass all `bankAccounts` (no checking/savings split needed)
-   - Remove the now-unused variables (`checkingAccounts`, `savingsAccounts`, totals, bank feed sums)
+**1. Add columns to `bank_feed_balances` table** (database migration)
 
-4. **Update** `useBankFeedBalances` usage: use `balances` array directly alongside `getBalance` to access `last_updated` timestamps for "Updated X ago" display
+Add three new nullable columns to store these QB-sourced stats:
+- `unaccepted_count` (integer, default null)
+- `unreconciled_count` (integer, default null)  
+- `reconciled_through` (date, default null)
 
-### Layout
+**2. Update `useBankFeedBalances` hook**
 
-The card will use the same grid slot as the current two bank cards. It will be styled as a single Card spanning one column but containing the full vertical list internally -- matching the QB widget proportions.
+- Add the new fields to the `BankFeedBalance` interface
+- No query changes needed (already selects `*`)
 
+**3. Rewrite `BankAccountsCard` component**
+
+Replace the card layout with a full-width table:
+- Collapsible section using Radix Collapsible (already installed)
+- Header row with column titles matching QB exactly
+- Each account as a table row with proper alignment
+- "--" placeholders for missing data
+- "No bank data. QuickBooks transactions only." italic subtitle for accounts without feed
+- "Never reconciled" for accounts without reconciliation date
+- Transaction counts derived from reconciliation_matches query
+
+**4. Derive unreconciled/unaccepted counts from `reconciliation_matches`**
+
+Add a query in the component (or a new hook) that groups `reconciliation_matches` by `bank_account_id` and `status` to compute:
+- Unaccepted = count where status = 'pending'
+- Unreconciled = total count of all matches for that account
+
+**5. Update `AccountingDashboard` grid**
+
+Make the BankAccountsCard span the full width of the grid (`col-span-full`) since it's now a wide table, not a narrow card.
+
+### Files Changed
+
+- `src/components/accounting/BankAccountsCard.tsx` -- full rewrite to table layout
+- `src/components/accounting/AccountingDashboard.tsx` -- adjust grid span
+- `src/hooks/useBankFeedBalances.ts` -- add new fields to interface
+- Database migration: add columns to `bank_feed_balances`
