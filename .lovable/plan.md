@@ -1,225 +1,96 @@
 
 
-# App Builder: 4-Mode Role Split (PLANNER / EXECUTOR / VERIFIER / RESOLVER)
+# Build `/accounting/health` -- Diagnostic Dashboard
 
 ## Overview
 
-Inject explicit mode-routing logic into the Architect's system prompt and enforce it via the multi-turn tool call loop. This is a **prompt-only change** -- no new tools, no new tables, no schema changes. The existing tool loop already supports all 4 modes; we are adding structured guardrails to the AI's behavior.
+Create a read-only diagnostic page at `/accounting/health` to diagnose the `$0.00` balance display bug. The page will query `qb_transactions` directly via 3 new database RPCs and display the results.
 
-## What Changes
+---
 
-A single file is modified: `supabase/functions/ai-agent/index.ts`
+## Step 1: Database Migration (3 RPCs + 2 Indexes)
 
-### 1. Replace the Architect System Prompt (lines 2283-2600)
+A single migration creating:
 
-The current `agentPrompts.empire` string gets a restructured preamble that defines the 4 explicit modes with hard constraints, replacing the current "EXECUTION DISCIPLINE" section.
+**A) `accounting_health_summary(p_company_id uuid)`**
+Returns one row with:
+- `total_invoices` -- COUNT where entity_type = 'Invoice' and not deleted
+- `open_balance_count` -- COUNT where balance > 0
+- `last_invoice_updated_at` -- MAX(updated_at)
+- `missing_customer_qb_id_count` -- COUNT where customer_qb_id IS NULL or empty
+- `null_balance_count` -- COUNT where balance IS NULL
 
-**New prompt structure:**
+Since `balance` is already `numeric`, no regex/text parsing is needed.
+
+**B) `accounting_health_top_customers(p_company_id uuid, p_limit int default 20)`**
+Groups invoices by `customer_qb_id`, sums `balance` where > 0, returns top N rows ordered by open balance descending.
+
+**C) `accounting_health_customer_debug(p_company_id uuid, p_customer_qb_id text)`**
+For a single customer: invoice count, total open balance, and a JSONB array of up to 10 most recent open invoices (with `qb_id`, `doc_number`, `txn_date`, `balance`, `updated_at`).
+
+**Indexes:**
+- `idx_qb_txn_company_type_deleted` on `(company_id, entity_type, is_deleted)`
+- `idx_qb_txn_company_customer` on `(company_id, customer_qb_id)`
+
+No RLS changes needed -- these are STABLE functions that respect existing row-level permissions on `qb_transactions`.
+
+---
+
+## Step 2: Add Route in App.tsx
+
+Add a new route `/accounting/health` pointing to a lazy-loaded `AccountingHealth` page, wrapped in the existing `P` (ProtectedRoute + AppLayout) wrapper.
+
+---
+
+## Step 3: Create `src/pages/AccountingHealth.tsx`
+
+A single-page component with three sections:
+
+**Section A: Mirror Status**
+- 5 stat cards (total invoices, open balance count, last updated, missing customer IDs, null balances)
+- Alert list that flags issues (e.g., "No invoices found", "No invoices with balance > 0", "X invoices missing customer_qb_id")
+- Uses existing `Card`, `Badge` components
+
+**Section B: Top 20 Customer Balances**
+- Table showing `customer_qb_id`, open balance (formatted as USD), and open invoice count
+- Uses existing `Table` components
+- Clickable rows auto-populate the debug tool below
+
+**Section C: Customer Debug Tool**
+- Text input for a QuickBooks Customer ID
+- "Debug" button calls the `accounting_health_customer_debug` RPC
+- Displays invoice count, total open balance, and raw JSON of matching invoices
+- Uses existing `Input`, `Button` components
+
+Data fetching uses `useQuery` from TanStack React Query, calling `supabase.rpc()` for each function. The `companyId` comes from the existing `useCompanyId()` hook.
+
+---
+
+## Step 4: Fix Join Guard in AccountingCustomers.tsx
+
+Update lines 111-113 in `AccountingCustomers.tsx` to prevent silent `$0.00` mismatches:
 
 ```text
-## MODE ARCHITECTURE (MANDATORY -- governs every response)
+Before:
+  const custInvoices = invoices.filter(i => i.CustomerRef?.value === c.Id);
 
-You operate in exactly ONE mode per response turn. Label it at the top.
-
-### MODE 1: [PLANNER] -- Think Only
-HARD CONSTRAINTS:
-- Zero tool calls. If you call ANY tool in PLANNER mode, the system rejects it.
-- Output YAML only (fenced in ```yaml):
-  task_type: <UI_LAYOUT|UI_STYLING|DATA_PERMISSION|DATABASE_SCHEMA|ERP_DATA|TOOLING>
-  scope: <module or page>
-  assumptions: [list]
-  unknowns: [list]
-  plan_steps:
-    - step: 1
-      action: <READ|WRITE|VERIFY>
-      tool: <tool_name>
-      params_summary: <what you will pass>
-  success_criteria: <how to confirm done>
-  rollback: <how to undo if it fails>
-- No prose outside the YAML block.
-- Every conversation MUST begin with a PLANNER turn before any tool use.
-
-### MODE 2: [EXECUTOR] -- Tools Only
-HARD CONSTRAINTS:
-- Executes ONLY plan_steps from the preceding PLANNER output, in order.
-- After EVERY tool call, print a receipt block:
-  ```
-  RECEIPT:
-    tool: <tool_name>
-    input: <1-line summary of params>
-    output: <1-line summary of result>
-    rows_affected: <N or "N/A">
-    patch_id: <id or "N/A">
-  ```
-- If a tool returns an error:
-  1. Classify: TOOL_BUG | PERMISSION_MISSING | CONTEXT_MISSING |
-               USER_INPUT_MISSING | SYNTAX_ERROR | DATA_NOT_FOUND
-  2. Print: ERROR_CLASS: <class>, ERROR: <exact message>,
-            MISSING: <minimal requirement>
-  3. STOP immediately. No further tool calls.
-- If the SAME error occurs twice across any turns: classify TOOL_BUG,
-  print "Systemic failure -- retrying will not help", and STOP.
-- No narration without receipts. The words "I found", "I checked",
-  "I verified" are BANNED unless a receipt appears in the same message.
-
-### MODE 3: [VERIFIER] -- Proof Only
-HARD CONSTRAINTS:
-- Read-only tools ONLY (db_read_query, list_machines, list_deliveries,
-  list_orders, list_leads, get_stock_levels, read_task, list_fix_tickets,
-  scrape_page). No write tools.
-- Output format:
-  ```
-  VERIFICATION:
-    check: <what was verified>
-    query: <the SQL or tool call used>
-    result: <actual output summary>
-    verdict: PASS | FAIL
-    evidence: <rows/data proving it>
-  ```
-- Multiple checks are allowed; each gets its own VERIFICATION block.
-- If ANY check is FAIL, do NOT proceed to RESOLVER.
-
-### MODE 4: [RESOLVER] -- Status Only
-HARD CONSTRAINTS:
-- May ONLY be entered if the preceding VERIFIER turn produced
-  ALL verdicts = PASS AND at least one EXECUTOR receipt exists.
-- Calls resolve_task with:
-  - resolution_note (20+ chars, evidence keywords required)
-  - before_evidence (from PLANNER/EXECUTOR)
-  - after_evidence (from VERIFIER)
-  - regression_guard (from VERIFIER)
-- If resolve_task fails: classify TOOL_BUG, STOP.
-  Do NOT ask the user to rephrase. This is a system error.
-- On success: append [FIX_CONFIRMED] at end of response.
-
-## GLOBAL REQUIREMENTS (apply to ALL modes)
-
-1. companyId is REQUIRED CONTEXT.
-   If companyId is missing or equals the fallback
-   "a0000000-0000-0000-0000-000000000001" in any tool call:
-   STOP with CONTEXT_MISSING. Do not proceed.
-
-2. For DB/RLS work: MUST query information_schema.columns BEFORE
-   writing policies. Never assume column names exist.
-
-3. No narration without receipts -- enforced in every mode.
-
-4. Mode transitions follow this strict order:
-   PLANNER -> EXECUTOR -> VERIFIER -> RESOLVER
-   You may loop back from VERIFIER(FAIL) -> PLANNER for a new plan.
-   You may NOT skip modes.
-
-## MODE ROUTER RULE
-
-On each turn, determine the mode as follows:
-- If no PLANNER YAML has been output in this conversation yet -> PLANNER
-- If PLANNER YAML exists but plan_steps have not been executed -> EXECUTOR
-- If all plan_steps have receipts but no VERIFICATION block exists -> VERIFIER
-- If all VERIFICATION verdicts are PASS and receipts exist -> RESOLVER
-- If VERIFICATION has any FAIL -> PLANNER (new plan)
-- If any STOP was issued -> remain STOPPED until user provides
-  the missing item
+After:
+  const custInvoices = invoices.filter(i => {
+    const refVal = i.CustomerRef?.value;
+    if (!refVal) return false;
+    return String(refVal) === String(c.Id);
+  });
 ```
 
-The rest of the current prompt (lines ~2384-2600: "You are **Architect**...", role description, apps, Empire Loop, capabilities, autofix behavior, fix ticket system, code engineer mode, security rules) remains **unchanged** -- it is appended after the mode architecture block.
+This guards against null/undefined `CustomerRef.value` and ensures consistent string comparison.
 
-### 2. Add companyId Guard in the Tool Loop (line ~8168)
+---
 
-Currently the env check at line 8161 only logs a `console.warn`. We upgrade it to inject a hard-stop message into the AI response when companyId is the fallback AND the agent is empire, preventing tool execution with bad context.
+## Files Changed
 
-### 3. No Other Changes
-
-- No new tools added
-- No database migrations
-- No frontend changes
-- The multi-turn loop (lines 8152-8639) is untouched -- mode enforcement is done entirely via the system prompt, which the AI model follows
-
-## Technical Details
-
-### Files Modified
-
-| File | Change |
-|------|--------|
-| `supabase/functions/ai-agent/index.ts` | Replace lines 2283-2382 (EXECUTION DISCIPLINE block) with the 4-mode architecture. Keep lines 2383-2600 intact. Add companyId hard-stop guard at line ~8168. |
-
-### Sample Response Skeletons
-
-**PLANNER response:**
+```text
+NEW:   src/pages/AccountingHealth.tsx
+EDIT:  src/App.tsx  (add route + import)
+EDIT:  src/components/accounting/AccountingCustomers.tsx  (fix join guard, lines 111-113)
+DB:    1 migration (3 RPCs + 2 indexes)
 ```
-[PLANNER]
-
-```yaml
-task_type: DATA_PERMISSION
-scope: direct_messages
-assumptions:
-  - dm_conversations table exists
-  - RLS is enabled but INSERT policy may be missing
-unknowns:
-  - Current RLS policies on dm_conversations
-plan_steps:
-  - step: 1
-    action: READ
-    tool: db_read_query
-    params_summary: "SELECT * FROM pg_policies WHERE tablename = 'dm_conversations'"
-  - step: 2
-    action: READ
-    tool: db_read_query
-    params_summary: "SELECT column_name FROM information_schema.columns WHERE table_name = 'dm_conversations'"
-  - step: 3
-    action: WRITE
-    tool: db_write_fix
-    params_summary: "CREATE POLICY for INSERT on dm_conversations"
-success_criteria: "User can create DMs without RLS violation"
-rollback: "DROP POLICY dm_conversations_insert ON dm_conversations"
-```
-```
-
-**EXECUTOR response:**
-```
-[EXECUTOR]
-
-Executing step 1 of 3.
-
-RECEIPT:
-  tool: db_read_query
-  input: SELECT * FROM pg_policies WHERE tablename = 'dm_conversations'
-  output: 2 rows returned (select_policy, update_policy). No INSERT policy found.
-  rows_affected: N/A
-  patch_id: N/A
-
-Executing step 2 of 3.
-...
-```
-
-**VERIFIER response:**
-```
-[VERIFIER]
-
-VERIFICATION:
-  check: INSERT policy exists on dm_conversations
-  query: SELECT policyname, cmd FROM pg_policies WHERE tablename = 'dm_conversations' AND cmd = 'INSERT'
-  result: 1 row: dm_conversations_insert, INSERT
-  verdict: PASS
-  evidence: Policy "dm_conversations_insert" found with qual = (auth.uid() = user_id)
-```
-
-**RESOLVER response:**
-```
-[RESOLVER]
-
-Calling resolve_task with evidence from EXECUTOR receipts and VERIFIER proof.
-
-RECEIPT:
-  tool: resolve_task
-  input: task_id=abc123, resolution_note="Created INSERT RLS policy on dm_conversations..."
-  output: Task completed successfully
-  rows_affected: 1
-  patch_id: N/A
-
-[FIX_CONFIRMED]
-```
-
-### Deployment
-
-Single edge function redeployment: `ai-agent`
-
