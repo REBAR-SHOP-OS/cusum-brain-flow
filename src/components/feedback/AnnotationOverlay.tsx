@@ -31,6 +31,7 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl }: Props) {
   const [history, setHistory] = useState<ImageData[]>([]);
   const [interimText, setInterimText] = useState("");
   const [voiceConnecting, setVoiceConnecting] = useState(false);
+  const isConnectingRef = useRef(false);
   const { companyId } = useCompanyId();
 
   // ElevenLabs Realtime Scribe — auto-detects language including Farsi
@@ -48,13 +49,24 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl }: Props) {
 
   const isVoiceActive = scribe.isConnected;
 
+  const safeDisconnect = useCallback(() => {
+    try {
+      if (!isConnectingRef.current) {
+        scribe.disconnect();
+      }
+    } catch {
+      // WebSocket already closed — ignore
+    }
+    setInterimText("");
+  }, [scribe]);
+
   const toggleVoice = useCallback(async () => {
-    if (isVoiceActive) {
-      scribe.disconnect();
-      setInterimText("");
+    if (isVoiceActive || isConnectingRef.current) {
+      safeDisconnect();
       return;
     }
     try {
+      isConnectingRef.current = true;
       setVoiceConnecting(true);
       await navigator.mediaDevices.getUserMedia({ audio: true });
       const { data, error } = await supabase.functions.invoke("elevenlabs-scribe-token");
@@ -65,19 +77,20 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl }: Props) {
       });
     } catch (err: any) {
       console.error("Voice error:", err);
+      safeDisconnect();
       toast.error("Could not start voice input: " + (err.message ?? "Unknown error"));
     } finally {
+      isConnectingRef.current = false;
       setVoiceConnecting(false);
     }
-  }, [isVoiceActive, scribe]);
+  }, [isVoiceActive, scribe, safeDisconnect]);
 
   // Stop voice when dialog closes
   useEffect(() => {
     if (!open && isVoiceActive) {
-      scribe.disconnect();
-      setInterimText("");
+      safeDisconnect();
     }
-  }, [open, isVoiceActive, scribe]);
+  }, [open, isVoiceActive, safeDisconnect]);
 
   // Load background image once
   useEffect(() => {
@@ -172,8 +185,7 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl }: Props) {
     if (!canSend || sending) return;
     // Stop voice recording if active
     if (isVoiceActive) {
-      scribe.disconnect();
-      setInterimText("");
+      safeDisconnect();
     }
     setSending(true);
     try {
@@ -294,7 +306,7 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl }: Props) {
     } finally {
       setSending(false);
     }
-  }, [canSend, sending, companyId, description, onClose, isVoiceActive, scribe]);
+  }, [canSend, sending, companyId, description, onClose, isVoiceActive, safeDisconnect]);
 
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
