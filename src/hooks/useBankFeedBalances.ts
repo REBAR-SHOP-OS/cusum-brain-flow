@@ -69,5 +69,30 @@ export function useBankFeedBalances() {
     [balances]
   );
 
-  return { balances, loading, fetchBalances, upsertBalance, getBalance };
+  const seedIfMissing = useCallback(
+    async (bankAccounts: { id: string; name: string; balance: number }[]) => {
+      if (!companyId || balances.length > 0) return;
+      const { data: existing } = await supabase
+        .from("bank_feed_balances")
+        .select("account_id")
+        .eq("company_id", companyId);
+      const existingIds = new Set((existing || []).map((e: any) => e.account_id));
+      const toSeed = bankAccounts.filter((a) => !existingIds.has(a.id));
+      if (toSeed.length === 0) return;
+      const { data: { user } } = await supabase.auth.getUser();
+      const rows = toSeed.map((a) => ({
+        account_id: a.id,
+        account_name: a.name,
+        bank_balance: a.balance,
+        company_id: companyId,
+        updated_by: user?.id ?? null,
+        last_updated: new Date().toISOString(),
+      }));
+      await supabase.from("bank_feed_balances").insert(rows as any);
+      await fetchBalances();
+    },
+    [companyId, balances, fetchBalances]
+  );
+
+  return { balances, loading, fetchBalances, upsertBalance, getBalance, seedIfMissing };
 }

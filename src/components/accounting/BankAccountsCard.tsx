@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { ChevronDown, ChevronRight, Landmark } from "lucide-react";
+import { ChevronDown, ChevronRight, Landmark, Pencil, Check, X, Plus } from "lucide-react";
 import { Table, TableHeader, TableHead, TableBody, TableRow, TableCell } from "@/components/ui/table";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
+import { Input } from "@/components/ui/input";
 import type { QBAccount } from "@/hooks/useQuickBooksData";
 import type { BankFeedBalance } from "@/hooks/useBankFeedBalances";
 import { format } from "date-fns";
@@ -12,16 +13,41 @@ const fmt = (n: number) =>
 interface BankAccountsCardProps {
   accounts: QBAccount[];
   getBalance: (accountId: string) => BankFeedBalance | undefined;
+  upsertBalance: (accountId: string, accountName: string, bankBalance: number) => Promise<any>;
   onNavigate: () => void;
 }
 
-export function BankAccountsCard({ accounts, getBalance, onNavigate }: BankAccountsCardProps) {
+export function BankAccountsCard({ accounts, getBalance, upsertBalance, onNavigate }: BankAccountsCardProps) {
   const [open, setOpen] = useState(true);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
+
+  const startEdit = (account: QBAccount, currentBalance?: number) => {
+    setEditingId(account.Id);
+    setEditValue(currentBalance != null ? String(currentBalance) : String(account.CurrentBalance));
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditValue("");
+  };
+
+  const saveEdit = async (account: QBAccount) => {
+    const parsed = parseFloat(editValue);
+    if (isNaN(parsed)) return;
+    await upsertBalance(account.Id, account.Name, parsed);
+    setEditingId(null);
+    setEditValue("");
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent, account: QBAccount) => {
+    if (e.key === "Enter") saveEdit(account);
+    if (e.key === "Escape") cancelEdit();
+  };
 
   return (
     <div className="col-span-full rounded-lg border bg-card text-card-foreground shadow-sm">
       <Collapsible open={open} onOpenChange={setOpen}>
-        {/* Header */}
         <CollapsibleTrigger asChild>
           <button className="flex items-center gap-2 w-full px-5 py-4 text-left hover:bg-muted/40 transition-colors">
             {open ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
@@ -62,6 +88,7 @@ export function BankAccountsCard({ accounts, getBalance, onNavigate }: BankAccou
               {accounts.map((account) => {
                 const feed = getBalance(account.Id);
                 const hasFeed = !!feed;
+                const isEditing = editingId === account.Id;
 
                 return (
                   <TableRow
@@ -86,9 +113,52 @@ export function BankAccountsCard({ accounts, getBalance, onNavigate }: BankAccou
                       </div>
                     </TableCell>
 
-                    {/* Bank Balance */}
-                    <TableCell className="text-right text-sm tabular-nums font-medium">
-                      {hasFeed ? fmt(feed.bank_balance) : <span className="text-muted-foreground">--</span>}
+                    {/* Bank Balance - inline editable */}
+                    <TableCell className="text-right text-sm tabular-nums font-medium" onClick={(e) => e.stopPropagation()}>
+                      {isEditing ? (
+                        <div className="flex items-center justify-end gap-1">
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={editValue}
+                            onChange={(e) => setEditValue(e.target.value)}
+                            onKeyDown={(e) => handleKeyDown(e, account)}
+                            className="w-28 h-7 text-right text-sm"
+                            autoFocus
+                          />
+                          <button
+                            onClick={() => saveEdit(account)}
+                            className="p-1 rounded hover:bg-primary/10 text-primary"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={cancelEdit}
+                            className="p-1 rounded hover:bg-destructive/10 text-muted-foreground"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-end gap-1.5 group">
+                          {hasFeed ? (
+                            <span>{fmt(feed.bank_balance)}</span>
+                          ) : (
+                            <span className="text-muted-foreground">--</span>
+                          )}
+                          <button
+                            onClick={() => startEdit(account, feed?.bank_balance)}
+                            className="p-1 rounded hover:bg-primary/10 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+                            title="Edit bank balance"
+                          >
+                            {hasFeed ? (
+                              <Pencil className="w-3 h-3" />
+                            ) : (
+                              <Plus className="w-3 h-3" />
+                            )}
+                          </button>
+                        </div>
+                      )}
                     </TableCell>
 
                     {/* In QuickBooks */}
