@@ -460,6 +460,7 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+            onPaste={(e) => { const files = e.clipboardData?.files; if (files?.length) { e.preventDefault(); addFiles(files); } }}
             disabled={isBusy}
           />
           <button
