@@ -292,7 +292,7 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
 
   // Map communications to InboxEmail format
   const allEmails: (InboxEmail & { priority: number; commType: "email" | "call" | "sms" })[] = useMemo(() => {
-    return communications.map((comm) => {
+    const mapped = communications.map((comm) => {
       const commType: "email" | "call" | "sms" = comm.type;
       const category = categorizeCommunication(comm.from, comm.subject || "", comm.preview || "", commType, comm.aiCategory, comm.aiUrgency);
       const meta = comm.metadata as Record<string, unknown> | null;
@@ -334,6 +334,38 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
         resolvedAt: comm.resolvedAt,
       };
     });
+
+    // Collapse SMS messages that share the same threadId into one list entry
+    const smsThreadMap = new Map<string, typeof mapped[number][]>();
+    const result: typeof mapped = [];
+
+    for (const item of mapped) {
+      if (item.commType === "sms" && item.threadId) {
+        const key = item.threadId;
+        if (!smsThreadMap.has(key)) smsThreadMap.set(key, []);
+        smsThreadMap.get(key)!.push(item);
+      } else {
+        result.push(item);
+      }
+    }
+
+    // For each SMS thread, emit one representative entry (most recent first,
+    // since the DB query orders by received_at DESC)
+    for (const [, group] of smsThreadMap) {
+      const representative = group[0]; // most recent
+      const hasUnread = group.some((m) => m.isUnread);
+      const count = group.length;
+      result.push({
+        ...representative,
+        isUnread: hasUnread,
+        subject: count > 1
+          ? `${representative.preview || "SMS message"} (${count} messages)`
+          : representative.preview || "SMS message",
+        preview: representative.preview || "",
+      });
+    }
+
+    return result;
   }, [communications]);
 
   // Follow-up nudge IDs (emails > 48h old with no outbound reply)
