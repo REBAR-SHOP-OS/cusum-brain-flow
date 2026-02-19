@@ -138,20 +138,20 @@ async function sendEmail(accessToken: string, to: string, subject: string, htmlB
 }
 
 async function aiSummarize(personData: PersonActivity): Promise<string> {
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  if (!LOVABLE_API_KEY) return "AI summary unavailable.";
+  try {
+    const { callAI } = await import("../_shared/aiRouter.ts");
 
-  const emailList = [
-    ...personData.emailsSent.map(e => `SENT to ${e.to}: "${e.subject}" — ${e.preview}`),
-    ...personData.emailsReceived.map(e => `RECEIVED from ${e.from}: "${e.subject}" — ${e.preview}`),
-  ].join("\n");
+    const emailList = [
+      ...personData.emailsSent.map(e => `SENT to ${e.to}: "${e.subject}" — ${e.preview}`),
+      ...personData.emailsReceived.map(e => `RECEIVED from ${e.from}: "${e.subject}" — ${e.preview}`),
+    ].join("\n");
 
-  const unanswered = personData.emailsReceived.length - personData.emailsSent.length;
-  const responseRate = personData.emailsReceived.length > 0 
-    ? Math.round((personData.emailsSent.length / personData.emailsReceived.length) * 100) 
-    : 100;
+    const unanswered = personData.emailsReceived.length - personData.emailsSent.length;
+    const responseRate = personData.emailsReceived.length > 0 
+      ? Math.round((personData.emailsSent.length / personData.emailsReceived.length) * 100) 
+      : 100;
 
-  const prompt = `You are a performance coach and business analyst. Analyze this person's FULL activity for today and produce a structured coaching report.
+    const prompt = `You are a performance coach and business analyst. Analyze this person's FULL activity for today and produce a structured coaching report.
 
 Person: ${personData.name} (${personData.role})
 Tasks: ${personData.tasksOpen} open, ${personData.tasksDone} completed
@@ -180,26 +180,17 @@ KEY NOTES (max 4):
 
 RULES: Be supportive but honest. Use data evidence. No fluff. Short sentences.`;
 
-  try {
-    const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: "You are a concise business analyst extracting key notes and action items from daily email activity." },
-          { role: "user", content: prompt },
-        ],
-      }),
+    // GPT-4o-mini: short structured analysis
+    const result = await callAI({
+      provider: "gpt",
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: "You are a concise business analyst extracting key notes and action items from daily email activity." },
+        { role: "user", content: prompt },
+      ],
     });
 
-    if (!resp.ok) {
-      console.warn("AI summarize failed:", resp.status);
-      return "AI summary unavailable (API error).";
-    }
-
-    const data = await resp.json();
-    return data.choices?.[0]?.message?.content || "No summary generated.";
+    return result.content || "No summary generated.";
   } catch (e) {
     console.warn("AI summarize error:", e);
     return "AI summary unavailable.";

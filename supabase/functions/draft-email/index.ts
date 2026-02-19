@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireAuth, corsHeaders } from "../_shared/auth.ts";
+import { callAI, AIError } from "../_shared/aiRouter.ts";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -8,7 +9,6 @@ serve(async (req) => {
   }
 
   try {
-    // Auth guard — enforce authentication + get user profile
     let rateLimitId: string;
     let userName = "Team Member";
     let userTitle = "";
@@ -52,54 +52,34 @@ serve(async (req) => {
 
     const body = await req.json();
     const action = body.action || "draft";
-
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
-    }
-
     const titleLine = userTitle ? ` (${userTitle})` : "";
+
+    // Helper: all draft-email calls use GPT-4o-mini (customer-facing writing, fast)
+    async function aiCall(systemPrompt: string, userPrompt: string, opts?: { maxTokens?: number; temperature?: number }) {
+      const result = await callAI({
+        provider: "gpt",
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        maxTokens: opts?.maxTokens || 800,
+        temperature: opts?.temperature ?? 0.4,
+      });
+      return result.content;
+    }
 
     // ─── Action: quick-replies ──────────────────────────────────────
     if (action === "quick-replies") {
       const { emailSubject, emailBody, senderName } = body;
-      const systemPrompt = `You generate 3 short, contextually appropriate email reply suggestions. Each suggestion should be 5-15 words. Return ONLY a JSON array of 3 strings, nothing else. Example: ["Thanks, got it!", "Let me check and get back to you.", "Sounds good, let's proceed."]`;
-      const userPrompt = `Email from ${senderName}:\nSubject: ${emailSubject}\n\n${emailBody}\n\nGenerate 3 short reply suggestions as a JSON array.`;
-
-      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash-lite",
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt },
-          ],
-          max_tokens: 300,
-          temperature: 0.7,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("AI gateway error:", response.status, errorText);
-        throw new Error(`AI gateway error: ${response.status}`);
-      }
-
-      const data = await response.json();
-      const raw = data.choices?.[0]?.message?.content || "[]";
-      // Extract JSON array from response
+      const raw = await aiCall(
+        `You generate 3 short, contextually appropriate email reply suggestions. Each suggestion should be 5-15 words. Return ONLY a JSON array of 3 strings, nothing else. Example: ["Thanks, got it!", "Let me check and get back to you.", "Sounds good, let's proceed."]`,
+        `Email from ${senderName}:\nSubject: ${emailSubject}\n\n${emailBody}\n\nGenerate 3 short reply suggestions as a JSON array.`,
+        { maxTokens: 300, temperature: 0.7 }
+      );
       const jsonMatch = raw.match(/\[[\s\S]*\]/);
       let replies: string[] = [];
-      try {
-        replies = JSON.parse(jsonMatch?.[0] || "[]");
-      } catch {
-        replies = ["Thanks, got it!", "Let me check on this.", "Sounds good!"];
-      }
-
+      try { replies = JSON.parse(jsonMatch?.[0] || "[]"); } catch { replies = ["Thanks, got it!", "Let me check on this.", "Sounds good!"]; }
       return new Response(JSON.stringify({ replies: replies.slice(0, 3) }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -108,35 +88,11 @@ serve(async (req) => {
     // ─── Action: summarize-email ────────────────────────────────────
     if (action === "summarize-email") {
       const { emailSubject, emailBody, senderName } = body;
-      const systemPrompt = `You summarize emails into 2-3 concise bullet points. Each bullet should be one sentence. Focus on action items and key information. Return ONLY the bullet points, each starting with "• ".`;
-      const userPrompt = `Summarize this email:\n\nFrom: ${senderName}\nSubject: ${emailSubject}\n\n${emailBody}`;
-
-      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash-lite",
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt },
-          ],
-          max_tokens: 400,
-          temperature: 0.3,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("AI gateway error:", response.status, errorText);
-        throw new Error(`AI gateway error: ${response.status}`);
-      }
-
-      const data = await response.json();
-      const summary = data.choices?.[0]?.message?.content || "";
-
+      const summary = await aiCall(
+        `You summarize emails into 2-3 concise bullet points. Each bullet should be one sentence. Focus on action items and key information. Return ONLY the bullet points, each starting with "• ".`,
+        `Summarize this email:\n\nFrom: ${senderName}\nSubject: ${emailSubject}\n\n${emailBody}`,
+        { maxTokens: 400, temperature: 0.3 }
+      );
       return new Response(JSON.stringify({ summary }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -145,34 +101,12 @@ serve(async (req) => {
     // ─── Action: polish ───────────────────────────────────────────
     if (action === "polish") {
       const { draftText } = body;
-
-      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash-lite",
-          messages: [
-            { role: "system", content: "You are an email editor. Polish the following email draft: fix grammar, tighten phrasing, improve clarity. Do NOT change the meaning, tone, or intent. Return ONLY the polished text." },
-            { role: "user", content: draftText },
-          ],
-          max_tokens: 800,
-          temperature: 0.3,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("AI gateway error:", response.status, errorText);
-        throw new Error(`AI gateway error: ${response.status}`);
-      }
-
-      const data = await response.json();
-      const polished = data.choices?.[0]?.message?.content || draftText;
-
-      return new Response(JSON.stringify({ draft: polished }), {
+      const polished = await aiCall(
+        "You are an email editor. Polish the following email draft: fix grammar, tighten phrasing, improve clarity. Do NOT change the meaning, tone, or intent. Return ONLY the polished text.",
+        draftText,
+        { temperature: 0.3 }
+      );
+      return new Response(JSON.stringify({ draft: polished || draftText }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -180,33 +114,10 @@ serve(async (req) => {
     // ─── Action: prompt-to-draft ────────────────────────────────────
     if (action === "prompt-to-draft") {
       const { prompt, recipientName, emailSubject } = body;
-
-      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash-lite",
-          messages: [
-            { role: "system", content: `You are Cassie, an AI email assistant for ${userName}${titleLine} at Rebar.Shop (Ontario Rebars Ltd.). Write a complete email body from a short prompt. Be professional and concise. Sign off with "Best regards,\\n${userName}". Return ONLY the email body text.` },
-            { role: "user", content: `Write an email${recipientName ? ` to ${recipientName}` : ""}${emailSubject ? ` about: ${emailSubject}` : ""}.\n\nWhat I want to say: ${prompt}` },
-          ],
-          max_tokens: 800,
-          temperature: 0.4,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("AI gateway error:", response.status, errorText);
-        throw new Error(`AI gateway error: ${response.status}`);
-      }
-
-      const data = await response.json();
-      const draft = data.choices?.[0]?.message?.content || "";
-
+      const draft = await aiCall(
+        `You are Cassie, an AI email assistant for ${userName}${titleLine} at Rebar.Shop (Ontario Rebars Ltd.). Write a complete email body from a short prompt. Be professional and concise. Sign off with "Best regards,\\n${userName}". Return ONLY the email body text.`,
+        `Write an email${recipientName ? ` to ${recipientName}` : ""}${emailSubject ? ` about: ${emailSubject}` : ""}.\n\nWhat I want to say: ${prompt}`
+      );
       return new Response(JSON.stringify({ draft }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -223,44 +134,17 @@ serve(async (req) => {
         friendly: "Rewrite the following email draft in a warm, friendly tone. Keep the same meaning but make it personable and approachable.",
         urgent: "Rewrite the following email draft with an urgent, action-oriented tone. Emphasize deadlines and importance. Keep the same meaning.",
       };
-
       const instruction = toneInstructions[tone] || toneInstructions.formal;
-
-      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash-lite",
-          messages: [
-            { role: "system", content: `${instruction} Return ONLY the rewritten text, nothing else.` },
-            { role: "user", content: draftText },
-          ],
-          max_tokens: 800,
-          temperature: 0.4,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("AI gateway error:", response.status, errorText);
-        throw new Error(`AI gateway error: ${response.status}`);
-      }
-
-      const data = await response.json();
-      const adjusted = data.choices?.[0]?.message?.content || draftText;
-
-      return new Response(JSON.stringify({ draft: adjusted }), {
+      const adjusted = await aiCall(`${instruction} Return ONLY the rewritten text, nothing else.`, draftText);
+      return new Response(JSON.stringify({ draft: adjusted || draftText }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // ─── Action: draft (default — existing behavior) ────────────────
+    // ─── Action: draft (default) ────────────────────────────────────
     const { emailSubject, emailBody, senderName, senderEmail } = body;
-
-    const systemPrompt = `You are Cassie, an AI email assistant for a rebar/steel manufacturing company called Rebar.Shop (Ontario Rebars Ltd.). 
+    const draft = await aiCall(
+      `You are Cassie, an AI email assistant for a rebar/steel manufacturing company called Rebar.Shop (Ontario Rebars Ltd.). 
 You draft professional, concise email replies on behalf of ${userName}${titleLine}.
 
 Guidelines:
@@ -272,63 +156,18 @@ Guidelines:
 - If it's a support/technical email, acknowledge the information and state next steps
 - If it's a sales/marketing email, politely decline or express interest based on context
 - If it's a notification/automated email, suggest a brief acknowledgment or skip reply
-- Do NOT include any email signature block — the system will add it automatically`;
-
-    const userPrompt = `Draft a reply to this email:
-
-From: ${senderName} <${senderEmail}>
-Subject: ${emailSubject}
-
-Email content:
-${emailBody}
-
-Write only the reply text, no subject line or email headers.`;
-
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash-lite",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        max_tokens: 800,
-        temperature: 0.4,
-      }),
-    });
-
-    if (!response.ok) {
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "AI credits exhausted. Please add credits to continue." }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      const errorText = await response.text();
-      console.error("AI gateway error:", response.status, errorText);
-      throw new Error(`AI gateway error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const draft = data.choices?.[0]?.message?.content || "";
+- Do NOT include any email signature block — the system will add it automatically`,
+      `Draft a reply to this email:\n\nFrom: ${senderName} <${senderEmail}>\nSubject: ${emailSubject}\n\nEmail content:\n${emailBody}\n\nWrite only the reply text, no subject line or email headers.`
+    );
 
     return new Response(JSON.stringify({ draft }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
     console.error("draft-email error:", error);
+    const status = error instanceof AIError ? error.status : 500;
     return new Response(JSON.stringify({ error: error.message || "Failed to generate draft" }), {
-      status: 500,
+      status,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
