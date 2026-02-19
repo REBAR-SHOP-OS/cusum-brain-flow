@@ -311,23 +311,18 @@ serve(async (req) => {
       { role: "user", content: `Original text:\n${originalForReview}\n\nTranslation to review:\n${translationForReview}` }
     ];
 
-    const pass2Response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ model: "google/gemini-2.5-pro", messages: pass2Messages }),
-    });
-
     let confidence = 85;
     let refinedTranslation = translationForReview;
     let reviewNotes = "";
     let speakers = parsed.speakers || [];
 
-    if (pass2Response.ok) {
-      const pass2Data = await pass2Response.json();
-      const pass2Raw = pass2Data.choices?.[0]?.message?.content || "";
+    try {
+      const pass2Result = await callAI({
+        provider: "gemini",
+        model: "gemini-2.5-pro",
+        messages: pass2Messages,
+      });
+      const pass2Raw = pass2Result.content;
       try {
         const pass2Cleaned = pass2Raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
         const pass2Parsed = JSON.parse(pass2Cleaned);
@@ -340,8 +335,8 @@ serve(async (req) => {
       } catch {
         console.error("Pass 2 parse failed, using pass 1 result");
       }
-    } else {
-      console.error("Pass 2 failed:", pass2Response.status);
+    } catch (pass2Err) {
+      console.error("Pass 2 failed:", pass2Err);
     }
 
     const result: any = {
