@@ -2,7 +2,7 @@ import { useState, useMemo, lazy, Suspense } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Activity, Bell, BarChart3, TrendingUp, Shield, Users, Zap, FileSpreadsheet, XCircle, Sparkles, Webhook } from "lucide-react";
+import { Activity, Bell, BarChart3, TrendingUp, Shield, Users, Zap, FileSpreadsheet, XCircle, Sparkles, Webhook, UserCheck, CalendarClock } from "lucide-react";
 import { usePipelineRealtime } from "@/hooks/usePipelineRealtime";
 import { PipelineErrorBoundary } from "@/components/pipeline/intelligence/PipelineErrorBoundary";
 import { TabLoadingSkeleton } from "@/components/pipeline/intelligence/TabLoadingSkeleton";
@@ -20,6 +20,8 @@ const PipelineReporting = lazy(() => import("@/components/pipeline/intelligence/
 const LossPatternAnalysis = lazy(() => import("@/components/pipeline/intelligence/LossPatternAnalysis").then(m => ({ default: m.LossPatternAnalysis })));
 const AICoachingDashboard = lazy(() => import("@/components/pipeline/intelligence/AICoachingDashboard").then(m => ({ default: m.AICoachingDashboard })));
 const PipelineWebhooks = lazy(() => import("@/components/pipeline/intelligence/PipelineWebhooks").then(m => ({ default: m.PipelineWebhooks })));
+const RepPerformanceDashboard = lazy(() => import("@/components/pipeline/intelligence/RepPerformanceDashboard").then(m => ({ default: m.RepPerformanceDashboard })));
+const ScheduledReportsManager = lazy(() => import("@/components/pipeline/intelligence/ScheduledReportsManager").then(m => ({ default: m.ScheduledReportsManager })));
 
 type Lead = Tables<"leads">;
 type LeadWithCustomer = Lead & { customers: { name: string; company_name: string | null } | null };
@@ -135,6 +137,12 @@ export default function PipelineIntelligence() {
             <TabsTrigger value="sync" className={tabClass}>
               <Activity className="w-3.5 h-3.5" /> Sync
             </TabsTrigger>
+            <TabsTrigger value="reps" className={tabClass}>
+              <UserCheck className="w-3.5 h-3.5" /> Reps
+            </TabsTrigger>
+            <TabsTrigger value="scheduled" className={tabClass}>
+              <CalendarClock className="w-3.5 h-3.5" /> Scheduled
+            </TabsTrigger>
           </TabsList>
         </div>
 
@@ -171,6 +179,12 @@ export default function PipelineIntelligence() {
           </TabsContent>
           <TabsContent value="sync" className="mt-0 p-4 sm:p-6">
             {wrapTab(<SyncHealthDashboard syncLogs={syncLogs} leads={leads} />, "Failed to load Sync")}
+          </TabsContent>
+          <TabsContent value="reps" className="mt-0 p-4 sm:p-6">
+            {wrapTab(<RepPerformanceDashboard leads={leads} isLoading={isLoading} />, "Failed to load Reps")}
+          </TabsContent>
+          <TabsContent value="scheduled" className="mt-0 p-4 sm:p-6">
+            {wrapTab(<ScheduledReportsManager />, "Failed to load Scheduled Reports")}
           </TabsContent>
         </div>
       </Tabs>
