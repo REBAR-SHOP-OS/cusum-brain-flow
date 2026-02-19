@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, forwardRef } from "react";
 import { CheckSquare, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,7 +50,7 @@ const priorities = [
   { value: "urgent", label: "Urgent" },
 ];
 
-export function CreateTaskDialog({ open, onOpenChange, defaults, onCreated }: CreateTaskDialogProps) {
+export const CreateTaskDialog = forwardRef<HTMLDivElement, CreateTaskDialogProps>(function CreateTaskDialog({ open, onOpenChange, defaults, onCreated }, ref) {
   const [title, setTitle] = useState(defaults.title);
   const [description, setDescription] = useState(defaults.description);
   const [priority, setPriority] = useState("medium");
@@ -104,7 +104,7 @@ export function CreateTaskDialog({ open, onOpenChange, defaults, onCreated }: Cr
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent ref={ref} className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <CheckSquare className="w-5 h-5 text-primary" />
@@ -191,4 +191,4 @@ export function CreateTaskDialog({ open, onOpenChange, defaults, onCreated }: Cr
       </DialogContent>
     </Dialog>
   );
-}
+});
