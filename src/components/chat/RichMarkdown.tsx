@@ -218,8 +218,8 @@ export function RichMarkdown({ content, className, onRegenerateImage, onActionIt
                   <div className="bg-muted/80 px-3 py-1 text-[10px] uppercase tracking-wider text-muted-foreground font-bold border-b border-border/50">
                     {codeClassName?.replace("language-", "") || "code"}
                   </div>
-                  <pre className="bg-muted/40 p-3 overflow-x-auto max-w-full">
-                    <code className="text-xs font-mono text-foreground/90">{children}</code>
+                  <pre className="bg-muted/40 p-3 overflow-x-auto max-w-full scrollbar-thin">
+                    <code className="text-xs font-mono text-foreground/90 whitespace-pre [overflow-wrap:normal]">{children}</code>
                   </pre>
                 </div>
               );
