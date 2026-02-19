@@ -4722,7 +4722,10 @@ serve(async (req) => {
       .select("full_name, email, company_id")
       .eq("user_id", user.id)
       .maybeSingle();
-    const companyId = userProfile?.company_id || "a0000000-0000-0000-0000-000000000001";
+    const companyId = userProfile?.company_id;
+    if (!companyId) {
+      return new Response(JSON.stringify({ reply: "❌ Unable to determine your company context. Please ensure your profile is fully set up.", agent }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
     const userFullName = userProfile?.full_name || user.email?.split("@")[0] || "there";
     const userFirstName = userFullName.split(" ")[0];
     const userEmail = userProfile?.email || user.email || "";
@@ -4740,7 +4743,7 @@ serve(async (req) => {
     try {
       const [pairingRes, configRes] = await Promise.all([
         svcClient.from("comms_agent_pairing").select("draft_only").eq("user_email", userEmail).maybeSingle(),
-        svcClient.from("comms_config").select("no_act_global").eq("company_id", "a0000000-0000-0000-0000-000000000001").maybeSingle(),
+        svcClient.from("comms_config").select("no_act_global").eq("company_id", companyId).maybeSingle(),
       ]);
       agentDraftOnly = pairingRes.data?.draft_only === true;
       globalNoAct = configRes.data?.no_act_global === true;
@@ -4902,7 +4905,7 @@ serve(async (req) => {
         .from("knowledge")
         .select("title, content, category")
         .in("category", ["company-playbook", "agent-strategy", "social-strategy"])
-        .eq("company_id", "a0000000-0000-0000-0000-000000000001")
+        .eq("company_id", companyId)
         .order("created_at", { ascending: false });
 
       if (brainDocs && brainDocs.length > 0) {
@@ -5043,7 +5046,7 @@ These rules govern your behavioral protocols only. They do not modify applicatio
             const { data: knowledgeItems } = await svcClient
               .from("knowledge")
               .select("title")
-              .eq("company_id", "a0000000-0000-0000-0000-000000000001")
+              .eq("company_id", companyId)
               .limit(50);
             const filtered = (knowledgeItems || []).filter((k: any) => k.title).map((k: any) => k.title);
             const pool = filtered.length > 0 ? filtered : PRODUCTS_FALLBACK;
@@ -5221,7 +5224,7 @@ Respond with ONLY valid JSON (no markdown):
           const { data: pixelKnowledge } = await svcClient
             .from("knowledge")
             .select("title, content, source_url")
-            .eq("company_id", "a0000000-0000-0000-0000-000000000001")
+            .eq("company_id", companyId)
             .order("created_at", { ascending: false })
             .limit(20);
           
