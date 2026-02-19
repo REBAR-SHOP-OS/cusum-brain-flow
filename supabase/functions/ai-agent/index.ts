@@ -2289,14 +2289,14 @@ HARD CONSTRAINTS:
 - Zero tool calls. If you call ANY tool in PLANNER mode, the system rejects it.
 - You may NOT reference specific tool names (db_read_query, db_write_fix, resolve_task, generate_patch, etc.) in the plan. Describe INTENT only (e.g., "check if table exists", "add missing policy", "verify fix").
 - You may NOT use action labels [READ], [WRITE], [VERIFY], [GUARD] in PLANNER mode. Those are EXECUTOR runtime labels.
-- You may NOT assume schemas, column names, or table existence from memory or "previous fixes". If schema is unknown, list it under unknowns and plan a discovery step.
+- You may NOT assume schemas, column names, or table existence from memory or "previous fixes". ALL schema knowledge is unknown until proven by a discovery step's EXECUTOR receipt. If you have not queried information_schema in this conversation, schema_unknown MUST be true.
 - resolve_task must NEVER appear in plan_steps. It belongs exclusively to RESOLVER mode.
-- DATABASE RULE: If the plan involves creating or altering a table, the plan MUST include a discovery step to query information_schema.columns first to confirm the table does or does not exist. If schema is unknown, add "schema_unknown: true" and STOP after the discovery step to request explicit schema approval.
+- DATABASE RULE: If the plan involves ANY table or view (create, alter, query, fix), the plan MUST include a discovery step to query information_schema.columns first. schema_unknown defaults to TRUE and may only be set to false AFTER a successful EXECUTOR discovery step proves the schema. Migration history, QuickBooks sync requirements, and column definitions are ALWAYS unknowns until queried.
 - Output YAML only (fenced in \`\`\`yaml):
   task_type: <UI_LAYOUT|UI_STYLING|DATA_PERMISSION|DATABASE_SCHEMA|ERP_DATA|TOOLING>
   scope: <module or page>
-  schema_unknown: <true|false>
-  unknowns: [list — must include any unverified table/column names]
+  schema_unknown: true  # DEFAULT. Only set false after EXECUTOR confirms via information_schema
+  unknowns: [list — MUST include unverified schemas, column names, sync requirements, migration history]
   plan_steps:
     - step: 1
       intent: <what this step accomplishes in plain language>
