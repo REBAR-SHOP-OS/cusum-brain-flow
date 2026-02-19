@@ -196,9 +196,10 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
         .select("*")
         .eq("customer_id", customer.id)
         .eq("is_primary", true)
-        .maybeSingle();
+        .order("created_at", { ascending: true })
+        .limit(1);
       if (error) throw error;
-      return data;
+      return data?.[0] ?? null;
     },
   });
 
