@@ -1006,7 +1006,7 @@ async function handleSyncBankActivity(svc: SvcClient, companyId: string) {
       try {
         const unreconReport = await qbFetch(
           config,
-          `reports/TransactionListByAccount?account=${account.qb_id}&cleared=Uncleared&columns=tx_date,txn_type,doc_num,name,memo,subt_nat_amount`,
+          `reports/TransactionList?account=${account.qb_id}&cleared=Uncleared&columns=tx_date,txn_type,doc_num,name,memo,subt_nat_amount`,
           ctx,
         ) as Record<string, unknown>;
 
@@ -1021,7 +1021,7 @@ async function handleSyncBankActivity(svc: SvcClient, companyId: string) {
       try {
         const reconReport = await qbFetch(
           config,
-          `reports/TransactionListByAccount?account=${account.qb_id}&cleared=Reconciled&sort_order=descend&sort_by=tx_date&columns=tx_date`,
+          `reports/TransactionList?account=${account.qb_id}&cleared=Reconciled&sort_order=descend&sort_by=tx_date&columns=tx_date`,
           ctx,
         ) as Record<string, unknown>;
 
