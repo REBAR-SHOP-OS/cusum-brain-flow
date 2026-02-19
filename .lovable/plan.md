@@ -1,61 +1,66 @@
 
-# Fix: Station Title Text Truncation in Shop Floor Header
+# Fix: Accounting Agent Stuck in "Thinking..." State
 
-## Root Cause
+## Root Cause — Confirmed
 
-File: `src/components/shopfloor/StationHeader.tsx`
+The problem is a **missing client-side timeout** in `src/lib/agent.ts`.
 
-Two CSS issues on adjacent elements cause the truncation:
+Here is the exact chain of failure:
 
-**Issue 1 — `<header>` line 52:**
-The header uses `items-center`, which vertically centres all flex children. When text wraps and the left column grows taller, `items-center` fights against it and may clip. It should be changed to `items-start` so the header grows naturally with the wrapped title.
+1. The user sends a message on `/agent/accounting`
+2. `AccountingAgent.tsx` calls `sendAgentMessage("accounting", ...)` and sets `isTyping = true`
+3. `sendAgentMessage` calls `supabase.functions.invoke("ai-agent", ...)` — which internally uses `fetch` with **no timeout**
+4. The `ai-agent` edge function runs its data-loading phase (QB data, emails, tasks, notifications, multi-turn tool loop) + GPT rate-limit retries (3s → 6s → 9s backoff)
+5. The edge function hits Supabase's **60-second execution limit** and the connection is closed mid-response
+6. `supabase.functions.invoke` never resolves (the underlying `fetch` is cut off), so the Promise returned by `sendAgentMessage` **never settles** — neither `.then()` nor `.catch()` fires
+7. The `finally { setIsTyping(false) }` block in `AccountingAgent.tsx` never executes
+8. The UI is permanently stuck at "Thinking..."
 
-**Issue 2 — `<h1>` line 59:**
-Inside a flex row, text is not free to wrap by default — it tries to stay on one line and gets squeezed/truncated. The `<h1>` needs `whitespace-normal break-words` (or simply `whitespace-normal`) to allow it to wrap onto multiple lines. Adding `min-w-0` to the parent `<div>` on line 54 is also required so the flex child can shrink and let the text wrap rather than overflow.
+## The Fix — One File Only: `src/lib/agent.ts`
 
-## Exact Changes — `src/components/shopfloor/StationHeader.tsx` Only
+The fix wraps the `supabase.functions.invoke` call with an `AbortController` that fires after **55 seconds** (5 seconds before Supabase's hard 60s limit). This guarantees the Promise always settles — either with a successful response, or with a meaningful timeout error that the `catch` block in `AccountingAgent.tsx` can display to the user.
 
-### Change 1: `<header>` — swap `items-center` → `items-start` (line 52)
-
-```diff
-- <header className="flex items-center justify-between px-4 py-3 bg-card border-b border-border">
-+ <header className="flex items-start justify-between px-4 py-3 bg-card border-b border-border">
+### Before (broken — no timeout, hangs forever on edge function timeout):
+```ts
+const { data, error } = await supabase.functions.invoke("ai-agent", {
+  body: { agent, message, history, context, attachedFiles, pixelSlot },
+});
 ```
 
-This allows the header's height to expand naturally when the title wraps, without clipping.
+### After (fixed — 55s AbortController wraps the invocation):
+```ts
+const controller = new AbortController();
+const timeoutId = setTimeout(() => controller.abort(), 55_000);
 
-### Change 2: Left flex child `<div>` — add `min-w-0` (line 54)
-
-```diff
-- <div className="flex items-center gap-3">
-+ <div className="flex items-center gap-3 min-w-0">
+let data: unknown, error: unknown;
+try {
+  ({ data, error } = await supabase.functions.invoke("ai-agent", {
+    body: { agent, message, history, context, attachedFiles, pixelSlot },
+    signal: controller.signal,
+  }));
+} finally {
+  clearTimeout(timeoutId);
+}
 ```
 
-`min-w-0` overrides the default `min-width: auto` on flex children, allowing this column to shrink so the title text can wrap instead of overflowing.
-
-### Change 3: `<h1>` — add `whitespace-normal break-words` (line 59)
-
-```diff
-- <h1 className="font-bold text-base sm:text-lg uppercase tracking-wide text-foreground">
-+ <h1 className="font-bold text-base sm:text-lg uppercase tracking-wide text-foreground whitespace-normal break-words">
+If `controller.abort()` fires, `supabase.functions.invoke` throws an `AbortError`. We catch this and convert it into a clean, human-readable error:
+```ts
+} catch (err: unknown) {
+  if (err instanceof Error && err.name === "AbortError") {
+    throw new Error("The request timed out — Penny is working on a complex task. Please try again in a moment.");
+  }
+  throw err;
+}
 ```
-
-This explicitly permits the title text to wrap onto multiple lines. The title "CIRCULAR SPIRAL BENDER 10M-20M BEDS" will now break naturally at word boundaries.
-
----
 
 ## Scope
 
-| File | Lines Changed | Nature |
+| File | Lines Affected | Change Type |
 |---|---|---|
-| `src/components/shopfloor/StationHeader.tsx` | 52, 54, 59 | CSS class additions only |
+| `src/lib/agent.ts` | `sendAgentMessage` function body | Add AbortController + timeout |
 
 ## What Is NOT Changed
-
-- The Supervisor button — untouched
-- The Pool button — untouched
-- The REMAINING badge — untouched
-- The Workspace chip — untouched
-- The Mark/Drawing centre section — untouched
-- `src/pages/StationView.tsx` — untouched
-- All other shop floor components, pages, database logic — untouched
+- `AccountingAgent.tsx` — untouched (its `catch` block already handles errors)
+- `supabase/functions/ai-agent/index.ts` — untouched (edge function is correct)
+- All other agents, pages, database — untouched
+- The accounting knowledge block added in the previous fix — untouched
