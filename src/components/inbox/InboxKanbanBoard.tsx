@@ -66,6 +66,15 @@ export function InboxKanbanBoard({ emails, onSelect, selectedId, starredIds = ne
     }
   });
 
+  // Sort each column newest-first
+  KANBAN_COLUMNS.forEach((col) => {
+    emailsByLabel[col.value].sort((a, b) => {
+      const ta = a.fullDate ? new Date(a.fullDate).getTime() : 0;
+      const tb = b.fullDate ? new Date(b.fullDate).getTime() : 0;
+      return tb - ta;
+    });
+  });
+
   return (
     <ScrollArea className="flex-1 w-full">
       <div className="flex gap-3 p-4 min-w-max h-full">
