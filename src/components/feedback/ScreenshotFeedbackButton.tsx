@@ -61,44 +61,45 @@ export function ScreenshotFeedbackButton() {
 
     const hiddenEls: HTMLElement[] = [];
 
-    // Scroll-container-aware trimming: hide children outside each scroll container's visible area
-    target.querySelectorAll("*").forEach((el) => {
-      const htmlEl = el as HTMLElement;
-      if (htmlEl.scrollHeight > htmlEl.clientHeight + 50 && htmlEl.children.length > 3) {
-        const cRect = htmlEl.getBoundingClientRect();
-        Array.from(htmlEl.children).forEach((child) => {
-          const childRect = child.getBoundingClientRect();
-          if (childRect.bottom < cRect.top - 20 || childRect.top > cRect.bottom + 20) {
-            (child as HTMLElement).style.display = "none";
-            hiddenEls.push(child as HTMLElement);
-          }
-        });
-      }
-    });
+    // Fast element count to determine strategy
+    const totalCount = target.querySelectorAll("*").length;
+    const isHeavyPage = totalCount > 3000;
 
-    // Element count safety cap
-    const remainingCount = target.querySelectorAll("*").length - hiddenEls.length;
-    if (remainingCount > 500) {
-      target.querySelectorAll('tr, li, [class*="card"]').forEach((el) => {
-        const r = el.getBoundingClientRect();
-        if (r.width === 0 || r.height === 0) {
-          (el as HTMLElement).style.display = "none";
-          hiddenEls.push(el as HTMLElement);
+    // Lightweight trimming: only target known scroll containers, not every DOM node
+    const trimStart = performance.now();
+    try {
+      const scrollSelectors = '[data-radix-scroll-area-viewport], [class*="overflow-y-auto"], [class*="overflow-auto"], tbody, [class*="kanban"], [role="list"]';
+      const scrollContainers = target.querySelectorAll(scrollSelectors);
+
+      scrollContainers.forEach((container) => {
+        // Abort if trimming is taking too long (500ms budget)
+        if (performance.now() - trimStart > 500) return;
+
+        const cRect = container.getBoundingClientRect();
+        // Only process direct children to avoid deep traversal
+        const children = container.children;
+        for (let i = 0; i < children.length; i++) {
+          const child = children[i] as HTMLElement;
+          const childRect = child.getBoundingClientRect();
+          if (childRect.bottom < cRect.top - 50 || childRect.top > cRect.bottom + 50) {
+            child.style.visibility = "hidden";
+            hiddenEls.push(child);
+          }
         }
       });
+    } catch {
+      // Trimming failed — proceed without it
     }
-
-    const isHeavyPage = remainingCount > 1000;
 
     const captureOnce = (skipImages: boolean): Promise<HTMLCanvasElement> => {
       const opts = {
         ...baseOpts,
-        scale: isHeavyPage ? 0.5 : 1,
-        imageTimeout: (skipImages || isHeavyPage) ? 0 : 5000,
+        scale: isHeavyPage ? 0.4 : 1,
+        imageTimeout: isHeavyPage ? 0 : 5000,
       };
       return Promise.race([
         html2canvas(target, opts),
-        new Promise<never>((_, rej) => setTimeout(() => rej(new Error("screenshot_timeout")), 5000)),
+        new Promise<never>((_, rej) => setTimeout(() => rej(new Error("screenshot_timeout")), isHeavyPage ? 3000 : 5000)),
       ]);
     };
 
@@ -128,7 +129,7 @@ export function ScreenshotFeedbackButton() {
       toast.error(`Failed to capture screen on ${window.location.pathname}`);
     } finally {
       // Restore hidden elements immediately
-      hiddenEls.forEach(el => el.style.display = "");
+      hiddenEls.forEach(el => el.style.visibility = "");
       setCapturing(false);
     }
   }, [capturing]);
