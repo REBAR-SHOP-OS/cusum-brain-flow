@@ -1,46 +1,87 @@
 
-# Fix: Loading Station Shows Only 1 Item Instead of All 5
+# Fix: Screenshot Captures Only Visible Viewport — Content Truncated
 
-## Root Cause — Confirmed
+## Root Cause
 
-**File:** `src/hooks/useCompletedBundles.ts`, **line 37**
+**File:** `src/components/feedback/ScreenshotFeedbackButton.tsx`
+
+The `capture()` function computes dimensions using `getBoundingClientRect()`:
 
 ```ts
-.eq("phase", "complete")
+const rect = target.getBoundingClientRect();
+// ...
+width: rect.width,
+height: rect.height,
+x: rect.left,
+y: rect.top,
 ```
 
-The `useCompletedBundles` query **only fetches items where `phase = 'complete'`**. However, items must pass through a `"clearance"` phase (QC verification) before being promoted to `"complete"` — and this promotion happens **one item at a time** as each is individually cleared by a QC operator in the Clearance screen.
+`getBoundingClientRect()` returns only the **visible** bounding box of the element on screen — not its full scrollable content. So if `#main-content` is 900px tall on screen but contains 2400px of scrollable content, the canvas is only told to be 900px tall. Everything below/to the right of the scroll position is clipped.
 
-**Database evidence (live data):**
-The bundle "EARNSCLIFFE CRICKET AIR DOME" has 5 items. The user sees only 1 on the Loading Station because only 1 has been individually cleared through QC (`phase = 'complete'`). The other 4 are still sitting at `phase = 'clearance'` — they are physically done being manufactured, but their QC paperwork hasn't been ticked off one by one yet.
+## The Fix — One File Only: `src/components/feedback/ScreenshotFeedbackButton.tsx`
 
-**The correct Loading Station behaviour** should show all items that are *ready for the truck* — meaning **both** `phase = 'clearance'` AND `phase = 'complete'` items should appear in a bundle, because both mean the item is physically ready (it left the bender/cutter and has been staged).
+Replace the `rect`-based width/height/x/y with the element's **full scroll dimensions** (`scrollWidth`, `scrollHeight`, `scrollLeft`, `scrollTop`). This tells `html2canvas` to render the complete document, not just what's currently visible.
 
-## The Fix — One File Only: `src/hooks/useCompletedBundles.ts`
+### For the `hasOverlay` branch (dialog/drawer open):
+No change needed — dialogs always use `window.innerWidth/Height` which is correct for modal capture.
 
-Change the single `.eq("phase", "complete")` filter to `.in("phase", ["clearance", "complete"])` so the bundle includes all items that have cleared production (either awaiting final QC sign-off or fully cleared).
+### For the normal (non-overlay) branch — the broken path:
 
-### Before (broken — excludes clearance-phase items):
+**Before:**
 ```ts
-.eq("phase", "complete")
+const rect = hasOverlay
+  ? { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight }
+  : target.getBoundingClientRect();
+
+const baseOpts = {
+  width: rect.width,
+  height: rect.height,
+  x: rect.left,
+  y: rect.top,
+  scrollX: 0,
+  scrollY: 0,
+  windowWidth: window.innerWidth,
+  windowHeight: window.innerHeight,
+  ...
+};
 ```
 
-### After (fixed — includes both clearance and complete items):
+**After:**
 ```ts
-.in("phase", ["clearance", "complete"])
+// For overlay path: use viewport dimensions (unchanged)
+// For normal path: use the full scroll dimensions of the target element
+const isOverlay = !!hasOverlay;
+
+const captureWidth  = isOverlay ? window.innerWidth  : target.scrollWidth;
+const captureHeight = isOverlay ? window.innerHeight : target.scrollHeight;
+const captureX      = isOverlay ? 0 : target.getBoundingClientRect().left + target.scrollLeft;
+const captureY      = isOverlay ? 0 : target.getBoundingClientRect().top  + target.scrollTop;
+
+const baseOpts = {
+  width:        captureWidth,
+  height:       captureHeight,
+  windowWidth:  Math.max(window.innerWidth,  captureWidth),
+  windowHeight: Math.max(window.innerHeight, captureHeight),
+  x:            captureX,
+  y:            captureY,
+  scrollX:      -target.scrollLeft,
+  scrollY:      -target.scrollTop,
+  ...
+};
 ```
 
-This is a one-line change. The grouping logic, the `CompletedBundle` interface, the `LoadingStation.tsx` rendering loop, and the checklist system all remain entirely untouched — they already handle however many items are in `bundle.items`.
+**Key details:**
+- `scrollWidth` / `scrollHeight` — the **full** content dimensions including off-screen content.
+- `scrollX: -target.scrollLeft` / `scrollY: -target.scrollTop` — tells html2canvas to offset the canvas origin to include content scrolled above/to the left of the current viewport.
+- `windowWidth/windowHeight` clamped to at least the capture size — prevents html2canvas from clipping the canvas to the window boundary.
 
 ## Scope
 
-| File | Line | Change |
+| File | Lines | Change |
 |---|---|---|
-| `src/hooks/useCompletedBundles.ts` | 37 | `.eq("phase", "complete")` → `.in("phase", ["clearance", "complete"])` |
+| `src/components/feedback/ScreenshotFeedbackButton.tsx` | 37–53 | Replace `getBoundingClientRect`-based dimensions with `scrollWidth`/`scrollHeight`-based dimensions |
 
 ## What Is NOT Changed
-- `src/pages/LoadingStation.tsx` — untouched
-- `src/hooks/useLoadingChecklist.ts` — untouched
-- `src/components/dispatch/ReadyBundleList.tsx` — untouched
-- `src/components/clearance/ClearanceCard.tsx` — untouched
-- All other pages, components, database logic — untouched
+- `AnnotationOverlay.tsx` — untouched
+- Dialog/overlay capture path — logic preserved, only the non-overlay path is corrected
+- All other components, pages, database, edge functions — untouched
