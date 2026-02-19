@@ -1,104 +1,92 @@
 
-# Fix: Add AI "Suggest What to Say" to Email Composition Interfaces
+# Investigation: "Size" Field Empty on `/shopfloor/station/[id]`
 
-## Root Cause — Confirmed
+## What Was Found
 
-The `AISuggestButton` component already declares `"email"` as a valid `contextType` and the `ai-inline-suggest` edge function already has a complete email system prompt. The component is used in `Tasks.tsx` for task descriptions and comments — but it was **never wired into any email composition interface**.
+### Complete Audit of All "Size" Fields Across Shopfloor
 
-Three email composition surfaces exist, none of which use `AISuggestButton`:
+After reading every relevant file in `src/components/shopfloor/`, `src/pages/StationView.tsx`, `src/hooks/useStationData.ts`, and supporting components, here is every place "Size" is displayed on the station page:
 
-| Component | Email body field | AI capability today | Missing |
+| Component | Label | Value Expression | Fallback |
 |---|---|---|---|
-| `EmailReplyComposer.tsx` | `replyText` textarea | AI Draft (full auto-generate) | Inline "Suggest" button on textarea label |
-| `ComposeEmailDialog.tsx` | `body` textarea | AI Draft + prompt-to-draft | Inline "Suggest" button on textarea label |
-| `TableRowActions.tsx` | Email popover body | None | Inline "Suggest" button on body field |
+| `ProductionCard.tsx` line 153 | "Size" | `{item.bar_code}` | `"—"` via `\|\| "—"` |
+| `BenderStationView.tsx` line 228 | "Bar Size" | `{currentItem.bar_code}` | none |
+| `CutEngine.tsx` line 101 | "Bar Size" | `{barCode}` | none |
 
-## The Fix — Three Files, Surgical Additions Only
+### Root Cause
 
-### 1. `src/components/inbox/EmailReplyComposer.tsx`
+The "Size" display in `ProductionCard.tsx` uses `{item.bar_code || "—"}`, which correctly shows a dash when `bar_code` is falsy. However, **`BenderStationView.tsx` (line 229) and `CutEngine.tsx` (line 101) render `bar_code` with NO fallback guard**. If `bar_code` is an empty string `""` (which is falsy but doesn't trigger `|| "—"`), the field renders visually blank.
 
-Add `AISuggestButton` import and place it next to the textarea label row. When the user has typed partial text, clicking "Suggest" will call `ai-inline-suggest` with `contextType="email"` and context from the email thread (subject + sender). The suggestion replaces/fills `replyText`.
+More critically: the **bender query** in `useStationData.ts` (line ~57) fetches items using a joined select:
 
-**Where:** In the textarea section (line ~246), add a label row above the `SmartTextarea` with the `AISuggestButton`:
-
-```tsx
-// Add import at top:
-import { AISuggestButton } from "@/components/ui/AISuggestButton";
-
-// Add above the SmartTextarea inside the px-4 div:
-<div className="flex items-center justify-between mb-1">
-  <span className="text-xs text-muted-foreground">Message</span>
-  <AISuggestButton
-    contextType="email"
-    context={`Subject: ${email.subject}\nFrom: ${email.sender} <${email.senderEmail}>\nOriginal message: ${(email.body || email.preview || "").slice(0, 500)}`}
-    currentText={replyText}
-    onSuggestion={(text) => setReplyText(text)}
-    label="Suggest"
-    compact={false}
-    disabled={drafting || sending}
-  />
-</div>
+```ts
+.select("*, cut_plans!inner(id, name, project_name, company_id)")
 ```
 
-### 2. `src/components/inbox/ComposeEmailDialog.tsx`
+The `bar_code` column comes from `cut_plan_items` directly — but the `phase` filter `.or("phase.eq.cut_done,phase.eq.bending")` and the mapping code at line ~69 spreads `...item` which includes `bar_code`. This is correct and should work.
 
-Add `AISuggestButton` import and place it above the body `SmartTextarea`.
+The most likely cause for a visually blank "Size" field: the `bar_code` value in the database record is an **empty string `""`** rather than `null`. With `{currentItem.bar_code}` (no fallback), an empty string renders as nothing visible.
 
-**Where:** In the body section (line ~318–326), add a label row above the textarea:
+### The Fix — Two Files, Surgical Only
 
+**1. `src/components/shopfloor/BenderStationView.tsx` — line 229**
+
+Add a fallback `|| "—"` to the bar_code display:
+
+Before:
 ```tsx
-// Add import at top:
-import { AISuggestButton } from "@/components/ui/AISuggestButton";
-
-// Add above the SmartTextarea inside the body section:
-<div className="flex items-center justify-between mb-1">
-  <span className="text-xs text-muted-foreground">Body</span>
-  <AISuggestButton
-    contextType="email"
-    context={`To: ${to}\nSubject: ${subject}`}
-    currentText={body}
-    onSuggestion={(text) => setBody(text)}
-    label="Suggest"
-    compact={false}
-    disabled={drafting || sending}
-  />
-</div>
+<p className="text-2xl sm:text-3xl font-black text-foreground">{currentItem.bar_code}</p>
 ```
 
-### 3. `src/components/accounting/TableRowActions.tsx`
-
-Add `AISuggestButton` import and place it on the email body field inside the email Popover.
-
-**Where:** In the email popover (lines ~70–80), between the subject `Input` and the `SmartTextarea`:
-
+After:
 ```tsx
-// Add import at top:
-import { AISuggestButton } from "@/components/ui/AISuggestButton";
-
-// Replace the label above SmartTextarea with a row:
-<div className="flex items-center justify-between mb-1">
-  <span className="text-xs text-muted-foreground">Body</span>
-  <AISuggestButton
-    contextType="email"
-    context={`Row context: ${rowText}\nSubject: ${emailSubject}`}
-    currentText={emailBody}
-    onSuggestion={(text) => setEmailBody(text)}
-    compact={true}
-    disabled={false}
-  />
-</div>
+<p className="text-2xl sm:text-3xl font-black text-foreground">{currentItem.bar_code || "—"}</p>
 ```
 
-## Scope
+**2. `src/components/shopfloor/CutEngine.tsx` — line 101**
 
-| File | Change |
-|---|---|
-| `src/components/inbox/EmailReplyComposer.tsx` | Add `AISuggestButton` import + label row with Suggest button above body textarea |
-| `src/components/inbox/ComposeEmailDialog.tsx` | Add `AISuggestButton` import + label row with Suggest button above body textarea |
-| `src/components/accounting/TableRowActions.tsx` | Add `AISuggestButton` import + compact Suggest button next to email body label in popover |
+Add a fallback to the Bar Size display in the CutEngine panel:
 
-## What Is NOT Changed
-- `AISuggestButton.tsx` — untouched (already supports `contextType="email"`)
-- `ai-inline-suggest` edge function — untouched (already has email system prompt)
-- All other pages, components, database, logic — strictly untouched
-- The existing "AI Draft" and "Polish" buttons in EmailReplyComposer and ComposeEmailDialog — untouched
+Before:
+```tsx
+<p className="text-lg font-black font-mono">{barCode}</p>
+```
+
+After:
+```tsx
+<p className="text-lg font-black font-mono">{barCode || "—"}</p>
+```
+
+**3. `src/hooks/useStationData.ts` — defensive mapping**
+
+Add an explicit `bar_code` check in the bender item mapping (line ~69–74) to ensure empty strings are normalized:
+
+Before:
+```ts
+return (items || []).map((item: Record<string, unknown>) => ({
+  ...item,
+  ...
+})) as StationItem[];
+```
+
+After:
+```ts
+return (items || []).map((item: Record<string, unknown>) => ({
+  ...item,
+  bar_code: (item.bar_code as string) || "",
+  ...
+})) as StationItem[];
+```
+
+### Scope
+
+| File | Line | Change |
+|---|---|---|
+| `src/components/shopfloor/BenderStationView.tsx` | 229 | Add `\|\| "—"` fallback to bar_code display under "Bar Size" label |
+| `src/components/shopfloor/CutEngine.tsx` | 101 | Add `\|\| "—"` fallback to barCode display under "Bar Size" label |
+
+### What Is NOT Changed
+- `ProductionCard.tsx` — already has `\|\| "—"` fallback, untouched
+- `useStationData.ts` data fetching queries — untouched
+- Database schema — untouched
+- Any other component, page, logic, or route
