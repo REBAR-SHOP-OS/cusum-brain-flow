@@ -1,52 +1,26 @@
 
+# Fix Unreconciled Count — Account Filter Not Working
 
-# Fix Sync QB — Three Broken API Calls
+## Problem
 
-## Problems Found in Edge Function Logs
+The `TransactionList` report does **not** support `account` as a filter parameter. QuickBooks silently ignores it, so all 4 bank accounts return the same 34 uncleared transactions (the total across ALL accounts).
 
-The sync engine has three failing API interactions, all confirmed by the logs:
+The same issue applies to the reconciled report — all accounts get the same result.
 
-### 1. Account Balance Fetch (400 Error)
-The `Account/{id}` endpoint returns "Unsupported Operation" for every bank account. The sync falls back to the stale `current_balance` from the `qb_accounts` table, so BMO BUSINESS stays at $32,035.28 instead of the real QB value.
+## Solution
 
-**Fix**: Replace individual `Account/{id}` calls with a single QB Query API call:
-`query?query=SELECT Id, Name, CurrentBalance FROM Account WHERE AccountType = 'Bank' AND Active = true`
+Instead of making 4 separate (broken) per-account report calls, fetch **one** `TransactionList` report with the `account` column included, then parse and group the results by account name in code.
 
-This fetches all bank accounts and their live balances in one efficient API call. Build a lookup map by account ID, then use it during the per-account loop.
+### Changes to `supabase/functions/qb-sync-engine/index.ts`
 
-### 2. Unreconciled Count (Same 34 for All Accounts)
-The `TransactionList` report uses `account=ACCOUNT_NAME` as a filter, but this is not filtering correctly -- all 4 accounts return exactly 34 rows, meaning the filter is being ignored.
+1. **Before the per-account loop**, fetch two reports once:
+   - `reports/TransactionList?cleared=Uncleared&columns=tx_date,txn_type,account,subt_nat_amount` -- all uncleared transactions
+   - `reports/TransactionList?cleared=Reconciled&columns=tx_date,account` -- all reconciled transactions
 
-**Fix**: The existing `quickbooks-oauth` function (line 1539) uses the `TransactionListByAccount` report type which natively groups by account ID. Switch the sync engine to either:
-- Use the correct report endpoint: `reports/TransactionListByAccount?account={ACCOUNT_ID}` (using numeric ID, not name)
-- This matches the proven pattern already working in the codebase
+2. **Parse each report** into a `Map<accountName, count>` (for uncleared) and `Map<accountName, latestDate>` (for reconciled), by reading the `account` column from each leaf row's `ColData`.
 
-### 3. Reconciled Through Date (Always Null)
-Same filter issue as above -- the reconciled `TransactionList` report returns no matching rows because the account name filter is not working.
+3. **In the per-account loop**, look up `account.name` in these maps instead of making individual API calls.
 
-**Fix**: Use `reports/TransactionListByAccount?account={ACCOUNT_ID}&cleared=Reconciled&sort_order=descend&sort_by=tx_date&columns=tx_date` with numeric account ID.
+4. **Remove** the two per-account `qbFetch` report calls (lines 1006-1033).
 
----
-
-## Technical Changes
-
-### File: `supabase/functions/qb-sync-engine/index.ts`
-
-**Before the per-account loop** (around line 975):
-- Add a single QB Query API call to fetch all bank account balances at once
-- Build a `Map<string, number>` of account ID to `CurrentBalance`
-
-**Replace the live account fetch** (lines 983-996):
-- Remove the individual `Account/{id}` try/catch block
-- Look up the live balance from the pre-built map instead
-
-**Fix unreconciled report** (lines 998-1011):
-- Change from `reports/TransactionList?cleared=Uncleared&account=${encodeURIComponent(account.name)}`
-- To: `reports/TransactionListByAccount?account=${account.qb_id}&cleared=Uncleared&columns=tx_date,txn_type,doc_num,name,memo,subt_nat_amount`
-
-**Fix reconciled report** (lines 1013-1026):
-- Change from `reports/TransactionList?cleared=Reconciled&account=${encodeURIComponent(account.name)}`
-- To: `reports/TransactionListByAccount?account=${account.qb_id}&cleared=Reconciled&sort_order=descend&sort_by=tx_date&columns=tx_date`
-
-No database or frontend changes needed.
-
+This reduces API calls from 2N+1 to 3 total (1 balance query + 2 reports), and actually filters correctly since we do the grouping in code.
