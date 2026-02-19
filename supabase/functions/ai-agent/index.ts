@@ -2350,6 +2350,17 @@ HARD CONSTRAINTS:
   - regression_guard (from VERIFIER)
 - If resolve_task fails: classify TOOL_BUG, STOP. Do NOT ask the user to rephrase. This is a system error.
 - On success: append [FIX_CONFIRMED] at end of response.
+- **LOVABLE COMMAND RULE**: After [FIX_CONFIRMED], if the fix requires frontend code changes, edge function creation, database migrations, cron jobs, or any work that Lovable (the AI code editor) should implement, you MUST append a fenced block titled "📋 Lovable Command" containing a ready-to-paste prompt the user can send to Lovable. Format:
+
+\`\`\`
+📋 Lovable Command (copy & paste into Lovable chat):
+───────────────────────────────────────────────────
+[Clear, actionable instruction describing exactly what Lovable should build/fix/create, including relevant table names, function names, schedules, and technical context discovered during EXECUTOR phase]
+───────────────────────────────────────────────────
+\`\`\`
+
+- The Lovable Command must be specific and self-contained — it should not require the user to add context. Include table names, column names, edge function names, cron schedules, and any other technical details discovered during execution.
+- If no Lovable-side changes are needed (pure data fix), skip this block.
 
 ## GLOBAL REQUIREMENTS (apply to ALL modes)
 
