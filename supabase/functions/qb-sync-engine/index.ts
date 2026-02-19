@@ -914,6 +914,42 @@ async function handleSyncEntity(svc: SvcClient, companyId: string, entityType: s
   return { entity_type: entityType, synced, errors, duration_ms: duration };
 }
 
+// ─── Report Row Helpers ────────────────────────────────────────────
+
+/** Recursively count leaf data rows (rows with ColData, not section headers) */
+function countReportDataRows(rows: unknown[]): number {
+  let count = 0;
+  for (const row of rows) {
+    const r = row as Record<string, unknown>;
+    const nestedRows = (r?.Rows as Record<string, unknown>)?.Row as unknown[] | undefined;
+    if (nestedRows && Array.isArray(nestedRows)) {
+      count += countReportDataRows(nestedRows);
+    } else if (r?.ColData) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+/** Recursively extract the maximum date string from all leaf rows */
+function extractMaxDateFromReport(rows: unknown[]): string | null {
+  let maxDate = "";
+  for (const row of rows) {
+    const r = row as Record<string, unknown>;
+    const nestedRows = (r?.Rows as Record<string, unknown>)?.Row as unknown[] | undefined;
+    if (nestedRows && Array.isArray(nestedRows)) {
+      const nested = extractMaxDateFromReport(nestedRows);
+      if (nested && nested > maxDate) maxDate = nested;
+    } else if (r?.ColData) {
+      const cols = r.ColData as Array<{ value?: string }>;
+      if (cols[0]?.value && cols[0].value > maxDate) {
+        maxDate = cols[0].value;
+      }
+    }
+  }
+  return maxDate || null;
+}
+
 // ─── Sync Bank Activity ────────────────────────────────────────────
 
 async function handleSyncBankActivity(svc: SvcClient, companyId: string) {
@@ -942,6 +978,22 @@ async function handleSyncBankActivity(svc: SvcClient, companyId: string) {
     try {
       let unreconciledCount = 0;
       let reconciledThroughDate: string | null = null;
+      let liveLedgerBalance = account.current_balance;
+
+      // Fix 1: Fetch live balance from QB API instead of cached table
+      try {
+        const liveAccount = await qbFetch(
+          config,
+          `Account/${account.qb_id}`,
+          ctx,
+        ) as Record<string, unknown>;
+        const acct = liveAccount?.Account as Record<string, unknown> | undefined;
+        if (acct?.CurrentBalance != null) {
+          liveLedgerBalance = acct.CurrentBalance as number;
+        }
+      } catch (e) {
+        console.warn(`[sync-bank-activity] Live account fetch failed for ${account.name}, using cached:`, e);
+      }
 
       // Query unreconciled (uncleared) transactions count via TransactionList report
       try {
@@ -953,42 +1005,22 @@ async function handleSyncBankActivity(svc: SvcClient, companyId: string) {
 
         const reportRows = unreconReport?.Rows as Record<string, unknown> | undefined;
         const rows = (reportRows?.Row as unknown[]) || [];
-        unreconciledCount = rows.length;
+        unreconciledCount = countReportDataRows(rows);
       } catch (e) {
         console.warn(`[sync-bank-activity] Uncleared report failed for ${account.name}:`, e);
       }
 
-      // Query reconciled transactions to find the latest reconciled date
+      // Fix 3: Query reconciled transactions to find the latest reconciled date
       try {
         const reconReport = await qbFetch(
           config,
-          `reports/TransactionList?cleared=Reconciled&account=${encodeURIComponent(account.name)}&sort_order=descend&sort_by=tx_date&columns=tx_date&limit=1`,
+          `reports/TransactionList?cleared=Reconciled&account=${encodeURIComponent(account.name)}&sort_order=descend&sort_by=tx_date&columns=tx_date`,
           ctx,
         ) as Record<string, unknown>;
 
         const reportRows = reconReport?.Rows as Record<string, unknown> | undefined;
         const rows = (reportRows?.Row as unknown[]) || [];
-        if (rows.length > 0) {
-          // Extract the latest transaction date from the first row
-          const firstRow = rows[0] as Record<string, unknown>;
-          const colData = (firstRow?.ColData as Array<{ value?: string }>) || [];
-          if (colData.length > 0 && colData[0]?.value) {
-            reconciledThroughDate = colData[0].value;
-          }
-        }
-
-        // If no rows from report, try to find max date across all reconciled transactions
-        if (!reconciledThroughDate && rows.length > 0) {
-          let maxDate = "";
-          for (const row of rows) {
-            const r = row as Record<string, unknown>;
-            const cols = (r?.ColData as Array<{ value?: string }>) || [];
-            if (cols[0]?.value && cols[0].value > maxDate) {
-              maxDate = cols[0].value;
-            }
-          }
-          if (maxDate) reconciledThroughDate = maxDate;
-        }
+        reconciledThroughDate = extractMaxDateFromReport(rows);
       } catch (e) {
         console.warn(`[sync-bank-activity] Reconciled report failed for ${account.name}:`, e);
       }
@@ -1005,7 +1037,7 @@ async function handleSyncBankActivity(svc: SvcClient, companyId: string) {
         company_id: companyId,
         qb_account_id: account.qb_id,
         account_name: account.name,
-        ledger_balance: account.current_balance,
+        ledger_balance: liveLedgerBalance,
         unreconciled_count: unreconciledCount,
         unaccepted_count: 0,
         reconciled_through_date: reconciledThroughDate,
