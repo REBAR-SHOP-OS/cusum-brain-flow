@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Plus, Mail, Loader2, Sparkles, RefreshCw, Pickaxe, MoreVertical, Bot } from "lucide-react";
+import { Plus, Mail, Loader2, Sparkles, RefreshCw, Pickaxe, MoreVertical, Bot, BarChart3 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { PipelineBoard } from "@/components/pipeline/PipelineBoard";
 import { LeadFormModal } from "@/components/pipeline/LeadFormModal";
@@ -590,6 +590,10 @@ export default function Pipeline() {
               <DropdownMenuItem onClick={() => navigate("/prospecting")}>
                 <Pickaxe className="w-3.5 h-3.5 mr-2" />
                 Prospect
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate("/pipeline/intelligence")}>
+                <BarChart3 className="w-3.5 h-3.5 mr-2" />
+                Intelligence
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setIsAISheetOpen(true)}>
                 <Sparkles className="w-3.5 h-3.5 mr-2" />
