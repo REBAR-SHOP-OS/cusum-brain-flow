@@ -136,12 +136,21 @@ function sortTasks(tasks: TaskRow[]): TaskRow[] {
 function linkifyText(text: string | null) {
   if (!text) return null;
   const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const imageExtRegex = /\.(png|jpe?g|gif|webp)(\?[^\s]*)?$/i;
   const parts = text.split(urlRegex);
-  return parts.map((part, i) =>
-    urlRegex.test(part)
-      ? <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-primary underline break-all">{part}</a>
-      : <span key={i}>{part}</span>
-  );
+  return parts.map((part, i) => {
+    if (urlRegex.test(part)) {
+      if (imageExtRegex.test(part)) {
+        return (
+          <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="block my-2">
+            <img src={part} alt="Screenshot" className="max-w-full h-auto rounded-lg border border-border" loading="lazy" />
+          </a>
+        );
+      }
+      return <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-primary underline break-all">{part}</a>;
+    }
+    return <span key={i}>{part}</span>;
+  });
 }
 
 // ─── Component ──────────────────────────────────────────
