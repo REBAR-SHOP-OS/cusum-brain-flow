@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import { SmartTextarea } from "@/components/ui/SmartTextarea";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -550,7 +550,7 @@ export function MessageThread({
 
         {/* Input area */}
         <div className="relative rounded-xl border border-border bg-background focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20 transition-all">
-          <Textarea
+          <SmartTextarea
             ref={textareaRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}

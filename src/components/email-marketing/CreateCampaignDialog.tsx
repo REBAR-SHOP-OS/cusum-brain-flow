@@ -4,7 +4,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { SmartTextarea } from "@/components/ui/SmartTextarea";
 import { Label } from "@/components/ui/label";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -124,7 +124,7 @@ export function CreateCampaignDialog({ open, onOpenChange }: Props) {
 
           <div>
             <Label>AI Brief (optional)</Label>
-            <Textarea
+            <SmartTextarea
               value={brief}
               onChange={(e) => setBrief(e.target.value)}
               placeholder="Describe what this campaign should achieve, who it targets, and any key messages..."

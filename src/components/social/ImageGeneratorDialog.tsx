@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import { SmartTextarea } from "@/components/ui/SmartTextarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ImageIcon, Loader2, Sparkles, Download, RotateCcw, CheckCircle2 } from "lucide-react";
@@ -192,7 +192,7 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady }: Image
               {/* Prompt */}
               <div className="space-y-1.5">
                 <Label className="text-sm">Describe your image</Label>
-                <Textarea
+                <SmartTextarea
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
                   placeholder="A professional social media banner with modern design..."

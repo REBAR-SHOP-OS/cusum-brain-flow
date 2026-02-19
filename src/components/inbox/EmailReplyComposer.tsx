@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { Send, Loader2, Sparkles, RefreshCw, X, Paperclip, Bold, Italic, List, Wand2, Mic, MicOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import { SmartTextarea } from "@/components/ui/SmartTextarea";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -244,7 +244,7 @@ export function EmailReplyComposer({ email, mode, onClose }: EmailReplyComposerP
 
       {/* Text Area */}
       <div className="px-4 py-1 overflow-y-auto flex-1 min-h-0">
-        <Textarea
+        <SmartTextarea
           value={replyText}
           onChange={(e) => setReplyText(e.target.value)}
           placeholder={isForward ? "Add a message..." : "Write your reply..."}
