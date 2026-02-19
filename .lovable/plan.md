@@ -1,60 +1,46 @@
 
-# Fix: Screenshot Images Not Loading in Task Details
+# Fix: Priority Tags Too Bold on /office Tasks Page
 
 ## Scope
-- Database: Make the `clearance-photos` storage bucket public
-- Code: `src/pages/Tasks.tsx` — fix a regex bug in `linkifyText` that can cause URL detection to fail intermittently
-- No other files, components, or UI touched
+Single file: `src/pages/Tasks.tsx`
+One line only (line 884). No other files, no database, no other components touched.
 
 ## Root Cause
 
-The feedback tool uploads screenshots to the `clearance-photos` storage bucket and stores a "public URL" in the task description. However, the bucket is configured as **private** (`public: false`).
+The `Badge` component (`src/components/ui/badge.tsx`) has `font-semibold` hardcoded in its base `cva` class string:
 
-When the task detail view tries to render the image using that URL, the storage API returns:
-```json
-{"statusCode":"404","error":"Bucket not found","message":"Bucket not found"}
+```
+"inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ..."
 ```
 
-This is why the screenshot appears as a broken image icon with the alt text "Screenshot" — exactly what the user sees.
+Every `<Badge>` in the app inherits this weight. The priority tag on line 884 of `Tasks.tsx` renders as:
+
+```tsx
+<Badge variant="secondary" className={cn("text-xs", PRIORITY_COLORS[selectedTask.priority || "medium"])}>
+  High   ← appears as "High" in bold/semibold
+</Badge>
+```
+
+Since `font-semibold` is in the base class, it wins unless explicitly overridden on this individual badge.
+
+The user sees "Urgent" / "High Priority" tags rendered heavier than intended. Note: the priority values stored are `high`, `medium`, `low` — the badge shows `"High"`, `"Medium"`, `"Low"` (capitalized). The user's screenshot likely shows these.
 
 ## The Fix
 
-### Change 1 — Make `clearance-photos` bucket public (database migration)
-
-The bucket already has a SELECT RLS policy ("Authenticated users can view clearance photos"), but since the description stores permanent URLs using `getPublicUrl()`, the bucket itself must allow public reads.
-
-```sql
-UPDATE storage.buckets
-SET public = true
-WHERE id = 'clearance-photos';
-```
-
-This makes all existing and future screenshot URLs work immediately — no code changes needed for the upload flow.
-
-### Change 2 — Fix regex bug in `linkifyText` (src/pages/Tasks.tsx, line 138-142)
-
-The `urlRegex` is created with the `g` (global) flag and then reused in a `test()` call inside a loop. The global flag causes `lastIndex` to persist between calls, which can make every other URL fail detection. Fix: use a fresh regex for the test.
+Add `font-normal` to the `className` of the priority badge on line 884. Tailwind's specificity means the last matching utility wins, and `font-normal` will override `font-semibold` from the base Badge class:
 
 ```diff
-  function linkifyText(text: string | null) {
-    if (!text) return null;
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
-    const imageExtRegex = /\.(png|jpe?g|gif|webp)(\?[^\s]*)?$/i;
-    const parts = text.split(urlRegex);
-    return parts.map((part, i) => {
--     if (urlRegex.test(part)) {
-+     if (/^https?:\/\//.test(part)) {
-        if (imageExtRegex.test(part)) {
+- <Badge variant="secondary" className={cn("text-xs", PRIORITY_COLORS[selectedTask.priority || "medium"])}>
++ <Badge variant="secondary" className={cn("text-xs font-normal", PRIORITY_COLORS[selectedTask.priority || "medium"])}>
 ```
 
 ## Summary
 
-| What | Change |
-|------|--------|
-| Storage bucket | `clearance-photos` set to `public = true` |
-| `Tasks.tsx` line 142 | Replace `urlRegex.test(part)` with `/^https?:\/\//.test(part)` to avoid global regex state bug |
+| File | Line | Change |
+|------|------|--------|
+| `src/pages/Tasks.tsx` | 884 | Add `font-normal` to priority Badge className |
 
 ## No Other Changes
-- No other files modified
-- No other UI, logic, or database schema altered
-- Upload flow in `AnnotationOverlay.tsx` already uses `getPublicUrl()` correctly — it just needs the bucket to actually be public
+- The Badge component itself (`badge.tsx`) is NOT touched — changing it would affect badges throughout the entire app
+- No other files, no database, no UI layout or logic altered
+- This is a one-token addition to a single className string
