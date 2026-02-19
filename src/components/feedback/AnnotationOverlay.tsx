@@ -2,10 +2,11 @@ import { useRef, useState, useCallback, useEffect } from "react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Undo2, Trash2, Send, Loader2 } from "lucide-react";
+import { Undo2, Trash2, Send, Loader2, Mic, MicOff } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useCompanyId } from "@/hooks/useCompanyId";
+import { useScribe, CommitStrategy } from "@elevenlabs/react";
 
 const COLORS = ["#ef4444", "#3b82f6", "#eab308"] as const;
 const LINE_WIDTH = 3;
@@ -28,7 +29,55 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl }: Props) {
   const [sending, setSending] = useState(false);
   const [hasDrawn, setHasDrawn] = useState(false);
   const [history, setHistory] = useState<ImageData[]>([]);
+  const [interimText, setInterimText] = useState("");
+  const [voiceConnecting, setVoiceConnecting] = useState(false);
   const { companyId } = useCompanyId();
+
+  // ElevenLabs Realtime Scribe — auto-detects language including Farsi
+  const scribe = useScribe({
+    modelId: "scribe_v2_realtime",
+    commitStrategy: CommitStrategy.VAD,
+    onPartialTranscript: (data) => {
+      setInterimText(data.text);
+    },
+    onCommittedTranscript: (data) => {
+      setDescription((prev) => (prev + " " + data.text).trim());
+      setInterimText("");
+    },
+  });
+
+  const isVoiceActive = scribe.isConnected;
+
+  const toggleVoice = useCallback(async () => {
+    if (isVoiceActive) {
+      scribe.disconnect();
+      setInterimText("");
+      return;
+    }
+    try {
+      setVoiceConnecting(true);
+      await navigator.mediaDevices.getUserMedia({ audio: true });
+      const { data, error } = await supabase.functions.invoke("elevenlabs-scribe-token");
+      if (error || !data?.token) throw new Error("Could not get scribe token");
+      await scribe.connect({
+        token: data.token,
+        microphone: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
+    } catch (err: any) {
+      console.error("Voice error:", err);
+      toast.error("Could not start voice input: " + (err.message ?? "Unknown error"));
+    } finally {
+      setVoiceConnecting(false);
+    }
+  }, [isVoiceActive, scribe]);
+
+  // Stop voice when dialog closes
+  useEffect(() => {
+    if (!open && isVoiceActive) {
+      scribe.disconnect();
+      setInterimText("");
+    }
+  }, [open, isVoiceActive, scribe]);
 
   // Load background image once
   useEffect(() => {
@@ -121,6 +170,11 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl }: Props) {
 
   const handleSend = useCallback(async () => {
     if (!canSend || sending) return;
+    // Stop voice recording if active
+    if (isVoiceActive) {
+      scribe.disconnect();
+      setInterimText("");
+    }
     setSending(true);
     try {
       const canvas = canvasRef.current;
@@ -181,27 +235,52 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl }: Props) {
         if (taskErr) throw taskErr;
       }
 
-      // Create notifications
+      // Create notifications — translated to each recipient's preferred_language
       for (const profileId of [SATTAR_PROFILE_ID, RADIN_PROFILE_ID]) {
-        // Get user_id from profile
-        const { data: prof } = await supabase
+        const { data: targetProf } = await supabase
           .from("profiles")
-          .select("user_id")
+          .select("user_id, preferred_language")
           .eq("id", profileId)
           .maybeSingle();
-        if (prof?.user_id) {
-          await supabase.from("notifications").insert({
-            user_id: prof.user_id,
-            type: "notification",
-            title: "📸 Screenshot Feedback",
-            description: description.trim().slice(0, 200) || "New annotated screenshot",
-            priority: "high",
-            link_to: "/tasks",
-            agent_name: "Feedback",
-            status: "unread",
-            metadata: { screenshot_url: publicUrl, page: pagePath },
-          });
+
+        if (!targetProf?.user_id) continue;
+
+        const lang = (targetProf.preferred_language as string) || "en";
+        let notifTitle = "📸 Screenshot Feedback";
+        let notifDesc = description.trim().slice(0, 200) || "New annotated screenshot";
+
+        // Translate if recipient's language is not English
+        if (lang !== "en") {
+          try {
+            const { data: translated } = await supabase.functions.invoke("translate-message", {
+              body: {
+                text: notifTitle + "\n" + notifDesc,
+                sourceLang: "en",
+                targetLangs: [lang],
+              },
+            });
+            const translatedText: string | undefined = translated?.translations?.[lang];
+            if (translatedText) {
+              const parts = translatedText.split("\n");
+              notifTitle = parts[0] ?? notifTitle;
+              notifDesc = parts.slice(1).join("\n").trim() || notifDesc;
+            }
+          } catch (translateErr) {
+            console.warn("Translation failed, using English:", translateErr);
+          }
         }
+
+        await supabase.from("notifications").insert({
+          user_id: targetProf.user_id,
+          type: "notification",
+          title: notifTitle,
+          description: notifDesc,
+          priority: "high",
+          link_to: "/tasks",
+          agent_name: "Feedback",
+          status: "unread",
+          metadata: { screenshot_url: publicUrl, page: pagePath },
+        });
       }
 
       toast.success("Feedback sent!");
@@ -215,7 +294,7 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl }: Props) {
     } finally {
       setSending(false);
     }
-  }, [canSend, sending, companyId, description, onClose]);
+  }, [canSend, sending, companyId, description, onClose, isVoiceActive, scribe]);
 
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
@@ -260,14 +339,43 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl }: Props) {
           />
         </div>
 
-        {/* Description + Send */}
+        {/* Description + Voice + Send */}
         <div className="flex gap-2 items-end">
-          <Textarea
-            placeholder="What change do you need?"
-            value={description}
-            onChange={e => setDescription(e.target.value)}
-            className="flex-1 min-h-[60px] max-h-[100px]"
-          />
+          <div className="flex-1">
+            <Textarea
+              placeholder="What change do you need? (or use voice input)"
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              className="min-h-[60px] max-h-[100px] w-full"
+            />
+            {/* Interim voice transcript */}
+            {interimText && (
+              <div className="mt-1 text-xs italic text-muted-foreground px-1">
+                🎙 {interimText}
+              </div>
+            )}
+          </div>
+
+          {/* Voice button */}
+          <Button
+            type="button"
+            variant={isVoiceActive ? "destructive" : "outline"}
+            size="icon"
+            onClick={toggleVoice}
+            disabled={voiceConnecting}
+            title={isVoiceActive ? "Stop voice input" : "Start voice input (supports Farsi, English & 99+ languages)"}
+            className="shrink-0"
+          >
+            {voiceConnecting ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : isVoiceActive ? (
+              <MicOff className="w-4 h-4 animate-pulse" />
+            ) : (
+              <Mic className="w-4 h-4" />
+            )}
+          </Button>
+
+          {/* Send button */}
           <Button onClick={handleSend} disabled={!canSend || sending} className="shrink-0">
             {sending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Send className="w-4 h-4 mr-1" />}
             Send
