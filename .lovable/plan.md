@@ -1,40 +1,30 @@
 
 
-# Fix Banking Activity — Wrong Numbers (3 Issues)
+# Fix Sync QB — Three Broken API Calls
 
-## Problems Identified
+## Problems Found in Edge Function Logs
 
-The screenshot from QuickBooks shows three values that don't match the ERP:
+The sync engine has three failing API interactions, all confirmed by the logs:
 
-| Field | QuickBooks Shows | ERP Shows | Root Cause |
-|-------|-----------------|-----------|------------|
-| In QuickBooks | $22,037.53 | $32,035.28 | Using stale cached balance from `qb_accounts` table instead of fetching live from QB API |
-| Unreconciled | 977 transactions | 34 | Counting section headers instead of actual transaction rows (QB reports nest rows inside sections) |
-| Reconciled Through | 31/10/2025 | -- (nil) | Report query likely failing or returning grouped structure that isn't being parsed correctly |
+### 1. Account Balance Fetch (400 Error)
+The `Account/{id}` endpoint returns "Unsupported Operation" for every bank account. The sync falls back to the stale `current_balance` from the `qb_accounts` table, so BMO BUSINESS stays at $32,035.28 instead of the real QB value.
 
----
+**Fix**: Replace individual `Account/{id}` calls with a single QB Query API call:
+`query?query=SELECT Id, Name, CurrentBalance FROM Account WHERE AccountType = 'Bank' AND Active = true`
 
-## Fix 1: Ledger Balance — Fetch Live from QB API
+This fetches all bank accounts and their live balances in one efficient API call. Build a lookup map by account ID, then use it during the per-account loop.
 
-**Current**: Line 1008 uses `account.current_balance` from the cached `qb_accounts` table, which may be stale.
+### 2. Unreconciled Count (Same 34 for All Accounts)
+The `TransactionList` report uses `account=ACCOUNT_NAME` as a filter, but this is not filtering correctly -- all 4 accounts return exactly 34 rows, meaning the filter is being ignored.
 
-**Fix**: During the bank-activity sync, fetch each bank account directly from the QB API (`Account/{id}`) to get the real-time `CurrentBalance`, instead of relying on the cached table.
+**Fix**: The existing `quickbooks-oauth` function (line 1539) uses the `TransactionListByAccount` report type which natively groups by account ID. Switch the sync engine to either:
+- Use the correct report endpoint: `reports/TransactionListByAccount?account={ACCOUNT_ID}` (using numeric ID, not name)
+- This matches the proven pattern already working in the codebase
 
----
+### 3. Reconciled Through Date (Always Null)
+Same filter issue as above -- the reconciled `TransactionList` report returns no matching rows because the account name filter is not working.
 
-## Fix 2: Unreconciled Count — Recursively Count Transaction Rows
-
-**Current**: Line 956 does `unreconciledCount = rows.length` which counts top-level elements. But QB TransactionList reports group transactions into sections, where each section has nested `Rows.Row` arrays containing the actual transactions.
-
-**Fix**: Add a recursive row counter that walks the nested report structure (same pattern already used in `quickbooks-oauth/index.ts` at line 1559) to count only leaf data rows (those with `ColData`), not section headers.
-
----
-
-## Fix 3: Reconciled Through Date — Fix Report Parsing
-
-**Current**: The reconciled report query uses `limit=1` which is not a valid QB report parameter, and it tries to parse just the first row's `ColData` — but that first "row" is likely a section header, not a data row.
-
-**Fix**: Remove the invalid `limit=1` parameter. Recursively walk all reconciled transaction rows to extract dates from `ColData`, then find the maximum date as the "reconciled through" date.
+**Fix**: Use `reports/TransactionListByAccount?account={ACCOUNT_ID}&cleared=Reconciled&sort_order=descend&sort_by=tx_date&columns=tx_date` with numeric account ID.
 
 ---
 
@@ -42,20 +32,21 @@ The screenshot from QuickBooks shows three values that don't match the ERP:
 
 ### File: `supabase/functions/qb-sync-engine/index.ts`
 
-1. Add a helper function `countReportDataRows(rows)` that recursively counts leaf rows (rows with `ColData` but no nested `Rows.Row`)
+**Before the per-account loop** (around line 975):
+- Add a single QB Query API call to fetch all bank account balances at once
+- Build a `Map<string, number>` of account ID to `CurrentBalance`
 
-2. Add a helper function `extractMaxDateFromReport(rows)` that recursively walks all leaf rows and finds the maximum date value
+**Replace the live account fetch** (lines 983-996):
+- Remove the individual `Account/{id}` try/catch block
+- Look up the live balance from the pre-built map instead
 
-3. Update the unreconciled section (~line 948-959):
-   - Replace `rows.length` with `countReportDataRows(rows)`
+**Fix unreconciled report** (lines 998-1011):
+- Change from `reports/TransactionList?cleared=Uncleared&account=${encodeURIComponent(account.name)}`
+- To: `reports/TransactionListByAccount?account=${account.qb_id}&cleared=Uncleared&columns=tx_date,txn_type,doc_num,name,memo,subt_nat_amount`
 
-4. Update the ledger balance fetch (~line 941-1008):
-   - Before the upsert, fetch the account from QB API: `Account/${account.qb_id}`
-   - Use the live `CurrentBalance` instead of the cached `account.current_balance`
+**Fix reconciled report** (lines 1013-1026):
+- Change from `reports/TransactionList?cleared=Reconciled&account=${encodeURIComponent(account.name)}`
+- To: `reports/TransactionListByAccount?account=${account.qb_id}&cleared=Reconciled&sort_order=descend&sort_by=tx_date&columns=tx_date`
 
-5. Update the reconciled section (~line 962-994):
-   - Remove invalid `limit=1` parameter
-   - Use `extractMaxDateFromReport(rows)` to find the latest reconciled date
-
-No database or frontend changes needed — the issue is entirely in the sync engine's data collection logic.
+No database or frontend changes needed.
 
