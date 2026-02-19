@@ -1,85 +1,61 @@
 
-# Fix: Add "Accounting Process" Knowledge to Penny (Accounting Agent)
+# Fix: Station Title Text Truncation in Shop Floor Header
 
 ## Root Cause
 
-The Penny agent's system prompt (in `supabase/functions/ai-agent/index.ts`, around lines 878–1044) is thorough on QuickBooks data access, collection calls, and compliance deadlines — but contains **zero narrative explanation of Rebar.shop's accounting process**.
+File: `src/components/shopfloor/StationHeader.tsx`
 
-When the user asks a conceptual question like *"Can you tell me about the accounting process?"*, the model has no declarative knowledge to draw from. It cannot fabricate a company-specific process description, so it correctly (but unhelpfully) says "I don't have enough information."
+Two CSS issues on adjacent elements cause the truncation:
 
-## The Fix — One Change, One File
+**Issue 1 — `<header>` line 52:**
+The header uses `items-center`, which vertically centres all flex children. When text wraps and the left column grows taller, `items-center` fights against it and may clip. It should be changed to `items-start` so the header grows naturally with the wrapped title.
 
-**File:** `supabase/functions/ai-agent/index.ts`  
-**Location:** Inside the `accounting:` system prompt string, just before the closing backtick at line ~1044.
+**Issue 2 — `<h1>` line 59:**
+Inside a flex row, text is not free to wrap by default — it tries to stay on one line and gets squeezed/truncated. The `<h1>` needs `whitespace-normal break-words` (or simply `whitespace-normal`) to allow it to wrap onto multiple lines. Adding `min-w-0` to the parent `<div>` on line 54 is also required so the flex child can shrink and let the text wrap rather than overflow.
 
-Insert a new section: **`## 📘 REBAR SHOP ACCOUNTING PROCESS (Company-Specific Knowledge)`**
+## Exact Changes — `src/components/shopfloor/StationHeader.tsx` Only
 
-This section will give Penny a full, factual description of the accounting workflow, organized by the cycle it belongs to. The AI will be able to answer any conceptual question about "the accounting process" by drawing on this embedded knowledge.
+### Change 1: `<header>` — swap `items-center` → `items-start` (line 52)
 
----
+```diff
+- <header className="flex items-center justify-between px-4 py-3 bg-card border-b border-border">
++ <header className="flex items-start justify-between px-4 py-3 bg-card border-b border-border">
+```
 
-## Content to Be Added
+This allows the header's height to expand naturally when the title wraps, without clipping.
 
-The new knowledge section will cover:
+### Change 2: Left flex child `<div>` — add `min-w-0` (line 54)
 
-### Revenue Cycle (Sales → Cash)
-1. Customer inquiry → Quote prepared in ERP / QuickBooks Estimate
-2. Quote approved → converted to Sales Order in ERP
-3. Shop drawings produced → QC approved → production starts
-4. Delivery completed → Packing Slip issued
-5. Invoice created in QuickBooks (matching Sales Order) → emailed to customer
-6. Payment received → matched against invoice in QuickBooks → AR cleared
-7. Overdue invoices → escalated to Penny for collection workflow (email → call → escalate)
+```diff
+- <div className="flex items-center gap-3">
++ <div className="flex items-center gap-3 min-w-0">
+```
 
-### Expenditure Cycle (Purchase → Payment)
-1. Materials/services needed → Purchase Order (PO) created
-2. PO sent to vendor → vendor delivers
-3. Vendor invoice received → matched to PO in QuickBooks (3-way match: PO / receipt / bill)
-4. Bill approved → scheduled for payment run
-5. Payment issued (EFT / cheque) → recorded in QuickBooks → AP cleared
+`min-w-0` overrides the default `min-width: auto` on flex children, allowing this column to shrink so the title text can wrap instead of overflowing.
 
-### Payroll Cycle
-1. Timesheets collected from the ERP time-clock module
-2. Hours verified by Shop Supervisor (Kourosh)
-3. Payroll processed — deductions calculated (CPP, EI, income tax)
-4. CRA remittance submitted by the 15th of the following month
-5. T4s issued to all employees by end of February
+### Change 3: `<h1>` — add `whitespace-normal break-words` (line 59)
 
-### Month-End Close Checklist
-1. Bank reconciliation (all accounts matched to QuickBooks)
-2. AR aging reviewed — all invoices >30 days flagged
-3. AP review — upcoming vendor payments scheduled
-4. HST/GST return prepared and filed (quarterly: Jan 31, Apr 30, Jul 31, Oct 31)
-5. Profit & Loss reviewed by CEO (Sattar)
-6. Closed period locked in QuickBooks — no backdating
+```diff
+- <h1 className="font-bold text-base sm:text-lg uppercase tracking-wide text-foreground">
++ <h1 className="font-bold text-base sm:text-lg uppercase tracking-wide text-foreground whitespace-normal break-words">
+```
 
-### System of Record
-- QuickBooks Online is the **sole financial system of record**
-- ERP (this system) serves as operational data and mirrors QB data for dashboards
-- Odoo is archived and read-only — no transactions are posted there
-- All financial reporting is generated from QuickBooks exports
-
-### Key Roles
-| Role | Responsibility |
-|---|---|
-| Vicky Anderson (Accountant) | Day-to-day bookkeeping, invoicing, collections, HST filing |
-| Sattar Esmaeili (CEO) | Month-end P&L review, credit hold approval, final sign-off |
-| Penny (AI) | Automated AR monitoring, collection escalation, task creation, email flagging |
-| Radin Lachini (AI Manager) | ERP/system oversight, Penny configuration |
+This explicitly permits the title text to wrap onto multiple lines. The title "CIRCULAR SPIRAL BENDER 10M-20M BEDS" will now break naturally at word boundaries.
 
 ---
 
 ## Scope
 
-| File | Lines Affected | Change Type |
+| File | Lines Changed | Nature |
 |---|---|---|
-| `supabase/functions/ai-agent/index.ts` | ~1037–1044 (inside `accounting:` prompt) | Insert knowledge section |
-
-**Only one file. No database changes. No UI changes. No other agents touched.**
+| `src/components/shopfloor/StationHeader.tsx` | 52, 54, 59 | CSS class additions only |
 
 ## What Is NOT Changed
-- All other agent prompts (Vizzy, Forge, Atlas, Commander, etc.) — untouched
-- The SmartTextarea grammar check — untouched
-- The Deliveries packing slip — untouched
-- The Pipeline lead form — untouched
-- Any UI, database schema, or routing logic — untouched
+
+- The Supervisor button — untouched
+- The Pool button — untouched
+- The REMAINING badge — untouched
+- The Workspace chip — untouched
+- The Mark/Drawing centre section — untouched
+- `src/pages/StationView.tsx` — untouched
+- All other shop floor components, pages, database logic — untouched
