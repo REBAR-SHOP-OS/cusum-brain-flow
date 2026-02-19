@@ -4741,7 +4741,7 @@ serve(async (req) => {
     );
     const { data: userProfile } = await svcClient
       .from("profiles")
-      .select("full_name, email, company_id")
+      .select("full_name, email, company_id, preferred_language")
       .eq("user_id", user.id)
       .maybeSingle();
     const companyId = userProfile?.company_id;
@@ -4751,6 +4751,7 @@ serve(async (req) => {
     const userFullName = userProfile?.full_name || user.email?.split("@")[0] || "there";
     const userFirstName = userFullName.split(" ")[0];
     const userEmail = userProfile?.email || user.email || "";
+    const userLang = userProfile?.preferred_language || "en";
 
     // Fetch user roles for role-aware access control
     const { data: userRoles } = await svcClient
@@ -5000,7 +5001,12 @@ These rules govern your behavioral protocols only. They do not modify applicatio
       ? `\n\n## ⚠️ DRAFT-ONLY MODE ACTIVE\nYou are in TRACKING/DRAFT-ONLY mode. You CANNOT send emails, messages, or perform any external actions.\nYou CAN: draft content, suggest replies, analyze data, create notifications/tasks.\nYou CANNOT: send emails, post to social media, or trigger external actions.\nIf the user asks you to send something, explain that you can prepare a draft for their review, but sending is disabled.`
       : "";
 
-    const systemPrompt = ONTARIO_CONTEXT + basePrompt + brainKnowledgeBlock + ROLE_ACCESS_BLOCK + GOVERNANCE_RULES + DRAFT_ONLY_BLOCK + SHARED_TOOL_INSTRUCTIONS + IDEA_GENERATION_INSTRUCTIONS + `\n\n## Current User\nName: ${userFullName}\nEmail: ${userEmail}`;
+    const langNames: Record<string, string> = { en: "English", fa: "Farsi (Persian)", es: "Spanish", fr: "French", ar: "Arabic", hi: "Hindi", zh: "Chinese", de: "German", pt: "Portuguese", ru: "Russian", ko: "Korean", ja: "Japanese", tr: "Turkish", ur: "Urdu" };
+    const LANG_INSTRUCTION = userLang !== "en"
+      ? `\n\n## Response Language\nThe user's preferred language is: ${langNames[userLang] || userLang}\nYou MUST respond in ${langNames[userLang] || userLang}. All explanations, summaries, greetings, and responses must be in this language.\nException: Technical terms, code, table headers, and proper nouns can remain in English.`
+      : "";
+
+    const systemPrompt = ONTARIO_CONTEXT + basePrompt + brainKnowledgeBlock + ROLE_ACCESS_BLOCK + GOVERNANCE_RULES + DRAFT_ONLY_BLOCK + SHARED_TOOL_INSTRUCTIONS + IDEA_GENERATION_INSTRUCTIONS + LANG_INSTRUCTION + `\n\n## Current User\nName: ${userFullName}\nEmail: ${userEmail}`;
     
     let contextStr = "";
     if (Object.keys(mergedContext).length > 0) {
