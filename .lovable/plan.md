@@ -1,81 +1,152 @@
 
-# Generate Fix Button — Surgical Enhancement
+# اطمینان از دریافت اعلان‌ها به زبان ترجیحی هر کاربر
 
-## Scope
-**ONLY** `supabase/functions/generate-fix-prompt/index.ts` and the Generate Fix section in `src/pages/Tasks.tsx`.
-No other UI, logic, database, or component is touched.
+## محدوده اجرا (Scope)
+**فقط و فقط** فایل‌های زیر تغییر می‌کنند:
+- `supabase/functions/notify-on-message/index.ts`
+- `supabase/functions/_shared/notifyTranslate.ts` (فایل جدید shared utility)
 
-## Problems Identified
+هیچ بخش دیگری از اپلیکیشن — هیچ UI، هیچ صفحه، هیچ جدول دیتابیس — تغییر نمی‌کند.
 
-### Problem 1 — Screenshot URL Missed from Description
-The current regex in `Tasks.tsx` (lines 930-938) uses:
+---
+
+## تحلیل مشکل
+
+### وضعیت فعلی (مشکل)
+
+در `notify-on-message/index.ts`:
+
+**برای Team Messages:**
 ```
-/(https?:\/\/[^\s]+\.(png|jpg|jpeg|gif|webp|svg)[^\s]*)/gi
-```
-But the Supabase storage URL for feedback screenshots ends in `.png` followed by nothing — which means this regex **should** catch it. However, the issue is that the description field contains the full text block including `Screenshot: <url>` and the regex only looks in `comments` and `description`, but does NOT specifically parse the structured `Screenshot:` line format. When the URL is embedded mid-text (with surrounding text), the regex boundary `[^\s]*` can cut off at spaces that appear in some encoded URLs, causing misses.
-
-### Problem 2 — AI Model Has No Vision Capability  
-The `generate-fix-prompt` function uses `gpt-4o-mini` (text only) and sends screenshot URLs as plain text references — the AI cannot actually **see** the screenshot. For feedback tasks that include a screenshot URL, the AI should use `gpt-4o` (with vision) to analyze the actual image content, producing a far more accurate fix prompt.
-
-### Problem 3 — Prompt Quality & Surgical Rules
-The generated prompt does NOT include the Surgical Execution Law constraints. Lovable AI receiving this prompt may make broad, sweeping changes. The system prompt must instruct the AI to embed surgical constraints in the output prompt.
-
-### Problem 4 — No Visual Feedback on Screenshot Detection
-The UI shows no indicator of how many screenshots were detected before generating. Users cannot verify the right context is being sent.
-
-## Solution
-
-### Change 1 — `supabase/functions/generate-fix-prompt/index.ts`
-Upgrade the edge function to:
-1. **Detect if screenshot URLs are present** → switch to `gpt-4o` with vision (multimodal) to actually analyze the screenshot image
-2. **Build a richer vision message** that sends `image_url` content blocks alongside text for screenshot URLs
-3. **Inject Surgical Execution Law** into the system prompt so the generated prompt always constrains Lovable AI to the specific file/component
-4. **Improve prompt output format** — add mandatory sections: `PROBLEM`, `FILE/COMPONENT`, `EXACT CHANGE`, `DO NOT TOUCH`
-
-Updated system prompt addition:
-```
-MANDATORY: Every generated prompt MUST include these sections:
-- **PROBLEM:** one-line summary
-- **FILE/COMPONENT:** exact file path(s) if identifiable
-- **FIX:** surgical change instructions
-- **DO NOT TOUCH:** explicitly list everything else that must NOT change
-- **SURGICAL LAW:** "Change ONLY the section listed above. Do not modify any other UI, logic, database, or component."
+title  = "Kourosh Zand in #general"        ← یک متن برای همه
+preview = "سلام، وقت داری؟"               ← یک متن برای همه
+→ همه اعضای کانال (از جمله کاربران فارسی‌زبان) همین را دریافت می‌کنند
 ```
 
-Vision support: when screenshots exist, build messages array with image_url content blocks for GPT-4o vision, so the AI actually sees what's in the screenshot.
+**برای Support Messages:**
+```
+title  = "Support: John Doe"              ← یک متن برای همه
+preview = "I need help with..."           ← یک متن برای همه
+→ همه admin/office users همین را دریافت می‌کنند
+```
 
-### Change 2 — `src/pages/Tasks.tsx` (Generate Fix section only)
-Improve screenshot extraction to also parse the structured `Screenshot: <url>` line format from feedback descriptions:
+تابع `preferred_language` را از profiles نمی‌خواند و هیچ ترجمه‌ای انجام نمی‌دهد.
+
+### الگوی صحیح (که قبلاً در `notify-feedback-owner` پیاده‌سازی شده)
+
+`notify-feedback-owner` این کار را به درستی انجام می‌دهد:
+1. زبان ترجیحی کاربر را از `profiles.preferred_language` می‌خواند
+2. اگر زبان انگلیسی نبود، `translate-message` edge function را صدا می‌زند
+3. اعلان را به زبان کاربر ذخیره می‌کند
+
+---
+
+## راه‌حل: Shared Translation Utility + Per-User Localization
+
+### تغییر ۱ — فایل جدید: `supabase/functions/_shared/notifyTranslate.ts`
+
+یک utility مشترک ایجاد می‌کنیم تا:
+- متن اعلان (title + body) را به زبان هدف ترجمه کند
+- از `translate-message` edge function استفاده کند (که از قبل وجود دارد و با gemini-2.5-flash-lite کار می‌کند)
+- در صورت شکست ترجمه، متن انگلیسی را برگرداند (fallback)
+
 ```typescript
-// Parse "Screenshot: <url>" lines explicitly  
-const screenshotLineRegex = /Screenshot:\s*(https?:\/\/[^\s]+)/gi;
-let match;
-while ((match = screenshotLineRegex.exec(selectedTask.description || "")) !== null) {
-  screenshots.push(match[1]);
+export async function translateNotification(
+  supabaseUrl: string,
+  serviceKey: string,
+  title: string,
+  body: string,
+  targetLang: string  // e.g., "fa", "en", "es"
+): Promise<{ title: string; body: string }>
+```
+
+نکته: چون `translate-message` نیاز به Auth دارد، از `serviceKey` در header استفاده می‌کنیم (همان روشی که `notify-feedback-owner` استفاده می‌کند).
+
+### تغییر ۲ — `notify-on-message/index.ts`
+
+#### در `handleTeamMessage`:
+
+فعلاً profiles را اینگونه می‌خواند:
+```typescript
+const { data: profiles } = await svc
+  .from("profiles")
+  .select("id, user_id")   // ← فقط id و user_id
+  .in("id", profileIds);
+```
+
+تغییر: `preferred_language` هم اضافه می‌شود:
+```typescript
+const { data: profiles } = await svc
+  .from("profiles")
+  .select("id, user_id, preferred_language")
+  .in("id", profileIds);
+```
+
+سپس به جای یک batch insert یکسان برای همه، برای هر کاربر با زبان غیر-انگلیسی ترجمه انجام می‌دهیم:
+
+```typescript
+// Group by language → translate once per language
+const byLang = groupByLanguage(profiles);
+for (const [lang, langProfiles] of Object.entries(byLang)) {
+  let { title: localTitle, body: localBody } = { title, body: preview };
+  if (lang !== "en") {
+    ({ title: localTitle, body: localBody } = await translateNotification(
+      supabaseUrl, serviceKey, title, preview, lang
+    ));
+  }
+  const rows = langProfiles.map(p => ({
+    user_id: p.user_id,
+    title: localTitle,
+    description: localBody,
+    ...
+  }));
+  await svc.from("notifications").insert(rows);
 }
-// Also run generic image URL regex as fallback
 ```
 
-Add a small visual indicator showing how many screenshots were detected:
-```tsx
-{detectedScreenshots > 0 && (
-  <span className="text-xs text-muted-foreground">
-    📎 {detectedScreenshots} screenshot(s) detected
-  </span>
-)}
+#### در `handleSupportMessage`:
+
+فعلاً `companyProfiles` را بدون `preferred_language` می‌گیرد:
+```typescript
+const { data: companyProfiles } = await svc
+  .from("profiles")
+  .select("user_id")   // ← فقط user_id
+  ...
 ```
 
-## Files Changed
-| File | Change |
-|------|--------|
-| `supabase/functions/generate-fix-prompt/index.ts` | Vision support + Surgical Law injection + better prompt format |
-| `src/pages/Tasks.tsx` | Better screenshot URL extraction + detection indicator |
+تغییر: `preferred_language` هم اضافه می‌شود و همان الگوی گروه‌بندی بر اساس زبان اعمال می‌شود.
 
-## What Does NOT Change
-- Task list UI, columns, Kanban board
-- Comment system
-- Audit log
-- Create task dialog
-- Delete/Complete/Reopen logic
-- Any other page or component
-- Database schema
+---
+
+## جزئیات فنی مهم
+
+### گروه‌بندی بر اساس زبان (بهینه‌سازی)
+به جای اینکه برای هر کاربر یک ترجمه جداگانه فراخوانی شود (که هزینه بالایی دارد)، کاربران بر اساس `preferred_language` گروه‌بندی می‌شوند:
+- کاربران انگلیسی: بدون فراخوانی API
+- کاربران فارسی: یک بار ترجمه → برای همه فارسی‌زبانان استفاده می‌شود
+- کاربران عربی: یک بار ترجمه → و الی آخر
+
+این روش تعداد API calls را به حداقل می‌رساند.
+
+### Fallback امن
+اگر ترجمه به هر دلیلی شکست بخورد (network error، rate limit)، متن انگلیسی اصلی استفاده می‌شود. اعلان همیشه ارسال می‌شود.
+
+### Default Language
+کاربرانی که `preferred_language` ندارند (null)، به عنوان `"en"` در نظر گرفته می‌شوند.
+
+---
+
+## خلاصه فایل‌های تغییریافته
+
+| فایل | نوع تغییر |
+|------|-----------|
+| `supabase/functions/_shared/notifyTranslate.ts` | ایجاد جدید — shared translation utility |
+| `supabase/functions/notify-on-message/index.ts` | ویرایش — اضافه کردن preferred_language + ترجمه per-user |
+
+## آنچه تغییر نمی‌کند
+- هیچ UI یا صفحه‌ای
+- هیچ جدول دیتابیس
+- سایر edge functions
+- `push-on-notify`, `notify-feedback-owner`, `alert-router`, `daily-team-report`
+- ساختار notifications table
+- هیچ منطق دیگری در اپلیکیشن
