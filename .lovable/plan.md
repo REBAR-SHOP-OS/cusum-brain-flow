@@ -1,47 +1,49 @@
 
+# Two Fixes: Radin's Agent + Helper Card Subtitle Color
 
-# Fix: "Unknown Customer" in Production Queue
+## Fix 1: radin@rebar.shop — Wrong Agent & Hero Text
 
-## Root Cause
+**File:** `src/lib/userAgentMap.ts`
 
-Two customer records have `company_id = NULL`:
-- `49167c2f...` — "NORTHFLEET GROUP"
-- `c56f5215...` — "Northfleet Group"
+The mapping for `radin@rebar.shop` currently has:
+- `agentKey: "support"` → routes to Haven (wrong)
+- `heroText: "How can **Relay** assist you today?"` → shows "Relay" in the hero (wrong)
 
-The RLS policy on the `customers` table requires `company_id = get_user_company_id(auth.uid())`. Since these two records have no company_id, they are invisible to the app, causing the "Unknown Customer (49167c2f)" fallback text.
+The correct agent for Radin is **Pixel** (Social Media). Changes needed:
 
-Both are also duplicates of existing "NORTHFLEET GROUP" / "Northfleet Group" customers that DO have the correct company_id.
+- `agentKey: "support"` → `agentKey: "social"`
+- `heroText` → `"How can **Pixel** assist you today?"`
 
-## Fix
+**File:** `src/pages/Home.tsx`
 
-### 1. Data Fix (SQL migration)
-
-Update the two orphaned customers to set their `company_id` to `a0000000-0000-0000-0000-000000000001` (the company their projects belong to):
-
-```text
-UPDATE customers
-SET company_id = 'a0000000-0000-0000-0000-000000000001'
-WHERE id IN (
-  '49167c2f-bb73-40b2-ba08-f72bc2cffed0',
-  'c56f5215-4ca1-418c-a408-20a17c89c850'
-)
-AND company_id IS NULL;
+The `agentKeyToSuggestion` map (line 43) already has `assistant`, `accounting`, `shopfloor`, `sales`, `estimating`, `support`, `email` — but is missing `"social"`. Need to add:
+```ts
+social: { code: "pixel", name: "Pixel" },
 ```
 
-### 2. Preventive Fix (SQL migration)
+Also the `ChatInput` placeholder (line 154) has a hardcoded conditional that only handles `assistant`, `shopfloor`, and falls back to `gauge`. Need to make it aware of `social` → show "Ask Pixel anything..."
 
-Add a NOT NULL constraint on `customers.company_id` to prevent this from happening again. Also add a validation trigger (or default) so that any future INSERT must include a `company_id`.
+---
 
-```text
-ALTER TABLE customers
-ALTER COLUMN company_id SET NOT NULL;
-```
+## Fix 2: Helper Card Subtitle (Role) Color Visibility
 
-This is a two-step migration: first backfill the NULLs, then add the constraint.
+**File:** `src/pages/Home.tsx` — `HelperCard` component (line 237)
 
-### 3. Optional: Deduplicate Northfleet
+Current desktop role text: `sm:text-muted-foreground`
 
-There are 7 customer records matching "Northfleet". You may want to consolidate them later, but that is a separate cleanup task and not required for this fix.
+`text-muted-foreground` uses the CSS variable `--muted-foreground` which in many themes resolves to a very light gray, making it hard to read against a white/light card background.
 
-No frontend code changes needed — once the data has the correct `company_id`, the existing code will resolve the names properly.
+**Fix:** Change to `sm:text-foreground/60` — this uses the primary foreground color at 60% opacity, which is always readable regardless of the active theme (light or dark).
 
+No other parts of the app are touched.
+
+---
+
+## Technical Summary
+
+| File | Line(s) | Change |
+|---|---|---|
+| `src/lib/userAgentMap.ts` | 56–58 | `agentKey: "social"`, update heroText to Pixel |
+| `src/pages/Home.tsx` | 43–51 | Add `social: { code: "pixel", name: "Pixel" }` to map |
+| `src/pages/Home.tsx` | 154 | Fix placeholder to handle "social" agentKey |
+| `src/pages/Home.tsx` | 237 | `sm:text-muted-foreground` → `sm:text-foreground/60` |
