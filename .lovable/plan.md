@@ -1,103 +1,78 @@
 
-# Fix: Packing Slip Header Incorrect Data on /deliveries Page
+# Add Grammar/Spell Check to All Textboxes
 
-## Root Cause Analysis
+## Overview
 
-After examining the code and live database, the issues are located in **two files only**:
+Add a "Grammarly-like" check-and-fix button to all textboxes across the app. When a user types text in any textarea, they can click a button to have AI fix grammar, spelling, punctuation, and clarity before the text is sent.
 
-### Issue 1 — `src/pages/Deliveries.tsx` (lines 160–172 and 362–377)
+## Architecture
 
-The packing slips query uses `select("*")` on the `packing_slips` table, which does **not join the `deliveries` table**. As a result, `delivery_number` (e.g. `DEL-MLTV5F3Z`) is never fetched — only `slip_number` (e.g. `PS-MLTV5F3Z`) is available.
+### 1. New Edge Function: `grammar-check`
 
-When the slip card is clicked to open the packing slip viewer (lines 366–377), `deliveryNumber` is incorrectly set to `slip.slip_number` instead of the actual delivery number.
+A lightweight edge function at `supabase/functions/grammar-check/index.ts` that:
+- Accepts `{ text: string }` in the body
+- Uses `callAI` from the shared router (GPT-4o-mini, fast and cheap)
+- System prompt: "Fix grammar, spelling, punctuation, and clarity. Do NOT change meaning, tone, or intent. If the text is already correct, return it unchanged. Return ONLY the corrected text."
+- Returns `{ corrected: string, changed: boolean }` (so the UI knows whether anything was actually fixed)
 
-Database reality (confirmed with live data):
+### 2. New Reusable Component: `SmartTextarea`
 
-| Field | DB Column | Current State |
-|---|---|---|
-| Customer | `packing_slips.customer_name` | Populated correctly |
-| Ship To | `packing_slips.site_address` | Populated on some slips |
-| Delivery # | `deliveries.delivery_number` (via join) | NOT fetched |
-| Invoice # | `packing_slips.invoice_number` | Null on existing slips |
-| Invoice Date | `packing_slips.invoice_date` | Null on existing slips |
-| Scope | `packing_slips.scope` | Null on existing slips |
-| Delivery Date | `packing_slips.delivery_date` | Populated correctly |
+A drop-in replacement wrapper at `src/components/ui/SmartTextarea.tsx` that:
+- Renders the existing `Textarea` component with all its props
+- Adds a small floating toolbar below/beside the textarea with a "Check Grammar" button (spell-check icon)
+- On click: sends current text to `grammar-check`, replaces the text, and shows a toast ("Text corrected" or "Looks good, no changes needed")
+- Shows a loading spinner while checking
+- Only shows the button when the textarea has content (3+ characters)
+- Preserves all existing Textarea props (className, placeholder, rows, onChange, etc.)
 
-### Issue 2 — `src/components/delivery/DeliveryPackingSlip.tsx` (line 85)
+### 3. Replace `Textarea` with `SmartTextarea` in All Relevant Files
 
-The "Delivery #" field in the template currently renders only `{deliveryNumber}`. It must be changed to show the concatenated format: `[Invoice Number] - [Delivery Number]` (falling back gracefully if invoice number is absent).
+Swap `Textarea` for `SmartTextarea` in files where text is composed/sent — specifically:
 
-### Product Table Status
+| File | Field(s) |
+|---|---|
+| `src/components/email/ComposeEmail.tsx` | Message body |
+| `src/components/inbox/EmailReplyComposer.tsx` | Reply text |
+| `src/components/inbox/ComposeEmailDialog.tsx` | Email body |
+| `src/components/inbox/EmailTemplatesDrawer.tsx` | Template body |
+| `src/components/teamhub/MessageThread.tsx` | Chat message |
+| `src/components/pipeline/LeadTimeline.tsx` | Notes |
+| `src/components/accounting/TableRowActions.tsx` | Email body |
+| `src/components/email-marketing/CreateCampaignDialog.tsx` | AI brief |
+| `src/components/inbox/InboxManagerSettings.tsx` | Custom instructions |
+| `src/pages/AdminPanel.tsx` | Duties textarea |
+| `src/components/social/ImageGeneratorDialog.tsx` | Image prompt |
+| `src/pages/Tasks.tsx` | Task description, comments |
 
-The table columns in `DeliveryPackingSlip.tsx` are **already correct**: DW#, Mark, Quantity, Size, Type, Total Length — in the exact required order. No changes needed here.
-
----
-
-## Exact Changes
-
-### File 1: `src/pages/Deliveries.tsx`
-
-**Change A — Update the packing slips query to join deliveries (lines 164–168):**
-
-Change `select("*")` to also fetch `delivery_number` via the foreign key join to `deliveries`:
-
-```ts
-// Before
-.select("*")
-
-// After
-.select("*, deliveries(delivery_number)")
-```
-
-Then map the result to expose `delivery_number` on each slip object.
-
-**Change B — Fix the `setShowPackingSlip` call (lines 366–377):**
-
-- Pass `deliveryNumber` from the joined `slip.deliveries?.delivery_number` instead of `slip.slip_number`
-- Pass `shipTo` from `slip.ship_to` (currently missing from the call)
-
-```ts
-// Before
-deliveryNumber: slip.slip_number,  // WRONG — was the slip #
-// shipTo was never passed
-
-// After
-deliveryNumber: slip.deliveries?.delivery_number || slip.slip_number,
-shipTo: slip.ship_to,  // ADD this
-```
-
-### File 2: `src/components/delivery/DeliveryPackingSlip.tsx`
-
-**Change — Update "Delivery #" label to show concatenated format (line 85):**
-
-```tsx
-// Before
-<p className="font-semibold">{deliveryNumber}</p>
-
-// After
-<p className="font-semibold">
-  {invoiceNumber ? `${invoiceNumber} - ${deliveryNumber}` : deliveryNumber}
-</p>
-```
+Each file change is a simple import swap (`Textarea` to `SmartTextarea`) with zero logic changes.
 
 ---
 
-## Scope
+## Technical Details
 
-| File | Lines | Change Type |
-|---|---|---|
-| `src/pages/Deliveries.tsx` | 164–168 (query) | Add join to deliveries |
-| `src/pages/Deliveries.tsx` | 366–377 (setShowPackingSlip) | Fix deliveryNumber source, add shipTo |
-| `src/components/delivery/DeliveryPackingSlip.tsx` | 85 | Concatenate invoice + delivery # |
+### Edge Function (`grammar-check`)
 
-**No other files. No database changes. No other UI elements. No other components.**
+```
+POST /grammar-check
+Body: { text: "some text with erors" }
+Response: { corrected: "some text with errors", changed: true }
+```
 
-## What Is NOT Changed
+Uses GPT-4o-mini via `callAI` from `_shared/aiRouter.ts` for speed and low cost. Max 500 tokens, temperature 0.2 (deterministic corrections).
 
-- All delivery tabs (Today, Upcoming, All) — untouched
-- Packing slip cards list layout — untouched
-- Delete button, status badge — untouched
-- Signature area, footer, header branding — untouched
-- Product table columns — already correct, untouched
-- All other pages and components — untouched
+### SmartTextarea Component
+
+- Wraps the existing `Textarea` — fully backward-compatible (same props interface)
+- Adds a small "ABC check" button that appears when text length > 2
+- The button sits in a small toolbar row below the textarea
+- Calls `grammar-check` edge function on click
+- Updates the value via the existing `onChange` handler (synthetic event)
+- Shows toast feedback: "Corrected" or "No issues found"
+
+### What Is NOT Changed
+
+- The base `src/components/ui/textarea.tsx` component — untouched
 - Database schema — untouched
+- Any page layout, routing, or business logic — untouched
+- The existing `AISuggestButton` and `ai-inline-suggest` function — untouched
+- The `draft-email` polish feature — untouched (different purpose)
