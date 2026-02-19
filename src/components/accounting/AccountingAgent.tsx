@@ -183,6 +183,13 @@ RULES:
       })
       .catch((err) => {
         console.error("Penny auto-greet error:", err);
+        const errMsg = err instanceof Error ? err.message : "Penny is temporarily unavailable";
+        setMessages([{
+          id: crypto.randomUUID(),
+          role: "agent",
+          content: `⚠️ ${errMsg}`,
+          timestamp: new Date(),
+        }]);
       })
       .finally(() => setIsTyping(false));
   }, [autoGreet, qbSummary]);
