@@ -15,6 +15,8 @@ import { TagsExportView } from "@/components/office/TagsExportView";
 import { PackingSlipsView } from "@/components/office/PackingSlipsView";
 
 import { PayrollAuditView } from "@/components/office/PayrollAuditView";
+import { ScreenshotFeedbackButton } from "@/components/feedback/ScreenshotFeedbackButton";
+import { useAuth } from "@/lib/auth";
 
 const sectionComponents: Record<OfficeSection, React.ComponentType> = {
   "ai-extract": AIExtractView,
@@ -29,6 +31,8 @@ const sectionComponents: Record<OfficeSection, React.ComponentType> = {
 
 export default function OfficePortal() {
   const { isAdmin, isOffice, isLoading: roleLoading } = useUserRole();
+  const { user } = useAuth();
+  const isRebarUser = (user?.email ?? "").endsWith("@rebar.shop");
   const location = useLocation();
   const rawSection = (location.state as any)?.section || "ai-extract";
   const initialSection = rawSection === "ceo-dashboard" ? "ai-extract" : rawSection;
@@ -97,6 +101,7 @@ export default function OfficePortal() {
           <ActiveComponent />
         </div>
       </main>
+      {isRebarUser && <ScreenshotFeedbackButton />}
     </div>
   );
 }
