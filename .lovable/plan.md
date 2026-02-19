@@ -1,81 +1,81 @@
 
-# جایگزینی ElevenLabs با Web Speech API (Google Voice)
+# Generate Fix Button — Surgical Enhancement
 
-## مشکل اصلی
+## Scope
+**ONLY** `supabase/functions/generate-fix-prompt/index.ts` and the Generate Fix section in `src/pages/Tasks.tsx`.
+No other UI, logic, database, or component is touched.
 
-تمام خطاهای WebSocket از SDK داخلی `@elevenlabs/react` می‌آیند. این SDK یک اتصال WebSocket جداگانه باز می‌کند که مدیریت lifecycle آن پیچیده و پر از حالت‌های ناپایدار است. هیچ تغییری در کد ما نمی‌تواند باگ‌های داخلی SDK را برطرف کند.
+## Problems Identified
 
-## راه‌حل: Web Speech API (Google Voice)
+### Problem 1 — Screenshot URL Missed from Description
+The current regex in `Tasks.tsx` (lines 930-938) uses:
+```
+/(https?:\/\/[^\s]+\.(png|jpg|jpeg|gif|webp|svg)[^\s]*)/gi
+```
+But the Supabase storage URL for feedback screenshots ends in `.png` followed by nothing — which means this regex **should** catch it. However, the issue is that the description field contains the full text block including `Screenshot: <url>` and the regex only looks in `comments` and `description`, but does NOT specifically parse the structured `Screenshot:` line format. When the URL is embedded mid-text (with surrounding text), the regex boundary `[^\s]*` can cut off at spaces that appear in some encoded URLs, causing misses.
 
-پروژه از قبل یک hook آماده و بدون خطا دارد: `useSpeechRecognition` در `src/hooks/useSpeechRecognition.ts`.
+### Problem 2 — AI Model Has No Vision Capability  
+The `generate-fix-prompt` function uses `gpt-4o-mini` (text only) and sends screenshot URLs as plain text references — the AI cannot actually **see** the screenshot. For feedback tasks that include a screenshot URL, the AI should use `gpt-4o` (with vision) to analyze the actual image content, producing a far more accurate fix prompt.
 
-این hook از **Web Speech API** مرورگر استفاده می‌کند که:
-- **هیچ WebSocket خارجی** باز نمی‌کند (مرورگر مستقیماً با Google ارتباط می‌گیرد)
-- **هیچ API Key** لازم ندارد
-- **هیچ edge function** لازم ندارد
-- **بدون خطا** کار می‌کند چون lifecycle کاملاً توسط مرورگر مدیریت می‌شود
-- در Chrome، Edge، و Safari پشتیبانی می‌شود
-- **فارسی** پشتیبانی می‌شود (با تنظیم `lang = "fa-IR"`)
+### Problem 3 — Prompt Quality & Surgical Rules
+The generated prompt does NOT include the Surgical Execution Law constraints. Lovable AI receiving this prompt may make broad, sweeping changes. The system prompt must instruct the AI to embed surgical constraints in the output prompt.
 
-## تغییر یک فایل: `src/components/feedback/AnnotationOverlay.tsx`
+### Problem 4 — No Visual Feedback on Screenshot Detection
+The UI shows no indicator of how many screenshots were detected before generating. Users cannot verify the right context is being sent.
 
-### چه چیزی حذف می‌شود:
-- تمام import های `useScribe` و `CommitStrategy` از `@elevenlabs/react`
-- تمام لاجیک `scribe.connect()` / `scribe.disconnect()`
-- state های `voiceConnecting` و `disconnectIfActive`
-- فراخوانی `supabase.functions.invoke("elevenlabs-scribe-token")`
+## Solution
 
-### چه چیزی اضافه می‌شود:
-- import از `useSpeechRecognition` (که از قبل در پروژه وجود دارد)
-- تنظیم `lang: "fa-IR"` برای پشتیبانی فارسی
-- وقتی `isFinal` می‌شود، متن به `description` اضافه می‌شود
-- `interimText` (متن موقت در حین صحبت) نمایش داده می‌شود
-- دکمه میکروفون `start()` / `stop()` را صدا می‌زند
+### Change 1 — `supabase/functions/generate-fix-prompt/index.ts`
+Upgrade the edge function to:
+1. **Detect if screenshot URLs are present** → switch to `gpt-4o` with vision (multimodal) to actually analyze the screenshot image
+2. **Build a richer vision message** that sends `image_url` content blocks alongside text for screenshot URLs
+3. **Inject Surgical Execution Law** into the system prompt so the generated prompt always constrains Lovable AI to the specific file/component
+4. **Improve prompt output format** — add mandatory sections: `PROBLEM`, `FILE/COMPONENT`, `EXACT CHANGE`, `DO NOT TOUCH`
 
-### تغییر در `useSpeechRecognition.ts`:
-فقط یک خط: `lang` از `"en-US"` به `"fa-IR"` تغییر می‌کند تا فارسی به درستی شناسایی شود. البته چون این hook جاهای دیگری هم استفاده می‌شود، بهتر است `lang` را به عنوان پارامتر قابل تنظیم درآوریم.
+Updated system prompt addition:
+```
+MANDATORY: Every generated prompt MUST include these sections:
+- **PROBLEM:** one-line summary
+- **FILE/COMPONENT:** exact file path(s) if identifiable
+- **FIX:** surgical change instructions
+- **DO NOT TOUCH:** explicitly list everything else that must NOT change
+- **SURGICAL LAW:** "Change ONLY the section listed above. Do not modify any other UI, logic, database, or component."
+```
 
-## جزئیات فنی
+Vision support: when screenshots exist, build messages array with image_url content blocks for GPT-4o vision, so the AI actually sees what's in the screenshot.
 
+### Change 2 — `src/pages/Tasks.tsx` (Generate Fix section only)
+Improve screenshot extraction to also parse the structured `Screenshot: <url>` line format from feedback descriptions:
 ```typescript
-// در AnnotationOverlay.tsx:
-import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
+// Parse "Screenshot: <url>" lines explicitly  
+const screenshotLineRegex = /Screenshot:\s*(https?:\/\/[^\s]+)/gi;
+let match;
+while ((match = screenshotLineRegex.exec(selectedTask.description || "")) !== null) {
+  screenshots.push(match[1]);
+}
+// Also run generic image URL regex as fallback
+```
 
-const speech = useSpeechRecognition({
-  onError: (err) => toast.error(err),
-});
-
-// وقتی transcript نهایی می‌شود، به description اضافه می‌شود:
-// این کار با یک useEffect انجام می‌شود که transcripts را watch می‌کند
-useEffect(() => {
-  if (speech.transcripts.length > 0) {
-    const lastFinal = speech.transcripts[speech.transcripts.length - 1];
-    setDescription((prev) => (prev + " " + lastFinal.text).trim());
-  }
-}, [speech.transcripts]);
-
-// دکمه:
-<Button onClick={speech.isListening ? speech.stop : speech.start}>
-  {speech.isListening ? <MicOff className="animate-pulse" /> : <Mic />}
-</Button>
-
-// متن موقت:
-{speech.interimText && (
-  <div className="mt-1 text-xs italic text-muted-foreground animate-pulse">
-    🎙 {speech.interimText}
-  </div>
+Add a small visual indicator showing how many screenshots were detected:
+```tsx
+{detectedScreenshots > 0 && (
+  <span className="text-xs text-muted-foreground">
+    📎 {detectedScreenshots} screenshot(s) detected
+  </span>
 )}
 ```
 
-## برای پشتیبانی فارسی
+## Files Changed
+| File | Change |
+|------|--------|
+| `supabase/functions/generate-fix-prompt/index.ts` | Vision support + Surgical Law injection + better prompt format |
+| `src/pages/Tasks.tsx` | Better screenshot URL extraction + detection indicator |
 
-یک پارامتر `lang` به `useSpeechRecognition` اضافه می‌شود. در `AnnotationOverlay` از `"fa-IR"` استفاده می‌کنیم. این باعث می‌شود Google Voice هم فارسی و هم انگلیسی را تشخیص دهد.
-
-## خلاصه فایل‌های تغییریافته
-
-| فایل | تغییر |
-|------|-------|
-| `src/components/feedback/AnnotationOverlay.tsx` | حذف ElevenLabs، جایگزینی با `useSpeechRecognition` |
-| `src/hooks/useSpeechRecognition.ts` | اضافه کردن پارامتر `lang` (اختیاری، default: `"fa-IR"`) |
-
-هیچ migration دیتابیس، edge function، یا API key جدیدی لازم نیست.
+## What Does NOT Change
+- Task list UI, columns, Kanban board
+- Comment system
+- Audit log
+- Create task dialog
+- Delete/Complete/Reopen logic
+- Any other page or component
+- Database schema
