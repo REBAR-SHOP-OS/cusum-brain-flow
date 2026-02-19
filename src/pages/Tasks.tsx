@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   CheckSquare, Plus, RefreshCw, Copy, Check, Maximize2, Minus, Sparkles,
-  MessageSquare, Paperclip, Send, Trash2, ExternalLink,
+  MessageSquare, Paperclip, Send, Trash2, ExternalLink, X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -169,6 +169,9 @@ export default function Tasks() {
   const [newDueDate, setNewDueDate] = useState("");
   const [newPriority, setNewPriority] = useState("medium");
   const [creating, setCreating] = useState(false);
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [uploadingFiles, setUploadingFiles] = useState(false);
 
   // Full screen desc
   const [fullScreenOpen, setFullScreenOpen] = useState(false);
@@ -179,6 +182,7 @@ export default function Tasks() {
     supabase.auth.getUser().then(async ({ data }) => {
       const uid = data.user?.id ?? null;
       setCurrentUserId(uid);
+      setCurrentUserEmail(data.user?.email ?? null);
       if (uid) {
         const { data: profile } = await supabase
           .from("profiles")
@@ -189,6 +193,17 @@ export default function Tasks() {
       }
     });
   }, []);
+
+  const isInternal = (currentUserEmail ?? "").endsWith("@rebar.shop");
+
+  const handleFilePick = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    setPendingFiles(prev => [...prev, ...files]);
+    e.target.value = "";
+  };
+  const removeFile = (index: number) => {
+    setPendingFiles(prev => prev.filter((_, i) => i !== index));
+  };
 
   // ─── Data loading ─────────────────────────────────────
   const loadData = useCallback(async () => {
@@ -354,6 +369,25 @@ export default function Tasks() {
       if (error) throw error;
       await writeAudit(data.id, "create", null, null, null);
 
+      // Upload pending files
+      if (pendingFiles.length > 0) {
+        setUploadingFiles(true);
+        const urls: string[] = [];
+        for (const file of pendingFiles) {
+          const path = `task-attachments/${data.id}/${Date.now()}-${file.name}`;
+          const { error: upErr } = await supabase.storage.from("clearance-photos").upload(path, file);
+          if (!upErr) {
+            const { data: signed } = await supabase.storage.from("clearance-photos").createSignedUrl(path, 60 * 60 * 24 * 365);
+            if (signed?.signedUrl) urls.push(signed.signedUrl);
+          }
+        }
+        if (urls.length > 0) {
+          await supabase.from("tasks").update({ attachment_urls: urls } as any).eq("id", data.id);
+        }
+        setPendingFiles([]);
+        setUploadingFiles(false);
+      }
+
       // Send notification to the assigned employee
       if (createForEmployee.user_id) {
         await supabase.from("notifications").insert({
@@ -367,10 +401,34 @@ export default function Tasks() {
 
       toast.success("Task created");
       setCreateForEmployee(null);
-      setNewTitle(""); setNewDesc(""); setNewDueDate(""); setNewPriority("medium");
+      setNewTitle(""); setNewDesc(""); setNewDueDate(""); setNewPriority("medium"); setPendingFiles([]);
       loadData();
     } catch (err: any) { toast.error(err.message); }
-    finally { setCreating(false); }
+    finally { setCreating(false); setUploadingFiles(false); }
+  };
+
+  const handleDrawerUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!selectedTask) return;
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    e.target.value = "";
+    const existingUrls: string[] = (selectedTask as any).attachment_urls || [];
+    const newUrls: string[] = [];
+    for (const file of files) {
+      const path = `task-attachments/${selectedTask.id}/${Date.now()}-${file.name}`;
+      const { error: upErr } = await supabase.storage.from("clearance-photos").upload(path, file);
+      if (!upErr) {
+        const { data: signed } = await supabase.storage.from("clearance-photos").createSignedUrl(path, 60 * 60 * 24 * 365);
+        if (signed?.signedUrl) newUrls.push(signed.signedUrl);
+      }
+    }
+    if (newUrls.length > 0) {
+      const combined = [...existingUrls, ...newUrls];
+      await supabase.from("tasks").update({ attachment_urls: combined } as any).eq("id", selectedTask.id);
+      setSelectedTask(prev => prev ? { ...prev, attachment_urls: combined } as any : prev);
+      toast.success(`${newUrls.length} file(s) uploaded`);
+      loadData();
+    }
   };
 
   const copyToClipboard = async (text: string | null) => {
@@ -584,8 +642,30 @@ export default function Tasks() {
                 </Select>
               </div>
             </div>
-            <Button onClick={createTask} disabled={creating} className="w-full">
-              {creating ? "Creating..." : "Create Task"}
+            {isInternal && (
+              <div>
+                <Label className="text-xs">Attachments</Label>
+                <label className="mt-1 flex items-center gap-2 cursor-pointer rounded-md border border-dashed border-input px-3 py-2 text-xs text-muted-foreground hover:bg-muted/40 transition-colors">
+                  <Paperclip className="w-3.5 h-3.5 shrink-0" />
+                  {pendingFiles.length > 0 ? `${pendingFiles.length} file(s) selected` : "Click to attach files"}
+                  <input type="file" multiple className="sr-only" onChange={handleFilePick} />
+                </label>
+                {pendingFiles.length > 0 && (
+                  <div className="mt-1 space-y-1">
+                    {pendingFiles.map((f, i) => (
+                      <div key={i} className="flex items-center justify-between text-xs text-muted-foreground bg-muted/30 rounded px-2 py-1">
+                        <span className="truncate">{f.name}</span>
+                        <button onClick={() => removeFile(i)} type="button">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            <Button onClick={createTask} disabled={creating || uploadingFiles} className="w-full">
+              {creating || uploadingFiles ? "Creating..." : "Create Task"}
             </Button>
           </div>
         </DialogContent>
@@ -745,6 +825,12 @@ export default function Tasks() {
                 <h4 className="text-xs font-medium text-muted-foreground flex items-center gap-1 mb-2">
                   <Paperclip className="w-3 h-3" /> Attachments
                 </h4>
+                {isInternal && (
+                  <label className="flex items-center gap-1.5 text-xs text-primary cursor-pointer hover:underline mb-2">
+                    <Paperclip className="w-3 h-3" /> Upload file
+                    <input type="file" multiple className="sr-only" onChange={handleDrawerUpload} />
+                  </label>
+                )}
                 {(selectedTask as any)?.attachment_urls?.length > 0 ? (
                   <div className="space-y-1">
                     {((selectedTask as any).attachment_urls as string[]).map((url, i) => (
@@ -755,7 +841,15 @@ export default function Tasks() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-xs text-muted-foreground">No attachments</p>
+                  <>
+                    {isInternal && (
+                      <label className="flex items-center gap-1.5 text-xs text-primary cursor-pointer hover:underline mt-1">
+                        <Paperclip className="w-3 h-3" /> Upload file
+                        <input type="file" multiple className="sr-only" onChange={handleDrawerUpload} />
+                      </label>
+                    )}
+                    <p className="text-xs text-muted-foreground mt-1">No attachments</p>
+                  </>
                 )}
               </div>
             </div>
