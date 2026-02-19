@@ -2328,6 +2328,31 @@ Before executing any writes, you MUST first output a structured plan:
 5. Rollback plan
 Then execute the plan step by step.
 
+ERROR CLASSIFICATION (MANDATORY on any tool failure):
+When a tool returns an error, you MUST classify it before responding:
+
+| Class               | Meaning                                    | Action               |
+|---------------------|--------------------------------------------|----------------------|
+| TOOL_BUG            | Tool itself is broken (runtime crash)      | [STOP] + escalate    |
+| PERMISSION_MISSING  | RLS/auth blocks the operation              | [READ] pg_policies   |
+| CONTEXT_MISSING     | companyId, userId, or PK not available     | [STOP] + request it  |
+| USER_INPUT_MISSING  | Need specific ID, name, or description     | [STOP] + ask once    |
+| SYNTAX_ERROR        | Bad SQL or malformed query                 | Fix query + retry    |
+| DATA_NOT_FOUND      | Query returned 0 rows                      | Report finding       |
+
+Rules:
+- TOOL_BUG: STOP immediately. Say "This is a tool implementation bug. Retrying will not help. Escalation required." Do NOT retry.
+- If the same error repeats twice, classify as systemic. STOP and report: "Problem is systemic, not user input."
+- If you ask the same clarifying question twice, STOP and say: "I cannot proceed due to missing system capability, not missing user input."
+- NEVER explain an error without classifying it first.
+
+EXECUTION RECEIPTS (MANDATORY):
+You may NOT use the words "I found", "I checked", "I queried", "I verified", "I confirmed" unless you include the tool receipt in the same message:
+- Tool name
+- Input (query or parameters)
+- Output (rows returned, error message, or result)
+If no receipt exists, say: "I could not execute the tool."
+
 ---
 
 You are **Architect**, the AI Venture Builder & Cross-Platform Operations Commander for REBAR SHOP OS.
@@ -8356,6 +8381,19 @@ RULES:
       let lastToolCalls = toolCalls;
       const accumulatedTurns: any[] = [];
 
+      // Environment sanity check — log warnings for degraded state
+      if (agent === "empire") {
+        const envChecks = {
+          companyId_present: !!companyId && companyId !== "a0000000-0000-0000-0000-000000000001",
+          companyId_is_fallback: companyId === "a0000000-0000-0000-0000-000000000001",
+          userId_present: !!user?.id,
+          authHeader_present: !!authHeader,
+        };
+        if (!envChecks.companyId_present || envChecks.companyId_is_fallback) {
+          console.warn("Empire env pre-check: companyId missing or fallback", envChecks);
+        }
+      }
+
       while (toolLoopIterations < MAX_TOOL_ITERATIONS &&
              (seoToolResults.length > 0 || (!reply && (createdNotifications.length > 0 || emailResults.length > 0)))) {
 
@@ -8405,6 +8443,7 @@ RULES:
 
         const followUpData = await followUp.json();
         const followUpChoice = followUpData.choices?.[0];
+        console.log(`Multi-turn iter ${toolLoopIterations}: finish_reason=${followUpChoice?.finish_reason}, has_content=${!!followUpChoice?.message?.content}, has_tools=${!!followUpChoice?.message?.tool_calls?.length}`);
 
         // Extract text reply if present
         if (followUpChoice?.message?.content) {
@@ -8728,14 +8767,28 @@ RULES:
             }
           }
 
-          // Circuit breaker: stop after 2 consecutive rounds where ALL tools errored
+          // Circuit breaker with error classification
           const allFailed = seoToolResults.length > 0 && seoToolResults.every(r => r.result?.error);
           if (allFailed) {
             consecutiveToolErrors++;
             if (consecutiveToolErrors >= 2) {
-              reply = "[STOP]\n\nMy database queries failed twice consecutively. The errors were:\n" +
-                seoToolResults.map(r => `- ${r.result.error}`).join("\n") +
-                "\n\nPlease help me by rephrasing your request, providing specific table/record names, or describing what you need.";
+              // Classify the errors
+              const classifications = seoToolResults.map(r => {
+                const err = String(r.result?.error || "");
+                let errorClass = "UNKNOWN";
+                if (/not a function|undefined is not|TypeError|Cannot read prop/i.test(err)) errorClass = "TOOL_BUG";
+                else if (/permission|denied|RLS|row.level security/i.test(err)) errorClass = "PERMISSION_MISSING";
+                else if (/company_id|companyId|user_id|not found.*profile/i.test(err)) errorClass = "CONTEXT_MISSING";
+                else if (/syntax|parse|unexpected token|invalid input/i.test(err)) errorClass = "SYNTAX_ERROR";
+                else if (/no rows|0 rows|not found/i.test(err)) errorClass = "DATA_NOT_FOUND";
+                return `- **${errorClass}**: ${r.name} → ${err.substring(0, 200)}`;
+              });
+              reply = "[STOP]\n\n**Error Classification:**\n" +
+                classifications.join("\n") +
+                "\n\nThe problem is systemic, not user input. " +
+                (classifications.some(c => c.includes("TOOL_BUG"))
+                  ? "This is a tool implementation bug. Retrying will not help. Escalation required."
+                  : "Please provide specific IDs, table names, or rephrase your request.");
               break;
             }
           } else {
@@ -8746,7 +8799,25 @@ RULES:
           lastAssistantMsg = followUpChoice.message;
           lastToolCalls = newToolCalls;
         } else {
-          // No more tool calls, we're done
+          // No more tool calls — synthesize if reply still empty
+          if (!reply || reply.trim() === "") {
+            const successResults = seoToolResults.filter(r => !r.result?.error);
+            const errorResults = seoToolResults.filter(r => r.result?.error);
+            if (successResults.length > 0) {
+              const summaries = successResults.map(r => {
+                if (r.name === "db_read_query" && r.result?.rows) {
+                  const rowCount = r.result.row_count || (Array.isArray(r.result.rows) ? r.result.rows.length : 0);
+                  if (rowCount === 0) return "Query returned no results.";
+                  return `Query returned ${rowCount} row(s):\n\`\`\`json\n${JSON.stringify(r.result.rows, null, 2).substring(0, 2000)}\n\`\`\``;
+                }
+                return r.result?.message || JSON.stringify(r.result).substring(0, 500);
+              });
+              reply = "[READ]\n\nHere are the results:\n\n" + summaries.join("\n\n");
+              if (errorResults.length > 0) {
+                reply += "\n\nSome operations had errors:\n" + errorResults.map(r => `- ${r.result.error}`).join("\n");
+              }
+            }
+          }
           break;
         }
 
