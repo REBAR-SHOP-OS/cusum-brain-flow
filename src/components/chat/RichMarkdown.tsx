@@ -62,7 +62,7 @@ function isRTL(text: string): boolean {
 export function RichMarkdown({ content, className, onRegenerateImage, onActionItem, onTableRowAction, dismissedItems, rescheduledItems }: RichMarkdownProps) {
   const rtl = isRTL(content);
   return (
-    <div className={cn("text-sm leading-relaxed break-words overflow-hidden max-w-full min-w-0 [overflow-wrap:anywhere]", rtl && "text-right", className)} dir={rtl ? "rtl" : undefined}>
+    <div className={cn("text-sm leading-relaxed break-words max-w-full min-w-0 [overflow-wrap:anywhere]", rtl && "text-right", className)} dir={rtl ? "rtl" : undefined}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
@@ -216,8 +216,8 @@ export function RichMarkdown({ content, className, onRegenerateImage, onActionIt
             const isLovableCommand = text.trimStart().startsWith("📋 Lovable Command");
             if (isBlock) {
               return (
-                <div className="my-3 rounded-lg overflow-hidden border border-border/50">
-                  <div className="bg-muted/80 px-3 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground font-bold border-b border-border/50 flex items-center justify-between">
+                <div className="my-3 rounded-lg border border-border/60 overflow-x-auto">
+                  <div className="bg-slate-100 dark:bg-slate-800 px-3 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground font-bold border-b border-border/50 flex items-center justify-between sticky left-0">
                     <span>
                       {isLovableCommand
                         ? "📋 Lovable Command"
@@ -231,8 +231,8 @@ export function RichMarkdown({ content, className, onRegenerateImage, onActionIt
                       Copy
                     </button>
                   </div>
-                  <pre className="bg-muted/40 p-3 overflow-x-auto max-w-full scrollbar-thin">
-                    <code className="text-xs font-mono text-foreground/90 whitespace-pre [overflow-wrap:normal]">{children}</code>
+                  <pre className="bg-white dark:bg-slate-900 p-3 overflow-x-auto min-w-0 scrollbar-thin">
+                    <code className="text-xs font-mono text-foreground/90 whitespace-pre [overflow-wrap:normal] block min-w-max">{children}</code>
                   </pre>
                 </div>
               );
