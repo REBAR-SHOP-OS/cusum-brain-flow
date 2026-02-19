@@ -54,6 +54,7 @@ export const PIPELINE_STAGES = [
   { id: "temp_ir_vam", label: "Temp: IR/VAM", color: "bg-fuchsia-500" },
   { id: "migration_others", label: "Migration-Others", color: "bg-slate-500" },
   { id: "dreamers", label: "Dreamers", color: "bg-sky-400" },
+  { id: "archived_orphan", label: "Archived / Orphan", color: "bg-zinc-700" },
 ];
 
 function getDateCutoff(rangeId: string): Date | null {
@@ -479,10 +480,12 @@ export default function Pipeline() {
                 {isScanningRfq ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-2" /> : <Mail className="w-3.5 h-3.5 mr-2" />}
                 Scan RFQ
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleOdooSync} disabled={isSyncingOdoo}>
-                {isSyncingOdoo ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-2" /> : <RefreshCw className="w-3.5 h-3.5 mr-2" />}
-                Odoo Sync
-              </DropdownMenuItem>
+              {isAdmin && (
+                <DropdownMenuItem onClick={handleOdooSync} disabled={isSyncingOdoo}>
+                  {isSyncingOdoo ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-2" /> : <RefreshCw className="w-3.5 h-3.5 mr-2" />}
+                  Odoo Sync
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem onClick={() => navigate("/prospecting")}>
                 <Pickaxe className="w-3.5 h-3.5 mr-2" />
                 Prospect
