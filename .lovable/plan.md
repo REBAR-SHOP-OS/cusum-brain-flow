@@ -1,155 +1,135 @@
 
 
-# Upgrade: Architect Diagnostic Intelligence System
+# Upgrade: Frontend Task Intelligence + Remaining .catch() Bug Fixes
 
 ## Summary
 
-Upgrade the Empire/Architect agent in `supabase/functions/ai-agent/index.ts` with three core capabilities: error classification taxonomy, execution receipts enforcement, and environment pre-checks. These changes go into the system prompt and the tool execution loop.
+Two categories of changes in `supabase/functions/ai-agent/index.ts`:
+
+1. **System prompt upgrade** -- Add Task Type Classification, UI inspection protocol, and structured patch template requirements so the agent stops collapsing into "context incomplete" on frontend tasks.
+2. **Bug fix** -- Replace remaining `.catch(() => {})` calls on Supabase `.insert()` with `try/catch` blocks to prevent the same runtime crash that broke `resolve_task`.
 
 ---
 
-## Change 1: Error Classification + "Stop Asking Me" Rule (System Prompt)
+## Change 1: Task Type Classification Block (System Prompt)
 
-**File:** `supabase/functions/ai-agent/index.ts` (empire system prompt, ~line 2297-2329)
+**File:** `supabase/functions/ai-agent/index.ts` (~line 2329, after PLANNING PHASE, before ERROR CLASSIFICATION)
 
-Add an **Error Classification Taxonomy** section after the existing EXECUTION DISCIPLINE block. This teaches the agent to classify errors instead of narrating them, and to stop after 2 identical clarification requests.
-
-New prompt section to insert after the PLANNING PHASE block (after line 2329):
+Insert a new mandatory classification step that forces the agent to categorize every task before acting:
 
 ```text
-ERROR CLASSIFICATION (MANDATORY on any tool failure):
-When a tool returns an error, you MUST classify it before responding:
+TASK TYPE CLASSIFICATION (MANDATORY before any tool call):
+Before calling ANY tool, classify the task:
 
-| Class               | Meaning                                    | Action               |
-|---------------------|--------------------------------------------|----------------------|
-| TOOL_BUG            | Tool itself is broken (runtime crash)      | [STOP] + escalate    |
-| PERMISSION_MISSING  | RLS/auth blocks the operation              | [READ] pg_policies   |
-| CONTEXT_MISSING     | companyId, userId, or PK not available     | [STOP] + request it  |
-| USER_INPUT_MISSING  | Need specific ID, name, or description     | [STOP] + ask once    |
-| SYNTAX_ERROR        | Bad SQL or malformed query                 | Fix query + retry    |
-| DATA_NOT_FOUND      | Query returned 0 rows                      | Report finding       |
+| Type             | Scope                         | Tools to Use                  |
+|------------------|-------------------------------|-------------------------------|
+| UI_LAYOUT        | Page structure, grid, spacing | generate_patch                |
+| UI_STYLING       | CSS, responsive, images       | generate_patch                |
+| DATA_PERMISSION  | RLS, auth, access denied      | db_read_query → db_write_fix  |
+| DATABASE_SCHEMA  | Missing columns, tables       | db_read_query → db_write_fix  |
+| ERP_DATA         | Odoo/QB records, sync issues  | odoo_write, db_write_fix      |
+| TOOLING          | Tool bugs, integration errors | [STOP] + escalate             |
+
+Output format (required in first response):
+TASK_TYPE: <type>
+SCOPE: <page or module>
+TARGET: <specific element>
+DEVICE: <all | mobile | desktop> (if UI)
 
 Rules:
-- TOOL_BUG: STOP immediately. Say "This is a tool implementation bug. Retrying will not help. Escalation required." Do NOT retry.
-- If the same error repeats twice, classify as systemic. STOP and report: "Problem is systemic, not user input."
-- If you ask the same clarifying question twice, STOP and say: "I cannot proceed due to missing system capability, not missing user input."
-- NEVER explain an error without classifying it first.
-
-EXECUTION RECEIPTS (MANDATORY):
-You may NOT use the words "I found", "I checked", "I queried", "I verified", "I confirmed" unless you include the tool receipt in the same message:
-- Tool name
-- Input (query or parameters)
-- Output (rows returned, error message, or result)
-If no receipt exists, say: "I could not execute the tool."
+- If TASK_TYPE is UI_LAYOUT or UI_STYLING, do NOT call db_read_query or ERP tools.
+- If TASK_TYPE is ERP_DATA, do NOT call generate_patch.
+- Misclassification wastes a tool turn. Classify correctly the first time.
 ```
 
 ---
 
-## Change 2: Environment Pre-Check Before Writes (Tool Loop)
+## Change 2: UI Inspection Protocol (System Prompt)
 
-**File:** `supabase/functions/ai-agent/index.ts` (~line 8359, before the while loop starts)
+**File:** `supabase/functions/ai-agent/index.ts` (~line 2489, extend FALLBACK PROTOCOL section)
 
-Add a pre-check that validates critical context before the multi-turn loop begins. If `companyId` is the fallback UUID, log a warning. This prevents silent failures where writes succeed but target the wrong tenant.
+Add mandatory inspection-before-patching rules after the existing Step 3:
 
-```javascript
-// Environment sanity check — log warnings for degraded state
-if (agent === "empire") {
-  const envChecks = {
-    companyId_present: !!companyId && companyId !== "a0000000-0000-0000-0000-000000000001",
-    companyId_is_fallback: companyId === "a0000000-0000-0000-0000-000000000001",
-    userId_present: !!user?.id,
-    authHeader_present: !!authHeader,
-  };
-  if (!envChecks.companyId_present || envChecks.companyId_is_fallback) {
-    console.warn("Empire env pre-check: companyId missing or fallback", envChecks);
-  }
-}
+```text
+- **Step 4 (UI tasks only):** Before generating a patch, state what you expect to find:
+  * Current HTML structure (img tags, containers, classes)
+  * Current CSS properties (width, max-width, object-fit, srcset)
+  * Breakpoint coverage (@media queries)
+  Never patch blind. If you cannot inspect the component, say what file you need.
+
+- **Step 5:** Use structured patch format:
+  * file: exact path
+  * change_type: css | jsx | html
+  * before_snippet: what exists now (or "unknown — needs inspection")
+  * after_snippet: proposed change
+  * reason: why this fixes the issue
+  If you cannot fill file + after_snippet, STOP and request the missing info.
 ```
 
 ---
 
-## Change 3: Enhanced Circuit Breaker with Error Classification (Tool Loop)
+## Change 3: Tool Failure vs. Clarity Failure Rule (System Prompt)
 
-**File:** `supabase/functions/ai-agent/index.ts` (~lines 8731-8743)
+**File:** `supabase/functions/ai-agent/index.ts` (~line 2347, add after existing ERROR CLASSIFICATION rules)
 
-Upgrade the existing circuit breaker to include error classification in its stop message. Currently it just says "queries failed twice." The upgrade classifies the errors before stopping.
+```text
+TOOL FAILURE vs. CLARITY FAILURE (MANDATORY distinction):
+If a task was clearly understood AND a tool failed:
+- Do NOT ask for clarification.
+- Instead: classify the failure source (TOOL_BUG, PERMISSION_MISSING, etc.)
+- Provide the exact missing dependency (file path, repo access, build environment).
+- STOP.
 
-Replace lines 8731-8743 with:
-
-```javascript
-// Circuit breaker with error classification
-const allFailed = seoToolResults.length > 0 && seoToolResults.every(r => r.result?.error);
-if (allFailed) {
-  consecutiveToolErrors++;
-  if (consecutiveToolErrors >= 2) {
-    // Classify the errors
-    const classifications = seoToolResults.map(r => {
-      const err = String(r.result?.error || "");
-      let errorClass = "UNKNOWN";
-      if (/not a function|undefined is not|TypeError|Cannot read prop/i.test(err)) errorClass = "TOOL_BUG";
-      else if (/permission|denied|RLS|row.level security/i.test(err)) errorClass = "PERMISSION_MISSING";
-      else if (/company_id|companyId|user_id|not found.*profile/i.test(err)) errorClass = "CONTEXT_MISSING";
-      else if (/syntax|parse|unexpected token|invalid input/i.test(err)) errorClass = "SYNTAX_ERROR";
-      else if (/no rows|0 rows|not found/i.test(err)) errorClass = "DATA_NOT_FOUND";
-      return `- **${errorClass}**: ${r.name} → ${err.substring(0, 200)}`;
-    });
-    reply = "[STOP]\n\n**Error Classification:**\n" +
-      classifications.join("\n") +
-      "\n\nThe problem is systemic, not user input. " +
-      (classifications.some(c => c.includes("TOOL_BUG"))
-        ? "This is a tool implementation bug. Retrying will not help. Escalation required."
-        : "Please provide specific IDs, table names, or rephrase your request.");
-    break;
-  }
-} else {
-  consecutiveToolErrors = 0;
-}
+The phrase "context incomplete" is BANNED unless you can prove the user's request was ambiguous.
+If the user said what page, what element, and what change — context is complete.
+A tool failure is NOT incomplete context.
 ```
 
 ---
 
-## Change 4: Diagnostic Logging on Follow-Up Responses (Tool Loop)
+## Change 4: Fix Remaining .catch() Bugs (Runtime)
 
-**File:** `supabase/functions/ai-agent/index.ts` (~line 8406, after `followUpData` is parsed)
+**File:** `supabase/functions/ai-agent/index.ts`
 
-Add a diagnostic log line so empty-reply scenarios are debuggable:
+There are 8 remaining `.catch(() => {})` calls on `svcClient.from(...).insert(...)` that will crash at runtime (same bug as resolve_task). All are best-effort activity logging -- wrap each in try/catch.
 
+Lines to fix (all in the multi-turn tool loop handlers):
+
+| Line | Handler | Current | Fix |
+|------|---------|---------|-----|
+| 8048 | create_fix_ticket (1st pass) | `.catch(() => {})` | `try/catch` |
+| 8079 | update_fix_ticket (1st pass) | `.catch(() => {})` | `try/catch` |
+| 8182 | diagnose_from_screenshot | `.catch(() => {})` | `try/catch` |
+| 8304 | db_write_fix (1st pass) | `.catch(() => {})` | `try/catch` |
+| 8610 | create_fix_ticket (multi-turn) | `.catch(() => {})` | `try/catch` |
+| 8635 | update_fix_ticket (multi-turn) | `.catch(() => {})` | `try/catch` |
+| 8753 | db_write_fix (multi-turn) | `.catch(() => {})` | `try/catch` |
+
+Each replacement pattern:
+
+Before:
 ```javascript
-const followUpData = await followUp.json();
-const followUpChoice = followUpData.choices?.[0];
-console.log(`Multi-turn iter ${toolLoopIterations}: finish_reason=${followUpChoice?.finish_reason}, has_content=${!!followUpChoice?.message?.content}, has_tools=${!!followUpChoice?.message?.tool_calls?.length}`);
+await svcClient.from("activity_events").insert({ ... }).catch(() => {});
 ```
+
+After:
+```javascript
+try { await svcClient.from("activity_events").insert({ ... }); } catch (_) { /* best-effort logging */ }
+```
+
+Note: Line 4388 (`.then().catch()`) and line 8439 (`.catch()` on `followUp.text()`) are safe -- those are on fetch Promises, not Supabase query builders.
 
 ---
 
-## Change 5: Synthesize Reply from Tool Results When Model Returns Empty (Tool Loop)
+## Change 5: Smarter Empty-Reply Fallback for Patch Results
 
-**File:** `supabase/functions/ai-agent/index.ts` (~line 8748-8750, the `else` branch for "no more tool calls")
+**File:** `supabase/functions/ai-agent/index.ts` (~line 8807, in the reply synthesis block)
 
-When the model returns no content and no tool calls but we have tool results, synthesize a response instead of silently breaking:
+Currently the synthesis block only handles `db_read_query`. Add handling for `generate_patch` results so successful patches don't get swallowed by the generic "context incomplete" fallback:
 
 ```javascript
-} else {
-  // No more tool calls — synthesize if reply still empty
-  if (!reply || reply.trim() === "") {
-    const successResults = seoToolResults.filter(r => !r.result?.error);
-    const errorResults = seoToolResults.filter(r => r.result?.error);
-    if (successResults.length > 0) {
-      const summaries = successResults.map(r => {
-        if (r.name === "db_read_query" && r.result?.rows) {
-          const rowCount = r.result.row_count || (Array.isArray(r.result.rows) ? r.result.rows.length : 0);
-          if (rowCount === 0) return "Query returned no results.";
-          return `Query returned ${rowCount} row(s):\n\`\`\`json\n${JSON.stringify(r.result.rows, null, 2).substring(0, 2000)}\n\`\`\``;
-        }
-        return r.result?.message || JSON.stringify(r.result).substring(0, 500);
-      });
-      reply = "[READ]\n\nHere are the results:\n\n" + summaries.join("\n\n");
-      if (errorResults.length > 0) {
-        reply += "\n\nSome operations had errors:\n" + errorResults.map(r => `- ${r.result.error}`).join("\n");
-      }
-    }
-  }
-  break;
+if (r.name === "generate_patch" && r.result?.success) {
+  return `Patch created for \`${r.result.artifact?.file || "unknown"}\`:\n- Patch ID: ${r.result.patch_id}\n- Status: Awaiting review\n- Description: ${r.result.message}`;
 }
 ```
 
@@ -157,20 +137,26 @@ When the model returns no content and no tool calls but we have tool results, sy
 
 ## Technical Summary
 
-| # | Location | Lines | Change |
-|---|----------|-------|--------|
-| 1 | Empire system prompt | ~2329 | Add Error Classification Taxonomy + Receipt enforcement |
-| 2 | Multi-turn loop setup | ~8359 | Add environment pre-check logging |
-| 3 | Circuit breaker | 8731-8743 | Classify errors before stopping |
-| 4 | Follow-up response | ~8406 | Add diagnostic logging |
-| 5 | No-tool-calls branch | 8748-8750 | Synthesize reply from tool results |
+| # | Type | Location | Change |
+|---|------|----------|--------|
+| 1 | Prompt | ~line 2329 | Task Type Classification block |
+| 2 | Prompt | ~line 2489 | UI Inspection Protocol (steps 4-5) |
+| 3 | Prompt | ~line 2347 | Tool Failure vs Clarity Failure rule |
+| 4 | Bug fix | 7 lines | Replace .catch() with try/catch on activity_events inserts |
+| 5 | Logic | ~line 8807 | Add generate_patch to reply synthesis |
 
 ## What This Fixes
 
-- Agent classifies errors as TOOL_BUG/PERMISSION/CONTEXT/SYNTAX/DATA instead of narrating
-- TOOL_BUG errors trigger immediate STOP (no retries, no speculation)
-- Duplicate clarification questions are blocked ("stop asking me" rule)
-- Empty model responses synthesize tool output instead of showing "blocked" banner
-- Environment pre-checks catch missing companyId before wasting tool calls
-- All changes are in one file with no schema or dependency changes
+- Agent classifies UI tasks correctly and stops calling DB/ERP tools for CSS issues
+- Agent inspects components before patching (no more "blind patches")
+- "Context incomplete" is banned when the task was clearly stated -- tool failures are classified instead
+- 7 remaining `.catch()` runtime bugs are fixed (same class as the resolve_task crash)
+- Successful `generate_patch` results are surfaced in the reply instead of being swallowed
+
+## No Changes To
+
+- Database schema
+- Dependencies
+- Frontend code
+- Other edge functions
 
