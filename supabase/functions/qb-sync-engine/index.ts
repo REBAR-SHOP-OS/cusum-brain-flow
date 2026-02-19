@@ -974,32 +974,39 @@ async function handleSyncBankActivity(svc: SvcClient, companyId: string) {
 
   let synced = 0;
 
+  // Fix 1: Fetch ALL bank account balances in one Query API call (Account/{id} returns 400)
+  const balanceMap = new Map<string, number>();
+  try {
+    const queryResult = await qbFetch(
+      config,
+      `query?query=${encodeURIComponent("SELECT Id, Name, CurrentBalance FROM Account WHERE AccountType = 'Bank' AND Active = true")}`,
+      ctx,
+    ) as Record<string, unknown>;
+    const queryResponse = queryResult?.QueryResponse as Record<string, unknown> | undefined;
+    const accounts = (queryResponse?.Account as Array<Record<string, unknown>>) || [];
+    for (const acct of accounts) {
+      if (acct.Id && acct.CurrentBalance != null) {
+        balanceMap.set(String(acct.Id), acct.CurrentBalance as number);
+      }
+    }
+    console.log(`[sync-bank-activity] Fetched live balances for ${balanceMap.size} bank accounts via Query API`);
+  } catch (e) {
+    console.warn(`[sync-bank-activity] Query API balance fetch failed, will use cached balances:`, e);
+  }
+
   for (const account of bankAccounts) {
     try {
       let unreconciledCount = 0;
       let reconciledThroughDate: string | null = null;
-      let liveLedgerBalance = account.current_balance;
 
-      // Fix 1: Fetch live balance from QB API instead of cached table
-      try {
-        const liveAccount = await qbFetch(
-          config,
-          `Account/${account.qb_id}`,
-          ctx,
-        ) as Record<string, unknown>;
-        const acct = liveAccount?.Account as Record<string, unknown> | undefined;
-        if (acct?.CurrentBalance != null) {
-          liveLedgerBalance = acct.CurrentBalance as number;
-        }
-      } catch (e) {
-        console.warn(`[sync-bank-activity] Live account fetch failed for ${account.name}, using cached:`, e);
-      }
+      // Use live balance from Query API, fallback to cached
+      const liveLedgerBalance = balanceMap.get(account.qb_id) ?? account.current_balance;
 
       // Query unreconciled (uncleared) transactions count via TransactionList report
       try {
         const unreconReport = await qbFetch(
           config,
-          `reports/TransactionList?cleared=Uncleared&account=${encodeURIComponent(account.name)}&columns=tx_date,txn_type,doc_num,name,memo,subt_nat_amount`,
+          `reports/TransactionListByAccount?account=${account.qb_id}&cleared=Uncleared&columns=tx_date,txn_type,doc_num,name,memo,subt_nat_amount`,
           ctx,
         ) as Record<string, unknown>;
 
@@ -1014,7 +1021,7 @@ async function handleSyncBankActivity(svc: SvcClient, companyId: string) {
       try {
         const reconReport = await qbFetch(
           config,
-          `reports/TransactionList?cleared=Reconciled&account=${encodeURIComponent(account.name)}&sort_order=descend&sort_by=tx_date&columns=tx_date`,
+          `reports/TransactionListByAccount?account=${account.qb_id}&cleared=Reconciled&sort_order=descend&sort_by=tx_date&columns=tx_date`,
           ctx,
         ) as Record<string, unknown>;
 
