@@ -1,55 +1,74 @@
 
-# Fix: `companyId is not defined` — Declare Missing Variable
+
+# Fix: AI App Builder — Semicolon Stripping + Error Circuit Breaker
 
 ## Problem
 
-The `companyId` variable is used throughout the `ai-agent` edge function (in tool handlers like `generate_patch`, `resolve_task`, context fetching, and database queries) but is **never declared**. This causes a fatal `ReferenceError` crash whenever any of those code paths execute.
+The Architect agent's `db_read_query` tool fails when queries include trailing semicolons (standard LLM habit). The `execute_readonly_query` DB function wraps user SQL in a subquery like `FROM (<user_sql>) t`, so a trailing `;` becomes `FROM (SELECT ...;) t` which is a syntax error. The agent then loops up to 5 times trying to "fix" the syntax, narrating endlessly instead of stopping.
 
-## Root Cause
+## Changes (1 file, 4 edits)
 
-At line 4834, the profile query only selects `full_name` and `email`:
+### 1. Strip trailing semicolons in first-pass handler (line 8167)
 
+Change:
+```javascript
+const query = (args.query || "").trim();
 ```
-.select("full_name, email")   // company_id NOT included
+To:
+```javascript
+const query = (args.query || "").trim().replace(/;+$/, "");
 ```
 
-No `companyId` variable is ever created from this result, so every reference to it crashes.
+### 2. Strip trailing semicolons in multi-turn handler (line 8615)
 
-## Changes (1 file, 3 edits)
+Same change at the second handler location.
 
-### Edit 1: Add `company_id` to profile select and declare `companyId` (lines 4832-4837)
+### 3. Add consecutive error circuit breaker (lines 8349-8356)
 
-Replace the profile fetch block to include `company_id` and create the variable:
+Add a `consecutiveToolErrors` counter before the while loop. After each iteration's tool results are collected, check if all results were errors. If 2+ consecutive rounds fail, inject a `[STOP]` message and break out of the loop.
 
 ```javascript
-const { data: userProfile } = await svcClient
-  .from("profiles")
-  .select("full_name, email, company_id")
-  .eq("user_id", user.id)
-  .maybeSingle();
-const companyId = userProfile?.company_id || "a0000000-0000-0000-0000-000000000001";
-const userFullName = userProfile?.full_name || user.email?.split("@")[0] || "there";
+let consecutiveToolErrors = 0;
 ```
 
-The fallback UUID matches the default company assigned by the `handle_new_user` trigger.
-
-### Edit 2: Add `companyId` parameter to `fetchContext` signature (line 2874)
+After tool results are processed in each iteration (around line 8415 where `seoToolResults` is reset), check:
 
 ```javascript
-async function fetchContext(supabase, agent, userId, userEmail, userRolesList, svcClient, companyId)
+const allFailed = seoToolResults.length > 0 && seoToolResults.every(r => r.result?.error);
+if (allFailed) {
+  consecutiveToolErrors++;
+  if (consecutiveToolErrors >= 2) {
+    reply = "[STOP]\n\nMy database queries failed twice consecutively. The errors were:\n" +
+      seoToolResults.map(r => `- ${r.result.error}`).join("\n") +
+      "\n\nPlease help me by rephrasing your request, providing specific table/record names, or describing what you need.";
+    break;
+  }
+} else {
+  consecutiveToolErrors = 0;
+}
 ```
 
-This allows company-scoped queries inside `fetchContext` to use the variable.
+### 4. Update tool description to warn about semicolons (line 6689)
 
-### Edit 3: Pass `companyId` in the `fetchContext` call (line 4877)
+Change the `db_read_query` description to include "Do NOT include trailing semicolons":
 
-```javascript
-const dbContext = await fetchContext(supabase, agent, user.id, userEmail, roles, svcClient, companyId);
 ```
+"Run a read-only SQL query against the database. Only SELECT/WITH queries allowed. Do NOT include trailing semicolons. Returns up to 50 rows."
+```
+
+## Technical Summary
+
+| Location | Lines | Change |
+|----------|-------|--------|
+| First-pass `db_read_query` handler | 8167 | Add `.replace(/;+$/, "")` |
+| Multi-turn `db_read_query` handler | 8615 | Add `.replace(/;+$/, "")` |
+| Multi-turn loop setup | 8349-8356 | Add `consecutiveToolErrors` counter + circuit breaker |
+| Tool definition | 6689 | Add semicolon warning to description |
 
 ## What This Fixes
 
-- `generate_patch` will work (needs `company_id` for the `code_patches` table insert)
-- `resolve_task` will work (no more crash before reaching task resolution)
-- All company-scoped context fetching (accounting, orders, ventures, deliveries, etc.) will return correct data
-- The Architect agent will no longer be blocked by this error
+- SQL queries with trailing semicolons execute correctly instead of erroring
+- Agent stops after 2 consecutive tool failures with a `[STOP]` marker (triggers amber "blocked" banner in UI)
+- No more endless narration loops when tools fail
+- Tool description guides the LLM away from semicolons proactively
+
