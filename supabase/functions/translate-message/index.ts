@@ -67,8 +67,8 @@ serve(async (req) => {
 
     // GPT: strict JSON translation output
     const result = await callAI({
-      provider: "gpt",
-      model: "gpt-4o-mini",
+      provider: "gemini",
+      model: "gemini-2.5-flash-lite",
       messages: [
         {
           role: "system",
