@@ -1,125 +1,70 @@
 
-# Final Execution Prompt — Add Delete Button for Draft Packing Slips on /deliveries
+# Fix Code Block Display in Empire Builder Chat — YAML Text Cut Off
 
 ## Scope Lock
 
-- File: `src/pages/Deliveries.tsx` ONLY
-- Section: The Packing Slip card (`TabsContent value="slips"`) — lines 325–366
-- Component: The `Card` element rendered inside `packingSlips.map()`
-- Do NOT touch: DeliveryList, DeliveryCard, StopCard, StatCard, Detail Panel, Tabs structure, navigation, layout, styles, or any other logic
+- File: `src/components/chat/RichMarkdown.tsx` ONLY
+- Section: The `code` component renderer (lines 213–232) and the outer wrapper div (line 65)
+- Do NOT touch: any other component, page, styling, or logic
 
-## Problem Description
+## Problem
 
-In the "Slips" tab on the `/deliveries` page, each packing slip card shows a `Badge` with its status (e.g., "draft", "delivered", "archived"). There is currently no way to delete a packing slip that is in **draft** status. A small Delete button must appear next to the status badge — only when `slip.status === "draft"`.
+In the `/empire` chat, the AI's response contains a `YAML` code block. The text inside it is cut off at the right edge because:
 
-## Minimal Fix Steps
+1. The outer `RichMarkdown` wrapper has `[overflow-wrap:anywhere]` — this CSS rule bleeds into `<pre><code>` blocks and forces code to word-wrap at **any** character, breaking structured content at random points.
+2. The `<pre>` has `overflow-x-auto` but the outer container's `overflow-hidden` suppresses the horizontal scrollbar.
+3. The `<code>` tag has no explicit `whitespace` or `overflow-wrap` override, so it inherits the bad behavior.
 
-**Step 1 — Add `Trash2` to the lucide-react import** (line 17–31):
+## Fix Steps
 
+### Step 1 — Add `whitespace-pre` and override `overflow-wrap` on the `<code>` tag (line 222)
+
+Change:
 ```tsx
-import { 
-  Truck, MapPin, Clock, CheckCircle2, AlertTriangle,
-  Loader2, Plus, Calendar, User, ArrowLeft,
-  Camera, FileWarning, FileText, Trash2   // <-- add Trash2
-} from "lucide-react";
+<code className="text-xs font-mono text-foreground/90">{children}</code>
 ```
 
-**Step 2 — Add `deletingSlipId` state** (after line 93):
-
+To:
 ```tsx
-const [deletingSlipId, setDeletingSlipId] = useState<string | null>(null);
+<code className="text-xs font-mono text-foreground/90 whitespace-pre [overflow-wrap:normal]">{children}</code>
 ```
 
-**Step 3 — Add `deleteSlip` function** (after the `refreshStops` function, around line 185):
+This ensures:
+- `whitespace-pre` — preserves line breaks and prevents wrapping inside code blocks
+- `[overflow-wrap:normal]` — overrides the parent's `[overflow-wrap:anywhere]` so long lines scroll instead of breaking at every character
 
+### Step 2 — Fix the `<pre>` to allow horizontal scrolling (line 221)
+
+Change:
 ```tsx
-const deleteSlip = async (slipId: string, e: React.MouseEvent) => {
-  e.stopPropagation(); // prevent card click / opening the slip
-  setDeletingSlipId(slipId);
-  const { error } = await supabase
-    .from("packing_slips" as any)
-    .delete()
-    .eq("id", slipId)
-    .eq("status", "draft"); // safety: only draft rows
-  setDeletingSlipId(null);
-  if (error) {
-    toast.error("Failed to delete: " + error.message);
-  } else {
-    queryClient.invalidateQueries({ queryKey: ["packing-slips"] });
-  }
-};
+<pre className="bg-muted/40 p-3 overflow-x-auto max-w-full">
 ```
 
-**Step 4 — Modify the packing slip Card header** (lines 344–357):
-
-Change the current `<div className="flex items-center justify-between mb-1">` to include a delete button next to the Badge, **only when status is draft**:
-
+To:
 ```tsx
-<div className="flex items-center justify-between mb-1">
-  <span className="font-medium flex items-center gap-2">
-    <FileText className="w-4 h-4" />
-    {slip.slip_number}
-  </span>
-  <div className="flex items-center gap-1.5">
-    <Badge className={...existing className logic...}>
-      {slip.status}
-    </Badge>
-    {slip.status === "draft" && (
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-6 w-6 text-destructive hover:text-destructive hover:bg-destructive/10"
-        onClick={(e) => deleteSlip(slip.id, e)}
-        disabled={deletingSlipId === slip.id}
-      >
-        {deletingSlipId === slip.id
-          ? <Loader2 className="w-3 h-3 animate-spin" />
-          : <Trash2 className="w-3 h-3" />
-        }
-      </Button>
-    )}
-  </div>
-</div>
+<pre className="bg-muted/40 p-3 overflow-x-auto max-w-full scrollbar-thin">
 ```
 
-**Step 5 — Add toast import check**
+And wrap the entire code block outer `<div>` to allow its children to scroll by using `overflow-hidden` only for the border-radius (already present), but ensure the pre doesn't get clipped. The `overflow-hidden` on the code block's wrapper div (line 217) is fine for border-radius but we must ensure the `<pre>` scroll is not suppressed.
 
-`toast` from `sonner` must be imported. Check line 1–32 of the file. If not already imported, add:
-```tsx
-import { toast } from "sonner";
-```
+### Step 3 — Ensure the label header text is correct
 
-## Acceptance Criteria
+The label currently reads `codeClassName?.replace("language-", "") || "code"` at line 219. For YAML blocks sent as ` ```yaml `, this correctly outputs "yaml". No change needed here.
 
-- [ ] Draft slips show a small red Trash2 icon button next to the "draft" badge
-- [ ] Non-draft slips (delivered, archived) show NO delete button
-- [ ] Clicking Delete does NOT open the packing slip overlay
-- [ ] After deletion, the slip disappears from the list immediately (via query invalidation)
-- [ ] While deletion is in progress, a spinner replaces the trash icon and button is disabled
-- [ ] If deletion fails, a toast error is shown
+## Result
 
-## Testing Steps
-
-1. Navigate to `/deliveries` → click "Slips" tab
-2. Confirm draft slips have a red trash icon next to their status badge
-3. Confirm delivered/archived slips have no delete button
-4. Click trash icon on a draft slip → confirm it disappears without opening the slip overlay
-5. Verify no other part of the page changed (tabs, delivery list, detail panel, header)
+| Before | After |
+|---|---|
+| YAML lines cut off at right edge | YAML block scrolls horizontally, all text visible |
+| `overflow-wrap:anywhere` breaks code at random characters | `overflow-wrap:normal` preserves code structure |
+| Lines like `unknowns: [The exact file path...]` are truncated | Full line visible with horizontal scroll |
 
 ## Files Changed
 
-| File | Change |
-|---|---|
-| `src/pages/Deliveries.tsx` | Add `Trash2` import, `deletingSlipId` state, `deleteSlip` function, delete button in slip card header |
+| File | Lines | Change |
+|---|---|---|
+| `src/components/chat/RichMarkdown.tsx` | 221–222 | Add `whitespace-pre [overflow-wrap:normal]` to `<code>` tag |
 
-No database migrations. No new tables. No other files touched.
+## Rollback
 
-## Rollback Method
-
-If the change causes issues, remove:
-1. `Trash2` from the lucide import
-2. `deletingSlipId` state declaration
-3. `deleteSlip` function
-4. The `{slip.status === "draft" && (...)}` JSX block and revert the wrapping `<div>` to the original single Badge
-
-The table data is unaffected unless a deletion was already confirmed by the user.
+Remove `whitespace-pre [overflow-wrap:normal]` from the `<code>` className to revert.
