@@ -1,32 +1,87 @@
 
-# نمایش دائمی دکمه حذف فایل در بخش Attachments
+# بهبود خروجی YAML ایجنت Architect (Empire) برای جلوگیری از تغییرات ناخواسته
 
-## مشکل موجود
+## مشکل
 
-کد کنونی (خط 854-860) دکمه X را فقط هنگام hover نمایش می‌دهد:
-```tsx
-className="opacity-0 group-hover/attachment:opacity-100 ..."
+وقتی ایجنت Architect (که در اسکرین‌شات با نام YAML نمایش داده شده) یک باگ UI مثل "remove Office from sidebar" را دریافت می‌کند، خروجی PLANNER YAML آن فاقد یک constraint الزام‌آور است که به Lovable (ابزار کد) بگوید:
+- **فقط** همین مشکل مشخص را برطرف کن
+- **هیچ چیز دیگری** در UI یا کارکرد اپ تغییر نده
+
+همچنین بلاک "📋 Lovable Command" که در RESOLVER mode تولید می‌شود نیز این اخطار را ندارد.
+
+## راه‌حل — فقط `supabase/functions/ai-agent/index.ts`
+
+### تغییر ۱: اضافه کردن فیلد `surgical_constraint` به YAML schema (خط 2295-2306)
+
+در قسمت Output YAML only، یک فیلد اجباری جدید اضافه می‌شود:
+
+```yaml
+# قبل:
+- Output YAML only (fenced in ```yaml):
+  task_type: <UI_LAYOUT|...>
+  scope: <module or page>
+  schema_unknown: true
+  unknowns: [...]
+  plan_steps: ...
+  success_criteria: ...
+  rollback: ...
+
+# بعد:
+- Output YAML only (fenced in ```yaml):
+  task_type: <UI_LAYOUT|...>
+  scope: <module or page>
+  schema_unknown: true
+  unknowns: [...]
+  surgical_constraint: |
+    ⚠️ SURGICAL EXECUTION LAW — MANDATORY:
+    Under NO circumstances may this fix alter any other part of the application.
+    ONLY the exact issue reported below may be changed.
+    Any side-effect on UI layout, navigation, data logic, styles, or other components is FORBIDDEN.
+    Reported issue: <one-line exact description of the user's reported problem>
+  plan_steps: ...
+  success_criteria: ...
+  rollback: ...
 ```
 
-این باعث می‌شود:
-- در موبایل دکمه اصلاً قابل استفاده نباشد (hover وجود ندارد)
-- یوزر متوجه نشود که می‌تواند فایل را حذف کند
-- UX گیج‌کننده است چون دکمه پنهان است
+این فیلد **الزام‌آور** است و مقدار آن باید شامل توضیح دقیق مشکل گزارش‌شده باشد.
 
-## راه‌حل — یک خط تغییر در Tasks.tsx
+### تغییر ۲: اضافه کردن constraint به Lovable Command (خط 2354-2363)
 
-فقط `opacity-0 group-hover/attachment:opacity-100` را از className دکمه X حذف می‌کنم تا همیشه قابل مشاهده باشد:
+در قالب Lovable Command، یک هدر اجباری اضافه می‌شود:
 
-```tsx
-// قبل:
-className="opacity-0 group-hover/attachment:opacity-100 text-muted-foreground hover:text-destructive transition-opacity shrink-0"
+```
+# قبل:
+📋 Lovable Command (copy & paste into Lovable chat):
+───────────────────────────────────────────────────
+[Clear, actionable instruction...]
+───────────────────────────────────────────────────
 
-// بعد:
-className="text-muted-foreground hover:text-destructive transition-colors shrink-0 ml-1"
+# بعد:
+📋 Lovable Command (copy & paste into Lovable chat):
+───────────────────────────────────────────────────
+🔒 SURGICAL EXECUTION LAW — NON-NEGOTIABLE:
+Do NOT change any other part of the application beyond what is described below.
+Do NOT modify the overall UI, navigation structure, layout, styling, or any unrelated logic.
+ONLY fix the exact reported issue described in this prompt. Nothing more.
+
+[Clear, actionable instruction...]
+───────────────────────────────────────────────────
 ```
 
-دکمه X همیشه کنار هر فایل نمایش داده می‌شود و روی hover قرمز می‌شود.
+### تغییر ۳: اضافه کردن SURGICAL FENCE rule به HARD CONSTRAINTS (خط 2288)
 
-## فایل تغییر می‌کند
+در بخش HARD CONSTRAINTS مود PLANNER، یک قانون جدید اضافه می‌شود:
 
-فقط یک خط در `src/pages/Tasks.tsx` (خط 856).
+```
+- SURGICAL FENCE (MANDATORY): The plan MUST include surgical_constraint field in YAML.
+  This field defines what MUST NOT change. Any plan_step that could affect UI components,
+  navigation, or logic beyond the exact reported issue is FORBIDDEN and must be removed.
+```
+
+## خلاصه فایل‌های تغییر یافته
+
+| فایل | تغییر |
+|---|---|
+| `supabase/functions/ai-agent/index.ts` | ۳ افزودنی به system prompt ایجنت empire |
+
+هیچ تغییری در دیتابیس، UI، یا edge function دیگری اعمال نمی‌شود.
