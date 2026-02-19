@@ -10,6 +10,9 @@ export interface BankFeedBalance {
   last_updated: string;
   updated_by: string | null;
   company_id: string;
+  unaccepted_count: number | null;
+  unreconciled_count: number | null;
+  reconciled_through: string | null;
 }
 
 export function useBankFeedBalances() {
