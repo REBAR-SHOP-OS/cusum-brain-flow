@@ -1,87 +1,85 @@
 
-# Fix Plan: Sattar Login Issue + Chat "Failed to Fetch"
+# Fix: /chat "Failed to Fetch" — Root Cause is OpenAI API Quota Exhaustion
 
-## Issue 1: Sattar@rebar.shop Cannot Log In
+## Confirmed Root Cause
 
-### Root Cause
-Sattar's account exists, is confirmed, and has admin role — the database is fine. The problem is with the Google OAuth login flow.
+The error on the `/chat` page is **NOT** a network or CORS issue. Direct testing of the `admin-chat` edge function confirmed:
 
-The Login page uses:
-```typescript
-const result = await lovable.auth.signInWithOAuth("google", {
-  redirect_uri: window.location.origin + "/home",
-});
+```
+429 — "You exceeded your current quota, please check your plan and billing details"
 ```
 
-`window.location.origin` is dynamic. If Sattar is accessing via the **Preview URL** (`ef512187...lovableproject.com`) instead of the **Published URL** (`cusum-brain-flow.lovable.app`), the OAuth redirect_uri won't match what Google has registered as an authorized redirect URI — causing a silent failure or redirect to an error page.
+The `GPT_API_KEY` (OpenAI) stored in the project secrets has **exceeded its billing limit**. Every message sent from `/chat` triggers a call to the OpenAI API, which immediately returns a 429, causing the frontend to display "⚠️ Error: AI API error: 429...".
 
-Additionally, the `/chat` page routes through `useAdminChat`, which calls the `admin-chat` edge function. That function enforces an **admin-only role check**. Sattar has `admin` role in `user_roles`, so once logged in, chat will work for him.
+The CORS fix from the previous session was correct and necessary, but the underlying blocker is the exhausted OpenAI quota.
 
-### Fix for Sattar's Login
-The fix is to ensure the Google OAuth redirect always uses the canonical published URL, not the dynamic origin. We update `Login.tsx` and `Signup.tsx` to use the published URL as the redirect_uri:
+## Why It's Showing as "Failed to Fetch"
 
-```typescript
-// Before (dynamic, breaks on preview URLs):
-redirect_uri: window.location.origin + "/home",
-
-// After (canonical published URL):
-redirect_uri: "https://cusum-brain-flow.lovable.app/home",
+The `useAdminChat` hook catches the edge function's 400/500-style errors and formats them as:
+```
+⚠️ Error: AI API error: 429 — { "error": { "code": "insufficient_quota" } }
 ```
 
-This ensures Google always redirects to the correct, registered domain regardless of which URL Sattar uses to access the login page.
+This appears in the chat bubble after the user's green "hi" message — exactly as described.
 
----
+## Current AI Routing Logic
 
-## Issue 2: Chat "Failed to Fetch" on /chat
+The `aiRouter.ts` file routes requests by default to GPT:
+- Simple messages → `gpt-4o-mini` (GPT) — **FAILS with 429**
+- Complex/accounting → `gpt-4o` (GPT) — **FAILS with 429**
+- Briefings → `gemini-2.5-pro` — **WORKS** (GEMINI_API_KEY is configured and valid)
 
-### Root Cause
-The `useAdminChat` hook constructs the endpoint URL as:
-```typescript
-const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-chat`;
-```
+## The Fix: Make Gemini the Default Fallback
 
-The `admin-chat` edge function is only deployed and live in the **Test environment** until a successful publish completes. The migration blocker (now fixed) prevented edge functions from being deployed to Live. Once you publish now, the `admin-chat` function will deploy to Live and the URL will resolve correctly for all users.
+Since `GEMINI_API_KEY` is already configured and working, the simplest fix is to update `aiRouter.ts` so that:
 
-However, there is a secondary issue: the `admin-chat` CORS headers are **incomplete**:
-```typescript
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  // MISSING: x-supabase-client-platform, x-supabase-client-platform-version, etc.
-};
-```
+1. **Default fast model** → `gemini-2.5-flash` (Gemini) instead of `gpt-4o-mini`
+2. **Complex reasoning** → keep trying GPT first, but fall back to `gemini-2.5-pro` on 429
+3. **The `callAIStream` function** → add automatic 429 fallback to Gemini (currently missing)
 
-The Supabase JS client (`supabase-js v2.95.2`) sends additional headers (`x-supabase-client-platform`, `x-supabase-client-runtime`, etc.) that are NOT listed in the CORS `Allow-Headers`. This causes the preflight OPTIONS request to be rejected, producing "Failed to fetch" in the browser.
-
-### Fix for Chat
-Update the `corsHeaders` in `supabase/functions/admin-chat/index.ts` to include the full set of Supabase client headers:
-
-```typescript
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
-```
-
-This matches the standard CORS headers used in all other edge functions in the project (e.g., `app-help-chat`, `website-chat`).
-
----
+This makes the system resilient: GPT is tried first when available, Gemini handles everything when GPT quota is exhausted.
 
 ## Files to Modify
 
 | File | Change |
 |---|---|
-| `src/pages/Login.tsx` | Fix Google OAuth redirect_uri to use canonical published URL |
-| `src/pages/Signup.tsx` | Same fix for Signup Google OAuth |
-| `supabase/functions/admin-chat/index.ts` | Expand CORS headers to include full Supabase client header set |
+| `supabase/functions/_shared/aiRouter.ts` | Switch default model to Gemini, add 429 fallback to `callAIStream` |
 
-## Sequence
-1. Fix CORS headers in `admin-chat` and deploy edge function
-2. Fix OAuth redirect URIs in Login/Signup pages
-3. Publish — this will deploy the updated `admin-chat` to Live and clear the chat error
+## Technical Detail
+
+The `callAIStream` function (used for streaming responses in the chat) currently has **no fallback logic** — unlike `callAI` which does have a `fallback` option. When GPT returns 429 on a streaming call, the error propagates directly. The fix adds a retry-with-Gemini path for 429 errors in the streaming path.
+
+### Updated `selectModel` defaults
+
+```typescript
+// Before (broken — GPT quota exhausted):
+return { provider: "gpt", model: "gpt-4o-mini", ... };
+
+// After (resilient — Gemini as default):
+return { provider: "gemini", model: "gemini-2.5-flash", ... };
+```
+
+### Updated `callAIStream` with fallback
+
+```typescript
+export async function callAIStream(opts): Promise<Response> {
+  try {
+    return await _callAIStreamSingle(provider, model, opts);
+  } catch (e) {
+    if (e instanceof AIError && e.status === 429) {
+      // Auto-fallback to Gemini on quota error
+      return await _callAIStreamSingle("gemini", "gemini-2.5-flash", opts);
+    }
+    throw e;
+  }
+}
+```
 
 ## Why This Is Safe
+
+- `GEMINI_API_KEY` is already configured and confirmed working (briefing calls succeed)
+- Gemini 2.5 Flash is faster and cheaper than GPT-4o-mini for simple queries
+- GPT is still tried first for complex reasoning tasks — if/when the OpenAI billing is resolved, GPT resumes automatically
 - No database changes required
-- CORS header expansion is purely additive — no existing functionality broken
-- OAuth redirect_uri change only affects users accessing via the preview URL (Sattar's specific scenario) — users already using the published URL are unaffected
-- Sattar's admin role is already in the database, so once login works he will have full chat access
+- No frontend changes required
+- After deploying the updated edge function, the chat will work immediately without requiring a publish
