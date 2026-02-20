@@ -1,140 +1,124 @@
 
-# Odoo → Pipeline Sync Diagnosis & Fix Plan
+# Fix: Multi-Project Mixing on Station View
 
-## Root Cause: No Scheduled Sync
+## Root Cause
 
-The single most critical finding: **`cron.job` has 0 rows** — there are no scheduled jobs running in the database. The `odoo-crm-sync` and `odoo-chatter-sync` edge functions exist and work correctly (the leads table shows 2,927 Odoo leads last synced on 2026-02-20), but they are only triggered **manually** by an admin clicking the "Sync Odoo" button on the Pipeline page. There is no automatic polling.
+The station view combines items from multiple active cut plans/projects into a single unfiltered list. The `project_name` field is already fetched from the database and exists on every `StationItem`, but it is never displayed or used to filter.
 
-**Evidence:**
-- `SELECT count(*) FROM cron.job` → `0`
-- `odoo-crm-sync` edge function logs: empty (no recent automated calls)
-- Last leads `updated_at` timestamps cluster together, confirming a one-time manual bulk sync, not ongoing polling
-- The `leads` table is NOT in `supabase_realtime` publication — Odoo-side changes (made directly in Odoo) have no pathway to trigger a Supabase realtime event
+**Bender path**: queries ALL `cut_plan_items` company-wide with `phase = cut_done OR bending`. Every project's bend items appear together with no separation.
+
+**Cutter path**: queries all plans assigned to the machine OR unassigned (`machine_id.is.null`), which can include multiple active projects simultaneously. Items are grouped by bar size only — the `BarSizeGroup` header shows `10M` / `15M` but never says which project.
 
 ---
 
-## Full Diagnosis: All Problems Found
+## What Is NOT Broken
 
-### Problem 1 — CRITICAL: No Scheduled Sync Job
-The `odoo-crm-sync` function runs in **incremental mode** (fetches only records changed in the last 5 days) and in **full mode** (all ~2,800 records). Neither runs automatically. Changes made in Odoo — stage moves, new leads, updated values — only appear in the ERP after a human manually clicks "Sync Odoo."
-
-### Problem 2 — HIGH: No Realtime for Odoo-Sourced Changes
-The `usePipelineRealtime` hook subscribes to Supabase's `postgres_changes` on the `leads` table. This correctly picks up changes made **within** the ERP (e.g., drag-and-drop stage changes). However, when the `odoo-crm-sync` edge function runs with `SUPABASE_SERVICE_ROLE_KEY`, it updates rows server-side — these updates DO trigger `postgres_changes` events, so realtime is technically wired up. The gap is purely that the sync function never runs automatically.
-
-### Problem 3 — MEDIUM: Chatter/Activity Sync is Also Manual
-The `odoo-chatter-sync` function (which syncs notes, emails, and scheduled activities from Odoo's `mail.message` and `mail.activity`) is never called after the initial historical import. New chatter posted in Odoo after the initial sync is invisible in the ERP Lead Timeline.
-
-### Problem 4 — MEDIUM: SLA Breach Checker Also Not Scheduled
-The `check-sla-breaches` edge function exists but also has no cron entry. SLA deadlines set by Odoo (`date_deadline` field) will never auto-escalate.
-
-### Problem 5 — LOW: No Sync Status Indicator on Pipeline Page
-Users have no way to know when the last sync ran or if it failed. The "Sync Odoo" button gives feedback only on manual click. If the scheduled sync silently fails, no one is alerted.
+- `project_name` is already correctly fetched — it's present on every `StationItem`
+- The grouping logic (bar size → bend/straight paths) is correct
+- Realtime subscriptions work correctly
 
 ---
 
-## What is NOT Broken
+## Proposed Fix: Two-Part Solution
 
-- The `odoo-crm-sync` edge function logic itself is correct — pagination, deduplication, stage mapping, and validation all work
-- The `usePipelineRealtime` hook is correctly subscribed to `postgres_changes`
-- The manual sync button on Pipeline page works
-- The `odoo-chatter-sync` "missing" mode (backfills leads with zero activities) works
+### Part 1 — Project Filter Pill Row (StationView.tsx)
 
----
+Add a horizontal scrollable row of project filter pills below the station header, visible when more than one project is present in the loaded items. Selecting a pill filters all items and groups to that project only. An "All" pill is always available as the default.
 
-## Fix Plan
-
-### Fix 1 — Install pg_cron scheduled jobs (Core Fix)
-
-Create a database migration that registers two cron jobs using `pg_cron` (already available in Supabase):
-
-```text
-Job 1: odoo-crm-sync (incremental)
-  Schedule: every 15 minutes
-  Command: calls the odoo-crm-sync edge function via net.http_post
-
-Job 2: odoo-chatter-sync (missing mode)
-  Schedule: every 60 minutes
-  Command: calls the odoo-chatter-sync edge function
-
-Job 3: check-sla-breaches
-  Schedule: every 30 minutes
-  Command: calls the check-sla-breaches edge function
+```
+[ All (47) ]  [ TANK FARM — OAA (12) ]  [ Vault 1 (8) ]  [ 15 Brownridge (27) ]
 ```
 
-The SQL uses `net.http_post` (pg_net extension, already enabled in Supabase) to call the edge functions with the service role key as the Authorization header.
+- Pills are derived from the distinct `project_name` values in the loaded `items` array (no extra DB query needed)
+- Selected project is stored in `useState<string | null>(null)` (null = All)
+- Filtering is applied in `StationView.tsx` before passing items/groups to the rendered list
 
-### Fix 2 — Add "Last Synced" indicator to Pipeline header
+### Part 2 — Project Name Label on ProductionCard.tsx
 
-Add a small status badge near the "Sync Odoo" button that shows:
-- When the last successful sync ran (read from the most recent `updated_at` of any `odoo_sync` lead)
-- A color indicator: green (< 30 min ago), amber (30–60 min), red (> 60 min)
-- Auto-refreshes every 5 minutes
+Add a small project name micro-label at the bottom of each card (consistent with the shop floor touch standard for micro-labels):
 
-### Fix 3 — Run a full sync on manual button click, incremental on schedule
+```
+TANK FARM RETAINING WALLS — OAA
+```
 
-The current manual button already uses `mode: "full"`. The cron job will use `mode: "incremental"` (last 5 days) to be efficient. This is the correct architecture.
+This ensures that even in "All" mode, each card always self-identifies which project it belongs to. This is critical for the bender view where no grouping by bar size exists.
 
 ---
 
-## Files to Create/Modify
+## Technical Changes
+
+### File 1: `src/pages/StationView.tsx`
+
+Add `selectedProject` state and a filter pill row:
+
+```tsx
+const [selectedProject, setSelectedProject] = useState<string | null>(null);
+
+// Derive distinct project names from loaded items
+const projectNames = useMemo(() =>
+  [...new Set(items.map((i) => i.project_name).filter(Boolean))] as string[],
+  [items]
+);
+
+// Apply project filter before rendering
+const filteredItems = selectedProject
+  ? items.filter((i) => i.project_name === selectedProject)
+  : items;
+
+const filteredGroups = selectedProject
+  ? groups.map((g) => ({
+      ...g,
+      bendItems: g.bendItems.filter((i) => i.project_name === selectedProject),
+      straightItems: g.straightItems.filter((i) => i.project_name === selectedProject),
+    })).filter((g) => g.bendItems.length > 0 || g.straightItems.length > 0)
+  : groups;
+```
+
+Project pill row (only shown when `projectNames.length > 1`):
+```tsx
+{projectNames.length > 1 && (
+  <div className="flex gap-2 overflow-x-auto pb-1 pt-2 scrollbar-none">
+    <button onClick={() => setSelectedProject(null)}
+      className={cn("pill", !selectedProject && "active")}>
+      All ({items.length})
+    </button>
+    {projectNames.map((name) => (
+      <button key={name} onClick={() => setSelectedProject(name)}
+        className={cn("pill", selectedProject === name && "active")}>
+        {name} ({items.filter(i => i.project_name === name).length})
+      </button>
+    ))}
+  </div>
+)}
+```
+
+Auto-reset `selectedProject` to null if the selected project disappears from the item list (e.g., after a phase transition):
+```tsx
+useEffect(() => {
+  if (selectedProject && !projectNames.includes(selectedProject)) {
+    setSelectedProject(null);
+  }
+}, [projectNames, selectedProject]);
+```
+
+### File 2: `src/components/shopfloor/ProductionCard.tsx`
+
+Add a project name label at the bottom of `CardContent`, below the piece count row:
+```tsx
+{item.project_name && (
+  <p className="text-[9px] text-muted-foreground tracking-[0.15em] uppercase truncate pt-0.5 border-t border-border/40 mt-1">
+    {item.project_name}
+  </p>
+)}
+```
+
+---
+
+## Summary of Files to Change
 
 | File | Change |
 |------|--------|
-| `supabase/migrations/YYYYMMDD_odoo_cron_sync.sql` | New migration: register 3 pg_cron jobs using `cron.schedule()` |
-| `src/pages/Pipeline.tsx` | Add "Last Synced" status badge near sync button |
+| `src/pages/StationView.tsx` | Add `selectedProject` state, project pill filter row, derive `filteredItems` / `filteredGroups`, auto-reset effect |
+| `src/components/shopfloor/ProductionCard.tsx` | Add project name micro-label at card bottom |
 
----
-
-## Technical Details: The pg_cron SQL
-
-```sql
--- Install pg_cron extension if not present
-CREATE EXTENSION IF NOT EXISTS pg_cron;
-CREATE EXTENSION IF NOT EXISTS pg_net;
-
--- Incremental Odoo CRM sync every 15 minutes
-SELECT cron.schedule(
-  'odoo-crm-sync-incremental',
-  '*/15 * * * *',
-  $$
-  SELECT net.http_post(
-    url := 'https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/odoo-crm-sync',
-    headers := jsonb_build_object(
-      'Content-Type', 'application/json',
-      'Authorization', 'Bearer ' || current_setting('app.service_role_key', true)
-    ),
-    body := '{"mode":"incremental"}'::jsonb
-  );
-  $$
-);
-
--- Chatter sync every 60 minutes
-SELECT cron.schedule(
-  'odoo-chatter-sync-hourly',
-  '0 * * * *',
-  ...
-);
-```
-
-The service role key will be stored as a Postgres setting (`app.service_role_key`) set via migration, so it is never exposed in client code.
-
----
-
-## Rollback Plan
-
-If the cron jobs cause performance issues (e.g., Odoo API rate limits hit), they can be disabled immediately with:
-```sql
-SELECT cron.unschedule('odoo-crm-sync-incremental');
-```
-No data is at risk — the cron jobs only call the existing, already-tested sync functions.
-
----
-
-## Expected Outcome After Fix
-
-| Metric | Before | After |
-|--------|--------|-------|
-| Sync lag | Manual only (hours/days) | Max 15 minutes |
-| Chatter sync | Manual only | Hourly |
-| SLA escalation | Never runs | Every 30 min |
-| Pipeline freshness | Stale | Live within 15 min |
+No database changes, no new queries, no new hooks — `project_name` is already in `StationItem`.
