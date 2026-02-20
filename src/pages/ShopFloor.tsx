@@ -9,7 +9,6 @@ import {
   Calculator
 } from "lucide-react";
 import { MyJobsCard } from "@/components/shopfloor/MyJobsCard";
-import { VoiceRecorderWidget } from "@/components/shopfloor/VoiceRecorderWidget";
 
 
 interface HubCard {
@@ -145,8 +144,6 @@ export default function ShopFloor() {
         </Link>
       </div>
 
-      {/* Voice Recorder Widget */}
-      <VoiceRecorderWidget />
     </div>
   );
 }
