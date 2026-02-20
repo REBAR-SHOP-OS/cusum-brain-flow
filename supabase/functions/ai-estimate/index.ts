@@ -138,7 +138,7 @@ serve(async (req) => {
     }
     if (benchmarks.length > 0) {
       historicalContext += `\n## WEIGHT BENCHMARKS FROM COMPLETED PROJECTS\n`;
-      for (const b of benchmarks.slice(0, 10)) {
+      for (const b of benchmarks.slice(0, 5)) {
         historicalContext += `- "${b.project_name}": est=${b.estimation_weight_kg}kg, actual=${b.detailing_weight_kg}kg (${((b.weight_difference_kg / b.estimation_weight_kg) * 100).toFixed(1)}% delta)\n`;
       }
     }
@@ -151,7 +151,7 @@ serve(async (req) => {
         const contentParts: any[] = [];
 
         // Pass file URLs directly as image_url references (gateway fetches them)
-        for (const url of file_urls.slice(0, 3)) {
+        for (const url of file_urls.slice(0, 2)) {
           contentParts.push({ type: "image_url", image_url: { url } });
         }
 
@@ -242,7 +242,7 @@ Return ONLY a valid JSON array of items.`;
             messages: [
               { role: "user", content: contentParts },
             ],
-            max_tokens: 32000,
+            max_tokens: 8000,
             temperature: 0.1,
           }),
         });
@@ -366,12 +366,15 @@ Return ONLY a valid JSON array of items.`;
         page_index: (item as any).page_index ?? 0,
       }));
 
-      const { error: itemsErr } = await supabaseAdmin
-        .from("estimation_items")
-        .insert(itemRows);
-
-      if (itemsErr) {
-        console.error("Items insert error:", itemsErr);
+      // Batch insert in groups of 25 to reduce memory spikes
+      for (let i = 0; i < itemRows.length; i += 25) {
+        const batch = itemRows.slice(i, i + 25);
+        const { error: itemsErr } = await supabaseAdmin
+          .from("estimation_items")
+          .insert(batch);
+        if (itemsErr) {
+          console.error(`Items insert error (batch ${Math.floor(i / 25)}):`, itemsErr);
+        }
       }
     }
 
