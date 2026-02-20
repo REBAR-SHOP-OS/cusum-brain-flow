@@ -746,6 +746,7 @@ export type Database = {
           created_by: string | null
           extract_session_id: string | null
           id: string
+          lead_id: string | null
           name: string
           parent_barlist_id: string | null
           project_id: string
@@ -760,6 +761,7 @@ export type Database = {
           created_by?: string | null
           extract_session_id?: string | null
           id?: string
+          lead_id?: string | null
           name: string
           parent_barlist_id?: string | null
           project_id: string
@@ -774,6 +776,7 @@ export type Database = {
           created_by?: string | null
           extract_session_id?: string | null
           id?: string
+          lead_id?: string | null
           name?: string
           parent_barlist_id?: string | null
           project_id?: string
@@ -788,6 +791,13 @@ export type Database = {
             columns: ["extract_session_id"]
             isOneToOne: false
             referencedRelation: "extract_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "barlists_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
             referencedColumns: ["id"]
           },
           {
@@ -2903,6 +2913,7 @@ export type Database = {
       }
       estimation_learnings: {
         Row: {
+          bar_size: string | null
           confidence_score: number | null
           context: string | null
           corrected_value: Json | null
@@ -2911,14 +2922,18 @@ export type Database = {
           element_type: string | null
           id: string
           is_global: boolean | null
+          lead_id: string | null
           learning_type: string
+          mark: string | null
           original_value: Json | null
           project_name: string
           source_files: string[] | null
           updated_at: string
           usage_count: number | null
+          weight_delta_pct: number | null
         }
         Insert: {
+          bar_size?: string | null
           confidence_score?: number | null
           context?: string | null
           corrected_value?: Json | null
@@ -2927,14 +2942,18 @@ export type Database = {
           element_type?: string | null
           id?: string
           is_global?: boolean | null
+          lead_id?: string | null
           learning_type: string
+          mark?: string | null
           original_value?: Json | null
           project_name: string
           source_files?: string[] | null
           updated_at?: string
           usage_count?: number | null
+          weight_delta_pct?: number | null
         }
         Update: {
+          bar_size?: string | null
           confidence_score?: number | null
           context?: string | null
           corrected_value?: Json | null
@@ -2943,14 +2962,25 @@ export type Database = {
           element_type?: string | null
           id?: string
           is_global?: boolean | null
+          lead_id?: string | null
           learning_type?: string
+          mark?: string | null
           original_value?: Json | null
           project_name?: string
           source_files?: string[] | null
           updated_at?: string
           usage_count?: number | null
+          weight_delta_pct?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "estimation_learnings_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       estimation_pricing: {
         Row: {
@@ -4103,6 +4133,54 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      ingestion_progress: {
+        Row: {
+          company_id: string
+          completed_at: string | null
+          created_at: string
+          error_log: Json | null
+          failed_items: number | null
+          id: string
+          job_type: string
+          last_processed_lead_id: string | null
+          processed_items: number | null
+          started_at: string | null
+          status: string
+          total_items: number | null
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          completed_at?: string | null
+          created_at?: string
+          error_log?: Json | null
+          failed_items?: number | null
+          id?: string
+          job_type: string
+          last_processed_lead_id?: string | null
+          processed_items?: number | null
+          started_at?: string | null
+          status?: string
+          total_items?: number | null
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          completed_at?: string | null
+          created_at?: string
+          error_log?: Json | null
+          failed_items?: number | null
+          id?: string
+          job_type?: string
+          last_processed_lead_id?: string | null
+          processed_items?: number | null
+          started_at?: string | null
+          status?: string
+          total_items?: number | null
+          updated_at?: string
+        }
+        Relationships: []
       }
       integration_connections: {
         Row: {
@@ -7298,6 +7376,62 @@ export type Database = {
             columns: ["manager_id"]
             isOneToOne: false
             referencedRelation: "profiles_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_coordination_log: {
+        Row: {
+          company_id: string
+          created_at: string
+          customer_name: string | null
+          detailing_weight_kg: number | null
+          elements: Json | null
+          estimation_weight_kg: number | null
+          id: string
+          lead_id: string | null
+          project_name: string | null
+          releases: Json | null
+          revisions: Json | null
+          source_file_url: string | null
+          weight_difference_kg: number | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          customer_name?: string | null
+          detailing_weight_kg?: number | null
+          elements?: Json | null
+          estimation_weight_kg?: number | null
+          id?: string
+          lead_id?: string | null
+          project_name?: string | null
+          releases?: Json | null
+          revisions?: Json | null
+          source_file_url?: string | null
+          weight_difference_kg?: number | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          customer_name?: string | null
+          detailing_weight_kg?: number | null
+          elements?: Json | null
+          estimation_weight_kg?: number | null
+          id?: string
+          lead_id?: string | null
+          project_name?: string | null
+          releases?: Json | null
+          revisions?: Json | null
+          source_file_url?: string | null
+          weight_difference_kg?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_coordination_log_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
             referencedColumns: ["id"]
           },
         ]
