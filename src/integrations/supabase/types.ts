@@ -101,6 +101,7 @@ export type Database = {
         Row: {
           actor_id: string | null
           actor_type: string | null
+          automation_source: string | null
           company_id: string
           created_at: string
           dedupe_key: string | null
@@ -117,6 +118,7 @@ export type Database = {
         Insert: {
           actor_id?: string | null
           actor_type?: string | null
+          automation_source?: string | null
           company_id: string
           created_at?: string
           dedupe_key?: string | null
@@ -133,6 +135,7 @@ export type Database = {
         Update: {
           actor_id?: string | null
           actor_type?: string | null
+          automation_source?: string | null
           company_id?: string
           created_at?: string
           dedupe_key?: string | null
@@ -374,6 +377,117 @@ export type Database = {
           slack_channel?: string | null
           target_roles?: string[]
           updated_at?: string
+        }
+        Relationships: []
+      }
+      automation_configs: {
+        Row: {
+          agent_name: string | null
+          automation_key: string
+          category: string | null
+          company_id: string
+          config: Json | null
+          created_at: string
+          description: string | null
+          enabled: boolean | null
+          id: string
+          last_run_at: string | null
+          name: string
+          tier: number | null
+          total_failed: number | null
+          total_runs: number | null
+          total_success: number | null
+          updated_at: string
+        }
+        Insert: {
+          agent_name?: string | null
+          automation_key: string
+          category?: string | null
+          company_id: string
+          config?: Json | null
+          created_at?: string
+          description?: string | null
+          enabled?: boolean | null
+          id?: string
+          last_run_at?: string | null
+          name: string
+          tier?: number | null
+          total_failed?: number | null
+          total_runs?: number | null
+          total_success?: number | null
+          updated_at?: string
+        }
+        Update: {
+          agent_name?: string | null
+          automation_key?: string
+          category?: string | null
+          company_id?: string
+          config?: Json | null
+          created_at?: string
+          description?: string | null
+          enabled?: boolean | null
+          id?: string
+          last_run_at?: string | null
+          name?: string
+          tier?: number | null
+          total_failed?: number | null
+          total_runs?: number | null
+          total_success?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      automation_runs: {
+        Row: {
+          agent_name: string | null
+          automation_key: string
+          automation_name: string
+          company_id: string
+          completed_at: string | null
+          created_at: string
+          error_log: Json | null
+          id: string
+          items_failed: number | null
+          items_processed: number | null
+          items_succeeded: number | null
+          metadata: Json | null
+          started_at: string
+          status: string
+          trigger_type: string
+        }
+        Insert: {
+          agent_name?: string | null
+          automation_key: string
+          automation_name: string
+          company_id: string
+          completed_at?: string | null
+          created_at?: string
+          error_log?: Json | null
+          id?: string
+          items_failed?: number | null
+          items_processed?: number | null
+          items_succeeded?: number | null
+          metadata?: Json | null
+          started_at?: string
+          status?: string
+          trigger_type?: string
+        }
+        Update: {
+          agent_name?: string | null
+          automation_key?: string
+          automation_name?: string
+          company_id?: string
+          completed_at?: string | null
+          created_at?: string
+          error_log?: Json | null
+          id?: string
+          items_failed?: number | null
+          items_processed?: number | null
+          items_succeeded?: number | null
+          metadata?: Json | null
+          started_at?: string
+          status?: string
+          trigger_type?: string
         }
         Relationships: []
       }
@@ -1791,6 +1905,59 @@ export type Database = {
           uploaded_by?: string | null
         }
         Relationships: []
+      }
+      customer_health_scores: {
+        Row: {
+          company_id: string
+          created_at: string
+          customer_id: string
+          engagement_score: number | null
+          factors: Json | null
+          id: string
+          last_calculated_at: string
+          loyalty_score: number | null
+          overall_score: number | null
+          payment_score: number | null
+          risk_level: string | null
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          customer_id: string
+          engagement_score?: number | null
+          factors?: Json | null
+          id?: string
+          last_calculated_at?: string
+          loyalty_score?: number | null
+          overall_score?: number | null
+          payment_score?: number | null
+          risk_level?: string | null
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          customer_id?: string
+          engagement_score?: number | null
+          factors?: Json | null
+          id?: string
+          last_calculated_at?: string
+          loyalty_score?: number | null
+          overall_score?: number | null
+          payment_score?: number | null
+          risk_level?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_health_scores_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       customer_user_links: {
         Row: {
@@ -6371,6 +6538,7 @@ export type Database = {
           customer_id: string
           customer_revision_count: number
           id: string
+          lead_id: string | null
           notes: string | null
           order_date: string | null
           order_number: string
@@ -6395,6 +6563,7 @@ export type Database = {
           customer_id: string
           customer_revision_count?: number
           id?: string
+          lead_id?: string | null
           notes?: string | null
           order_date?: string | null
           order_number: string
@@ -6419,6 +6588,7 @@ export type Database = {
           customer_id?: string
           customer_revision_count?: number
           id?: string
+          lead_id?: string | null
           notes?: string | null
           order_date?: string | null
           order_number?: string
@@ -6441,6 +6611,13 @@ export type Database = {
             columns: ["customer_id"]
             isOneToOne: false
             referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
             referencedColumns: ["id"]
           },
           {

@@ -91,6 +91,15 @@ const defaultAutomations: Automation[] = [
     icon: "search",
     route: "/seo",
   },
+  {
+    id: "automations-hub",
+    name: "Automations Hub",
+    description: "17 AI automations for revenue, pipeline, production",
+    enabled: true,
+    color: "red",
+    icon: "code",
+    route: "/automations",
+  },
 ];
 
 const colorGradients = {

@@ -74,6 +74,7 @@ import KnowledgeBasePublic from "./pages/KnowledgeBasePublic";
 import DriverDashboard from "./pages/DriverDashboard";
 import Estimation from "./pages/Estimation";
 import QuoteEngine from "./pages/QuoteEngine";
+import AutomationsHub from "./pages/AutomationsHub";
 
 import LiveChat from "./pages/LiveChat";
 import EmailMarketing from "./pages/EmailMarketing";
@@ -186,6 +187,9 @@ const App = () => (
                     <Route path="/admin/cleanup" element={<P><CleanupReport /></P>} />
                     <Route path="/admin/connections-audit" element={<P><ConnectionsAudit /></P>} />
                     <Route path="/admin/data-audit" element={<P><DataStoresAudit /></P>} />
+
+                    {/* Automations Hub */}
+                    <Route path="/automations" element={<P><AdminRoute><AutomationsHub /></AdminRoute></P>} />
 
                     {/* Full-screen live chat */}
                     <Route path="/chat" element={<P><LiveChat /></P>} />
