@@ -72,6 +72,7 @@ import PipelineIntelligence from "./pages/PipelineIntelligence";
 import SupportInbox from "./pages/SupportInbox";
 import KnowledgeBasePublic from "./pages/KnowledgeBasePublic";
 import DriverDashboard from "./pages/DriverDashboard";
+import Estimation from "./pages/Estimation";
 
 import LiveChat from "./pages/LiveChat";
 import EmailMarketing from "./pages/EmailMarketing";
@@ -206,7 +207,7 @@ const App = () => (
                     {/* Redirect broken notification paths */}
                     <Route path="/hr" element={<Navigate to="/timeclock" replace />} />
                     <Route path="/hr/*" element={<Navigate to="/timeclock" replace />} />
-                    <Route path="/estimation" element={<Navigate to="/pipeline" replace />} />
+                    <Route path="/estimation" element={<P><Estimation /></P>} />
                     <Route path="/bills" element={<Navigate to="/accounting" replace />} />
                     <Route path="/bills/*" element={<Navigate to="/accounting" replace />} />
                     <Route path="/invoices/*" element={<Navigate to="/accounting" replace />} />
