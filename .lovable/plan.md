@@ -1,90 +1,87 @@
 
-# Fix: Permanent Resolution of the Vector Migration Build Blocker
+# Fix Plan: Sattar Login Issue + Chat "Failed to Fetch"
 
-## Root Cause (Definitive)
+## Issue 1: Sattar@rebar.shop Cannot Log In
 
-The two migration files `20260220012124` and `20260220140325` **do not exist as files on disk** — they were applied directly via the database tool in previous sessions and exist only as SQL executed against the database. Because they are not tracked as files, the Lovable migration diff engine **never knows they ran**. On every publish, the diff system detects `document_embeddings` + `vector` as a schema delta and generates a new migration that tries to `DROP EXTENSION vector` — which always fails because the table depends on it.
+### Root Cause
+Sattar's account exists, is confirmed, and has admin role — the database is fine. The problem is with the Google OAuth login flow.
 
-The Test DB migration history confirms this: only 2 recent entries exist (`20260220140323` and `20260220122840`), neither of which is the problematic `20260220012124`.
-
-## What Must Be Done
-
-There are two things to fix simultaneously:
-
-### Fix 1 — Create the missing migration file on disk
-
-A file named `supabase/migrations/20260220012124_14ad7630-a525-4125-a8ec-11ffed3c9966.sql` must be created. This is the file the migration tracker expects to find. Its contents must be **100% idempotent** — safe to run on both Test (where objects exist) and Live (where they also exist):
-
-```sql
--- Enable pgvector extension (safe if already exists)
-CREATE EXTENSION IF NOT EXISTS vector;
-
--- Document embeddings table (safe if already exists)
-CREATE TABLE IF NOT EXISTS public.document_embeddings (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  company_id TEXT NOT NULL DEFAULT 'a0000000-0000-0000-0000-000000000001',
-  agent_domain TEXT NOT NULL,
-  entity_type TEXT NOT NULL,
-  entity_id TEXT,
-  content_text TEXT NOT NULL,
-  embedding vector(768),
-  metadata JSONB DEFAULT '{}',
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- Indexes (safe if already exist)
-CREATE INDEX IF NOT EXISTS idx_embeddings_domain ON public.document_embeddings(agent_domain);
-CREATE INDEX IF NOT EXISTS idx_embeddings_entity ON public.document_embeddings(entity_type, entity_id);
-CREATE INDEX IF NOT EXISTS idx_embeddings_company ON public.document_embeddings(company_id);
-CREATE INDEX IF NOT EXISTS idx_embeddings_vector ON public.document_embeddings
-  USING hnsw (embedding vector_cosine_ops);
-
--- Enable RLS
-ALTER TABLE public.document_embeddings ENABLE ROW LEVEL SECURITY;
-
--- Policies (drop first to make idempotent)
-DROP POLICY IF EXISTS "Users can read embeddings for their company" ON public.document_embeddings;
-CREATE POLICY "Users can read embeddings for their company"
-  ON public.document_embeddings FOR SELECT
-  USING (company_id = (SELECT company_id::text FROM public.profiles WHERE user_id = auth.uid() LIMIT 1));
-
-DROP POLICY IF EXISTS "Service role can manage embeddings" ON public.document_embeddings;
-CREATE POLICY "Service role can manage embeddings"
-  ON public.document_embeddings FOR ALL
-  USING (true) WITH CHECK (true);
-
--- Similarity search function (OR REPLACE = always idempotent)
-CREATE OR REPLACE FUNCTION public.match_documents(
-  query_embedding vector(768), ...
-) ...;
-
--- Trigger (drop first to make idempotent)
-DROP TRIGGER IF EXISTS update_document_embeddings_updated_at ON public.document_embeddings;
-CREATE TRIGGER update_document_embeddings_updated_at
-  BEFORE UPDATE ON public.document_embeddings
-  FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+The Login page uses:
+```typescript
+const result = await lovable.auth.signInWithOAuth("google", {
+  redirect_uri: window.location.origin + "/home",
+});
 ```
 
-### Fix 2 — Replace the broken fix migration
+`window.location.origin` is dynamic. If Sattar is accessing via the **Preview URL** (`ef512187...lovableproject.com`) instead of the **Published URL** (`cusum-brain-flow.lovable.app`), the OAuth redirect_uri won't match what Google has registered as an authorized redirect URI — causing a silent failure or redirect to an error page.
 
-The file `20260220140325_2cb45d25-3d18-449a-8242-47d5dddae281.sql` (which tries to `DROP TABLE` and recreate everything — destructive) must be **replaced** with a no-op migration that just marks itself as a cleanup step, since the primary migration above now handles everything idempotently.
+Additionally, the `/chat` page routes through `useAdminChat`, which calls the `admin-chat` edge function. That function enforces an **admin-only role check**. Sattar has `admin` role in `user_roles`, so once logged in, chat will work for him.
 
-## Files to Create/Modify
+### Fix for Sattar's Login
+The fix is to ensure the Google OAuth redirect always uses the canonical published URL, not the dynamic origin. We update `Login.tsx` and `Signup.tsx` to use the published URL as the redirect_uri:
 
-| Action | File |
+```typescript
+// Before (dynamic, breaks on preview URLs):
+redirect_uri: window.location.origin + "/home",
+
+// After (canonical published URL):
+redirect_uri: "https://cusum-brain-flow.lovable.app/home",
+```
+
+This ensures Google always redirects to the correct, registered domain regardless of which URL Sattar uses to access the login page.
+
+---
+
+## Issue 2: Chat "Failed to Fetch" on /chat
+
+### Root Cause
+The `useAdminChat` hook constructs the endpoint URL as:
+```typescript
+const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-chat`;
+```
+
+The `admin-chat` edge function is only deployed and live in the **Test environment** until a successful publish completes. The migration blocker (now fixed) prevented edge functions from being deployed to Live. Once you publish now, the `admin-chat` function will deploy to Live and the URL will resolve correctly for all users.
+
+However, there is a secondary issue: the `admin-chat` CORS headers are **incomplete**:
+```typescript
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  // MISSING: x-supabase-client-platform, x-supabase-client-platform-version, etc.
+};
+```
+
+The Supabase JS client (`supabase-js v2.95.2`) sends additional headers (`x-supabase-client-platform`, `x-supabase-client-runtime`, etc.) that are NOT listed in the CORS `Allow-Headers`. This causes the preflight OPTIONS request to be rejected, producing "Failed to fetch" in the browser.
+
+### Fix for Chat
+Update the `corsHeaders` in `supabase/functions/admin-chat/index.ts` to include the full set of Supabase client headers:
+
+```typescript
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+};
+```
+
+This matches the standard CORS headers used in all other edge functions in the project (e.g., `app-help-chat`, `website-chat`).
+
+---
+
+## Files to Modify
+
+| File | Change |
 |---|---|
-| **CREATE** (new file on disk) | `supabase/migrations/20260220012124_14ad7630-a525-4125-a8ec-11ffed3c9966.sql` |
-| **REPLACE** (convert to no-op) | `supabase/migrations/20260220140325_2cb45d25-3d18-449a-8242-47d5dddae281.sql` |
+| `src/pages/Login.tsx` | Fix Google OAuth redirect_uri to use canonical published URL |
+| `src/pages/Signup.tsx` | Same fix for Signup Google OAuth |
+| `supabase/functions/admin-chat/index.ts` | Expand CORS headers to include full Supabase client header set |
 
-## Why This Works
+## Sequence
+1. Fix CORS headers in `admin-chat` and deploy edge function
+2. Fix OAuth redirect URIs in Login/Signup pages
+3. Publish — this will deploy the updated `admin-chat` to Live and clear the chat error
 
-Once `20260220012124` exists as a file on disk, the migration diff engine recognises it as already tracked. It will be registered in the migration history table on the next publish. The diff engine will stop generating new migrations for `document_embeddings` because the schema will match what's in the file. The build blocker will be permanently cleared.
-
-## Chat "Failed to Fetch" Issue
-
-The `admin-chat` streaming fix from the previous session (adding `callAIStream` to `aiRouter.ts`) is **correctly deployed**. The "Failed to fetch" on `/chat` is caused by the **build being blocked** — edge functions are not being deployed to Live because the migration step fails first. Once the migration blocker is resolved and publishing succeeds, the streaming AI functions (including `admin-chat`) will be live and chat will work.
-
-## No Database Data Loss
-
-The `document_embeddings` table is not dropped — the idempotent approach uses `CREATE TABLE IF NOT EXISTS` and `CREATE INDEX IF NOT EXISTS`, so any existing embedding data is preserved.
+## Why This Is Safe
+- No database changes required
+- CORS header expansion is purely additive — no existing functionality broken
+- OAuth redirect_uri change only affects users accessing via the preview URL (Sattar's specific scenario) — users already using the published URL are unaffected
+- Sattar's admin role is already in the database, so once login works he will have full chat access
