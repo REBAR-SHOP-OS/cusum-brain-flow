@@ -264,9 +264,11 @@ export default function Tasks() {
   const authResolved = currentUserEmail !== null;
   const isInternal = authResolved && currentUserEmail.endsWith("@rebar.shop");
 
-  // Only the assigned user can mark a task complete
+  // Assigned user, creator, or admin can mark a task complete
   const canMarkComplete = (task: TaskRow) =>
-    currentProfileId === task.assigned_to;
+    isAdmin ||
+    currentProfileId === task.assigned_to ||
+    currentProfileId === task.created_by_profile_id;
 
   // Assigned user, creator, or admin can reopen/uncomplete
   const canUncomplete = (task: TaskRow) =>
