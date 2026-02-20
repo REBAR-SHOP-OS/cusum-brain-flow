@@ -190,6 +190,50 @@ ENFORCEMENT RULES:
   return context;
 }
 
+/**
+ * RAG step: search document_embeddings for relevant historical context.
+ * Returns top-K results as a formatted string block to inject into the system prompt.
+ */
+export async function fetchRAGContext(
+  supabaseUrl: string,
+  agent: string,
+  query: string,
+  companyId: string,
+): Promise<string> {
+  if (!query || query.length < 5) return "";
+
+  try {
+    const response = await fetch(`${supabaseUrl}/functions/v1/search-embeddings`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+      },
+      body: JSON.stringify({
+        query,
+        domain: agent,
+        companyId,
+        matchCount: 5,
+        threshold: 0.55,
+      }),
+    });
+
+    if (!response.ok) return "";
+
+    const { results } = await response.json();
+    if (!results || results.length === 0) return "";
+
+    const formatted = results.map((r: any, i: number) =>
+      `[${i + 1}] (${r.entity_type || "doc"}) ${r.content_text?.substring(0, 300)}`
+    ).join("\n");
+
+    return `\n\n## 🔍 Relevant Historical Context (RAG)\n${formatted}`;
+  } catch (e) {
+    console.error("RAG fetch error:", e);
+    return "";
+  }
+}
+
 // Placeholder for full QuickBooks fetch logic if needed separate
 export async function fetchQuickBooksLiveContext(svcClient: any, context: any) {
   // Logic from original file to fetch live QB data
