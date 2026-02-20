@@ -264,10 +264,24 @@ export default function Tasks() {
   const authResolved = currentUserEmail !== null;
   const isInternal = authResolved && currentUserEmail.endsWith("@rebar.shop");
 
-  const canToggleTask = (task: TaskRow) =>
+  // Only the assigned user can mark a task complete
+  const canMarkComplete = (task: TaskRow) =>
+    currentProfileId === task.assigned_to;
+
+  // Assigned user, creator, or admin can reopen/uncomplete
+  const canUncomplete = (task: TaskRow) =>
     isAdmin ||
     currentProfileId === task.assigned_to ||
     currentProfileId === task.created_by_profile_id;
+
+  // Only task creator or admin can approve/close or reopen with issue
+  const canApproveTask = (task: TaskRow) =>
+    isAdmin || currentProfileId === task.created_by_profile_id;
+
+  const canToggleTask = (task: TaskRow) => {
+    if (task.status === "completed") return canUncomplete(task);
+    return canMarkComplete(task);
+  };
 
   const handleFilePick = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -445,11 +459,15 @@ export default function Tasks() {
   };
 
   const toggleComplete = async (task: TaskRow) => {
-    if (!canToggleTask(task)) {
-      toast.error("Only the assigned user or creator can mark this task complete");
+    const isCompleted = task.status === "completed";
+    if (!isCompleted && !canMarkComplete(task)) {
+      toast.error("Only the assigned user can mark this task complete");
       return;
     }
-    const isCompleted = task.status === "completed";
+    if (isCompleted && !canUncomplete(task)) {
+      toast.error("Only the assigned user, creator, or admin can reopen this task");
+      return;
+    }
     const newStatus = isCompleted ? "open" : "completed";
     const updates: any = {
       status: newStatus,
@@ -981,12 +999,27 @@ export default function Tasks() {
               <div className="flex gap-2 flex-wrap">
                 {selectedTask.status === "completed" ? (
                   <>
-                    <Button size="sm" className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => approveAndClose(selectedTask)}>
+                    <Button
+                      size="sm"
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                      onClick={() => approveAndClose(selectedTask)}
+                      disabled={!canApproveTask(selectedTask)}
+                      title={!canApproveTask(selectedTask) ? "Only the task creator or an admin can approve & close" : undefined}
+                    >
                       <Check className="w-4 h-4" /> Approve & Close
                     </Button>
-                    <Button size="sm" className="flex-1 bg-orange-500 hover:bg-orange-600 text-white" onClick={() => setReopenDialogOpen(true)}>
+                    <Button
+                      size="sm"
+                      className="flex-1 bg-orange-500 hover:bg-orange-600 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                      onClick={() => setReopenDialogOpen(true)}
+                      disabled={!canApproveTask(selectedTask)}
+                      title={!canApproveTask(selectedTask) ? "Only the task creator or an admin can reopen with an issue" : undefined}
+                    >
                       <RefreshCw className="w-4 h-4" /> Reopen with Issue
                     </Button>
+                    {!canApproveTask(selectedTask) && (
+                      <p className="text-xs text-muted-foreground w-full">Only the task creator or an admin can approve or reopen this task.</p>
+                    )}
                   </>
                 ) : (
                   <>
@@ -994,7 +1027,7 @@ export default function Tasks() {
                       Mark Complete
                     </Button>
                     {!canToggleTask(selectedTask) && (
-                      <p className="text-xs text-muted-foreground w-full">Only the assigned user or creator can mark this complete.</p>
+                      <p className="text-xs text-muted-foreground w-full">Only the assigned user can mark this task complete.</p>
                     )}
                   </>
                 )}
