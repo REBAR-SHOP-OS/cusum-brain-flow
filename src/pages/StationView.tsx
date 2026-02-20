@@ -12,7 +12,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, AlertTriangle, LayoutGrid } from "lucide-react";
-import { useState } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { cn } from "@/lib/utils";
 
 export default function StationView() {
   const { machineId } = useParams<{ machineId: string }>();
@@ -24,6 +25,35 @@ export default function StationView() {
   const [activeTab, setActiveTab] = useState("production");
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [isSupervisor, setIsSupervisor] = useState(false);
+  const [selectedProject, setSelectedProject] = useState<string | null>(null);
+
+  // Distinct project names present in loaded items
+  const projectNames = useMemo(
+    () => [...new Set(items.map((i) => i.project_name).filter(Boolean))] as string[],
+    [items]
+  );
+
+  // Auto-reset if selected project disappears (e.g. phase transition)
+  useEffect(() => {
+    if (selectedProject && !projectNames.includes(selectedProject)) {
+      setSelectedProject(null);
+    }
+  }, [projectNames, selectedProject]);
+
+  // Filtered views
+  const filteredItems = selectedProject
+    ? items.filter((i) => i.project_name === selectedProject)
+    : items;
+
+  const filteredGroups = selectedProject
+    ? groups
+        .map((g) => ({
+          ...g,
+          bendItems: g.bendItems.filter((i) => i.project_name === selectedProject),
+          straightItems: g.straightItems.filter((i) => i.project_name === selectedProject),
+        }))
+        .filter((g) => g.bendItems.length > 0 || g.straightItems.length > 0)
+    : groups;
 
   if (!machineId) return <Navigate to="/shopfloor/station" replace />;
 
@@ -108,6 +138,37 @@ export default function StationView() {
       />
 
       <div className="px-4 pt-3">
+        {/* Project filter pills — only shown when multiple projects present */}
+        {projectNames.length > 1 && (
+          <div className="flex gap-2 overflow-x-auto pb-2 pt-1 scrollbar-none">
+            <button
+              onClick={() => setSelectedProject(null)}
+              className={cn(
+                "shrink-0 text-[10px] font-bold tracking-wider px-3 py-1.5 rounded-full border transition-colors",
+                !selectedProject
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-muted text-muted-foreground border-border hover:bg-muted/80"
+              )}
+            >
+              ALL ({items.length})
+            </button>
+            {projectNames.map((name) => (
+              <button
+                key={name}
+                onClick={() => setSelectedProject(name)}
+                className={cn(
+                  "shrink-0 text-[10px] font-bold tracking-wider px-3 py-1.5 rounded-full border transition-colors max-w-[180px] truncate",
+                  selectedProject === name
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-muted text-muted-foreground border-border hover:bg-muted/80"
+                )}
+              >
+                {name} ({items.filter((i) => i.project_name === name).length})
+              </button>
+            ))}
+          </div>
+        )}
+
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList>
             <TabsTrigger value="production" className="gap-1.5">
@@ -129,13 +190,13 @@ export default function StationView() {
             <ScrollArea className="h-[calc(100vh-180px)]">
               <div className="space-y-10 py-4 pr-3">
                 {isBender ? (
-                  items.length === 0 ? (
+                  filteredItems.length === 0 ? (
                     <div className="text-center py-12 text-muted-foreground text-sm">
                       No items queued to this bender yet
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {items.map((item) => (
+                      {filteredItems.map((item) => (
                         <ProductionCard
                           key={item.id}
                           item={item}
@@ -149,12 +210,12 @@ export default function StationView() {
                     </div>
                   )
                 ) : (
-                  groups.length === 0 ? (
+                  filteredGroups.length === 0 ? (
                     <div className="text-center py-12 text-muted-foreground text-sm">
                       No items queued to this machine yet
                     </div>
                   ) : (
-                    groups.map((group) => (
+                    filteredGroups.map((group) => (
                       <BarSizeGroup
                         key={group.barCode}
                         group={group}
