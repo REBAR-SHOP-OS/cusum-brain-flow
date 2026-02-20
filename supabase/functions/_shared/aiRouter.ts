@@ -100,9 +100,7 @@ async function _callAISingle(provider: AIProvider, model: string, opts: AIReques
   };
 }
 
-export async function callAIStream(opts: AIRequestOptions): Promise<Response> {
-  const provider = opts.provider || "gpt";
-  const model = opts.model || "gpt-4o";
+async function _callAIStreamSingle(provider: AIProvider, model: string, opts: AIRequestOptions): Promise<Response> {
   const { url, apiKey } = getProviderConfig(provider);
 
   const body: Record<string, unknown> = {
@@ -129,6 +127,21 @@ export async function callAIStream(opts: AIRequestOptions): Promise<Response> {
   }
 
   return response; // Caller pipes response.body as SSE stream
+}
+
+export async function callAIStream(opts: AIRequestOptions): Promise<Response> {
+  const provider = opts.provider || "gemini";
+  const model = opts.model || "gemini-2.5-flash";
+
+  try {
+    return await _callAIStreamSingle(provider, model, opts);
+  } catch (e) {
+    if (e instanceof AIError && e.status === 429) {
+      console.warn(`AI stream ${model} rate-limited (429), falling back to gemini-2.5-flash`);
+      return await _callAIStreamSingle("gemini", "gemini-2.5-flash", opts);
+    }
+    throw e;
+  }
 }
 
 export class AIError extends Error {
@@ -158,11 +171,11 @@ export function selectModel(agent: string, message: string, hasAttachments: bool
     return { provider: "gemini", model: "gemini-2.5-pro", maxTokens: 6000, temperature: 0.2, reason: "briefing context" };
   }
 
-  // Complex reasoning → GPT-4o
+  // Complex reasoning → GPT-4o (with Gemini fallback via callAI fallback option)
   if (["accounting", "legal", "empire"].includes(agent) || /analyze|strategy|plan/i.test(message)) {
     return { provider: "gpt", model: "gpt-4o", maxTokens: 4000, temperature: 0.2, reason: "complex reasoning" };
   }
 
-  // Default → GPT-4o-mini
-  return { provider: "gpt", model: "gpt-4o-mini", maxTokens: 2000, temperature: 0.5, reason: "default fast" };
+  // Default → Gemini 2.5 Flash (GPT quota exhausted; Gemini is configured and working)
+  return { provider: "gemini", model: "gemini-2.5-flash", maxTokens: 2000, temperature: 0.5, reason: "default fast" };
 }
