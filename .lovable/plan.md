@@ -1,36 +1,95 @@
 
-# Fix: ai-estimate Edge Function WORKER_LIMIT Crash
+# Security Hardening Plan
 
-## Problem
-The `ai-estimate` edge function hits the 150MB memory limit and crashes with `WORKER_LIMIT`. The root cause is requesting up to **32,000 tokens** from Gemini 2.5 Pro, which creates a massive response object in memory, combined with 5 parallel DB queries, a large prompt (~3KB), and post-processing of all extracted items.
+This plan addresses all non-ignored security findings across the project. The changes are grouped into three categories: database policy fixes, edge function auth hardening, and informational dismissals.
 
-## Solution: Reduce Memory Footprint
+---
 
-### 1. Cut `max_tokens` from 32,000 to 8,000
-The response rarely needs more than 8K tokens. A typical drawing yields 20-80 items at ~100 tokens each = 2K-8K tokens. This alone significantly reduces the memory consumed by the response buffer.
+## 1. Database Migration: Fix Overly Permissive RLS Policies
 
-### 2. Limit files to first 2 (from 3)
-Each file URL adds context for Gemini to process. Reducing from 3 to 2 lowers the gateway response size and processing time.
+Replace `USING (true)` / `WITH CHECK (true)` policies on business tables with proper company-scoped or authenticated-only access. Tables without `company_id` (reference/lookup data) get restricted to authenticated read-only.
 
-### 3. Trim the historical context
-Cap the benchmarks section to 5 entries (from 10) and learnings context to a shorter summary, reducing prompt size by ~500 tokens.
+### Tables with `company_id` (scope to company):
 
-### 4. Process items in smaller batches for DB insert
-Instead of building a single massive array of item rows and inserting all at once, batch inserts in groups of 25 to avoid large memory allocations.
+| Table | Current Policy | New Policy |
+|-------|---------------|------------|
+| `automation_configs` | Service role full access (public, ALL, true) | Service role only (restrict to `service_role`) |
+| `automation_runs` | Service role full access (public, ALL, true) | Service role only (restrict to `service_role`) |
+| `customer_health_scores` | Service role full access (public, ALL, true) | Service role only (restrict to `service_role`) |
+| `document_embeddings` | Service role can manage (public, ALL, true) | Service role only (restrict to `service_role`) |
+| `estimation_learnings` | Service insert (public, INSERT, true) | Service role only (restrict to `service_role`) |
+| `ingestion_progress` | Multiple service policies (public role, true) | Service role only + authenticated company-scoped read |
+| `project_coordination_log` | Service insert/update (public, true) | Service role only (restrict to `service_role`) |
+| `rc_presence` | Service manages presence (public, ALL, true) | Service role only (restrict to `service_role`) |
+| `kb_articles` | Published articles readable by `anon` | Remove anon policy; authenticated company-scoped only |
 
-## Technical Changes
+### Tables without `company_id` (reference/lookup data):
 
-### File: `supabase/functions/ai-estimate/index.ts`
+| Table | Current Policy | New Policy |
+|-------|---------------|------------|
+| `rebar_standards` | Public read (anyone) | Authenticated read only |
+| `wwm_standards` | Public read (anyone) | Authenticated read only |
+| `estimation_validation_rules` | Public read (anyone) | Authenticated read only |
+| `rebar_sizes` | Public read (anyone) | Authenticated read only |
 
-| Line | Change |
-|------|--------|
-| 141 | Reduce benchmarks slice from 10 to 5 |
-| 154 | Change `file_urls.slice(0, 3)` to `file_urls.slice(0, 2)` |
-| 245 | Change `max_tokens: 32000` to `max_tokens: 8000` |
-| 344-375 | Batch item inserts in groups of 25 |
+### Extension fix:
+- Move `vector` extension from `public` schema to `extensions` schema
 
-### Deployment
-Redeploy the `ai-estimate` edge function after changes.
+---
 
-## Why This Works
-Edge functions have a ~150MB memory ceiling. The 32K max_tokens response from Gemini Pro can produce a JSON string of 100KB+, which when parsed and processed (with the calculation engine running on each item) compounds memory usage. Cutting to 8K tokens and 2 files keeps the function well within limits while still extracting all items from typical drawings (most drawings yield under 80 items).
+## 2. Edge Function Auth Hardening
+
+### Add authentication to `seo-ai-copilot`
+Currently accepts any request with a `domain_id`. Will add `requireAuth()` and verify the user's company owns the requested domain.
+
+### Sanitize error messages in edge functions
+Update catch blocks in key functions to log detailed errors server-side but return generic messages to clients. Affected functions:
+- `seo-ai-copilot`
+- `app-help-chat` (public, but sanitize errors)
+
+Note: `app-help-chat` and `website-chat` are intentionally public (help/widget endpoints). They will be marked as acceptable with a note.
+
+---
+
+## 3. Security Findings Management
+
+After fixes, the following findings will be deleted (resolved):
+- `overly_permissive_rls` - fixed by migration
+- `kb_articles_public_exposure` - fixed by removing anon policy
+- `automation_configs_business_logic_exposure` - fixed by restricting to service_role
+- `ingestion_progress_data_exposure` - fixed by restricting to service_role
+- `rebar_standards_pricing_data` - fixed by requiring auth
+- `estimation_validation_rules_exposure` - fixed by requiring auth
+- `wwm_standards_product_specs` - fixed by requiring auth
+- `SUPA_extension_in_public` - fixed by moving vector extension
+- `SUPA_rls_policy_always_true` - fixed by removing true policies
+- `unauthenticated_edge_functions` - fixed (seo-ai-copilot gets auth; others marked acceptable)
+- `verbose_edge_function_errors` - fixed by sanitizing error responses
+
+---
+
+## Technical Details
+
+### SQL Migration (single migration)
+
+```text
+-- 1. Fix service-role policies: change role from 'public' to 'service_role'
+--    for: automation_configs, automation_runs, customer_health_scores,
+--         document_embeddings, estimation_learnings, ingestion_progress,
+--         project_coordination_log, rc_presence
+
+-- 2. Fix reference table policies: change role from 'public' to 'authenticated'
+--    for: rebar_standards, wwm_standards, estimation_validation_rules, rebar_sizes
+
+-- 3. Remove kb_articles anon policy
+
+-- 4. Move vector extension to 'extensions' schema
+```
+
+### Edge Function Changes
+
+**`seo-ai-copilot/index.ts`**: Add `requireAuth()` import and call. Verify user's company owns the domain_id before proceeding.
+
+### Files Modified
+- `supabase/functions/seo-ai-copilot/index.ts` (add auth + error sanitization)
+- Database migration (RLS policy fixes + extension move)
