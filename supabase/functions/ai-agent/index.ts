@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { fetchContext, fetchQuickBooksLiveContext, fetchEstimationLearnings, fetchRebarStandards } from "../_shared/agentContext.ts";
+import { fetchContext, fetchQuickBooksLiveContext, fetchEstimationLearnings, fetchRebarStandards, fetchRAGContext } from "../_shared/agentContext.ts";
 import { getTools } from "../_shared/agentTools.ts";
 import { executeToolCall } from "../_shared/agentToolExecutor.ts";
 import { selectModel, AIError, callAI, type AIMessage, type AIProvider } from "../_shared/aiRouter.ts";
@@ -154,10 +154,19 @@ Deno.serve(async (req) => {
     const stripSendCapabilities = false;
     const DRAFT_ONLY_BLOCK = ""; 
 
+    // RAG: fetch relevant historical context
+    const ragBlock = await fetchRAGContext(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      agent,
+      message,
+      companyId,
+    );
+
     const systemPrompt = ONTARIO_CONTEXT + basePrompt + 
       (mergedContext.brainKnowledgeBlock as string || "") + 
       (mergedContext.roleAccessBlock as string || "") + 
       GOVERNANCE_RULES + DRAFT_ONLY_BLOCK + SHARED_TOOL_INSTRUCTIONS + IDEA_GENERATION_INSTRUCTIONS + LANG_INSTRUCTION + 
+      ragBlock +
       `\n\n## Current User\nName: ${userFullName}\nEmail: ${userEmail}`;
 
     let contextStr = "";
