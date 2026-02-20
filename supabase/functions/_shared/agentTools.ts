@@ -93,6 +93,109 @@ export function getTools(agent: string, stripSendCapabilities: boolean = false) 
     });
   }
 
+  // Estimation Tools
+  if (agent === "estimation") {
+    tools.push(
+      {
+        type: "function" as const,
+        function: {
+          name: "run_takeoff",
+          description: "Run an AI-powered rebar takeoff from uploaded structural drawings. Returns project ID and full BOM summary.",
+          parameters: {
+            type: "object",
+            properties: {
+              name: { type: "string", description: "Project name (e.g. '20 York St - Foundation')" },
+              file_urls: { type: "array", items: { type: "string" }, description: "URLs of uploaded PDF/image files" },
+              customer_id: { type: "string" },
+              lead_id: { type: "string" },
+              waste_factor_pct: { type: "number", description: "Waste percentage (default 5)" },
+              scope_context: { type: "string", description: "Additional context about what to estimate" }
+            },
+            required: ["name", "file_urls"]
+          }
+        }
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "get_estimate_summary",
+          description: "Fetch an estimation project's summary and item breakdown.",
+          parameters: {
+            type: "object",
+            properties: {
+              project_id: { type: "string" }
+            },
+            required: ["project_id"]
+          }
+        }
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "update_estimate_item",
+          description: "Manually correct/override an AI-extracted estimation item.",
+          parameters: {
+            type: "object",
+            properties: {
+              item_id: { type: "string" },
+              quantity: { type: "number" },
+              cut_length_mm: { type: "number" },
+              bar_size: { type: "string" },
+              mark: { type: "string" },
+              element_ref: { type: "string" }
+            },
+            required: ["item_id"]
+          }
+        }
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "apply_waste_factor",
+          description: "Recalculate an estimation project with a different waste percentage.",
+          parameters: {
+            type: "object",
+            properties: {
+              project_id: { type: "string" },
+              waste_factor_pct: { type: "number" }
+            },
+            required: ["project_id", "waste_factor_pct"]
+          }
+        }
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "convert_to_quote",
+          description: "Create a quote/order record from an estimation project.",
+          parameters: {
+            type: "object",
+            properties: {
+              project_id: { type: "string" },
+              customer_id: { type: "string" },
+              notes: { type: "string" }
+            },
+            required: ["project_id"]
+          }
+        }
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "export_estimate",
+          description: "Generate a structured JSON export of the estimation project for download.",
+          parameters: {
+            type: "object",
+            properties: {
+              project_id: { type: "string" }
+            },
+            required: ["project_id"]
+          }
+        }
+      }
+    );
+  }
+
   // Empire / Architect Tools
   if (agent === "empire") {
     tools.push(
