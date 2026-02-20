@@ -1,7 +1,10 @@
 /**
  * Smart Agent Router
  * Analyzes user input and returns the best-matching agent route.
+ * Phase 2: Keyword fast-path + LLM fallback for ambiguous queries.
  */
+
+import { supabase } from "@/integrations/supabase/client";
 
 interface AgentRoute {
   id: string;
@@ -218,13 +221,20 @@ const agentRoutes: AgentRoute[] = [
   },
 ];
 
+// ─── Route name map (for resolving LLM agent IDs to routes) ───
+const agentMap = new Map(agentRoutes.map(a => [a.id, a]));
+
 export interface RouteResult {
   agentId: string;
   route: string;
   agentName: string;
   confidence: number;
+  method?: "keyword" | "llm" | "fallback";
+  /** For compound requests, additional agents */
+  secondaryAgents?: string[];
 }
 
+// ─── Keyword-based fast-path (synchronous) ───
 export function routeToAgent(input: string): RouteResult {
   const q = input.toLowerCase().trim();
 
@@ -233,13 +243,13 @@ export function routeToAgent(input: string): RouteResult {
     route: "/agent/assistant",
     agentName: "Vizzy",
     confidence: 0,
+    method: "keyword",
   };
 
   for (const agent of agentRoutes) {
     let score = 0;
     for (const keyword of agent.keywords) {
       if (q.includes(keyword)) {
-        // Longer keyword matches = higher confidence
         score += keyword.length;
       }
     }
@@ -249,9 +259,62 @@ export function routeToAgent(input: string): RouteResult {
         route: agent.route,
         agentName: agent.name,
         confidence: score,
+        method: "keyword",
       };
     }
   }
 
   return bestMatch;
+}
+
+// ─── Confidence threshold for LLM fallback ───
+const LLM_FALLBACK_THRESHOLD = 6; // keyword score below this triggers LLM
+
+/**
+ * Smart router: keyword fast-path → LLM fallback for ambiguous queries.
+ * Falls back gracefully to keyword match if LLM is unavailable.
+ */
+export async function routeToAgentSmart(input: string): Promise<RouteResult> {
+  // 1. Try keyword match first (instant, free)
+  const keywordResult = routeToAgent(input);
+
+  // 2. If confidence is high enough, use keyword result
+  if (keywordResult.confidence >= LLM_FALLBACK_THRESHOLD) {
+    return keywordResult;
+  }
+
+  // 3. Low confidence → call LLM classifier
+  try {
+    const { data, error } = await supabase.functions.invoke("agent-router", {
+      body: {
+        message: input,
+        currentMatch: keywordResult.agentId,
+        currentConfidence: keywordResult.confidence,
+      },
+    });
+
+    if (error || !data?.agents?.length) {
+      console.warn("LLM router failed, using keyword fallback:", error);
+      return keywordResult;
+    }
+
+    const primaryId = data.agents[0];
+    const primary = agentMap.get(primaryId);
+
+    if (!primary) {
+      return keywordResult;
+    }
+
+    return {
+      agentId: primary.id,
+      route: primary.route,
+      agentName: primary.name,
+      confidence: data.confidence ?? 0.8,
+      method: data.method === "llm" ? "llm" : "fallback",
+      secondaryAgents: data.agents.slice(1),
+    };
+  } catch (e) {
+    console.warn("LLM router error, using keyword fallback:", e);
+    return keywordResult;
+  }
 }

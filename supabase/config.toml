@@ -279,3 +279,6 @@ verify_jwt = false
 
 [functions.generate-fix-prompt]
 verify_jwt = false
+
+[functions.agent-router]
+verify_jwt = false
