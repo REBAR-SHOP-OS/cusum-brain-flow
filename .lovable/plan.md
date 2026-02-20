@@ -1,140 +1,200 @@
 
 
-# Multi-Agent AI and Social Media Autopilot -- Gap Analysis and Implementation Plan
+# AI-Driven Rebar Estimation and Detailing Module -- Implementation Plan
 
-## What Already Exists (No Work Needed)
+## Current State Assessment
 
-The strategy document proposes an architecture that is largely **already built**. Here is the mapping:
+The existing system already has foundational estimation capabilities:
 
-| Proposed Component | Already Exists As | Status |
-|---|---|---|
-| SalesOpsAgent | **Blitz** (sales rep) + **Commander** (sales ops) | Done |
-| ProductionPlannerAgent | **Forge** (shopfloor agent) | Done |
-| CustomerSupportAgent | **Haven** (support agent) | Done |
-| ExecutiveSummaryAgent | **agentExecutiveContext.ts** (Phase 6) for Data/Empire/Commander | Done |
-| AuditAgent | **agentQA.ts** (Phase 4) -- QA reviewer layer | Done |
-| ContentGenAgent | **Pixel** agent + `auto-generate-post` edge function | Done |
-| Router / Orchestrator | Hybrid keyword + LLM router (`agent-router`) | Done |
-| Domain-separated memory | RAG with pgvector (`document_embeddings`, `embed-documents`, `search-embeddings`) | Done |
-| Prompt caching | Static/dynamic prefix split in `ai-agent/index.ts` (Phase 5) | Done |
-| Image generation | `generate-image` edge function (DALL-E) | Done |
-| Video generation | `generate-video` edge function (Veo 3.0) | Done |
-| Social publishing | `social-publish` (Facebook/Instagram/LinkedIn Graph API) | Done |
-| Cron publishing | `social-cron-publish` (auto-publishes scheduled posts) | Done |
-| Social intelligence | `social-intelligence` (business insights + trend analysis) | Done |
+- **Gauge agent** (`specialists.ts`): RSIC/CSA-focused prompt for rebar estimating
+- **Document analysis pipeline** (`agentDocumentUtils.ts`): OCR, PDF-to-images, zone detection, basic rebar data extraction via regex
+- **extract-manifest** edge function: Parses uploaded schedules (PDF/Excel/images) into structured bar-bending data using Gemini
+- **shape-vision** edge function: Identifies ASA shape codes from images
+- **Database tables**: `rebar_standards` (bar properties, hook/lap multipliers), `rebar_sizes`, `estimation_learnings`, `estimation_validation_rules`
+- **Storage**: `estimation-files` bucket
 
-## Actual Gaps to Implement
+### What's Missing (Gaps)
 
-After auditing what exists, **three meaningful gaps** remain from the strategy document:
+1. **No dedicated Estimator edge function** -- Gauge can chat about estimation but cannot run a structured, deterministic takeoff pipeline that produces a formal BOM/cost output
+2. **No Detailer Agent** -- No CAD/DXF drawing generation capability
+3. **No estimation projects/sessions table** -- No way to persist a takeoff as a project with revisions
+4. **No cost calculation engine** -- No labor rates, material pricing, waste factor application
+5. **No structured output format** -- The current extraction returns raw JSON but doesn't produce a downloadable Excel/PDF estimate
+6. **No CRSI/ACI rule engine** -- `rebar_standards` has multipliers but no code to compute hook allowances, lap splices, development lengths deterministically
+7. **No estimation-specific tools for the Gauge agent** -- Cannot save takeoffs, create quotes from estimates, or write results back to orders
 
-### Gap 1: Approval Workflow Agent (ApprovalAgent)
+## Implementation Plan
 
-Currently, posts move through statuses manually (draft -> scheduled -> published). There is no automated notification pipeline to Radin/Neel when content is ready for review, no timeout escalation, and no structured approval/rejection flow with feedback loops.
+### Step 1: Database Schema -- Estimation Projects and Takeoff Items
 
-**What to build:**
-- A `social_approvals` table tracking approval requests, assigned approver, deadline, decision, and feedback
-- An `approval-notify` edge function that sends push/email notifications when a post enters "pending_approval" status
-- Auto-escalation: if no response within a configurable window (e.g., 4 hours), re-notify or escalate
-- Wire the ContentGen output (from `auto-generate-post`) to automatically create approval records instead of going straight to "scheduled"
-- Add an Approvals panel in the Social Media Manager UI showing pending items with Approve/Reject + feedback input
+Create tables to persist estimation sessions and their line items:
 
-### Gap 2: Twitter/X Publishing Support
+**`estimation_projects`** -- A takeoff session/project
+- `id` UUID PK
+- `name` TEXT (e.g. "20 York St - Foundation")
+- `customer_id` UUID FK (nullable)
+- `lead_id` UUID FK (nullable)
+- `status` TEXT (draft / in_progress / completed / approved)
+- `source_files` JSONB (array of uploaded file URLs + names)
+- `element_summary` JSONB (counts by element type: footings, columns, beams, slabs)
+- `total_weight_kg` NUMERIC
+- `total_cost` NUMERIC
+- `waste_factor_pct` NUMERIC DEFAULT 5
+- `labor_hours` NUMERIC
+- `notes` TEXT
+- `created_by` UUID
+- `company_id` UUID
+- `created_at`, `updated_at` TIMESTAMPTZ
 
-The `social-publish` function currently supports Facebook, Instagram, and LinkedIn only. Twitter/X is listed as a platform in the UI but publishing is not implemented.
+**`estimation_items`** -- Individual rebar lines from takeoff
+- `id` UUID PK
+- `project_id` UUID FK -> estimation_projects
+- `element_type` TEXT (footing, column, beam, slab, wall, pier)
+- `element_ref` TEXT (e.g. "C1", "F2", "B3")
+- `mark` TEXT
+- `bar_size` TEXT (e.g. "20M")
+- `grade` TEXT (e.g. "400W")
+- `shape_code` TEXT (ASA code)
+- `quantity` INTEGER
+- `cut_length_mm` NUMERIC (raw bar length before hooks/laps)
+- `total_length_mm` NUMERIC (with hook/lap allowances applied)
+- `hook_allowance_mm` NUMERIC
+- `lap_allowance_mm` NUMERIC
+- `weight_kg` NUMERIC (computed: total_length * mass_per_m * quantity)
+- `spacing_mm` NUMERIC
+- `dimensions` JSONB (A, B, C, D, E, F, G, H, J, K values)
+- `unit_cost` NUMERIC
+- `line_cost` NUMERIC
+- `source` TEXT (ai_extracted / manual / revised)
+- `warnings` TEXT[]
+- `created_at` TIMESTAMPTZ
 
-**What to build:**
-- Add Twitter OAuth 1.0a signing to `social-publish` using the `api.x.com/2` endpoint
-- Support text-only and text+media tweets
-- Ensure the user has configured `TWITTER_CONSUMER_KEY`, `TWITTER_CONSUMER_SECRET`, `TWITTER_ACCESS_TOKEN`, and `TWITTER_ACCESS_TOKEN_SECRET`
+**`estimation_pricing`** -- Material and labor rates
+- `id` UUID PK
+- `company_id` UUID
+- `bar_size` TEXT
+- `material_cost_per_kg` NUMERIC
+- `labor_rate_per_hour` NUMERIC
+- `kg_per_labor_hour` NUMERIC (productivity factor)
+- `effective_date` DATE
+- `is_active` BOOLEAN DEFAULT true
 
-### Gap 3: TikTok Publishing Support
+RLS: All scoped to `company_id` via `auth.uid()` join to `profiles`.
 
-TikTok is listed in the platform filters but has no publishing integration.
+### Step 2: Rebar Calculation Engine (Shared Module)
 
-**What to build:**
-- Add TikTok Content Posting API support to `social-publish` (video upload via `tiktok-oauth` flow that already exists)
-- Requires TikTok developer app credentials
+Create `supabase/functions/_shared/rebarCalcEngine.ts` -- a deterministic calculation module (no AI, pure math):
 
-## Implementation Steps
+- `computeHookAllowance(barSize, hookType, standards)` -- Uses `hook_90_extension_mult` and `hook_180_extension_mult` from `rebar_standards` to compute exact mm
+- `computeLapSplice(barSize, spliceType, standards)` -- Uses `lap_tension_mult` / `lap_compression_mult`
+- `computeDevelopmentLength(barSize, standards)` -- Uses `development_length_mult`
+- `computeBendDeduction(barSize, standards)` -- Uses `bend_radius_mult`, `hook_90_deduction`, `hook_180_deduction`
+- `computeBarWeight(barSize, lengthMm, standards)` -- Uses `weight_per_meter` from `rebar_standards`
+- `computeTotalLength(cutLength, hooks, laps)` -- Sums raw + allowances
+- `computeLineCost(weightKg, pricing)` -- Weight * material cost
+- `computeLaborHours(totalWeightKg, pricing)` -- Weight / kg_per_labor_hour
+- `applyWasteFactor(items, wastePct)` -- Adds scrap percentage
+- `validateItem(item, rules)` -- Checks against `estimation_validation_rules` (min/max bar sizes, lengths, spacing)
 
-### Step 1: Approval Workflow (Database)
+All formulas reference CSA G30.18 / RSIC 2018 standards stored in the database.
 
-Create a `social_approvals` table:
+### Step 3: AI Estimation Edge Function
 
+Create `supabase/functions/ai-estimate/index.ts` -- the main estimation pipeline:
+
+**Input:** Uploaded structural/architectural drawings (PDF/images) + optional scope context
+
+**Pipeline:**
+1. **Preprocessing**: Convert PDFs to images via `pdf-to-images`, run OCR via `google-vision-ocr`
+2. **AI Extraction (Gemini 2.5 Pro)**: Vision model identifies structural elements (columns, beams, footings, slabs) and extracts:
+   - Element type, reference, dimensions
+   - Bar sizes, quantities, spacing
+   - Hook types, lap requirements
+   - Notes, scales, general specifications
+3. **Deterministic Calculation**: For each extracted item, run through `rebarCalcEngine`:
+   - Look up bar properties from `rebar_standards`
+   - Compute hook allowances, lap splices per RSIC rules
+   - Calculate total lengths, weights, costs
+   - Apply waste factors
+   - Validate against `estimation_validation_rules`
+4. **Persist**: Save to `estimation_projects` + `estimation_items`
+5. **Output**: Return structured JSON with full BOM, summary, warnings, and cost breakdown
+
+### Step 4: Estimation Tools for Gauge Agent
+
+Add estimation-specific tools to `agentTools.ts` for the `estimation` agent:
+
+- **`run_takeoff`**: Trigger the `ai-estimate` function with attached files, returns project ID and summary
+- **`get_estimate_summary`**: Fetch an estimation project's summary and item breakdown
+- **`update_estimate_item`**: Manually correct/override an AI-extracted item (mark, quantity, length)
+- **`apply_waste_factor`**: Recalculate with a different waste percentage
+- **`convert_to_quote`**: Create a quote record from the estimation project, linking to the customer/lead
+- **`export_estimate`**: Generate downloadable output (structured JSON for now, Excel in future)
+
+### Step 5: Upgrade Gauge Agent Prompt
+
+Rewrite `specialists.ts` estimation prompt to:
+- Include CRSI/ACI rule references (hook = 6d for 90 deg, 12d for 180 deg, lap = 40-60d)
+- Include CSA G30.18 bar size reference table
+- Include OSHA 1926.701 safety flag instructions
+- Reference the new tools and explain when to use `run_takeoff` vs manual calculation
+- Add structured output format expectations for takeoff results
+- Include waste factor guidance (3-5% standard, higher for complex shapes)
+
+### Step 6: Estimation UI Page
+
+Create `src/pages/Estimation.tsx` with:
+- **Upload zone**: Drag-and-drop structural drawings (PDF/images)
+- **Scope confirmation**: User confirms project name, customer, element types to estimate
+- **Progress indicator**: Shows pipeline stages (OCR -> Extraction -> Calculation -> Validation)
+- **Results table**: Sortable/editable grid of estimation items (element, mark, bar size, qty, length, weight, cost)
+- **Summary cards**: Total weight, total cost, labor hours, waste percentage
+- **Warnings panel**: Validation flags (e.g., unusual bar sizes, missing data)
+- **Actions**: Export, Convert to Quote, Save Draft, Revise
+
+## Technical Details
+
+### Calculation Example (CSA/RSIC)
+For a 20M bar in a column with 90-degree hooks both ends:
+- Bar diameter: 19.5mm (from `rebar_standards`)
+- Hook allowance: 19.5 * 6 = 117mm per hook = 234mm total
+- Hook deduction: from `hook_90_deduction` field
+- Net total length = cut_length + hook_allowances - hook_deductions
+- Weight = total_length_m * 2.355 kg/m (from `weight_per_meter`)
+- Cost = weight * material_cost_per_kg
+
+### AI Model Selection
+- **Gemini 2.5 Pro**: For vision analysis of drawings (needs multimodal + large context)
+- **Gemini 2.5 Flash**: For structured data extraction from OCR text
+- Deterministic calculations use NO AI -- pure TypeScript math from database standards
+
+### File Flow
 ```text
-social_approvals
-  id              UUID PK
-  post_id         UUID FK -> social_posts.id
-  approver_id     UUID (user who should review)
-  status          TEXT (pending / approved / rejected)
-  feedback        TEXT (rejection reason or notes)
-  deadline        TIMESTAMPTZ
-  decided_at      TIMESTAMPTZ
-  created_at      TIMESTAMPTZ
+Upload (PDF/Image)
+  -> pdf-to-images (if PDF)
+  -> google-vision-ocr (per page)
+  -> Gemini 2.5 Pro (element identification + rebar extraction)
+  -> rebarCalcEngine (deterministic math)
+  -> estimation_items (persist)
+  -> Summary + BOM output
 ```
 
-Add RLS policies scoped to the approver's user ID and the post owner.
+## Implementation Sequence
 
-### Step 2: Approval Notification Edge Function
+| Step | What | Effort |
+|------|------|--------|
+| 1 | Database tables (estimation_projects, items, pricing) + RLS | 1 hour |
+| 2 | rebarCalcEngine.ts (deterministic calculations) | 1.5 hours |
+| 3 | ai-estimate edge function (full pipeline) | 2 hours |
+| 4 | Estimation tools for Gauge agent | 1 hour |
+| 5 | Upgrade Gauge prompt with CRSI/ACI/OSHA rules | 30 min |
+| 6 | Estimation UI page | 2 hours |
+| **Total** | | **~8 hours** |
 
-Create `approval-notify` edge function:
-- Triggered when a post status changes to "pending_approval"
-- Looks up assigned approvers from `social_approvals`
-- Sends push notification (via existing `send-push`) and/or email
-- Records notification timestamp for escalation tracking
+## Out of Scope (Future Phases)
 
-### Step 3: Auto-Generate -> Approval Pipeline
-
-Modify `auto-generate-post` so newly generated posts:
-1. Are saved with status `"pending_approval"` (not `"draft"`)
-2. Automatically create a `social_approvals` record targeting the configured approver(s)
-3. Trigger the `approval-notify` function
-
-### Step 4: Approval UI in Social Media Manager
-
-Add an "Approvals" tab/section:
-- List of pending approval posts with preview (text + image)
-- Approve button (moves to "scheduled" with next available slot)
-- Reject button with feedback textarea (moves to "declined", feedback saved)
-- Badge count on the tab showing pending items
-
-### Step 5: Twitter/X Publishing
-
-Add to `social-publish`:
-- OAuth 1.0a signature generation for Twitter API v2
-- Text post endpoint: `POST https://api.x.com/2/tweets`
-- Media upload via `https://upload.twitter.com/1.1/media/upload.json` for image posts
-- Check for required secrets before attempting
-
-### Step 6: Escalation Cron
-
-Add a cron job (every 2 hours) that:
-- Queries `social_approvals` where status = 'pending' and deadline < now()
-- Re-sends notification to approver
-- After 2 missed deadlines, auto-escalates (e.g., notifies admin or auto-approves based on policy)
-
-## What We Are NOT Doing (and Why)
-
-| Proposed Item | Why Not |
-|---|---|
-| Separate vector DB (Weaviate/Chroma/Pinecone) | pgvector already handles this with HNSW index |
-| LangChain / LlamaIndex | System is TypeScript/Deno; `aiRouter.ts` already provides equivalent functionality |
-| Self-hosted GPU / open-source models | API access to GPT/Gemini is already configured with fallback routing |
-| Multi-tenant SaaS architecture | Premature -- system serves one company; can be added later |
-| Kubernetes / KServe / Airflow | Edge functions already provide serverless isolation |
-| DALL-E / Stable Diffusion comparison | `generate-image` already uses DALL-E; `generate-video` uses Veo 3.0 |
-| Synthesia video | Veo 3.0 is already integrated and more cost-effective |
-| Grafana / Datadog monitoring | Executive dashboard context (Phase 6) already provides KPI aggregation |
-
-## Timeline Estimate
-
-| Step | Effort |
-|---|---|
-| Step 1: Approval table + RLS | 1 hour |
-| Step 2: approval-notify function | 1 hour |
-| Step 3: Wire auto-generate pipeline | 1 hour |
-| Step 4: Approval UI components | 2 hours |
-| Step 5: Twitter/X publishing | 2 hours (requires API keys) |
-| Step 6: Escalation cron | 30 min |
-| **Total** | **~7.5 hours** |
+- **CAD/DXF Drawing Generation (Detailer Agent)**: Requires DXF library integration; planned for Phase 2
+- **Excel Export**: Requires server-side XLSX generation; can leverage existing `xlsx` dependency
+- **BIM/Tekla Integration**: Enterprise feature, requires API access
+- **Fine-tuned vision model for rebar drawings**: Would improve accuracy but requires training data collection first
 
