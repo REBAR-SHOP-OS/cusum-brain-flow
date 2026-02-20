@@ -1,150 +1,97 @@
 
+# Enhance Penny AI with Phase 17 QuickBooks Data
 
-# Phase 17: Maximize QuickBooks Integration
+## Summary
 
-## Current Coverage Assessment
+Penny currently has extensive QB context (invoices, payments, bills, P&L, balance sheet, aged AR/AP) but does NOT yet leverage the new Phase 17 capabilities: **Cash Flow Statement**, **Tax Summary**, **Bill Payments**, **Classes/Departments**, or the new tables. This plan wires all of that into Penny's brain, adds new tool-calling capabilities, and upgrades the morning briefing.
 
-The existing QuickBooks integration is already extensive, covering:
-- **OAuth + Token Management** with proactive refresh and rate-limit retry
-- **Full Sync Engine** (backfill, incremental, CDC deletion detection, reconciliation)
-- **GL Normalization** -- all QB transactions mapped to double-entry GL lines
-- **Transaction CRUD** -- Invoice, Estimate, Bill, Payment, CreditMemo, PurchaseOrder, SalesReceipt, RefundReceipt, Deposit, Transfer, JournalEntry
-- **Reports** -- P&L, Balance Sheet, Aged AR/AP, General Ledger, Trial Balance, Transaction List
-- **Payroll** -- Employee list/get/update, TimeActivity list, payroll corrections via JE
-- **Banking** -- Bank activity sync with live balances, unreconciled counts, reconciled-through dates
-- **Recurring Transactions** -- List via query (UI exists)
-- **Expenses/Purchases** -- List via query (UI exists)
-- **AI Audit** -- Gemini-powered forensic analysis of QB data
-- **Auto-Reconciliation** -- 100% confidence matching engine
-- **Orphan Invoice Relinking** -- Auto-match invoices to CRM customers
+---
 
-## What's Missing (Unused QB APIs)
+## Track A: Expand `fetchQuickBooksLiveContext` with Phase 17 Reports
 
-### Track 1: Cash Flow Statement Report
-QuickBooks provides a native `reports/CashFlow` endpoint. Currently cash flow is "derived" (per memory). Using the real QB report ensures accuracy.
+Add three new QB API calls inside the existing helper function:
 
-**Deliverables:**
-- Add `get-cash-flow` action to `quickbooks-oauth`
-- New `AccountingCashFlow.tsx` component with period comparison (this month vs last month)
-- Add to AccountingWorkspace tabs
+1. **Cash Flow Statement** -- `reports/CashFlow` with current month and prior month for comparison
+2. **Tax Summary** -- `reports/TaxSummary` for HST/GST collected vs paid
+3. **Bill Payments** -- `SELECT * FROM BillPayment` for vendor payment tracking
 
-### Track 2: Bill Payments (VendorCredit already synced, BillPayment is not)
-The `BillPayment` entity allows paying bills -- currently bills exist but paying them through the ERP creates journal entries rather than proper QB BillPayments.
+Also fetch **Classes** and **Departments** from local `qb_classes` / `qb_departments` tables so Penny can reference project/cost-center data.
 
-**Deliverables:**
-- Add `create-bill-payment` and `list-bill-payments` actions to `quickbooks-oauth`
-- Add BillPayment to `TXN_TYPES` in `qb-sync-engine` for full sync
-- Wire into VendorDetail "Make Payment" button
+New context keys: `qbCashFlow`, `qbTaxSummary`, `qbBillPayments`, `qbClasses`, `qbDepartments`
 
-### Track 3: Attachments API
-QB's `Attachable` endpoint lets you attach PDFs/images to invoices, bills, and receipts. Currently no file attachment sync exists.
+---
 
-**Deliverables:**
-- Add `upload-attachment` and `list-attachments` actions to `quickbooks-oauth`
-- New `QBAttachmentUploader` component for InvoiceEditor and VendorDetail
-- Auto-attach packing slip PDFs to invoices when generated
+## Track B: New Penny Tools (Tool-Calling)
 
-### Track 4: Customer/Vendor Update (Write-Back)
-Currently customers/vendors sync one-way (QB to ERP). Edits in the ERP don't push back.
+Give Penny 4 new tool-calling functions so she can take action, not just report:
 
-**Deliverables:**
-- Add `update-customer` and `update-vendor` actions to `quickbooks-oauth`
-- Wire "Save" in customer/vendor detail views to push changes to QB
-- Two-way sync indicator in UI
+1. **`fetch_cash_flow_report`** -- Pull native QB cash flow for any date range and present it
+2. **`fetch_tax_summary`** -- Pull HST/GST summary for a specific period (for filing prep)
+3. **`create_bill_payment`** -- Pay a vendor bill through QB (with user approval gate)
+4. **`create_expense`** -- Record a new expense/purchase in QB (with user approval gate)
 
-### Track 5: Tax Summary Report + HST Filing Support
-QB's `reports/TaxSummary` provides tax collected/paid breakdown for HST/GST filing.
+These tools call the existing `quickbooks-oauth` edge function actions added in Phase 17.
 
-**Deliverables:**
-- Add `get-tax-summary` action to `quickbooks-oauth`
-- New `TaxFilingSummary.tsx` component showing HST collected, ITC claimed, net owing
-- Add to the existing `TaxPlanning.tsx` tab
+---
 
-### Track 6: Class & Department Tracking
-QB supports `Class` and `Department` entities for cost-center tracking. This enables project-level and department-level P&L.
+## Track C: Upgrade Morning Briefing
 
-**Deliverables:**
-- Add `list-classes`, `list-departments`, `create-class` actions
-- Sync classes/departments in `qb-sync-engine` backfill
-- Add Class/Department selector to transaction creation dialogs (Invoice, Bill, JE)
-- Enable `reports/ProfitAndLoss?summarize_column_by=Class` for project-level reporting
+Add 3 new sections to Penny's structured morning briefing (currently 8 sections, expanding to 11):
 
-### Track 7: Webhooks (Real-Time Push Notifications)
-Instead of polling with incremental sync, QB Webhooks push changes in real-time.
+- **Section 9: Cash Flow Snapshot** -- Operating/Investing/Financing from native QB report, month-over-month comparison
+- **Section 10: HST/GST Status** -- Tax collected, ITCs claimed, net owing, days until next filing deadline
+- **Section 11: Project/Class P&L** -- If classes exist, show top 5 classes by revenue with margin
 
-**Deliverables:**
-- New edge function `qb-webhook` to receive QB webhook events
-- Register webhook URL via QB Developer Portal
-- On webhook event: trigger incremental sync for the changed entity
-- Eliminates sync delay -- changes appear in seconds vs next cron cycle
+---
 
-### Track 8: Purchase (Expense) Creation
-Expenses/Purchases can be listed but not created from the ERP.
+## Track D: Enhanced System Prompt
 
-**Deliverables:**
-- Add `create-purchase` action to `quickbooks-oauth`
-- New `CreateExpenseDialog` component
-- Wire into AccountingExpenses tab
+Update Penny's persona prompt to include:
+- Knowledge of cash flow analysis (3-activity breakdown: operating, investing, financing)
+- HST/GST filing rules (quarterly deadlines, ITC claiming, net remittance calculation)
+- Class/Department-level reporting capabilities
+- Bill payment workflow (3-way match reminder before paying)
 
 ---
 
 ## Technical Details
 
-### Edge Function Changes
+### Files Modified
 
-**`quickbooks-oauth/index.ts`** -- Add 10 new action handlers:
-- `get-cash-flow` -- fetch `reports/CashFlow` with date range
-- `create-bill-payment` -- POST to `billpayment` endpoint
-- `list-bill-payments` -- query BillPayment entity
-- `upload-attachment` -- multipart POST to `upload` endpoint
-- `list-attachments` -- query Attachable by entity ref
-- `update-customer` -- sparse update to `customer` endpoint
-- `update-vendor` -- sparse update to `vendor` endpoint
-- `get-tax-summary` -- fetch `reports/TaxSummary`
-- `list-classes` / `create-class` -- query/create Class entities
-- `list-departments` -- query Department entities
-- `create-purchase` -- POST to `purchase` endpoint
+**`supabase/functions/ai-agent/index.ts`** (4 areas):
 
-**`qb-sync-engine/index.ts`** -- Extend sync:
-- Add `BillPayment` to `TXN_TYPES` array
-- Add Class and Department upsert functions (new `qb_classes` and `qb_departments` tables)
-- Sync attachable metadata during backfill
+1. **`fetchQuickBooksLiveContext()`** (~line 3098) -- Add 5 new data fetches:
+   - QB Cash Flow report via `qbFetch`
+   - QB Tax Summary report via `qbFetch`  
+   - QB BillPayment query via `qbFetch`
+   - `qb_classes` table query
+   - `qb_departments` table query
 
-**New `qb-webhook/index.ts`** -- Webhook receiver:
-- Validate webhook signature using QB's verifier token
-- Parse notification payload for entity type and ID
-- Trigger targeted sync for changed entities
+2. **Penny system prompt** (~line 892) -- Add paragraphs on cash flow analysis, HST/GST compliance, class-based reporting
 
-### Database Migration
-- `qb_classes` table (id, company_id, qb_id, name, parent_qb_id, is_active, raw_json, last_synced_at) with RLS
-- `qb_departments` table (id, company_id, qb_id, name, is_active, raw_json, last_synced_at) with RLS
-- Add `class_qb_id` and `department_qb_id` nullable columns to `qb_transactions`
-- Add `qb_webhook_events` table for audit logging of incoming webhooks
+3. **Tools array** (~line 6036) -- Add 4 new tool definitions for accounting agent:
+   - `fetch_cash_flow_report` (params: start_date, end_date)
+   - `fetch_tax_summary` (params: start_date, end_date)
+   - `create_bill_payment` (params: vendor_id, bill_id, amount, payment_method)
+   - `create_expense` (params: account_id, vendor_id, amount, description, class_id, department_id)
 
-### New Frontend Components (6)
-- `src/components/accounting/AccountingCashFlow.tsx` -- Cash flow statement with period comparison
-- `src/components/accounting/TaxFilingSummary.tsx` -- HST/GST filing report
-- `src/components/accounting/QBAttachmentUploader.tsx` -- File upload to QB entities
-- `src/components/accounting/CreateExpenseDialog.tsx` -- New expense/purchase dialog
-- `src/components/accounting/ClassDepartmentPicker.tsx` -- Reusable picker for transactions
-- `src/components/accounting/BillPaymentDialog.tsx` -- Pay bills with proper QB BillPayment
+4. **Tool execution handler** -- Add cases to execute these tools by calling `supabase.functions.invoke("quickbooks-oauth", { body: { action: "...", ... } })`
 
-### Modified Frontend Files (6-8)
-- `AccountingWorkspace.tsx` -- Add Cash Flow and Tax Filing tabs
-- `VendorDetail.tsx` -- Wire "Make Payment" to new BillPaymentDialog
-- `InvoiceEditor.tsx` -- Add attachment upload, class/department pickers
-- `CreateVendorTransactionDialog.tsx` -- Add class/department pickers
-- `AccountingExpenses.tsx` -- Add "New Expense" button
-- `AccountingDashboard.tsx` -- Add cash flow widget
+5. **Morning briefing template** (~line 5588) -- Add sections 9, 10, 11 with context references to `qbCashFlow`, `qbTaxSummary`, `qbClasses`
+
+### No New Files Required
+
+All changes are within the existing `ai-agent/index.ts` edge function.
+
+### No Database Changes Required
+
+Phase 17 already created `qb_classes`, `qb_departments`, and all needed tables.
 
 ### Implementation Order
-1. Database migration (qb_classes, qb_departments, webhook events)
-2. Track 1: Cash Flow report (quick win, high value)
-3. Track 2: Bill Payments (fixes vendor payment gap)
-4. Track 5: Tax Summary (compliance value)
-5. Track 4: Customer/Vendor write-back (two-way sync)
-6. Track 6: Class/Department tracking (project-level P&L)
-7. Track 8: Expense creation
-8. Track 3: Attachments API
-9. Track 7: Webhooks (infrastructure upgrade)
 
+1. Expand `fetchQuickBooksLiveContext` with new data fetches
+2. Update Penny's system prompt with new knowledge
+3. Add tool definitions to the tools array
+4. Add tool execution handlers
+5. Upgrade morning briefing template
+6. Deploy and test
