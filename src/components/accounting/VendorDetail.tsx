@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { CreateVendorTransactionDialog, type VendorTransactionType } from "./CreateVendorTransactionDialog";
+import { BillPaymentDialog } from "./BillPaymentDialog";
 import { useToast } from "@/hooks/use-toast";
 import type { QBVendor } from "@/hooks/useQuickBooksData";
 
@@ -74,6 +75,7 @@ export function VendorDetail({ vendor }: VendorDetailProps) {
   const [txnDialogOpen, setTxnDialogOpen] = useState(false);
   const [txnDialogType, setTxnDialogType] = useState<VendorTransactionType>("Bill");
   const [syncing, setSyncing] = useState(false);
+  const [billPayOpen, setBillPayOpen] = useState(false);
   const autoSyncAttempted = useRef(false);
 
   const openTxnDialog = (type: VendorTransactionType) => {
@@ -324,8 +326,13 @@ export function VendorDetail({ vendor }: VendorDetailProps) {
             </CardContent>
           </Card>
 
-          {/* ── New Transaction ── */}
-          <div className="flex justify-end">
+         {/* ── New Transaction + Make Payment ── */}
+          <div className="flex justify-end gap-2">
+            {financialSummary.openBalance > 0 && (
+              <Button size="sm" variant="outline" className="gap-1" onClick={() => setBillPayOpen(true)}>
+                <DollarSign className="w-4 h-4" /> Make Payment
+              </Button>
+            )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button size="sm" className="gap-1"><FileText className="w-4 h-4" /> New transaction <ChevronDown className="w-3 h-3" /></Button>
@@ -524,6 +531,21 @@ export function VendorDetail({ vendor }: VendorDetailProps) {
         type={txnDialogType}
         vendorQbId={vendor.Id}
         vendorName={vendor.DisplayName}
+      />
+
+      <BillPaymentDialog
+        open={billPayOpen}
+        onOpenChange={setBillPayOpen}
+        vendorQbId={vendor.Id}
+        vendorName={vendor.DisplayName}
+        bills={transactions
+          .filter((t) => t.entity_type === "Bill" && (t.balance ?? 0) > 0)
+          .map((t) => ({
+            Id: (t.raw_json as any)?.Id || "",
+            DocNumber: t.doc_number || undefined,
+            Balance: t.balance ?? 0,
+            TxnDate: t.txn_date || undefined,
+          }))}
       />
     </ScrollArea>
   );

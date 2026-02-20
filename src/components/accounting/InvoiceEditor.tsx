@@ -7,6 +7,8 @@ import { X, Printer, Pencil, Save, Plus, Trash2, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import brandLogo from "@/assets/brand-logo.png";
 import { Badge } from "@/components/ui/badge";
+import { QBAttachmentUploader } from "./QBAttachmentUploader";
+import { ClassDepartmentPicker } from "./ClassDepartmentPicker";
 import type { QBInvoice, QBCustomer, QBItem, QBPayment } from "@/hooks/useQuickBooksData";
 
 interface LineItem {
@@ -94,6 +96,14 @@ export function InvoiceEditor({ invoice, customers, items, payments, onUpdate, o
   const [salesRep, setSalesRep] = useState(() => {
     const customs = rawField(invoice, "CustomField") as Array<{ Name?: string; StringValue?: string }> | undefined;
     return customs?.find((c) => c.Name?.toLowerCase().includes("rep"))?.StringValue || "";
+  });
+  const [classQbId, setClassQbId] = useState<string | undefined>(() => {
+    const ref = rawField(invoice, "ClassRef") as { value?: string } | undefined;
+    return ref?.value;
+  });
+  const [departmentQbId, setDepartmentQbId] = useState<string | undefined>(() => {
+    const ref = rawField(invoice, "DepartmentRef") as { value?: string } | undefined;
+    return ref?.value;
   });
 
   // Tax rate
@@ -219,6 +229,8 @@ export function InvoiceEditor({ invoice, customers, items, payments, onUpdate, o
       if (poNumber) customFields.push({ Name: "P.O. Number", StringValue: poNumber, Type: "StringType" });
       if (salesRep) customFields.push({ Name: "Sales Rep", StringValue: salesRep, Type: "StringType" });
       if (customFields.length) updates.CustomField = customFields;
+      if (classQbId) updates.ClassRef = { value: classQbId };
+      if (departmentQbId) updates.DepartmentRef = { value: departmentQbId };
 
       await onUpdate(invoice.Id, updates);
       setEditing(false);
@@ -426,9 +438,13 @@ export function InvoiceEditor({ invoice, customers, items, payments, onUpdate, o
               <label className="text-[10px] uppercase tracking-widest text-gray-400">P.O. Number</label>
               <Input value={poNumber} onChange={(e) => setPoNumber(e.target.value)} className="h-8 text-sm bg-white border-gray-300" />
             </div>
-            <div className="col-span-3 space-y-2">
+             <div className="col-span-3 space-y-2">
               <label className="text-[10px] uppercase tracking-widest text-gray-400">Sales Rep</label>
               <Input value={salesRep} onChange={(e) => setSalesRep(e.target.value)} className="h-8 text-sm bg-white border-gray-300 max-w-xs" />
+            </div>
+            <div className="col-span-3 grid grid-cols-2 gap-4">
+              <ClassDepartmentPicker type="class" value={classQbId} onChange={setClassQbId} />
+              <ClassDepartmentPicker type="department" value={departmentQbId} onChange={setDepartmentQbId} />
             </div>
           </div>
         ) : (
@@ -576,6 +592,11 @@ export function InvoiceEditor({ invoice, customers, items, payments, onUpdate, o
               <span className="tabular-nums">{fmt(amountDue)}</span>
             </div>
           </div>
+        </div>
+
+        {/* Attachments */}
+        <div className="mt-6 print:hidden">
+          <QBAttachmentUploader entityType="Invoice" entityId={invoice.Id} />
         </div>
 
         {/* Footer */}
