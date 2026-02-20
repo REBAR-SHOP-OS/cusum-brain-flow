@@ -1,85 +1,117 @@
 
-# Fix: /chat "Failed to Fetch" — Root Cause is OpenAI API Quota Exhaustion
+# Full App Audit — Findings & Fix Plan
 
-## Confirmed Root Cause
+## What "Lost the Brain" Means
 
-The error on the `/chat` page is **NOT** a network or CORS issue. Direct testing of the `admin-chat` edge function confirmed:
+Looking at the logs and code together, the agents are working but with reduced intelligence because:
 
-```
-429 — "You exceeded your current quota, please check your plan and billing details"
-```
+1. **GPT-4o is still being selected for `accounting`, `legal`, and `empire` agents** — then hitting 429 (rate limit) and falling back to `gemini-2.5-flash`. This means these complex agents get the fast/cheap Gemini model instead of the smart one, making them seem "dumb."
 
-The `GPT_API_KEY` (OpenAI) stored in the project secrets has **exceeded its billing limit**. Every message sent from `/chat` triggers a call to the OpenAI API, which immediately returns a 429, causing the frontend to display "⚠️ Error: AI API error: 429...".
+2. **The `admin-chat` (Vizzy at `/chat`) is returning its own 429 errors** at the edge function level — this is a separate rate-limiter built inside `admin-chat` itself that hasn't been tuned for Gemini's higher throughput.
 
-The CORS fix from the previous session was correct and necessary, but the underlying blocker is the exhausted OpenAI quota.
+3. **The tool execution loop follow-up calls have NO fallback** — when `gpt-4o` fails mid-tool-loop, the second AI call also fails silently, cutting agents off mid-thought.
 
-## Why It's Showing as "Failed to Fetch"
+4. **`maxTokens: 2000` for the default Gemini path is too small** — agents trying to write detailed reports hit the token ceiling and produce truncated, low-quality replies.
 
-The `useAdminChat` hook catches the edge function's 400/500-style errors and formats them as:
-```
-⚠️ Error: AI API error: 429 — { "error": { "code": "insufficient_quota" } }
-```
+---
 
-This appears in the chat bubble after the user's green "hi" message — exactly as described.
+## Issue Breakdown
 
-## Current AI Routing Logic
+### Issue 1 — Wrong model selected for complex agents (ROOT CAUSE of "lost brain")
 
-The `aiRouter.ts` file routes requests by default to GPT:
-- Simple messages → `gpt-4o-mini` (GPT) — **FAILS with 429**
-- Complex/accounting → `gpt-4o` (GPT) — **FAILS with 429**
-- Briefings → `gemini-2.5-pro` — **WORKS** (GEMINI_API_KEY is configured and valid)
-
-## The Fix: Make Gemini the Default Fallback
-
-Since `GEMINI_API_KEY` is already configured and working, the simplest fix is to update `aiRouter.ts` so that:
-
-1. **Default fast model** → `gemini-2.5-flash` (Gemini) instead of `gpt-4o-mini`
-2. **Complex reasoning** → keep trying GPT first, but fall back to `gemini-2.5-pro` on 429
-3. **The `callAIStream` function** → add automatic 429 fallback to Gemini (currently missing)
-
-This makes the system resilient: GPT is tried first when available, Gemini handles everything when GPT quota is exhausted.
-
-## Files to Modify
-
-| File | Change |
-|---|---|
-| `supabase/functions/_shared/aiRouter.ts` | Switch default model to Gemini, add 429 fallback to `callAIStream` |
-
-## Technical Detail
-
-The `callAIStream` function (used for streaming responses in the chat) currently has **no fallback logic** — unlike `callAI` which does have a `fallback` option. When GPT returns 429 on a streaming call, the error propagates directly. The fix adds a retry-with-Gemini path for 429 errors in the streaming path.
-
-### Updated `selectModel` defaults
+In `aiRouter.ts`, the `selectModel` function routes `accounting`, `legal`, and `empire` to `gpt-4o`:
 
 ```typescript
-// Before (broken — GPT quota exhausted):
-return { provider: "gpt", model: "gpt-4o-mini", ... };
-
-// After (resilient — Gemini as default):
-return { provider: "gemini", model: "gemini-2.5-flash", ... };
-```
-
-### Updated `callAIStream` with fallback
-
-```typescript
-export async function callAIStream(opts): Promise<Response> {
-  try {
-    return await _callAIStreamSingle(provider, model, opts);
-  } catch (e) {
-    if (e instanceof AIError && e.status === 429) {
-      // Auto-fallback to Gemini on quota error
-      return await _callAIStreamSingle("gemini", "gemini-2.5-flash", opts);
-    }
-    throw e;
-  }
+if (["accounting", "legal", "empire"].includes(agent) || ...) {
+  return { provider: "gpt", model: "gpt-4o", ... };
 }
 ```
 
-## Why This Is Safe
+The `callAI` fallback works, but only if the error is a 429 **AND** the `fallback` option is passed. Looking at the tool-loop follow-up call (lines 273-281 of `ai-agent/index.ts`), it does NOT pass the `fallback` option:
 
-- `GEMINI_API_KEY` is already configured and confirmed working (briefing calls succeed)
-- Gemini 2.5 Flash is faster and cheaper than GPT-4o-mini for simple queries
-- GPT is still tried first for complex reasoning tasks — if/when the OpenAI billing is resolved, GPT resumes automatically
-- No database changes required
-- No frontend changes required
-- After deploying the updated edge function, the chat will work immediately without requiring a publish
+```typescript
+// Follow-up AI call — NO FALLBACK OPTION
+aiResult = await callAI({
+  provider: modelConfig.provider,
+  model: modelConfig.model,
+  ...
+  // ❌ fallback: missing here
+});
+```
+
+This means the first call falls back correctly, but any tool calls and follow-ups crash silently.
+
+**Fix**: Route `accounting`, `legal`, `empire`, and `commander` to `gemini-2.5-pro` directly (since GPT quota is exhausted) and add the fallback to the tool loop's follow-up call.
+
+---
+
+### Issue 2 — Default `maxTokens: 2000` is too low for Gemini responses
+
+With Gemini as the primary model, many agents try to produce detailed reports but get cut off at 2000 tokens (~1500 words). This causes:
+- Incomplete daily briefings (Penny stops mid-report)
+- Truncated pipeline analyses (Blitz cuts off mid-table)
+- Short, surface-level responses that feel "brainless"
+
+**Fix**: Increase default `maxTokens` to `4000` for the Gemini default path.
+
+---
+
+### Issue 3 — `admin-chat` has a built-in rate limiter blocking Gemini calls
+
+The analytics logs show `admin-chat` returning 429s to the browser. This is an internal rate limiter in `admin-chat/index.ts` that throttles requests per user. With Gemini being faster and users sending more requests, the limiter triggers prematurely.
+
+**Fix**: Review and increase the rate limit window in `admin-chat/index.ts`.
+
+---
+
+### Issue 4 — Tool loop follow-up has no fallback
+
+In `ai-agent/index.ts` line 273, the follow-up AI call after tool execution uses the same `modelConfig.provider/model` (which could be GPT) but passes no `fallback`:
+
+```typescript
+aiResult = await callAI({
+  provider: modelConfig.provider,
+  model: modelConfig.model,
+  // ❌ no fallback here — if GPT fails, the whole tool loop dies
+});
+```
+
+When GPT hits rate limits mid-tool-loop, the function either crashes or returns an empty reply, leading to the "[STOP] I processed the data but couldn't generate a text response" message users see.
+
+**Fix**: Add `fallback: { provider: "gemini", model: "gemini-2.5-pro" }` to the tool loop follow-up call.
+
+---
+
+### Issue 5 — `ringcentral-sip-provision` 400 errors on every page load
+
+Every time an admin user loads the app, `useWebPhone` tries to initialize and hits the `ringcentral-sip-provision` edge function which returns 400. While the hook now handles this gracefully (from the previous fix), the error still fires on every session start unnecessarily.
+
+**Fix**: Already handled — `useWebPhone.ts` was patched in a previous session. No action needed.
+
+---
+
+## Summary of Files to Change
+
+| File | Change |
+|---|---|
+| `supabase/functions/_shared/aiRouter.ts` | Route complex agents to `gemini-2.5-pro` directly; increase default `maxTokens` to 4000 |
+| `supabase/functions/ai-agent/index.ts` | Add `fallback` to the tool loop follow-up `callAI` call |
+| `supabase/functions/admin-chat/index.ts` | Increase the internal rate limit window or threshold |
+
+---
+
+## Why the Agents Feel "Brainless"
+
+The agents' system prompts, personas, and tools are all intact and correct. The prompts for Penny, Blitz, Forge, Gauge, etc. are rich and detailed. The problem is purely at the **model layer**: agents that need `gemini-2.5-pro` for quality reasoning are getting `gemini-2.5-flash` (which is optimized for speed, not depth), producing shallow, surface-level answers.
+
+Routing them directly to `gemini-2.5-pro` from the start (bypassing the failed GPT → flash fallback path) will immediately restore full intelligence.
+
+---
+
+## After These Fixes
+
+- Accounting (Penny), Legal (Tally), and Empire (Architect) → use `gemini-2.5-pro` directly
+- All other agents → use `gemini-2.5-flash` with 4000 token limit (2× current)
+- Tool loops → survive GPT failures gracefully
+- Admin chat → stops rate-limiting legitimate users
+- Edge function deployment required after changes
