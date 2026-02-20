@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Plus, Trash2, Loader2 } from "lucide-react";
+import { ClassDepartmentPicker } from "./ClassDepartmentPicker";
 
 export type VendorTransactionType = "Bill" | "Expense" | "Cheque" | "SupplierCredit";
 
@@ -62,6 +63,8 @@ export function CreateVendorTransactionDialog({
   const [submitting, setSubmitting] = useState(false);
   const [taxEnabled, setTaxEnabled] = useState(true);
   const [taxRate, setTaxRate] = useState(13);
+  const [classQbId, setClassQbId] = useState<string | undefined>();
+  const [departmentQbId, setDepartmentQbId] = useState<string | undefined>();
 
   const total = lineItems.reduce((s, li) => s + li.qty * li.unitPrice, 0);
   const safeTaxRate = Math.max(0, Math.min(100, taxRate));
@@ -104,6 +107,8 @@ export function CreateVendorTransactionDialog({
         body.taxAmount = taxAmount;
       }
       if (dueDate) body.dueDate = dueDate;
+      if (classQbId) body.classRef = classQbId;
+      if (departmentQbId) body.departmentRef = departmentQbId;
 
       const { data, error } = await supabase.functions.invoke("quickbooks-oauth", { body });
       if (error) throw error;
@@ -192,6 +197,11 @@ export function CreateVendorTransactionDialog({
               </div>
             </div>
           )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <ClassDepartmentPicker type="class" value={classQbId} onChange={setClassQbId} />
+            <ClassDepartmentPicker type="department" value={departmentQbId} onChange={setDepartmentQbId} />
+          </div>
 
           <div className="space-y-1.5">
             <Label>Memo / Notes</Label>
