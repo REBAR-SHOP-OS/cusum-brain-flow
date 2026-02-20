@@ -1,7 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { requireAuth, corsHeaders } from "../_shared/auth.ts";
-
-const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") || "";
+import { callAI as routerCallAI, AIError } from "../_shared/aiRouter.ts";
 
 const systemPrompt = `You are Blitz, an AI sales assistant for rebar.shop — a Canadian rebar fabrication company.
 You help sales reps manage their pipeline, draft communications, score leads, and recommend actions.
@@ -33,31 +32,16 @@ function buildLeadContext(lead: any, activities?: any[]): string {
 }
 
 async function callAI(messages: any[], tools?: any[], toolChoice?: any): Promise<any> {
-  const body: any = {
+  const result = await routerCallAI({
+    provider: "gemini",
     model: "gemini-2.5-flash",
     messages,
     temperature: 0.7,
-  };
-  if (tools) body.tools = tools;
-  if (toolChoice) body.tool_choice = toolChoice;
-
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${GEMINI_API_KEY}`,
-      },
-      body: JSON.stringify(body),
-    }
-  );
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`AI API error ${res.status}: ${text}`);
-  }
-  return res.json();
+    tools,
+    toolChoice,
+  });
+  // Return raw format for compatibility with extractToolResult
+  return result.raw;
 }
 
 function extractToolResult(data: any): any | null {

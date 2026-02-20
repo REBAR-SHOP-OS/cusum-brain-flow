@@ -100,6 +100,37 @@ async function _callAISingle(provider: AIProvider, model: string, opts: AIReques
   };
 }
 
+export async function callAIStream(opts: AIRequestOptions): Promise<Response> {
+  const provider = opts.provider || "gpt";
+  const model = opts.model || "gpt-4o";
+  const { url, apiKey } = getProviderConfig(provider);
+
+  const body: Record<string, unknown> = {
+    model,
+    messages: opts.messages,
+    temperature: opts.temperature ?? 0.5,
+    stream: true,
+  };
+
+  if (opts.maxTokens) body.max_tokens = opts.maxTokens;
+  if (opts.tools?.length) body.tools = opts.tools;
+  if (opts.toolChoice) body.tool_choice = opts.toolChoice;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal: opts.signal,
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new AIError(`AI API error: ${response.status} — ${errText}`, response.status);
+  }
+
+  return response; // Caller pipes response.body as SSE stream
+}
+
 export class AIError extends Error {
   status: number;
   constructor(message: string, status: number) {
