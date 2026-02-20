@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { callAI } from "../_shared/aiRouter.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -18,46 +17,18 @@ serve(async (req) => {
       });
     }
 
-    // Take first 3 files to keep it fast
-    const urls = file_urls.slice(0, 3) as string[];
+    // Use Lovable AI gateway instead of downloading files to avoid memory limits
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-    // Build image parts for Gemini vision
-    const imageParts: Array<{ type: string; image_url?: { url: string }; text?: string }> = [];
-    
-    for (const url of urls) {
-      try {
-        const resp = await fetch(url);
-        if (!resp.ok) continue;
-        const buf = await resp.arrayBuffer();
-        const bytes = new Uint8Array(buf);
-        
-        // Determine mime type from URL or default
-        let mime = "image/png";
-        const lower = url.toLowerCase();
-        if (lower.includes(".pdf")) mime = "application/pdf";
-        else if (lower.includes(".jpg") || lower.includes(".jpeg")) mime = "image/jpeg";
-        else if (lower.includes(".tif") || lower.includes(".tiff")) mime = "image/tiff";
-        else if (lower.includes(".png")) mime = "image/png";
+    // Take first 3 file URLs
+    const urls = (file_urls as string[]).slice(0, 3);
 
-        // Convert to base64
-        let binary = "";
-        for (let i = 0; i < bytes.length; i++) {
-          binary += String.fromCharCode(bytes[i]);
-        }
-        const b64 = btoa(binary);
-        const dataUrl = `data:${mime};base64,${b64}`;
-
-        imageParts.push({ type: "image_url", image_url: { url: dataUrl } });
-      } catch (e) {
-        console.warn(`Failed to fetch file: ${url}`, e);
-      }
-    }
-
-    if (imageParts.length === 0) {
-      return new Response(JSON.stringify({ scope: "", elements_found: [], confidence: 0 }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    // Build image_url parts pointing to public URLs (Gemini fetches them server-side)
+    const imageParts = urls.map((url: string) => ({
+      type: "image_url",
+      image_url: { url },
+    }));
 
     const systemPrompt = `You are a rebar estimation expert analyzing structural drawings. Your job is to identify what structural elements are shown and recommend a scope of work for a reinforcing steel takeoff.
 
@@ -74,30 +45,50 @@ Focus on:
 
 Return ONLY valid JSON, no markdown.`;
 
-    const result = await callAI({
-      provider: "gemini",
-      model: "gemini-2.5-flash",
-      messages: [
-        { role: "system", content: systemPrompt },
-        {
-          role: "user",
-          content: [
-            { type: "text", text: "Analyze these structural drawings and recommend a scope of work for rebar estimation:" },
-            ...imageParts,
-          ],
-        },
-      ],
-      maxTokens: 1000,
-      temperature: 0.1,
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [
+          { role: "system", content: systemPrompt },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Analyze these structural drawings and recommend a scope of work for rebar estimation:" },
+              ...imageParts,
+            ],
+          },
+        ],
+        max_tokens: 1000,
+        temperature: 0.1,
+      }),
     });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error("AI gateway error:", response.status, errText);
+      if (response.status === 429) {
+        return new Response(JSON.stringify({ error: "Rate limited, please try again shortly" }), {
+          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      throw new Error(`AI error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content || "";
 
     // Parse AI response
     let parsed: { scope: string; elements_found: string[]; confidence: number };
     try {
-      const cleaned = result.content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+      const cleaned = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
       parsed = JSON.parse(cleaned);
     } catch {
-      parsed = { scope: result.content.trim(), elements_found: [], confidence: 50 };
+      parsed = { scope: content.trim(), elements_found: [], confidence: 50 };
     }
 
     return new Response(JSON.stringify(parsed), {
@@ -111,4 +102,3 @@ Return ONLY valid JSON, no markdown.`;
     });
   }
 });
-
