@@ -5,6 +5,7 @@ import { executeToolCall } from "../_shared/agentToolExecutor.ts";
 import { selectModel, AIError, callAI, type AIMessage, type AIProvider } from "../_shared/aiRouter.ts";
 import { analyzeDocumentWithGemini, convertPdfToImages, performOCR, performOCROnBase64, performMultiPassAnalysis, detectZones, extractRebarData } from "../_shared/agentDocumentUtils.ts";
 import { agentPrompts } from "../_shared/agentPrompts.ts";
+import { reviewAgentOutput } from "../_shared/agentQA.ts";
 import { 
   ONTARIO_CONTEXT, 
   SHARED_TOOL_INSTRUCTIONS, 
@@ -275,13 +276,34 @@ Deno.serve(async (req) => {
       reply = "[STOP] I processed the data but couldn't generate a text response. Please check the notifications/tasks created.";
     }
 
+    // QA Reviewer Layer — validate high-risk agent outputs
+    const qaResult = await reviewAgentOutput(
+      agent,
+      reply,
+      contextStr,
+      toolLoopIterations > 0,
+    );
+
+    if (!qaResult.skipped) {
+      console.log(`🔍 QA Review: ${agent} → pass=${qaResult.pass}, severity=${qaResult.severity}, flags=${qaResult.flags.length}`);
+    }
+
+    // If critical issues found, use sanitized reply
+    if (!qaResult.pass && qaResult.severity === "critical" && qaResult.sanitizedReply) {
+      reply = qaResult.sanitizedReply;
+    }
+
+    // Append warning flags as metadata (non-critical)
+    const qaFlags = qaResult.flags.length > 0 ? qaResult.flags : undefined;
+
     return new Response(
       JSON.stringify({
         reply,
         context: mergedContext,
         modelUsed: modelConfig.model,
         createdNotifications,
-        emailsSent: emailResults
+        emailsSent: emailResults,
+        qaReview: qaFlags ? { pass: qaResult.pass, severity: qaResult.severity, flags: qaFlags } : undefined,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

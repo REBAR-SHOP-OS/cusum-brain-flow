@@ -83,17 +83,16 @@ Implemented retrieval-augmented generation infrastructure:
 
 **Remaining:** Wire RAG into agent context fetching in `ai-agent/index.ts` and set up nightly cron for `embed-documents`.
 
-## Phase 4: QA / Reviewer Layer
+## Phase 4: QA / Reviewer Layer ✅ COMPLETE
 
-Add an output validation step before returning agent responses.
+Implemented output validation for high-risk agents:
 
-**What changes:**
-- Create a lightweight QA function in `_shared/agentQA.ts`
-- For high-risk agents (accounting, legal, empire), run the agent's output through a validation prompt
-- Checks: numerical consistency, prohibited content, hallucination detection (does the response reference data not in context?)
-- For write operations (invoices, payments, DB writes), add a structured pre-flight check
-
-**Implementation:** After the main agent responds, if the agent is in the "high-risk" list, call GPT-4o-mini with the original context + agent output and ask it to flag errors. Cost: ~200 tokens per validation (~$0.0004).
+- **`_shared/agentQA.ts`**: Lightweight QA module that validates agent outputs via Gemini 2.5 Flash (~200 tokens, ~$0.0004/call)
+- **High-risk agents**: accounting, collections, empire, estimation, commander
+- **Checks**: Numerical consistency, hallucination detection, prohibited content, write operation safety
+- **Fail-open design**: QA errors don't block responses; critical issues get sanitized replies
+- **Response metadata**: QA flags returned as `qaReview` in API response for UI consumption
+- **Nightly cron**: `embed-documents-nightly` runs at 3 AM UTC indexing all domains
 
 ## Phase 5: Prompt Cache Optimization
 
