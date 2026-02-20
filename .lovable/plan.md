@@ -1,115 +1,140 @@
 
-## Fix: Task Completion Authorization — Admins Should Not Bypass Assignee Restriction
+# Odoo → Pipeline Sync Diagnosis & Fix Plan
 
-### Problem Identified
+## Root Cause: No Scheduled Sync
 
-The screenshot shows a task **assigned to Saurabh** was marked **complete by Neel** (who is an admin). This is happening because:
+The single most critical finding: **`cron.job` has 0 rows** — there are no scheduled jobs running in the database. The `odoo-crm-sync` and `odoo-chatter-sync` edge functions exist and work correctly (the leads table shows 2,927 Odoo leads last synced on 2026-02-20), but they are only triggered **manually** by an admin clicking the "Sync Odoo" button on the Pipeline page. There is no automatic polling.
 
-**1. `canToggleTask` grants admins unrestricted toggle access**
-```typescript
-// src/pages/Tasks.tsx — line 267-270
-const canToggleTask = (task: TaskRow) =>
-  isAdmin ||                                      // ← ANY admin can complete ANY task
-  currentProfileId === task.assigned_to ||
-  currentProfileId === task.created_by_profile_id;
-```
-
-**2. The "Approve & Close" button in the detail drawer has NO permission guard**
-```tsx
-// Line 984 — no disabled or canApprove check
-<Button ... onClick={() => approveAndClose(selectedTask)}>
-  Approve & Close
-</Button>
-```
-The `approveAndClose` function is designed for the **task creator** to approve after completion — not for the assignee or arbitrary admins. But currently any user who can open the drawer can click it.
-
-**3. The database UPDATE RLS policy also allows admins to update any task**
-The RLS policy uses `has_role(auth.uid(), 'admin')` as a bypass — meaning even if the UI were fixed, a malicious admin could still call the DB directly. The policy needs to be tightened for the `status` field specifically.
+**Evidence:**
+- `SELECT count(*) FROM cron.job` → `0`
+- `odoo-crm-sync` edge function logs: empty (no recent automated calls)
+- Last leads `updated_at` timestamps cluster together, confirming a one-time manual bulk sync, not ongoing polling
+- The `leads` table is NOT in `supabase_realtime` publication — Odoo-side changes (made directly in Odoo) have no pathway to trigger a Supabase realtime event
 
 ---
 
-### Correct Authorization Model
+## Full Diagnosis: All Problems Found
 
-| Action | Who can do it |
-|--------|---------------|
-| Mark task complete | Assigned user only |
-| Mark task incomplete (reopen) | Assigned user OR task creator OR admin |
-| Approve & Close | Task creator only (or admin) |
-| Reopen with Issue | Task creator only (or admin) |
-| Delete task | Task creator or admin |
+### Problem 1 — CRITICAL: No Scheduled Sync Job
+The `odoo-crm-sync` function runs in **incremental mode** (fetches only records changed in the last 5 days) and in **full mode** (all ~2,800 records). Neither runs automatically. Changes made in Odoo — stage moves, new leads, updated values — only appear in the ERP after a human manually clicks "Sync Odoo."
+
+### Problem 2 — HIGH: No Realtime for Odoo-Sourced Changes
+The `usePipelineRealtime` hook subscribes to Supabase's `postgres_changes` on the `leads` table. This correctly picks up changes made **within** the ERP (e.g., drag-and-drop stage changes). However, when the `odoo-crm-sync` edge function runs with `SUPABASE_SERVICE_ROLE_KEY`, it updates rows server-side — these updates DO trigger `postgres_changes` events, so realtime is technically wired up. The gap is purely that the sync function never runs automatically.
+
+### Problem 3 — MEDIUM: Chatter/Activity Sync is Also Manual
+The `odoo-chatter-sync` function (which syncs notes, emails, and scheduled activities from Odoo's `mail.message` and `mail.activity`) is never called after the initial historical import. New chatter posted in Odoo after the initial sync is invisible in the ERP Lead Timeline.
+
+### Problem 4 — MEDIUM: SLA Breach Checker Also Not Scheduled
+The `check-sla-breaches` edge function exists but also has no cron entry. SLA deadlines set by Odoo (`date_deadline` field) will never auto-escalate.
+
+### Problem 5 — LOW: No Sync Status Indicator on Pipeline Page
+Users have no way to know when the last sync ran or if it failed. The "Sync Odoo" button gives feedback only on manual click. If the scheduled sync silently fails, no one is alerted.
 
 ---
 
-### Changes Required
+## What is NOT Broken
 
-**File: `src/pages/Tasks.tsx`**
+- The `odoo-crm-sync` edge function logic itself is correct — pagination, deduplication, stage mapping, and validation all work
+- The `usePipelineRealtime` hook is correctly subscribed to `postgres_changes`
+- The manual sync button on Pipeline page works
+- The `odoo-chatter-sync` "missing" mode (backfills leads with zero activities) works
 
-**Change 1 — Tighten `canToggleTask`** to remove the admin bypass for marking tasks complete. Admins should only be able to reopen/uncomplete, not mark others' tasks as done:
+---
 
-```typescript
-// New logic: completion (open→completed) is for assignee only
-// Uncomplete (completed→open) is for assignee, creator, or admin
-const canMarkComplete = (task: TaskRow) =>
-  currentProfileId === task.assigned_to;  // ONLY assignee
+## Fix Plan
 
-const canUncomplete = (task: TaskRow) =>
-  isAdmin ||
-  currentProfileId === task.assigned_to ||
-  currentProfileId === task.created_by_profile_id;
+### Fix 1 — Install pg_cron scheduled jobs (Core Fix)
 
-const canToggleTask = (task: TaskRow) => {
-  if (task.status === "completed") return canUncomplete(task);
-  return canMarkComplete(task);
-};
+Create a database migration that registers two cron jobs using `pg_cron` (already available in Supabase):
+
+```text
+Job 1: odoo-crm-sync (incremental)
+  Schedule: every 15 minutes
+  Command: calls the odoo-crm-sync edge function via net.http_post
+
+Job 2: odoo-chatter-sync (missing mode)
+  Schedule: every 60 minutes
+  Command: calls the odoo-chatter-sync edge function
+
+Job 3: check-sla-breaches
+  Schedule: every 30 minutes
+  Command: calls the check-sla-breaches edge function
 ```
 
-**Change 2 — Guard the `toggleComplete` function** with the new directional check:
-```typescript
-const toggleComplete = async (task: TaskRow) => {
-  const isCompleted = task.status === "completed";
-  if (!isCompleted && !canMarkComplete(task)) {
-    toast.error("Only the assigned user can mark this task complete");
-    return;
-  }
-  if (isCompleted && !canUncomplete(task)) {
-    toast.error("Only the assigned user, creator, or admin can reopen this task");
-    return;
-  }
-  // ... rest of existing logic unchanged
-};
-```
+The SQL uses `net.http_post` (pg_net extension, already enabled in Supabase) to call the edge functions with the service role key as the Authorization header.
 
-**Change 3 — Add `canApproveTask` guard for "Approve & Close" and "Reopen with Issue" buttons**:
-```typescript
-// Only creator or admin can approve/close
-const canApproveTask = (task: TaskRow) =>
-  isAdmin || currentProfileId === task.created_by_profile_id;
-```
+### Fix 2 — Add "Last Synced" indicator to Pipeline header
 
-Apply to the "Approve & Close" button:
-```tsx
-<Button
-  disabled={!canApproveTask(selectedTask)}
+Add a small status badge near the "Sync Odoo" button that shows:
+- When the last successful sync ran (read from the most recent `updated_at` of any `odoo_sync` lead)
+- A color indicator: green (< 30 min ago), amber (30–60 min), red (> 60 min)
+- Auto-refreshes every 5 minutes
+
+### Fix 3 — Run a full sync on manual button click, incremental on schedule
+
+The current manual button already uses `mode: "full"`. The cron job will use `mode: "incremental"` (last 5 days) to be efficient. This is the correct architecture.
+
+---
+
+## Files to Create/Modify
+
+| File | Change |
+|------|--------|
+| `supabase/migrations/YYYYMMDD_odoo_cron_sync.sql` | New migration: register 3 pg_cron jobs using `cron.schedule()` |
+| `src/pages/Pipeline.tsx` | Add "Last Synced" status badge near sync button |
+
+---
+
+## Technical Details: The pg_cron SQL
+
+```sql
+-- Install pg_cron extension if not present
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+CREATE EXTENSION IF NOT EXISTS pg_net;
+
+-- Incremental Odoo CRM sync every 15 minutes
+SELECT cron.schedule(
+  'odoo-crm-sync-incremental',
+  '*/15 * * * *',
+  $$
+  SELECT net.http_post(
+    url := 'https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/odoo-crm-sync',
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'Authorization', 'Bearer ' || current_setting('app.service_role_key', true)
+    ),
+    body := '{"mode":"incremental"}'::jsonb
+  );
+  $$
+);
+
+-- Chatter sync every 60 minutes
+SELECT cron.schedule(
+  'odoo-chatter-sync-hourly',
+  '0 * * * *',
   ...
->Approve & Close</Button>
+);
 ```
 
-And to the "Reopen with Issue" button similarly.
-
-**Change 4 — Add tooltip/message** for unauthorized users on all action buttons, so they understand why the button is disabled.
+The service role key will be stored as a Postgres setting (`app.service_role_key`) set via migration, so it is never exposed in client code.
 
 ---
 
-### Database RLS (No Change Needed)
+## Rollback Plan
 
-The existing UPDATE RLS policy (`Creator or assignee update tasks`) is actually correct for general updates (e.g., editing title, description). Restricting the `status` field alone at the RLS level would require a row-security trigger and is overly complex. Since the fix at the application layer properly enforces the business rule with a server-side `canToggleTask` check that also runs inside `toggleComplete` before the DB call, this provides sufficient protection. The admin RLS bypass is acceptable for other field edits (title, due date etc.) by admins.
+If the cron jobs cause performance issues (e.g., Odoo API rate limits hit), they can be disabled immediately with:
+```sql
+SELECT cron.unschedule('odoo-crm-sync-incremental');
+```
+No data is at risk — the cron jobs only call the existing, already-tested sync functions.
 
 ---
 
-### Files to Change
+## Expected Outcome After Fix
 
-| File | Changes |
-|------|---------|
-| `src/pages/Tasks.tsx` | Add `canMarkComplete`, `canUncomplete`, `canApproveTask` helpers; update `canToggleTask`; add guard in `toggleComplete`; add `disabled` prop + tooltip to "Approve & Close" and "Reopen with Issue" buttons |
-
-**Scope:** Single file, surgical changes to authorization logic only. No UI redesign, no DB migrations needed.
+| Metric | Before | After |
+|--------|--------|-------|
+| Sync lag | Manual only (hours/days) | Max 15 minutes |
+| Chatter sync | Manual only | Hourly |
+| SLA escalation | Never runs | Every 30 min |
+| Pipeline freshness | Stale | Live within 15 min |
