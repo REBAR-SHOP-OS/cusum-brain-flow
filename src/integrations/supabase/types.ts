@@ -2914,19 +2914,23 @@ export type Database = {
       estimation_learnings: {
         Row: {
           bar_size: string | null
+          company_id: string | null
           confidence_score: number | null
           context: string | null
           corrected_value: Json | null
           created_at: string
           created_by: string | null
           element_type: string | null
+          field_name: string | null
           id: string
           is_global: boolean | null
           lead_id: string | null
           learning_type: string
           mark: string | null
           original_value: Json | null
+          project_id: string | null
           project_name: string
+          source: string | null
           source_files: string[] | null
           updated_at: string
           usage_count: number | null
@@ -2934,19 +2938,23 @@ export type Database = {
         }
         Insert: {
           bar_size?: string | null
+          company_id?: string | null
           confidence_score?: number | null
           context?: string | null
           corrected_value?: Json | null
           created_at?: string
           created_by?: string | null
           element_type?: string | null
+          field_name?: string | null
           id?: string
           is_global?: boolean | null
           lead_id?: string | null
           learning_type: string
           mark?: string | null
           original_value?: Json | null
+          project_id?: string | null
           project_name: string
+          source?: string | null
           source_files?: string[] | null
           updated_at?: string
           usage_count?: number | null
@@ -2954,19 +2962,23 @@ export type Database = {
         }
         Update: {
           bar_size?: string | null
+          company_id?: string | null
           confidence_score?: number | null
           context?: string | null
           corrected_value?: Json | null
           created_at?: string
           created_by?: string | null
           element_type?: string | null
+          field_name?: string | null
           id?: string
           is_global?: boolean | null
           lead_id?: string | null
           learning_type?: string
           mark?: string | null
           original_value?: Json | null
+          project_id?: string | null
           project_name?: string
+          source?: string | null
           source_files?: string[] | null
           updated_at?: string
           usage_count?: number | null

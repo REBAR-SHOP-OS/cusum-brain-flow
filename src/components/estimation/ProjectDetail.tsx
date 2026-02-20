@@ -9,6 +9,7 @@ import { ArrowLeft, Weight, DollarSign, Clock, Percent, AlertTriangle, MapPin } 
 import BOMTable from "./BOMTable";
 import ExportPanel from "./ExportPanel";
 import AnnotatedDrawingViewer from "./AnnotatedDrawingViewer";
+import BarlistValidation from "./BarlistValidation";
 
 interface ProjectDetailProps {
   projectId: string;
@@ -111,6 +112,7 @@ export default function ProjectDetail({ projectId, onBack }: ProjectDetailProps)
           )}
           <TabsTrigger value="bom">BOM Table ({items.length})</TabsTrigger>
           <TabsTrigger value="export">Export</TabsTrigger>
+          <TabsTrigger value="validate">Validate</TabsTrigger>
         </TabsList>
 
         {sourceFileUrls.length > 0 && (
@@ -135,6 +137,10 @@ export default function ProjectDetail({ projectId, onBack }: ProjectDetailProps)
 
         <TabsContent value="export">
           <ExportPanel project={project} items={items} />
+        </TabsContent>
+
+        <TabsContent value="validate">
+          <BarlistValidation projectId={projectId} items={items} />
         </TabsContent>
       </Tabs>
     </div>

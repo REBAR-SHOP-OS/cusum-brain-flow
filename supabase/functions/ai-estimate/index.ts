@@ -77,8 +77,8 @@ serve(async (req) => {
       });
     }
 
-    // ─── 1. Load standards, pricing, validation rules ───
-    const [standardsRes, pricingRes, rulesRes] = await Promise.all([
+    // ─── 1. Load standards, pricing, validation rules, AND historical learnings ───
+    const [standardsRes, pricingRes, rulesRes, learningsRes, benchmarksRes] = await Promise.all([
       supabaseAdmin.from("rebar_standards").select("*"),
       supabaseAdmin
         .from("estimation_pricing")
@@ -89,15 +89,59 @@ serve(async (req) => {
         .from("estimation_validation_rules")
         .select("*")
         .eq("is_active", true),
+      // Historical learnings for few-shot context
+      supabaseAdmin
+        .from("estimation_learnings")
+        .select("element_type, bar_size, mark, field_name, original_value, corrected_value, weight_delta_pct, context, confidence_score")
+        .eq("company_id", companyId)
+        .gte("confidence_score", 70)
+        .order("confidence_score", { ascending: false })
+        .limit(50),
+      // Weight benchmarks from coordination logs
+      supabaseAdmin
+        .from("project_coordination_log")
+        .select("project_name, estimation_weight_kg, detailing_weight_kg, weight_difference_kg, elements")
+        .eq("company_id", companyId)
+        .gt("detailing_weight_kg", 0)
+        .order("created_at", { ascending: false })
+        .limit(20),
     ]);
 
     const standards: RebarStandard[] = standardsRes.data ?? [];
     const pricing: EstimationPricing[] = pricingRes.data ?? [];
     const rules: ValidationRule[] = rulesRes.data ?? [];
+    const learnings = learningsRes.data ?? [];
+    const benchmarks = benchmarksRes.data ?? [];
 
     const standardsMap = new Map(standards.map((s) => [s.bar_size, s]));
     const pricingMap = new Map(pricing.map((p) => [p.bar_size, p]));
 
+    // Build historical context string for Gemini
+    let historicalContext = "";
+    if (learnings.length > 0) {
+      const avgDelta = learnings.reduce((s, l) => s + (l.weight_delta_pct ?? 0), 0) / learnings.length;
+      historicalContext += `\n## HISTORICAL ACCURACY DATA (from ${learnings.length} past corrections)\n`;
+      historicalContext += `Average estimation overestimate: ${avgDelta.toFixed(1)}%\n`;
+
+      // Group learnings by element type
+      const byElement = new Map<string, { count: number; avgDelta: number }>();
+      for (const l of learnings) {
+        const et = l.element_type ?? "unknown";
+        const entry = byElement.get(et) ?? { count: 0, avgDelta: 0 };
+        entry.count++;
+        entry.avgDelta += l.weight_delta_pct ?? 0;
+        byElement.set(et, entry);
+      }
+      for (const [et, stats] of byElement) {
+        historicalContext += `- ${et}: avg ${(stats.avgDelta / stats.count).toFixed(1)}% overestimate (${stats.count} samples)\n`;
+      }
+    }
+    if (benchmarks.length > 0) {
+      historicalContext += `\n## WEIGHT BENCHMARKS FROM COMPLETED PROJECTS\n`;
+      for (const b of benchmarks.slice(0, 10)) {
+        historicalContext += `- "${b.project_name}": est=${b.estimation_weight_kg}kg, actual=${b.detailing_weight_kg}kg (${((b.weight_difference_kg / b.estimation_weight_kg) * 100).toFixed(1)}% delta)\n`;
+      }
+    }
     // ─── 2. Send files directly to Gemini 2.5 Pro for vision extraction ───
     let extractedItems: EstimationItemInput[] = [];
 
@@ -135,11 +179,12 @@ serve(async (req) => {
           });
         }
 
-        // Add the extraction prompt
+        // Add the extraction prompt with historical learning context
         parts.push({
           text: `You are a senior Canadian rebar detailer and structural estimator. Analyze the uploaded structural/shop drawings and extract ALL rebar reinforcement items.
 
 ${scope_context ? `Context: ${scope_context}` : ""}
+${historicalContext}
 
 ## CANADIAN SHOP DRAWING NOTATION GUIDE
 
