@@ -1,12 +1,14 @@
+import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Weight, DollarSign, Clock, Percent, AlertTriangle, Download, FileText } from "lucide-react";
+import { ArrowLeft, Weight, DollarSign, Clock, Percent, AlertTriangle, MapPin } from "lucide-react";
 import BOMTable from "./BOMTable";
 import ExportPanel from "./ExportPanel";
+import AnnotatedDrawingViewer from "./AnnotatedDrawingViewer";
 
 interface ProjectDetailProps {
   projectId: string;
@@ -15,6 +17,7 @@ interface ProjectDetailProps {
 
 export default function ProjectDetail({ projectId, onBack }: ProjectDetailProps) {
   const queryClient = useQueryClient();
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
 
   const { data: project } = useQuery({
     queryKey: ["estimation_project", projectId],
@@ -48,6 +51,18 @@ export default function ProjectDetail({ projectId, onBack }: ProjectDetailProps)
     queryClient.invalidateQueries({ queryKey: ["estimation_items", projectId] });
     queryClient.invalidateQueries({ queryKey: ["estimation_project", projectId] });
   };
+
+  // Extract source file URLs from project
+  const sourceFileUrls: string[] = (() => {
+    if (!project?.source_files) return [];
+    const sf = project.source_files;
+    if (Array.isArray(sf)) {
+      return sf.map((f: any) => (typeof f === "string" ? f : f?.url)).filter(Boolean);
+    }
+    return [];
+  })();
+
+  const hasAnnotations = items.some((i: any) => i.bbox);
 
   if (!project) return null;
 
@@ -86,34 +101,36 @@ export default function ProjectDetail({ projectId, onBack }: ProjectDetailProps)
         ))}
       </div>
 
-      <Tabs defaultValue="bom">
+      <Tabs defaultValue={hasAnnotations ? "drawings" : "bom"}>
         <TabsList>
+          {sourceFileUrls.length > 0 && (
+            <TabsTrigger value="drawings">
+              <MapPin className="h-3.5 w-3.5 mr-1" />
+              Annotated Drawings
+            </TabsTrigger>
+          )}
           <TabsTrigger value="bom">BOM Table ({items.length})</TabsTrigger>
-          <TabsTrigger value="drawings">Drawings</TabsTrigger>
           <TabsTrigger value="export">Export</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="bom">
-          <BOMTable items={items} onItemUpdated={refresh} />
-        </TabsContent>
+        {sourceFileUrls.length > 0 && (
+          <TabsContent value="drawings">
+            <AnnotatedDrawingViewer
+              sourceFiles={sourceFileUrls}
+              items={items}
+              selectedItemId={selectedItemId}
+              onItemSelect={setSelectedItemId}
+            />
+          </TabsContent>
+        )}
 
-        <TabsContent value="drawings">
-          <Card>
-            <CardContent className="p-6">
-              {project.source_files && Array.isArray(project.source_files) && project.source_files.length > 0 ? (
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  {(project.source_files as string[]).map((url: string, i: number) => (
-                    <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 rounded-lg border p-3 hover:bg-muted/50 transition-colors">
-                      <FileText className="h-5 w-5 text-muted-foreground" />
-                      <span className="text-sm truncate">File {i + 1}</span>
-                    </a>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-center text-muted-foreground">No source drawings attached.</p>
-              )}
-            </CardContent>
-          </Card>
+        <TabsContent value="bom">
+          <BOMTable
+            items={items}
+            onItemUpdated={refresh}
+            highlightedItemId={selectedItemId}
+            onItemSelect={setSelectedItemId}
+          />
         </TabsContent>
 
         <TabsContent value="export">

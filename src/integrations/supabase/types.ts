@@ -2818,6 +2818,7 @@ export type Database = {
       estimation_items: {
         Row: {
           bar_size: string | null
+          bbox: Json | null
           created_at: string
           cut_length_mm: number | null
           dimensions: Json | null
@@ -2829,6 +2830,7 @@ export type Database = {
           lap_allowance_mm: number | null
           line_cost: number | null
           mark: string | null
+          page_index: number | null
           project_id: string
           quantity: number
           shape_code: string | null
@@ -2841,6 +2843,7 @@ export type Database = {
         }
         Insert: {
           bar_size?: string | null
+          bbox?: Json | null
           created_at?: string
           cut_length_mm?: number | null
           dimensions?: Json | null
@@ -2852,6 +2855,7 @@ export type Database = {
           lap_allowance_mm?: number | null
           line_cost?: number | null
           mark?: string | null
+          page_index?: number | null
           project_id: string
           quantity?: number
           shape_code?: string | null
@@ -2864,6 +2868,7 @@ export type Database = {
         }
         Update: {
           bar_size?: string | null
+          bbox?: Json | null
           created_at?: string
           cut_length_mm?: number | null
           dimensions?: Json | null
@@ -2875,6 +2880,7 @@ export type Database = {
           lap_allowance_mm?: number | null
           line_cost?: number | null
           mark?: string | null
+          page_index?: number | null
           project_id?: string
           quantity?: number
           shape_code?: string | null
