@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { fetchContext, fetchQuickBooksLiveContext, fetchEstimationLearnings, fetchRebarStandards, fetchRAGContext } from "../_shared/agentContext.ts";
+import { fetchExecutiveContext } from "../_shared/agentExecutiveContext.ts";
 import { getTools } from "../_shared/agentTools.ts";
 import { executeToolCall } from "../_shared/agentToolExecutor.ts";
 import { selectModel, AIError, callAI, type AIMessage, type AIProvider } from "../_shared/aiRouter.ts";
@@ -67,7 +68,14 @@ Deno.serve(async (req) => {
 
     // Context fetching (Moved to shared module)
     const dbContext = await fetchContext(supabase, agent, user.id, userEmail, roles, svcClient, companyId);
-    const mergedContext = { ...dbContext, ...userContext };
+    
+    // Phase 6: Executive dashboard context for data/empire agents
+    let execContext: Record<string, unknown> = {};
+    if (agent === "data" || agent === "empire" || agent === "commander") {
+      execContext = await fetchExecutiveContext(svcClient, companyId);
+    }
+    
+    const mergedContext = { ...dbContext, ...execContext, ...userContext };
 
     // Document Analysis (Moved logic to shared/agentDocumentUtils but integrated here)
     let documentResults: { 
@@ -163,13 +171,6 @@ Deno.serve(async (req) => {
       companyId,
     );
 
-    const systemPrompt = ONTARIO_CONTEXT + basePrompt + 
-      (mergedContext.brainKnowledgeBlock as string || "") + 
-      (mergedContext.roleAccessBlock as string || "") + 
-      GOVERNANCE_RULES + DRAFT_ONLY_BLOCK + SHARED_TOOL_INSTRUCTIONS + IDEA_GENERATION_INSTRUCTIONS + LANG_INSTRUCTION + 
-      ragBlock +
-      `\n\n## Current User\nName: ${userFullName}\nEmail: ${userEmail}`;
-
     let contextStr = "";
     if (Object.keys(mergedContext).length > 0) {
       const displayContext = { ...mergedContext };
@@ -178,13 +179,28 @@ Deno.serve(async (req) => {
       contextStr = `\n\nCurrent data context:\n${JSON.stringify(displayContext, null, 2)}`;
     }
 
+    // Phase 5: Cache-optimized message ordering
+    // Static prefix (system prompt + tools) stays identical across calls for the same agent
+    // → OpenAI/Gemini cache this prefix and charge 50-90% less for repeated tokens
+    // Dynamic suffix (context, history, user message) varies per call
+    const staticSystemPrompt = ONTARIO_CONTEXT + basePrompt + 
+      GOVERNANCE_RULES + DRAFT_ONLY_BLOCK + SHARED_TOOL_INSTRUCTIONS + IDEA_GENERATION_INSTRUCTIONS + LANG_INSTRUCTION +
+      `\n\n## Current User\nName: ${userFullName}\nEmail: ${userEmail}`;
+
+    // Dynamic content goes in a separate system message to preserve cache boundary
+    const dynamicContext = (mergedContext.brainKnowledgeBlock as string || "") +
+      (mergedContext.roleAccessBlock as string || "") +
+      ragBlock + contextStr;
+
     // Document analysis summary injection
+    let docSummary = "";
     if (agent === "estimation" && documentResults.length > 0) {
-       contextStr += "\n\n📋 DOCUMENT ANALYSIS RESULTS:\n" + documentResults.map(d => `--- ${d.fileName} ---\n${d.text.substring(0, 1000)}...`).join("\n");
+      docSummary = "\n\n📋 DOCUMENT ANALYSIS RESULTS:\n" + documentResults.map(d => `--- ${d.fileName} ---\n${d.text.substring(0, 1000)}...`).join("\n");
     }
 
     const messages: ChatMessage[] = [
-      { role: "system", content: systemPrompt + contextStr },
+      { role: "system", content: staticSystemPrompt },
+      ...(dynamicContext || docSummary ? [{ role: "system" as const, content: dynamicContext + docSummary }] : []),
       ...history.slice(-10),
       { role: "user", content: message },
     ];
