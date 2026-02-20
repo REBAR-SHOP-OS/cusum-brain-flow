@@ -21,7 +21,7 @@ serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const batchSize = body.batch_size ?? 1;
-    const maxFilesPerBatch = body.max_files ?? 5;
+    const maxFilesPerBatch = body.max_files ?? 2;
     const reset = body.reset ?? false;
 
     // Get or create progress tracker
@@ -135,6 +135,36 @@ serve(async (req) => {
         // Get lead info
         const { data: lead } = await admin.from("leads").select("id, title, customer_id, stage").eq("id", leadId).maybeSingle();
 
+        // Resolve or create a project row for this lead (barlists.project_id FK → projects)
+        let projectId: string | null = null;
+        const { data: existingProject } = await admin.from("projects")
+          .select("id").eq("id", leadId).maybeSingle();
+        if (existingProject) {
+          projectId = existingProject.id;
+        } else {
+          // Try to find a project linked to this lead via name match
+          const { data: linkedProject } = await admin.from("projects")
+            .select("id").eq("company_id", companyId).ilike("name", lead?.title ?? "___NOMATCH___").maybeSingle();
+          if (linkedProject) {
+            projectId = linkedProject.id;
+          } else {
+            // Create a lightweight project for this lead
+            const { data: newProj } = await admin.from("projects").insert({
+              id: leadId,
+              company_id: companyId,
+              name: lead?.title ?? "Imported Project",
+              status: "active",
+            }).select("id").maybeSingle();
+            projectId = newProj?.id ?? null;
+          }
+        }
+
+        if (!projectId) {
+          console.error(`Could not resolve project for lead ${leadId}, skipping`);
+          processedLeads++;
+          continue;
+        }
+
         for (const file of files) {
           if (totalFilesThisBatch >= maxFilesPerBatch) break;
           totalFilesThisBatch++;
@@ -186,7 +216,7 @@ serve(async (req) => {
 
             const { data: barlist, error: blErr } = await admin.from("barlists").insert({
               company_id: companyId,
-              project_id: leadId,
+              project_id: projectId,
               lead_id: leadId,
               name: file.file_name.replace(/\.(xls|xlsx)$/i, ""),
               source_type: "historical_import",
