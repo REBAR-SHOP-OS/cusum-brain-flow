@@ -1,16 +1,21 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { ZoomIn, ZoomOut, Maximize, Eye, EyeOff } from "lucide-react";
+import { ZoomIn, ZoomOut, Maximize, Eye, EyeOff, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import AnnotationLegend from "./AnnotationLegend";
 
 const ELEMENT_COLORS: Record<string, string> = {
-  footing: "#3b82f6",   // blue
-  column: "#ef4444",    // red
-  beam: "#22c55e",      // green
-  slab: "#f97316",      // orange
-  wall: "#a855f7",      // purple
-  pier: "#14b8a6",      // teal
+  footing: "#3b82f6",
+  column: "#ef4444",
+  beam: "#22c55e",
+  slab: "#f97316",
+  wall: "#a855f7",
+  pier: "#14b8a6",
+  grade_beam: "#06b6d4",
+  retaining_wall: "#8b5cf6",
+  stair: "#ec4899",
+  pool_slab: "#0ea5e9",
+  pool_deck: "#84cc16",
 };
 
 function getColor(type: string) {
@@ -24,35 +29,114 @@ interface AnnotatedDrawingViewerProps {
   onItemSelect: (id: string | null) => void;
 }
 
+interface RenderedPage {
+  url: string;
+  width: number;
+  height: number;
+  fileIndex: number;
+  pageInFile: number;
+}
+
 export default function AnnotatedDrawingViewer({
   sourceFiles,
   items,
   selectedItemId,
   onItemSelect,
 }: AnnotatedDrawingViewerProps) {
-  const [pageIndex, setPageIndex] = useState(0);
+  const [currentPage, setCurrentPage] = useState(0);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [showAnnotations, setShowAnnotations] = useState(true);
   const [hiddenTypes, setHiddenTypes] = useState<Set<string>>(new Set());
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [imgSize, setImgSize] = useState({ w: 0, h: 0 });
+  const [renderedPages, setRenderedPages] = useState<RenderedPage[]>([]);
+  const [loading, setLoading] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
   const isPanning = useRef(false);
   const lastMouse = useRef({ x: 0, y: 0 });
 
-  const pageItems = items.filter(
-    (i) => (i.page_index ?? 0) === pageIndex && i.bbox && !hiddenTypes.has(i.element_type?.toLowerCase())
-  );
+  // Render PDFs to images and collect image URLs
+  useEffect(() => {
+    if (!sourceFiles.length) return;
+    let cancelled = false;
+    setLoading(true);
 
-  const handleWheel = useCallback(
-    (e: React.WheelEvent) => {
-      e.preventDefault();
-      const delta = e.deltaY > 0 ? -0.15 : 0.15;
-      setZoom((z) => Math.min(4, Math.max(0.5, z + delta)));
-    },
-    []
-  );
+    (async () => {
+      const pages: RenderedPage[] = [];
+
+      for (let fi = 0; fi < sourceFiles.length; fi++) {
+        const url = sourceFiles[fi];
+        const lowerUrl = url.toLowerCase();
+        const isPdf = lowerUrl.includes(".pdf");
+
+        if (isPdf) {
+          try {
+            const pdfjsLib = await import("pdfjs-dist");
+            pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+
+            const loadingTask = pdfjsLib.getDocument({ url, withCredentials: false });
+            const pdf = await loadingTask.promise;
+
+            for (let p = 1; p <= pdf.numPages; p++) {
+              if (cancelled) return;
+              const page = await pdf.getPage(p);
+              const scale = 2; // High res for zoom
+              const viewport = page.getViewport({ scale });
+              const canvas = document.createElement("canvas");
+              canvas.width = viewport.width;
+              canvas.height = viewport.height;
+              const ctx = canvas.getContext("2d")!;
+              await page.render({ canvasContext: ctx, viewport }).promise;
+              const dataUrl = canvas.toDataURL("image/png");
+              pages.push({
+                url: dataUrl,
+                width: viewport.width,
+                height: viewport.height,
+                fileIndex: fi,
+                pageInFile: p - 1,
+              });
+            }
+          } catch (err) {
+            console.error("PDF render error:", err);
+            // Fallback: add as-is (will show broken image but at least shows something)
+            pages.push({ url, width: 0, height: 0, fileIndex: fi, pageInFile: 0 });
+          }
+        } else {
+          // Image file — use directly
+          pages.push({ url, width: 0, height: 0, fileIndex: fi, pageInFile: 0 });
+        }
+      }
+
+      if (!cancelled) {
+        setRenderedPages(pages);
+        setLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [sourceFiles]);
+
+  // Map items to rendered page index based on file index + page_index
+  const getPageItemsForRenderedPage = (renderedIdx: number) => {
+    const rp = renderedPages[renderedIdx];
+    if (!rp) return [];
+    return items.filter((i) => {
+      const itemPageIndex = i.page_index ?? 0;
+      // Find which rendered page this item maps to
+      // page_index from AI = overall page across all files
+      // We need to check if this rendered page corresponds to that page_index
+      return itemPageIndex === renderedIdx && i.bbox && !hiddenTypes.has(i.element_type?.toLowerCase());
+    });
+  };
+
+  const pageItems = getPageItemsForRenderedPage(currentPage);
+
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.15 : 0.15;
+    setZoom((z) => Math.min(4, Math.max(0.5, z + delta)));
+  }, []);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button === 0) {
@@ -70,23 +154,9 @@ export default function AnnotatedDrawingViewer({
     lastMouse.current = { x: e.clientX, y: e.clientY };
   }, []);
 
-  const handleMouseUp = useCallback(() => {
-    isPanning.current = false;
-  }, []);
+  const handleMouseUp = useCallback(() => { isPanning.current = false; }, []);
 
-  const fitToWidth = () => {
-    setZoom(1);
-    setPan({ x: 0, y: 0 });
-  };
-
-  const currentUrl = sourceFiles[pageIndex];
-  if (!currentUrl) {
-    return (
-      <div className="flex items-center justify-center h-64 text-muted-foreground">
-        No drawings uploaded for this project.
-      </div>
-    );
-  }
+  const fitToWidth = () => { setZoom(1); setPan({ x: 0, y: 0 }); };
 
   const toggleType = (type: string) => {
     setHiddenTypes((prev) => {
@@ -97,17 +167,29 @@ export default function AnnotatedDrawingViewer({
     });
   };
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64 text-muted-foreground gap-2">
+        <Loader2 className="h-5 w-5 animate-spin" />
+        Rendering drawings...
+      </div>
+    );
+  }
+
+  if (!renderedPages.length) {
+    return (
+      <div className="flex items-center justify-center h-64 text-muted-foreground">
+        No drawings uploaded for this project.
+      </div>
+    );
+  }
+
+  const currentUrl = renderedPages[currentPage]?.url;
+
   return (
     <div className="flex gap-3">
-      {/* Legend sidebar */}
-      <AnnotationLegend
-        items={items}
-        hiddenTypes={hiddenTypes}
-        onToggleType={toggleType}
-        colors={ELEMENT_COLORS}
-      />
+      <AnnotationLegend items={items} hiddenTypes={hiddenTypes} onToggleType={toggleType} colors={ELEMENT_COLORS} />
 
-      {/* Main viewer */}
       <div className="flex-1 space-y-2">
         {/* Toolbar */}
         <div className="flex items-center gap-2 flex-wrap">
@@ -120,29 +202,23 @@ export default function AnnotatedDrawingViewer({
           <Button size="sm" variant="outline" onClick={fitToWidth}>
             <Maximize className="h-4 w-4" />
           </Button>
-          <Button
-            size="sm"
-            variant={showAnnotations ? "default" : "outline"}
-            onClick={() => setShowAnnotations(!showAnnotations)}
-          >
+          <Button size="sm" variant={showAnnotations ? "default" : "outline"} onClick={() => setShowAnnotations(!showAnnotations)}>
             {showAnnotations ? <Eye className="h-4 w-4 mr-1" /> : <EyeOff className="h-4 w-4 mr-1" />}
-            {showAnnotations ? "Annotations On" : "Annotations Off"}
+            {showAnnotations ? "On" : "Off"}
           </Button>
-          <span className="text-xs text-muted-foreground ml-2">{Math.round(zoom * 100)}%</span>
+          <span className="text-xs text-muted-foreground">{Math.round(zoom * 100)}%</span>
 
-          {sourceFiles.length > 1 && (
+          {renderedPages.length > 1 && (
             <div className="flex items-center gap-1 ml-auto">
-              {sourceFiles.map((_, i) => (
-                <Button
-                  key={i}
-                  size="sm"
-                  variant={i === pageIndex ? "default" : "outline"}
-                  onClick={() => { setPageIndex(i); fitToWidth(); }}
-                  className="h-7 w-7 p-0 text-xs"
-                >
-                  {i + 1}
-                </Button>
-              ))}
+              <Button size="sm" variant="outline" className="h-7 w-7 p-0" onClick={() => { setCurrentPage((p) => Math.max(0, p - 1)); fitToWidth(); }} disabled={currentPage === 0}>
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span className="text-xs text-muted-foreground px-1">
+                Page {currentPage + 1} / {renderedPages.length}
+              </span>
+              <Button size="sm" variant="outline" className="h-7 w-7 p-0" onClick={() => { setCurrentPage((p) => Math.min(renderedPages.length - 1, p + 1)); fitToWidth(); }} disabled={currentPage >= renderedPages.length - 1}>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
             </div>
           )}
         </div>
@@ -168,7 +244,7 @@ export default function AnnotatedDrawingViewer({
           >
             <img
               src={currentUrl}
-              alt={`Drawing page ${pageIndex + 1}`}
+              alt={`Drawing page ${currentPage + 1}`}
               className="max-w-none"
               draggable={false}
               onLoad={(e) => {
@@ -178,7 +254,6 @@ export default function AnnotatedDrawingViewer({
               style={{ display: "block" }}
             />
 
-            {/* SVG overlay */}
             {showAnnotations && imgSize.w > 0 && (
               <TooltipProvider delayDuration={100}>
                 <svg
@@ -200,43 +275,20 @@ export default function AnnotatedDrawingViewer({
 
                     return (
                       <g key={item.id} style={{ pointerEvents: "all", cursor: "pointer" }}>
-                        {/* Background fill */}
                         <rect
-                          x={x}
-                          y={y}
-                          width={w}
-                          height={h}
+                          x={x} y={y} width={w} height={h}
                           fill={color}
                           fillOpacity={isSelected ? 0.35 : isHovered ? 0.25 : 0.12}
                           stroke={color}
                           strokeWidth={isSelected ? 3 : isHovered ? 2.5 : 1.5}
-                          strokeDasharray={isSelected ? "none" : "none"}
                           rx={3}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onItemSelect(item.id === selectedItemId ? null : item.id);
-                          }}
+                          onClick={(e) => { e.stopPropagation(); onItemSelect(item.id === selectedItemId ? null : item.id); }}
                           onMouseEnter={() => setHoveredId(item.id)}
                           onMouseLeave={() => setHoveredId(null)}
                         />
-                        {/* Label */}
-                        <rect
-                          x={x}
-                          y={y - 18}
-                          width={Math.max(w, 90)}
-                          height={16}
-                          fill={color}
-                          rx={2}
-                        />
-                        <text
-                          x={x + 3}
-                          y={y - 5}
-                          fill="white"
-                          fontSize={11}
-                          fontWeight="bold"
-                          fontFamily="sans-serif"
-                        >
-                          {item.element_ref} – {item.bar_size} x{item.quantity}
+                        <rect x={x} y={y - 18} width={Math.max(w, 90)} height={16} fill={color} rx={2} />
+                        <text x={x + 3} y={y - 5} fill="white" fontSize={11} fontWeight="bold" fontFamily="sans-serif">
+                          {item.element_ref || item.mark} – {item.bar_size} x{item.quantity}
                         </text>
                       </g>
                     );

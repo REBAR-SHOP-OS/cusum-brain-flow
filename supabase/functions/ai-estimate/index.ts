@@ -137,32 +137,78 @@ serve(async (req) => {
 
         // Add the extraction prompt
         parts.push({
-          text: `You are a senior structural estimator. Analyze the uploaded structural/architectural drawings and extract ALL rebar reinforcement items.
+          text: `You are a senior Canadian rebar detailer and structural estimator. Analyze the uploaded structural/shop drawings and extract ALL rebar reinforcement items.
 
 ${scope_context ? `Context: ${scope_context}` : ""}
 
-For each structural element (column, beam, footing, slab, wall, pier), extract:
-- element_type: footing, column, beam, slab, wall, pier
-- element_ref: reference label (e.g. C1, F2, B3)
-- mark: bar mark number
-- bar_size: Canadian metric (10M, 15M, 20M, 25M, 30M, 35M)
-- quantity: number of bars
-- cut_length_mm: length in mm before hooks/laps
+## CANADIAN SHOP DRAWING NOTATION GUIDE
+
+These drawings use RebarCAD notation common in Canadian rebar detailing. Key patterns:
+
+### Mark Prefixes
+- **LS** prefix (e.g. LS02, LS117, LS125): Straight bars (no bends)
+- **AS** prefix (e.g. AS24, AS57, AS81): Straight bars (alternate series)
+- **L** prefix (e.g. L1003, L1510, L2009): Bent shapes — the digits encode bar size (e.g. L15xx = 15M bar, L20xx = 20M bar)
+- **A** prefix (e.g. A1505, A1552): Bent shapes (alternate series)
+
+### Quantity Notation
+- Simple: "5" means 5 pieces
+- Layer multiplier: "2x11" means 2 layers × 11 bars = 22 total bars
+- "4x2" means 4 sets × 2 bars = 8 total bars
+
+### Bend Types (ACI/RebarCAD)
+- **Type 2**: L-shape (90° hook on one end) — dimensions A, B
+- **Type 3**: Cranked/Z-shape — dimensions A, B, C
+- **Type 17**: U-bar/stirrup (hook both ends) — dimensions A, B
+- **T1**: Custom trapezoidal — dimensions A through G
+- **Straight (no type)**: Single dimension A = full length
+
+### Position Codes
+- BLL = Bottom Long-way Lower
+- TUL = Top Upper-way Lower
+- T&B = Top & Bottom
+- SF/EF = Start Face / End Face
+- EW = Each Way
+- DWL = Dowel
+
+### Spacing
+- "@12\"" means spaced at 12 inches = 305mm
+- "@8\"" means spaced at 8 inches = 203mm
+
+### Dimensions
+- All dimensions are in imperial (feet-inches): 4'-2" = 1270mm, 30'-0" = 9144mm
+- Convert ALL dimensions to millimeters for output
+
+## EXTRACTION INSTRUCTIONS
+
+For each rebar callout found on the drawings, extract:
+- element_type: "footing", "column", "beam", "slab", "wall", "pier", "grade_beam", "retaining_wall", "stair", "pool_slab", "pool_deck"
+- element_ref: structural element reference label (e.g. W6, W7, GB1, F1, SD29)
+- mark: the bar mark as shown (e.g. LS02, L1510, A1505, AS24)
+- bar_size: Canadian metric size (10M, 15M, 20M, 25M, 30M, 35M)
+- quantity: TOTAL number of bars after resolving multipliers (e.g. "2x11" = 22)
+- cut_length_mm: total length in mm (convert from imperial feet-inches)
 - hook_type_near: "90", "180", or "none"
 - hook_type_far: "90", "180", or "none"
 - lap_type: "tension", "compression", or "none"
 - num_laps: number of lap splices (0 if none)
-- spacing_mm: spacing if applicable
+- spacing_mm: spacing in mm if applicable (convert from inches), null if not specified
+- shape_code: "straight", "L-shape", "U-bar", "stirrup", "cranked", "trapezoidal", "dowel"
+- bend_type: the RebarCAD bend type number if visible (2, 3, 17, T1, etc.) or null
+- position: position code if visible (BLL, TUL, T&B, EW, etc.) or null
+- drawing_ref: the drawing sheet reference (e.g. SD29, SD31, SD03)
 - page_index: which uploaded file/page this item was found on (0-based index)
-- bbox: bounding box of the rebar callout on the drawing as {"x": float, "y": float, "w": float, "h": float} where all values are normalized 0.0-1.0 relative to the full page dimensions. x,y = top-left corner, w,h = width and height of the region containing the rebar callout or structural element label.
+- bbox: bounding box of the rebar callout as {"x": float, "y": float, "w": float, "h": float} with normalized 0.0-1.0 coordinates relative to full page. x,y = top-left corner. Be precise — these will be used for colored overlays.
 
-CRITICAL for bbox accuracy:
-- Coordinates MUST be normalized (0.0 to 1.0) relative to full page width and height
-- x=0.0 is left edge, x=1.0 is right edge, y=0.0 is top, y=1.0 is bottom
-- Each bbox should tightly surround the specific rebar callout text or structural detail area
-- Be precise — these coordinates will be used to draw colored annotation overlays on the drawing
+## CRITICAL RULES
+1. Convert ALL imperial dimensions to millimeters: 1 foot = 304.8mm, 1 inch = 25.4mm
+2. Resolve ALL multipliers: "2x11" = 22 bars, "4x2" = 8 bars
+3. For bent shapes, cut_length_mm = total developed length (sum of all dimensions A+B+C+...)
+4. Extract EVERY single bar callout — do not skip any
+5. If a bar appears on multiple drawing sheets, list each occurrence separately
+6. For bbox: x=0.0 is left edge, x=1.0 is right, y=0.0 is top, y=1.0 is bottom
 
-Return ONLY a valid JSON array of items. Be thorough — extract every bar callout visible in the drawings.`,
+Return ONLY a valid JSON array of items.`,
         });
 
         // Call Gemini directly with native multimodal API
@@ -175,7 +221,7 @@ Return ONLY a valid JSON array of items. Be thorough — extract every bar callo
               contents: [{ parts }],
               generationConfig: {
                 temperature: 0.1,
-                maxOutputTokens: 16000,
+                maxOutputTokens: 32000,
               },
             }),
           }
