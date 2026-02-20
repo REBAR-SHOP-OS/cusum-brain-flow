@@ -525,8 +525,9 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
             </Card>
           )}
 
-          {/* ASA shape diagram if bend */}
-          {currentItem.bend_type === "bend" && currentItem.asa_shape_code && (
+          {/* ASA shape diagram if bend — only shown once cutting has started */}
+          {currentItem.bend_type === "bend" && currentItem.asa_shape_code &&
+            (currentItem.completed_pieces > 0 || currentItem.phase === "bending" || currentItem.phase === "cut_done") && (
             <Card className="bg-card border border-border">
               <CardContent className="py-6 px-4 flex justify-center">
                 <AsaShapeDiagram

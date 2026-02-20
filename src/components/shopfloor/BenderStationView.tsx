@@ -208,9 +208,9 @@ export function BenderStationView({ machine, items, canWrite, initialIndex = 0, 
           </div>
         )}
 
-        {/* Large shape diagram area */}
+        {/* Large shape diagram area — only shown once production has started */}
         <div className="flex justify-center py-4 mb-6">
-          {currentItem.asa_shape_code ? (
+          {(currentItem.phase === "bending" || (currentItem.bend_completed_pieces ?? 0) > 0) && currentItem.asa_shape_code ? (
             <AsaShapeDiagram
               shapeCode={currentItem.asa_shape_code}
               dimensions={currentItem.bend_dimensions}
@@ -218,7 +218,7 @@ export function BenderStationView({ machine, items, canWrite, initialIndex = 0, 
             />
           ) : (
             <div className="w-64 h-40 rounded-lg border border-dashed border-border flex items-center justify-center text-muted-foreground text-sm">
-              No shape assigned
+              {currentItem.phase === "bending" || (currentItem.bend_completed_pieces ?? 0) > 0 ? "No shape assigned" : "Press start to reveal shape"}
             </div>
           )}
         </div>
