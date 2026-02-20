@@ -32,36 +32,34 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-    // Take first 2 files to stay within memory
-    const urls = (file_urls as string[]).slice(0, 2);
+    // Take only 1 file to stay within memory limits
+    const url = urls[0];
+    const lower = url.toLowerCase();
+    const isPdf = lower.includes(".pdf");
+    const isImage = /\.(png|jpg|jpeg|webp|gif)/.test(lower);
     const imageParts: Array<{ type: string; image_url: { url: string } }> = [];
 
-    for (const url of urls) {
-      const lower = url.toLowerCase();
-      const isPdf = lower.includes(".pdf");
-      const isImage = /\.(png|jpg|jpeg|webp|gif)/.test(lower);
-
-      if (isImage) {
-        // Images can be sent as direct URLs
-        imageParts.push({ type: "image_url", image_url: { url } });
-      } else if (isPdf) {
-        // PDFs must be sent as base64 data URLs — fetch limited size (1.5MB max)
-        try {
-          const resp = await fetch(url, {
-            headers: { Range: "bytes=0-1572863" }, // first 1.5MB
-          });
-          if (!resp.ok && resp.status !== 206) continue;
-          const buf = await resp.arrayBuffer();
+    if (isImage) {
+      imageParts.push({ type: "image_url", image_url: { url } });
+    } else if (isPdf) {
+      // Fetch full PDF — must be complete for Gemini to parse pages
+      try {
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error(`Fetch failed: ${resp.status}`);
+        const buf = await resp.arrayBuffer();
+        // Skip if over 4MB to avoid memory crash
+        if (buf.byteLength > 4 * 1024 * 1024) {
+          console.warn("PDF too large, skipping base64 encode");
+        } else {
           const b64 = arrayBufferToBase64(buf);
           imageParts.push({
             type: "image_url",
             image_url: { url: `data:application/pdf;base64,${b64}` },
           });
-        } catch (e) {
-          console.warn(`Failed to fetch PDF: ${url}`, e);
         }
+      } catch (e) {
+        console.warn(`Failed to fetch PDF: ${url}`, e);
       }
-      // Skip unsupported file types (xlsx, csv, tiff, etc.)
     }
 
     if (imageParts.length === 0) {
