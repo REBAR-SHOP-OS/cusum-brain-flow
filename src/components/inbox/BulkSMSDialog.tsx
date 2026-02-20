@@ -27,8 +27,15 @@ interface Template {
   body: string;
 }
 
-export function BulkSMSDialog() {
-  const [open, setOpen] = useState(false);
+interface BulkSMSDialogProps {
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}
+
+export function BulkSMSDialog({ open: controlledOpen, onOpenChange }: BulkSMSDialogProps = {}) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen ?? internalOpen;
+  const setOpen = onOpenChange ?? setInternalOpen;
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());

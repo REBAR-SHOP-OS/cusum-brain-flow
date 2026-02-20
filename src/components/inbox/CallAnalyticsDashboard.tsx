@@ -3,10 +3,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Phone, PhoneIncoming, PhoneOutgoing, PhoneMissed, Clock, TrendingUp } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const COLORS = ["hsl(var(--primary))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
 
-export function CallAnalyticsDashboard() {
+interface CallAnalyticsDashboardProps {
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}
+
+export function CallAnalyticsDashboard({ open, onOpenChange }: CallAnalyticsDashboardProps = {}) {
   const { analytics, loading } = useCallAnalytics(30);
 
   if (loading) {
@@ -29,7 +35,7 @@ export function CallAnalyticsDashboard() {
     return m > 0 ? `${m}m ${s}s` : `${s}s`;
   };
 
-  return (
+  const content = (
     <div className="space-y-6 p-4">
       {/* KPI Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -152,4 +158,19 @@ export function CallAnalyticsDashboard() {
       </div>
     </div>
   );
+
+  if (open !== undefined && onOpenChange) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Call Analytics</DialogTitle>
+          </DialogHeader>
+          {content}
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  return content;
 }

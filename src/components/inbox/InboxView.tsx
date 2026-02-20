@@ -2,7 +2,8 @@ import { useState, useMemo, useCallback, useEffect, useLayoutEffect } from "reac
 import {
   RefreshCw, Settings, Loader2, Search, CheckSquare,
   Trash2, Archive, X, Mail, LogOut, Phone, LayoutGrid,
-  List, MessageSquare, Wifi, WifiOff, PenSquare
+  List, MessageSquare, Wifi, WifiOff, PenSquare,
+  FileText, Volume2, BarChart3, Send
 } from "lucide-react";
 import { InboxEmailList, type InboxEmail } from "./InboxEmailList";
 import { InboxEmailViewer } from "./InboxEmailViewer";
@@ -12,6 +13,10 @@ import { ComposeEmailDialog } from "./ComposeEmailDialog";
 import { InboxAIToolbar, type AIAction } from "./InboxAIToolbar";
 import { InboxSummaryPanel, type InboxSummary } from "./InboxSummaryPanel";
 import { InboxKanbanBoard } from "./InboxKanbanBoard";
+import { SendFaxDialog } from "./SendFaxDialog";
+import { BulkSMSDialog } from "./BulkSMSDialog";
+import { SMSTemplateManager } from "./SMSTemplateManager";
+import { CallAnalyticsDashboard } from "./CallAnalyticsDashboard";
 import { useCommunications } from "@/hooks/useCommunications";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
@@ -148,8 +153,12 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
   // Default to list view on mobile, kanban on desktop
   const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
   const [viewMode, setViewMode] = useState<"list" | "kanban">(isMobile ? "list" : "kanban");
-  const [kanbanTypeFilter, setKanbanTypeFilter] = useState<"all" | "email" | "call" | "sms">("all");
+  const [kanbanTypeFilter, setKanbanTypeFilter] = useState<"all" | "email" | "call" | "sms" | "voicemail" | "fax">("all");
   const [summary, setSummary] = useState<InboxSummary | null>(null);
+  const [showFaxDialog, setShowFaxDialog] = useState(false);
+  const [showBulkSMS, setShowBulkSMS] = useState(false);
+  const [showSMSTemplates, setShowSMSTemplates] = useState(false);
+  const [showCallAnalytics, setShowCallAnalytics] = useState(false);
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -709,6 +718,39 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
             <TooltipContent side="bottom" className="text-xs">Compose new email (c)</TooltipContent>
           </Tooltip>
 
+          {/* Send Fax */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-6 gap-1 text-[11px] px-2" onClick={() => setShowFaxDialog(true)}>
+                <FileText className="w-3 h-3" />
+                Fax
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-xs">Send a fax</TooltipContent>
+          </Tooltip>
+
+          {/* Bulk SMS */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-6 gap-1 text-[11px] px-2" onClick={() => setShowBulkSMS(true)}>
+                <Send className="w-3 h-3" />
+                SMS
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-xs">Bulk SMS</TooltipContent>
+          </Tooltip>
+
+          {/* Call Analytics */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-6 gap-1 text-[11px] px-2" onClick={() => setShowCallAnalytics(true)}>
+                <BarChart3 className="w-3 h-3" />
+                Analytics
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-xs">Call Analytics</TooltipContent>
+          </Tooltip>
+
           {/* Divider */}
           <div className="w-px h-4 bg-border shrink-0" />
 
@@ -894,6 +936,8 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
                   { value: "email" as const, label: "Email", icon: <Mail className="w-3.5 h-3.5" />, count: emails.filter(e => e.commType === "email").length },
                   { value: "call" as const, label: "Calls", icon: <Phone className="w-3.5 h-3.5" />, count: emails.filter(e => e.commType === "call").length },
                   { value: "sms" as const, label: "SMS", icon: <MessageSquare className="w-3.5 h-3.5" />, count: emails.filter(e => e.commType === "sms").length },
+                  { value: "voicemail" as const, label: "Voicemail", icon: <Volume2 className="w-3.5 h-3.5" />, count: emails.filter(e => e.commType === "voicemail").length },
+                  { value: "fax" as const, label: "Fax", icon: <FileText className="w-3.5 h-3.5" />, count: emails.filter(e => e.commType === "fax").length },
                 ]).map((tab) => (
                   <button
                     key={tab.value}
@@ -1007,6 +1051,18 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
 
         {/* Compose Dialog */}
         <ComposeEmailDialog open={showCompose} onOpenChange={setShowCompose} />
+
+        {/* Send Fax Dialog */}
+        <SendFaxDialog open={showFaxDialog} onOpenChange={setShowFaxDialog} />
+
+        {/* Bulk SMS Dialog */}
+        <BulkSMSDialog open={showBulkSMS} onOpenChange={setShowBulkSMS} />
+
+        {/* SMS Template Manager */}
+        <SMSTemplateManager open={showSMSTemplates} onOpenChange={setShowSMSTemplates} />
+
+        {/* Call Analytics */}
+        <CallAnalyticsDashboard open={showCallAnalytics} onOpenChange={setShowCallAnalytics} />
       </div>
     </TooltipProvider>
   );

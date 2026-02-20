@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Mail, Phone, MessageSquare, RefreshCw, Circle, PhoneIncoming, PhoneOutgoing } from "lucide-react";
+import { Mail, Phone, MessageSquare, RefreshCw, Circle, PhoneIncoming, PhoneOutgoing, Volume2, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SmartSearchInput } from "@/components/ui/SmartSearchInput";
 import { cn } from "@/lib/utils";
@@ -44,17 +44,25 @@ function TypeIcon({ comm }: { comm: Communication }) {
       ? <PhoneIncoming className="w-4 h-4 text-blue-500" />
       : <PhoneOutgoing className="w-4 h-4 text-blue-500" />;
   }
+  if (comm.type === "voicemail") {
+    return <Volume2 className="w-4 h-4 text-amber-500" />;
+  }
+  if (comm.type === "fax") {
+    return <FileText className="w-4 h-4 text-purple-500" />;
+  }
   return <Mail className="w-4 h-4 text-primary" />;
 }
 
 function SourceBadge({ source, type }: { source: string; type: string }) {
   if (source === "ringcentral") {
+    const labels: Record<string, string> = { sms: "SMS", call: "Call", voicemail: "VM", fax: "Fax" };
+    const colors: Record<string, string> = { sms: "bg-green-500/15 text-green-500", call: "bg-blue-500/15 text-blue-500", voicemail: "bg-amber-500/15 text-amber-500", fax: "bg-purple-500/15 text-purple-500" };
     return (
       <span className={cn(
         "inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium",
-        type === "sms" ? "bg-green-500/15 text-green-500" : "bg-blue-500/15 text-blue-500"
+        colors[type] || "bg-muted text-muted-foreground"
       )}>
-        {type === "sms" ? "SMS" : "Call"}
+        {labels[type] || type}
       </span>
     );
   }
