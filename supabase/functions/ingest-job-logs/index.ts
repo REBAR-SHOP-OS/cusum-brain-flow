@@ -5,15 +5,8 @@ import * as XLSX from "https://esm.sh/xlsx@0.18.5/xlsx.mjs";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const BUCKET = "estimation-files";
 
-/**
- * Parse a Job Log XLS file into structured coordination data.
- * Job Logs typically contain:
- * - Project summary (name, customer, estimation weight, detailing weight)
- * - Release code breakdown (CBA, CBB, ... with weights and dates)
- * - Revision history
- * - Element-level weight breakdown
- */
 function parseJobLog(rows: any[][]): {
   project_name: string;
   customer_name: string;
@@ -34,28 +27,16 @@ function parseJobLog(rows: any[][]): {
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
     if (!row || row.length === 0) continue;
-
     const cell0 = String(row[0] ?? "").trim().toLowerCase();
     const cell1 = String(row[1] ?? "").trim();
 
-    // Extract project name
-    if (cell0.includes("project") && cell1) {
-      projectName = cell1;
-    }
-    // Extract customer
-    if (cell0.includes("customer") || cell0.includes("client")) {
-      customerName = cell1;
-    }
-    // Extract estimation weight
-    if (cell0.includes("estimation") && cell0.includes("weight")) {
+    if (cell0.includes("project") && cell1) projectName = cell1;
+    if (cell0.includes("customer") || cell0.includes("client")) customerName = cell1;
+    if (cell0.includes("estimation") && cell0.includes("weight"))
       estimationWeight = parseFloat(cell1.replace(/[^0-9.]/g, "")) || 0;
-    }
-    // Extract detailing weight
-    if (cell0.includes("detail") && cell0.includes("weight")) {
+    if (cell0.includes("detail") && cell0.includes("weight"))
       detailingWeight = parseFloat(cell1.replace(/[^0-9.]/g, "")) || 0;
-    }
 
-    // Detect release code rows (e.g., CBA, CBB, CBC...)
     const releaseMatch = String(row[0] ?? "").match(/^(CB[A-Z]|[A-Z]{2,3}\d*)$/);
     if (releaseMatch) {
       releases.push({
@@ -67,7 +48,6 @@ function parseJobLog(rows: any[][]): {
       });
     }
 
-    // Detect element rows (e.g., "Footing F1", "Wall W6", "Slab S1")
     const elementPatterns = /^(footing|wall|slab|beam|column|pier|grade.?beam|retaining|stair|pool|cabana|foundation)/i;
     if (elementPatterns.test(cell0) || elementPatterns.test(cell1)) {
       const description = cell0 || cell1;
@@ -79,7 +59,6 @@ function parseJobLog(rows: any[][]): {
       });
     }
 
-    // Detect revision rows
     if (cell0.includes("rev") || cell0.match(/^r\d+$/i)) {
       revisions.push({
         revision: String(row[0] ?? "").trim(),
@@ -91,7 +70,6 @@ function parseJobLog(rows: any[][]): {
     }
   }
 
-  // If we didn't find explicit weights, try summing releases
   if (detailingWeight === 0 && releases.length > 0) {
     detailingWeight = releases.reduce((s, r) => s + r.weight_kg, 0);
   }
@@ -110,10 +88,10 @@ serve(async (req) => {
     if (!profile?.company_id) return json({ error: "No company found" }, 400);
     const companyId = profile.company_id;
 
-    const body = await req.json();
-    const batchSize = body.batch_size ?? 10;
+    const body = await req.json().catch(() => ({}));
+    const batchSize = body.batch_size ?? 20;
+    const reset = body.reset ?? false;
 
-    // Get or create progress tracker
     let { data: progress } = await admin
       .from("ingestion_progress")
       .select("*")
@@ -121,11 +99,33 @@ serve(async (req) => {
       .eq("company_id", companyId)
       .maybeSingle();
 
+    if (reset && progress) {
+      await admin.from("ingestion_progress").update({
+        status: "pending", processed_items: 0, processed_files: 0, failed_items: 0,
+        last_processed_lead_id: null, error_log: [], completed_at: null,
+        updated_at: new Date().toISOString(),
+      }).eq("id", progress.id);
+      progress.status = "pending";
+      progress.processed_items = 0;
+      progress.processed_files = 0;
+      progress.last_processed_lead_id = null;
+    }
+
     if (!progress) {
+      // Count job log files from lead_files
+      const { count: totalFiles } = await admin
+        .from("lead_files")
+        .select("id", { count: "exact", head: true })
+        .eq("company_id", companyId)
+        .not("storage_path", "is", null)
+        .or("file_name.ilike.%job%log%.xls,file_name.ilike.%job%log%.xlsx,file_name.ilike.%job_log%.xls,file_name.ilike.%job_log%.xlsx");
+
       const { data: inserted } = await admin.from("ingestion_progress").insert({
         job_type: "job_logs",
         company_id: companyId,
+        source_type: "xls",
         total_items: 0,
+        total_files: totalFiles ?? 0,
         status: "running",
         started_at: new Date().toISOString(),
       }).select().single();
@@ -133,108 +133,104 @@ serve(async (req) => {
     }
 
     if (progress.status === "completed") {
-      return json({ message: "Job log ingestion already completed", progress });
+      return json({ message: "Job log ingestion already completed. Use reset=true to re-run.", progress });
     }
 
     await admin.from("ingestion_progress")
       .update({ status: "running", updated_at: new Date().toISOString() })
       .eq("id", progress.id);
 
-    // Fetch next batch of leads
-    let query = admin
-      .from("leads")
-      .select("id, name, customer_id")
+    // Query lead_files for job log files directly
+    let fileQuery = admin
+      .from("lead_files")
+      .select("id, lead_id, file_name, storage_path, file_url")
       .eq("company_id", companyId)
-      .order("id", { ascending: true })
-      .limit(batchSize);
+      .not("storage_path", "is", null)
+      .or("file_name.ilike.%job%log%.xls,file_name.ilike.%job%log%.xlsx,file_name.ilike.%job_log%.xls,file_name.ilike.%job_log%.xlsx")
+      .order("lead_id", { ascending: true });
 
     if (progress.last_processed_lead_id) {
-      query = query.gt("id", progress.last_processed_lead_id);
+      fileQuery = fileQuery.gt("lead_id", progress.last_processed_lead_id);
     }
 
-    const { data: leads } = await query;
+    const { data: jobLogFiles } = await fileQuery.limit(batchSize);
 
-    if (!leads || leads.length === 0) {
-      await admin.from("ingestion_progress")
-        .update({ status: "completed", completed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-        .eq("id", progress.id);
-      return json({ message: "All leads processed", progress });
+    if (!jobLogFiles || jobLogFiles.length === 0) {
+      await admin.from("ingestion_progress").update({
+        status: "completed", completed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }).eq("id", progress.id);
+      return json({ message: "All job logs processed", progress });
     }
 
     let processedCount = 0;
     let failedCount = 0;
 
-    for (const lead of leads) {
+    for (const file of jobLogFiles) {
       try {
-        const { data: files } = await admin.storage.from("odoo-archive").list(lead.id, { limit: 100 });
-        if (!files) { processedCount++; continue; }
-
-        const jobLogFiles = files.filter((f: any) => {
-          const name = f.name.toLowerCase();
-          return (name.includes("job_log") || name.includes("job log") || name.includes("joblog"))
-            && (name.endsWith(".xls") || name.endsWith(".xlsx"));
-        });
-
-        for (const file of jobLogFiles) {
+        let arrayBuf: ArrayBuffer;
+        if (file.storage_path) {
+          const { data: fileData, error: dlErr } = await admin.storage
+            .from(BUCKET)
+            .download(file.storage_path);
+          if (dlErr || !fileData) { failedCount++; continue; }
+          arrayBuf = await fileData.arrayBuffer();
+        } else if (file.file_url) {
           try {
-            const filePath = `${lead.id}/${file.name}`;
-            const { data: fileData, error: dlErr } = await admin.storage.from("odoo-archive").download(filePath);
-            if (dlErr || !fileData) continue;
+            const resp = await fetch(file.file_url);
+            if (!resp.ok) { failedCount++; continue; }
+            arrayBuf = await resp.arrayBuffer();
+          } catch { failedCount++; continue; }
+        } else { failedCount++; continue; }
 
-            const arrayBuf = await fileData.arrayBuffer();
-            const workbook = XLSX.read(new Uint8Array(arrayBuf), { type: "array" });
-            const firstSheet = workbook.SheetNames[0];
-            const rows: any[][] = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet], { header: 1 });
+        const workbook = XLSX.read(new Uint8Array(arrayBuf), { type: "array" });
+        const firstSheet = workbook.SheetNames[0];
+        const rows: any[][] = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet], { header: 1 });
 
-            const parsed = parseJobLog(rows);
+        const parsed = parseJobLog(rows);
 
-            // Get signed URL for reference
-            const { data: urlData } = await admin.storage.from("odoo-archive").createSignedUrl(filePath, 86400);
+        const { data: lead } = await admin.from("leads").select("name").eq("id", file.lead_id).maybeSingle();
 
-            try {
-              await admin.from("project_coordination_log").insert({
-                lead_id: lead.id,
-                company_id: companyId,
-                project_name: parsed.project_name || lead.name,
-                customer_name: parsed.customer_name,
-                estimation_weight_kg: parsed.estimation_weight_kg,
-                detailing_weight_kg: parsed.detailing_weight_kg,
-                weight_difference_kg: parsed.estimation_weight_kg - parsed.detailing_weight_kg,
-                elements: parsed.elements,
-                releases: parsed.releases,
-                revisions: parsed.revisions,
-                source_file_url: urlData?.signedUrl ?? filePath,
-              });
-            } catch (insertErr) {
-              console.error(`Insert error for ${file.name}:`, insertErr);
-            }
-
-            console.log(`Parsed job log: ${file.name} (est: ${parsed.estimation_weight_kg}kg, det: ${parsed.detailing_weight_kg}kg)`);
-          } catch (fileErr) {
-            console.error(`Error processing ${file.name}:`, fileErr);
-          }
+        try {
+          await admin.from("project_coordination_log").insert({
+            lead_id: file.lead_id,
+            company_id: companyId,
+            project_name: parsed.project_name || lead?.name || file.file_name,
+            customer_name: parsed.customer_name,
+            estimation_weight_kg: parsed.estimation_weight_kg,
+            detailing_weight_kg: parsed.detailing_weight_kg,
+            weight_difference_kg: parsed.estimation_weight_kg - parsed.detailing_weight_kg,
+            elements: parsed.elements,
+            releases: parsed.releases,
+            revisions: parsed.revisions,
+            source_file_url: file.storage_path,
+          });
+        } catch (insertErr) {
+          console.error(`Insert error for ${file.file_name}:`, insertErr);
         }
 
         processedCount++;
-      } catch (leadErr) {
+        console.log(`✅ Job log: ${file.file_name} (est: ${parsed.estimation_weight_kg}kg, det: ${parsed.detailing_weight_kg}kg)`);
+      } catch (fileErr) {
         failedCount++;
-        console.error(`Error processing lead ${lead.id}:`, leadErr);
+        console.error(`Error processing ${file.file_name}:`, fileErr);
       }
     }
 
-    const lastLeadId = leads[leads.length - 1]?.id;
+    const lastLeadId = jobLogFiles[jobLogFiles.length - 1]?.lead_id;
     await admin.from("ingestion_progress").update({
       processed_items: (progress.processed_items ?? 0) + processedCount,
+      processed_files: (progress.processed_files ?? 0) + processedCount,
       failed_items: (progress.failed_items ?? 0) + failedCount,
       last_processed_lead_id: lastLeadId,
       updated_at: new Date().toISOString(),
     }).eq("id", progress.id);
 
     return json({
-      message: `Processed ${processedCount} leads`,
-      batch_size: leads.length,
+      message: `Processed ${processedCount} job logs, ${failedCount} failed`,
+      batch_size: jobLogFiles.length,
       last_lead_id: lastLeadId,
-      has_more: leads.length === batchSize,
+      has_more: jobLogFiles.length === batchSize,
     });
   } catch (err) {
     if (err instanceof Response) return err;

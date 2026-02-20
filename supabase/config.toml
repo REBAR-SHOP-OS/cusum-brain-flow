@@ -300,3 +300,6 @@ verify_jwt = false
 
 [functions.quote-expiry-watchdog]
 verify_jwt = false
+
+[functions.ingest-shop-drawings]
+verify_jwt = false

@@ -4323,9 +4323,12 @@ export type Database = {
           id: string
           job_type: string
           last_processed_lead_id: string | null
+          processed_files: number | null
           processed_items: number | null
+          source_type: string | null
           started_at: string | null
           status: string
+          total_files: number | null
           total_items: number | null
           updated_at: string
         }
@@ -4338,9 +4341,12 @@ export type Database = {
           id?: string
           job_type: string
           last_processed_lead_id?: string | null
+          processed_files?: number | null
           processed_items?: number | null
+          source_type?: string | null
           started_at?: string | null
           status?: string
+          total_files?: number | null
           total_items?: number | null
           updated_at?: string
         }
@@ -4353,9 +4359,12 @@ export type Database = {
           id?: string
           job_type?: string
           last_processed_lead_id?: string | null
+          processed_files?: number | null
           processed_items?: number | null
+          source_type?: string | null
           started_at?: string | null
           status?: string
+          total_files?: number | null
           total_items?: number | null
           updated_at?: string
         }
