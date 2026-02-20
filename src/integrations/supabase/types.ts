@@ -855,6 +855,7 @@ export type Database = {
       }
       barlists: {
         Row: {
+          auto_approved: boolean
           company_id: string
           created_at: string
           created_by: string | null
@@ -862,14 +863,21 @@ export type Database = {
           id: string
           lead_id: string | null
           name: string
+          ocr_confidence_score: number | null
           parent_barlist_id: string | null
           project_id: string
+          qa_flags: Json | null
           revision_no: number
           source_type: string
           status: string
           updated_at: string
+          verification_notes: string | null
+          verification_status: string
+          verified_at: string | null
+          verified_by: string | null
         }
         Insert: {
+          auto_approved?: boolean
           company_id: string
           created_at?: string
           created_by?: string | null
@@ -877,14 +885,21 @@ export type Database = {
           id?: string
           lead_id?: string | null
           name: string
+          ocr_confidence_score?: number | null
           parent_barlist_id?: string | null
           project_id: string
+          qa_flags?: Json | null
           revision_no?: number
           source_type?: string
           status?: string
           updated_at?: string
+          verification_notes?: string | null
+          verification_status?: string
+          verified_at?: string | null
+          verified_by?: string | null
         }
         Update: {
+          auto_approved?: boolean
           company_id?: string
           created_at?: string
           created_by?: string | null
@@ -892,12 +907,18 @@ export type Database = {
           id?: string
           lead_id?: string | null
           name?: string
+          ocr_confidence_score?: number | null
           parent_barlist_id?: string | null
           project_id?: string
+          qa_flags?: Json | null
           revision_no?: number
           source_type?: string
           status?: string
           updated_at?: string
+          verification_notes?: string | null
+          verification_status?: string
+          verified_at?: string | null
+          verified_by?: string | null
         }
         Relationships: [
           {
@@ -6428,6 +6449,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      ocr_verification_stats: {
+        Row: {
+          auto_approve_enabled: boolean
+          company_id: string
+          created_at: string
+          human_verified_count: number
+          id: string
+          project_id: string
+          updated_at: string
+        }
+        Insert: {
+          auto_approve_enabled?: boolean
+          company_id: string
+          created_at?: string
+          human_verified_count?: number
+          id?: string
+          project_id: string
+          updated_at?: string
+        }
+        Update: {
+          auto_approve_enabled?: boolean
+          company_id?: string
+          created_at?: string
+          human_verified_count?: number
+          id?: string
+          project_id?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       optimization_snapshots: {
         Row: {

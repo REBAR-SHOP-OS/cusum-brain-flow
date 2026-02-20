@@ -234,7 +234,43 @@ serve(async (req) => {
         // Get lead info
         const { data: lead } = await admin.from("leads").select("title").eq("id", file.lead_id).maybeSingle();
 
-        // Create barlist
+        // Calculate confidence score based on OCR quality
+        const confidenceScore = Math.min(100, Math.round(
+          (ocrText.length > 500 ? 30 : ocrText.length / 500 * 30) + // text volume
+          (result.items.length > 0 ? 30 : 0) + // found rebar items
+          (result.items.every((i: any) => i.bar_size && i.quantity) ? 20 : 10) + // complete data
+          (result.summary?.total_weight_kg > 0 ? 20 : 5) // has weight summary
+        ));
+
+        // Check if auto-approve is enabled for this project (first 10 rule)
+        let verificationStatus = "pending_review";
+        let autoApproved = false;
+        const qaFlags: string[] = [];
+
+        // Flag quality issues
+        if (ocrText.length < 200) qaFlags.push("Low OCR text volume — may be missing content");
+        if (result.items.some((i: any) => !i.bar_size)) qaFlags.push("Some items missing bar size");
+        if (result.items.some((i: any) => !i.cut_length_mm || i.cut_length_mm === 0)) qaFlags.push("Some items missing cut length");
+        if (confidenceScore < 60) qaFlags.push("Overall confidence below 60%");
+
+        // Check if project has enough human-verified barlists
+        try {
+          const { data: stats } = await admin.from("ocr_verification_stats")
+            .select("human_verified_count, auto_approve_enabled")
+            .eq("company_id", companyId)
+            .eq("project_id", file.lead_id)
+            .maybeSingle();
+          
+          if (stats?.auto_approve_enabled && stats.human_verified_count >= 10 && confidenceScore >= 80 && qaFlags.length === 0) {
+            verificationStatus = "auto_approved";
+            autoApproved = true;
+            console.log(`🤖 Auto-approved: confidence ${confidenceScore}%, ${stats.human_verified_count} prior verifications`);
+          }
+        } catch (e) {
+          console.error("Stats check error:", e);
+        }
+
+        // Create barlist with verification metadata
         const { data: barlist, error: blErr } = await admin.from("barlists").insert({
           company_id: companyId,
           project_id: file.lead_id,
@@ -243,6 +279,10 @@ serve(async (req) => {
           source_type: "ai_deep_ocr_extract",
           status: "approved",
           created_by: userId,
+          ocr_confidence_score: confidenceScore,
+          verification_status: verificationStatus,
+          auto_approved: autoApproved,
+          qa_flags: qaFlags,
         }).select("id").single();
 
         if (blErr || !barlist) {
