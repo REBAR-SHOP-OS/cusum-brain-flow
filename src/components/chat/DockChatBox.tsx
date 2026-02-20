@@ -229,14 +229,19 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
 
   const isBusy = uploading || sendMutation.isPending;
 
-  // Get avatar info for header (first other profile in DM, or channel icon for group)
+  // Get avatar info for header — for DMs, derive partner from message senders, not all profiles
   const headerProfile = useMemo(() => {
     if (channelType === "dm") {
-      const other = profiles.find((p) => p.id !== myProfile?.id && p.is_active);
-      return other || null;
+      // Find the other person's profile_id from message history
+      const otherSenderId = messages.find(
+        (m) => m.sender_profile_id !== myProfile?.id
+      )?.sender_profile_id;
+      if (otherSenderId) return profileMap.get(otherSenderId) || null;
+      // Fallback: use channel name to match a profile (last resort)
+      return profiles.find((p) => p.id !== myProfile?.id && channelName.includes(p.full_name)) || null;
     }
     return null;
-  }, [channelType, profiles, myProfile]);
+  }, [channelType, messages, myProfile, profileMap, profiles, channelName]);
 
   const headerName = channelName;
   const headerInitials = getInitials(headerName);
