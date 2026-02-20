@@ -12,7 +12,7 @@ export async function executeToolCall(
 ) {
   const result: any = { tool_call_id: toolCall.id, result: {}, sideEffects: {} };
   const name = toolCall.function.name;
-  let args = {};
+  let args: any = {};
   
   try {
     args = JSON.parse(toolCall.function.arguments);
@@ -20,14 +20,15 @@ export async function executeToolCall(
     return { ...result, result: { error: "Invalid JSON arguments" } };
   }
 
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+
   try {
     // 1. Notifications
     if (name === "create_notifications") {
       const items = args.items || [];
-      const notifications = [];
+      const notifications: any[] = [];
       
       for (const item of items) {
-        // Simple resolution of assignee from context
         let assignedTo = null;
         if (item.assigned_to_name && context.availableEmployees) {
           const match = context.availableEmployees.find((e: any) => e.name.toLowerCase().includes(item.assigned_to_name.toLowerCase()));
@@ -55,7 +56,7 @@ export async function executeToolCall(
     // 2. Send Email
     else if (name === "send_email") {
       const emailRes = await fetch(
-        `${Deno.env.get("SUPABASE_URL")}/functions/v1/gmail-send`,
+        `${supabaseUrl}/functions/v1/gmail-send`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json", "Authorization": authHeader },
@@ -82,9 +83,281 @@ export async function executeToolCall(
       result.result = error ? { error: error.message } : { success: true, message: "Query executed" };
     }
 
-    // 5. Update Statuses
+    // 5. Update Machine Status
     else if (name === "update_machine_status") {
       const { data, error } = await svcClient.from("machines").update({ status: args.status }).eq("id", args.id).select();
+      result.result = error ? { error: error.message } : { success: true, data };
+    }
+
+    // ═══════════════════════════════════════════════════
+    // 6. Run Takeoff — POST to ai-estimate edge function
+    // ═══════════════════════════════════════════════════
+    else if (name === "run_takeoff") {
+      const body: any = {
+        name: args.name || args.project_name || "Untitled Takeoff",
+        file_urls: args.file_urls || [],
+        waste_factor_pct: args.waste_factor_pct ?? 5,
+        scope_context: args.scope_context || "",
+      };
+      if (args.customer_id) body.customer_id = args.customer_id;
+      if (args.lead_id) body.lead_id = args.lead_id;
+
+      const takeoffRes = await fetch(`${supabaseUrl}/functions/v1/ai-estimate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": authHeader },
+        body: JSON.stringify(body),
+      });
+
+      if (takeoffRes.ok) {
+        const takeoffData = await takeoffRes.json();
+        result.result = {
+          success: true,
+          project_id: takeoffData.project_id,
+          summary: takeoffData.summary,
+          message: `Takeoff complete: ${takeoffData.summary?.item_count ?? 0} items, ${takeoffData.summary?.total_weight_kg ?? 0} kg`,
+        };
+      } else {
+        result.result = { success: false, error: await takeoffRes.text() };
+      }
+    }
+
+    // ═══════════════════════════════════════════════════
+    // 7. Get Estimate Summary
+    // ═══════════════════════════════════════════════════
+    else if (name === "get_estimate_summary") {
+      const projectId = args.project_id;
+      if (!projectId) {
+        result.result = { error: "project_id is required" };
+      } else {
+        const { data: project, error: pErr } = await svcClient
+          .from("estimation_projects")
+          .select("*")
+          .eq("id", projectId)
+          .maybeSingle();
+
+        if (pErr || !project) {
+          result.result = { error: pErr?.message || "Project not found" };
+        } else {
+          const { data: items, error: iErr } = await svcClient
+            .from("estimation_items")
+            .select("*")
+            .eq("project_id", projectId)
+            .order("element_type", { ascending: true });
+
+          result.result = {
+            success: true,
+            project,
+            items: items || [],
+            item_count: items?.length ?? 0,
+          };
+        }
+      }
+    }
+
+    // ═══════════════════════════════════════════════════
+    // 8. Update Estimate Item
+    // ═══════════════════════════════════════════════════
+    else if (name === "update_estimate_item") {
+      const itemId = args.item_id || args.id;
+      if (!itemId) {
+        result.result = { error: "item_id is required" };
+      } else {
+        const updates: any = {};
+        if (args.quantity !== undefined) updates.quantity = args.quantity;
+        if (args.cut_length_mm !== undefined) updates.cut_length_mm = args.cut_length_mm;
+        if (args.bar_size !== undefined) updates.bar_size = args.bar_size;
+        if (args.mark !== undefined) updates.mark = args.mark;
+        if (args.element_ref !== undefined) updates.element_ref = args.element_ref;
+        if (args.element_type !== undefined) updates.element_type = args.element_type;
+
+        const { data, error } = await svcClient
+          .from("estimation_items")
+          .update(updates)
+          .eq("id", itemId)
+          .select();
+
+        result.result = error ? { error: error.message } : { success: true, updated: data };
+      }
+    }
+
+    // ═══════════════════════════════════════════════════
+    // 9. Apply Waste Factor
+    // ═══════════════════════════════════════════════════
+    else if (name === "apply_waste_factor") {
+      const projectId = args.project_id;
+      const newWaste = args.waste_factor_pct;
+      if (!projectId || newWaste === undefined) {
+        result.result = { error: "project_id and waste_factor_pct are required" };
+      } else {
+        // Fetch items
+        const { data: items, error: iErr } = await svcClient
+          .from("estimation_items")
+          .select("*")
+          .eq("project_id", projectId);
+
+        if (iErr || !items) {
+          result.result = { error: iErr?.message || "No items found" };
+        } else {
+          const factor = 1 + (newWaste / 100);
+          let totalWeight = 0;
+          let totalCost = 0;
+
+          for (const item of items) {
+            const newQty = Math.ceil((item.quantity || 0) * factor);
+            const weightPerUnit = item.weight_kg && item.quantity ? item.weight_kg / item.quantity : 0;
+            const newWeight = +(newQty * weightPerUnit).toFixed(2);
+            const costPerUnit = item.unit_cost || 0;
+            const newLineCost = +(newQty * costPerUnit).toFixed(2);
+
+            try {
+              await svcClient
+                .from("estimation_items")
+                .update({ quantity: newQty, weight_kg: newWeight, line_cost: newLineCost })
+                .eq("id", item.id);
+            } catch (_) { /* best effort */ }
+
+            totalWeight += newWeight;
+            totalCost += newLineCost;
+          }
+
+          // Update project
+          try {
+            await svcClient
+              .from("estimation_projects")
+              .update({ waste_factor_pct: newWaste, total_weight_kg: totalWeight, total_cost: totalCost })
+              .eq("id", projectId);
+          } catch (_) { /* best effort */ }
+
+          result.result = {
+            success: true,
+            message: `Applied ${newWaste}% waste to ${items.length} items`,
+            total_weight_kg: totalWeight,
+            total_cost: totalCost,
+          };
+        }
+      }
+    }
+
+    // ═══════════════════════════════════════════════════
+    // 10. Convert to Quote
+    // ═══════════════════════════════════════════════════
+    else if (name === "convert_to_quote") {
+      const body = {
+        project_id: args.project_id,
+        customer_id: args.customer_id,
+        notes: args.notes || "",
+      };
+
+      const quoteRes = await fetch(`${supabaseUrl}/functions/v1/convert-quote-to-order`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": authHeader },
+        body: JSON.stringify(body),
+      });
+
+      if (quoteRes.ok) {
+        const quoteData = await quoteRes.json();
+        result.result = { success: true, ...quoteData };
+      } else {
+        result.result = { success: false, error: await quoteRes.text() };
+      }
+    }
+
+    // ═══════════════════════════════════════════════════
+    // 11. Generate Sales Quote
+    // ═══════════════════════════════════════════════════
+    else if (name === "generate_sales_quote") {
+      const body = {
+        action: args.action || "generate",
+        estimate_request: args.estimate_request || args,
+        company_id: companyId,
+      };
+
+      const qeRes = await fetch(`${supabaseUrl}/functions/v1/quote-engine`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": authHeader },
+        body: JSON.stringify(body),
+      });
+
+      if (qeRes.ok) {
+        const qeData = await qeRes.json();
+        result.result = { success: true, ...qeData };
+      } else {
+        result.result = { success: false, error: await qeRes.text() };
+      }
+    }
+
+    // ═══════════════════════════════════════════════════
+    // 12. Export Estimate
+    // ═══════════════════════════════════════════════════
+    else if (name === "export_estimate") {
+      const projectId = args.project_id;
+      if (!projectId) {
+        result.result = { error: "project_id is required" };
+      } else {
+        const { data: project } = await svcClient
+          .from("estimation_projects")
+          .select("*")
+          .eq("id", projectId)
+          .maybeSingle();
+
+        const { data: items } = await svcClient
+          .from("estimation_items")
+          .select("*")
+          .eq("project_id", projectId)
+          .order("element_type", { ascending: true });
+
+        // Build element summaries
+        const elementSummary: Record<string, { count: number; weight: number; cost: number }> = {};
+        for (const item of items || []) {
+          const key = item.element_type || "other";
+          if (!elementSummary[key]) elementSummary[key] = { count: 0, weight: 0, cost: 0 };
+          elementSummary[key].count += item.quantity || 0;
+          elementSummary[key].weight += item.weight_kg || 0;
+          elementSummary[key].cost += item.line_cost || 0;
+        }
+
+        result.result = {
+          success: true,
+          export: {
+            project: {
+              id: project?.id,
+              name: project?.name,
+              status: project?.status,
+              total_weight_kg: project?.total_weight_kg,
+              total_cost: project?.total_cost,
+              waste_factor_pct: project?.waste_factor_pct,
+              labor_hours: project?.labor_hours,
+              created_at: project?.created_at,
+            },
+            element_summary: elementSummary,
+            items: (items || []).map((i: any) => ({
+              element_type: i.element_type,
+              element_ref: i.element_ref,
+              mark: i.mark,
+              bar_size: i.bar_size,
+              quantity: i.quantity,
+              cut_length_mm: i.cut_length_mm,
+              total_length_mm: i.total_length_mm,
+              weight_kg: i.weight_kg,
+              unit_cost: i.unit_cost,
+              line_cost: i.line_cost,
+              warnings: i.warnings,
+            })),
+            item_count: items?.length ?? 0,
+          },
+        };
+      }
+    }
+
+    // ═══════════════════════════════════════════════════
+    // 13. Update Delivery Status
+    // ═══════════════════════════════════════════════════
+    else if (name === "update_delivery_status") {
+      const { data, error } = await svcClient
+        .from("deliveries")
+        .update({ status: args.status })
+        .eq("id", args.id)
+        .select();
       result.result = error ? { error: error.message } : { success: true, data };
     }
     

@@ -806,6 +806,89 @@ export type Database = {
           },
         ]
       }
+      bid_board: {
+        Row: {
+          bid_due_date: string | null
+          company_id: string
+          created_at: string
+          customer_name: string | null
+          estimated_value: number | null
+          estimation_project_id: string | null
+          estimator_id: string | null
+          id: string
+          lead_id: string | null
+          location: string | null
+          notes: string | null
+          priority: string
+          project_name: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          bid_due_date?: string | null
+          company_id: string
+          created_at?: string
+          customer_name?: string | null
+          estimated_value?: number | null
+          estimation_project_id?: string | null
+          estimator_id?: string | null
+          id?: string
+          lead_id?: string | null
+          location?: string | null
+          notes?: string | null
+          priority?: string
+          project_name: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          bid_due_date?: string | null
+          company_id?: string
+          created_at?: string
+          customer_name?: string | null
+          estimated_value?: number | null
+          estimation_project_id?: string | null
+          estimator_id?: string | null
+          id?: string
+          lead_id?: string | null
+          location?: string | null
+          notes?: string | null
+          priority?: string
+          project_name?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bid_board_estimation_project_id_fkey"
+            columns: ["estimation_project_id"]
+            isOneToOne: false
+            referencedRelation: "estimation_projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bid_board_estimator_id_fkey"
+            columns: ["estimator_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bid_board_estimator_id_fkey"
+            columns: ["estimator_id"]
+            isOneToOne: false
+            referencedRelation: "profiles_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bid_board_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       brand_kit: {
         Row: {
           brand_voice: string
@@ -2906,11 +2989,14 @@ export type Database = {
           created_by: string | null
           customer_id: string | null
           element_summary: Json | null
+          estimator_id: string | null
           id: string
           labor_hours: number | null
           lead_id: string | null
           name: string
           notes: string | null
+          parent_project_id: string | null
+          revision_number: number
           source_files: Json | null
           status: string
           total_cost: number | null
@@ -2924,11 +3010,14 @@ export type Database = {
           created_by?: string | null
           customer_id?: string | null
           element_summary?: Json | null
+          estimator_id?: string | null
           id?: string
           labor_hours?: number | null
           lead_id?: string | null
           name: string
           notes?: string | null
+          parent_project_id?: string | null
+          revision_number?: number
           source_files?: Json | null
           status?: string
           total_cost?: number | null
@@ -2942,11 +3031,14 @@ export type Database = {
           created_by?: string | null
           customer_id?: string | null
           element_summary?: Json | null
+          estimator_id?: string | null
           id?: string
           labor_hours?: number | null
           lead_id?: string | null
           name?: string
           notes?: string | null
+          parent_project_id?: string | null
+          revision_number?: number
           source_files?: Json | null
           status?: string
           total_cost?: number | null
@@ -2963,10 +3055,31 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "estimation_projects_estimator_id_fkey"
+            columns: ["estimator_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimation_projects_estimator_id_fkey"
+            columns: ["estimator_id"]
+            isOneToOne: false
+            referencedRelation: "profiles_safe"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "estimation_projects_lead_id_fkey"
             columns: ["lead_id"]
             isOneToOne: false
             referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimation_projects_parent_project_id_fkey"
+            columns: ["parent_project_id"]
+            isOneToOne: false
+            referencedRelation: "estimation_projects"
             referencedColumns: ["id"]
           },
         ]
