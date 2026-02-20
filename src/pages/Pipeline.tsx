@@ -22,7 +22,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useUserRole } from "@/hooks/useUserRole";
 import { usePipelineStageOrder } from "@/hooks/usePipelineStageOrder";
 import type { Tables } from "@/integrations/supabase/types";
-import { startOfDay, startOfWeek, startOfMonth, startOfQuarter, startOfYear, subDays, differenceInCalendarDays } from "date-fns";
+import { startOfDay, startOfWeek, startOfMonth, startOfQuarter, startOfYear, subDays, differenceInCalendarDays, formatDistanceToNow, differenceInMinutes } from "date-fns";
 import { parseSmartSearch, type SmartSearchResult } from "@/lib/smartSearchParser";
 import { getRequiredGates, type GateType } from "@/lib/pipelineTransitionGates";
 import { usePipelineMemory } from "@/hooks/usePipelineMemory";
@@ -215,6 +215,32 @@ export default function Pipeline() {
       return allLeads;
     },
   });
+
+  // Last Synced: fetch the most recent updated_at from odoo_sync leads, refresh every 5 min
+  const { data: lastSyncedAt } = useQuery({
+    queryKey: ["odoo-last-synced"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("leads")
+        .select("updated_at")
+        .eq("source", "odoo_sync")
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .single();
+      if (error || !data) return null;
+      return new Date(data.updated_at);
+    },
+    refetchInterval: 5 * 60 * 1000,
+    staleTime: 60 * 1000,
+  });
+
+  const syncStatusColor = useMemo(() => {
+    if (!lastSyncedAt) return "text-muted-foreground";
+    const minutesAgo = differenceInMinutes(new Date(), lastSyncedAt);
+    if (minutesAgo < 30) return "text-emerald-500 dark:text-emerald-400";
+    if (minutesAgo < 60) return "text-amber-500 dark:text-amber-400";
+    return "text-destructive";
+  }, [lastSyncedAt]);
 
   const updateStageMutation = useMutation({
     mutationFn: async ({ id, stage, fromStage }: { id: string; stage: string; fromStage?: string }) => {
@@ -574,11 +600,20 @@ export default function Pipeline() {
       <header className="px-4 sm:px-6 py-2 border-b border-border shrink-0 space-y-1.5 bg-background">
       {/* Row 1: Title, stats, actions — Odoo style */}
         <div className="flex items-center gap-3 flex-wrap">
-          <div className="flex items-center gap-2 mr-auto">
+          <div className="flex items-center gap-2 mr-auto flex-wrap">
             <h1 className="text-[15px] font-semibold leading-tight text-foreground">Pipeline</h1>
             <span className="text-[11px] text-muted-foreground">
               ({filteredLeads.length}{filteredLeads.length !== leads.length ? ` / ${leads.length}` : ""})
             </span>
+            {isAdmin && lastSyncedAt && (
+              <span className={`hidden sm:flex items-center gap-1 text-[10px] font-medium ${syncStatusColor}`}>
+                <span className={`w-1.5 h-1.5 rounded-full inline-block ${
+                  differenceInMinutes(new Date(), lastSyncedAt) < 30 ? "bg-emerald-500" :
+                  differenceInMinutes(new Date(), lastSyncedAt) < 60 ? "bg-amber-500" : "bg-destructive"
+                }`} />
+                Synced {formatDistanceToNow(lastSyncedAt, { addSuffix: true })}
+              </span>
+            )}
           </div>
 
           {/* AI Mode Toggle */}
@@ -615,7 +650,12 @@ export default function Pipeline() {
               {isAdmin && (
                 <DropdownMenuItem onClick={handleOdooSync} disabled={isSyncingOdoo}>
                   {isSyncingOdoo ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-2" /> : <RefreshCw className="w-3.5 h-3.5 mr-2" />}
-                  Odoo Sync
+                  <span>Odoo Sync</span>
+                  {lastSyncedAt && (
+                    <span className={`ml-auto text-[10px] ${syncStatusColor}`}>
+                      {formatDistanceToNow(lastSyncedAt, { addSuffix: true })}
+                    </span>
+                  )}
                 </DropdownMenuItem>
               )}
               <DropdownMenuItem onClick={() => navigate("/prospecting")}>
