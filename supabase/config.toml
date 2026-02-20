@@ -282,3 +282,9 @@ verify_jwt = false
 
 [functions.agent-router]
 verify_jwt = false
+
+[functions.embed-documents]
+verify_jwt = false
+
+[functions.search-embeddings]
+verify_jwt = false

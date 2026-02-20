@@ -2207,6 +2207,45 @@ export type Database = {
           },
         ]
       }
+      document_embeddings: {
+        Row: {
+          agent_domain: string
+          company_id: string
+          content_text: string
+          created_at: string
+          embedding: string | null
+          entity_id: string | null
+          entity_type: string
+          id: string
+          metadata: Json | null
+          updated_at: string
+        }
+        Insert: {
+          agent_domain: string
+          company_id?: string
+          content_text: string
+          created_at?: string
+          embedding?: string | null
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          metadata?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          agent_domain?: string
+          company_id?: string
+          content_text?: string
+          created_at?: string
+          embedding?: string | null
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          metadata?: Json | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       email_automations: {
         Row: {
           automation_key: string
@@ -11640,6 +11679,24 @@ export type Database = {
       log_contact_bulk_access: {
         Args: { _action?: string; _count: number }
         Returns: undefined
+      }
+      match_documents: {
+        Args: {
+          filter_company?: string
+          filter_domain?: string
+          match_count?: number
+          match_threshold?: number
+          query_embedding: string
+        }
+        Returns: {
+          agent_domain: string
+          content_text: string
+          entity_id: string
+          entity_type: string
+          id: string
+          metadata: Json
+          similarity: number
+        }[]
       }
       recalculate_client_performance: {
         Args: { p_company_id: string; p_customer_id: string }
