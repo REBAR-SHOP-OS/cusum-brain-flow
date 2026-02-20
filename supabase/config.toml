@@ -303,3 +303,6 @@ verify_jwt = false
 
 [functions.ingest-shop-drawings]
 verify_jwt = false
+
+[functions.analyze-scope]
+verify_jwt = false
