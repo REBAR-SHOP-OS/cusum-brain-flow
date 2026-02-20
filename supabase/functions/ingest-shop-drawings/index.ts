@@ -229,7 +229,7 @@ serve(async (req) => {
         }
 
         // Get lead info
-        const { data: lead } = await admin.from("leads").select("name").eq("id", file.lead_id).maybeSingle();
+        const { data: lead } = await admin.from("leads").select("title").eq("id", file.lead_id).maybeSingle();
 
         // Create barlist record
         const { data: barlist, error: blErr } = await admin.from("barlists").insert({
@@ -278,7 +278,7 @@ serve(async (req) => {
             await admin.from("project_coordination_log").insert({
               lead_id: file.lead_id,
               company_id: companyId,
-              project_name: lead?.name ?? file.file_name,
+              project_name: lead?.title ?? file.file_name,
               detailing_weight_kg: result.summary.total_weight_kg ?? 0,
               elements: [{ description: result.summary.element_name, type: result.summary.element_type }],
               source_file_url: file.storage_path,
