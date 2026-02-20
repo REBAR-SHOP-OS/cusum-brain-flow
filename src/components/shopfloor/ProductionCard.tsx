@@ -191,6 +191,13 @@ export function ProductionCard({
               {isBend ? item.bend_completed_pieces : item.completed_pieces} / {item.total_pieces} PCS
             </p>
           </div>
+
+          {/* Project name micro-label */}
+          {item.project_name && (
+            <p className="text-[9px] text-muted-foreground tracking-[0.15em] uppercase truncate pt-0.5 border-t border-border/40 mt-1">
+              {item.project_name}
+            </p>
+          )}
         </CardContent>
       </Card>
 
