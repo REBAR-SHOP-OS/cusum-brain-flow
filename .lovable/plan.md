@@ -1,134 +1,84 @@
 
+# Re-run 20 York Takeoff with Walden Shop Drawings
 
-# Annotated Drawing Viewer with Color-Coded Rebar Marks
+## What's Happening
 
-## What This Adds
+The existing "20 york" estimation project has 0 extracted items because the previous takeoff failed (bucket/pipeline issues we already fixed). The user has now uploaded the **actual shop drawing markups** from Walden (SD24-SD31 and SD01-SD04) which contain dense, precise rebar callouts -- exactly the kind of drawings the AI can extract from.
 
-Like iBeam.ai, when a takeoff completes, each extracted rebar item will have its **location on the drawing** identified by the AI, and the drawing will be displayed with **colorful bounding boxes and labels** overlaid on top. Users can click an annotation to highlight the corresponding BOM row, and vice versa.
+## ERP Context Found
 
-## How It Works
+| Entity | Details |
+|--------|---------|
+| Estimation Project | "20 york" (id: f4eb4228) -- draft, 0 items |
+| Customer | WALDEN DESIGN BUILD INC. (id: 26ea9d67) |
+| Lead (Cabana) | "FW: cabana 20 york Walden Homes Seperate" -- stage: won |
+| Lead (Main) | "S00128, RFP-2196 - reinforcement steel bars for 20 York Valley Cres." -- stage: shop_drawing_approval |
+| Existing Files | 2 PDFs already in storage (Structural + Architectural) |
 
-### 1. AI Returns Bounding Box Coordinates (Backend Change)
+## Plan
 
-**File: `supabase/functions/ai-estimate/index.ts`**
+### Step 1: Upload the 2 Walden Markup PDFs to Storage
 
-Update the Gemini prompt to also extract spatial location data for each item. Gemini vision can return normalized bounding box coordinates (0-1 range) for detected elements.
+Copy the user-uploaded files into the project so they can be uploaded to the estimation-files bucket. The TakeoffWizard handles uploading to storage automatically, but we need to make these files available.
 
-Add to the extraction prompt:
-- `page_index`: which uploaded file/page (0-based)
-- `bbox`: `{ x: float, y: float, w: float, h: float }` -- normalized coordinates (0.0 to 1.0) of where the rebar callout appears on the drawing
+### Step 2: Delete the Failed "20 york" Project
 
-Increase `maxOutputTokens` to 16000 to accommodate the extra spatial data.
+The existing project has 0 items and status "draft" -- it's a failed run. Delete it so the user can re-run cleanly with the correct shop drawings.
 
-### 2. Store Annotations in Database
-
-**Database migration** -- Add a `bbox` JSONB column to `estimation_items`:
-
+**SQL:**
 ```sql
-ALTER TABLE estimation_items 
-  ADD COLUMN IF NOT EXISTS bbox jsonb,
-  ADD COLUMN IF NOT EXISTS page_index integer DEFAULT 0;
+DELETE FROM estimation_items WHERE project_id = 'f4eb4228-f0ed-4d77-9ae2-9bb263968899';
+DELETE FROM estimation_projects WHERE id = 'f4eb4228-f0ed-4d77-9ae2-9bb263968899';
 ```
 
-The `bbox` stores `{"x": 0.12, "y": 0.35, "w": 0.08, "h": 0.05}` and `page_index` identifies which source file the annotation belongs to.
+### Step 3: Link Estimation to ERP Entities
 
-Update the insert logic in `ai-estimate/index.ts` to persist `bbox` and `page_index`.
+Update `TakeoffWizard.tsx` to allow linking a takeoff to an existing **lead** and **customer** from the pipeline. Add optional dropdowns for:
+- Customer selector (pre-populated from `customers` table)
+- Lead selector (filtered by customer)
 
-### 3. Drawing Viewer Component with Canvas Overlay
+This connects the estimation back to the pipeline so "20 York Valley" lead and "WALDEN DESIGN BUILD INC." customer are properly linked.
 
-**New file: `src/components/estimation/AnnotatedDrawingViewer.tsx`**
+### Step 4: Improve the Gemini Prompt for Shop Drawings
 
-A split-panel or full-width component that:
-- Renders the uploaded drawing (image) in a scrollable/zoomable container
-- Overlays an HTML5 Canvas (or SVG layer) on top with colored rectangles for each detected item
-- Color coding by element type:
-  - Footing = blue
-  - Column = red  
-  - Beam = green
-  - Slab = orange
-  - Wall = purple
-  - Pier = teal
-- Each annotation box shows a small label (e.g. "C1 - 20M x8") 
-- Hover shows a tooltip with full item details
-- Click an annotation to highlight the corresponding BOM table row
-- Legend panel showing element type colors
-- Zoom controls (zoom in/out, fit-to-width, pan with mouse drag)
-- Page selector if multiple drawings uploaded
+The uploaded Walden drawings use a specific notation style:
+- `2x11 15M LS100 @12" BLL & TUL` -- means 2 layers x 11 bars, 15M size, mark LS100, at 12" spacing, Bottom Long-way Lower & Top Upper-way Lower
+- `3 20M AS57 T&B` -- 3 bars, 20M, mark AS57, Top & Bottom
+- `4x2 15M A1502 U-BAR EW` -- 4 sets of 2 bars, U-bar shape
 
-### 4. Update ProjectDetail to Include Annotated View
+Update the Gemini prompt in `ai-estimate/index.ts` to:
+- Recognize Canadian rebar shop drawing notation (LS, AS, A-prefix marks)
+- Parse layer multipliers (e.g., "2x11" = 22 bars total)
+- Understand position codes: BLL (Bottom Long-way Lower), TUL (Top Upper-way Lower), SF EF (Start Face End Face), T&B (Top & Bottom), D&E DWL (Dowel)
+- Extract spacing from "@12" notation and convert to mm (12" = 305mm)
+- Identify shape codes: straight, U-bar, stirrup, dowel
+- Return more accurate `cut_length_mm` by inferring from element dimensions when not explicitly stated
 
-**File: `src/components/estimation/ProjectDetail.tsx`**
+### Step 5: Increase Gemini Token Limit
 
-Replace the basic "Drawings" tab with the new `AnnotatedDrawingViewer`:
-- Pass `source_files` URLs and `items` (with bbox data) as props
-- Add a toggle: "Show Annotations" on/off
-- Add a "Confidence" filter slider (if we add confidence scores)
+These shop drawings are very dense (8+ pages of detailed callouts). Increase `maxOutputTokens` from 16,000 to **32,000** to ensure all items are captured. Also consider processing each page separately and merging results for better accuracy.
 
-Add a new tab called "Annotated Drawings" between BOM and Export.
+### Step 6: PDF Rendering for Annotation Viewer
 
-### 5. BOM Table ↔ Drawing Sync
+The `AnnotatedDrawingViewer` currently tries to render source files as `<img>` tags. PDFs won't render this way. Add PDF.js rendering:
+- Install `pdfjs-dist` or use a CDN-loaded PDF.js worker
+- For each PDF source file, render each page to a canvas, then convert to an image URL
+- Cache the rendered page images so zoom/pan remains smooth
+- Map `page_index` from items to the correct rendered page
 
-**File: `src/components/estimation/BOMTable.tsx`**
+## Files to Modify
 
-- Add a `highlightedItemId` prop
-- When an item is hovered/selected in the BOM table, emit an event to highlight the corresponding annotation on the drawing
-- When an annotation is clicked on the drawing, scroll the BOM table to that row and highlight it
-- Lift the `selectedItemId` state into `ProjectDetail.tsx` to sync both components
-
-### 6. Color Legend Component
-
-**New file: `src/components/estimation/AnnotationLegend.tsx`**
-
-A small sidebar/bar showing:
-- Color swatch + element type name for each category
-- Count of items per category
-- Toggle visibility per category (show/hide footings, columns, etc.)
-
-## Component Architecture
-
-```
-ProjectDetail
-  |-- KPI Cards
-  |-- Tabs
-       |-- "Annotated Drawings" (NEW - default tab)
-       |    |-- AnnotatedDrawingViewer
-       |    |    |-- Image layer (the PDF/drawing rendered as image)
-       |    |    |-- SVG overlay layer (bounding boxes + labels)
-       |    |    |-- Zoom/pan controls
-       |    |-- AnnotationLegend (sidebar)
-       |-- "BOM Table"
-       |    |-- BOMTable (with highlight sync)
-       |-- "Export"
-            |-- ExportPanel
-```
-
-## Technical Details
-
-**Drawing Rendering**: For PDFs, we cannot render them inline in canvas. Instead, the edge function will convert uploaded PDFs to images (PNG) during the takeoff and store them in the same bucket. For images (PNG/JPG), display directly. The `source_files` JSONB will be updated to include `{ url, type, preview_url }` where `preview_url` is the rendered image version.
-
-**SVG Overlay Approach**: Use an absolutely-positioned SVG element over the image. Each annotation is a `<rect>` with stroke color matching element type, plus a `<text>` label. This approach:
-- Scales naturally with CSS transforms (zoom)
-- Supports click/hover events natively
-- Is resolution-independent
-- Works better than Canvas for interactive elements
-
-**Zoom/Pan**: Use CSS transform (scale + translate) on a wrapper div. Track zoom level (0.5x to 4x) and pan offset via mouse drag. Mouse wheel = zoom.
-
-**For PDF files**: Since we're already sending PDFs to Gemini for extraction, add a second step that converts the first page of each PDF to a PNG using the Gemini image generation model or a lightweight approach: render the PDF URL in an `<iframe>` for preview, or use `pdf.js` (can add as dependency). The simplest approach: for image files, display directly; for PDFs, show in an `<object>` or `<iframe>` tag with the SVG overlay anchored to a known page size.
-
-**Prompt Engineering for Accurate BBoxes**: The Gemini prompt will instruct:
-- Use normalized coordinates (0.0-1.0) relative to the full page
-- `x,y` = top-left corner of the rebar callout or structural element reference
-- `w,h` = width and height of the bounding region
-- Temperature set to 0.1 for maximum precision
-
-## Files to Create/Modify
-
-| File | Action |
+| File | Change |
 |------|--------|
-| `supabase/functions/ai-estimate/index.ts` | Add bbox + page_index to prompt and persist |
-| `src/components/estimation/AnnotatedDrawingViewer.tsx` | New -- full drawing viewer with SVG overlay |
-| `src/components/estimation/AnnotationLegend.tsx` | New -- color legend with category toggles |
-| `src/components/estimation/ProjectDetail.tsx` | Add Annotated Drawings tab, sync state |
-| `src/components/estimation/BOMTable.tsx` | Add highlight sync props |
-| Database migration | Add `bbox` and `page_index` columns to `estimation_items` |
+| `supabase/functions/ai-estimate/index.ts` | Enhanced Gemini prompt for Canadian shop drawing notation, increase token limit to 32K, per-page processing option |
+| `src/components/estimation/TakeoffWizard.tsx` | Add customer/lead selectors, pass IDs to ai-estimate |
+| `src/components/estimation/AnnotatedDrawingViewer.tsx` | Add PDF.js rendering for PDF source files instead of raw img tag |
+| Database cleanup | Delete failed "20 york" project |
+
+## Technical Notes
+
+- The Walden markup PDFs are multi-page (SD24-SD31 = ~8 pages, SD01-SD04 = ~4 pages) with hundreds of individual bar callouts
+- Gemini 2.5 Pro handles multi-page PDFs natively via inline_data with `application/pdf` MIME type
+- The base64 encoding of large PDFs (potentially 5-15MB each) may hit Gemini's inline data limits; if so, we'll use the File API to upload first
+- bbox coordinates from Gemini on PDF pages will map to specific page indices, which the annotation viewer needs to handle per-page
+- The pricing table already has 6 active rows (10M-35M) so cost calculations will work
