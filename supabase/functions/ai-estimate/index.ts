@@ -153,6 +153,14 @@ For each structural element (column, beam, footing, slab, wall, pier), extract:
 - lap_type: "tension", "compression", or "none"
 - num_laps: number of lap splices (0 if none)
 - spacing_mm: spacing if applicable
+- page_index: which uploaded file/page this item was found on (0-based index)
+- bbox: bounding box of the rebar callout on the drawing as {"x": float, "y": float, "w": float, "h": float} where all values are normalized 0.0-1.0 relative to the full page dimensions. x,y = top-left corner, w,h = width and height of the region containing the rebar callout or structural element label.
+
+CRITICAL for bbox accuracy:
+- Coordinates MUST be normalized (0.0 to 1.0) relative to full page width and height
+- x=0.0 is left edge, x=1.0 is right edge, y=0.0 is top, y=1.0 is bottom
+- Each bbox should tightly surround the specific rebar callout text or structural detail area
+- Be precise — these coordinates will be used to draw colored annotation overlays on the drawing
 
 Return ONLY a valid JSON array of items. Be thorough — extract every bar callout visible in the drawings.`,
         });
@@ -167,7 +175,7 @@ Return ONLY a valid JSON array of items. Be thorough — extract every bar callo
               contents: [{ parts }],
               generationConfig: {
                 temperature: 0.1,
-                maxOutputTokens: 8000,
+                maxOutputTokens: 16000,
               },
             }),
           }
@@ -289,6 +297,8 @@ Return ONLY a valid JSON array of items. Be thorough — extract every bar callo
         line_cost: item.line_cost,
         source: "ai_extracted",
         warnings: item.warnings,
+        bbox: (item as any).bbox ?? null,
+        page_index: (item as any).page_index ?? 0,
       }));
 
       const { error: itemsErr } = await supabaseAdmin
