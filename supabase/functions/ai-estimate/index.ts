@@ -15,7 +15,7 @@ import {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY")!;
+const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -147,50 +147,15 @@ serve(async (req) => {
 
     if (file_urls.length > 0) {
       try {
-        // Build multipart content for Gemini — limit to first 2 files to stay within memory
-        const parts: any[] = [];
+        // Use Lovable AI gateway with URL references — no file download needed
+        const contentParts: any[] = [];
 
-        for (const url of file_urls.slice(0, 2)) {
-          // Fetch file and convert to base64 for inline_data
-          const fileRes = await fetch(url);
-          if (!fileRes.ok) {
-            console.error(`Failed to fetch file: ${url} — ${fileRes.status}`);
-            continue;
-          }
-          const arrayBuf = await fileRes.arrayBuffer();
-          
-          // Skip files over 4MB to avoid memory crash
-          if (arrayBuf.byteLength > 4 * 1024 * 1024) {
-            console.warn(`Skipping large file (${(arrayBuf.byteLength / 1024 / 1024).toFixed(1)}MB): ${url}`);
-            continue;
-          }
-          
-          const uint8 = new Uint8Array(arrayBuf);
-          
-          // Convert to base64 in chunks to avoid stack overflow
-          const CHUNK = 8192;
-          let binary = "";
-          for (let i = 0; i < uint8.length; i += CHUNK) {
-            const slice = uint8.subarray(i, Math.min(i + CHUNK, uint8.length));
-            binary += String.fromCharCode(...slice);
-          }
-          const base64 = btoa(binary);
-
-          // Determine MIME type
-          const lowerUrl = url.toLowerCase();
-          let mimeType = "application/pdf";
-          if (lowerUrl.includes(".png")) mimeType = "image/png";
-          else if (lowerUrl.includes(".jpg") || lowerUrl.includes(".jpeg")) mimeType = "image/jpeg";
-          else if (lowerUrl.includes(".tif") || lowerUrl.includes(".tiff")) mimeType = "image/tiff";
-
-          parts.push({
-            inline_data: { mime_type: mimeType, data: base64 },
-          });
+        // Pass file URLs directly as image_url references (gateway fetches them)
+        for (const url of file_urls.slice(0, 3)) {
+          contentParts.push({ type: "image_url", image_url: { url } });
         }
 
-        // Add the extraction prompt with historical learning context
-        parts.push({
-          text: `You are a senior Canadian rebar detailer and structural estimator. Analyze the uploaded structural/shop drawings and extract ALL rebar reinforcement items.
+        const extractionPrompt = `You are a senior Canadian rebar detailer and structural estimator. Analyze the uploaded structural/shop drawings and extract ALL rebar reinforcement items.
 
 ${scope_context ? `Context: ${scope_context}` : ""}
 ${historicalContext}
@@ -226,8 +191,8 @@ These drawings use RebarCAD notation common in Canadian rebar detailing. Key pat
 - DWL = Dowel
 
 ### Spacing
-- "@12\"" means spaced at 12 inches = 305mm
-- "@8\"" means spaced at 8 inches = 203mm
+- "@12\\"" means spaced at 12 inches = 305mm
+- "@8\\"" means spaced at 8 inches = 203mm
 
 ### Dimensions
 - All dimensions are in imperial (feet-inches): 4'-2" = 1270mm, 30'-0" = 9144mm
@@ -262,44 +227,44 @@ For each rebar callout found on the drawings, extract:
 5. If a bar appears on multiple drawing sheets, list each occurrence separately
 6. For bbox: x=0.0 is left edge, x=1.0 is right, y=0.0 is top, y=1.0 is bottom
 
-Return ONLY a valid JSON array of items.`,
+Return ONLY a valid JSON array of items.`;
+
+        contentParts.push({ type: "text", text: extractionPrompt });
+
+        const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${LOVABLE_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "google/gemini-2.5-pro",
+            messages: [
+              { role: "user", content: contentParts },
+            ],
+            max_tokens: 32000,
+            temperature: 0.1,
+          }),
         });
 
-        // Call Gemini directly with native multimodal API
-        const geminiRes = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${GEMINI_API_KEY}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [{ parts }],
-              generationConfig: {
-                temperature: 0.1,
-                maxOutputTokens: 32000,
-              },
-            }),
-          }
-        );
-
-        if (!geminiRes.ok) {
-          const errText = await geminiRes.text();
-          console.error("Gemini API error:", geminiRes.status, errText);
+        if (!aiRes.ok) {
+          const errText = await aiRes.text();
+          console.error("AI gateway error:", aiRes.status, errText);
         } else {
-          const geminiData = await geminiRes.json();
-          const content = geminiData.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-          console.log("Gemini extraction response length:", content.length);
+          const aiData = await aiRes.json();
+          const content = aiData.choices?.[0]?.message?.content ?? "";
+          console.log("AI extraction response length:", content.length);
 
-          // Parse JSON array from response
           const jsonMatch = content.match(/\[[\s\S]*\]/);
           if (jsonMatch) {
             extractedItems = JSON.parse(jsonMatch[0]);
             console.log(`Extracted ${extractedItems.length} items from drawings`);
           } else {
-            console.error("No JSON array found in Gemini response");
+            console.error("No JSON array found in AI response");
           }
         }
       } catch (e) {
-        console.error("Gemini vision extraction error:", e);
+        console.error("AI vision extraction error:", e);
       }
     }
 
