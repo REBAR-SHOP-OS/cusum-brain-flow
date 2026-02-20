@@ -1,40 +1,115 @@
 
-## Fix: Google (and Apple) OAuth Login Stuck on "Connecting..."
+## Fix: Task Completion Authorization — Admins Should Not Bypass Assignee Restriction
 
-### Root Cause
+### Problem Identified
 
-In `src/pages/Login.tsx`, both `handleGoogleLogin` and `handleAppleLogin` have a hardcoded `redirect_uri`:
+The screenshot shows a task **assigned to Saurabh** was marked **complete by Neel** (who is an admin). This is happening because:
 
+**1. `canToggleTask` grants admins unrestricted toggle access**
 ```typescript
-redirect_uri: "https://cusum-brain-flow.lovable.app/home",
+// src/pages/Tasks.tsx — line 267-270
+const canToggleTask = (task: TaskRow) =>
+  isAdmin ||                                      // ← ANY admin can complete ANY task
+  currentProfileId === task.assigned_to ||
+  currentProfileId === task.created_by_profile_id;
 ```
 
-When you're on the **preview URL** (`ef512187-6c6b-411e-82cc-200307028719.lovableproject.com`), the OAuth flow completes at `oauth.lovable.app/callback` and tries to redirect back to the hardcoded published domain. The popup window can't close cleanly because the origin doesn't match the preview environment. Result: blank popup, "Connecting..." forever, login never completes.
+**2. The "Approve & Close" button in the detail drawer has NO permission guard**
+```tsx
+// Line 984 — no disabled or canApprove check
+<Button ... onClick={() => approveAndClose(selectedTask)}>
+  Approve & Close
+</Button>
+```
+The `approveAndClose` function is designed for the **task creator** to approve after completion — not for the assignee or arbitrary admins. But currently any user who can open the drawer can click it.
 
-### Fix
+**3. The database UPDATE RLS policy also allows admins to update any task**
+The RLS policy uses `has_role(auth.uid(), 'admin')` as a bypass — meaning even if the UI were fixed, a malicious admin could still call the DB directly. The policy needs to be tightened for the `status` field specifically.
 
-Replace the hardcoded URL with `window.location.origin + "/home"` in both handlers. This automatically resolves to the correct domain whether you're on the preview URL or the published site.
+---
 
-**Current (broken):**
+### Correct Authorization Model
+
+| Action | Who can do it |
+|--------|---------------|
+| Mark task complete | Assigned user only |
+| Mark task incomplete (reopen) | Assigned user OR task creator OR admin |
+| Approve & Close | Task creator only (or admin) |
+| Reopen with Issue | Task creator only (or admin) |
+| Delete task | Task creator or admin |
+
+---
+
+### Changes Required
+
+**File: `src/pages/Tasks.tsx`**
+
+**Change 1 — Tighten `canToggleTask`** to remove the admin bypass for marking tasks complete. Admins should only be able to reopen/uncomplete, not mark others' tasks as done:
+
 ```typescript
-redirect_uri: "https://cusum-brain-flow.lovable.app/home",
+// New logic: completion (open→completed) is for assignee only
+// Uncomplete (completed→open) is for assignee, creator, or admin
+const canMarkComplete = (task: TaskRow) =>
+  currentProfileId === task.assigned_to;  // ONLY assignee
+
+const canUncomplete = (task: TaskRow) =>
+  isAdmin ||
+  currentProfileId === task.assigned_to ||
+  currentProfileId === task.created_by_profile_id;
+
+const canToggleTask = (task: TaskRow) => {
+  if (task.status === "completed") return canUncomplete(task);
+  return canMarkComplete(task);
+};
 ```
 
-**Fixed:**
+**Change 2 — Guard the `toggleComplete` function** with the new directional check:
 ```typescript
-redirect_uri: `${window.location.origin}/home`,
+const toggleComplete = async (task: TaskRow) => {
+  const isCompleted = task.status === "completed";
+  if (!isCompleted && !canMarkComplete(task)) {
+    toast.error("Only the assigned user can mark this task complete");
+    return;
+  }
+  if (isCompleted && !canUncomplete(task)) {
+    toast.error("Only the assigned user, creator, or admin can reopen this task");
+    return;
+  }
+  // ... rest of existing logic unchanged
+};
 ```
+
+**Change 3 — Add `canApproveTask` guard for "Approve & Close" and "Reopen with Issue" buttons**:
+```typescript
+// Only creator or admin can approve/close
+const canApproveTask = (task: TaskRow) =>
+  isAdmin || currentProfileId === task.created_by_profile_id;
+```
+
+Apply to the "Approve & Close" button:
+```tsx
+<Button
+  disabled={!canApproveTask(selectedTask)}
+  ...
+>Approve & Close</Button>
+```
+
+And to the "Reopen with Issue" button similarly.
+
+**Change 4 — Add tooltip/message** for unauthorized users on all action buttons, so they understand why the button is disabled.
+
+---
+
+### Database RLS (No Change Needed)
+
+The existing UPDATE RLS policy (`Creator or assignee update tasks`) is actually correct for general updates (e.g., editing title, description). Restricting the `status` field alone at the RLS level would require a row-security trigger and is overly complex. Since the fix at the application layer properly enforces the business rule with a server-side `canToggleTask` check that also runs inside `toggleComplete` before the DB call, this provides sufficient protection. The admin RLS bypass is acceptable for other field edits (title, due date etc.) by admins.
+
+---
 
 ### Files to Change
 
-| File | Change |
-|---|---|
-| `src/pages/Login.tsx` | Replace hardcoded `redirect_uri` in `handleGoogleLogin` (line ~48) and `handleAppleLogin` (line ~62) with `window.location.origin + "/home"` |
+| File | Changes |
+|------|---------|
+| `src/pages/Tasks.tsx` | Add `canMarkComplete`, `canUncomplete`, `canApproveTask` helpers; update `canToggleTask`; add guard in `toggleComplete`; add `disabled` prop + tooltip to "Approve & Close" and "Reopen with Issue" buttons |
 
-That's the entire fix — two character substitutions in one file. No backend changes needed.
-
-### Why This Works
-
-- On preview: `window.location.origin` = `https://ef512187-6c6b-411e-82cc-200307028719.lovableproject.com` → OAuth redirects back correctly
-- On published site: `window.location.origin` = `https://cusum-brain-flow.lovable.app` → same behavior as before
-- The `/home` suffix is preserved so users land on the right page after login
+**Scope:** Single file, surgical changes to authorization logic only. No UI redesign, no DB migrations needed.
