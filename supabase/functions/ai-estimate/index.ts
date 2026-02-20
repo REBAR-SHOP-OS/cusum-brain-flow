@@ -147,10 +147,10 @@ serve(async (req) => {
 
     if (file_urls.length > 0) {
       try {
-        // Build multipart content for Gemini — PDF and images supported natively
+        // Build multipart content for Gemini — limit to first 2 files to stay within memory
         const parts: any[] = [];
 
-        for (const url of file_urls.slice(0, 10)) {
+        for (const url of file_urls.slice(0, 2)) {
           // Fetch file and convert to base64 for inline_data
           const fileRes = await fetch(url);
           if (!fileRes.ok) {
@@ -158,12 +158,21 @@ serve(async (req) => {
             continue;
           }
           const arrayBuf = await fileRes.arrayBuffer();
+          
+          // Skip files over 4MB to avoid memory crash
+          if (arrayBuf.byteLength > 4 * 1024 * 1024) {
+            console.warn(`Skipping large file (${(arrayBuf.byteLength / 1024 / 1024).toFixed(1)}MB): ${url}`);
+            continue;
+          }
+          
           const uint8 = new Uint8Array(arrayBuf);
           
-          // Convert to base64
+          // Convert to base64 in chunks to avoid stack overflow
+          const CHUNK = 8192;
           let binary = "";
-          for (let i = 0; i < uint8.length; i++) {
-            binary += String.fromCharCode(uint8[i]);
+          for (let i = 0; i < uint8.length; i += CHUNK) {
+            const slice = uint8.subarray(i, Math.min(i + CHUNK, uint8.length));
+            binary += String.fromCharCode(...slice);
           }
           const base64 = btoa(binary);
 
