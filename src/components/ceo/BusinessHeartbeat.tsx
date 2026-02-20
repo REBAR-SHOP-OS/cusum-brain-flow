@@ -6,9 +6,12 @@ import { Progress } from "@/components/ui/progress";
 import {
   Globe, Users, Cpu, MessageSquare, ShoppingCart, Target,
   MapPin, TrendingUp, DollarSign, Activity, Clock, Loader2,
-  CircleDot, ArrowUpRight, ArrowDownRight
+  CircleDot, ArrowUpRight, ArrowDownRight, Phone
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { useRCPresence } from "@/hooks/useRCPresence";
+import { RCPresenceIndicator } from "@/components/shared/RCPresenceIndicator";
+import { ActiveCallsPanel } from "@/components/inbox/ActiveCallsPanel";
 
 // ─── Section 1: Live Pulse Strip ──────────────────────────────────────────────
 function LivePulseStrip({ data }: { data: ReturnType<typeof useBusinessHeartbeat>["data"] }) {
@@ -165,6 +168,31 @@ function CustomerOrigins({ data }: { data: ReturnType<typeof useBusinessHeartbea
 }
 
 // ─── Section 3: Status Board ──────────────────────────────────────────────────
+// Team member with RC presence indicator
+function TeamMemberWithPresence({ member }: { member: { profileId: string; fullName: string; clockIn: string } }) {
+  const { getPresence } = useRCPresence();
+  const presence = getPresence(member.profileId);
+  
+  return (
+    <div className="flex items-center gap-2">
+      {presence ? (
+        <RCPresenceIndicator
+          status={presence.status}
+          dndStatus={presence.dnd_status}
+          telephonyStatus={presence.telephony_status}
+          size="sm"
+        />
+      ) : (
+        <span className="h-2 w-2 rounded-full bg-green-500 shrink-0" />
+      )}
+      <span className="text-sm truncate flex-1">{member.fullName}</span>
+      <span className="text-xs text-muted-foreground">
+        {new Date(member.clockIn).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+      </span>
+    </div>
+  );
+}
+
 function StatusBoard({ data }: { data: ReturnType<typeof useBusinessHeartbeat>["data"] }) {
   if (!data) return null;
 
@@ -190,13 +218,7 @@ function StatusBoard({ data }: { data: ReturnType<typeof useBusinessHeartbeat>["
               <p className="text-sm text-muted-foreground">No one clocked in</p>
             ) : (
               data.team.clockedIn.map((member) => (
-                <div key={member.profileId} className="flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-green-500 shrink-0" />
-                  <span className="text-sm truncate flex-1">{member.fullName}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {new Date(member.clockIn).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                  </span>
-                </div>
+                <TeamMemberWithPresence key={member.profileId} member={member} />
               ))
             )}
           </div>
@@ -487,6 +509,7 @@ export function BusinessHeartbeat() {
       <LivePulseStrip data={data} />
       <CustomerOrigins data={data} />
       <StatusBoard data={data} />
+      <ActiveCallsPanel />
       <SpendingOverview data={data} />
       <ProductivityMetrics data={data} />
       <ActivityFeed data={data} />

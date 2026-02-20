@@ -20,10 +20,17 @@ interface SMSTemplate {
   variables: string[];
 }
 
-export function SMSTemplateManager() {
+interface SMSTemplateManagerProps {
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}
+
+export function SMSTemplateManager({ open: controlledOpen, onOpenChange }: SMSTemplateManagerProps = {}) {
   const [templates, setTemplates] = useState<SMSTemplate[]>([]);
   const [loading, setLoading] = useState(true);
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen ?? internalOpen;
+  const setOpen = onOpenChange ?? setInternalOpen;
   const [editId, setEditId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [body, setBody] = useState("");

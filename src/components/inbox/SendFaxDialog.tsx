@@ -10,8 +10,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
-export function SendFaxDialog() {
-  const [open, setOpen] = useState(false);
+interface SendFaxDialogProps {
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}
+
+export function SendFaxDialog({ open: controlledOpen, onOpenChange }: SendFaxDialogProps = {}) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen ?? internalOpen;
+  const setOpen = onOpenChange ?? setInternalOpen;
   const [faxNumber, setFaxNumber] = useState("");
   const [coverText, setCoverText] = useState("");
   const [file, setFile] = useState<File | null>(null);
