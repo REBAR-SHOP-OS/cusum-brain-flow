@@ -20,7 +20,8 @@ serve(async (req) => {
     const companyId = profile.company_id;
 
     const body = await req.json().catch(() => ({}));
-    const batchSize = body.batch_size ?? 3;
+    const batchSize = body.batch_size ?? 1;
+    const maxFilesPerBatch = body.max_files ?? 5;
     const reset = body.reset ?? false;
 
     // Get or create progress tracker
@@ -117,6 +118,7 @@ serve(async (req) => {
     let processedFiles = 0;
     let failedLeads = 0;
     const errors: any[] = [];
+    let totalFilesThisBatch = 0;
 
     for (const leadId of uniqueLeadIds) {
       try {
@@ -134,6 +136,8 @@ serve(async (req) => {
         const { data: lead } = await admin.from("leads").select("id, title, customer_id, stage").eq("id", leadId).maybeSingle();
 
         for (const file of files) {
+          if (totalFilesThisBatch >= maxFilesPerBatch) break;
+          totalFilesThisBatch++;
           try {
             // Download file — prefer storage_path, fall back to file_url
             let arrayBuf: ArrayBuffer;
@@ -142,7 +146,7 @@ serve(async (req) => {
                 .from(BUCKET)
                 .download(file.storage_path);
               if (dlErr || !fileData) {
-                console.error(`Failed to download ${file.storage_path}:`, dlErr);
+                console.error(`Skip download fail: ${file.storage_path}`);
                 processedFiles++;
                 continue;
               }
@@ -150,10 +154,9 @@ serve(async (req) => {
             } else if (file.file_url) {
               try {
                 const resp = await fetch(file.file_url);
-                if (!resp.ok) { console.error(`HTTP ${resp.status} for ${file.file_url}`); processedFiles++; continue; }
+                if (!resp.ok) { processedFiles++; continue; }
                 arrayBuf = await resp.arrayBuffer();
-              } catch (fetchErr) {
-                console.error(`Fetch failed for ${file.file_url}:`, fetchErr);
+              } catch {
                 processedFiles++;
                 continue;
               }
@@ -176,12 +179,11 @@ serve(async (req) => {
 
             if (items.length === 0) {
               processedFiles++;
-              continue; // Not a valid RebarCAD file, skip
+              continue;
             }
 
             const summary = summarizeBarlist(items);
 
-            // Create barlist record
             const { data: barlist, error: blErr } = await admin.from("barlists").insert({
               company_id: companyId,
               project_id: leadId,
@@ -193,12 +195,10 @@ serve(async (req) => {
             }).select("id").single();
 
             if (blErr || !barlist) {
-              console.error(`Failed to create barlist for ${file.file_name}:`, blErr);
               processedFiles++;
               continue;
             }
 
-            // Insert items in batches of 100
             const itemRows = items.map((item) => ({
               barlist_id: barlist.id,
               bar_code: item.bar_size,
@@ -226,7 +226,7 @@ serve(async (req) => {
             console.log(`✅ ${file.file_name}: ${items.length} items, ${summary.total_weight_kg} kg`);
           } catch (fileErr) {
             console.error(`Error processing ${file.file_name}:`, fileErr);
-            processedFiles++; // Count it so we don't get stuck
+            processedFiles++;
           }
         }
 
