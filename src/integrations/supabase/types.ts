@@ -9463,6 +9463,53 @@ export type Database = {
         }
         Relationships: []
       }
+      social_approvals: {
+        Row: {
+          approver_id: string
+          created_at: string
+          deadline: string
+          decided_at: string | null
+          escalation_count: number
+          feedback: string | null
+          id: string
+          notified_at: string | null
+          post_id: string
+          status: string
+        }
+        Insert: {
+          approver_id: string
+          created_at?: string
+          deadline?: string
+          decided_at?: string | null
+          escalation_count?: number
+          feedback?: string | null
+          id?: string
+          notified_at?: string | null
+          post_id: string
+          status?: string
+        }
+        Update: {
+          approver_id?: string
+          created_at?: string
+          deadline?: string
+          decided_at?: string | null
+          escalation_count?: number
+          feedback?: string | null
+          id?: string
+          notified_at?: string | null
+          post_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_approvals_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "social_posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       social_posts: {
         Row: {
           clicks: number | null
