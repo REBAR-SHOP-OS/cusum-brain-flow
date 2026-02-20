@@ -7566,6 +7566,42 @@ export type Database = {
         }
         Relationships: []
       }
+      qb_classes: {
+        Row: {
+          company_id: string
+          created_at: string
+          id: string
+          is_active: boolean
+          last_synced_at: string | null
+          name: string
+          parent_qb_id: string | null
+          qb_id: string
+          raw_json: Json | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_synced_at?: string | null
+          name: string
+          parent_qb_id?: string | null
+          qb_id: string
+          raw_json?: Json | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_synced_at?: string | null
+          name?: string
+          parent_qb_id?: string | null
+          qb_id?: string
+          raw_json?: Json | null
+        }
+        Relationships: []
+      }
       qb_company_info: {
         Row: {
           company_id: string
@@ -7644,6 +7680,39 @@ export type Database = {
           raw_json?: Json
           sync_token?: string | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      qb_departments: {
+        Row: {
+          company_id: string
+          created_at: string
+          id: string
+          is_active: boolean
+          last_synced_at: string | null
+          name: string
+          qb_id: string
+          raw_json: Json | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_synced_at?: string | null
+          name: string
+          qb_id: string
+          raw_json?: Json | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_synced_at?: string | null
+          name?: string
+          qb_id?: string
+          raw_json?: Json | null
         }
         Relationships: []
       }
@@ -7746,9 +7815,11 @@ export type Database = {
       qb_transactions: {
         Row: {
           balance: number | null
+          class_qb_id: string | null
           company_id: string
           created_at: string
           customer_qb_id: string | null
+          department_qb_id: string | null
           doc_number: string | null
           entity_type: string
           id: string
@@ -7766,9 +7837,11 @@ export type Database = {
         }
         Insert: {
           balance?: number | null
+          class_qb_id?: string | null
           company_id: string
           created_at?: string
           customer_qb_id?: string | null
+          department_qb_id?: string | null
           doc_number?: string | null
           entity_type: string
           id?: string
@@ -7786,9 +7859,11 @@ export type Database = {
         }
         Update: {
           balance?: number | null
+          class_qb_id?: string | null
           company_id?: string
           created_at?: string
           customer_qb_id?: string | null
+          department_qb_id?: string | null
           doc_number?: string | null
           entity_type?: string
           id?: string
@@ -7854,6 +7929,45 @@ export type Database = {
           raw_json?: Json
           sync_token?: string | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      qb_webhook_events: {
+        Row: {
+          company_id: string | null
+          created_at: string
+          entity_id: string
+          entity_type: string
+          error_message: string | null
+          id: string
+          operation: string
+          processed_at: string | null
+          raw_payload: Json | null
+          realm_id: string
+        }
+        Insert: {
+          company_id?: string | null
+          created_at?: string
+          entity_id: string
+          entity_type: string
+          error_message?: string | null
+          id?: string
+          operation: string
+          processed_at?: string | null
+          raw_payload?: Json | null
+          realm_id: string
+        }
+        Update: {
+          company_id?: string | null
+          created_at?: string
+          entity_id?: string
+          entity_type?: string
+          error_message?: string | null
+          id?: string
+          operation?: string
+          processed_at?: string | null
+          raw_payload?: Json | null
+          realm_id?: string
         }
         Relationships: []
       }
