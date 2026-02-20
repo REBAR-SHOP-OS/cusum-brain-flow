@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { useUserRole } from "@/hooks/useUserRole";
 import { useNavigate } from "react-router-dom";
 import {
   CheckSquare, Plus, RefreshCw, Copy, Check, Maximize2, Minus, Sparkles,
@@ -258,8 +259,15 @@ export default function Tasks() {
     });
   }, []);
 
+  const { isAdmin } = useUserRole();
+
   const authResolved = currentUserEmail !== null;
   const isInternal = authResolved && currentUserEmail.endsWith("@rebar.shop");
+
+  const canToggleTask = (task: TaskRow) =>
+    isAdmin ||
+    currentProfileId === task.assigned_to ||
+    currentProfileId === task.created_by_profile_id;
 
   const handleFilePick = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -437,6 +445,10 @@ export default function Tasks() {
   };
 
   const toggleComplete = async (task: TaskRow) => {
+    if (!canToggleTask(task)) {
+      toast.error("Only the assigned user or creator can mark this task complete");
+      return;
+    }
     const isCompleted = task.status === "completed";
     const newStatus = isCompleted ? "open" : "completed";
     const updates: any = {
@@ -740,6 +752,8 @@ export default function Tasks() {
                         >
                           <Checkbox
                             checked={false}
+                            disabled={!canToggleTask(task)}
+                            title={!canToggleTask(task) ? "Only the assigned user or creator can mark this complete" : undefined}
                             onCheckedChange={() => toggleComplete(task)}
                             className="mt-0.5 shrink-0"
                           />
@@ -790,6 +804,8 @@ export default function Tasks() {
                             >
                               <Checkbox
                                 checked={true}
+                                disabled={!canToggleTask(task)}
+                                title={!canToggleTask(task) ? "Only the assigned user or creator can mark this complete" : undefined}
                                 onCheckedChange={() => toggleComplete(task)}
                                 className="mt-0.5 shrink-0"
                               />
@@ -973,9 +989,14 @@ export default function Tasks() {
                     </Button>
                   </>
                 ) : (
-                  <Button size="sm" variant="default" onClick={() => toggleComplete(selectedTask)} className="flex-1">
-                    Mark Complete
-                  </Button>
+                  <>
+                    <Button size="sm" variant="default" onClick={() => toggleComplete(selectedTask)} className="flex-1" disabled={!canToggleTask(selectedTask)}>
+                      Mark Complete
+                    </Button>
+                    {!canToggleTask(selectedTask) && (
+                      <p className="text-xs text-muted-foreground w-full">Only the assigned user or creator can mark this complete.</p>
+                    )}
+                  </>
                 )}
                 <Button
                   size="sm"
