@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/auth.ts";
+import { callAI } from "../_shared/aiRouter.ts";
 import {
   calculateItem,
   applyWasteFactor,
@@ -97,7 +98,7 @@ serve(async (req) => {
     const standardsMap = new Map(standards.map((s) => [s.bar_size, s]));
     const pricingMap = new Map(pricing.map((p) => [p.bar_size, p]));
 
-    // ─── 2. Process files through OCR + Vision AI ───
+    // ─── 2. Process files through OCR (google-vision-ocr) + AI extraction ───
     let extractedItems: EstimationItemInput[] = [];
 
     if (file_urls.length > 0) {
@@ -123,22 +124,53 @@ serve(async (req) => {
             }
           } catch (e) {
             console.error("PDF conversion error:", e);
-            imageUrls.push(url); // fallback: send the PDF URL directly
+            imageUrls.push(url);
           }
         } else {
           imageUrls.push(url);
         }
       }
 
-      // ─── Vision AI extraction using Gemini 2.5 Pro ───
-      const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-      if (LOVABLE_API_KEY && imageUrls.length > 0) {
-        const visionContent: any[] = [
-          {
-            type: "text",
-            text: `You are a senior structural estimator. Analyze these structural/architectural drawings and extract ALL rebar reinforcement items.
+      // ─── OCR each image via google-vision-ocr (uses Gemini via aiRouter) ───
+      const ocrTexts: string[] = [];
+      for (const imgUrl of imageUrls.slice(0, 20)) {
+        try {
+          const ocrRes = await fetch(`${SUPABASE_URL}/functions/v1/google-vision-ocr`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              apikey: Deno.env.get("SUPABASE_ANON_KEY")!,
+              Authorization: `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
+            },
+            body: JSON.stringify({ imageUrl: imgUrl }),
+          });
+          if (ocrRes.ok) {
+            const ocrData = await ocrRes.json();
+            if (ocrData.fullText) ocrTexts.push(ocrData.fullText);
+          } else {
+            console.error("OCR failed for image:", ocrRes.status);
+          }
+        } catch (e) {
+          console.error("OCR error:", e);
+        }
+      }
+
+      // ─── AI structured extraction from OCR text using Gemini (via aiRouter) ───
+      const combinedText = ocrTexts.join("\n\n--- PAGE BREAK ---\n\n");
+      if (combinedText.trim()) {
+        try {
+          const result = await callAI({
+            provider: "gemini",
+            model: "gemini-2.5-pro",
+            messages: [
+              {
+                role: "user",
+                content: `You are a senior structural estimator. Analyze the following OCR text extracted from structural/architectural drawings and extract ALL rebar reinforcement items.
 
 ${scope_context ? `Context: ${scope_context}` : ""}
+
+OCR TEXT:
+${combinedText}
 
 For each structural element (column, beam, footing, slab, wall, pier), extract:
 - element_type: footing, column, beam, slab, wall, pier
@@ -153,76 +185,18 @@ For each structural element (column, beam, footing, slab, wall, pier), extract:
 - num_laps: number of lap splices (0 if none)
 - spacing_mm: spacing if applicable
 
-Return a JSON array of items. Be thorough — extract every bar callout visible.`,
-          },
-        ];
-
-        // Add images (limit to 10 to stay within context)
-        for (const imgUrl of imageUrls.slice(0, 10)) {
-          visionContent.push({
-            type: "image_url",
-            image_url: { url: imgUrl },
-          });
-        }
-
-        try {
-          const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${LOVABLE_API_KEY}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              model: "google/gemini-2.5-pro",
-              messages: [{ role: "user", content: visionContent }],
-              tools: [
-                {
-                  type: "function",
-                  function: {
-                    name: "extract_rebar_items",
-                    description: "Return extracted rebar items from structural drawings",
-                    parameters: {
-                      type: "object",
-                      properties: {
-                        items: {
-                          type: "array",
-                          items: {
-                            type: "object",
-                            properties: {
-                              element_type: { type: "string" },
-                              element_ref: { type: "string" },
-                              mark: { type: "string" },
-                              bar_size: { type: "string" },
-                              quantity: { type: "number" },
-                              cut_length_mm: { type: "number" },
-                              hook_type_near: { type: "string", enum: ["90", "180", "none"] },
-                              hook_type_far: { type: "string", enum: ["90", "180", "none"] },
-                              lap_type: { type: "string", enum: ["tension", "compression", "none"] },
-                              num_laps: { type: "number" },
-                              spacing_mm: { type: "number" },
-                            },
-                            required: ["element_type", "bar_size", "quantity", "cut_length_mm"],
-                          },
-                        },
-                      },
-                      required: ["items"],
-                    },
-                  },
-                },
-              ],
-              tool_choice: { type: "function", function: { name: "extract_rebar_items" } },
-            }),
+Return ONLY a valid JSON array of items. Be thorough — extract every bar callout visible.`,
+              },
+            ],
+            maxTokens: 8000,
+            temperature: 0.1,
           });
 
-          if (aiRes.ok) {
-            const aiData = await aiRes.json();
-            const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
-            if (toolCall?.function?.arguments) {
-              const parsed = JSON.parse(toolCall.function.arguments);
-              extractedItems = parsed.items ?? [];
-            }
-          } else {
-            console.error("AI extraction failed:", aiRes.status, await aiRes.text());
+          // Parse the JSON from the response
+          const content = result.content.trim();
+          const jsonMatch = content.match(/\[[\s\S]*\]/);
+          if (jsonMatch) {
+            extractedItems = JSON.parse(jsonMatch[0]);
           }
         } catch (e) {
           console.error("AI extraction error:", e);
