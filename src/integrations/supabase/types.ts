@@ -2732,6 +2732,86 @@ export type Database = {
           },
         ]
       }
+      estimation_items: {
+        Row: {
+          bar_size: string | null
+          created_at: string
+          cut_length_mm: number | null
+          dimensions: Json | null
+          element_ref: string | null
+          element_type: string | null
+          grade: string | null
+          hook_allowance_mm: number | null
+          id: string
+          lap_allowance_mm: number | null
+          line_cost: number | null
+          mark: string | null
+          project_id: string
+          quantity: number
+          shape_code: string | null
+          source: string | null
+          spacing_mm: number | null
+          total_length_mm: number | null
+          unit_cost: number | null
+          warnings: string[] | null
+          weight_kg: number | null
+        }
+        Insert: {
+          bar_size?: string | null
+          created_at?: string
+          cut_length_mm?: number | null
+          dimensions?: Json | null
+          element_ref?: string | null
+          element_type?: string | null
+          grade?: string | null
+          hook_allowance_mm?: number | null
+          id?: string
+          lap_allowance_mm?: number | null
+          line_cost?: number | null
+          mark?: string | null
+          project_id: string
+          quantity?: number
+          shape_code?: string | null
+          source?: string | null
+          spacing_mm?: number | null
+          total_length_mm?: number | null
+          unit_cost?: number | null
+          warnings?: string[] | null
+          weight_kg?: number | null
+        }
+        Update: {
+          bar_size?: string | null
+          created_at?: string
+          cut_length_mm?: number | null
+          dimensions?: Json | null
+          element_ref?: string | null
+          element_type?: string | null
+          grade?: string | null
+          hook_allowance_mm?: number | null
+          id?: string
+          lap_allowance_mm?: number | null
+          line_cost?: number | null
+          mark?: string | null
+          project_id?: string
+          quantity?: number
+          shape_code?: string | null
+          source?: string | null
+          spacing_mm?: number | null
+          total_length_mm?: number | null
+          unit_cost?: number | null
+          warnings?: string[] | null
+          weight_kg?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estimation_items_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "estimation_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       estimation_learnings: {
         Row: {
           confidence_score: number | null
@@ -2782,6 +2862,114 @@ export type Database = {
           usage_count?: number | null
         }
         Relationships: []
+      }
+      estimation_pricing: {
+        Row: {
+          bar_size: string
+          company_id: string
+          created_at: string
+          effective_date: string
+          id: string
+          is_active: boolean
+          kg_per_labor_hour: number
+          labor_rate_per_hour: number
+          material_cost_per_kg: number
+        }
+        Insert: {
+          bar_size: string
+          company_id: string
+          created_at?: string
+          effective_date?: string
+          id?: string
+          is_active?: boolean
+          kg_per_labor_hour?: number
+          labor_rate_per_hour?: number
+          material_cost_per_kg?: number
+        }
+        Update: {
+          bar_size?: string
+          company_id?: string
+          created_at?: string
+          effective_date?: string
+          id?: string
+          is_active?: boolean
+          kg_per_labor_hour?: number
+          labor_rate_per_hour?: number
+          material_cost_per_kg?: number
+        }
+        Relationships: []
+      }
+      estimation_projects: {
+        Row: {
+          company_id: string
+          created_at: string
+          created_by: string | null
+          customer_id: string | null
+          element_summary: Json | null
+          id: string
+          labor_hours: number | null
+          lead_id: string | null
+          name: string
+          notes: string | null
+          source_files: Json | null
+          status: string
+          total_cost: number | null
+          total_weight_kg: number | null
+          updated_at: string
+          waste_factor_pct: number | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          customer_id?: string | null
+          element_summary?: Json | null
+          id?: string
+          labor_hours?: number | null
+          lead_id?: string | null
+          name: string
+          notes?: string | null
+          source_files?: Json | null
+          status?: string
+          total_cost?: number | null
+          total_weight_kg?: number | null
+          updated_at?: string
+          waste_factor_pct?: number | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          customer_id?: string | null
+          element_summary?: Json | null
+          id?: string
+          labor_hours?: number | null
+          lead_id?: string | null
+          name?: string
+          notes?: string | null
+          source_files?: Json | null
+          status?: string
+          total_cost?: number | null
+          total_weight_kg?: number | null
+          updated_at?: string
+          waste_factor_pct?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estimation_projects_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimation_projects_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       estimation_validation_rules: {
         Row: {
