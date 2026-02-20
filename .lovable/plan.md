@@ -1,100 +1,71 @@
 
-# Fix: Penny Has No QB Data — Full Connection Repair
+## Fix: Penny's `fetch_qb_report` Sends Wrong Action Names to QuickBooks
 
-## Root Cause (Confirmed)
+### Root Cause (Confirmed — 2 bugs in the connector)
 
-Three compounding failures prevent Penny from accessing QuickBooks data:
+**Bug 1 — Wrong action name: `"report"` does not exist**
 
-**Problem 1 — `fetchQuickBooksLiveContext` is never called**
-In `ai-agent/index.ts`, the function is imported on line 2 but never invoked anywhere in the 335-line file. The accounting context block in `fetchContext()` only loads `accounting_mirror` (a secondary mirror table), not the actual `qb_transactions`, `qb_customers`, or `qb_accounts` tables.
-
-**Problem 2 — `fetchQuickBooksLiveContext` body is empty**
-The function at line 274 of `agentContext.ts` contains only a comment: `// Logic from original file to fetch live QB data`. It returns nothing. Even if called, it would inject nothing.
-
-**Problem 3 — Penny's prompt references undefined context keys**
-The accounting prompt says: "For monthly financial reports: Use qbProfitAndLoss data" — but `qbProfitAndLoss`, `qbInvoices`, `qbCustomers` are never populated. When Penny looks for them and finds nothing, the QA layer flags this and the model correctly (but unhelpfully) says "I cannot fulfill this request."
-
-**The database has all the data:**
-- 1,827 Invoices, $4.6M total
-- 1,843 Payments, $4.3M total
-- 461 Bills, $3.2M total
-- Open AR invoices with customer names, amounts, due dates — all in `qb_transactions`
-
----
-
-## Fix Plan
-
-### Step 1 — Implement `fetchQuickBooksLiveContext` in `agentContext.ts`
-
-Fill in the empty stub to query:
-- `qb_transactions` — open invoices (balance > 0), recent bills, recent payments
-- `qb_customers` — customer balances and contacts
-- `qb_accounts` — chart of accounts snapshot
-- `qb_bank_activity` — current bank balances
-- `qb_vendors` — vendor list for AP context
-
-Returns a structured object with: `qbInvoices`, `qbCustomers`, `qbAccounts`, `qbBankActivity`, `qbVendors`, `qbSummary` (totals for AR, AP, open invoices count).
-
-### Step 2 — Call it from `ai-agent/index.ts` for accounting agents
-
-After the `fetchContext()` call (line 70), add:
-```typescript
-if (agent === "accounting" || agent === "collections") {
-  const qbLiveData = await fetchQuickBooksLiveContext(svcClient, companyId);
-  Object.assign(mergedContext, qbLiveData);
-}
+The `fetch_qb_report` tool handler in `agentToolExecutor.ts` (line 372) sends:
+```json
+{ "action": "report", "report_type": "ProfitAndLoss" }
 ```
 
-This injects the live QB context into `mergedContext`, which flows into `contextStr` and is injected into Penny's system prompt — exactly where her instructions expect `qbInvoices` etc. to appear.
+But `quickbooks-oauth/index.ts` switch statement has **no `case "report"`**. It hits the `default` branch and returns:
+```json
+{ "error": "Unknown action: report" }
+```
 
-### Step 3 — Add 3 QB Action Tools for Penny in `agentTools.ts`
+The real action names are: `"get-profit-loss"`, `"get-balance-sheet"`, `"get-aged-receivables"`, `"get-aged-payables"`, `"get-cash-flow"`, `"get-tax-summary"`.
 
-Add these tools to the accounting agent:
-- `fetch_qb_report` — fetch live P&L, AR Aging, Balance Sheet, or Cash Flow report from QuickBooks via `quickbooks-oauth` edge function
-- `fetch_gl_anomalies` — query `gl_transactions` + `gl_lines` for unusual patterns (round numbers, single-sided entries, missing contra-entries)
-- `trigger_qb_sync` — call `qb-sync-engine` to trigger an incremental sync on demand
+**Bug 2 — Wrong parameter names**
 
-### Step 4 — Wire tool handlers in `agentToolExecutor.ts`
+Even if the action were correct, the parameter names don't match:
+- Tool sends `start_date` / `end_date` (snake_case)
+- `handleGetProfitLoss` reads `body.startDate` / `body.endDate` (camelCase)
+- `handleGetBalanceSheet` reads `body.asOfDate`
 
-Add handlers for each new tool:
-- `fetch_qb_report`: calls `quickbooks-oauth` with `action: "report"` and the report type
-- `fetch_gl_anomalies`: runs a direct query on `gl_transactions`/`gl_lines`, returns top anomalies
-- `trigger_qb_sync`: calls `qb-sync-engine` edge function with `mode: "incremental"`
+**Result:** Every call to `fetch_qb_report` returns `"Unknown action: report"` → tool result is `success: false, error: "Unknown action: report"` → Penny sees the tool failed → QA layer catches it → sanitized reply: *"I was unable to retrieve the Profit and Loss report for 2025 due to a technical issue."*
 
 ---
 
-## Files to Modify
+### Fix Plan
+
+**Only 1 file needs to change: `supabase/functions/_shared/agentToolExecutor.ts`**
+
+Replace the `fetch_qb_report` handler (lines 367–388) with a proper router that:
+
+1. Maps `report_type` → correct `quickbooks-oauth` action name:
+
+| `report_type` (Penny sends) | `action` (QB expects) |
+|---|---|
+| `ProfitAndLoss` | `get-profit-loss` |
+| `BalanceSheet` | `get-balance-sheet` |
+| `AgedReceivables` | `get-aged-receivables` |
+| `AgedPayables` | `get-aged-payables` |
+| `CashFlow` | `get-cash-flow` |
+| `TaxSummary` | `get-tax-summary` |
+
+2. Sends correct camelCase parameter names to match what each handler reads:
+   - P&L: `startDate`, `endDate`
+   - Balance Sheet: `asOfDate`
+   - Aged reports: `asOfDate`
+   - Cash Flow / Tax Summary: `startDate`, `endDate`
+
+3. If `period` is passed (e.g., `"This Year"`, `"Last Month"`), convert it to concrete `start_date` / `end_date` date strings before sending.
+
+---
+
+### Files to Change
 
 | File | Change |
 |---|---|
-| `supabase/functions/_shared/agentContext.ts` | Implement `fetchQuickBooksLiveContext` body — query `qb_transactions`, `qb_customers`, `qb_accounts`, `qb_bank_activity`, `qb_vendors` |
-| `supabase/functions/ai-agent/index.ts` | Call `fetchQuickBooksLiveContext` for accounting/collections agents after `fetchContext()` |
-| `supabase/functions/_shared/agentTools.ts` | Add `fetch_qb_report`, `fetch_gl_anomalies`, `trigger_qb_sync` tools for accounting agent |
-| `supabase/functions/_shared/agentToolExecutor.ts` | Add handlers for the 3 new QB tools |
+| `supabase/functions/_shared/agentToolExecutor.ts` | Fix `fetch_qb_report` handler: map `report_type` → correct action, fix parameter casing, add period→date conversion |
+
+No other files need to change. The QB handlers are fine. The tools definition is fine. Only the bridge between Penny's tool call and QuickBooks is broken.
 
 ---
 
-## What Changes After This Fix
+### After This Fix
 
-**Before:** Penny says "I cannot fulfill this request. I do not have access to Profit and Loss statements."
-
-**After:** Penny sees all QB data and can:
-- Answer "P&L Dec 2025" → reads from `qbProfitAndLoss` context (or calls `fetch_qb_report`)  
-- Answer "Outstanding invoices" → reads `qbInvoices` (1,827 real invoices in DB)
-- Answer "What should I do today?" → sees AR aging, overdue balances, upcoming bills
-- Pull live reports mid-conversation using `fetch_qb_report` tool
-- Trigger a QB sync from chat using `trigger_qb_sync`
-
----
-
-## Integration Health Summary (Current State)
-
-| Integration | Send | Receive | Status |
-|---|---|---|---|
-| Odoo CRM Sync | — | 103 leads/24h | Healthy |
-| Odoo File Migration | — | Blocked (15,260 pending) | Broken — bad IDs |
-| QuickBooks Sync | Yes | Yes (1,827 invoices) | Healthy |
-| Penny QB Context | — | — | Broken — empty stub |
-| QB Audit AI | Yes | Yes | Working (now on Gemini Pro) |
-| Vizzy Daily Brief | Yes | Yes | Working (now on Gemini Pro) |
-| Penny Collection Drafts | Yes | Yes | Fixed (now on Gemini Flash) |
+- Penny asks for P&L 2025 → calls `fetch_qb_report` with `{ report_type: "ProfitAndLoss", start_date: "2025-01-01", end_date: "2025-12-31" }` → executor maps to `action: "get-profit-loss"` with `{ startDate: "2025-01-01", endDate: "2025-12-31" }` → QB returns real P&L data → Penny summarizes it correctly
+- Same fix applies to Balance Sheet, AR Aging, AP Aging, Cash Flow, and Tax Summary
