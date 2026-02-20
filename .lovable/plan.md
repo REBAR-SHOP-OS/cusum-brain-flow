@@ -1,164 +1,248 @@
 
-# Learning Engine: Train AI from 1,600+ Historical Projects for 100% Accuracy
+# Complete Business Process Audit and Automation Recommendations
 
-## The Data Goldmine Already in Your ERP
+## Your Business at a Glance
 
-| Data Source | Count | What It Contains |
-|-------------|-------|-----------------|
-| Leads (total) | 2,956 | Full pipeline from inquiry to delivery |
-| Leads with files (odoo-archive) | 1,606 | Shop drawings, bar lists, job logs, estimation reports |
-| Total files in storage | 9,629 | PDFs, XLS, DWG, images across all projects |
-| Bar list files (named) | 762 | RebarCAD-exported bar lists (ground truth) |
-| Shop drawing files (named) | 966 | SD-series structural drawings |
-| Job log files | 358 | Coordination logs with revision tracking, weights |
-| Estimation/weight summaries | 690 | Estimation reports with known totals |
-| Spreadsheets (XLS/XLSX) | 1,838 | Parseable structured data (bar lists, job logs) |
-| Won leads | 801 | Completed projects with known final weights |
-| Delivered leads | 130 | Fully closed-loop projects |
-| Existing barlists (manual) | 15 with 242 items | Already parsed production data |
-| Quotes | 2,588 | Pricing history for margin learning |
-| Rebar standards | 6 sizes (10M-35M) | CSA/RSIC calculation constants |
+| Domain | Volume | Current State |
+|--------|--------|---------------|
+| Pipeline (Leads) | 2,956 total / 1,435 active | SLA triggers exist, AI scoring active, but 1,147 leads have ZERO communications |
+| Quotes | 2,588 sent ($64K avg) / 0 accepted tracked | Quote-to-order conversion is completely untracked |
+| Orders | 24 created / 0 from quotes | Massive gap -- 801 won leads but orders created manually outside system |
+| Accounts Receivable | $120K open / ALL 33 overdue / 17 over 90 days | Penny agent has 25 pending actions stuck at "pending_approval" |
+| Production | 13 cut plans / 144 items / 134 machine runs | Working but small; 34 items queued |
+| Deliveries | 4 total (all pending) | Barely used in system |
+| Customers | 2,845 | Synced from Odoo, rich data |
+| Contacts | 1,212 | Good coverage |
+| Employees | 12 profiles / 11 tracked in timeclock | 7 salary records, 0 certifications/contracts |
+| Email Marketing | 8 automations / 1 campaign | Built but barely launched |
+| Support | 32 conversations | Live chat widget active |
+| AI Agents | 8 agents all enabled | Vizzy, Blitz, Forge, Gauge, Penny, Pixel, Relay, Atlas |
+| Estimations | 0 projects (just reset) / 380 leads with files but no estimation | Huge untapped backlog |
 
-## What the Uploaded 20 York Files Teach Us
+---
 
-The Job Log (XLS) is the **Rosetta Stone** -- it contains:
-- **Estimation Weight**: 20,812.96 kg (what the estimator predicted)
-- **Detailing Weight**: 17,873.17 kg (what was actually detailed)
-- **Remaining Difference**: 2,939.79 kg (the gap to learn from)
-- **15 release codes** (CBA through CBQ) tracking every element from submission through fabrication
-- **4 revisions** with weight deltas and reasons (A/E comments, new drawings, patches)
-- **Element breakdown**: Cabana Foundation (SD01-SD03) = 4,350.91 kg, Pool Area (SD24-SD31) = 13,522.26 kg
+## Critical Gaps Found (Broken Loops)
 
-The bar lists (CBH, CBJ, CBQ) are **RebarCAD exports** with exact mark, quantity, size, length, bend type, and dimensions -- this IS the ground truth the AI needs to match.
+### 1. Quote-to-Order Black Hole
+- 2,588 quotes sent, but **0 orders** linked to any quote
+- 801 leads marked "won" but only 24 orders exist in the system
+- **The entire order creation process happens outside the ERP**
 
-## The Plan: Build a Self-Learning Estimation Brain
+### 2. Collections Paralysis
+- ALL $120,340.70 in AR is overdue
+- 17 invoices are 90+ days past due
+- 25 Penny collection actions are stuck at "pending_approval" -- nobody is approving them
 
-### Phase 1: Bulk Barlist Ingestion Pipeline (New Edge Function)
+### 3. Dead Pipeline Weight
+- 690 leads stuck at "quotation_bids" -- the largest single stage
+- 1,147 active leads have received ZERO recorded communications
+- 229 leads at "quotation_priority" with no movement
 
-**New file: `supabase/functions/ingest-historical-barlists/index.ts`**
+### 4. Estimation Backlog
+- 380 leads have uploaded files but no AI estimation has ever been run
+- 21 leads sitting at estimation stages right now
 
-A batch processing function that:
-1. Scans `odoo-archive/{lead_id}/` folders for bar list files (XLS/XLSX/PDF with "bar_list" or "BAR_LIST" in name)
-2. Parses XLS files directly using structured column mapping (the RebarCAD export format is consistent: Item, No. Pcs, Dwg.No, Size, Length, Mark, Type, A-R dimensions)
-3. Parses PDF bar lists using Gemini vision (for scanned/image PDFs)
-4. Stores parsed items in `barlist_items` linked to `barlists` records
-5. Links each barlist to its lead via a new `lead_id` column on `barlists`
-6. Processes in batches of 10 leads at a time to avoid timeouts
+### 5. HR Data Gaps
+- 0 employee contracts, 0 certifications, 0 job positions defined
+- Leave system works (4 requests) but no baseline data
 
-### Phase 2: Job Log Ingestion (Coordination Data)
+---
 
-**New file: `supabase/functions/ingest-job-logs/index.ts`**
+## Recommended Automations (Priority-Ordered)
 
-Parse Job Log XLS files to extract:
-- Element-level weight tracking across revisions
-- Estimation vs. detailing weight deltas
-- Release codes and submission dates
-- Revision comments (A/E comments, patches, addendums)
+### TIER 1: Revenue Recovery (Implement First)
 
-**New table: `project_coordination_log`**
+**A1. Auto-Approve Penny Collections for < $5K invoices**
+Create an automation that auto-approves Penny's collection queue items when the invoice amount is under $5K and the invoice is 30+ days overdue. Only escalate large/complex ones for manual approval.
+- Trigger: New `penny_collection_queue` insert
+- Action: If amount < $5K and overdue > 30 days, auto-set status to "approved"
+- Impact: Unblocks 25 stuck collection actions immediately
 
-```
-id, lead_id, company_id, project_name, customer_name,
-estimation_weight_kg, detailing_weight_kg, weight_difference_kg,
-elements (JSONB array of element breakdowns),
-releases (JSONB array of release codes with weights/dates),
-revisions (JSONB array of revision history with deltas),
-source_file_url, created_at
-```
+**A2. Auto-Create Orders from Won Leads**
+When a lead moves to "won" stage, automatically generate an order from the linked quote, copying line items and amounts. This closes the quote-to-order gap.
+- Trigger: Lead stage change to "won"
+- Action: Create order from linked quote, set status "confirmed"
+- Edge function: `auto-create-order-from-quote`
 
-This gives the AI the full coordination lifecycle for every project.
+**A3. AR Aging Escalation Ladder**
+Automated escalation based on aging:
+- 30 days: Penny sends friendly reminder email
+- 60 days: Penny escalates to Vizzy, creates human task for Neel
+- 90 days: Auto-flag account, pause new quotes to that customer, notify accounting
+- Trigger: Daily cron checks AR aging
+- Edge function: `ar-aging-escalation`
 
-### Phase 3: Estimation vs. Actual Comparison Engine
+### TIER 2: Pipeline Velocity
 
-**New file: `supabase/functions/build-learning-pairs/index.ts`**
+**A4. Dead Lead Recycler**
+690 leads at "quotation_bids" is a graveyard. Automate:
+- If no activity in 14 days at quotation stage: auto-send follow-up email via Blitz
+- If no response in 30 days: move to "lost" with reason "no_response"
+- If customer opens email: re-score and move back to active
+- Edge function: `pipeline-lead-recycler`
 
-For each project that has BOTH:
-- An AI estimation (from `estimation_items`) or historical estimation weight
-- A detailed bar list (from `barlist_items`) as ground truth
+**A5. Communication Gap Closer**
+1,147 leads with zero communications is unacceptable. Automate:
+- Daily batch: identify leads in active stages with 0 comms
+- Auto-generate and send introduction/follow-up email per stage
+- Log communication in `lead_communications`
+- Edge function: `pipeline-comm-gap-filler`
 
-Generate learning pairs stored in `estimation_learnings`:
-- `original_value`: what the AI/estimator predicted (bar size, quantity, cut length, weight)
-- `corrected_value`: what the detailer actually produced
-- `context`: element type, project type, drawing notation style
-- `confidence_score`: calculated from how close the prediction was
+**A6. Estimation Auto-Queue**
+380 leads have files but no estimation. Automate:
+- When a lead enters "estimation_ben" or "estimation_karthick" and has files in `lead_files`: auto-trigger `ai-estimate` on the shop drawings
+- Store results, notify estimator for review
+- Edge function: Modify `ai-estimate` to accept lead_id trigger
 
-This creates a feedback loop: every completed project teaches the AI what it got right and wrong.
+**A7. Quote Expiry Watchdog**
+Quotes with `valid_until` approaching or passed:
+- 7 days before: send renewal reminder to customer
+- On expiry: notify sales rep, suggest price update
+- 14 days past: auto-move lead stage to reflect stale quote
+- Edge function: `quote-expiry-watchdog`
 
-### Phase 4: Enhanced AI Prompt with Historical Context
+### TIER 3: Production and Operations
 
-**Modify: `supabase/functions/ai-estimate/index.ts`**
+**A8. Auto-Generate Work Orders from Approved Shop Drawings**
+When an order's `shop_drawing_status` changes to "approved" and `qc_internal_approved_at` is set:
+- Auto-create work order
+- Auto-generate cut plan from barlist
+- Queue items to machine based on `machine_capabilities`
+- Edge function: `auto-generate-work-order`
 
-Before sending drawings to Gemini, inject historical learning context:
-1. Query `estimation_learnings` for relevant patterns (same element type, similar project)
-2. Query `project_coordination_log` for weight benchmarks (e.g., "typical retaining wall projects in this size range weigh 8,000-15,000 kg")
-3. Include top-5 most relevant bar list examples from `barlist_items` as few-shot examples
-4. Add a validation step: compare AI output weights against historical benchmarks and flag anomalies
+**A9. Production Completion to Delivery Auto-Schedule**
+When all `cut_plan_items` for a work order reach "complete" or "clearance":
+- Auto-create delivery record
+- Auto-assign driver based on availability
+- Send customer notification with ETA
+- Edge function: `auto-schedule-delivery`
 
-### Phase 5: Coordination Dashboard
+**A10. Inventory Auto-Reorder**
+Monitor `floor_stock` levels:
+- When stock drops below minimum threshold: auto-create purchase order draft
+- Aggregate PO items by vendor for bulk ordering
+- Notify purchasing team for approval
+- Edge function: `inventory-auto-reorder`
 
-**New file: `src/components/estimation/CoordinationDashboard.tsx`**
+### TIER 4: Intelligence and Learning
 
-A view showing:
-- Estimation vs. Actual weight comparison chart across all projects
-- Accuracy trend over time (as more projects are ingested)
-- Element-type accuracy breakdown (footings vs. walls vs. slabs)
-- Revision impact analysis (how much do A/E comments typically change weights)
-- Per-customer patterns (e.g., "Walden projects typically have 15% waste")
+**A11. Win/Loss Pattern Analyzer**
+Daily analysis of won vs. lost leads:
+- Identify patterns: which sources, customers, project sizes win most
+- Auto-adjust lead scoring weights based on actual outcomes
+- Generate weekly insight report for sales team
+- Edge function: `win-loss-analyzer`
 
-### Phase 6: Auto-Validation Against RebarCAD Bar Lists
+**A12. Customer Health Score**
+Automated scoring combining:
+- Payment history (AR aging, payment speed)
+- Quote acceptance rate
+- Communication responsiveness
+- Repeat business frequency
+- Auto-flag "at risk" customers, suggest retention actions
+- Edge function: `customer-health-score`
 
-**Modify: `src/components/estimation/ProjectDetail.tsx`**
+**A13. Smart Quote Pricing**
+Before a quote is sent:
+- Check historical win rates for similar project types/sizes
+- Compare margin against won deals in same category
+- Suggest optimal pricing based on customer's acceptance patterns
+- Inject into quote engine UI
+- Edge function: Modify `quote-engine`
 
-Add a "Validate Against Bar List" button that:
-1. Accepts a RebarCAD bar list upload (XLS or PDF)
-2. Parses it into structured items
-3. Compares mark-by-mark against AI-extracted items
-4. Shows a diff view: matched items (green), missing items (red), extra items (yellow), weight discrepancies (orange)
-5. Auto-records mismatches as `estimation_learnings` entries
+### TIER 5: HR and Compliance
 
-## Database Changes
+**A14. Certification Expiry Tracker**
+When employee certifications are populated:
+- 30 days before expiry: notify employee and HR
+- On expiry: restrict assignment to certain machines/roles
+- Auto-generate renewal tasks
+- Edge function: `cert-expiry-tracker`
 
-### New table: `project_coordination_log`
-Stores parsed Job Log data linking estimation weights to detailing weights per element per revision.
+**A15. Payroll Anomaly Detector**
+Daily check on timeclock data:
+- Flag unusual patterns: overtime > 4 hours, missed clock-ins, weekend work without approval
+- Auto-notify manager for review
+- Generate weekly summary for HR
+- Already partially built in `timeclock-alerts`, extend with anomaly detection
 
-### Modify table: `barlists`
-Add `lead_id` UUID column (nullable FK to leads) to link historical bar lists back to pipeline leads.
+### TIER 6: Customer Experience
 
-### Modify table: `estimation_learnings`
-Add columns:
-- `lead_id` UUID -- link learning to specific lead
-- `bar_size` text -- for bar-size-specific patterns
-- `mark` text -- for mark-level matching
-- `weight_delta_pct` numeric -- percentage difference for quick queries
+**A16. Project Status Auto-Updates**
+For active orders/deliveries:
+- Auto-send customer email updates at key milestones (shop drawing approved, production started, ready for delivery, delivered)
+- Use customer portal link for self-service tracking
+- Edge function: `customer-milestone-notify`
 
-## Files to Create/Modify
+**A17. Post-Delivery Follow-Up**
+After delivery is marked complete:
+- Day 1: Thank you email with invoice
+- Day 7: Quality satisfaction survey
+- Day 30: Request for Google review
+- Day 90: Re-engagement with next project inquiry
+- Edge function: `post-delivery-nurture`
 
-| File | Action |
-|------|--------|
-| `supabase/functions/ingest-historical-barlists/index.ts` | New -- batch parse 762+ bar list files from odoo-archive |
-| `supabase/functions/ingest-job-logs/index.ts` | New -- parse 358 Job Log XLS files for coordination data |
-| `supabase/functions/build-learning-pairs/index.ts` | New -- generate estimation vs. actual comparison pairs |
-| `supabase/functions/ai-estimate/index.ts` | Modify -- inject historical context and few-shot examples into Gemini prompt |
-| `src/components/estimation/CoordinationDashboard.tsx` | New -- accuracy tracking and coordination analytics |
-| `src/components/estimation/ProjectDetail.tsx` | Modify -- add "Validate Against Bar List" with diff view |
-| `supabase/functions/_shared/rebarCADParser.ts` | New -- shared RebarCAD XLS/PDF parsing logic |
-| Database migration | New table + column additions |
+---
 
-## Processing Strategy
+## Implementation Plan
 
-The 1,606 lead folders with 9,629 files cannot be processed in one shot. The ingestion functions will:
-1. Process 10 leads per invocation (to stay within edge function timeouts)
-2. Track progress in a `ingestion_progress` table
-3. Be triggered via a cron job that runs every 5 minutes until complete
-4. Estimated total processing time: ~13 hours for all 1,606 leads
-5. Priority order: Won leads first (801), then delivered (130), then shop_drawing stage (18)
+### Phase 1 (Week 1): Revenue Recovery
+- A1: Auto-approve Penny collections (new edge function + DB trigger)
+- A2: Auto-create orders from won leads (new edge function + trigger on lead stage change)
+- A3: AR aging escalation (new edge function + daily cron)
 
-## Expected Outcome
+### Phase 2 (Week 2): Pipeline Cleanup
+- A4: Dead lead recycler (new edge function + cron)
+- A5: Communication gap closer (new edge function + cron)
+- A7: Quote expiry watchdog (new edge function + cron)
 
-After ingestion completes:
-- ~762 bar lists parsed into structured items (tens of thousands of individual rebar items)
-- ~358 coordination logs with estimation-to-actual weight tracking
-- Thousands of learning pairs for the AI to reference
-- The Gemini prompt will include real examples from YOUR past projects
-- Accuracy validation against RebarCAD ground truth on every new takeoff
-- The system learns from every correction, getting closer to 100% with each project
+### Phase 3 (Week 3): Production Flow
+- A6: Estimation auto-queue (modify ai-estimate)
+- A8: Auto-generate work orders (new edge function + trigger)
+- A9: Production-to-delivery (new edge function + trigger)
+
+### Phase 4 (Week 4): Intelligence
+- A11: Win/loss analyzer (new edge function + cron)
+- A12: Customer health score (new edge function + cron)
+- A13: Smart quote pricing (modify quote-engine)
+
+### Phase 5 (Ongoing): Customer Experience + HR
+- A10, A14-A17: Lower urgency, implement as capacity allows
+
+---
+
+## Technical Architecture
+
+Each automation follows this pattern:
+1. **Trigger**: DB trigger (on insert/update) or cron schedule (via `pg_cron` or scheduled edge function calls)
+2. **Edge Function**: Processes logic, queries context, executes actions
+3. **Audit Trail**: All actions logged to `activity_events` with `actor_type: 'automation'`
+4. **Human Override**: Critical actions (large payments, customer-facing emails) require approval via `human_tasks`
+5. **Agent Integration**: Each automation maps to an AI agent (Penny for AR, Blitz for pipeline, Forge for production)
+
+### New Edge Functions to Create
+| Function | Agent | Trigger |
+|----------|-------|---------|
+| `auto-approve-penny` | Penny | DB trigger on `penny_collection_queue` insert |
+| `auto-create-order` | Gauge | DB trigger on lead stage = 'won' |
+| `ar-aging-escalation` | Penny | Daily cron |
+| `pipeline-lead-recycler` | Blitz | Daily cron |
+| `pipeline-comm-gap-filler` | Blitz | Daily cron |
+| `quote-expiry-watchdog` | Gauge | Daily cron |
+| `auto-generate-work-order` | Forge | DB trigger on order shop_drawing_status |
+| `auto-schedule-delivery` | Forge | DB trigger on work order completion |
+| `inventory-auto-reorder` | Forge | Daily cron |
+| `win-loss-analyzer` | Atlas | Weekly cron |
+| `customer-health-score` | Atlas | Daily cron |
+| `customer-milestone-notify` | Relay | DB trigger on order/delivery status |
+| `post-delivery-nurture` | Relay | DB trigger on delivery status = delivered |
+
+### Database Changes
+- New table: `automation_runs` (track execution history, success/failure, metrics)
+- New table: `customer_health_scores` (cached health scores per customer)
+- Add `lead_id` to `orders` table (link orders back to pipeline)
+- Add `automation_source` column to `activity_events` (track which automation created the event)
+
+### UI Changes
+- Add "Automations Hub" page showing all 17 automations with on/off toggles, run history, and metrics
+- Extend existing `AutomationsSection` on Home to include these new operational automations alongside the existing marketing ones
