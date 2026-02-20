@@ -5,18 +5,6 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Convert ArrayBuffer to base64 in chunks to avoid stack overflow
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  const CHUNK = 8192;
-  let binary = "";
-  for (let i = 0; i < bytes.length; i += CHUNK) {
-    const slice = bytes.subarray(i, Math.min(i + CHUNK, bytes.length));
-    binary += String.fromCharCode(...slice);
-  }
-  return btoa(binary);
-}
-
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -32,52 +20,42 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-    // Take only 1 file to stay within memory limits
-    const url = urls[0];
-    const lower = url.toLowerCase();
-    const isPdf = lower.includes(".pdf");
-    const isImage = /\.(png|jpg|jpeg|webp|gif)/.test(lower);
-    const imageParts: Array<{ type: string; image_url: { url: string } }> = [];
+    const urls = file_urls as string[];
 
-    if (isImage) {
-      imageParts.push({ type: "image_url", image_url: { url } });
-    } else if (isPdf) {
-      // Fetch full PDF — must be complete for Gemini to parse pages
+    // Extract filenames from URLs for context
+    const filenames = urls.map((u: string) => {
       try {
-        const resp = await fetch(url);
-        if (!resp.ok) throw new Error(`Fetch failed: ${resp.status}`);
-        const buf = await resp.arrayBuffer();
-        // Skip if over 4MB to avoid memory crash
-        if (buf.byteLength > 4 * 1024 * 1024) {
-          console.warn("PDF too large, skipping base64 encode");
-        } else {
-          const b64 = arrayBufferToBase64(buf);
-          imageParts.push({
-            type: "image_url",
-            image_url: { url: `data:application/pdf;base64,${b64}` },
-          });
-        }
-      } catch (e) {
-        console.warn(`Failed to fetch PDF: ${url}`, e);
+        const decoded = decodeURIComponent(u.split("/").pop() || u);
+        // Strip timestamp prefix like "1771561615192_"
+        return decoded.replace(/^\d+_/, "");
+      } catch {
+        return u.split("/").pop() || u;
+      }
+    });
+
+    // Build content parts — use direct URLs for images only
+    const contentParts: Array<{ type: string; text?: string; image_url?: { url: string } }> = [];
+    contentParts.push({
+      type: "text",
+      text: `Analyze these structural drawing files and recommend a scope of work for rebar estimation.\n\nFile names uploaded:\n${filenames.map((f: string, i: number) => `${i + 1}. ${f}`).join("\n")}\n\nBased on the file names, infer the project and structural scope. If the names contain sheet references, element types, or project info, use that to build a detailed scope.`,
+    });
+
+    // For image files, attach them for visual analysis (lightweight, no memory issue)
+    for (const url of urls.slice(0, 3)) {
+      const lower = url.toLowerCase();
+      if (/\.(png|jpg|jpeg|webp|gif)(\?|$)/.test(lower)) {
+        contentParts.push({ type: "image_url", image_url: { url } });
       }
     }
 
-    if (imageParts.length === 0) {
-      return new Response(JSON.stringify({
-        scope: "Unable to analyze the uploaded files. Please describe the scope manually.",
-        elements_found: [],
-        confidence: 0,
-      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
+    const systemPrompt = `You are a rebar estimation expert. Based on the uploaded drawing file names (and any attached images), recommend a scope of work for a reinforcing steel takeoff.
 
-    const systemPrompt = `You are a rebar estimation expert analyzing structural drawings. Identify structural elements and recommend a scope of work for a reinforcing steel takeoff.
-
-Return ONLY a JSON object with:
+Return ONLY a JSON object:
 - "scope": Concise scope statement (1-2 sentences). Example: "Estimate all reinforcing steel for footings F1-F6, grade beams GB1-GB4, retaining walls W6-W10 per sheets SD-01 to SD-08"
-- "elements_found": Array of element types found (e.g. ["footings", "grade beams", "retaining walls"])
-- "confidence": Number 0-100
+- "elements_found": Array of likely structural element types (e.g. ["footings", "grade beams", "retaining walls", "columns", "slabs"])
+- "confidence": Number 0-100 (lower if working only from filenames)
 
-Focus on structural element types, marks/identifiers, sheet numbers, and project name from title block. Return ONLY valid JSON.`;
+If you can see images, use visual details. If only filenames are available, make reasonable inferences from the project name and sheet references. Return ONLY valid JSON.`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -89,13 +67,7 @@ Focus on structural element types, marks/identifiers, sheet numbers, and project
         model: "google/gemini-2.5-flash",
         messages: [
           { role: "system", content: systemPrompt },
-          {
-            role: "user",
-            content: [
-              { type: "text", text: "Analyze these structural drawings and recommend a scope of work for rebar estimation:" },
-              ...imageParts,
-            ],
-          },
+          { role: "user", content: contentParts },
         ],
         max_tokens: 1000,
         temperature: 0.1,
