@@ -3,9 +3,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, RefreshCw, Receipt, Search } from "lucide-react";
+import { Loader2, RefreshCw, Receipt, Search, Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { CreateExpenseDialog } from "./CreateExpenseDialog";
 import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
 
 interface Props {
@@ -29,6 +30,7 @@ export function AccountingExpenses({ data }: Props) {
   const [purchases, setPurchases] = useState<QBPurchase[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
+  const [showCreate, setShowCreate] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -63,10 +65,17 @@ export function AccountingExpenses({ data }: Props) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold flex items-center gap-2"><Receipt className="w-5 h-5" /> Expenses / Purchases</h2>
-        <Button variant="outline" size="sm" onClick={load} disabled={loading} className="gap-2">
-          <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} /> Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="default" size="sm" onClick={() => setShowCreate(true)} className="gap-2">
+            <Plus className="w-4 h-4" /> New Expense
+          </Button>
+          <Button variant="outline" size="sm" onClick={load} disabled={loading} className="gap-2">
+            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} /> Refresh
+          </Button>
+        </div>
       </div>
+
+      <CreateExpenseDialog open={showCreate} onOpenChange={setShowCreate} onCreated={load} />
 
       <div className="flex items-center gap-4">
         <div className="relative flex-1 max-w-sm">

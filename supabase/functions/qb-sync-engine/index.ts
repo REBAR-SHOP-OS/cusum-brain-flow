@@ -515,6 +515,7 @@ async function getCompanyQBConfig(svc: SvcClient, companyId: string): Promise<{ 
 const TXN_TYPES = [
   "Invoice", "Bill", "Payment", "CreditMemo", "JournalEntry",
   "Estimate", "PurchaseOrder", "Deposit", "Transfer", "VendorCredit", "SalesReceipt",
+  "BillPayment",
 ];
 
 // ─── BACKFILL ──────────────────────────────────────────────────────
@@ -568,7 +569,44 @@ async function handleBackfill(svc: SvcClient, companyId: string) {
     results.Vendor = await upsertVendors(svc, companyId, realmId, vendors);
   } catch (e) { errors.push(`Vendor: ${e}`); }
 
-  // 6. All transaction types
+  // 6. Classes
+  try {
+    const classes = await qbQuery(config, ctx, "Class") as Record<string, unknown>[];
+    const now = new Date().toISOString();
+    for (let i = 0; i < classes.length; i += 100) {
+      const batch = classes.slice(i, i + 100).map(c => ({
+        company_id: companyId,
+        qb_id: String(c.Id),
+        name: String(c.Name ?? ""),
+        parent_qb_id: (c.ParentRef as any)?.value || null,
+        is_active: c.Active !== false,
+        raw_json: c,
+        last_synced_at: now,
+      }));
+      await svc.from("qb_classes").upsert(batch, { onConflict: "company_id,qb_id" });
+    }
+    results.Class = classes.length;
+  } catch (e) { errors.push(`Class: ${e}`); }
+
+  // 7. Departments
+  try {
+    const depts = await qbQuery(config, ctx, "Department") as Record<string, unknown>[];
+    const now = new Date().toISOString();
+    for (let i = 0; i < depts.length; i += 100) {
+      const batch = depts.slice(i, i + 100).map(d => ({
+        company_id: companyId,
+        qb_id: String(d.Id),
+        name: String(d.Name ?? ""),
+        is_active: d.Active !== false,
+        raw_json: d,
+        last_synced_at: now,
+      }));
+      await svc.from("qb_departments").upsert(batch, { onConflict: "company_id,qb_id" });
+    }
+    results.Department = depts.length;
+  } catch (e) { errors.push(`Department: ${e}`); }
+
+  // 8. All transaction types
   // Build lookups for GL normalization
   const accountLookup = await buildLookupMap(svc, "qb_accounts", companyId);
   const customerLookup = await buildLookupMap(svc, "qb_customers", companyId);
