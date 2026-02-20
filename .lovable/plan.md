@@ -1,77 +1,134 @@
 
-# Fix: AI Takeoff Returns 0 Items
 
-## Root Cause Analysis
+# Annotated Drawing Viewer with Color-Coded Rebar Marks
 
-The takeoff pipeline has **3 breaking points** in sequence:
+## What This Adds
 
-1. **Storage bucket is private** -- The `estimation-files` bucket is set to `public: false`, but `TakeoffWizard.tsx` uses `getPublicUrl()` to generate download URLs. When the `pdf-to-images` edge function tries to fetch that URL, storage returns HTTP 400. This is confirmed in the logs: `"Failed to fetch PDF: 400"`.
+Like iBeam.ai, when a takeoff completes, each extracted rebar item will have its **location on the drawing** identified by the AI, and the drawing will be displayed with **colorful bounding boxes and labels** overlaid on top. Users can click an annotation to highlight the corresponding BOM row, and vice versa.
 
-2. **`pdf-to-images` function is broken** -- The function body references a local `convertPdfToImages(pdfData, maxPages, dpi)` function, but its implementation was lost (replaced by a `// ... keep existing code` placeholder). Even if the URL worked, this function would crash.
+## How It Works
 
-3. **No pricing data** -- `estimation_pricing` has 0 active rows, so all cost calculations return $0 even if items were extracted.
+### 1. AI Returns Bounding Box Coordinates (Backend Change)
 
-**Result**: PDF cant be fetched -> no images -> no OCR -> no AI extraction -> 0 items, 0 weight, 0 cost.
+**File: `supabase/functions/ai-estimate/index.ts`**
 
-## Fix Plan
+Update the Gemini prompt to also extract spatial location data for each item. Gemini vision can return normalized bounding box coordinates (0-1 range) for detected elements.
 
-### Fix 1: Make storage bucket public (or use signed URLs)
+Add to the extraction prompt:
+- `page_index`: which uploaded file/page (0-based)
+- `bbox`: `{ x: float, y: float, w: float, h: float }` -- normalized coordinates (0.0 to 1.0) of where the rebar callout appears on the drawing
 
-Make the `estimation-files` bucket public so edge functions can fetch uploaded PDFs. This is the simplest fix since estimation files are project drawings (not sensitive PII).
+Increase `maxOutputTokens` to 16000 to accommodate the extra spatial data.
 
-**SQL Migration:**
+### 2. Store Annotations in Database
+
+**Database migration** -- Add a `bbox` JSONB column to `estimation_items`:
+
 ```sql
-UPDATE storage.buckets SET public = true WHERE id = 'estimation-files';
+ALTER TABLE estimation_items 
+  ADD COLUMN IF NOT EXISTS bbox jsonb,
+  ADD COLUMN IF NOT EXISTS page_index integer DEFAULT 0;
 ```
 
-### Fix 2: Rewrite `pdf-to-images/index.ts` with working PDF conversion
+The `bbox` stores `{"x": 0.12, "y": 0.35, "w": 0.08, "h": 0.05}` and `page_index` identifies which source file the annotation belongs to.
 
-The current approach of converting PDFs to images in Deno is complex and broken. Instead, skip the PDF-to-images step entirely and send the PDF URL directly to Gemini for vision analysis. Gemini 2.5 Pro/Flash natively supports PDF input via URL.
+Update the insert logic in `ai-estimate/index.ts` to persist `bbox` and `page_index`.
 
-**Changes to `supabase/functions/ai-estimate/index.ts`:**
-- Remove the `pdf-to-images` call entirely
-- Send file URLs (PDF or image) directly to Gemini as multipart content (Gemini supports PDF natively)
-- Use `google/gemini-2.5-pro` with the PDF URL in the vision message
-- This eliminates the broken PDF-to-images and separate OCR steps
+### 3. Drawing Viewer Component with Canvas Overlay
 
-The updated flow becomes:
+**New file: `src/components/estimation/AnnotatedDrawingViewer.tsx`**
+
+A split-panel or full-width component that:
+- Renders the uploaded drawing (image) in a scrollable/zoomable container
+- Overlays an HTML5 Canvas (or SVG layer) on top with colored rectangles for each detected item
+- Color coding by element type:
+  - Footing = blue
+  - Column = red  
+  - Beam = green
+  - Slab = orange
+  - Wall = purple
+  - Pier = teal
+- Each annotation box shows a small label (e.g. "C1 - 20M x8") 
+- Hover shows a tooltip with full item details
+- Click an annotation to highlight the corresponding BOM table row
+- Legend panel showing element type colors
+- Zoom controls (zoom in/out, fit-to-width, pan with mouse drag)
+- Page selector if multiple drawings uploaded
+
+### 4. Update ProjectDetail to Include Annotated View
+
+**File: `src/components/estimation/ProjectDetail.tsx`**
+
+Replace the basic "Drawings" tab with the new `AnnotatedDrawingViewer`:
+- Pass `source_files` URLs and `items` (with bbox data) as props
+- Add a toggle: "Show Annotations" on/off
+- Add a "Confidence" filter slider (if we add confidence scores)
+
+Add a new tab called "Annotated Drawings" between BOM and Export.
+
+### 5. BOM Table ↔ Drawing Sync
+
+**File: `src/components/estimation/BOMTable.tsx`**
+
+- Add a `highlightedItemId` prop
+- When an item is hovered/selected in the BOM table, emit an event to highlight the corresponding annotation on the drawing
+- When an annotation is clicked on the drawing, scroll the BOM table to that row and highlight it
+- Lift the `selectedItemId` state into `ProjectDetail.tsx` to sync both components
+
+### 6. Color Legend Component
+
+**New file: `src/components/estimation/AnnotationLegend.tsx`**
+
+A small sidebar/bar showing:
+- Color swatch + element type name for each category
+- Count of items per category
+- Toggle visibility per category (show/hide footings, columns, etc.)
+
+## Component Architecture
+
 ```
-Upload PDF -> Send PDF URL directly to Gemini 2.5 Pro (vision) -> Extract rebar items -> Calculate -> Save
+ProjectDetail
+  |-- KPI Cards
+  |-- Tabs
+       |-- "Annotated Drawings" (NEW - default tab)
+       |    |-- AnnotatedDrawingViewer
+       |    |    |-- Image layer (the PDF/drawing rendered as image)
+       |    |    |-- SVG overlay layer (bounding boxes + labels)
+       |    |    |-- Zoom/pan controls
+       |    |-- AnnotationLegend (sidebar)
+       |-- "BOM Table"
+       |    |-- BOMTable (with highlight sync)
+       |-- "Export"
+            |-- ExportPanel
 ```
-
-Instead of the old broken flow:
-```
-Upload PDF -> pdf-to-images (BROKEN) -> google-vision-ocr (NEVER REACHED) -> Extract -> Calculate -> Save
-```
-
-### Fix 3: Seed `estimation_pricing` with real data
-
-**SQL Migration** to insert standard Canadian rebar pricing for the company:
-
-| Bar Size | Material Cost/kg | Labor Rate/hr | kg/Labor Hour |
-|----------|-----------------|---------------|---------------|
-| 10M | $1.65 | $75.00 | 250 |
-| 15M | $1.55 | $75.00 | 300 |
-| 20M | $1.45 | $75.00 | 350 |
-| 25M | $1.40 | $75.00 | 400 |
-| 30M | $1.35 | $75.00 | 400 |
-| 35M | $1.30 | $75.00 | 450 |
-
-### Fix 4: Update TakeoffWizard to use signed URLs (backup)
-
-If we make the bucket public (Fix 1), `getPublicUrl()` will work. But as a safety measure, also add signed URL generation as a fallback.
-
-## Files Changed
-
-| File | Change |
-|------|--------|
-| `supabase/functions/ai-estimate/index.ts` | Replace PDF-to-images + OCR pipeline with direct Gemini PDF vision |
-| `supabase/functions/pdf-to-images/index.ts` | Rebuild with working implementation (for other callers) |
-| Database migration | Make bucket public + seed pricing data |
 
 ## Technical Details
 
-- Gemini 2.5 Pro supports PDF files directly via `fileData` or `image_url` in vision messages
-- The `callAI` function in `aiRouter.ts` already supports multipart content messages
-- This approach is faster (1 AI call instead of N OCR calls + 1 extraction call) and more reliable
-- Rebar standards table already has 6 rows (10M-35M) so calculations will work once items are extracted
+**Drawing Rendering**: For PDFs, we cannot render them inline in canvas. Instead, the edge function will convert uploaded PDFs to images (PNG) during the takeoff and store them in the same bucket. For images (PNG/JPG), display directly. The `source_files` JSONB will be updated to include `{ url, type, preview_url }` where `preview_url` is the rendered image version.
+
+**SVG Overlay Approach**: Use an absolutely-positioned SVG element over the image. Each annotation is a `<rect>` with stroke color matching element type, plus a `<text>` label. This approach:
+- Scales naturally with CSS transforms (zoom)
+- Supports click/hover events natively
+- Is resolution-independent
+- Works better than Canvas for interactive elements
+
+**Zoom/Pan**: Use CSS transform (scale + translate) on a wrapper div. Track zoom level (0.5x to 4x) and pan offset via mouse drag. Mouse wheel = zoom.
+
+**For PDF files**: Since we're already sending PDFs to Gemini for extraction, add a second step that converts the first page of each PDF to a PNG using the Gemini image generation model or a lightweight approach: render the PDF URL in an `<iframe>` for preview, or use `pdf.js` (can add as dependency). The simplest approach: for image files, display directly; for PDFs, show in an `<object>` or `<iframe>` tag with the SVG overlay anchored to a known page size.
+
+**Prompt Engineering for Accurate BBoxes**: The Gemini prompt will instruct:
+- Use normalized coordinates (0.0-1.0) relative to the full page
+- `x,y` = top-left corner of the rebar callout or structural element reference
+- `w,h` = width and height of the bounding region
+- Temperature set to 0.1 for maximum precision
+
+## Files to Create/Modify
+
+| File | Action |
+|------|--------|
+| `supabase/functions/ai-estimate/index.ts` | Add bbox + page_index to prompt and persist |
+| `src/components/estimation/AnnotatedDrawingViewer.tsx` | New -- full drawing viewer with SVG overlay |
+| `src/components/estimation/AnnotationLegend.tsx` | New -- color legend with category toggles |
+| `src/components/estimation/ProjectDetail.tsx` | Add Annotated Drawings tab, sync state |
+| `src/components/estimation/BOMTable.tsx` | Add highlight sync props |
+| Database migration | Add `bbox` and `page_index` columns to `estimation_items` |
