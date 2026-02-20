@@ -56,19 +56,18 @@ supabase/functions/
 
 Each agent module exports: `systemPrompt`, `getTools()`, `fetchContext()`, and `briefingTemplate`.
 
-## Phase 2: LLM-Based Intent Router
+## Phase 2: LLM-Based Intent Router ✅ COMPLETE
 
-Replace the keyword-matching router with an LLM classifier for ambiguous queries.
+Replaced keyword-only routing with a hybrid system:
+- **Keyword fast-path** (synchronous, free): Used when confidence score ≥ 6
+- **LLM fallback** (async, ~200ms): Called via `agent-router` edge function when keywords are ambiguous
+- **Compound request detection**: LLM returns multiple agents for multi-domain queries (e.g., "check invoices and schedule delivery" → `["accounting", "delivery"]`)
+- **Provider fallback**: GPT-4o-mini primary → Gemini 2.5 Flash on 429/failure
+- **Graceful degradation**: Falls back to keyword match if all LLM providers fail
 
-**What changes:**
-- Keep keyword matching as fast-path (confidence > threshold = instant route)
-- For low-confidence matches, call a lightweight LLM (GPT-4o-mini) with a classification prompt
-- Add "compound request" detection that decomposes multi-domain queries
-
-**Implementation:**
-- Update `src/lib/agentRouter.ts` to add an async `routeToAgentSmart()` function
-- Create `supabase/functions/agent-router/index.ts` edge function for LLM classification
-- The classifier receives the user message and returns `{ agents: string[], confidence: number }`
+**Files created/modified:**
+- `supabase/functions/agent-router/index.ts` — LLM classifier edge function
+- `src/lib/agentRouter.ts` — Added `routeToAgentSmart()` async function with `secondaryAgents` support
 
 ## Phase 3: RAG / Vector Memory
 
