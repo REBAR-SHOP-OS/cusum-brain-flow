@@ -365,22 +365,76 @@ export async function executeToolCall(
     // QB: Fetch Live Report from QuickBooks
     // ═══════════════════════════════════════════════════
     else if (name === "fetch_qb_report") {
+      // Map report_type → correct quickbooks-oauth action name
+      const reportTypeToAction: Record<string, string> = {
+        ProfitAndLoss:    "get-profit-loss",
+        BalanceSheet:     "get-balance-sheet",
+        AgedReceivables:  "get-aged-receivables",
+        AgedPayables:     "get-aged-payables",
+        CashFlow:         "get-cash-flow",
+        TaxSummary:       "get-tax-summary",
+      };
+
+      // Period → concrete dates helper
+      function resolvePeriodDates(period: string): { startDate: string; endDate: string } {
+        const now = new Date();
+        const y = now.getFullYear();
+        const m = now.getMonth(); // 0-based
+        const pad = (n: number) => String(n).padStart(2, "0");
+        const fmt = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+        switch (period?.toLowerCase()) {
+          case "this month":
+            return { startDate: `${y}-${pad(m + 1)}-01`, endDate: fmt(new Date(y, m + 1, 0)) };
+          case "last month": {
+            const lm = m === 0 ? 11 : m - 1;
+            const ly = m === 0 ? y - 1 : y;
+            return { startDate: `${ly}-${pad(lm + 1)}-01`, endDate: fmt(new Date(ly, lm + 1, 0)) };
+          }
+          case "this year":
+            return { startDate: `${y}-01-01`, endDate: `${y}-12-31` };
+          case "last year":
+            return { startDate: `${y - 1}-01-01`, endDate: `${y - 1}-12-31` };
+          case "this quarter": {
+            const q = Math.floor(m / 3);
+            return { startDate: `${y}-${pad(q * 3 + 1)}-01`, endDate: fmt(new Date(y, q * 3 + 3, 0)) };
+          }
+          default:
+            return { startDate: `${y}-01-01`, endDate: `${y}-12-31` };
+        }
+      }
+
+      const action = reportTypeToAction[args.report_type] ?? "get-profit-loss";
+      const reportType = args.report_type as string;
+
+      // Resolve dates — prefer explicit dates, fall back to period string
+      let startDate = args.start_date as string | undefined;
+      let endDate   = args.end_date   as string | undefined;
+      if ((!startDate || !endDate) && args.period) {
+        const resolved = resolvePeriodDates(args.period as string);
+        startDate = startDate ?? resolved.startDate;
+        endDate   = endDate   ?? resolved.endDate;
+      }
+
+      // Build camelCase body that each QB handler expects
+      let qbBody: Record<string, unknown> = { action, company_id: companyId };
+      if (reportType === "BalanceSheet" || reportType === "AgedReceivables" || reportType === "AgedPayables") {
+        // These handlers read body.asOfDate (use endDate as the as-of date)
+        qbBody.asOfDate = endDate ?? new Date().toISOString().split("T")[0];
+      } else {
+        // P&L, CashFlow, TaxSummary → startDate / endDate
+        if (startDate) qbBody.startDate = startDate;
+        if (endDate)   qbBody.endDate   = endDate;
+      }
+
       const reportRes = await fetch(`${supabaseUrl}/functions/v1/quickbooks-oauth`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": authHeader },
-        body: JSON.stringify({
-          action: "report",
-          report_type: args.report_type,
-          start_date: args.start_date,
-          end_date: args.end_date,
-          period: args.period,
-          company_id: companyId,
-        }),
+        body: JSON.stringify(qbBody),
       });
 
       if (reportRes.ok) {
         const reportData = await reportRes.json();
-        result.result = { success: true, report_type: args.report_type, data: reportData };
+        result.result = { success: true, report_type: reportType, data: reportData };
       } else {
         const errText = await reportRes.text();
         result.result = { success: false, error: errText };
