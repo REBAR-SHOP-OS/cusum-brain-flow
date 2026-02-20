@@ -90,7 +90,7 @@ export async function analyzeDocumentWithGemini(
   }
 }
 
-export async function performOCR(imageUrl: string): Promise<{ fullText: string; textBlocks: Array<{ text: string; boundingPoly: unknown }>; error?: string }> {
+export async function performOCR(imageUrl: string, mode: "standard" | "deep" = "standard"): Promise<{ fullText: string; textBlocks: Array<{ text: string; boundingPoly: unknown }>; error?: string }> {
   try {
     const response = await fetch(
       `${Deno.env.get("SUPABASE_URL")}/functions/v1/google-vision-ocr`,
@@ -100,7 +100,7 @@ export async function performOCR(imageUrl: string): Promise<{ fullText: string; 
           "Content-Type": "application/json",
           "Authorization": `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
         },
-        body: JSON.stringify({ imageUrl }),
+        body: JSON.stringify({ imageUrl, mode }),
       }
     );
 
@@ -142,7 +142,7 @@ export async function convertPdfToImages(pdfUrl: string, maxPages: number = 20):
   }
 }
 
-export async function performOCROnBase64(base64Image: string): Promise<{ 
+export async function performOCROnBase64(base64Image: string, mode: "standard" | "deep" = "standard"): Promise<{ 
   fullText: string; 
   textBlocks: Array<{ text: string; boundingPoly: unknown }>;
   error?: string;
@@ -157,7 +157,7 @@ export async function performOCROnBase64(base64Image: string): Promise<{
           "Content-Type": "application/json",
           "Authorization": `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
         },
-        body: JSON.stringify({ imageBase64: base64Data }),
+        body: JSON.stringify({ imageBase64: base64Data, mode }),
       }
     );
 
@@ -237,7 +237,7 @@ export async function performMultiPassAnalysis(
     
     const pageResults: string[] = [];
     for (let i = 0; i < conversionResult.pages.length; i++) {
-      const ocrResult = await performOCROnBase64(conversionResult.pages[i]);
+      const ocrResult = await performOCROnBase64(conversionResult.pages[i], "deep");
       if (ocrResult.fullText) {
         const pageZones = detectZones(ocrResult.fullText, ocrResult.textBlocks);
         allZones.push(...pageZones);
@@ -249,7 +249,7 @@ export async function performMultiPassAnalysis(
     return { mergedText: pageResults.join("\n"), confidence: 90, discrepancies, zones: allZones, extractedRebar: allExtractedRebar };
   }
   
-  const ocrResult = await performOCR(fileUrl);
+  const ocrResult = await performOCR(fileUrl, "deep");
   const zones = detectZones(ocrResult.fullText, ocrResult.textBlocks);
   const extractedRebar = extractRebarData(ocrResult.fullText, validationRules);
   
