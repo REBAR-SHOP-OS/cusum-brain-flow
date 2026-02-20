@@ -43,7 +43,7 @@ export default function Login() {
     setGoogleLoading(true);
     
     const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: window.location.origin + "/home",
+      redirect_uri: "https://cusum-brain-flow.lovable.app/home",
     });
 
     if (result.error) {
@@ -62,7 +62,7 @@ export default function Login() {
     setAppleLoading(true);
     
     const result = await lovable.auth.signInWithOAuth("apple", {
-      redirect_uri: window.location.origin + "/home",
+      redirect_uri: "https://cusum-brain-flow.lovable.app/home",
     });
 
     if (result.error) {
