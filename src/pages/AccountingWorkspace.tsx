@@ -57,6 +57,8 @@ const AccountingScheduledReports = lazy(() => import("@/components/accounting/Ac
 const AccountingRecurringTxns = lazy(() => import("@/components/accounting/AccountingRecurringTxns").then(m => ({ default: m.AccountingRecurringTxns })));
 const TaxPlanning = lazy(() => import("@/components/accounting/TaxPlanning").then(m => ({ default: m.TaxPlanning })));
 const BudgetVsActuals = lazy(() => import("@/components/accounting/BudgetVsActuals").then(m => ({ default: m.BudgetVsActuals })));
+const AccountingCashFlow = lazy(() => import("@/components/accounting/AccountingCashFlow").then(m => ({ default: m.AccountingCashFlow })));
+const TaxFilingSummary = lazy(() => import("@/components/accounting/TaxFilingSummary").then(m => ({ default: m.TaxFilingSummary })));
 
 /* ── Constants ── */
 const QB_LAST_LOAD_KEY = "qb-last-load-date";
@@ -370,6 +372,8 @@ export default function AccountingWorkspace() {
               {activeTab === "recurring-auto" && <AccountingRecurringTxns />}
               {activeTab === "tax-planning" && <TaxPlanning />}
               {activeTab === "budget-vs-actuals" && <BudgetVsActuals />}
+              {activeTab === "cash-flow-report" && <AccountingCashFlow />}
+              {activeTab === "tax-filing" && <TaxFilingSummary />}
               {activeTab === "documents" && <AccountingDocuments data={qb} />}
               {activeTab === "balance-sheet" && <AccountingReport data={qb} report="balance-sheet" />}
               {activeTab === "profit-loss" && <AccountingReport data={qb} report="profit-loss" />}

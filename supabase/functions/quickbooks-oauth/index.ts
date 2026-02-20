@@ -422,6 +422,32 @@ serve(async (req) => {
       case "get-transaction-list":
         return handleGetTransactionList(supabase, userId, body);
 
+      // ── Phase 17: New Actions ─────────────────────────────────
+      case "get-cash-flow":
+        return handleGetCashFlow(supabase, userId, body);
+      case "get-tax-summary":
+        return handleGetTaxSummary(supabase, userId, body);
+      case "create-bill-payment":
+        return handleCreateBillPayment(supabase, userId, body);
+      case "list-bill-payments":
+        return handleListBillPayments(supabase, userId);
+      case "update-customer":
+        return handleUpdateCustomer(supabase, userId, body);
+      case "update-vendor":
+        return handleUpdateVendor(supabase, userId, body);
+      case "list-classes":
+        return handleListClasses(supabase, userId);
+      case "list-departments":
+        return handleListDepartments(supabase, userId);
+      case "create-class":
+        return handleCreateClass(supabase, userId, body);
+      case "create-purchase":
+        return handleCreatePurchase(supabase, userId, body);
+      case "upload-attachment":
+        return handleUploadAttachment(supabase, userId, body);
+      case "list-attachments":
+        return handleListAttachments(supabase, userId, body);
+
       // ── Sync Engine Delegation ─────────────────────────────────
       case "full-sync":
       case "incremental-sync":
@@ -1790,4 +1816,125 @@ async function handleGetTransactionList(supabase: ReturnType<typeof createClient
   parseRows(reportRows);
 
   return jsonRes({ transactions, beginningBalance, startDate, endDate });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Phase 17: New Action Handlers
+// ═══════════════════════════════════════════════════════════════════
+
+// ─── Cash Flow Report ─────────────────────────────────────────────
+
+async function handleGetCashFlow(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const startDate = (body.startDate as string) || new Date(new Date().getFullYear(), 0, 1).toISOString().split("T")[0];
+  const endDate = (body.endDate as string) || new Date().toISOString().split("T")[0];
+  const data = await qbFetch(config, `reports/CashFlow?start_date=${startDate}&end_date=${endDate}`);
+  return jsonRes({ report: data });
+}
+
+// ─── Tax Summary Report ───────────────────────────────────────────
+
+async function handleGetTaxSummary(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const startDate = (body.startDate as string) || new Date(new Date().getFullYear(), 0, 1).toISOString().split("T")[0];
+  const endDate = (body.endDate as string) || new Date().toISOString().split("T")[0];
+  const data = await qbFetch(config, `reports/TaxSummary?start_date=${startDate}&end_date=${endDate}`);
+  return jsonRes({ report: data });
+}
+
+// ─── Bill Payments ────────────────────────────────────────────────
+
+async function handleCreateBillPayment(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const payload = body.billPayment as Record<string, unknown>;
+  if (!payload) throw new Error("Missing billPayment payload");
+  const data = await qbFetch(config, "billpayment", { method: "POST", body: JSON.stringify(payload) });
+  await updateLastSync(supabase, userId);
+  return jsonRes(data);
+}
+
+async function handleListBillPayments(supabase: ReturnType<typeof createClient>, userId: string) {
+  const config = await getQBConfig(supabase, userId);
+  const data = await qbQuery(config, "BillPayment");
+  return jsonRes(data);
+}
+
+// ─── Customer/Vendor Write-Back ───────────────────────────────────
+
+async function handleUpdateCustomer(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const customer = body.customer as Record<string, unknown>;
+  if (!customer?.Id || !customer?.SyncToken) throw new Error("Missing customer Id/SyncToken for sparse update");
+  customer.sparse = true;
+  const data = await qbFetch(config, "customer", { method: "POST", body: JSON.stringify(customer) });
+  await updateLastSync(supabase, userId);
+  return jsonRes(data);
+}
+
+async function handleUpdateVendor(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const vendor = body.vendor as Record<string, unknown>;
+  if (!vendor?.Id || !vendor?.SyncToken) throw new Error("Missing vendor Id/SyncToken for sparse update");
+  vendor.sparse = true;
+  const data = await qbFetch(config, "vendor", { method: "POST", body: JSON.stringify(vendor) });
+  await updateLastSync(supabase, userId);
+  return jsonRes(data);
+}
+
+// ─── Classes & Departments ────────────────────────────────────────
+
+async function handleListClasses(supabase: ReturnType<typeof createClient>, userId: string) {
+  const config = await getQBConfig(supabase, userId);
+  const data = await qbQuery(config, "Class");
+  return jsonRes(data);
+}
+
+async function handleListDepartments(supabase: ReturnType<typeof createClient>, userId: string) {
+  const config = await getQBConfig(supabase, userId);
+  const data = await qbQuery(config, "Department");
+  return jsonRes(data);
+}
+
+async function handleCreateClass(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const cls = body.class as Record<string, unknown>;
+  if (!cls?.Name) throw new Error("Missing class Name");
+  const data = await qbFetch(config, "class", { method: "POST", body: JSON.stringify(cls) });
+  await updateLastSync(supabase, userId);
+  return jsonRes(data);
+}
+
+// ─── Purchase (Expense) Creation ──────────────────────────────────
+
+async function handleCreatePurchase(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const purchase = body.purchase as Record<string, unknown>;
+  if (!purchase) throw new Error("Missing purchase payload");
+  const data = await qbFetch(config, "purchase", { method: "POST", body: JSON.stringify(purchase) });
+  await updateLastSync(supabase, userId);
+  return jsonRes(data);
+}
+
+// ─── Attachments API ──────────────────────────────────────────────
+
+async function handleUploadAttachment(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const attachable = body.attachable as Record<string, unknown>;
+  if (!attachable) throw new Error("Missing attachable payload");
+  // Create attachable metadata (link file to entity)
+  const data = await qbFetch(config, "attachable", { method: "POST", body: JSON.stringify(attachable) });
+  await updateLastSync(supabase, userId);
+  return jsonRes(data);
+}
+
+async function handleListAttachments(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const entityType = body.entityType as string;
+  const entityId = body.entityId as string;
+  let whereClause: string | undefined;
+  if (entityType && entityId) {
+    whereClause = `AttachableRef.EntityRef.Type = '${entityType}' AND AttachableRef.EntityRef.value = '${entityId}'`;
+  }
+  const data = await qbQuery(config, "Attachable", 1000, whereClause);
+  return jsonRes(data);
 }
