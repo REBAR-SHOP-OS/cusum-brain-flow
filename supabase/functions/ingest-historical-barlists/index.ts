@@ -143,27 +143,37 @@ serve(async (req) => {
                 .download(file.storage_path);
               if (dlErr || !fileData) {
                 console.error(`Failed to download ${file.storage_path}:`, dlErr);
+                processedFiles++;
                 continue;
               }
               arrayBuf = await fileData.arrayBuffer();
             } else if (file.file_url) {
               try {
                 const resp = await fetch(file.file_url);
-                if (!resp.ok) { console.error(`HTTP ${resp.status} for ${file.file_url}`); continue; }
+                if (!resp.ok) { console.error(`HTTP ${resp.status} for ${file.file_url}`); processedFiles++; continue; }
                 arrayBuf = await resp.arrayBuffer();
               } catch (fetchErr) {
                 console.error(`Fetch failed for ${file.file_url}:`, fetchErr);
+                processedFiles++;
                 continue;
               }
             } else {
-              continue; // No download path available
+              processedFiles++;
+              continue;
             }
 
-            const workbook = XLSX.read(new Uint8Array(arrayBuf), { type: "array" });
-            const firstSheet = workbook.SheetNames[0];
-            const rows: any[][] = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet], { header: 1 });
+            let items: any[] = [];
+            try {
+              const workbook = XLSX.read(new Uint8Array(arrayBuf), { type: "array" });
+              const firstSheet = workbook.SheetNames[0];
+              const rows: any[][] = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet], { header: 1 });
+              items = parseRebarCADRows(rows);
+            } catch (parseErr) {
+              console.error(`Parse error ${file.file_name}:`, parseErr);
+              processedFiles++;
+              continue;
+            }
 
-            const items = parseRebarCADRows(rows);
             if (items.length === 0) {
               processedFiles++;
               continue; // Not a valid RebarCAD file, skip
@@ -184,6 +194,7 @@ serve(async (req) => {
 
             if (blErr || !barlist) {
               console.error(`Failed to create barlist for ${file.file_name}:`, blErr);
+              processedFiles++;
               continue;
             }
 
@@ -215,6 +226,7 @@ serve(async (req) => {
             console.log(`✅ ${file.file_name}: ${items.length} items, ${summary.total_weight_kg} kg`);
           } catch (fileErr) {
             console.error(`Error processing ${file.file_name}:`, fileErr);
+            processedFiles++; // Count it so we don't get stuck
           }
         }
 

@@ -88,14 +88,16 @@ export function parseRebarCADRows(rows: any[][]): ParsedBarlistItem[] {
       try { return String(c ?? "").trim().toLowerCase(); } catch { return ""; }
     });
 
-    // Look for key columns
-    const itemIdx = cells.findIndex((c: string) => c === "item" || c === "item no" || c === "item no.");
-    const pcsIdx = cells.findIndex((c: string) => c.includes("pcs") || c.includes("no.") || c === "qty" || c === "quantity");
-    const sizeIdx = cells.findIndex((c: string) => c === "size" || c === "bar size");
-    const lengthIdx = cells.findIndex((c: string) => c === "length" || c === "cut length" || c === "total length");
-    const markIdx = cells.findIndex((c: string) => c === "mark" || c === "bar mark");
-    const typeIdx = cells.findIndex((c: string) => c === "type" || c === "bend type" || c === "shape");
-    const dwgIdx = cells.findIndex((c: string) => c.includes("dwg") || c.includes("drawing") || c.includes("drg"));
+    // Look for key columns — guard every callback against undefined
+    const safeIncludes = (c: any, term: string) => typeof c === 'string' && c.includes(term);
+    const safeEquals = (c: any, ...terms: string[]) => typeof c === 'string' && terms.includes(c);
+    const itemIdx = cells.findIndex((c) => safeEquals(c, "item", "item no", "item no."));
+    const pcsIdx = cells.findIndex((c) => safeIncludes(c, "pcs") || safeIncludes(c, "no.") || safeEquals(c, "qty", "quantity"));
+    const sizeIdx = cells.findIndex((c) => safeEquals(c, "size", "bar size"));
+    const lengthIdx = cells.findIndex((c) => safeEquals(c, "length", "cut length", "total length"));
+    const markIdx = cells.findIndex((c) => safeEquals(c, "mark", "bar mark"));
+    const typeIdx = cells.findIndex((c) => safeEquals(c, "type", "bend type", "shape"));
+    const dwgIdx = cells.findIndex((c) => safeIncludes(c, "dwg") || safeIncludes(c, "drawing") || safeIncludes(c, "drg"));
 
     if (sizeIdx >= 0 || (itemIdx >= 0 && lengthIdx >= 0)) {
       headerIdx = i;
