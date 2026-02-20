@@ -5,7 +5,8 @@ import {
   Send, 
   PackageCheck,
   ArrowLeft,
-  ClipboardList
+  ClipboardList,
+  Calculator
 } from "lucide-react";
 import { MyJobsCard } from "@/components/shopfloor/MyJobsCard";
 import { VoiceRecorderWidget } from "@/components/shopfloor/VoiceRecorderWidget";
@@ -61,6 +62,12 @@ const hubCards: HubCard[] = [
     subtitle: "COUNTS & ADJUSTMENTS",
     icon: <ClipboardList className="w-7 h-7" />,
     to: "/shopfloor/inventory",
+  },
+  {
+    label: "ESTIMATION",
+    subtitle: "AI TAKEOFF & BIDS",
+    icon: <Calculator className="w-7 h-7" />,
+    to: "/estimation",
   },
 ];
 
