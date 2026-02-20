@@ -8198,6 +8198,36 @@ export type Database = {
         }
         Relationships: []
       }
+      quote_pricing_configs: {
+        Row: {
+          company_id: string
+          config_name: string
+          created_at: string
+          id: string
+          is_active: boolean
+          pricing_data: Json
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          config_name?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          pricing_data?: Json
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          config_name?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          pricing_data?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
       quote_requests: {
         Row: {
           chat_transcript: Json | null

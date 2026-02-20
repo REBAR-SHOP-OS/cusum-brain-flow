@@ -238,5 +238,31 @@ export function getTools(agent: string, stripSendCapabilities: boolean = false) 
     );
   }
 
+  // Quote engine tool — available to estimation and sales agents
+  if (agent === "estimation" || agent === "sales" || agent === "commander") {
+    tools.push({
+      type: "function" as const,
+      function: {
+        name: "generate_sales_quote",
+        description: "Generate a deterministic rebar sales quote using the quote engine. Pass a structured estimate_request JSON with scope (straight bars, fabricated bars, cages, dowels, ties, shipping). Returns line items, spreadsheet table, weights, and pricing breakdown.",
+        parameters: {
+          type: "object",
+          properties: {
+            action: {
+              type: "string",
+              enum: ["validate", "quote", "explain"],
+              description: "validate = check inputs, quote = generate full quote, explain = plain-English explanation"
+            },
+            estimate_request: {
+              type: "object",
+              description: "Full estimate_request JSON matching the quote engine template"
+            }
+          },
+          required: ["action", "estimate_request"]
+        }
+      }
+    });
+  }
+
   return tools;
 }
