@@ -926,6 +926,11 @@ You are directly integrated with QuickBooks Online and can access real-time fina
 14. **Collection History**: Available in \`collectionHistory\` — last 20 executed/failed collection actions from penny_collection_queue. Reference this when discussing past collection efforts with customers.
 15. **Un-invoiced Orders**: Available in \`uninvoicedOrders\` — completed orders with no linked invoice. Flag these for immediate invoicing.
 16. **Payment Velocity**: Available in \`paymentVelocity\` — average days-to-pay per top customer. Flag customers whose payment speed has worsened by 20%+.
+17. **Cash Flow Statement**: Available in \`qbCashFlow\` (current month) and \`qbCashFlowPriorMonth\` (prior month). Native QB cash flow report with Operating/Investing/Financing breakdown.
+18. **Tax Summary**: Available in \`qbTaxSummary\` — current quarter HST/GST collected vs ITCs claimed. Use for filing prep.
+19. **Bill Payments**: Available in \`qbBillPayments\` — recent vendor bill payments with vendor name, amount, date, payment type.
+20. **Classes**: Available in \`qbClasses\` — QuickBooks classes (projects/cost centers). Use for class-level reporting.
+21. **Departments**: Available in \`qbDepartments\` — QuickBooks departments (organizational divisions).
 
 ### WRITE Operations (Draft for approval):
 1. **Create Invoice** — Use the \`create_qb_invoice\` tool. Requires customer ID, line items, and due date. ALWAYS show the draft to the user and get explicit confirmation before creating.
@@ -939,6 +944,36 @@ You are aware of Canadian tax deadlines. Today's date is provided in context. Pr
 - **Payroll Remittance**: Due by the 15th of each month for the prior month.
 - **Corporate Tax (T2)**: Due 6 months after fiscal year-end.
 When any deadline is within 7 days, flag it as 🚨 urgent. Within 14 days, flag as 🟡 upcoming.
+
+## 💰 Cash Flow Analysis (Phase 17):
+You now have access to the **native QuickBooks Cash Flow Statement** via \`qbCashFlow\` (current month) and \`qbCashFlowPriorMonth\` (prior month for comparison).
+When discussing cash flow, always break it down by the 3 standard activities:
+- **Operating Activities**: Cash from core business (collections, vendor payments, payroll)
+- **Investing Activities**: Capital expenditures, equipment purchases, asset sales
+- **Financing Activities**: Loans, owner draws, equity injections
+Compare month-over-month and flag negative operating cash flow as 🔴 critical.
+
+## 🧾 HST/GST Deep Knowledge (Phase 17):
+You now have \`qbTaxSummary\` with the current quarter's tax data.
+- **HST Collected**: Tax collected from customers on sales
+- **Input Tax Credits (ITCs)**: HST paid on business expenses (claimable against collected HST)
+- **Net Remittance**: HST Collected − ITCs = Amount owing to CRA (or refund)
+- Quarterly filing deadlines: Jan 31, Apr 30, Jul 31, Oct 31
+- Always remind users to ensure all vendor bills are entered BEFORE filing to maximize ITCs
+- Flag if net remittance exceeds 20% of revenue as unusual
+
+## 🏗️ Class/Department Reporting (Phase 17):
+You now have \`qbClasses\` and \`qbDepartments\` from the local database.
+- **Classes** typically represent projects, job sites, or cost centers in construction businesses
+- **Departments** represent organizational divisions
+- When classes exist, you can provide class-level P&L analysis using the \`fetch_cash_flow_report\` tool with class filters
+- Use this for project profitability analysis — compare revenue vs costs by class
+
+## 💳 Bill Payment Workflow (Phase 17):
+You now have \`qbBillPayments\` showing recent vendor payments.
+- Before approving any bill payment, remind users of the **3-way match**: Purchase Order → Goods Receipt → Vendor Invoice
+- Flag duplicate payments (same vendor + similar amount within 7 days)
+- Track payment timing vs terms to optimize cash flow
 
 ## ⚖️ INTERNAL FINANCIAL CONTROLS (MANDATORY):
 You are also acting as an internal financial controller enforcing these permanent rules:
@@ -3097,6 +3132,59 @@ async function fetchQuickBooksLiveContext(supabase: ReturnType<typeof createClie
             context.qbAgedPayables = apData;
           }
         } catch (e) { console.error("[QB] Failed to fetch Aged Payables:", e); }
+
+        // ─── Phase 17: Cash Flow Statement ───
+        try {
+          const now = new Date();
+          const thisMonthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+          const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+          const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+          const cfRes = await qbFetch(`${qbApiBase}/v3/company/${config.realm_id}/reports/CashFlow?start_date=${thisMonthStart}&end_date=${now.toISOString().split("T")[0]}`);
+          if (cfRes) {
+            const cfData = await cfRes.json();
+            context.qbCashFlow = cfData;
+          }
+          // Prior month for comparison
+          const cfPriorRes = await qbFetch(`${qbApiBase}/v3/company/${config.realm_id}/reports/CashFlow?start_date=${lastMonthStart.toISOString().split("T")[0]}&end_date=${lastMonthEnd.toISOString().split("T")[0]}`);
+          if (cfPriorRes) {
+            const cfPriorData = await cfPriorRes.json();
+            context.qbCashFlowPriorMonth = cfPriorData;
+          }
+        } catch (e) { console.error("[QB] Failed to fetch Cash Flow:", e); }
+
+        // ─── Phase 17: Tax Summary (HST/GST) ───
+        try {
+          const now = new Date();
+          const qStart = Math.floor(now.getMonth() / 3) * 3;
+          const quarterStart = new Date(now.getFullYear(), qStart, 1);
+          const taxRes = await qbFetch(`${qbApiBase}/v3/company/${config.realm_id}/reports/TaxSummary?start_date=${quarterStart.toISOString().split("T")[0]}&end_date=${now.toISOString().split("T")[0]}`);
+          if (taxRes) {
+            const taxData = await taxRes.json();
+            context.qbTaxSummary = taxData;
+          }
+        } catch (e) { console.error("[QB] Failed to fetch Tax Summary:", e); }
+
+        // ─── Phase 17: Bill Payments ───
+        try {
+          const bpRes = await qbFetch(`${qbApiBase}/v3/company/${config.realm_id}/query?query=SELECT * FROM BillPayment ORDER BY TxnDate DESC MAXRESULTS 50`);
+          if (bpRes) {
+            const bpData = await bpRes.json();
+            context.qbBillPayments = (bpData.QueryResponse?.BillPayment || []).map((bp: Record<string, unknown>) => ({
+              id: bp.Id, vendorName: (bp.VendorRef as any)?.name, totalAmt: bp.TotalAmt, txnDate: bp.TxnDate, payType: bp.PayType,
+            }));
+          }
+        } catch (e) { console.error("[QB] Failed to fetch Bill Payments:", e); }
+
+        // ─── Phase 17: Classes & Departments from local tables ───
+        try {
+          const { data: classes } = await supabase.from("qb_classes").select("id, name, qb_class_id, fully_qualified_name, active").eq("company_id", companyId).eq("active", true);
+          context.qbClasses = classes || [];
+        } catch (e) { console.error("[QB] Failed to fetch classes:", e); }
+
+        try {
+          const { data: departments } = await supabase.from("qb_departments").select("id, name, qb_department_id, fully_qualified_name, active").eq("company_id", companyId).eq("active", true);
+          context.qbDepartments = departments || [];
+        } catch (e) { console.error("[QB] Failed to fetch departments:", e); }
       }
     } else {
       context.qbConnectionStatus = qbConnection?.status || "not_connected";
@@ -5619,6 +5707,28 @@ From context.userTasks, show by priority. Overdue count: ${context.overdueTaskCo
 ### 8. 📅 Compliance Deadlines
 ${deadlineStr}
 
+### 9. 💰 Cash Flow Snapshot
+From context.qbCashFlow (current month) and context.qbCashFlowPriorMonth (prior month), show:
+| Activity | This Month | Last Month | Trend |
+|----------|-----------|-----------|-------|
+| Operating | $ | $ | ↑/↓ |
+| Investing | $ | $ | ↑/↓ |
+| Financing | $ | $ | ↑/↓ |
+| **Net Cash Flow** | $ | $ | ↑/↓ |
+Flag negative operating cash flow as 🔴 critical. If qbCashFlow is not available, say "Cash flow data not available — QB connection may need refresh."
+
+### 10. 🧾 HST/GST Status
+From context.qbTaxSummary, show:
+- **HST Collected**: $ amount from sales tax collected
+- **ITCs Claimed**: $ amount of input tax credits
+- **Net Owing**: $ (Collected − ITCs). If positive = you owe CRA; if negative = CRA owes you
+- **Next Filing Deadline**: Calculate from quarterly schedule (Jan 31, Apr 30, Jul 31, Oct 31) and show days remaining
+If qbTaxSummary is not available, say "Tax summary not available."
+
+### 11. 🏗️ Project/Class P&L
+From context.qbClasses, if classes exist (length > 0), mention the available classes/projects and suggest the user ask for a class-level P&L breakdown using the fetch_cash_flow_report tool.
+If no classes exist, say "No QB classes configured — class-level reporting not available."
+
 RULES:
 - Use tables and emoji tags for scannability
 - Bold dollar amounts
@@ -5631,7 +5741,7 @@ RULES:
 
       briefingModelOverride = {
         model: "google/gemini-2.5-pro",
-        maxTokens: 5000,
+        maxTokens: 6000,
         temperature: 0.2,
         reason: "penny morning briefing → Pro for financial synthesis",
       };
@@ -6114,6 +6224,79 @@ RULES:
           },
         },
       },
+      ] : []),
+      // ─── Penny Phase 17: Cash Flow, Tax, Bill Payment, Expense tools ───
+      ...(agent === "accounting" ? [
+        {
+          type: "function" as const,
+          function: {
+            name: "fetch_cash_flow_report",
+            description: "Pull native QuickBooks Cash Flow Statement for any date range. Returns Operating, Investing, and Financing activity breakdown. Use when user asks about cash flow for a specific period.",
+            parameters: {
+              type: "object",
+              properties: {
+                start_date: { type: "string", description: "Start date in YYYY-MM-DD format" },
+                end_date: { type: "string", description: "End date in YYYY-MM-DD format" },
+              },
+              required: ["start_date", "end_date"],
+              additionalProperties: false,
+            },
+          },
+        },
+        {
+          type: "function" as const,
+          function: {
+            name: "fetch_tax_summary",
+            description: "Pull QuickBooks Tax Summary report for a specific period. Shows HST/GST collected, ITCs claimed, and net remittance. Use for filing prep or tax compliance review.",
+            parameters: {
+              type: "object",
+              properties: {
+                start_date: { type: "string", description: "Start date in YYYY-MM-DD format" },
+                end_date: { type: "string", description: "End date in YYYY-MM-DD format" },
+              },
+              required: ["start_date", "end_date"],
+              additionalProperties: false,
+            },
+          },
+        },
+        {
+          type: "function" as const,
+          function: {
+            name: "create_bill_payment",
+            description: "Pay a vendor bill through QuickBooks. ALWAYS show payment details and get explicit user approval before calling. Remind user of 3-way match (PO → Receipt → Invoice).",
+            parameters: {
+              type: "object",
+              properties: {
+                vendor_id: { type: "string", description: "QuickBooks vendor ID" },
+                bill_id: { type: "string", description: "QuickBooks bill ID to pay" },
+                amount: { type: "number", description: "Payment amount" },
+                payment_method: { type: "string", enum: ["Check", "CreditCard", "EFT", "Cash"], description: "Payment method" },
+              },
+              required: ["vendor_id", "bill_id", "amount", "payment_method"],
+              additionalProperties: false,
+            },
+          },
+        },
+        {
+          type: "function" as const,
+          function: {
+            name: "create_expense",
+            description: "Record a new expense/purchase in QuickBooks. ALWAYS show expense details and get explicit user approval before calling.",
+            parameters: {
+              type: "object",
+              properties: {
+                account_id: { type: "string", description: "QuickBooks expense account ID (from qbAccounts)" },
+                vendor_id: { type: "string", description: "QuickBooks vendor ID (optional)" },
+                amount: { type: "number", description: "Expense amount" },
+                description: { type: "string", description: "Expense description/memo" },
+                class_id: { type: "string", description: "QuickBooks class ID for project tracking (from qbClasses, optional)" },
+                department_id: { type: "string", description: "QuickBooks department ID (from qbDepartments, optional)" },
+              },
+              required: ["account_id", "amount", "description"],
+              additionalProperties: false,
+            },
+          },
+        },
       ] : []),
       // Empire (Architect) — venture management tool
       ...(agent === "empire" ? [{
@@ -7018,6 +7201,91 @@ RULES:
               name: tc.function.name,
               result: { success: false, error: e instanceof Error ? e.message : "Unknown error" },
             });
+          }
+        }
+
+        // ─── Phase 17: Penny Cash Flow, Tax Summary, Bill Payment, Expense tool handlers ───
+        if (tc.function?.name === "fetch_cash_flow_report") {
+          try {
+            const args = JSON.parse(tc.function.arguments || "{}");
+            console.log(`📊 Penny fetching Cash Flow report: ${args.start_date} → ${args.end_date}`);
+            const qbRes = await fetch(
+              `${Deno.env.get("SUPABASE_URL")}/functions/v1/quickbooks-oauth`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "Authorization": authHeader! },
+                body: JSON.stringify({ action: "get-cash-flow", startDate: args.start_date, endDate: args.end_date }),
+              }
+            );
+            const qbResult = await qbRes.json();
+            seoToolResults.push({ id: tc.id, name: "fetch_cash_flow_report", result: qbRes.ok ? { success: true, report: qbResult } : { success: false, error: qbResult.error || "Failed to fetch cash flow" } });
+          } catch (e) {
+            seoToolResults.push({ id: tc.id, name: "fetch_cash_flow_report", result: { success: false, error: e instanceof Error ? e.message : "Unknown error" } });
+          }
+        }
+
+        if (tc.function?.name === "fetch_tax_summary") {
+          try {
+            const args = JSON.parse(tc.function.arguments || "{}");
+            console.log(`🧾 Penny fetching Tax Summary: ${args.start_date} → ${args.end_date}`);
+            const qbRes = await fetch(
+              `${Deno.env.get("SUPABASE_URL")}/functions/v1/quickbooks-oauth`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "Authorization": authHeader! },
+                body: JSON.stringify({ action: "get-tax-summary", startDate: args.start_date, endDate: args.end_date }),
+              }
+            );
+            const qbResult = await qbRes.json();
+            seoToolResults.push({ id: tc.id, name: "fetch_tax_summary", result: qbRes.ok ? { success: true, report: qbResult } : { success: false, error: qbResult.error || "Failed to fetch tax summary" } });
+          } catch (e) {
+            seoToolResults.push({ id: tc.id, name: "fetch_tax_summary", result: { success: false, error: e instanceof Error ? e.message : "Unknown error" } });
+          }
+        }
+
+        if (tc.function?.name === "create_bill_payment") {
+          try {
+            const args = JSON.parse(tc.function.arguments || "{}");
+            console.log(`💳 Penny creating bill payment: vendor=${args.vendor_id}, bill=${args.bill_id}, amount=${args.amount}`);
+            const qbRes = await fetch(
+              `${Deno.env.get("SUPABASE_URL")}/functions/v1/quickbooks-oauth`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "Authorization": authHeader! },
+                body: JSON.stringify({ action: "create-bill-payment", vendorId: args.vendor_id, billId: args.bill_id, amount: args.amount, paymentMethod: args.payment_method }),
+              }
+            );
+            const qbResult = await qbRes.json();
+            seoToolResults.push({ id: tc.id, name: "create_bill_payment", result: qbRes.ok ? { success: true, message: "Bill payment created", data: qbResult } : { success: false, error: qbResult.error || "Failed to create bill payment" } });
+          } catch (e) {
+            seoToolResults.push({ id: tc.id, name: "create_bill_payment", result: { success: false, error: e instanceof Error ? e.message : "Unknown error" } });
+          }
+        }
+
+        if (tc.function?.name === "create_expense") {
+          try {
+            const args = JSON.parse(tc.function.arguments || "{}");
+            console.log(`💰 Penny creating expense: account=${args.account_id}, amount=${args.amount}`);
+            const qbRes = await fetch(
+              `${Deno.env.get("SUPABASE_URL")}/functions/v1/quickbooks-oauth`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "Authorization": authHeader! },
+                body: JSON.stringify({
+                  action: "create-expense",
+                  accountId: args.account_id,
+                  vendorId: args.vendor_id || null,
+                  amount: args.amount,
+                  description: args.description,
+                  classId: args.class_id || null,
+                  departmentId: args.department_id || null,
+                }),
+              }
+            );
+            const qbResult = await qbRes.json();
+            seoToolResults.push({ id: tc.id, name: "create_expense", result: qbRes.ok ? { success: true, message: "Expense recorded", data: qbResult } : { success: false, error: qbResult.error || "Failed to create expense" } });
+          } catch (e) {
+            seoToolResults.push({ id: tc.id, name: "create_expense", result: { success: false, error: e instanceof Error ? e.message : "Unknown error" } });
           }
         }
         
