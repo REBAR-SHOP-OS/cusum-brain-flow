@@ -69,9 +69,9 @@ export async function buildFullVizzyContext(
       .limit(500),
     supabase
       .from("leads")
-      .select("id, contact_name, company_name, status, expected_revenue, lead_score, stage")
-      .in("status", ["new", "contacted", "qualified", "proposal"])
-      .order("lead_score", { ascending: false })
+      .select("id, title, customer_id, stage, expected_value, win_prob_score, priority_score")
+      .not("stage", "in", '("won","lost","loss","cancelled")')
+      .order("win_prob_score", { ascending: false })
       .limit(20),
     supabase
       .from("deliveries")
@@ -81,7 +81,7 @@ export async function buildFullVizzyContext(
       .limit(50),
     supabase
       .from("profiles")
-      .select("id, full_name, user_id, email, role")
+      .select("id, full_name, user_id, email")
       .not("full_name", "is", null),
     supabase
       .from("accounting_mirror")
@@ -184,11 +184,11 @@ export async function buildFullVizzyContext(
   // CRM
   const openLeads = (leads || []).length;
   const hotLeads = (leads || [])
-    .filter((l: any) => (l.lead_score || 0) >= 70)
+    .filter((l: any) => (l.win_prob_score || 0) >= 70)
     .slice(0, 5)
     .map(
       (l: any) =>
-        `  • ${l.contact_name} (${l.company_name}) — Score: ${l.lead_score}, Expected: ${fmt(l.expected_revenue || 0)}`
+        `  • ${l.title} — Win prob: ${l.win_prob_score}%, Expected: ${fmt(l.expected_value || 0)}`
     )
     .join("\n");
 
