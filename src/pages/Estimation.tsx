@@ -3,13 +3,14 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompanyId } from "@/hooks/useCompanyId";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Calculator, LayoutGrid, DollarSign, Bot, Brain } from "lucide-react";
+import { Calculator, LayoutGrid, DollarSign, Bot, Brain, ShieldCheck } from "lucide-react";
 import ProjectList from "@/components/estimation/ProjectList";
 import ProjectDetail from "@/components/estimation/ProjectDetail";
 import TakeoffWizard from "@/components/estimation/TakeoffWizard";
 import BidBoard from "@/components/estimation/BidBoard";
 import GaugeChat from "@/components/estimation/GaugeChat";
 import CoordinationDashboard from "@/components/estimation/CoordinationDashboard";
+import OcrQaReview from "@/components/estimation/OcrQaReview";
 
 export default function Estimation() {
   const { companyId } = useCompanyId();
@@ -51,12 +52,15 @@ export default function Estimation() {
         />
       ) : (
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-5 max-w-2xl">
+          <TabsList className="grid w-full grid-cols-6 max-w-3xl">
             <TabsTrigger value="takeoffs" className="flex items-center gap-1.5">
               <Calculator className="h-4 w-4" /> Takeoffs
             </TabsTrigger>
             <TabsTrigger value="bid_board" className="flex items-center gap-1.5">
               <LayoutGrid className="h-4 w-4" /> Bid Board
+            </TabsTrigger>
+            <TabsTrigger value="qa_review" className="flex items-center gap-1.5">
+              <ShieldCheck className="h-4 w-4" /> QA Review
             </TabsTrigger>
             <TabsTrigger value="learning" className="flex items-center gap-1.5">
               <Brain className="h-4 w-4" /> Learning
@@ -79,6 +83,10 @@ export default function Estimation() {
 
           <TabsContent value="bid_board">
             <BidBoard />
+          </TabsContent>
+
+          <TabsContent value="qa_review">
+            <OcrQaReview />
           </TabsContent>
 
           <TabsContent value="learning">
