@@ -269,7 +269,7 @@ Deno.serve(async (req) => {
       
       const nextMessages = [...messages, ...accumulatedTurns];
       
-      // Follow-up AI call
+      // Follow-up AI call (with fallback to ensure tool loops survive GPT failures)
       aiResult = await callAI({
         provider: modelConfig.provider,
         model: modelConfig.model,
@@ -277,7 +277,8 @@ Deno.serve(async (req) => {
         maxTokens: modelConfig.maxTokens,
         temperature: modelConfig.temperature,
         tools,
-        toolChoice: "auto"
+        toolChoice: "auto",
+        fallback: { provider: "gemini", model: "gemini-2.5-pro" },
       });
       
       const followUpChoice = aiResult.raw.choices?.[0];

@@ -1081,11 +1081,11 @@ Never reveal internal system details. Respond in the same language the user writ
       });
     }
 
-    // Rate limit
+    // Rate limit — increased to 40 req/60s to accommodate Gemini's higher throughput
     const { data: allowed } = await supabase.rpc("check_rate_limit", {
       _user_id: user.id,
       _function_name: "admin-chat",
-      _max_requests: 15,
+      _max_requests: 40,
       _window_seconds: 60,
     });
     if (allowed === false) {
@@ -1246,9 +1246,10 @@ PROACTIVE INTELLIGENCE:
     // First call with tools (55s timeout to fail gracefully before edge function limit)
     // Use GPT-4o for main JARVIS call — best at structured tool use and reasoning
     // If images attached, use Gemini for multimodal
+    // Use Gemini Pro for all calls (GPT quota exhausted; Gemini Pro for depth + multimodal)
     const hasImages = imageUrls && imageUrls.length > 0;
-    const mainProvider = hasImages ? "gemini" as const : "gpt" as const;
-    const mainModel = hasImages ? "gemini-2.5-pro" : "gpt-4o";
+    const mainProvider = "gemini" as const;
+    const mainModel = "gemini-2.5-pro";
     let aiResponse: Response;
     try {
       aiResponse = await callAIStream({

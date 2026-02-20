@@ -171,11 +171,11 @@ export function selectModel(agent: string, message: string, hasAttachments: bool
     return { provider: "gemini", model: "gemini-2.5-pro", maxTokens: 6000, temperature: 0.2, reason: "briefing context" };
   }
 
-  // Complex reasoning → GPT-4o (with Gemini fallback via callAI fallback option)
-  if (["accounting", "legal", "empire"].includes(agent) || /analyze|strategy|plan/i.test(message)) {
-    return { provider: "gpt", model: "gpt-4o", maxTokens: 4000, temperature: 0.2, reason: "complex reasoning" };
+  // Complex reasoning → Gemini 2.5 Pro (GPT quota exhausted; Pro model for depth & quality)
+  if (["accounting", "legal", "empire", "commander", "data"].includes(agent) || /analyze|strategy|plan/i.test(message)) {
+    return { provider: "gemini", model: "gemini-2.5-pro", maxTokens: 6000, temperature: 0.2, reason: "complex reasoning → gemini-pro" };
   }
 
-  // Default → Gemini 2.5 Flash (GPT quota exhausted; Gemini is configured and working)
-  return { provider: "gemini", model: "gemini-2.5-flash", maxTokens: 2000, temperature: 0.5, reason: "default fast" };
+  // Default → Gemini 2.5 Flash with generous token budget
+  return { provider: "gemini", model: "gemini-2.5-flash", maxTokens: 4000, temperature: 0.5, reason: "default fast" };
 }
