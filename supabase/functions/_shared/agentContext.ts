@@ -176,8 +176,44 @@ ENFORCEMENT RULES:
       
       let brainBlock = "";
       if (brainDocs) {
+        // Always inject company playbook
         const shared = brainDocs.filter((d: any) => d.category === "company-playbook");
         if (shared.length > 0) brainBlock += `\n\n## 🧠 BRAIN: Company Playbook\n${shared[0].content}`;
+
+        // Map agent code → strategy title prefix
+        const agentStrategyMap: Record<string, string> = {
+          accounting: "Penny",
+          sales: "Blitz",
+          commander: "Vizzy",
+          estimation: "Gauge",
+          shopfloor: "Forge",
+          delivery: "Atlas",
+          legal: "Tally",
+          empire: "Vizzy",
+          data: "Prism",
+          support: "Haven",
+          collections: "Penny",
+          email: "Relay",
+          social: "Pixel",
+          talent: "Scouty",
+          seo: "Seomi",
+          bizdev: "Buddy",
+          copywriting: "Penn",
+          eisenhower: "Vizzy",
+          assistant: "Vizzy",
+          growth: "Buddy",
+          webbuilder: "Commet",
+        };
+
+        const agentPersonaName = agentStrategyMap[agent];
+        if (agentPersonaName) {
+          const agentStrategy = brainDocs.find((d: any) =>
+            d.category === "agent-strategy" && d.title?.toLowerCase().includes(agentPersonaName.toLowerCase())
+          );
+          if (agentStrategy) {
+            brainBlock += `\n\n## 🎯 AGENT STRATEGY: ${agentStrategy.title}\n${agentStrategy.content}`;
+          }
+        }
       }
       context.brainKnowledgeBlock = brainBlock;
     } catch (_) {}
