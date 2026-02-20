@@ -68,6 +68,16 @@ Deno.serve(async (req) => {
 
     // Context fetching (Moved to shared module)
     const dbContext = await fetchContext(supabase, agent, user.id, userEmail, roles, svcClient, companyId);
+
+    // Inject live QuickBooks context for accounting/collections agents
+    if (agent === "accounting" || agent === "collections") {
+      try {
+        const qbLiveData = await fetchQuickBooksLiveContext(svcClient, companyId);
+        Object.assign(dbContext, qbLiveData);
+      } catch (qbErr) {
+        console.error("[QB Context] Failed to load QB live data:", qbErr);
+      }
+    }
     
     // Phase 6: Executive dashboard context for data/empire agents
     let execContext: Record<string, unknown> = {};

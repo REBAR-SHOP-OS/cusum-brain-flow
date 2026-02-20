@@ -238,6 +238,62 @@ export function getTools(agent: string, stripSendCapabilities: boolean = false) 
     );
   }
 
+  // Accounting (Penny) — QB Action Tools
+  if (agent === "accounting" || agent === "collections") {
+    tools.push(
+      {
+        type: "function" as const,
+        function: {
+          name: "fetch_qb_report",
+          description: "Fetch a live financial report from QuickBooks: ProfitAndLoss, BalanceSheet, AgedReceivables, AgedPayables, CashFlow, or TaxSummary. Use when the user asks for P&L, balance sheet, AR aging, AP aging, cash flow, or HST/GST summary.",
+          parameters: {
+            type: "object",
+            properties: {
+              report_type: {
+                type: "string",
+                enum: ["ProfitAndLoss", "BalanceSheet", "AgedReceivables", "AgedPayables", "CashFlow", "TaxSummary"],
+                description: "Type of report to fetch from QuickBooks"
+              },
+              start_date: { type: "string", description: "Start date YYYY-MM-DD (optional)" },
+              end_date: { type: "string", description: "End date YYYY-MM-DD (optional)" },
+              period: { type: "string", description: "e.g. 'This Month', 'Last Month', 'This Year', 'Last Year'" }
+            },
+            required: ["report_type"]
+          }
+        }
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "fetch_gl_anomalies",
+          description: "Scan the general ledger for anomalies: round-number entries, unbalanced lines, unusual accounts, or large transactions. Use for audit and financial review.",
+          parameters: {
+            type: "object",
+            properties: {
+              days_back: { type: "number", description: "How many days back to scan (default 30)" },
+              min_amount: { type: "number", description: "Minimum transaction amount to flag (default 1000)" }
+            },
+            required: []
+          }
+        }
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "trigger_qb_sync",
+          description: "Trigger an incremental QuickBooks sync to pull the latest invoices, payments, and bills. Use when the user says data looks stale or asks to refresh QB data.",
+          parameters: {
+            type: "object",
+            properties: {
+              mode: { type: "string", enum: ["incremental", "full"], description: "Sync mode (default: incremental)" }
+            },
+            required: []
+          }
+        }
+      }
+    );
+  }
+
   // Quote engine tool — available to estimation and sales agents
   if (agent === "estimation" || agent === "sales" || agent === "commander") {
     tools.push({
