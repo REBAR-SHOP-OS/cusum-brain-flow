@@ -69,20 +69,19 @@ Replaced keyword-only routing with a hybrid system:
 - `supabase/functions/agent-router/index.ts` — LLM classifier edge function
 - `src/lib/agentRouter.ts` — Added `routeToAgentSmart()` async function with `secondaryAgents` support
 
-## Phase 3: RAG / Vector Memory
+## Phase 3: RAG / Vector Memory ✅ COMPLETE
 
-Add retrieval-augmented generation so agents can search historical data instead of loading everything into context.
+Implemented retrieval-augmented generation infrastructure:
 
-**What changes:**
-- Create a `document_embeddings` table with columns: `id`, `agent_domain`, `entity_type`, `entity_id`, `content_text`, `embedding` (vector), `metadata` (JSONB), `created_at`
-- Create an `embed-documents` edge function that generates embeddings via the AI gateway
-- Create a `search-embeddings` edge function for similarity search
-- Add a nightly cron job (`embed-sync`) that indexes new/updated records (orders, leads, invoices, machine logs)
-- Each agent's context fetch adds a RAG step: query top-K relevant documents before calling the LLM
+- **`document_embeddings` table**: pgvector-backed with HNSW index, company-scoped RLS, unique constraint for upsert
+- **`match_documents()` SQL function**: Cosine similarity search with domain/company filtering and configurable threshold
+- **`embed-documents` edge function**: Batch-indexes records from sales (leads), accounting (invoices), shopfloor (work orders), delivery, and support domains using Gemini `gemini-embedding-001` (768d)
+- **`search-embeddings` edge function**: Generates query embedding and calls `match_documents()` for top-K retrieval
+- **Incremental indexing**: Supports `since` parameter to only embed records updated after a given timestamp
 
-**Vector search:** Use `pgvector` extension (available in Lovable Cloud) with cosine similarity.
+**Token savings:** Instead of loading all records into context (~5,000-10,000 tokens), RAG fetches top 5-10 relevant records (~500-1,000 tokens). Estimated 60-80% context reduction.
 
-**Token savings:** Instead of loading all invoices/orders into context (often 5,000-10,000 tokens), RAG fetches only the 5-10 most relevant records (~500-1,000 tokens). Estimated 60-80% context reduction for data-heavy agents (Penny, Forge, Blitz).
+**Remaining:** Wire RAG into agent context fetching in `ai-agent/index.ts` and set up nightly cron for `embed-documents`.
 
 ## Phase 4: QA / Reviewer Layer
 
