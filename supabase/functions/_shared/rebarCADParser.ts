@@ -83,8 +83,10 @@ export function parseRebarCADRows(rows: any[][]): ParsedBarlistItem[] {
 
   for (let i = 0; i < Math.min(10, rows.length); i++) {
     const row = rows[i];
-    if (!row) continue;
-    const cells = row.map((c: any) => String(c ?? "").trim().toLowerCase());
+    if (!row || !Array.isArray(row)) continue;
+    const cells = row.map((c: any) => {
+      try { return String(c ?? "").trim().toLowerCase(); } catch { return ""; }
+    });
 
     // Look for key columns
     const itemIdx = cells.findIndex((c: string) => c === "item" || c === "item no" || c === "item no.");

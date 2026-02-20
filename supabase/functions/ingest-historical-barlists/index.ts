@@ -20,7 +20,7 @@ serve(async (req) => {
     const companyId = profile.company_id;
 
     const body = await req.json().catch(() => ({}));
-    const batchSize = body.batch_size ?? 20;
+    const batchSize = body.batch_size ?? 3;
     const reset = body.reset ?? false;
 
     // Get or create progress tracker
@@ -131,7 +131,7 @@ serve(async (req) => {
         if (!files || files.length === 0) { processedLeads++; continue; }
 
         // Get lead info
-        const { data: lead } = await admin.from("leads").select("id, name, customer_id, stage").eq("id", leadId).maybeSingle();
+        const { data: lead } = await admin.from("leads").select("id, title, customer_id, stage").eq("id", leadId).maybeSingle();
 
         for (const file of files) {
           try {
