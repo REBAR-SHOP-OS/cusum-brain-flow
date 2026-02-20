@@ -1,95 +1,73 @@
 
-# Security Hardening Plan
+# Fix: Restrict Task Completion to Assigned User Only
 
-This plan addresses all non-ignored security findings across the project. The changes are grouped into three categories: database policy fixes, edge function auth hardening, and informational dismissals.
+## Problem
 
----
+In `src/pages/Tasks.tsx`, the `toggleComplete` function and the "Mark Complete" button have **no authorization guard**. Any logged-in user can click the checkbox on any task card or the "Mark Complete" button in the detail drawer and trigger `toggleComplete()`.
 
-## 1. Database Migration: Fix Overly Permissive RLS Policies
+The database RLS policy `"Creator or assignee update tasks"` is correctly scoped — it will reject the write if the caller is not the creator, assignee, or admin. However, the UI provides no guard, no visual feedback, and no clear indication of why the action is unavailable. Users see an enabled checkbox that silently fails.
 
-Replace `USING (true)` / `WITH CHECK (true)` policies on business tables with proper company-scoped or authenticated-only access. Tables without `company_id` (reference/lookup data) get restricted to authenticated read-only.
+## Root Cause (Two Touch Points)
 
-### Tables with `company_id` (scope to company):
+| Location | Line(s) | Element |
+|----------|---------|---------|
+| Kanban card (active tasks) | ~742-744 | `<Checkbox onCheckedChange={() => toggleComplete(task)} />` |
+| Kanban card (completed tasks) | ~791-794 | `<Checkbox onCheckedChange={() => toggleComplete(task)} />` (un-complete) |
+| Detail drawer action button | ~976 | `<Button onClick={() => toggleComplete(selectedTask)}>Mark Complete</Button>` |
 
-| Table | Current Policy | New Policy |
-|-------|---------------|------------|
-| `automation_configs` | Service role full access (public, ALL, true) | Service role only (restrict to `service_role`) |
-| `automation_runs` | Service role full access (public, ALL, true) | Service role only (restrict to `service_role`) |
-| `customer_health_scores` | Service role full access (public, ALL, true) | Service role only (restrict to `service_role`) |
-| `document_embeddings` | Service role can manage (public, ALL, true) | Service role only (restrict to `service_role`) |
-| `estimation_learnings` | Service insert (public, INSERT, true) | Service role only (restrict to `service_role`) |
-| `ingestion_progress` | Multiple service policies (public role, true) | Service role only + authenticated company-scoped read |
-| `project_coordination_log` | Service insert/update (public, true) | Service role only (restrict to `service_role`) |
-| `rc_presence` | Service manages presence (public, ALL, true) | Service role only (restrict to `service_role`) |
-| `kb_articles` | Published articles readable by `anon` | Remove anon policy; authenticated company-scoped only |
+## Fix: Add Authorization Guard
 
-### Tables without `company_id` (reference/lookup data):
+### Logic
 
-| Table | Current Policy | New Policy |
-|-------|---------------|------------|
-| `rebar_standards` | Public read (anyone) | Authenticated read only |
-| `wwm_standards` | Public read (anyone) | Authenticated read only |
-| `estimation_validation_rules` | Public read (anyone) | Authenticated read only |
-| `rebar_sizes` | Public read (anyone) | Authenticated read only |
+A user may toggle a task's completion if **any** of the following is true:
+- They are the **assigned user** (`currentProfileId === task.assigned_to`)
+- They are the **task creator** (`currentProfileId === task.created_by_profile_id`)
+- They are an **admin** (determined by the `isInternal` flag already available, or a `hasRole` check)
 
-### Extension fix:
-- Move `vector` extension from `public` schema to `extensions` schema
+Since `isInternal` is already computed (user email ends with `@rebar.shop`) and admins are internal, the simplest guard is:
 
----
-
-## 2. Edge Function Auth Hardening
-
-### Add authentication to `seo-ai-copilot`
-Currently accepts any request with a `domain_id`. Will add `requireAuth()` and verify the user's company owns the requested domain.
-
-### Sanitize error messages in edge functions
-Update catch blocks in key functions to log detailed errors server-side but return generic messages to clients. Affected functions:
-- `seo-ai-copilot`
-- `app-help-chat` (public, but sanitize errors)
-
-Note: `app-help-chat` and `website-chat` are intentionally public (help/widget endpoints). They will be marked as acceptable with a note.
-
----
-
-## 3. Security Findings Management
-
-After fixes, the following findings will be deleted (resolved):
-- `overly_permissive_rls` - fixed by migration
-- `kb_articles_public_exposure` - fixed by removing anon policy
-- `automation_configs_business_logic_exposure` - fixed by restricting to service_role
-- `ingestion_progress_data_exposure` - fixed by restricting to service_role
-- `rebar_standards_pricing_data` - fixed by requiring auth
-- `estimation_validation_rules_exposure` - fixed by requiring auth
-- `wwm_standards_product_specs` - fixed by requiring auth
-- `SUPA_extension_in_public` - fixed by moving vector extension
-- `SUPA_rls_policy_always_true` - fixed by removing true policies
-- `unauthenticated_edge_functions` - fixed (seo-ai-copilot gets auth; others marked acceptable)
-- `verbose_edge_function_errors` - fixed by sanitizing error responses
-
----
-
-## Technical Details
-
-### SQL Migration (single migration)
-
-```text
--- 1. Fix service-role policies: change role from 'public' to 'service_role'
---    for: automation_configs, automation_runs, customer_health_scores,
---         document_embeddings, estimation_learnings, ingestion_progress,
---         project_coordination_log, rc_presence
-
--- 2. Fix reference table policies: change role from 'public' to 'authenticated'
---    for: rebar_standards, wwm_standards, estimation_validation_rules, rebar_sizes
-
--- 3. Remove kb_articles anon policy
-
--- 4. Move vector extension to 'extensions' schema
+```
+canToggle(task) = currentProfileId === task.assigned_to
+               || currentProfileId === task.created_by_profile_id
+               || isAdmin
 ```
 
-### Edge Function Changes
+We already fetch `currentProfileId` and have `isInternal`. We'll use `useUserRole()` hook (already exists in the codebase at `src/hooks/useUserRole.ts`) to get `isAdmin`.
 
-**`seo-ai-copilot/index.ts`**: Add `requireAuth()` import and call. Verify user's company owns the domain_id before proceeding.
+### Changes to `src/pages/Tasks.tsx`
 
-### Files Modified
-- `supabase/functions/seo-ai-copilot/index.ts` (add auth + error sanitization)
-- Database migration (RLS policy fixes + extension move)
+1. **Import `useUserRole`** at the top of the file.
+
+2. **Call `useUserRole()`** inside the component and extract `isAdmin`.
+
+3. **Create a `canToggleTask(task)` helper** using the logic above.
+
+4. **Kanban card checkboxes** (both active and completed):
+   - Add `disabled={!canToggleTask(task)}` to the `<Checkbox>` so it's visually grayed out for non-assignees.
+   - Wrap with a `title` tooltip: `"Only the assigned user or creator can mark this complete"` when disabled.
+
+5. **Detail drawer "Mark Complete" button**:
+   - Add `disabled={!canToggleTask(selectedTask)}` to the button.
+   - Show a small helper text below the button when disabled explaining why.
+
+6. **Early return in `toggleComplete`** as a safety backstop:
+   ```typescript
+   const toggleComplete = async (task: TaskRow) => {
+     if (!canToggleTask(task)) {
+       toast.error("Only the assigned user or creator can mark this task complete");
+       return;
+     }
+     // ... existing logic
+   };
+   ```
+
+## Why This Approach
+
+- **Surgical**: Touches only the three UI points + adds one helper function. No other logic, layout, or data fetching changes.
+- **Defense in depth**: The RLS backend policy remains the authoritative guard. The frontend guard adds UX clarity (disabled state, tooltip, error toast as backstop).
+- **No new DB queries**: `currentProfileId` and `isAdmin` are already available or cheaply derived from the existing `useUserRole` hook.
+- **Consistent**: The same `canToggleTask` function is used at all three touch points, so they can't diverge.
+
+## Files Modified
+
+- `src/pages/Tasks.tsx` — import hook, add helper, guard 3 UI points, add backstop in `toggleComplete`
