@@ -270,9 +270,161 @@ export async function fetchRAGContext(
   }
 }
 
-// Placeholder for full QuickBooks fetch logic if needed separate
-export async function fetchQuickBooksLiveContext(svcClient: any, context: any) {
-  // Logic from original file to fetch live QB data
+// Full QuickBooks live context — queries real QB tables for Penny (accounting agent)
+export async function fetchQuickBooksLiveContext(svcClient: any, companyId: string): Promise<Record<string, unknown>> {
+  const qb: Record<string, unknown> = {};
+
+  try {
+    // 1. Open AR invoices (balance > 0) — top 50 by balance desc
+    const { data: openInvoices } = await svcClient
+      .from("qb_transactions")
+      .select("qb_id, doc_number, txn_date, total_amt, balance, customer_qb_id, raw_json")
+      .eq("company_id", companyId)
+      .eq("entity_type", "Invoice")
+      .eq("is_deleted", false)
+      .gt("balance", 0)
+      .order("balance", { ascending: false })
+      .limit(50);
+
+    qb.qbInvoices = (openInvoices || []).map((inv: any) => ({
+      id: inv.qb_id,
+      docNumber: inv.doc_number,
+      date: inv.txn_date,
+      total: inv.total_amt,
+      balance: inv.balance,
+      customerName: inv.raw_json?.CustomerRef?.name || inv.customer_qb_id,
+      dueDate: inv.raw_json?.DueDate || null,
+    }));
+
+    // 2. Total AR summary
+    const { data: arSummary } = await svcClient
+      .from("qb_transactions")
+      .select("balance, entity_type")
+      .eq("company_id", companyId)
+      .eq("entity_type", "Invoice")
+      .eq("is_deleted", false)
+      .gt("balance", 0);
+
+    const totalAR = (arSummary || []).reduce((sum: number, r: any) => sum + (r.balance || 0), 0);
+    const openInvoiceCount = (arSummary || []).length;
+
+    // 3. Recent Bills (AP) — last 30
+    const { data: bills } = await svcClient
+      .from("qb_transactions")
+      .select("qb_id, doc_number, txn_date, total_amt, balance, raw_json")
+      .eq("company_id", companyId)
+      .eq("entity_type", "Bill")
+      .eq("is_deleted", false)
+      .order("txn_date", { ascending: false })
+      .limit(30);
+
+    qb.qbBills = (bills || []).map((b: any) => ({
+      id: b.qb_id,
+      docNumber: b.doc_number,
+      date: b.txn_date,
+      total: b.total_amt,
+      balance: b.balance,
+      vendorName: b.raw_json?.VendorRef?.name || "Unknown Vendor",
+      dueDate: b.raw_json?.DueDate || null,
+    }));
+
+    const totalAP = (bills || []).reduce((sum: number, b: any) => sum + (b.balance || 0), 0);
+
+    // 4. Recent Payments — last 20
+    const { data: payments } = await svcClient
+      .from("qb_transactions")
+      .select("qb_id, doc_number, txn_date, total_amt, customer_qb_id, raw_json")
+      .eq("company_id", companyId)
+      .eq("entity_type", "Payment")
+      .eq("is_deleted", false)
+      .order("txn_date", { ascending: false })
+      .limit(20);
+
+    qb.qbRecentPayments = (payments || []).map((p: any) => ({
+      id: p.qb_id,
+      date: p.txn_date,
+      amount: p.total_amt,
+      customerName: p.raw_json?.CustomerRef?.name || p.customer_qb_id,
+    }));
+
+    // 5. QB Customers (top 30 by open balance)
+    const { data: customers } = await svcClient
+      .from("qb_customers")
+      .select("qb_id, display_name, balance, email, phone, company_id")
+      .eq("company_id", companyId)
+      .gt("balance", 0)
+      .order("balance", { ascending: false })
+      .limit(30);
+
+    qb.qbCustomers = (customers || []).map((c: any) => ({
+      id: c.qb_id,
+      name: c.display_name,
+      balance: c.balance,
+      email: c.email,
+      phone: c.phone,
+    }));
+
+    // 6. Bank Activity (current balances)
+    const { data: bankActivity } = await svcClient
+      .from("qb_bank_activity")
+      .select("account_name, account_type, balance, currency_ref, last_updated_time")
+      .eq("company_id", companyId)
+      .order("balance", { ascending: false })
+      .limit(10);
+
+    qb.qbBankActivity = bankActivity || [];
+
+    // 7. Chart of Accounts (key accounts)
+    const { data: accounts } = await svcClient
+      .from("qb_accounts")
+      .select("qb_id, name, account_type, account_sub_type, current_balance, currency_ref")
+      .eq("company_id", companyId)
+      .eq("active", true)
+      .order("account_type")
+      .limit(50);
+
+    qb.qbAccounts = (accounts || []).map((a: any) => ({
+      id: a.qb_id,
+      name: a.name,
+      type: a.account_type,
+      subType: a.account_sub_type,
+      balance: a.current_balance,
+    }));
+
+    // 8. Vendors (for AP context)
+    const { data: vendors } = await svcClient
+      .from("qb_vendors")
+      .select("qb_id, display_name, balance, email, vendor_1099")
+      .eq("company_id", companyId)
+      .order("balance", { ascending: false })
+      .limit(20);
+
+    qb.qbVendors = (vendors || []).map((v: any) => ({
+      id: v.qb_id,
+      name: v.display_name,
+      balance: v.balance,
+      email: v.email,
+    }));
+
+    // 9. Summary block for quick reference
+    const bankTotal = (bankActivity || []).reduce((sum: number, b: any) => sum + (b.balance || 0), 0);
+    qb.qbSummary = {
+      totalAR: Math.round(totalAR * 100) / 100,
+      totalAP: Math.round(totalAP * 100) / 100,
+      openInvoiceCount,
+      openBillCount: (bills || []).filter((b: any) => (b.balance || 0) > 0).length,
+      recentPaymentCount: payments?.length || 0,
+      bankBalance: Math.round(bankTotal * 100) / 100,
+    };
+
+    console.log(`[QB Context] AR=$${qb.qbSummary && (qb.qbSummary as any).totalAR} (${openInvoiceCount} invoices), AP=$${qb.qbSummary && (qb.qbSummary as any).totalAP}`);
+
+  } catch (err) {
+    console.error("[QB Context] Error fetching QB live context:", err);
+    qb.qbContextError = err instanceof Error ? err.message : String(err);
+  }
+
+  return qb;
 }
 
 export async function fetchEstimationLearnings(supabase: any) {

@@ -361,6 +361,106 @@ export async function executeToolCall(
       result.result = error ? { error: error.message } : { success: true, data };
     }
     
+    // ═══════════════════════════════════════════════════
+    // QB: Fetch Live Report from QuickBooks
+    // ═══════════════════════════════════════════════════
+    else if (name === "fetch_qb_report") {
+      const reportRes = await fetch(`${supabaseUrl}/functions/v1/quickbooks-oauth`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": authHeader },
+        body: JSON.stringify({
+          action: "report",
+          report_type: args.report_type,
+          start_date: args.start_date,
+          end_date: args.end_date,
+          period: args.period,
+          company_id: companyId,
+        }),
+      });
+
+      if (reportRes.ok) {
+        const reportData = await reportRes.json();
+        result.result = { success: true, report_type: args.report_type, data: reportData };
+      } else {
+        const errText = await reportRes.text();
+        result.result = { success: false, error: errText };
+      }
+    }
+
+    // ═══════════════════════════════════════════════════
+    // QB: Fetch GL Anomalies
+    // ═══════════════════════════════════════════════════
+    else if (name === "fetch_gl_anomalies") {
+      const daysBack = args.days_back ?? 30;
+      const minAmount = args.min_amount ?? 1000;
+      const since = new Date(Date.now() - daysBack * 86400000).toISOString();
+
+      // Large / round-number transactions
+      const { data: largeEntries } = await svcClient
+        .from("gl_transactions")
+        .select("id, txn_date, description, total_debit, total_credit, source_ref, status")
+        .eq("company_id", companyId)
+        .gte("txn_date", since.split("T")[0])
+        .gte("total_debit", minAmount)
+        .order("total_debit", { ascending: false })
+        .limit(20);
+
+      // Unbalanced transactions (debit != credit)
+      const { data: unbalanced } = await svcClient
+        .from("gl_transactions")
+        .select("id, txn_date, description, total_debit, total_credit, source_ref")
+        .eq("company_id", companyId)
+        .gte("txn_date", since.split("T")[0])
+        .neq("status", "voided")
+        .limit(200);
+
+      const imbalanced = (unbalanced || []).filter((t: any) => 
+        Math.abs((t.total_debit || 0) - (t.total_credit || 0)) > 0.01
+      );
+
+      // Round-number large entries (divisible by 1000)
+      const roundNumberFlags = (largeEntries || []).filter((t: any) => 
+        (t.total_debit || 0) % 1000 === 0
+      );
+
+      result.result = {
+        success: true,
+        anomalies: {
+          large_transactions: largeEntries || [],
+          imbalanced_entries: imbalanced.slice(0, 10),
+          round_number_flags: roundNumberFlags,
+          summary: {
+            large_count: (largeEntries || []).length,
+            imbalanced_count: imbalanced.length,
+            round_number_count: roundNumberFlags.length,
+            scan_period_days: daysBack,
+            min_amount: minAmount,
+          },
+        },
+      };
+    }
+
+    // ═══════════════════════════════════════════════════
+    // QB: Trigger Sync
+    // ═══════════════════════════════════════════════════
+    else if (name === "trigger_qb_sync") {
+      const syncRes = await fetch(`${supabaseUrl}/functions/v1/qb-sync-engine`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": authHeader },
+        body: JSON.stringify({
+          mode: args.mode || "incremental",
+          company_id: companyId,
+        }),
+      });
+
+      if (syncRes.ok) {
+        const syncData = await syncRes.json();
+        result.result = { success: true, message: "QuickBooks sync triggered", ...syncData };
+      } else {
+        result.result = { success: false, error: await syncRes.text() };
+      }
+    }
+
     // Default fallback
     else {
       result.result = { success: true, message: "Tool executed (simulated)" };
