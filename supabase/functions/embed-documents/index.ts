@@ -154,7 +154,7 @@ async function fetchRecordsForDomain(
   const domainFetchers: Record<string, () => Promise<void>> = {
     sales: async () => {
       if (!entityType || entityType === "lead") {
-        let query = supabase.from("leads").select("id, company_name, contact_name, stage, source, notes, total_value, created_at")
+        let query = supabase.from("leads").select("id, title, stage, source, notes, expected_value, created_at")
           .eq("company_id", companyId).limit(200);
         if (since) query = query.gte("updated_at", since);
         const { data } = await query;

@@ -532,7 +532,7 @@ const JARVIS_TOOLS = [
 async function executeReadTool(supabase: any, toolName: string, args: any): Promise<string> {
   switch (toolName) {
     case "list_machines": {
-      let q = supabase.from("machines").select("id, name, status, type, current_operator_id").limit(50);
+      let q = supabase.from("machines").select("id, name, status, type, current_operator_profile_id").limit(50);
       if (args.status) q = q.eq("status", args.status);
       const { data, error } = await q;
       if (error) return JSON.stringify({ error: error.message });
@@ -554,10 +554,10 @@ async function executeReadTool(supabase: any, toolName: string, args: any): Prom
       return JSON.stringify(data || []);
     }
     case "list_leads": {
-      let q = supabase.from("leads").select("id, contact_name, company_name, status, expected_revenue, lead_score, stage").limit(50);
-      if (args.status) q = q.eq("status", args.status);
-      if (args.min_score) q = q.gte("lead_score", args.min_score);
-      q = q.order("lead_score", { ascending: false });
+      let q = supabase.from("leads").select("id, title, stage, expected_value, computed_score, priority").limit(50);
+      if (args.stage) q = q.eq("stage", args.stage);
+      if (args.min_score) q = q.gte("computed_score", args.min_score);
+      q = q.order("computed_score", { ascending: false });
       const { data, error } = await q;
       if (error) return JSON.stringify({ error: error.message });
       return JSON.stringify(data || []);
