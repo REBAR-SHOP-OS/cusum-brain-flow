@@ -12457,6 +12457,7 @@ export type Database = {
         }
         Returns: {
           agent_domain: string
+          company_id: string
           content_text: string
           entity_id: string
           entity_type: string
