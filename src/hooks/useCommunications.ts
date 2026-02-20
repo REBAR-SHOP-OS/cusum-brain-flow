@@ -6,7 +6,7 @@ export interface Communication {
   id: string;
   source: "gmail" | "ringcentral";
   sourceId: string;
-  type: "email" | "call" | "sms";
+  type: "email" | "call" | "sms" | "voicemail" | "fax";
   direction: "inbound" | "outbound";
   from: string;
   to: string;
@@ -78,7 +78,11 @@ export function useCommunications(options?: { search?: string; typeFilter?: stri
         const meta = row.metadata as Record<string, unknown> | null;
         let type: Communication["type"] = "email";
         if (row.source === "ringcentral") {
-          type = (meta?.type as string) === "sms" ? "sms" : "call";
+          const metaType = (meta?.type as string) || "";
+          if (metaType === "sms") type = "sms";
+          else if (metaType === "voicemail") type = "voicemail";
+          else if (metaType === "fax") type = "fax";
+          else type = "call";
         }
 
         return {

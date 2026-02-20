@@ -15,7 +15,7 @@ interface ThreadEntry {
   subject: string | null;
   body: string;
   date: Date;
-  type: "email" | "call" | "sms";
+  type: "email" | "call" | "sms" | "voicemail" | "fax";
   attachments: { name: string; url: string; type: string }[];
   // Call-specific fields
   duration?: number;

@@ -53,7 +53,7 @@ function categorizeCommunication(
   from: string,
   subject: string,
   preview: string,
-  type: "email" | "call" | "sms",
+  type: "email" | "call" | "sms" | "voicemail" | "fax",
   aiCategory?: string | null,
   aiUrgency?: string | null,
 ): { label: string; labelColor: string; priority: number } {
@@ -291,9 +291,9 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
   };
 
   // Map communications to InboxEmail format
-  const allEmails: (InboxEmail & { priority: number; commType: "email" | "call" | "sms" })[] = useMemo(() => {
+  const allEmails: (InboxEmail & { priority: number; commType: "email" | "call" | "sms" | "voicemail" | "fax" })[] = useMemo(() => {
     const mapped = communications.map((comm) => {
-      const commType: "email" | "call" | "sms" = comm.type;
+      const commType = comm.type;
       const category = categorizeCommunication(comm.from, comm.subject || "", comm.preview || "", commType, comm.aiCategory, comm.aiUrgency);
       const meta = comm.metadata as Record<string, unknown> | null;
       const fullBody = (meta?.body as string) || comm.preview || "";

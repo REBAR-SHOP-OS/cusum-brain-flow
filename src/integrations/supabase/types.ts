@@ -8121,6 +8121,39 @@ export type Database = {
         }
         Relationships: []
       }
+      rc_presence: {
+        Row: {
+          company_id: string
+          dnd_status: string | null
+          id: string
+          message: string | null
+          status: string
+          telephony_status: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          company_id: string
+          dnd_status?: string | null
+          id?: string
+          message?: string | null
+          status?: string
+          telephony_status?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          company_id?: string
+          dnd_status?: string | null
+          id?: string
+          message?: string | null
+          status?: string
+          telephony_status?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       rebar_sizes: {
         Row: {
           area_mm2: number
@@ -9238,6 +9271,42 @@ export type Database = {
           resolved_at?: string | null
           sla_hours?: number
           stage?: string
+        }
+        Relationships: []
+      }
+      sms_templates: {
+        Row: {
+          body: string
+          category: string | null
+          company_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          name: string
+          updated_at: string
+          variables: string[] | null
+        }
+        Insert: {
+          body: string
+          category?: string | null
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name: string
+          updated_at?: string
+          variables?: string[] | null
+        }
+        Update: {
+          body?: string
+          category?: string | null
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name?: string
+          updated_at?: string
+          variables?: string[] | null
         }
         Relationships: []
       }

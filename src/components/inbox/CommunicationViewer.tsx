@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Phone, MessageSquare, Mail, PhoneIncoming, PhoneOutgoing, Clock, Brain, Loader2, Sparkles, Play, Pause } from "lucide-react";
+import { Phone, MessageSquare, Mail, PhoneIncoming, PhoneOutgoing, Clock, Brain, Loader2, Sparkles, Play, Pause, Volume2, FileText } from "lucide-react";
 import { Communication } from "@/hooks/useCommunications";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -12,6 +12,8 @@ import { AddToTaskButton } from "@/components/shared/AddToTaskButton";
 import { CreateTaskDialog } from "@/components/shared/CreateTaskDialog";
 import { Badge } from "@/components/ui/badge";
 import { CallDetailView } from "./CallDetailView";
+import { VoicemailPlayer } from "./VoicemailPlayer";
+import { FaxViewer } from "./FaxViewer";
 import type { InboxEmail } from "./InboxEmailList";
 
 interface CommunicationViewerProps {
@@ -226,7 +228,6 @@ export function CommunicationViewer({ communication }: CommunicationViewerProps)
             </div>
           </div>
         </div>
-
         <div className="flex-1 p-6 space-y-4 overflow-y-auto">
           <div className="flex items-center justify-between text-sm text-muted-foreground">
             <span>From: {sender.name}</span>
@@ -241,7 +242,63 @@ export function CommunicationViewer({ communication }: CommunicationViewerProps)
             </p>
           </div>
         </div>
+        <AddToBrainButton communication={communication} />
+      </div>
+    );
+  }
 
+  // Voicemail view
+  if (communication.type === "voicemail") {
+    return (
+      <div className="flex flex-col h-full">
+        <div className="p-6 border-b border-border">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center">
+              <Volume2 className="w-5 h-5 text-amber-500" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold">Voicemail</h2>
+              <p className="text-sm text-muted-foreground">via RingCentral</p>
+            </div>
+          </div>
+        </div>
+        <div className="flex-1 p-6 space-y-4 overflow-y-auto">
+          <div className="flex items-center justify-between text-sm text-muted-foreground">
+            <span>From: {sender.name}</span>
+            <span>{formatFullDate(communication.receivedAt)}</span>
+          </div>
+          <VoicemailPlayer communication={communication} />
+        </div>
+        <AddToBrainButton communication={communication} />
+      </div>
+    );
+  }
+
+  // Fax view
+  if (communication.type === "fax") {
+    return (
+      <div className="flex flex-col h-full">
+        <div className="p-6 border-b border-border">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center">
+              <FileText className="w-5 h-5 text-purple-500" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold">Fax Document</h2>
+              <p className="text-sm text-muted-foreground">via RingCentral</p>
+            </div>
+          </div>
+        </div>
+        <div className="flex-1 p-6 space-y-4 overflow-y-auto">
+          <div className="flex items-center justify-between text-sm text-muted-foreground">
+            <span>From: {sender.name}</span>
+            <span>{formatFullDate(communication.receivedAt)}</span>
+          </div>
+          <div className="flex items-center text-sm text-muted-foreground">
+            <span>To: {recipient.name}</span>
+          </div>
+          <FaxViewer communication={communication} />
+        </div>
         <AddToBrainButton communication={communication} />
       </div>
     );

@@ -6,7 +6,7 @@ import { Mail, Phone, MessageSquare } from "lucide-react";
 import type { InboxEmail } from "./InboxEmailList";
 
 interface InboxKanbanBoardProps {
-  emails: (InboxEmail & { priority: number; commType?: "email" | "call" | "sms" })[];
+  emails: (InboxEmail & { priority: number; commType?: "email" | "call" | "sms" | "voicemail" | "fax" })[];
   onSelect: (email: InboxEmail) => void;
   selectedId: string | null;
   starredIds?: Set<string>;
@@ -23,7 +23,7 @@ const KANBAN_COLUMNS = [
   { label: "Spam", value: "Spam", dotColor: "bg-zinc-500" },
 ];
 
-function getTypeBadge(type?: "email" | "call" | "sms") {
+function getTypeBadge(type?: "email" | "call" | "sms" | "voicemail" | "fax") {
   switch (type) {
     case "call":
       return (
@@ -42,7 +42,7 @@ function getTypeBadge(type?: "email" | "call" | "sms") {
   }
 }
 
-function getTypeIcon(type?: "email" | "call" | "sms") {
+function getTypeIcon(type?: "email" | "call" | "sms" | "voicemail" | "fax") {
   switch (type) {
     case "call":
       return <Phone className="w-3 h-3 text-blue-400" />;
@@ -54,7 +54,7 @@ function getTypeIcon(type?: "email" | "call" | "sms") {
 }
 
 export function InboxKanbanBoard({ emails, onSelect, selectedId, starredIds = new Set(), onToggleStar }: InboxKanbanBoardProps) {
-  const emailsByLabel: Record<string, (InboxEmail & { priority: number; commType?: "email" | "call" | "sms" })[]> = {};
+  const emailsByLabel: Record<string, (InboxEmail & { priority: number; commType?: "email" | "call" | "sms" | "voicemail" | "fax" })[]> = {};
   KANBAN_COLUMNS.forEach((col) => {
     emailsByLabel[col.value] = [];
   });
@@ -125,7 +125,7 @@ function KanbanCard({
   isStarred,
   onToggleStar,
 }: {
-  email: InboxEmail & { commType?: "email" | "call" | "sms" };
+  email: InboxEmail & { commType?: "email" | "call" | "sms" | "voicemail" | "fax" };
   isSelected: boolean;
   onClick: () => void;
   isStarred?: boolean;
