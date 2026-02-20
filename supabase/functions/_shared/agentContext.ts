@@ -101,7 +101,7 @@ export async function fetchContext(
       // Machines
       const { data: machines } = await supabase
         .from("machines")
-        .select("id, name, status, type, current_operator_id, active_run_id")
+        .select("id, name, status, type, current_operator_profile_id, current_run_id")
         .order("name");
       context.machineStatus = machines;
       

@@ -37,7 +37,7 @@ export async function buildFullVizzyContext(
       .in("status", ["pending", "in_progress"]),
     supabase
       .from("machines")
-      .select("id, name, status, type, current_operator_id")
+      .select("id, name, status, type, current_operator_profile_id")
       .limit(20),
     supabase
       .from("activity_events")
