@@ -1,99 +1,71 @@
 
 
-# Deep OCR + Fix Ingestion Pipeline
+# Auto-Scope: AI-Recommended Scope of Work
 
-## Problem Summary
+## What This Does
 
-Two separate issues:
+When a user uploads drawings but leaves the "Scope / Context" field empty, the system will automatically analyze the uploaded files using AI and recommend a scope of work. The user sees the AI suggestion pre-filled in the scope field and can accept it as-is, edit it, or clear it entirely.
 
-1. **WORKER_LIMIT crash**: `XLSX.read` on large spreadsheets consumes too much CPU. The edge function hits the Deno runtime CPU limit and gets killed. Additionally, the "create project" insert fails silently (the `projects` table likely has required columns we're not providing), causing FK violations that cascade into more retries and wasted CPU.
+## How It Works
 
-2. **OCR quality**: The current OCR uses a single Gemini flash call on full-resolution images. For structural drawings with small text (bar marks, dimensions, notes), this misses detail. You want a **tile-based deep OCR** that splits each page into overlapping grid sections and analyzes each section individually at high quality.
+### 1. New Edge Function: `analyze-scope`
 
-## The Fix (3 Parts)
+A lightweight backend function that takes the uploaded file URLs, runs a quick Gemini Flash scan on the first few pages, and returns a recommended scope of work.
 
-### Part 1: Fix WORKER_LIMIT in `ingest-historical-barlists`
+**Input:** `{ file_urls: string[] }`
+**Output:** `{ scope: string, elements_found: string[], confidence: number }`
 
-The XLSX library is too heavy for edge functions. Instead of parsing XLS in the edge function:
+The AI prompt instructs Gemini to:
+- Identify structural element types visible in the drawings (footings, walls, beams, columns, slabs, etc.)
+- Note drawing sheet numbers and revision info
+- Identify the project name/address if visible on the title block
+- Suggest a concise scope statement like: "Estimate all reinforcing steel for footings F1-F4, grade beams GB1-GB3, and retaining walls W6-W10 as shown on sheets SD-01 through SD-05"
 
-- **Process only 1 file per invocation** (not 1 lead with multiple files)
-- **Add a hard timeout guard**: If parsing takes > 3 seconds, skip the file and log it
-- **Fix the project creation**: Query the `projects` table schema to see what columns are required, then provide all mandatory fields. If insert still fails, skip the lead gracefully (increment cursor) instead of crashing
-- **Remove XLSX.read for very large files**: Add a file size check (skip files > 5MB) since those crash the runtime
+Uses `gemini-2.5-flash` (fast + cheap) since this is a quick pre-scan, not the full deep OCR.
 
-### Part 2: Upgrade OCR to Tile-Based Deep Scanning
+### 2. Updated TakeoffWizard Flow (Step 2)
 
-Replace the single-shot Gemini OCR with a multi-tile approach in `google-vision-ocr`:
+When the user arrives at Step 2 (project details):
+- A "Analyze Scope" button appears next to the Scope field (with a sparkle/wand icon)
+- Clicking it calls `analyze-scope` with the uploaded file URLs
+- While analyzing, a small spinner shows "AI analyzing drawings..."
+- When complete, the AI-suggested scope populates the textarea
+- A small badge shows "AI Suggested" so the user knows it was auto-generated
+- The user can freely edit the text or clear it
 
-**How it works:**
-1. Accept a new `mode` parameter: `"standard"` (default, current behavior) or `"deep"`
-2. In `"deep"` mode, the function instructs the AI to analyze the image in quadrants
-3. Since we cannot do image manipulation in Deno, we use a **multi-prompt approach**:
-   - First pass: Full image scan for layout understanding
-   - Second pass: "Focus on the TOP-LEFT quadrant of this image. Extract every piece of text, number, dimension, bar mark, and notation you can see in fine detail."
-   - Third pass: Same for TOP-RIGHT
-   - Fourth pass: BOTTOM-LEFT
-   - Fifth pass: BOTTOM-RIGHT
-   - Merge pass: Deduplicate and merge all extracted text
-4. Use **Gemini 2.5 Pro** (not Flash) for deep mode to get maximum accuracy on small text
-5. Each quadrant prompt includes instructions to look for: bar marks, dimensions in mm, rebar notation (e.g., "7-20M B.E.W."), schedule tables, scale annotations
+If the user already typed something in the scope field, the button still works but asks confirmation before overwriting.
 
-**New endpoint parameters:**
-```
-POST /google-vision-ocr
-{
-  "imageBase64": "...",
-  "mode": "deep",          // "standard" | "deep"  
-  "quadrants": 4            // 4 (2x2) or 9 (3x3) for very dense drawings
-}
-```
+### 3. Auto-Trigger Option
 
-### Part 3: Wire Deep OCR into `ingest-shop-drawings`
-
-- Add `mode: "deep"` when calling the OCR for shop drawings
-- Use Gemini 2.5 Pro (already configured) with the quadrant-based extraction
-- After all quadrant results come back, do a final merge + rebar extraction pass
-- This replaces the single `callGeminiVision` call with a multi-pass approach
+When the user moves from Step 1 to Step 2 and the scope field is empty, the analysis runs automatically in the background. By the time the user fills in the project name and customer, the scope suggestion is ready. If it finishes before the user types anything, it pre-fills silently with the "AI Suggested" badge.
 
 ## Technical Details
 
-### File: `supabase/functions/google-vision-ocr/index.ts`
-- Add `mode` and `quadrants` parameters to the request body
-- In `deep` mode: make 5 sequential AI calls (1 full + 4 quadrant-focused prompts)
-- Each quadrant prompt says "Focus ONLY on the [position] portion of this image"
-- Use `gemini-2.5-pro` for deep mode, keep `gemini-2.5-flash` for standard
-- Merge results by deduplicating lines across quadrant outputs
-- Return combined `fullText` with higher confidence
+### New file: `supabase/functions/analyze-scope/index.ts`
+- Accepts `file_urls` array
+- Downloads first 3 files (to keep it fast)
+- Converts to base64, sends to Gemini 2.5 Flash with a scope-identification prompt
+- Returns structured scope recommendation
+- Uses `callAI` from the shared `aiRouter`
 
-### File: `supabase/functions/ingest-historical-barlists/index.ts`
-- Add file size check: skip files > 5MB (log as "too large for edge runtime")
-- Wrap `XLSX.read` in a try/catch with a size pre-check
-- Fix project resolution: query `projects` table columns first, provide all required fields including `id` as a proper UUID
-- Ensure cursor always advances even on project creation failure
-- Reduce `maxFilesPerBatch` to 1
+### Modified file: `src/components/estimation/TakeoffWizard.tsx`
+- Add state: `aiScope`, `scopeLoading`, `scopeSource` ("manual" or "ai")
+- On transition to Step 2: trigger `analyze-scope` in background
+- Show loading indicator and "AI Suggested" badge on the scope textarea
+- Add a manual "Analyze Scope" button with sparkle icon
+- Pre-fill `scopeContext` when AI result arrives (only if field is still empty)
 
-### File: `supabase/functions/ingest-shop-drawings/index.ts`
-- Replace single `callGeminiVision` with the new deep OCR multi-pass approach
-- For each PDF: send the base64 data with quadrant-focused prompts
-- Merge quadrant results before JSON extraction
-- Keep batch size at 1 PDF per invocation (deep OCR is slower but much more accurate)
+### No database changes required
+- The scope text flows through to `ai-estimate` the same way it does today
+- No new tables or columns needed
 
-### File: `supabase/functions/_shared/agentDocumentUtils.ts`
-- Update `performOCR` and `performOCROnBase64` to accept optional `mode` parameter
-- Pass `mode: "deep"` through to the OCR endpoint when called from ingestion pipelines
+## User Experience
 
-## Processing Impact
-
-- **Standard mode**: Same speed as before (1 AI call per image)
-- **Deep mode**: 5x slower per image but catches small text, bar marks, and dimensions that were previously missed
-- **XLS ingestion**: More reliable with the 1-file-per-batch limit, no more CPU crashes
-- **Shop drawing ingestion**: Much higher accuracy on dense structural drawings with small annotations
-
-## Result
-
-After this fix:
-- XLS ingestion will stop crashing and process files reliably (1 at a time)
-- Shop drawing OCR will find bar marks, dimensions, and schedule text that was previously missed
-- The deep quadrant scanning catches text in every corner of complex structural drawings
-- The Learning Engine gets much higher quality training data
+1. User uploads drawings (Step 1)
+2. User clicks "Next" to Step 2
+3. While user types project name and selects customer, AI silently analyzes the drawings
+4. By the time user reaches the Scope field, it already shows something like:
+   > "Estimate reinforcing steel for footings F1-F6, grade beams GB1-GB4, retaining walls W6-W10, and pool slab PS1 per sheets SD-01 to SD-08"
+5. User can edit, accept, or clear it
+6. User clicks "Run AI Takeoff" -- the scope (whether AI-suggested or user-edited) goes to `ai-estimate` as before
 
