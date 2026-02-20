@@ -1,7 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/auth.ts";
-import { callAI } from "../_shared/aiRouter.ts";
 import {
   calculateItem,
   applyWasteFactor,
@@ -16,6 +15,7 @@ import {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY")!;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -98,79 +98,48 @@ serve(async (req) => {
     const standardsMap = new Map(standards.map((s) => [s.bar_size, s]));
     const pricingMap = new Map(pricing.map((p) => [p.bar_size, p]));
 
-    // ─── 2. Process files through OCR (google-vision-ocr) + AI extraction ───
+    // ─── 2. Send files directly to Gemini 2.5 Pro for vision extraction ───
     let extractedItems: EstimationItemInput[] = [];
 
     if (file_urls.length > 0) {
-      // Convert PDFs to images if needed
-      const imageUrls: string[] = [];
-      for (const url of file_urls) {
-        if (url.toLowerCase().endsWith(".pdf")) {
-          try {
-            const pdfRes = await fetch(`${SUPABASE_URL}/functions/v1/pdf-to-images`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                apikey: Deno.env.get("SUPABASE_ANON_KEY")!,
-                Authorization: `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
-              },
-              body: JSON.stringify({ pdfUrl: url, maxPages: 20, dpi: 200 }),
-            });
-            const pdfData = await pdfRes.json();
-            if (pdfData.pages) {
-              for (const page of pdfData.pages) {
-                if (page.imageUrl) imageUrls.push(page.imageUrl);
-              }
-            }
-          } catch (e) {
-            console.error("PDF conversion error:", e);
-            imageUrls.push(url);
-          }
-        } else {
-          imageUrls.push(url);
-        }
-      }
+      try {
+        // Build multipart content for Gemini — PDF and images supported natively
+        const parts: any[] = [];
 
-      // ─── OCR each image via google-vision-ocr (uses Gemini via aiRouter) ───
-      const ocrTexts: string[] = [];
-      for (const imgUrl of imageUrls.slice(0, 20)) {
-        try {
-          const ocrRes = await fetch(`${SUPABASE_URL}/functions/v1/google-vision-ocr`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              apikey: Deno.env.get("SUPABASE_ANON_KEY")!,
-              Authorization: `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
-            },
-            body: JSON.stringify({ imageUrl: imgUrl }),
+        for (const url of file_urls.slice(0, 10)) {
+          // Fetch file and convert to base64 for inline_data
+          const fileRes = await fetch(url);
+          if (!fileRes.ok) {
+            console.error(`Failed to fetch file: ${url} — ${fileRes.status}`);
+            continue;
+          }
+          const arrayBuf = await fileRes.arrayBuffer();
+          const uint8 = new Uint8Array(arrayBuf);
+          
+          // Convert to base64
+          let binary = "";
+          for (let i = 0; i < uint8.length; i++) {
+            binary += String.fromCharCode(uint8[i]);
+          }
+          const base64 = btoa(binary);
+
+          // Determine MIME type
+          const lowerUrl = url.toLowerCase();
+          let mimeType = "application/pdf";
+          if (lowerUrl.includes(".png")) mimeType = "image/png";
+          else if (lowerUrl.includes(".jpg") || lowerUrl.includes(".jpeg")) mimeType = "image/jpeg";
+          else if (lowerUrl.includes(".tif") || lowerUrl.includes(".tiff")) mimeType = "image/tiff";
+
+          parts.push({
+            inline_data: { mime_type: mimeType, data: base64 },
           });
-          if (ocrRes.ok) {
-            const ocrData = await ocrRes.json();
-            if (ocrData.fullText) ocrTexts.push(ocrData.fullText);
-          } else {
-            console.error("OCR failed for image:", ocrRes.status);
-          }
-        } catch (e) {
-          console.error("OCR error:", e);
         }
-      }
 
-      // ─── AI structured extraction from OCR text using Gemini (via aiRouter) ───
-      const combinedText = ocrTexts.join("\n\n--- PAGE BREAK ---\n\n");
-      if (combinedText.trim()) {
-        try {
-          const result = await callAI({
-            provider: "gemini",
-            model: "gemini-2.5-pro",
-            messages: [
-              {
-                role: "user",
-                content: `You are a senior structural estimator. Analyze the following OCR text extracted from structural/architectural drawings and extract ALL rebar reinforcement items.
+        // Add the extraction prompt
+        parts.push({
+          text: `You are a senior structural estimator. Analyze the uploaded structural/architectural drawings and extract ALL rebar reinforcement items.
 
 ${scope_context ? `Context: ${scope_context}` : ""}
-
-OCR TEXT:
-${combinedText}
 
 For each structural element (column, beam, footing, slab, wall, pier), extract:
 - element_type: footing, column, beam, slab, wall, pier
@@ -185,22 +154,44 @@ For each structural element (column, beam, footing, slab, wall, pier), extract:
 - num_laps: number of lap splices (0 if none)
 - spacing_mm: spacing if applicable
 
-Return ONLY a valid JSON array of items. Be thorough — extract every bar callout visible.`,
-              },
-            ],
-            maxTokens: 8000,
-            temperature: 0.1,
-          });
+Return ONLY a valid JSON array of items. Be thorough — extract every bar callout visible in the drawings.`,
+        });
 
-          // Parse the JSON from the response
-          const content = result.content.trim();
+        // Call Gemini directly with native multimodal API
+        const geminiRes = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${GEMINI_API_KEY}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ parts }],
+              generationConfig: {
+                temperature: 0.1,
+                maxOutputTokens: 8000,
+              },
+            }),
+          }
+        );
+
+        if (!geminiRes.ok) {
+          const errText = await geminiRes.text();
+          console.error("Gemini API error:", geminiRes.status, errText);
+        } else {
+          const geminiData = await geminiRes.json();
+          const content = geminiData.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+          console.log("Gemini extraction response length:", content.length);
+
+          // Parse JSON array from response
           const jsonMatch = content.match(/\[[\s\S]*\]/);
           if (jsonMatch) {
             extractedItems = JSON.parse(jsonMatch[0]);
+            console.log(`Extracted ${extractedItems.length} items from drawings`);
+          } else {
+            console.error("No JSON array found in Gemini response");
           }
-        } catch (e) {
-          console.error("AI extraction error:", e);
         }
+      } catch (e) {
+        console.error("Gemini vision extraction error:", e);
       }
     }
 
@@ -228,11 +219,7 @@ Return ONLY a valid JSON array of items. Be thorough — extract every bar callo
 
       const p = pricingMap.get(input.bar_size);
       const result = calculateItem(input, std, p);
-
-      // Validate
-      const itemWarnings = validateItem(result, rules);
-      result.warnings = itemWarnings;
-
+      result.warnings = validateItem(result, rules);
       calculatedItems.push(result);
     }
 
@@ -244,7 +231,6 @@ Return ONLY a valid JSON array of items. Be thorough — extract every bar callo
     // ─── 4. Compute summary ───
     const summary = computeProjectSummary(calculatedItems);
 
-    // Labor hours
     const totalLaborHours = pricing.length > 0
       ? calculatedItems.reduce((sum, item) => {
           const p = pricingMap.get(item.bar_size);
