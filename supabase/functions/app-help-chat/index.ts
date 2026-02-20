@@ -70,7 +70,7 @@ serve(async (req) => {
   } catch (e) {
     console.error("app-help-chat error:", e);
     const status = e instanceof AIError ? e.status : 500;
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
+    return new Response(JSON.stringify({ error: "Internal server error" }), {
       status,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
