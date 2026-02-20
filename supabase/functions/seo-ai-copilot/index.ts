@@ -1,11 +1,6 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireAuth, json, corsHeaders } from "../_shared/auth.ts";
 import { callAIStream, AIError } from "../_shared/aiRouter.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -13,53 +8,59 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    // Require authentication
+    const { userId, serviceClient } = await requireAuth(req);
 
-    const supabase = createClient(supabaseUrl, serviceKey);
     const { domain_id, messages } = await req.json();
 
     if (!domain_id || !messages?.length) {
-      return new Response(JSON.stringify({ error: "domain_id and messages required" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return json({ error: "domain_id and messages required" }, 400);
     }
 
-    // Get domain
-    const { data: domain } = await supabase
+    // Get the user's company_id
+    const { data: profile } = await serviceClient
+      .from("profiles")
+      .select("company_id")
+      .eq("user_id", userId)
+      .single();
+
+    if (!profile?.company_id) {
+      return json({ error: "User profile not found" }, 403);
+    }
+
+    // Fetch domain and verify it belongs to the user's company
+    const { data: domain } = await serviceClient
       .from("seo_domains")
       .select("*")
       .eq("id", domain_id)
+      .eq("company_id", profile.company_id)
       .single();
+
     if (!domain) {
-      return new Response(JSON.stringify({ error: "Domain not found" }), {
-        status: 404,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return json({ error: "Domain not found or access denied" }, 404);
     }
 
     // Fetch context data for the AI
     const [keywordsRes, pagesRes, insightsRes, tasksRes] = await Promise.all([
-      supabase
+      serviceClient
         .from("seo_keyword_ai")
         .select("keyword, intent, impressions_28d, clicks_28d, ctr, avg_position, trend_score, opportunity_score, status, topic_cluster")
         .eq("domain_id", domain_id)
         .order("opportunity_score", { ascending: false })
         .limit(50),
-      supabase
+      serviceClient
         .from("seo_page_ai")
         .select("url, impressions, clicks, ctr, avg_position, sessions, engagement_rate, conversions, revenue, seo_score, cwv_status")
         .eq("domain_id", domain_id)
         .order("seo_score", { ascending: false })
         .limit(30),
-      supabase
+      serviceClient
         .from("seo_insight")
         .select("entity_type, insight_type, explanation_text, confidence_score")
         .eq("domain_id", domain_id)
         .order("confidence_score", { ascending: false })
         .limit(20),
-      supabase
+      serviceClient
         .from("seo_tasks")
         .select("title, priority, status, task_type, expected_impact, created_by")
         .eq("domain_id", domain_id)
@@ -109,16 +110,14 @@ ${contextData}`;
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
   } catch (e) {
+    // Return the thrown Response directly (from requireAuth)
+    if (e instanceof Response) return e;
+
     console.error("seo-ai-copilot error:", e);
+
     if (e instanceof AIError) {
-      return new Response(JSON.stringify({ error: e.message }), {
-        status: e.status,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return json({ error: "AI service error" }, e.status);
     }
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return json({ error: "Internal server error" }, 500);
   }
 });
