@@ -1,179 +1,140 @@
 
 
-# Agentic Architecture Evolution Plan
+# Multi-Agent AI and Social Media Autopilot -- Gap Analysis and Implementation Plan
 
-## Current State Assessment
+## What Already Exists (No Work Needed)
 
-The system already has a robust agentic architecture with 20+ specialized agents, a keyword-based router, multi-turn tool calling (5 iterations max with circuit breaker), model routing (GPT/Gemini with fallback), and domain-specific context fetching -- all in a single 9,093-line edge function (`ai-agent/index.ts`). There are also 120+ specialized edge functions for discrete tasks.
+The strategy document proposes an architecture that is largely **already built**. Here is the mapping:
 
-What the research document proposes largely **already exists** in the codebase. The practical gaps are:
-
-| Proposed Feature | Current Status | Action Needed |
+| Proposed Component | Already Exists As | Status |
 |---|---|---|
-| Orchestrator/Router | Keyword-based router exists (`agentRouter.ts`) | Upgrade to LLM-based intent classification |
-| Domain-separated memory | Per-agent context fetching exists | Add vector/embedding store for RAG |
-| QA/Reviewer Agent | Not implemented | Add output validation layer |
-| Prompt caching | Not implemented | Structure prompts for cache-friendly prefixes |
-| Model routing | Already uses GPT/Gemini routing | Already done -- minor tuning only |
-| Monolith decomposition | Single 9K-line file | Split into per-agent modules |
+| SalesOpsAgent | **Blitz** (sales rep) + **Commander** (sales ops) | Done |
+| ProductionPlannerAgent | **Forge** (shopfloor agent) | Done |
+| CustomerSupportAgent | **Haven** (support agent) | Done |
+| ExecutiveSummaryAgent | **agentExecutiveContext.ts** (Phase 6) for Data/Empire/Commander | Done |
+| AuditAgent | **agentQA.ts** (Phase 4) -- QA reviewer layer | Done |
+| ContentGenAgent | **Pixel** agent + `auto-generate-post` edge function | Done |
+| Router / Orchestrator | Hybrid keyword + LLM router (`agent-router`) | Done |
+| Domain-separated memory | RAG with pgvector (`document_embeddings`, `embed-documents`, `search-embeddings`) | Done |
+| Prompt caching | Static/dynamic prefix split in `ai-agent/index.ts` (Phase 5) | Done |
+| Image generation | `generate-image` edge function (DALL-E) | Done |
+| Video generation | `generate-video` edge function (Veo 3.0) | Done |
+| Social publishing | `social-publish` (Facebook/Instagram/LinkedIn Graph API) | Done |
+| Cron publishing | `social-cron-publish` (auto-publishes scheduled posts) | Done |
+| Social intelligence | `social-intelligence` (business insights + trend analysis) | Done |
 
-## Phase 1: Monolith Decomposition (Structural)
+## Actual Gaps to Implement
 
-Split `ai-agent/index.ts` (9,093 lines) into modular files without changing behavior.
+After auditing what exists, **three meaningful gaps** remain from the strategy document:
 
-**What changes:**
-- Extract each agent's system prompt into `supabase/functions/_shared/agents/{agentId}.ts`
-- Extract context-fetching logic into `supabase/functions/_shared/agentContext.ts`
-- Extract tool definitions into `supabase/functions/_shared/agentTools.ts`
-- Extract tool execution handlers into `supabase/functions/_shared/agentToolExecutor.ts`
-- Keep `ai-agent/index.ts` as a thin orchestrator (~500 lines) that imports modules
+### Gap 1: Approval Workflow Agent (ApprovalAgent)
 
-**File structure:**
-```text
-supabase/functions/
-  _shared/
-    aiRouter.ts              (existing -- unchanged)
-    agents/
-      sales.ts               (Commander prompt + tools)
-      accounting.ts          (Penny prompt + tools + context)
-      support.ts             (Haven prompt)
-      shopfloor.ts           (Forge prompt + briefing)
-      delivery.ts            (Atlas prompt + briefing)
-      estimation.ts          (Gauge prompt)
-      social.ts              (Pixel prompt)
-      email.ts               (Relay prompt)
-      data.ts                (Prism prompt)
-      legal.ts               (Tally prompt)
-      empire.ts              (Architect prompt + tools)
-      ... (remaining agents)
-    agentContext.ts           (all context-fetching functions)
-    agentTools.ts             (tool definitions registry)
-    agentToolExecutor.ts      (tool call handlers)
-    agentBriefings.ts         (morning briefing templates)
-  ai-agent/
-    index.ts                  (thin orchestrator)
-```
+Currently, posts move through statuses manually (draft -> scheduled -> published). There is no automated notification pipeline to Radin/Neel when content is ready for review, no timeout escalation, and no structured approval/rejection flow with feedback loops.
 
-Each agent module exports: `systemPrompt`, `getTools()`, `fetchContext()`, and `briefingTemplate`.
+**What to build:**
+- A `social_approvals` table tracking approval requests, assigned approver, deadline, decision, and feedback
+- An `approval-notify` edge function that sends push/email notifications when a post enters "pending_approval" status
+- Auto-escalation: if no response within a configurable window (e.g., 4 hours), re-notify or escalate
+- Wire the ContentGen output (from `auto-generate-post`) to automatically create approval records instead of going straight to "scheduled"
+- Add an Approvals panel in the Social Media Manager UI showing pending items with Approve/Reject + feedback input
 
-## Phase 2: LLM-Based Intent Router ✅ COMPLETE
+### Gap 2: Twitter/X Publishing Support
 
-Replaced keyword-only routing with a hybrid system:
-- **Keyword fast-path** (synchronous, free): Used when confidence score ≥ 6
-- **LLM fallback** (async, ~200ms): Called via `agent-router` edge function when keywords are ambiguous
-- **Compound request detection**: LLM returns multiple agents for multi-domain queries (e.g., "check invoices and schedule delivery" → `["accounting", "delivery"]`)
-- **Provider fallback**: GPT-4o-mini primary → Gemini 2.5 Flash on 429/failure
-- **Graceful degradation**: Falls back to keyword match if all LLM providers fail
+The `social-publish` function currently supports Facebook, Instagram, and LinkedIn only. Twitter/X is listed as a platform in the UI but publishing is not implemented.
 
-**Files created/modified:**
-- `supabase/functions/agent-router/index.ts` — LLM classifier edge function
-- `src/lib/agentRouter.ts` — Added `routeToAgentSmart()` async function with `secondaryAgents` support
+**What to build:**
+- Add Twitter OAuth 1.0a signing to `social-publish` using the `api.x.com/2` endpoint
+- Support text-only and text+media tweets
+- Ensure the user has configured `TWITTER_CONSUMER_KEY`, `TWITTER_CONSUMER_SECRET`, `TWITTER_ACCESS_TOKEN`, and `TWITTER_ACCESS_TOKEN_SECRET`
 
-## Phase 3: RAG / Vector Memory ✅ COMPLETE
+### Gap 3: TikTok Publishing Support
 
-Implemented retrieval-augmented generation infrastructure:
+TikTok is listed in the platform filters but has no publishing integration.
 
-- **`document_embeddings` table**: pgvector-backed with HNSW index, company-scoped RLS, unique constraint for upsert
-- **`match_documents()` SQL function**: Cosine similarity search with domain/company filtering and configurable threshold
-- **`embed-documents` edge function**: Batch-indexes records from sales (leads), accounting (invoices), shopfloor (work orders), delivery, and support domains using Gemini `gemini-embedding-001` (768d)
-- **`search-embeddings` edge function**: Generates query embedding and calls `match_documents()` for top-K retrieval
-- **Incremental indexing**: Supports `since` parameter to only embed records updated after a given timestamp
+**What to build:**
+- Add TikTok Content Posting API support to `social-publish` (video upload via `tiktok-oauth` flow that already exists)
+- Requires TikTok developer app credentials
 
-**Token savings:** Instead of loading all records into context (~5,000-10,000 tokens), RAG fetches top 5-10 relevant records (~500-1,000 tokens). Estimated 60-80% context reduction.
+## Implementation Steps
 
-**Remaining:** Wire RAG into agent context fetching in `ai-agent/index.ts` and set up nightly cron for `embed-documents`.
+### Step 1: Approval Workflow (Database)
 
-## Phase 4: QA / Reviewer Layer ✅ COMPLETE
-
-Implemented output validation for high-risk agents:
-
-- **`_shared/agentQA.ts`**: Lightweight QA module that validates agent outputs via Gemini 2.5 Flash (~200 tokens, ~$0.0004/call)
-- **High-risk agents**: accounting, collections, empire, estimation, commander
-- **Checks**: Numerical consistency, hallucination detection, prohibited content, write operation safety
-- **Fail-open design**: QA errors don't block responses; critical issues get sanitized replies
-- **Response metadata**: QA flags returned as `qaReview` in API response for UI consumption
-- **Nightly cron**: `embed-documents-nightly` runs at 3 AM UTC indexing all domains
-
-## Phase 5: Prompt Cache Optimization ✅ COMPLETE
-
-Restructured message array for OpenAI/Gemini prompt caching:
-
-- **Static prefix**: System prompt (ONTARIO_CONTEXT + agent prompt + governance + tools + shared instructions) stays identical across calls for the same agent → cached by providers at 50-90% discount
-- **Dynamic suffix**: Brain knowledge, role access, RAG context, data context, and document analysis go in a separate system message after the static prefix
-- **History + user message**: Appended last as always
-- **Cache boundary preserved**: The split into two system messages ensures the static prefix hash remains constant
-
-**Expected savings:** ~800-2000 tokens of static prefix cached per agent, compounding across all calls.
-
-## Phase 6: Executive Dashboard Context ✅ COMPLETE
-
-Added cross-agent KPI aggregation for Data/Empire/Commander agents:
-
-- **`_shared/agentExecutiveContext.ts`**: New module with `fetchExecutiveContext()` that pulls summary metrics:
-  - Financial: Total AR, overdue AR, total AP, weekly revenue
-  - Pipeline: Active leads, hot leads count, pipeline value
-  - Production: Active items, completed/total pieces, progress %
-  - Delivery: Weekly total, completed, success rate %
-  - Support: Open ticket count
-  - Agent usage: Session counts by agent name
-  - Recent events: Last 10 activity events from the week
-- **Wired into orchestrator**: Data, Empire, and Commander agents automatically receive `executiveKPIs` in their context
-- **Uses service role client**: Ensures cross-domain read access regardless of user RLS
-
-## Implementation Order and Timeline
+Create a `social_approvals` table:
 
 ```text
-Phase 1 (Decomposition)     -- Week 1-2: Extract modules, zero behavior change
-Phase 5 (Cache Optimization) -- Week 2: Reorder prompts during decomposition
-Phase 2 (Smart Router)       -- Week 3: Add LLM fallback router
-Phase 4 (QA Layer)            -- Week 3-4: Add validation for high-risk agents
-Phase 3 (RAG/Vector)          -- Week 4-6: pgvector setup, embedding pipeline, RAG integration
-Phase 6 (Executive Dashboard) -- Week 6-7: Cross-agent KPI aggregation
+social_approvals
+  id              UUID PK
+  post_id         UUID FK -> social_posts.id
+  approver_id     UUID (user who should review)
+  status          TEXT (pending / approved / rejected)
+  feedback        TEXT (rejection reason or notes)
+  deadline        TIMESTAMPTZ
+  decided_at      TIMESTAMPTZ
+  created_at      TIMESTAMPTZ
 ```
 
-## Technical Details
+Add RLS policies scoped to the approver's user ID and the post owner.
 
-### Phase 1 Module Interface
+### Step 2: Approval Notification Edge Function
 
-Each agent module (`_shared/agents/{id}.ts`) exports:
+Create `approval-notify` edge function:
+- Triggered when a post status changes to "pending_approval"
+- Looks up assigned approvers from `social_approvals`
+- Sends push notification (via existing `send-push`) and/or email
+- Records notification timestamp for escalation tracking
 
-```typescript
-export const systemPrompt: string;
-export function getTools(opts: { userEmail: string; canWrite: boolean }): ToolDef[];
-export async function fetchContext(supabase: any, userId: string, companyId: string): Promise<Record<string, unknown>>;
-export const briefingTemplate?: (context: any) => string;
-export const modelOverride?: { model: string; maxTokens: number; temperature: number };
-```
+### Step 3: Auto-Generate -> Approval Pipeline
 
-### Phase 3 Database Migration
+Modify `auto-generate-post` so newly generated posts:
+1. Are saved with status `"pending_approval"` (not `"draft"`)
+2. Automatically create a `social_approvals` record targeting the configured approver(s)
+3. Trigger the `approval-notify` function
 
-```sql
-CREATE EXTENSION IF NOT EXISTS vector;
+### Step 4: Approval UI in Social Media Manager
 
-CREATE TABLE document_embeddings (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  agent_domain TEXT NOT NULL,
-  entity_type TEXT NOT NULL,
-  entity_id TEXT,
-  content_text TEXT NOT NULL,
-  embedding vector(768),
-  metadata JSONB DEFAULT '{}',
-  created_at TIMESTAMPTZ DEFAULT now()
-);
+Add an "Approvals" tab/section:
+- List of pending approval posts with preview (text + image)
+- Approve button (moves to "scheduled" with next available slot)
+- Reject button with feedback textarea (moves to "declined", feedback saved)
+- Badge count on the tab showing pending items
 
-CREATE INDEX idx_embeddings_domain ON document_embeddings(agent_domain);
-CREATE INDEX idx_embeddings_vector ON document_embeddings 
-  USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
-```
+### Step 5: Twitter/X Publishing
 
-### Phase 2 Router Edge Function
+Add to `social-publish`:
+- OAuth 1.0a signature generation for Twitter API v2
+- Text post endpoint: `POST https://api.x.com/2/tweets`
+- Media upload via `https://upload.twitter.com/1.1/media/upload.json` for image posts
+- Check for required secrets before attempting
 
-The LLM classifier receives the user message and a list of agent descriptions, returns the best match. Uses GPT-4o-mini for speed (~200ms, ~100 tokens). Falls back to keyword matching if the LLM call fails.
+### Step 6: Escalation Cron
 
-### What We Are NOT Doing (and why)
+Add a cron job (every 2 hours) that:
+- Queries `social_approvals` where status = 'pending' and deadline < now()
+- Re-sends notification to approver
+- After 2 missed deadlines, auto-escalates (e.g., notifies admin or auto-approves based on policy)
 
-- **Self-hosted open-source models**: The system already has GPT/Gemini direct API access with fallback. Self-hosting adds infrastructure complexity with marginal cost savings at current scale.
-- **LangChain/LlamaIndex**: These are Python frameworks. The system is TypeScript/Deno edge functions. The existing `aiRouter.ts` already handles what these frameworks provide.
-- **Separate microservices per agent**: Edge functions already provide isolation. Splitting into separate deployed functions would add latency (inter-function calls) without meaningful benefit.
-- **Multi-tenant SaaS architecture**: This is premature. The system serves one company. Multi-tenancy can be added later if needed.
+## What We Are NOT Doing (and Why)
+
+| Proposed Item | Why Not |
+|---|---|
+| Separate vector DB (Weaviate/Chroma/Pinecone) | pgvector already handles this with HNSW index |
+| LangChain / LlamaIndex | System is TypeScript/Deno; `aiRouter.ts` already provides equivalent functionality |
+| Self-hosted GPU / open-source models | API access to GPT/Gemini is already configured with fallback routing |
+| Multi-tenant SaaS architecture | Premature -- system serves one company; can be added later |
+| Kubernetes / KServe / Airflow | Edge functions already provide serverless isolation |
+| DALL-E / Stable Diffusion comparison | `generate-image` already uses DALL-E; `generate-video` uses Veo 3.0 |
+| Synthesia video | Veo 3.0 is already integrated and more cost-effective |
+| Grafana / Datadog monitoring | Executive dashboard context (Phase 6) already provides KPI aggregation |
+
+## Timeline Estimate
+
+| Step | Effort |
+|---|---|
+| Step 1: Approval table + RLS | 1 hour |
+| Step 2: approval-notify function | 1 hour |
+| Step 3: Wire auto-generate pipeline | 1 hour |
+| Step 4: Approval UI components | 2 hours |
+| Step 5: Twitter/X publishing | 2 hours (requires API keys) |
+| Step 6: Escalation cron | 30 min |
+| **Total** | **~7.5 hours** |
 
