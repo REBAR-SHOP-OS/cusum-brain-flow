@@ -50,7 +50,15 @@ export function DockChatBar() {
   }, [channels, openChat]);
 
   const groupChannels = channels.filter((c) => c.channel_type === "group");
-  const dmChannels = channels.filter((c) => c.channel_type === "dm");
+  // Hide DM channels where the other member is inactive (user_id null or is_active false)
+  // We detect this by checking if the channel name matches any active non-self profile
+  const dmChannels = channels.filter((c) => {
+    if (c.channel_type !== "dm") return false;
+    // A DM is valid if at least one active non-self profile's name appears in the channel name
+    return profiles.some(
+      (p) => p.id !== myProfile?.id && p.is_active !== false && c.name.includes(p.full_name)
+    );
+  });
 
   const handleSelectChannel = (id: string, name: string, type: "dm" | "group") => {
     openChat(id, name, type);

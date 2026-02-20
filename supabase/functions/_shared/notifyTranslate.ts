@@ -1,8 +1,10 @@
 /**
  * notifyTranslate.ts — Shared translation utility for notification edge functions.
- * Translates notification title+body into a target language using the translate-message edge function.
+ * Translates notification title+body into a target language using callAI() directly.
  * Falls back to original English text on any error.
  */
+
+import { callAI } from "./aiRouter.ts";
 
 /**
  * Group an array of profile objects by their preferred_language.
@@ -22,12 +24,12 @@ export function groupByLanguage<T extends { preferred_language?: string | null }
 
 /**
  * Translate a notification title and body into the target language.
- * Uses the existing translate-message edge function (gemini-2.5-flash-lite).
+ * Calls Gemini directly via callAI() — no auth dependency on translate-message.
  * Returns the original English strings if translation fails for any reason.
  */
 export async function translateNotification(
-  supabaseUrl: string,
-  anonKey: string,
+  _supabaseUrl: string,
+  _anonKey: string,
   title: string,
   body: string,
   targetLang: string
@@ -38,27 +40,21 @@ export async function translateNotification(
   try {
     const combined = title + "\n" + body;
 
-    const res = await fetch(`${supabaseUrl}/functions/v1/translate-message`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${anonKey}`,
-        "apikey": anonKey,
-      },
-      body: JSON.stringify({
-        text: combined,
-        sourceLang: "en",
-        targetLangs: [targetLang],
-      }),
+    const result = await callAI({
+      provider: "gemini",
+      model: "gemini-2.5-flash-lite",
+      messages: [
+        {
+          role: "system",
+          content: `You are a translation engine. Translate the following text into ${targetLang}. Return ONLY the translated text, preserving the exact same line structure (first line = title, remaining lines = body). Do not add any explanations or extra content.`,
+        },
+        { role: "user", content: combined },
+      ],
+      temperature: 0.1,
+      maxTokens: 500,
     });
 
-    if (!res.ok) {
-      console.warn(`translateNotification: HTTP ${res.status} for lang=${targetLang}`);
-      return { title, body };
-    }
-
-    const { translations } = await res.json();
-    const translated: string | undefined = translations?.[targetLang];
+    const translated = result.content?.trim();
     if (!translated) return { title, body };
 
     const parts = translated.split("\n");
@@ -71,3 +67,4 @@ export async function translateNotification(
     return { title, body };
   }
 }
+
