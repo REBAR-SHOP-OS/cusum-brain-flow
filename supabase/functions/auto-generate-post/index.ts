@@ -298,7 +298,7 @@ Return an array of 5 objects:
               content: post.content || "",
               hashtags: post.hashtags || [],
               image_url: imageUrl,
-              status: "draft",
+              status: "pending_approval",
               scheduled_date: scheduledAt,
             })
             .select()
@@ -307,6 +307,51 @@ Return an array of 5 objects:
           if (insertError) {
             console.error("Failed to insert post:", insertError);
             continue;
+          }
+
+          // Create approval record for configured approvers
+          try {
+            // Find admin users to be approvers
+            const { data: admins } = await supabaseAdmin
+              .from("user_roles")
+              .select("user_id")
+              .in("role", ["admin", "sales"]);
+
+            const approverIds = admins?.map((a) => a.user_id).filter((id) => id !== userId) || [];
+            
+            for (const approverId of approverIds.slice(0, 2)) {
+              await supabaseAdmin.from("social_approvals").insert({
+                post_id: insertedPost.id,
+                approver_id: approverId,
+                status: "pending",
+                deadline: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
+              });
+            }
+
+            // Notify approvers
+            if (approverIds.length > 0) {
+              try {
+                await fetch(
+                  `${Deno.env.get("SUPABASE_URL")}/functions/v1/approval-notify`,
+                  {
+                    method: "POST",
+                    headers: {
+                      Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                      post_id: insertedPost.id,
+                      approver_ids: approverIds.slice(0, 2),
+                      mode: "notify",
+                    }),
+                  }
+                );
+              } catch (notifyErr) {
+                console.error("Approval notification failed (non-critical):", notifyErr);
+              }
+            }
+          } catch (approvalErr) {
+            console.error("Approval record creation failed (non-critical):", approvalErr);
           }
 
           allCreatedPosts.push({

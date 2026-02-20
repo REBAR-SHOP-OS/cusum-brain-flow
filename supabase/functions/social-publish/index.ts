@@ -41,7 +41,7 @@ serve(async (req) => {
     }
 
     const publishSchema = z.object({
-      platform: z.enum(["facebook", "instagram", "linkedin"]),
+      platform: z.enum(["facebook", "instagram", "linkedin", "twitter"]),
       message: z.string().min(1).max(63206),
       image_url: z.string().url().max(2000).optional(),
       post_id: z.string().uuid().optional(),
@@ -110,8 +110,9 @@ serve(async (req) => {
       }
       result = await publishToInstagram(igAccounts[0].id, pageAccessToken, message, image_url);
     } else if (platform === "linkedin") {
-      // LinkedIn uses integration_connections, not user_meta_tokens
       result = await publishToLinkedIn(supabaseAdmin, userId, message, image_url);
+    } else if (platform === "twitter") {
+      result = await publishToTwitter(message, image_url);
     } else {
       return new Response(
         JSON.stringify({ error: `Publishing to ${platform} is not yet supported.` }),
@@ -358,5 +359,159 @@ async function publishToLinkedIn(
     return { id: postRes.headers.get("x-restli-id") || "published" };
   } catch (err) {
     return { error: `LinkedIn publish failed: ${err instanceof Error ? err.message : "Unknown"}` };
+  }
+}
+
+// ─── Twitter/X Publishing ───────────────────────────────────────────────────
+
+function percentEncode(str: string): string {
+  return encodeURIComponent(str).replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+}
+
+async function hmacSha1(key: string, message: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const keyData = encoder.encode(key);
+  const msgData = encoder.encode(message);
+  const cryptoKey = await crypto.subtle.importKey("raw", keyData, { name: "HMAC", hash: "SHA-1" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("HMAC", cryptoKey, msgData);
+  return btoa(String.fromCharCode(...new Uint8Array(sig)));
+}
+
+function generateNonce(): string {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  let result = "";
+  for (let i = 0; i < 32; i++) result += chars.charAt(Math.floor(Math.random() * chars.length));
+  return result;
+}
+
+async function createOAuthHeader(
+  method: string,
+  url: string,
+  consumerKey: string,
+  consumerSecret: string,
+  accessToken: string,
+  accessTokenSecret: string,
+  extraParams?: Record<string, string>
+): Promise<string> {
+  const oauthParams: Record<string, string> = {
+    oauth_consumer_key: consumerKey,
+    oauth_nonce: generateNonce(),
+    oauth_signature_method: "HMAC-SHA1",
+    oauth_timestamp: Math.floor(Date.now() / 1000).toString(),
+    oauth_token: accessToken,
+    oauth_version: "1.0",
+  };
+
+  // For signature: only include OAuth params (NOT POST body params for JSON requests)
+  const allParams = { ...oauthParams, ...(extraParams || {}) };
+  const paramStr = Object.keys(allParams)
+    .sort()
+    .map((k) => `${percentEncode(k)}=${percentEncode(allParams[k])}`)
+    .join("&");
+
+  const baseStr = `${method.toUpperCase()}&${percentEncode(url)}&${percentEncode(paramStr)}`;
+  const signingKey = `${percentEncode(consumerSecret)}&${percentEncode(accessTokenSecret)}`;
+  const signature = await hmacSha1(signingKey, baseStr);
+
+  oauthParams.oauth_signature = signature;
+
+  const header = Object.keys(oauthParams)
+    .sort()
+    .map((k) => `${percentEncode(k)}="${percentEncode(oauthParams[k])}"`)
+    .join(", ");
+
+  return `OAuth ${header}`;
+}
+
+async function publishToTwitter(
+  text: string,
+  imageUrl?: string
+): Promise<{ id?: string; error?: string }> {
+  try {
+    const consumerKey = Deno.env.get("TWITTER_CONSUMER_KEY");
+    const consumerSecret = Deno.env.get("TWITTER_CONSUMER_SECRET");
+    const accessToken = Deno.env.get("TWITTER_ACCESS_TOKEN");
+    const accessTokenSecret = Deno.env.get("TWITTER_ACCESS_TOKEN_SECRET");
+
+    if (!consumerKey || !consumerSecret || !accessToken || !accessTokenSecret) {
+      return { error: "Twitter API credentials not configured. Please add TWITTER_CONSUMER_KEY, TWITTER_CONSUMER_SECRET, TWITTER_ACCESS_TOKEN, and TWITTER_ACCESS_TOKEN_SECRET." };
+    }
+
+    let mediaId: string | undefined;
+
+    // Upload media if image provided
+    if (imageUrl) {
+      try {
+        const imgRes = await fetch(imageUrl);
+        if (imgRes.ok) {
+          const imgBlob = await imgRes.blob();
+          const imgBuffer = new Uint8Array(await imgBlob.arrayBuffer());
+          const base64 = btoa(String.fromCharCode(...imgBuffer));
+
+          const uploadUrl = "https://upload.twitter.com/1.1/media/upload.json";
+          const uploadParams = {
+            media_data: base64,
+            media_category: "tweet_image",
+          };
+
+          const formBody = Object.entries(uploadParams)
+            .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+            .join("&");
+
+          const uploadAuth = await createOAuthHeader(
+            "POST", uploadUrl, consumerKey, consumerSecret, accessToken, accessTokenSecret
+          );
+
+          const uploadRes = await fetch(uploadUrl, {
+            method: "POST",
+            headers: {
+              Authorization: uploadAuth,
+              "Content-Type": "application/x-www-form-urlencoded",
+            },
+            body: formBody,
+          });
+
+          if (uploadRes.ok) {
+            const uploadData = await uploadRes.json();
+            mediaId = uploadData.media_id_string;
+          } else {
+            console.error("Twitter media upload failed:", await uploadRes.text());
+          }
+        }
+      } catch (e) {
+        console.error("Twitter image upload error:", e);
+      }
+    }
+
+    // Post tweet
+    const tweetUrl = "https://api.x.com/2/tweets";
+    const tweetBody: any = { text };
+    if (mediaId) {
+      tweetBody.media = { media_ids: [mediaId] };
+    }
+
+    // Do NOT include POST body params in OAuth signature for JSON requests
+    const authHeader = await createOAuthHeader(
+      "POST", tweetUrl, consumerKey, consumerSecret, accessToken, accessTokenSecret
+    );
+
+    const tweetRes = await fetch(tweetUrl, {
+      method: "POST",
+      headers: {
+        Authorization: authHeader,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(tweetBody),
+    });
+
+    const tweetData = await tweetRes.json();
+    if (!tweetRes.ok) {
+      console.error("Twitter API error:", tweetData);
+      return { error: `Twitter: ${tweetData.detail || tweetData.title || "Unknown error"}` };
+    }
+
+    return { id: tweetData.data?.id };
+  } catch (err) {
+    return { error: `Twitter publish failed: ${err instanceof Error ? err.message : "Unknown"}` };
   }
 }

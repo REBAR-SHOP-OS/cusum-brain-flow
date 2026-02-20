@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Plus, Settings, ChevronLeft, ChevronRight,
   ThumbsUp, Palette, Users, TrendingUp, Search, Filter, X,
-  Sparkles, Loader2, BookOpen,
+  Sparkles, Loader2, BookOpen, ShieldCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SmartSearchInput } from "@/components/ui/SmartSearchInput";
@@ -19,6 +19,8 @@ import { SettingsSheet } from "@/components/social/SettingsSheet";
 import { useSocialPosts, type SocialPost } from "@/hooks/useSocialPosts";
 import { useAutoGenerate } from "@/hooks/useAutoGenerate";
 import { useStrategyChecklist } from "@/hooks/useStrategyChecklist";
+import { useSocialApprovals } from "@/hooks/useSocialApprovals";
+import { ApprovalsPanel } from "@/components/social/ApprovalsPanel";
 
 const platformFilters = [
   { id: "all", label: "All" },
@@ -32,6 +34,7 @@ const platformFilters = [
 
 const statusFilters = [
   { id: "all", label: "All statuses" },
+  { id: "pending_approval", label: "Pending Approval" },
   { id: "draft", label: "Drafts" },
   { id: "scheduled", label: "Scheduled" },
   { id: "published", label: "Published" },
@@ -43,6 +46,8 @@ export default function SocialMediaManager() {
   const { generatePosts, generating } = useAutoGenerate();
   const { posts, isLoading, updatePost } = useSocialPosts();
   const { completedChecklist, toggleChecklist } = useStrategyChecklist();
+  const { pendingApprovals } = useSocialApprovals();
+  const [showApprovals, setShowApprovals] = useState(false);
   const [weekStart, setWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
 
@@ -139,10 +144,24 @@ export default function SocialMediaManager() {
             <span className="sm:hidden">{generating ? "..." : "Auto"}</span>
           </Button>
           <Button
+            variant={showApprovals ? "default" : "outline"}
+            size="sm"
+            className="gap-1.5 relative"
+            onClick={() => { setShowApprovals((v) => !v); setShowStrategy(false); }}
+          >
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Approvals</span>
+            {pendingApprovals.length > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                {pendingApprovals.length}
+              </span>
+            )}
+          </Button>
+          <Button
             variant={showStrategy ? "default" : "outline"}
             size="sm"
             className="gap-1.5"
-            onClick={() => setShowStrategy((v) => !v)}
+            onClick={() => { setShowStrategy((v) => !v); setShowApprovals(false); }}
           >
             <BookOpen className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Strategy</span>
@@ -261,6 +280,14 @@ export default function SocialMediaManager() {
             </Button>
           ))}
         </div>
+
+        {/* Content Strategy Panel */}
+        {/* Approvals Panel */}
+        {showApprovals && (
+          <div className="mb-6">
+            <ApprovalsPanel />
+          </div>
+        )}
 
         {/* Content Strategy Panel */}
         {showStrategy && (

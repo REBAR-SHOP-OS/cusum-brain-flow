@@ -5,7 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 export interface SocialPost {
   id: string;
   platform: "facebook" | "instagram" | "linkedin" | "twitter" | "tiktok" | "youtube";
-  status: "published" | "scheduled" | "draft" | "declined";
+  status: "published" | "scheduled" | "draft" | "declined" | "pending_approval";
   title: string;
   content: string;
   image_url: string | null;
