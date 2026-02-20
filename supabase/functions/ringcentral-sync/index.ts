@@ -231,11 +231,11 @@ async function fetchCallLog(accessToken: string, dateFrom: string): Promise<Call
   return data.records || [];
 }
 
-async function fetchMessages(accessToken: string, dateFrom: string): Promise<MessageRecord[]> {
+async function fetchMessages(accessToken: string, dateFrom: string, messageType = "SMS"): Promise<MessageRecord[]> {
   const params = new URLSearchParams({
     dateFrom,
     perPage: "100",
-    messageType: "SMS",
+    messageType,
   });
 
   const response = await fetch(
@@ -244,7 +244,7 @@ async function fetchMessages(accessToken: string, dateFrom: string): Promise<Mes
   );
 
   if (!response.ok) {
-    throw new Error(`Failed to fetch messages: ${await response.text()}`);
+    throw new Error(`Failed to fetch ${messageType} messages: ${await response.text()}`);
   }
 
   const data = await response.json();
@@ -323,6 +323,8 @@ serve(async (req) => {
 
     let callsUpserted = 0;
     let smsUpserted = 0;
+    let voicemailsUpserted = 0;
+    let faxesUpserted = 0;
 
     // Sync calls
     if (syncType === "calls" || syncType === "all") {
@@ -428,11 +430,92 @@ serve(async (req) => {
       }
     }
 
+    // Sync Voicemails
+    if (syncType === "voicemail" || syncType === "all") {
+      try {
+        const voicemails = await fetchMessages(accessToken, dateFrom, "VoiceMail");
+        for (const vm of voicemails) {
+          const toAddress = vm.to?.map(t => t.phoneNumber || t.name).join(", ") || "Unknown";
+          const vmAttachments = (vm as any).attachments || [];
+          const { error } = await supabaseAdmin
+            .from("communications")
+            .upsert({
+              source: "ringcentral",
+              source_id: String(vm.id),
+              thread_id: vm.conversationId,
+              from_address: vm.from?.phoneNumber || vm.from?.name || "Unknown",
+              to_address: toAddress,
+              subject: "Voicemail",
+              body_preview: vm.subject || "Voicemail message",
+              received_at: vm.creationTime,
+              direction: vm.direction.toLowerCase(),
+              status: vm.readStatus === "Unread" ? "unread" : "read",
+              metadata: {
+                type: "voicemail",
+                duration: (vm as any).vmDuration || 0,
+                recording_uri: vmAttachments[0]?.uri || null,
+                recording_id: vmAttachments[0]?.id || null,
+              },
+              user_id: userId,
+              company_id: companyId,
+            }, { onConflict: "source,source_id", ignoreDuplicates: false });
+
+          if (!error) voicemailsUpserted++;
+        }
+      } catch (e) {
+        console.warn("Voicemail sync skipped:", e);
+      }
+    }
+
+    // Sync Faxes
+    if (syncType === "fax" || syncType === "all") {
+      try {
+        const faxes = await fetchMessages(accessToken, dateFrom, "Fax");
+        for (const fax of faxes) {
+          const toAddress = fax.to?.map(t => t.phoneNumber || t.name).join(", ") || "Unknown";
+          const faxAttachments = ((fax as any).attachments || []).map((a: any) => ({
+            id: a.id,
+            uri: a.uri,
+            type: a.contentType,
+            name: a.fileName,
+          }));
+          const { error } = await supabaseAdmin
+            .from("communications")
+            .upsert({
+              source: "ringcentral",
+              source_id: String(fax.id),
+              thread_id: fax.conversationId,
+              from_address: fax.from?.phoneNumber || fax.from?.name || "Unknown",
+              to_address: toAddress,
+              subject: "Fax",
+              body_preview: fax.subject || "Fax document",
+              received_at: fax.creationTime,
+              direction: fax.direction.toLowerCase(),
+              status: fax.readStatus === "Unread" ? "unread" : "read",
+              metadata: {
+                type: "fax",
+                page_count: (fax as any).pgCnt || 0,
+                resolution: (fax as any).faxResolution || "Standard",
+                attachments: faxAttachments,
+              },
+              user_id: userId,
+              company_id: companyId,
+            }, { onConflict: "source,source_id", ignoreDuplicates: false });
+
+          if (!error) faxesUpserted++;
+        }
+      } catch (e) {
+        console.warn("Fax sync skipped:", e);
+      }
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
         callsUpserted,
         smsUpserted,
+        voicemailsUpserted,
+        faxesUpserted,
         dateFrom,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }

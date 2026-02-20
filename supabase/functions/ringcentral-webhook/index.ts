@@ -58,13 +58,29 @@ serve(async (req) => {
   }
 });
 
+// ─── Contact matching helper ──────────────────────────────────────────────
+async function matchContactByPhone(supabase: any, phone: string, companyId: string): Promise<string | null> {
+  if (!phone || phone === "Unknown") return null;
+  const normalized = phone.replace(/^\+1/, "").replace(/\D/g, "");
+  if (normalized.length < 7) return null;
+
+  // Try exact match first, then partial
+  const { data } = await supabase
+    .from("contacts")
+    .select("id")
+    .eq("company_id", companyId)
+    .or(`phone.eq.${phone},phone.eq.+1${normalized},phone.eq.${normalized}`)
+    .limit(1)
+    .maybeSingle();
+
+  return data?.id || null;
+}
+
 // ─── Link call event to call_tasks for idempotency ─────────────────────────
 
 async function linkCallToTask(supabase: any, phone: string, sessionId: string) {
-  // Normalize phone for matching (strip +1 prefix, etc.)
   const normalizedPhone = phone.replace(/^\+1/, "").replace(/\D/g, "");
   
-  // Find matching call_task by phone + active status
   const { data: task } = await supabase
     .from("call_tasks")
     .select("id, status, rc_session_id")
@@ -73,24 +89,12 @@ async function linkCallToTask(supabase: any, phone: string, sessionId: string) {
     .maybeSingle();
 
   if (!task) return;
+  if (task.rc_session_id === sessionId) return;
 
-  // If already has this session ID, skip (idempotency)
-  if (task.rc_session_id === sessionId) {
-    console.log(`call_task ${task.id} already linked to session ${sessionId}`);
-    return;
-  }
-
-  // Store rc_session_id and update status
   const update: Record<string, any> = { rc_session_id: sessionId };
-  if (task.status === "dialing") {
-    update.status = "in_call";
-  }
+  if (task.status === "dialing") update.status = "in_call";
 
-  await supabase
-    .from("call_tasks")
-    .update(update)
-    .eq("id", task.id);
-
+  await supabase.from("call_tasks").update(update).eq("id", task.id);
   console.log(`Linked call_task ${task.id} to RC session ${sessionId}`);
 }
 
@@ -169,6 +173,10 @@ async function handleCallEvent(supabase: any, body: any) {
     const result = call.result || call.telephonyStatus || "Unknown";
     const duration = call.duration || 0;
 
+    // Contact matching
+    const matchPhone = direction === "inbound" ? fromNumber : toNumber;
+    const contactId = companyId ? await matchContactByPhone(supabase, matchPhone, companyId) : null;
+
     const { error: upsertErr } = await supabase
       .from("communications")
       .upsert({
@@ -194,6 +202,7 @@ async function handleCallEvent(supabase: any, body: any) {
         },
         user_id: userId,
         company_id: companyId,
+        contact_id: contactId,
       }, {
         onConflict: "source,source_id",
         ignoreDuplicates: false,
@@ -277,6 +286,10 @@ async function handleMessageEvent(supabase: any, body: any) {
     const toAddr = (msg.to || []).map((t: any) => t.phoneNumber || t.name).join(", ") || "Unknown";
     const direction = (msg.direction || "").toLowerCase();
 
+    // Contact matching
+    const matchPhone = direction === "inbound" ? fromAddr : toAddr;
+    const contactId = companyId ? await matchContactByPhone(supabase, matchPhone, companyId) : null;
+
     const { error: upsertErr } = await supabase
       .from("communications")
       .upsert({
@@ -293,6 +306,7 @@ async function handleMessageEvent(supabase: any, body: any) {
         metadata: { type: "sms" },
         user_id: userId,
         company_id: companyId,
+        contact_id: contactId,
       }, {
         onConflict: "source,source_id",
         ignoreDuplicates: false,
