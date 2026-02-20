@@ -12,7 +12,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const EMBEDDING_MODEL = "text-embedding-004";
+const EMBEDDING_MODEL = "gemini-embedding-001";
 const EMBEDDING_DIM = 768;
 const BATCH_SIZE = 20;
 
@@ -114,8 +114,9 @@ async function generateEmbeddings(apiKey: string, texts: string[]): Promise<numb
 
   const requests = texts.map(text => ({
     model: `models/${EMBEDDING_MODEL}`,
-    content: { parts: [{ text: text.slice(0, 2048) }] }, // Truncate to 2048 chars
+    content: { parts: [{ text: text.slice(0, 2048) }] },
     taskType: "RETRIEVAL_DOCUMENT",
+    outputDimensionality: EMBEDDING_DIM,
   }));
 
   const response = await fetch(url, {
