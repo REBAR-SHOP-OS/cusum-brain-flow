@@ -1,71 +1,40 @@
 
-## Fix: Penny's `fetch_qb_report` Sends Wrong Action Names to QuickBooks
+## Fix: Google (and Apple) OAuth Login Stuck on "Connecting..."
 
-### Root Cause (Confirmed — 2 bugs in the connector)
+### Root Cause
 
-**Bug 1 — Wrong action name: `"report"` does not exist**
+In `src/pages/Login.tsx`, both `handleGoogleLogin` and `handleAppleLogin` have a hardcoded `redirect_uri`:
 
-The `fetch_qb_report` tool handler in `agentToolExecutor.ts` (line 372) sends:
-```json
-{ "action": "report", "report_type": "ProfitAndLoss" }
+```typescript
+redirect_uri: "https://cusum-brain-flow.lovable.app/home",
 ```
 
-But `quickbooks-oauth/index.ts` switch statement has **no `case "report"`**. It hits the `default` branch and returns:
-```json
-{ "error": "Unknown action: report" }
+When you're on the **preview URL** (`ef512187-6c6b-411e-82cc-200307028719.lovableproject.com`), the OAuth flow completes at `oauth.lovable.app/callback` and tries to redirect back to the hardcoded published domain. The popup window can't close cleanly because the origin doesn't match the preview environment. Result: blank popup, "Connecting..." forever, login never completes.
+
+### Fix
+
+Replace the hardcoded URL with `window.location.origin + "/home"` in both handlers. This automatically resolves to the correct domain whether you're on the preview URL or the published site.
+
+**Current (broken):**
+```typescript
+redirect_uri: "https://cusum-brain-flow.lovable.app/home",
 ```
 
-The real action names are: `"get-profit-loss"`, `"get-balance-sheet"`, `"get-aged-receivables"`, `"get-aged-payables"`, `"get-cash-flow"`, `"get-tax-summary"`.
-
-**Bug 2 — Wrong parameter names**
-
-Even if the action were correct, the parameter names don't match:
-- Tool sends `start_date` / `end_date` (snake_case)
-- `handleGetProfitLoss` reads `body.startDate` / `body.endDate` (camelCase)
-- `handleGetBalanceSheet` reads `body.asOfDate`
-
-**Result:** Every call to `fetch_qb_report` returns `"Unknown action: report"` → tool result is `success: false, error: "Unknown action: report"` → Penny sees the tool failed → QA layer catches it → sanitized reply: *"I was unable to retrieve the Profit and Loss report for 2025 due to a technical issue."*
-
----
-
-### Fix Plan
-
-**Only 1 file needs to change: `supabase/functions/_shared/agentToolExecutor.ts`**
-
-Replace the `fetch_qb_report` handler (lines 367–388) with a proper router that:
-
-1. Maps `report_type` → correct `quickbooks-oauth` action name:
-
-| `report_type` (Penny sends) | `action` (QB expects) |
-|---|---|
-| `ProfitAndLoss` | `get-profit-loss` |
-| `BalanceSheet` | `get-balance-sheet` |
-| `AgedReceivables` | `get-aged-receivables` |
-| `AgedPayables` | `get-aged-payables` |
-| `CashFlow` | `get-cash-flow` |
-| `TaxSummary` | `get-tax-summary` |
-
-2. Sends correct camelCase parameter names to match what each handler reads:
-   - P&L: `startDate`, `endDate`
-   - Balance Sheet: `asOfDate`
-   - Aged reports: `asOfDate`
-   - Cash Flow / Tax Summary: `startDate`, `endDate`
-
-3. If `period` is passed (e.g., `"This Year"`, `"Last Month"`), convert it to concrete `start_date` / `end_date` date strings before sending.
-
----
+**Fixed:**
+```typescript
+redirect_uri: `${window.location.origin}/home`,
+```
 
 ### Files to Change
 
 | File | Change |
 |---|---|
-| `supabase/functions/_shared/agentToolExecutor.ts` | Fix `fetch_qb_report` handler: map `report_type` → correct action, fix parameter casing, add period→date conversion |
+| `src/pages/Login.tsx` | Replace hardcoded `redirect_uri` in `handleGoogleLogin` (line ~48) and `handleAppleLogin` (line ~62) with `window.location.origin + "/home"` |
 
-No other files need to change. The QB handlers are fine. The tools definition is fine. Only the bridge between Penny's tool call and QuickBooks is broken.
+That's the entire fix — two character substitutions in one file. No backend changes needed.
 
----
+### Why This Works
 
-### After This Fix
-
-- Penny asks for P&L 2025 → calls `fetch_qb_report` with `{ report_type: "ProfitAndLoss", start_date: "2025-01-01", end_date: "2025-12-31" }` → executor maps to `action: "get-profit-loss"` with `{ startDate: "2025-01-01", endDate: "2025-12-31" }` → QB returns real P&L data → Penny summarizes it correctly
-- Same fix applies to Balance Sheet, AR Aging, AP Aging, Cash Flow, and Tax Summary
+- On preview: `window.location.origin` = `https://ef512187-6c6b-411e-82cc-200307028719.lovableproject.com` → OAuth redirects back correctly
+- On published site: `window.location.origin` = `https://cusum-brain-flow.lovable.app` → same behavior as before
+- The `/home` suffix is preserved so users land on the right page after login
