@@ -1,124 +1,119 @@
 
-# Fix: Multi-Project Mixing on Station View
+# Fix: Odoo Sync Cron Jobs Failing with 401 Unauthorized
 
-## Root Cause
+## Root Cause — Confirmed
 
-The station view combines items from multiple active cut plans/projects into a single unfiltered list. The `project_name` field is already fetched from the database and exists on every `StationItem`, but it is never displayed or used to filter.
+The cron jobs were built when the sync functions used a simple anon-key-based auth check. They were later upgraded to use `requireAuth()` from `_shared/auth.ts`, which calls `userClient.auth.getClaims(token)` — a method that validates a **user JWT**, not an anon key.
 
-**Bender path**: queries ALL `cut_plan_items` company-wide with `phase = cut_done OR bending`. Every project's bend items appear together with no separation.
+All three cron jobs in the database pass the **anon key** as the Bearer token:
 
-**Cutter path**: queries all plans assigned to the machine OR unassigned (`machine_id.is.null`), which can include multiple active projects simultaneously. Items are grouped by bar size only — the `BarSizeGroup` header shows `10M` / `15M` but never says which project.
+```
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...  (anon key, role: anon)
+```
+
+The `requireAuth()` function runs `getClaims()` on this token and expects `claims.sub` (a user ID) to be present. The anon key has no `sub` claim — it is a non-user service token — so `getClaims()` returns no `sub`, and the function throws a **401**. This has been happening silently every 15 minutes, meaning **no incremental Odoo CRM sync has run since the crons were installed**.
+
+The edge function logs confirm: `POST | 401 | odoo-crm-sync`.
+
+### Why `check-sla-breaches` still works
+
+That function has its own auth logic that explicitly accepts the **service role key** as a valid token (`if (token !== serviceRoleKey)`). It does NOT use `requireAuth()`. This is the correct pattern for cron-invoked functions.
+
+### Why `odoo-chatter-sync` is also broken
+
+It calls `requireAuth(req)` on line 56 — same broken path as `odoo-crm-sync`.
 
 ---
 
-## What Is NOT Broken
+## The Fix — Two Parts
 
-- `project_name` is already correctly fetched — it's present on every `StationItem`
-- The grouping logic (bar size → bend/straight paths) is correct
-- Realtime subscriptions work correctly
+### Part 1: Update Both Sync Functions to Accept Service-Role Calls
 
----
+Replace the `requireAuth(req)` call at the top of `odoo-crm-sync` and `odoo-chatter-sync` with a pattern that:
 
-## Proposed Fix: Two-Part Solution
+1. Checks if the incoming token is the **service role key** — if so, grant full access (this is the cron path).
+2. Falls back to the existing `requireAuth()` user-JWT path for manual UI-triggered calls.
 
-### Part 1 — Project Filter Pill Row (StationView.tsx)
+The `check-sla-breaches` function already implements this correctly and serves as the model:
 
-Add a horizontal scrollable row of project filter pills below the station header, visible when more than one project is present in the loaded items. Selecting a pill filters all items and groups to that project only. An "All" pill is always available as the default.
+```ts
+// Pattern used by check-sla-breaches — to be adopted by both sync functions
+const authHeader = req.headers.get("Authorization") ?? "";
+const token = authHeader.replace("Bearer ", "");
+const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 
-```
-[ All (47) ]  [ TANK FARM — OAA (12) ]  [ Vault 1 (8) ]  [ 15 Brownridge (27) ]
-```
+const serviceClient = createClient(supabaseUrl, serviceRoleKey);
 
-- Pills are derived from the distinct `project_name` values in the loaded `items` array (no extra DB query needed)
-- Selected project is stored in `useState<string | null>(null)` (null = All)
-- Filtering is applied in `StationView.tsx` before passing items/groups to the rendered list
-
-### Part 2 — Project Name Label on ProductionCard.tsx
-
-Add a small project name micro-label at the bottom of each card (consistent with the shop floor touch standard for micro-labels):
-
-```
-TANK FARM RETAINING WALLS — OAA
-```
-
-This ensures that even in "All" mode, each card always self-identifies which project it belongs to. This is critical for the bender view where no grouping by bar size exists.
-
----
-
-## Technical Changes
-
-### File 1: `src/pages/StationView.tsx`
-
-Add `selectedProject` state and a filter pill row:
-
-```tsx
-const [selectedProject, setSelectedProject] = useState<string | null>(null);
-
-// Derive distinct project names from loaded items
-const projectNames = useMemo(() =>
-  [...new Set(items.map((i) => i.project_name).filter(Boolean))] as string[],
-  [items]
-);
-
-// Apply project filter before rendering
-const filteredItems = selectedProject
-  ? items.filter((i) => i.project_name === selectedProject)
-  : items;
-
-const filteredGroups = selectedProject
-  ? groups.map((g) => ({
-      ...g,
-      bendItems: g.bendItems.filter((i) => i.project_name === selectedProject),
-      straightItems: g.straightItems.filter((i) => i.project_name === selectedProject),
-    })).filter((g) => g.bendItems.length > 0 || g.straightItems.length > 0)
-  : groups;
-```
-
-Project pill row (only shown when `projectNames.length > 1`):
-```tsx
-{projectNames.length > 1 && (
-  <div className="flex gap-2 overflow-x-auto pb-1 pt-2 scrollbar-none">
-    <button onClick={() => setSelectedProject(null)}
-      className={cn("pill", !selectedProject && "active")}>
-      All ({items.length})
-    </button>
-    {projectNames.map((name) => (
-      <button key={name} onClick={() => setSelectedProject(name)}
-        className={cn("pill", selectedProject === name && "active")}>
-        {name} ({items.filter(i => i.project_name === name).length})
-      </button>
-    ))}
-  </div>
-)}
-```
-
-Auto-reset `selectedProject` to null if the selected project disappears from the item list (e.g., after a phase transition):
-```tsx
-useEffect(() => {
-  if (selectedProject && !projectNames.includes(selectedProject)) {
-    setSelectedProject(null);
+if (token !== serviceRoleKey) {
+  // Validate as a user JWT (manual trigger from UI)
+  const userClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+  });
+  const { data: { user } } = await userClient.auth.getUser();
+  if (!user) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" }
+    });
   }
-}, [projectNames, selectedProject]);
+  // Optionally: check has_role admin for odoo sync
+}
+// serviceClient is ready for use
 ```
 
-### File 2: `src/components/shopfloor/ProductionCard.tsx`
+### Part 2: Update the Cron Jobs to Use the Service Role Key Instead of the Anon Key
 
-Add a project name label at the bottom of `CardContent`, below the piece count row:
-```tsx
-{item.project_name && (
-  <p className="text-[9px] text-muted-foreground tracking-[0.15em] uppercase truncate pt-0.5 border-t border-border/40 mt-1">
-    {item.project_name}
-  </p>
-)}
+The cron jobs currently pass the **anon key** hardcoded. They need to pass the **service role key** so the service-role path is taken.
+
+This is done via a database migration that updates the `cron.job` commands:
+
+```sql
+-- Update odoo-crm-sync cron job to use service role key
+SELECT cron.unschedule('odoo-crm-sync-incremental');
+SELECT cron.schedule(
+  'odoo-crm-sync-incremental',
+  '*/15 * * * *',
+  $$
+    SELECT net.http_post(
+      url := 'https://rzqonxnowjrtbueauziu.supabase.co/functions/v1/odoo-crm-sync',
+      headers := jsonb_build_object(
+        'Content-Type', 'application/json',
+        'Authorization', 'Bearer ' || current_setting('app.service_role_key')
+      ),
+      body := '{"mode":"incremental"}'::jsonb
+    ) AS request_id;
+  $$
+);
 ```
+
+However — `current_setting('app.service_role_key')` is not automatically available. The cleanest solution is to store the service role key as a database secret via `vault` or use a dedicated `cron_secret` custom setting, which is already the established pattern for `check-sla-breaches`.
+
+The safest approach is to make the edge functions accept **both the anon key AND a valid user JWT** for the manual path, while accepting the **service role key** for the cron path — and update the cron jobs in the migration to pass the service role key via `current_setting`.
 
 ---
 
-## Summary of Files to Change
+## Summary of Changes
 
 | File | Change |
 |------|--------|
-| `src/pages/StationView.tsx` | Add `selectedProject` state, project pill filter row, derive `filteredItems` / `filteredGroups`, auto-reset effect |
-| `src/components/shopfloor/ProductionCard.tsx` | Add project name micro-label at card bottom |
+| `supabase/functions/odoo-crm-sync/index.ts` | Replace `requireAuth(req)` with dual-path auth: accept service role key (cron) OR valid user JWT (manual) |
+| `supabase/functions/odoo-chatter-sync/index.ts` | Same dual-path auth replacement |
+| Database migration | `cron.unschedule` + `cron.schedule` both Odoo sync jobs, replacing the anon key in `Authorization` header with the service role key via `vault.decrypted_secrets` or a stored setting |
 
-No database changes, no new queries, no new hooks — `project_name` is already in `StationItem`.
+### Auth Flow After Fix
+
+```text
+pg_cron fires every 15 min
+       |
+       v
+net.http_post → odoo-crm-sync
+       |
+       Authorization: Bearer <SERVICE_ROLE_KEY>
+       |
+       v
+token === serviceRoleKey?
+  YES → skip user validation, run sync with serviceClient
+  NO  → validate JWT, check admin role, proceed or 401
+```
+
+No changes to the sync logic itself — only the authentication gate at the top of both functions changes.
