@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { FileText, Upload, ArrowRight, ArrowLeft, Users, Briefcase } from "lucide-react";
+import { FileText, Upload, ArrowRight, ArrowLeft, Users, Briefcase, Sparkles, Loader2 } from "lucide-react";
 import TakeoffPipeline from "./TakeoffPipeline";
 
 interface TakeoffWizardProps {
@@ -26,6 +26,11 @@ export default function TakeoffWizard({ open, onClose, onComplete }: TakeoffWiza
   const [uploading, setUploading] = useState(false);
   const [pipelineStage, setPipelineStage] = useState<string | null>(null);
   const [resultData, setResultData] = useState<any>(null);
+
+  // Auto-scope state
+  const [scopeLoading, setScopeLoading] = useState(false);
+  const [scopeSource, setScopeSource] = useState<"manual" | "ai">("manual");
+  const scopeAnalyzedRef = useRef(false);
 
   // ERP linking
   const [customerId, setCustomerId] = useState<string>("");
@@ -47,6 +52,47 @@ export default function TakeoffWizard({ open, onClose, onComplete }: TakeoffWiza
       .order("created_at", { ascending: false })
       .then(({ data }) => { setLeads(data ?? []); });
   }, [customerId]);
+
+  const analyzeScope = useCallback(async (urls: string[]) => {
+    if (!urls.length || scopeLoading) return;
+    setScopeLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("analyze-scope", {
+        body: { file_urls: urls },
+      });
+      if (error) throw error;
+      if (data?.scope && !scopeContext) {
+        setScopeContext(data.scope);
+        setScopeSource("ai");
+      }
+    } catch (err: any) {
+      console.warn("Auto-scope failed:", err.message);
+    } finally {
+      setScopeLoading(false);
+    }
+  }, [scopeContext, scopeLoading]);
+
+  const handleManualAnalyze = useCallback(async () => {
+    if (scopeContext && scopeSource === "manual") {
+      const ok = confirm("This will replace your current scope text with an AI suggestion. Continue?");
+      if (!ok) return;
+    }
+    setScopeLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("analyze-scope", {
+        body: { file_urls: fileUrls },
+      });
+      if (error) throw error;
+      if (data?.scope) {
+        setScopeContext(data.scope);
+        setScopeSource("ai");
+      }
+    } catch (err: any) {
+      toast.error("Scope analysis failed");
+    } finally {
+      setScopeLoading(false);
+    }
+  }, [fileUrls, scopeContext, scopeSource]);
 
   const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -138,7 +184,14 @@ export default function TakeoffWizard({ open, onClose, onComplete }: TakeoffWiza
               </div>
             )}
             <div className="flex justify-end">
-              <Button onClick={() => setStep(2)} disabled={fileUrls.length === 0}>
+              <Button onClick={() => {
+                setStep(2);
+                // Auto-trigger scope analysis in background
+                if (!scopeAnalyzedRef.current && fileUrls.length > 0) {
+                  scopeAnalyzedRef.current = true;
+                  analyzeScope(fileUrls);
+                }
+              }} disabled={fileUrls.length === 0}>
                 Next <ArrowRight className="h-4 w-4 ml-1" />
               </Button>
             </div>
@@ -180,8 +233,34 @@ export default function TakeoffWizard({ open, onClose, onComplete }: TakeoffWiza
               </div>
             )}
             <div>
-              <Label>Scope / Context (optional)</Label>
-              <Textarea placeholder="e.g. Estimate retaining walls W6-W10 only" value={scopeContext} onChange={(e) => setScopeContext(e.target.value)} rows={2} />
+              <div className="flex items-center justify-between mb-1">
+                <Label className="flex items-center gap-1">
+                  Scope / Context (optional)
+                  {scopeSource === "ai" && !scopeLoading && (
+                    <Badge variant="secondary" className="ml-1 text-xs gap-1">
+                      <Sparkles className="h-3 w-3" /> AI Suggested
+                    </Badge>
+                  )}
+                </Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleManualAnalyze}
+                  disabled={scopeLoading || fileUrls.length === 0}
+                  className="h-7 text-xs gap-1"
+                >
+                  {scopeLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+                  {scopeLoading ? "Analyzing..." : "Analyze Scope"}
+                </Button>
+              </div>
+              <Textarea
+                placeholder={scopeLoading ? "AI analyzing drawings..." : "e.g. Estimate retaining walls W6-W10 only"}
+                value={scopeContext}
+                onChange={(e) => { setScopeContext(e.target.value); setScopeSource("manual"); }}
+                rows={2}
+                className={scopeLoading ? "opacity-60" : ""}
+              />
             </div>
             <div>
               <Label>Waste Factor (%)</Label>
