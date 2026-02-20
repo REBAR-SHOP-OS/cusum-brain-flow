@@ -94,27 +94,31 @@ Implemented output validation for high-risk agents:
 - **Response metadata**: QA flags returned as `qaReview` in API response for UI consumption
 - **Nightly cron**: `embed-documents-nightly` runs at 3 AM UTC indexing all domains
 
-## Phase 5: Prompt Cache Optimization
+## Phase 5: Prompt Cache Optimization ✅ COMPLETE
 
-Structure all prompts to maximize OpenAI/Gemini prompt caching.
+Restructured message array for OpenAI/Gemini prompt caching:
 
-**What changes:**
-- Move all static content (system prompt, tool definitions, team directory, business rules) to the front of the message array
-- Keep dynamic content (user context, conversation history) at the end
-- Ensure system prompt + tools are identical across calls for the same agent (deterministic prefix)
-- This is a refactor of message ordering in the orchestrator, not new functionality
+- **Static prefix**: System prompt (ONTARIO_CONTEXT + agent prompt + governance + tools + shared instructions) stays identical across calls for the same agent → cached by providers at 50-90% discount
+- **Dynamic suffix**: Brain knowledge, role access, RAG context, data context, and document analysis go in a separate system message after the static prefix
+- **History + user message**: Appended last as always
+- **Cache boundary preserved**: The split into two system messages ensures the static prefix hash remains constant
 
-**Expected savings:** OpenAI caches identical prompt prefixes and charges 50-90% less for cached tokens. With ~800 tokens of static prefix per agent, savings compound across calls.
+**Expected savings:** ~800-2000 tokens of static prefix cached per agent, compounding across all calls.
 
-## Phase 6: Executive Dashboard Agent
+## Phase 6: Executive Dashboard Context ✅ COMPLETE
 
-Enhance the existing Prism (Data) agent with cross-agent KPI aggregation.
+Added cross-agent KPI aggregation for Data/Empire/Commander agents:
 
-**What changes:**
-- Add a `fetchExecutiveContext()` function that pulls summary metrics from all domains
-- Include: total AR, pipeline value, production throughput, open tickets, delivery success rate
-- Add a "weekly digest" briefing template that Prism generates automatically
-- Wire into the existing `vizzy-daily-brief` pattern
+- **`_shared/agentExecutiveContext.ts`**: New module with `fetchExecutiveContext()` that pulls summary metrics:
+  - Financial: Total AR, overdue AR, total AP, weekly revenue
+  - Pipeline: Active leads, hot leads count, pipeline value
+  - Production: Active items, completed/total pieces, progress %
+  - Delivery: Weekly total, completed, success rate %
+  - Support: Open ticket count
+  - Agent usage: Session counts by agent name
+  - Recent events: Last 10 activity events from the week
+- **Wired into orchestrator**: Data, Empire, and Commander agents automatically receive `executiveKPIs` in their context
+- **Uses service role client**: Ensures cross-domain read access regardless of user RLS
 
 ## Implementation Order and Timeline
 
