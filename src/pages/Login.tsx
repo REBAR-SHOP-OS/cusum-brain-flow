@@ -190,6 +190,24 @@ export default function Login() {
             Sign up
           </Link>
         </p>
+        <p className="text-center text-xs text-muted-foreground">
+          <button
+            type="button"
+            className="hover:underline text-muted-foreground"
+            onClick={() => {
+              Object.keys(localStorage)
+                .filter((k) => k.startsWith("sb-"))
+                .forEach((k) => localStorage.removeItem(k));
+              toast({
+                title: "Session cleared",
+                description: "Reloading with a fresh session...",
+              });
+              setTimeout(() => window.location.reload(), 500);
+            }}
+          >
+            Having trouble signing in? Clear session
+          </button>
+        </p>
       </div>
     </div>
   );
