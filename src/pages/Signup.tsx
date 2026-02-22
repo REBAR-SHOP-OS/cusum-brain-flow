@@ -45,7 +45,7 @@ export default function Signup() {
     setGoogleLoading(true);
     
     const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: "https://cusum-brain-flow.lovable.app/home",
+      redirect_uri: `${window.location.origin}/home`,
     });
 
     if (result.error) {
