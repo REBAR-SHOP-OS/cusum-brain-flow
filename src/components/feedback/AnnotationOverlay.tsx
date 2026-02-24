@@ -199,19 +199,33 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl }: Props) {
       } = await supabase.auth.getUser();
       const userId = user?.id;
 
-      // Look up submitter's profile
+      // Domain restriction: only @rebar.shop users
+      if (!user?.email?.endsWith('@rebar.shop')) {
+        toast.error("فقط کاربران @rebar.shop می‌توانند بازخورد ارسال کنند");
+        return;
+      }
+
+      // Look up submitter's profile (include company_id as fallback)
       let submitterProfileId: string | null = null;
       let submitterName = "Unknown";
+      let resolvedCompanyId = companyId;
       if (userId) {
         const { data: prof } = await supabase
           .from("profiles")
-          .select("id, full_name")
+          .select("id, full_name, company_id")
           .eq("user_id", userId)
           .maybeSingle();
         if (prof) {
           submitterProfileId = prof.id;
           submitterName = prof.full_name || "Unknown";
+          if (!resolvedCompanyId) {
+            resolvedCompanyId = (prof as any).company_id;
+          }
         }
+      }
+
+      if (!resolvedCompanyId) {
+        throw new Error("Company context not found. Please try again.");
       }
 
       // Get current page for context
@@ -227,7 +241,7 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl }: Props) {
           status: "pending",
           priority: "high",
           assigned_to: profileId,
-          company_id: companyId ?? "a0000000-0000-0000-0000-000000000001",
+          company_id: resolvedCompanyId,
           created_by_profile_id: submitterProfileId,
           source: "screenshot_feedback",
           attachment_url: publicUrl,
