@@ -1,59 +1,59 @@
 
 
-## Fix: Items Reappearing After Approve & Edits Not Saved
+## Fix: Customer List Capped at 1000 on Accounting Page
 
-### Problem Summary
-Three issues are happening together, creating the impression that "Approve" and "Edit & Approve" do nothing:
+### Problem
+The accounting page shows "Customers (1000)" instead of the full ~1,947 customers. The database has 1,947 active `qb_customers` records, but the query fetching them is silently truncated at 1,000 rows by the backend's default row limit.
 
-1. **Auto-follow-up creates a clone**: After a successful approve+execute, the edge function `penny-execute-action` (lines 136-161) inserts a NEW `pending_approval` item for the same customer with `action_payload: {}` (empty). This makes it look like the item "came back" and any edits are "lost."
+### Root Cause
+In `src/hooks/useQuickBooksData.ts` (line 296), the `loadFromMirror` function fetches customers with:
+```typescript
+supabase.from("qb_customers").select("*").eq("is_deleted", false).limit(5000)
+```
+Despite requesting 5,000 rows, the backend enforces a maximum of 1,000 rows per query. The same issue affects vendors, accounts, and items queries on lines 295-298.
 
-2. **Duplicate items accumulate**: The database currently has customers with up to 6 duplicate pending items (e.g., GLADIUS 7835 Inc has 6). Each "Scan Now" or auto-follow-up can pile up duplicates because the dedup logic doesn't catch follow-ups created by `penny-execute-action`.
-
-3. **No immediate UI refresh**: The `approve` function in `usePennyQueue.ts` does not call `load()` after the mutation completes. It relies entirely on the realtime subscription, which has latency.
-
-### Root Causes
-
-**File: `supabase/functions/penny-execute-action/index.ts` (lines 136-161)**
-After successful execution, the function unconditionally inserts a new follow-up item with an empty `action_payload: {}` and no dedup check. This is the main cause of items "reappearing."
-
-**File: `src/hooks/usePennyQueue.ts` (line 92-93)**
-The `approve` function does not await a `load()` call after the edge function completes. The UI stays stale until the realtime subscription fires.
+The `loadMirrorTransactions` helper (line 149) already implements proper pagination using `.range()` -- but the entity-table queries (customers, vendors, accounts, items) do not.
 
 ### Solution
 
-#### 1. Edge Function: Add dedup guard and stop auto-follow-up for escalations
+**File: `src/hooks/useQuickBooksData.ts`**
 
-**File: `supabase/functions/penny-execute-action/index.ts`**
+1. Create a generic paginated fetch helper (similar to `loadMirrorTransactions`) for mirror entity tables:
 
-- Before inserting the auto-follow-up (line 146), add a dedup check: query `penny_collection_queue` for any existing `pending_approval` item with the same `customer_name` and skip if one exists
-- Set `action_payload` on the follow-up to carry forward relevant context (invoice list, customer info) instead of `{}`
-- Keep the auto-follow-up feature (it's useful) but prevent duplicates
+```text
+async function loadMirrorEntity(table, selectCols, filterCol, filterVal) {
+  const all = [];
+  let page = 0;
+  const PAGE_SIZE = 1000;
+  while (true) {
+    const { data } = await supabase
+      .from(table)
+      .select(selectCols)
+      .eq(filterCol, filterVal)
+      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+    const rows = data || [];
+    all.push(...rows);
+    if (rows.length < PAGE_SIZE) break;
+    page++;
+  }
+  return all;
+}
+```
 
-#### 2. Hook: Force refetch after approve/reject/schedule
+2. Replace the four `.limit(5000)` calls on lines 295-298 with calls to this paginated helper:
 
-**File: `src/hooks/usePennyQueue.ts`**
+| Line | Current | Change |
+|------|---------|--------|
+| 295 | `supabase.from("qb_accounts").select("*").eq("is_deleted", false).limit(5000)` | `loadMirrorEntity("qb_accounts", "*", "is_deleted", false)` |
+| 296 | `supabase.from("qb_customers").select("*").eq("is_deleted", false).limit(5000)` | `loadMirrorEntity("qb_customers", "*", "is_deleted", false)` |
+| 297 | `supabase.from("qb_vendors").select("*").eq("is_deleted", false).limit(5000)` | `loadMirrorEntity("qb_vendors", "*", "is_deleted", false)` |
+| 298 | `supabase.from("qb_items").select("*").eq("is_deleted", false).limit(5000)` | `loadMirrorEntity("qb_items", "*", "is_deleted", false)` |
 
-- Add `await load()` at the end of `approve`, `reject`, and `schedule` callbacks, after the DB update and edge function call complete
-- This ensures the UI immediately reflects the new state without waiting for realtime
-
-#### 3. Data cleanup: Remove existing duplicates
-
-- Run a one-time migration or manual query to deduplicate existing `pending_approval` items, keeping only one per customer
-
-### Technical Details
-
-| File | Change | Detail |
-|------|--------|--------|
-| `penny-execute-action/index.ts` | Add dedup check before follow-up insert (line ~146) | Query for existing pending item with same `customer_name`; skip insert if found |
-| `penny-execute-action/index.ts` | Carry forward context in follow-up `action_payload` | Copy invoice details from parent action instead of `{}` |
-| `usePennyQueue.ts` | Add `await load()` after approve (line ~93) | Force immediate UI refresh |
-| `usePennyQueue.ts` | Add `await load()` after reject (line ~109) | Force immediate UI refresh |
-| `usePennyQueue.ts` | Add `await load()` after schedule (line ~122) | Force immediate UI refresh |
-| Database | One-time cleanup of duplicate pending items | Keep newest per customer, reject the rest |
+3. Update the data consumers on lines 308-324 to handle the new return type (raw arrays instead of `{ data }` objects) -- e.g., `mirrorCustomersData` becomes an array directly instead of `mirrorCustomersData.data`.
 
 ### What This Does NOT Touch
-- The `/accounting` page core logic or UI
-- The feedback modal
-- Any other components or pages
-- The `penny-auto-actions` scan logic (its dedup already works correctly)
+- No database schema changes needed
+- No edge function changes
+- The QB API fallback path (lines 403+) already has proper pagination for customers (lines 451-465)
+- No UI component changes required -- the count display is already dynamic
 
