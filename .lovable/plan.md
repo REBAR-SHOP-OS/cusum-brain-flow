@@ -1,53 +1,60 @@
 
 
-## Fix: Show Detailed Error Messages in Sales Receipt Tab
+## Fix: Task Completion Status Not Updating Across Notification Center and Inbox
 
 ### Problem
-When the Sales Receipts tab encounters an error (e.g., QuickBooks API failure, expired token), it shows a generic red toast like "Error loading sales receipts" with a vague message such as "Edge Function returned a non-2xx status code" instead of the actual error (e.g., "QuickBooks API error (401): query?query=SELECT * FROM SalesReceipt...").
+When a task is marked complete, approved/closed, or reopened on the Tasks page, the corresponding notifications in the Inbox/Notification Center are never dismissed or updated. This means stale "Approve & Close" to-do items and task-related notifications remain visible indefinitely, making it appear that task status changes don't propagate across the app.
 
 ### Root Cause
-The edge function (`quickbooks-oauth`) correctly returns structured JSON errors like `{ error: "QuickBooks API error (401): ..." }` with a 500 status code. However, `supabase.functions.invoke()` wraps non-2xx responses into a `FunctionsHttpError` object where `.message` is generic. The actual error details are in the response body, which the component never reads.
+Three functions in `src/pages/Tasks.tsx` modify task or `human_task` status but never touch the related `notifications` rows:
 
-In `AccountingSalesReceipts.tsx`, both `loadReceipts` and `handleCreate` catch the error and display `e.message` -- which is the generic SDK message, not the server's error detail.
+1. **`toggleComplete`** (line 470): Creates a `human_task` (which triggers a notification via DB trigger), but when *reopening* a completed task, it doesn't dismiss the existing approval notification.
+2. **`approveAndClose`** (line 524): Resolves the `human_tasks` but does NOT dismiss the corresponding notification that was created by the `notify_human_task` trigger.
+3. **`reopenWithIssue`** (line 543): Same as above -- resolves `human_tasks` but leaves notifications untouched.
+
+The `notifications` table has a `metadata` column containing `{ human_task_id: "..." }` (set by the `notify_human_task` trigger), which can be used to find and dismiss the correct notifications.
 
 ### Solution
 
-**File: `src/components/accounting/AccountingSalesReceipts.tsx`**
+**File: `src/pages/Tasks.tsx`**
 
-Update both `try/catch` blocks in `loadReceipts` and `handleCreate` to use `getErrorMessage` from `@/lib/utils` and also parse the response body from the edge function error when available.
+Add a helper function `dismissTaskNotifications` that dismisses notifications linked to a specific task's `human_tasks`, then call it from the three affected functions.
 
-Specifically:
-1. Import `getErrorMessage` from `@/lib/utils`
-2. In `loadReceipts` (line 46-58): After `supabase.functions.invoke`, check if the response `data` itself contains an `error` field (for cases where the function returns 200 but with an error payload). Also, in the catch block, attempt to read `e.context?.body` (the response text from Supabase SDK) to extract the real error message.
-3. In `handleCreate` (line 63-86): Apply the same pattern -- extract the real error message from the response or the caught error.
+| Function | Change |
+|---|---|
+| New helper: `dismissTaskNotifications(taskId)` | Query `notifications` where `metadata->>'human_task_id'` matches any `human_task` for the given task entity, and update their status to `"dismissed"` |
+| `approveAndClose` (line 524) | After resolving `human_tasks`, call `dismissTaskNotifications(task.id)` |
+| `reopenWithIssue` (line 543) | After resolving `human_tasks`, call `dismissTaskNotifications(task.id)` |
+| `toggleComplete` (line 470) | When reopening (uncompleting), call `dismissTaskNotifications(task.id)` to clear any lingering approval notifications |
 
 ### Technical Details
 
-| File | Change |
-|---|---|
-| `src/components/accounting/AccountingSalesReceipts.tsx` | Import `getErrorMessage`; update both catch blocks to parse `e.context?.body` for the real server error message before falling back to `getErrorMessage(e)` |
+The helper will:
+1. Query `human_tasks` to get IDs for the task's entity (`entity_type = 'task'`, `entity_id = taskId`)
+2. For each `human_task` ID, update `notifications` where `metadata->>'human_task_id'` matches, setting `status = 'dismissed'`
+3. The Realtime subscription in `useNotifications` will automatically pick up these changes and remove the notifications from the Inbox UI
 
-The key pattern is:
+```text
+toggleComplete(task)
+  |
+  +-- (completing) --> creates human_task --> trigger creates notification --> appears in Inbox
+  |
+  +-- (reopening) --> dismissTaskNotifications(task.id) --> notifications dismissed --> removed from Inbox
 
-```typescript
-} catch (e: any) {
-  // supabase.functions.invoke wraps non-2xx in FunctionsHttpError
-  // The real error is in the response body
-  let msg = getErrorMessage(e);
-  try {
-    const body = e?.context?.body ? await e.context.body.text() : null;
-    if (body) {
-      const parsed = JSON.parse(body);
-      if (parsed.error) msg = parsed.error;
-    }
-  } catch { /* use fallback msg */ }
-  toast({ title: "Error loading sales receipts", description: msg, variant: "destructive" });
-}
+approveAndClose(task)
+  |
+  +-- resolves human_tasks
+  +-- dismissTaskNotifications(task.id) --> notifications dismissed --> removed from Inbox
+
+reopenWithIssue(task)
+  |
+  +-- resolves human_tasks
+  +-- dismissTaskNotifications(task.id) --> notifications dismissed --> removed from Inbox
 ```
 
-This ensures the actual QuickBooks error message (e.g., "QuickBooks API error (401)") is shown to the user instead of a generic "Edge Function returned a non-2xx status code".
-
 ### What is NOT Changed
-- No edge function changes needed -- it already returns structured errors
-- No database changes
-- No changes to other accounting tabs (though they may benefit from the same pattern later)
+- No database schema or migration changes
+- No changes to the `useNotifications` hook (Realtime handles the updates)
+- No changes to InboxPanel, Sidebar, TopBar, or any other component
+- No changes to any other page or feature
+
