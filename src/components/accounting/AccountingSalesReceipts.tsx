@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Receipt, Search, Plus, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { getErrorMessage } from "@/lib/utils";
 import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
 
 interface Props {
@@ -52,7 +53,15 @@ export function AccountingSalesReceipts({ data }: Props) {
       if (error) throw error;
       setReceipts(result?.salesReceipts || []);
     } catch (e: any) {
-      toast({ title: "Error loading sales receipts", description: e.message, variant: "destructive" });
+      let msg = getErrorMessage(e);
+      try {
+        const body = e?.context?.body ? await e.context.body.text() : null;
+        if (body) {
+          const parsed = JSON.parse(body);
+          if (parsed.error) msg = parsed.error;
+        }
+      } catch { /* use fallback msg */ }
+      toast({ title: "Error loading sales receipts", description: msg, variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -80,7 +89,15 @@ export function AccountingSalesReceipts({ data }: Props) {
       setCustomerId(""); setDescription(""); setAmount(""); setMemo("");
       loadReceipts();
     } catch (e: any) {
-      toast({ title: "Error creating sales receipt", description: e.message, variant: "destructive" });
+      let msg = getErrorMessage(e);
+      try {
+        const body = e?.context?.body ? await e.context.body.text() : null;
+        if (body) {
+          const parsed = JSON.parse(body);
+          if (parsed.error) msg = parsed.error;
+        }
+      } catch { /* use fallback msg */ }
+      toast({ title: "Error creating sales receipt", description: msg, variant: "destructive" });
     } finally {
       setCreating(false);
     }
