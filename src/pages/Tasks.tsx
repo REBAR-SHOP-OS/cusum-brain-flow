@@ -27,6 +27,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
+import { ScheduledActivities } from "@/components/pipeline/ScheduledActivities";
 import { format, isPast, isToday, startOfDay } from "date-fns";
 
 // ─── Types ──────────────────────────────────────────────
@@ -1235,6 +1236,12 @@ export default function Tasks() {
                   </div>
                 </DialogContent>
               </Dialog>
+
+              {/* Next Activity */}
+              <div>
+                <h4 className="text-xs font-medium text-muted-foreground mb-2">Next Activity</h4>
+                <ScheduledActivities entityType="task" entityId={selectedTask.id} />
+              </div>
 
               {/* Audit Log */}
               <div>
