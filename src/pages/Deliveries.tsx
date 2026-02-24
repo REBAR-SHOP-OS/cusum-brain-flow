@@ -681,20 +681,18 @@ function DeliveryCard({ delivery, isSelected, onClick, onRequestDelete, deleting
             <Badge className={statusColors[status]}>
               {status}
             </Badge>
-            {status === "pending" && (
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-7 w-7 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
-                onClick={(e) => { e.stopPropagation(); onRequestDelete(delivery.id); }}
-                disabled={deletingId === delivery.id}
-              >
-                {deletingId === delivery.id
-                  ? <Loader2 className="w-4 h-4 animate-spin" />
-                  : <Trash2 className="w-4 h-4" />
-                }
-              </Button>
-            )}
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-7 w-7 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+              onClick={(e) => { e.stopPropagation(); onRequestDelete(delivery.id); }}
+              disabled={deletingId === delivery.id}
+            >
+              {deletingId === delivery.id
+                ? <Loader2 className="w-4 h-4 animate-spin" />
+                : <Trash2 className="w-4 h-4" />
+              }
+            </Button>
           </div>
         </div>
         <div className="text-sm text-muted-foreground space-y-1">
