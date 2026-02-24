@@ -218,9 +218,10 @@ export default function Deliveries() {
     d.status !== "completed" && d.status !== "delivered" && d.status !== "in-transit"
   );
 
-  const todayDeliveries = pendingDeliveries.filter(d => 
-    d.scheduled_date?.startsWith(today)
-  );
+  const todayDeliveries = pendingDeliveries.filter(d => {
+    const dateOnly = d.scheduled_date?.split("T")[0];
+    return dateOnly && dateOnly <= today; // today + overdue
+  });
   
   const upcomingDeliveries = pendingDeliveries.filter(d => {
     const dateOnly = d.scheduled_date?.split("T")[0];
