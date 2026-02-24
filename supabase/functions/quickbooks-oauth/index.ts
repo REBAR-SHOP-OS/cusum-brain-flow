@@ -1066,7 +1066,7 @@ async function handleGetProfitLoss(supabase: ReturnType<typeof createClient>, us
 async function handleGetBalanceSheet(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
   const config = await getQBConfig(supabase, userId);
   const asOfDate = (body.asOfDate as string) || new Date().toISOString().split("T")[0];
-  const data = await qbFetch(config, `reports/BalanceSheet?date_macro=Custom&end_date=${asOfDate}`);
+  const data = await qbFetch(config, `reports/BalanceSheet?end_date=${asOfDate}`);
   return jsonRes(data);
 }
 
