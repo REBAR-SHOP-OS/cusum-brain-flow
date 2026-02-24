@@ -122,7 +122,7 @@ export function MachineSelector({ machines }: MachineSelectorProps) {
                 </div>
 
                 {/* Capability badges */}
-                {spec && (
+                {spec && machine.status === "running" && (
                   <div className="flex items-center gap-1.5 flex-wrap justify-center">
                     <Badge variant="outline" className="text-[9px] px-1.5 py-0 font-mono">
                       {spec.operation.toUpperCase()}
