@@ -1,15 +1,19 @@
-import { useState, forwardRef } from "react";
+import { useState, useEffect, forwardRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { usePickupOrders, usePickupOrderItems } from "@/hooks/usePickupOrders";
 import { useCompletedBundles, type CompletedBundle } from "@/hooks/useCompletedBundles";
+import { useLoadingChecklist } from "@/hooks/useLoadingChecklist";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAuth } from "@/lib/auth";
+import { supabase } from "@/integrations/supabase/client";
 import { PickupVerification } from "@/components/shopfloor/PickupVerification";
 import { ReadyBundleList } from "@/components/dispatch/ReadyBundleList";
+import { DeliveryPackingSlip } from "@/components/delivery/DeliveryPackingSlip";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, Package, MapPin, ArrowLeft, AlertTriangle } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Loader2, Package, MapPin, ArrowLeft, AlertTriangle, FileText } from "lucide-react";
 
 const statusColors: Record<string, string> = {
   pending: "bg-muted text-muted-foreground",
@@ -28,35 +32,135 @@ const PickupStation = forwardRef<HTMLDivElement>(function PickupStation(_props, 
   const { bundles } = useCompletedBundles();
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [selectedBundle, setSelectedBundle] = useState<CompletedBundle | null>(null);
+  const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set());
+  const [showPackingSlip, setShowPackingSlip] = useState(false);
+  const [photoUrls, setPhotoUrls] = useState<Map<string, string>>(new Map());
+
+  const { checklistMap } = useLoadingChecklist(selectedBundle?.cutPlanId ?? null);
+
+  // Resolve signed URLs for loading photos
+  useEffect(() => {
+    if (!selectedBundle || checklistMap.size === 0) return;
+    const resolve = async () => {
+      const urls = new Map<string, string>();
+      for (const item of selectedBundle.items) {
+        const cl = checklistMap.get(item.id);
+        if (cl?.photo_path) {
+          const { data } = await supabase.storage
+            .from("clearance-photos")
+            .createSignedUrl(cl.photo_path, 3600);
+          if (data?.signedUrl) urls.set(item.id, data.signedUrl);
+        }
+      }
+      setPhotoUrls(urls);
+    };
+    resolve();
+  }, [selectedBundle, checklistMap]);
+
+  // Reset checked items when bundle changes
+  useEffect(() => {
+    if (selectedBundle) {
+      setCheckedItems(new Set(selectedBundle.items.map((i) => i.id)));
+    }
+  }, [selectedBundle]);
+
   const selectedOrder = orders.find((o) => o.id === selectedOrderId) || null;
   const { items, toggleVerified } = usePickupOrderItems(selectedOrderId);
 
+  const toggleItem = (id: string) => {
+    setCheckedItems((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (!selectedBundle) return;
+    if (checkedItems.size === selectedBundle.items.length) {
+      setCheckedItems(new Set());
+    } else {
+      setCheckedItems(new Set(selectedBundle.items.map((i) => i.id)));
+    }
+  };
+
+  if (showPackingSlip && selectedBundle) {
+    const selectedItems = selectedBundle.items.filter((i) => checkedItems.has(i.id));
+    const slipNumber = `PKP-${Date.now().toString(36).toUpperCase()}`;
+    return (
+      <DeliveryPackingSlip
+        slipNumber={slipNumber}
+        deliveryNumber={slipNumber}
+        customerName={selectedBundle.projectName}
+        date={new Date().toISOString()}
+        items={selectedItems}
+        onClose={() => setShowPackingSlip(false)}
+        scope={selectedBundle.planName}
+      />
+    );
+  }
+
   if (selectedBundle) {
+    const allChecked = checkedItems.size === selectedBundle.items.length;
     return (
       <div className="flex flex-col h-full">
         <header className="flex items-center gap-3 px-4 sm:px-6 py-4 border-b border-border">
-          <Button variant="ghost" size="icon" onClick={() => setSelectedBundle(null)}>
+          <Button variant="ghost" size="icon" onClick={() => { setSelectedBundle(null); setCheckedItems(new Set()); }}>
             <ArrowLeft className="w-5 h-5" />
           </Button>
-          <div>
+          <div className="flex-1">
             <h1 className="text-xl font-bold">{selectedBundle.projectName}</h1>
             <p className="text-xs text-muted-foreground">{selectedBundle.planName} • {selectedBundle.items.length} items • {selectedBundle.totalPieces} pcs</p>
           </div>
+          <Button variant="ghost" size="sm" onClick={toggleAll} className="text-xs">
+            {allChecked ? "Deselect All" : "Select All"}
+          </Button>
         </header>
         <div className="flex-1 overflow-auto p-4 sm:p-6">
           <div className="grid gap-3">
-            {selectedBundle.items.map((item) => (
-              <Card key={item.id}>
-                <CardContent className="p-3 flex items-center justify-between">
-                  <div>
-                    <span className="text-sm font-medium">{item.mark_number || "No mark"}</span>
-                    <p className="text-xs text-muted-foreground">{item.cut_length_mm}mm • {item.total_pieces} pcs</p>
-                  </div>
-                  <Badge variant="outline">{item.bar_code}</Badge>
-                </CardContent>
-              </Card>
-            ))}
+            {selectedBundle.items.map((item) => {
+              const photoUrl = photoUrls.get(item.id);
+              return (
+                <Card key={item.id} className={`cursor-pointer transition-all ${checkedItems.has(item.id) ? "border-primary/50 bg-primary/5" : ""}`} onClick={() => toggleItem(item.id)}>
+                  <CardContent className="p-3 flex items-center gap-3">
+                    <Checkbox
+                      checked={checkedItems.has(item.id)}
+                      onCheckedChange={() => toggleItem(item.id)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="shrink-0"
+                    />
+                    {photoUrl ? (
+                      <img src={photoUrl} alt="Loading evidence" className="w-10 h-10 rounded object-cover shrink-0 border border-border" />
+                    ) : (
+                      <div className="w-10 h-10 rounded bg-muted flex items-center justify-center shrink-0">
+                        <Package className="w-5 h-5 text-muted-foreground" />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-medium">{item.mark_number || "No mark"}</span>
+                      <p className="text-xs text-muted-foreground">{item.cut_length_mm}mm • {item.total_pieces} pcs</p>
+                    </div>
+                    <Badge variant="outline">{item.bar_code}</Badge>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
+        </div>
+        {/* Sticky footer */}
+        <div className="border-t border-border px-4 sm:px-6 py-3 flex items-center justify-between bg-background">
+          <span className="text-sm text-muted-foreground">
+            {checkedItems.size} of {selectedBundle.items.length} selected
+          </span>
+          <Button
+            disabled={checkedItems.size === 0}
+            onClick={() => setShowPackingSlip(true)}
+            className="gap-2"
+          >
+            <FileText className="w-4 h-4" />
+            Create Pickup Packing Slip
+          </Button>
         </div>
       </div>
     );
