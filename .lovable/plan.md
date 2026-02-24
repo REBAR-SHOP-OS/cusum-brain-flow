@@ -1,52 +1,53 @@
 
 
-## Enhance Payments Screen: Outstanding Invoices + Date of Payment
+## Fix: Show Detailed Error Messages in Sales Receipt Tab
 
 ### Problem
-1. The **Payments** tab in Accounting does not show outstanding (unpaid) invoices for a selected customer -- it only lists already-received payments.
-2. When recording a new payment (via `CreateTransactionDialog`), there is no "Date of Payment" input field, so all payments default to today's date in QuickBooks.
+When the Sales Receipts tab encounters an error (e.g., QuickBooks API failure, expired token), it shows a generic red toast like "Error loading sales receipts" with a vague message such as "Edge Function returned a non-2xx status code" instead of the actual error (e.g., "QuickBooks API error (401): query?query=SELECT * FROM SalesReceipt...").
+
+### Root Cause
+The edge function (`quickbooks-oauth`) correctly returns structured JSON errors like `{ error: "QuickBooks API error (401): ..." }` with a 500 status code. However, `supabase.functions.invoke()` wraps non-2xx responses into a `FunctionsHttpError` object where `.message` is generic. The actual error details are in the response body, which the component never reads.
+
+In `AccountingSalesReceipts.tsx`, both `loadReceipts` and `handleCreate` catch the error and display `e.message` -- which is the generic SDK message, not the server's error detail.
 
 ### Solution
 
-#### 1. Add Customer Filter + Outstanding Invoices to AccountingPayments
+**File: `src/components/accounting/AccountingSalesReceipts.tsx`**
 
-**File: `src/components/accounting/AccountingPayments.tsx`**
+Update both `try/catch` blocks in `loadReceipts` and `handleCreate` to use `getErrorMessage` from `@/lib/utils` and also parse the response body from the edge function error when available.
 
-- Add a customer dropdown (Select) that filters payments by `CustomerRef.value`
-- When a customer is selected, display their outstanding invoices (from `data.invoices` where `Balance > 0` and matching `CustomerRef.value`) in a separate section above or beside the payments table
-- Show each outstanding invoice's doc number, date, total, and open balance
-- Include a summary card showing total outstanding balance for the selected customer
-
-#### 2. Add "Date of Payment" Field to CreateTransactionDialog
-
-**File: `src/components/customers/CreateTransactionDialog.tsx`**
-
-- Add a `txnDate` state field (defaulting to today's date)
-- Render a date input labeled "Date of Payment" in the Payment form section (alongside the existing Payment Method and Amount fields)
-- Pass `txnDate` in the submission body when `type === "Payment"`
-
-#### 3. Accept TxnDate in the Edge Function
-
-**File: `supabase/functions/quickbooks-oauth/index.ts`**
-
-- In `handleCreatePayment`, extract `txnDate` from the request body
-- If provided, add `TxnDate: txnDate` to the QuickBooks API payload so the payment is recorded with the correct date
+Specifically:
+1. Import `getErrorMessage` from `@/lib/utils`
+2. In `loadReceipts` (line 46-58): After `supabase.functions.invoke`, check if the response `data` itself contains an `error` field (for cases where the function returns 200 but with an error payload). Also, in the catch block, attempt to read `e.context?.body` (the response text from Supabase SDK) to extract the real error message.
+3. In `handleCreate` (line 63-86): Apply the same pattern -- extract the real error message from the response or the caught error.
 
 ### Technical Details
 
 | File | Change |
 |---|---|
-| `src/components/accounting/AccountingPayments.tsx` | Add customer selector, outstanding invoices panel using existing `data.invoices` filtered by customer + balance > 0 |
-| `src/components/customers/CreateTransactionDialog.tsx` | Add `txnDate` state + date input for Payment type, pass in body |
-| `supabase/functions/quickbooks-oauth/index.ts` | Accept `txnDate` param, include `TxnDate` in QB payment payload |
+| `src/components/accounting/AccountingSalesReceipts.tsx` | Import `getErrorMessage`; update both catch blocks to parse `e.context?.body` for the real server error message before falling back to `getErrorMessage(e)` |
 
-### Data Flow
-- Outstanding invoices are already available via `data.invoices` (QBInvoice[]) in the accounting hook -- no new queries needed
-- The customer list is already available via `data.customers`
-- The edge function already handles `create-payment` -- just needs the additional `TxnDate` field
+The key pattern is:
+
+```typescript
+} catch (e: any) {
+  // supabase.functions.invoke wraps non-2xx in FunctionsHttpError
+  // The real error is in the response body
+  let msg = getErrorMessage(e);
+  try {
+    const body = e?.context?.body ? await e.context.body.text() : null;
+    if (body) {
+      const parsed = JSON.parse(body);
+      if (parsed.error) msg = parsed.error;
+    }
+  } catch { /* use fallback msg */ }
+  toast({ title: "Error loading sales receipts", description: msg, variant: "destructive" });
+}
+```
+
+This ensures the actual QuickBooks error message (e.g., "QuickBooks API error (401)") is shown to the user instead of a generic "Edge Function returned a non-2xx status code".
 
 ### What is NOT Changed
-- No database schema changes
-- No changes to other pages or components
-- No changes to the Customer Portal invoice display
-- No changes to BillPaymentDialog (vendor-side payments)
+- No edge function changes needed -- it already returns structured errors
+- No database changes
+- No changes to other accounting tabs (though they may benefit from the same pattern later)
