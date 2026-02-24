@@ -1,19 +1,36 @@
 
+# Fix: "Suggestion failed" Error Across the App
 
-# Fix: Edge Function Deployment Timeout
+## Root Cause
+The `ai-inline-suggest` edge function (line 60-62) is hardcoded to use `provider: "gpt"` with model `gpt-4o-mini`. Based on project history, **OpenAI API quotas are exhausted**, so every call returns a 429 or similar error. The function has **no fallback** to Gemini, unlike other edge functions in the project.
 
-## Problem
-The build failed with `Bundle generation timed out` errors during edge function deployment. This is a transient infrastructure issue -- the project has 140+ edge functions, and the deployment process exceeded its time limit. The actual code changes (OAuth redirect fix and clear session link) are correct and do not need modification.
+A secondary issue: the CORS `Access-Control-Allow-Headers` is missing newer Supabase client headers, which can cause preflight failures in some browsers.
 
-## Solution
-No code changes are needed. The fix is to **re-trigger the deployment**, which will retry the edge function bundling. Transient timeouts like this resolve on subsequent attempts.
+## Fix (1 file)
 
-## What Was Already Fixed (Previous Commit)
-These changes are already in place and working:
+### `supabase/functions/ai-inline-suggest/index.ts`
 
-1. **`src/pages/Signup.tsx`** -- Hardcoded redirect URL replaced with `${window.location.origin}/home`
-2. **`src/pages/Login.tsx`** -- "Having trouble signing in? Clear session" recovery link added
+**Change 1 -- Switch to Gemini with GPT fallback (line 60-68):**
+Replace:
+```typescript
+provider: "gpt",
+model: "gpt-4o-mini",
+```
+With:
+```typescript
+provider: "gemini",
+model: "gemini-2.5-flash-lite",
+fallback: { provider: "gemini", model: "gemini-2.5-flash" },
+```
+This uses the cheapest/fastest Gemini model (appropriate for short suggestions) and falls back to the standard Flash model if rate-limited.
 
-## Action
-Approve this plan to re-trigger the build. No files will be modified -- the existing code is correct. The deployment will simply retry and succeed.
+**Change 2 -- Fix CORS headers (line 6):**
+Update `Access-Control-Allow-Headers` to include the full set of Supabase client headers:
+```
+authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version
+```
 
+## Why This Fixes It
+- The "Suggestion failed: Edge Function returned a non-2xx status code" error is caused by the OpenAI API rejecting calls (quota exhausted), which makes the function return HTTP 500
+- Switching to Gemini (which is working for all other agents in the app) resolves the issue immediately
+- The CORS fix prevents potential preflight failures with newer Supabase JS client versions
