@@ -15,6 +15,7 @@ export interface CutPlan {
   project_name: string | null;
   project_id: string | null;
   machine_id: string | null;
+  customer_name?: string | null;
 }
 
 export interface CutPlanItem {
@@ -73,14 +74,21 @@ export function useCutPlans() {
     setLoading(true);
     const { data, error } = await supabase
       .from("cut_plans")
-      .select("*")
+      .select("*, projects(name, customer_id, customers(name))")
       .eq("company_id", companyId)
       .order("created_at", { ascending: false });
 
     if (error) {
       toast({ title: "Error loading cut plans", description: error.message, variant: "destructive" });
     } else {
-      setPlans((data as CutPlan[]) || []);
+      const mapped = (data || []).map((row: any) => {
+        const { projects, ...rest } = row;
+        return {
+          ...rest,
+          customer_name: projects?.customers?.name || null,
+        } as CutPlan;
+      });
+      setPlans(mapped);
     }
     setLoading(false);
   }, [companyId, toast]);

@@ -1,9 +1,9 @@
 import { useCutPlans, useCutPlanItems } from "@/hooks/useCutPlans";
 import { useState, useMemo } from "react";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Pencil } from "lucide-react";
+import { ArrowLeft, Pencil, ChevronDown, ChevronRight } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 export function DetailedListView() {
   const { plans, loading: plansLoading } = useCutPlans();
@@ -11,6 +11,26 @@ export function DetailedListView() {
   const { items, loading: itemsLoading } = useCutPlanItems(selectedPlanId);
 
   const selectedPlan = plans.find(p => p.id === selectedPlanId);
+
+  // Group plans by customer_name, sorted alphabetically
+  const groupedPlans = useMemo(() => {
+    const groups: Record<string, typeof plans> = {};
+    for (const plan of plans) {
+      const key = plan.customer_name || "Ungrouped";
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(plan);
+    }
+    // Sort manifests within each group alphabetically
+    for (const key of Object.keys(groups)) {
+      groups[key].sort((a, b) => a.name.localeCompare(b.name));
+    }
+    // Return sorted group entries
+    return Object.entries(groups).sort(([a], [b]) => {
+      if (a === "Ungrouped") return 1;
+      if (b === "Ungrouped") return -1;
+      return a.localeCompare(b);
+    });
+  }, [plans]);
 
   // Dimension columns
   const dimCols = ["A", "B", "C", "D", "E", "F", "G", "H", "J", "K", "O", "R"];
@@ -25,16 +45,32 @@ export function DetailedListView() {
         ) : plans.length === 0 ? (
           <p className="text-sm text-muted-foreground">No manifests found.</p>
         ) : (
-          <div className="space-y-2">
-            {plans.map(plan => (
-              <button
-                key={plan.id}
-                onClick={() => setSelectedPlanId(plan.id)}
-                className="w-full text-left p-4 rounded-lg border border-border bg-card hover:bg-muted/50 transition-colors"
-              >
-                <span className="font-bold text-foreground">{plan.name}</span>
-                <span className="ml-3 text-xs text-muted-foreground">{plan.status}</span>
-              </button>
+          <div className="space-y-3">
+            {groupedPlans.map(([companyName, companyPlans]) => (
+              <Collapsible key={companyName} defaultOpen>
+                <CollapsibleTrigger className="w-full flex items-center gap-2 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors text-left group">
+                  <ChevronDown className="w-4 h-4 text-muted-foreground group-data-[state=closed]:hidden" />
+                  <ChevronRight className="w-4 h-4 text-muted-foreground group-data-[state=open]:hidden" />
+                  <span className="font-bold text-foreground uppercase text-sm tracking-wide">{companyName}</span>
+                  <Badge variant="secondary" className="ml-auto text-[10px]">
+                    {companyPlans.length}
+                  </Badge>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="ml-4 border-l-2 border-border/50 space-y-1 mt-1">
+                    {companyPlans.map(plan => (
+                      <button
+                        key={plan.id}
+                        onClick={() => setSelectedPlanId(plan.id)}
+                        className="w-full text-left pl-4 pr-3 py-2.5 rounded-r-lg hover:bg-muted/30 transition-colors flex items-center justify-between"
+                      >
+                        <span className="font-medium text-sm text-foreground">{plan.name}</span>
+                        <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{plan.status}</span>
+                      </button>
+                    ))}
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
             ))}
           </div>
         )}
