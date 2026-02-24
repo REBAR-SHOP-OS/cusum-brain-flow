@@ -25,10 +25,9 @@ export default function StationDashboard() {
     return <Navigate to={`/shopfloor/station/${pinnedMachineId}`} replace />;
   }
 
-  // Active cut plans (draft, ready, queued, running)
-  const activePlans = plans.filter(p =>
-    ["draft", "ready", "queued", "running"].includes(p.status)
-  );
+  // Split plans into running vs queued
+  const runningPlans = plans.filter(p => p.status === "running");
+  const queuedPlans = plans.filter(p => ["draft", "ready", "queued"].includes(p.status));
 
   // Build a machine name lookup
   const machineMap = new Map(machines.map(m => [m.id, m.name]));
@@ -89,13 +88,13 @@ export default function StationDashboard() {
             {/* Material Flow Diagram */}
             <MaterialFlowDiagram />
 
-            <ActiveProductionHub machines={machines} activePlans={activePlans} />
+            <ActiveProductionHub machines={machines} activePlans={[...runningPlans, ...queuedPlans]} />
 
-            {/* Live Queue - Cut Plans */}
+            {/* Live Queue - Running Jobs Only */}
             <div className="space-y-3">
               <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">
-                  {activePlans.length}
+                <div className="w-6 h-6 rounded bg-success/20 flex items-center justify-center text-[10px] font-bold text-success">
+                  {runningPlans.length}
                 </div>
                 <h2 className="text-lg font-black italic tracking-wide uppercase text-foreground">
                   Live Queue
@@ -106,35 +105,111 @@ export default function StationDashboard() {
                 <div className="rounded-lg border border-dashed border-border p-6 text-center">
                   <Loader2 className="w-5 h-5 animate-spin text-muted-foreground mx-auto" />
                 </div>
-              ) : activePlans.length === 0 ? (
+              ) : runningPlans.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-border p-6 text-center">
                   <p className="text-sm text-muted-foreground">
-                    No active jobs in queue
+                    No active jobs running
                   </p>
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {activePlans.map(plan => {
+                  {runningPlans.map(plan => {
+                    const machineName = plan.machine_id ? machineMap.get(plan.machine_id) : null;
+                    return (
+                      <div
+                        key={plan.id}
+                        className="flex items-center gap-3 p-3 rounded-lg border border-success/40 bg-card hover:bg-muted/30 transition-colors"
+                      >
+                        <div className="w-2 h-2 rounded-full shrink-0 bg-success animate-pulse" />
+                        <Badge className="bg-success/20 text-success text-[10px] tracking-wider shrink-0">ACTIVE</Badge>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-sm font-bold text-foreground truncate">{plan.name}</h3>
+                          <div className="flex items-center gap-3 text-[10px] text-muted-foreground mt-0.5">
+                            {plan.project_name && (
+                              <span className="flex items-center gap-1 truncate">
+                                <FolderOpen className="w-3 h-3 shrink-0" />
+                                {plan.project_name}
+                              </span>
+                            )}
+                            {machineName && (
+                              <span className="flex items-center gap-1 truncate">
+                                <Layers className="w-3 h-3 shrink-0" />
+                                {machineName}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-[10px] gap-1 px-2.5 font-bold border-warning/40 text-warning hover:bg-warning/10"
+                            onClick={async () => {
+                              const ok = await updatePlanStatus(plan.id, "queued");
+                              if (ok) toast({ title: "Paused", description: plan.name });
+                            }}
+                          >
+                            <Pause className="w-3 h-3" />
+                            Pause
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-[10px] gap-1 px-2.5 font-bold border-success/40 text-success hover:bg-success/10"
+                            onClick={async () => {
+                              const ok = await updatePlanStatus(plan.id, "completed");
+                              if (ok) toast({ title: "Completed", description: plan.name });
+                            }}
+                          >
+                            <CheckCircle2 className="w-3 h-3" />
+                            Complete
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Queued - Unstarted Jobs */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">
+                  {queuedPlans.length}
+                </div>
+                <h2 className="text-lg font-black italic tracking-wide uppercase text-foreground">
+                  Queued
+                </h2>
+              </div>
+
+              {plansLoading ? (
+                <div className="rounded-lg border border-dashed border-border p-6 text-center">
+                  <Loader2 className="w-5 h-5 animate-spin text-muted-foreground mx-auto" />
+                </div>
+              ) : queuedPlans.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-border p-6 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    No jobs in queue
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {queuedPlans.map(plan => {
                     const statusMap: Record<string, { label: string; color: string }> = {
                       draft: { label: "DRAFT", color: "bg-muted text-muted-foreground" },
                       ready: { label: "READY", color: "bg-warning/20 text-warning" },
                       queued: { label: "QUEUED", color: "bg-primary/20 text-primary" },
-                      running: { label: "ACTIVE", color: "bg-success/20 text-success" },
                     };
                     const st = statusMap[plan.status] || statusMap.draft;
                     const machineName = plan.machine_id ? machineMap.get(plan.machine_id) : null;
-
                     return (
                       <div
                         key={plan.id}
-                        className={`flex items-center gap-3 p-3 rounded-lg border bg-card hover:bg-muted/30 transition-colors ${
-                          plan.status === "running" ? "border-success/40" : "border-border"
-                        }`}
+                        className="flex items-center gap-3 p-3 rounded-lg border border-border bg-card hover:bg-muted/30 transition-colors"
                       >
-                        <div className={`w-2 h-2 rounded-full shrink-0 ${plan.status === "running" ? "bg-success animate-pulse" : "bg-muted-foreground/30"}`} />
-                        <Badge className={`${st.color} text-[10px] tracking-wider shrink-0`}>
-                          {st.label}
-                        </Badge>
+                        <div className="w-2 h-2 rounded-full shrink-0 bg-muted-foreground/30" />
+                        <Badge className={`${st.color} text-[10px] tracking-wider shrink-0`}>{st.label}</Badge>
                         <div className="flex-1 min-w-0">
                           <h3 className="text-sm font-bold text-foreground truncate">{plan.name}</h3>
                           <div className="flex items-center gap-3 text-[10px] text-muted-foreground mt-0.5">
@@ -157,50 +232,18 @@ export default function StationDashboard() {
                             )}
                           </div>
                         </div>
-
-                        {/* Action Buttons */}
                         <div className="flex items-center gap-1.5 shrink-0">
-                          {(plan.status === "draft" || plan.status === "queued" || plan.status === "ready") && (
-                            <Button
-                              size="sm"
-                              className="h-7 text-[10px] gap-1 px-2.5 font-bold"
-                              onClick={async () => {
-                                const ok = await updatePlanStatus(plan.id, "running");
-                                if (ok) toast({ title: "Started", description: plan.name });
-                              }}
-                            >
-                              <Play className="w-3 h-3" />
-                              Start
-                            </Button>
-                          )}
-                          {plan.status === "running" && (
-                            <>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-7 text-[10px] gap-1 px-2.5 font-bold border-warning/40 text-warning hover:bg-warning/10"
-                                onClick={async () => {
-                                  const ok = await updatePlanStatus(plan.id, "queued");
-                                  if (ok) toast({ title: "Paused", description: plan.name });
-                                }}
-                              >
-                                <Pause className="w-3 h-3" />
-                                Pause
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-7 text-[10px] gap-1 px-2.5 font-bold border-success/40 text-success hover:bg-success/10"
-                                onClick={async () => {
-                                  const ok = await updatePlanStatus(plan.id, "completed");
-                                  if (ok) toast({ title: "Completed", description: plan.name });
-                                }}
-                              >
-                                <CheckCircle2 className="w-3 h-3" />
-                                Complete
-                              </Button>
-                            </>
-                          )}
+                          <Button
+                            size="sm"
+                            className="h-7 text-[10px] gap-1 px-2.5 font-bold"
+                            onClick={async () => {
+                              const ok = await updatePlanStatus(plan.id, "running");
+                              if (ok) toast({ title: "Started", description: plan.name });
+                            }}
+                          >
+                            <Play className="w-3 h-3" />
+                            Start
+                          </Button>
                         </div>
                       </div>
                     );
