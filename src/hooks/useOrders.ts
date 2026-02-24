@@ -159,6 +159,9 @@ export function useOrders() {
   const sendToQuickBooks = useCallback(async (orderId: string) => {
     const order = orders.find((o) => o.id === orderId);
     if (!order) throw new Error("Order not found");
+    if (order.quickbooks_invoice_id) {
+      throw new Error(`Order already invoiced (Invoice #${order.quickbooks_invoice_id})`);
+    }
     if (!order.customers?.quickbooks_id) throw new Error("Customer has no QuickBooks ID — link it first");
 
     // Fetch items
@@ -178,6 +181,7 @@ export function useOrders() {
     const { data, error } = await supabase.functions.invoke("quickbooks-oauth", {
       body: {
         action: "create-invoice",
+        orderId,
         customerId: order.customers.quickbooks_id,
         customerName: order.customers.name,
         lineItems,

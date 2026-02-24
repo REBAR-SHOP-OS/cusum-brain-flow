@@ -1104,11 +1104,28 @@ async function handleCreateEstimate(supabase: ReturnType<typeof createClient>, u
 
 async function handleCreateInvoice(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
   const config = await getQBConfig(supabase, userId);
-  const { customerId, customerName, lineItems, dueDate, memo } = body as {
-    customerId: string; customerName: string;
+  const { orderId, customerId, customerName, lineItems, dueDate, memo } = body as {
+    orderId?: string; customerId: string; customerName: string;
     lineItems: { description: string; amount: number; quantity?: number; serviceId?: string }[];
     dueDate?: string; memo?: string;
   };
+
+  // ── Server-side idempotency guard ──────────────────────────────
+  if (orderId) {
+    const { data: existingOrder } = await supabase
+      .from("orders")
+      .select("quickbooks_invoice_id")
+      .eq("id", orderId)
+      .maybeSingle();
+    if (existingOrder?.quickbooks_invoice_id) {
+      return jsonRes({
+        success: true,
+        alreadyExisted: true,
+        docNumber: existingOrder.quickbooks_invoice_id,
+        message: `Invoice #${existingOrder.quickbooks_invoice_id} already exists for this order`,
+      });
+    }
+  }
 
   if (!customerId || !lineItems || (lineItems as unknown[]).length === 0) {
     throw new Error("Customer ID and line items are required");
