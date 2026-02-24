@@ -1,38 +1,25 @@
 
 
-## Fix: Station View Showing Items From Other Stations
+## Fix: Screenshot Annotation Modal Truncation
 
 ### Problem
-When an operator opens a cutter station (e.g., CUTTER-01), they see items that belong to other stations too. This happens because the `useStationData` query for cutters includes a `machine_id.is.null` clause -- meaning **every unassigned cut plan shows up on every cutter station**.
-
-Currently, all active cut plans in the database have `machine_id = NULL`, so every single item appears on every cutter. The only separation today is a hardcoded bar-size filter (`CUTTER_DISTRIBUTION`) that splits items by diameter (10M/15M to CUTTER-01, 20M+ to CUTTER-02), but this is fragile and doesn't enforce true station isolation.
+The annotation overlay modal's canvas area grows beyond the available viewport height, pushing the description textarea and send button off-screen. The bottom of the annotated screenshot gets cut off.
 
 ### Root Cause
-In `src/hooks/useStationData.ts`, line 93:
-```
-.or(`machine_id.eq.${machineId},machine_id.is.null`)
-```
-The `machine_id.is.null` part means any plan without a machine assignment appears on **all** cutters simultaneously.
+The `DialogContent` base component uses CSS `grid` layout, which conflicts with the `flex flex-col` applied by `AnnotationOverlay`. The canvas wrapper has `flex-1 overflow-auto`, but the canvas element itself (`w-full`) expands to its full intrinsic height without constraint, causing the flex container to overflow.
 
 ### Solution
+**File: `src/components/feedback/AnnotationOverlay.tsx`**
 
-**File: `src/hooks/useStationData.ts`**
+1. **Add `overflow-hidden`** to the `DialogContent` className so the outer container clips properly within `95vh`.
 
-1. **Remove `machine_id.is.null` from the cutter query** -- Only show plans that are explicitly assigned to the current machine. This enforces strict station isolation: a plan must be assigned to a machine before it appears on that station.
+2. **Constrain the canvas wrapper** -- change from `flex-1 overflow-auto` to `flex-1 min-h-0 overflow-auto`. The `min-h-0` is critical in flex layouts to allow the element to shrink below its content size, enabling the scroll behavior to work correctly.
 
-2. **Remove the hardcoded `CUTTER_DISTRIBUTION` filter** -- This brittle UUID-based filter becomes unnecessary once plans are properly assigned per machine. Machine capabilities already track what each machine can handle.
+### Technical Details
 
-3. **Keep the bender behavior unchanged** -- Benders intentionally show all bend items regardless of machine assignment (items flow to benders after cutting is done).
+| Line | Current | Change |
+|------|---------|--------|
+| 315 | `className="max-w-[95vw] w-[95vw] max-h-[95vh] h-[95vh] flex flex-col p-3 gap-2"` | Add `overflow-hidden` |
+| 350 | `className="flex-1 overflow-auto border rounded-md bg-muted/30"` | Add `min-h-0` |
 
-### What This Means for Workflow
-- Plans must be assigned to a specific machine (via the office/planning interface) before they appear on a station
-- Unassigned plans (`machine_id = NULL`) will no longer leak into every cutter station
-- The existing project filter pills and bar-size grouping remain unchanged
-
-### Technical Changes
-
-| Change | Location | Detail |
-|--------|----------|--------|
-| Remove `machine_id.is.null` from cutter query | `useStationData.ts` line 93 | Change `.or(...)` to `.eq("machine_id", machineId)` |
-| Remove `CUTTER_DISTRIBUTION` constant and `passesDistribution` function | `useStationData.ts` lines 42-56, 111 | Delete hardcoded UUID map and filter call |
-
+These are the only two class changes needed -- no structural or logic changes.
