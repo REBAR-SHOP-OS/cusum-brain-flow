@@ -35,23 +35,29 @@ export interface BarSizeGroup {
 }
 
 
-export function useStationData(machineId: string | null, machineType?: string) {
+export function useStationData(machineId: string | null, machineType?: string, projectId?: string | null) {
   const { user } = useAuth();
   const { companyId } = useCompanyId();
   const queryClient = useQueryClient();
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["station-data", machineId, machineType, companyId],
+    queryKey: ["station-data", machineId, machineType, companyId, projectId],
     enabled: !!user && !!machineId && !!companyId,
     queryFn: async () => {
       if (machineType === "bender") {
         // Bender: show ALL bend items that are cut_done or bending (regardless of machine assignment)
-        const { data: items, error: itemsError } = await supabase
+        let benderQuery = supabase
           .from("cut_plan_items")
-          .select("*, cut_plans!inner(id, name, project_name, company_id)")
+          .select("*, cut_plans!inner(id, name, project_name, company_id, project_id)")
           .eq("bend_type", "bend")
           .eq("cut_plans.company_id", companyId!)
           .or("phase.eq.cut_done,phase.eq.bending");
+
+        if (projectId) {
+          benderQuery = benderQuery.eq("cut_plans.project_id", projectId);
+        }
+
+        const { data: items, error: itemsError } = await benderQuery;
 
         if (itemsError) throw itemsError;
 
@@ -66,12 +72,18 @@ export function useStationData(machineId: string | null, machineType?: string) {
       }
 
       // Cutter / default: plans assigned to this machine or unassigned, scoped by company
-      const { data: plans, error: plansError } = await supabase
+      let cutterQuery = supabase
         .from("cut_plans")
         .select("id, name, project_name, machine_id")
         .eq("company_id", companyId!)
         .eq("machine_id", machineId)
         .in("status", ["draft", "queued", "running"]);
+
+      if (projectId) {
+        cutterQuery = cutterQuery.eq("project_id", projectId);
+      }
+
+      const { data: plans, error: plansError } = await cutterQuery;
 
       if (plansError) throw plansError;
       if (!plans?.length) return [];
@@ -111,12 +123,12 @@ export function useStationData(machineId: string | null, machineType?: string) {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "cut_plan_items" },
-        () => queryClient.invalidateQueries({ queryKey: ["station-data", machineId, machineType, companyId] })
+        () => queryClient.invalidateQueries({ queryKey: ["station-data", machineId, machineType, companyId, projectId] })
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "cut_plans" },
-        () => queryClient.invalidateQueries({ queryKey: ["station-data", machineId, machineType, companyId] })
+        () => queryClient.invalidateQueries({ queryKey: ["station-data", machineId, machineType, companyId, projectId] })
       )
       .subscribe();
 
