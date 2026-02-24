@@ -38,7 +38,6 @@ export function ScheduledActivities({ entityType, entityId }: ScheduledActivitie
   const [showForm, setShowForm] = useState(false);
   const [activityType, setActivityType] = useState("call");
   const [summary, setSummary] = useState("");
-  const [note, setNote] = useState("");
   const [dueDate, setDueDate] = useState(() => format(new Date(), "yyyy-MM-dd"));
 
   const handleSubmit = () => {
@@ -49,13 +48,12 @@ export function ScheduledActivities({ entityType, entityId }: ScheduledActivitie
         entity_id: entityId,
         activity_type: activityType,
         summary,
-        note: note || undefined,
         due_date: dueDate,
       },
       {
         onSuccess: () => {
           setSummary("");
-          setNote("");
+          setShowForm(false);
           setShowForm(false);
         },
       }
@@ -103,17 +101,11 @@ export function ScheduledActivities({ entityType, entityId }: ScheduledActivitie
               className="w-36 h-8 text-xs"
             />
           </div>
-          <Input
+          <Textarea
             value={summary}
             onChange={(e) => setSummary(e.target.value)}
-            placeholder="Activity summary..."
-            className="h-8 text-sm"
-          />
-          <Textarea
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="Additional notes (optional)..."
-            rows={2}
+            placeholder="Note..."
+            rows={3}
             className="text-sm resize-none"
           />
           <div className="flex items-center gap-2 justify-end">
