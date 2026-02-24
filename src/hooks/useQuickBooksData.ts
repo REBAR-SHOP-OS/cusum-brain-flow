@@ -368,6 +368,17 @@ export function useQuickBooksData() {
 
       if (mirrorLoaded) {
         setLoading(false);
+        // Background: trigger incremental sync to refresh mirror data, then reload
+        (async () => {
+          try {
+            await qbAction("incremental-sync");
+            // Re-load from mirror after sync completes to update UI with fresh data
+            await loadFromMirror();
+            console.log("[QB] Background incremental sync completed, mirror refreshed");
+          } catch (e) {
+            console.warn("[QB] Background incremental sync failed:", e);
+          }
+        })();
         // Background: load employees & time activities from QB API (not mirrored yet)
         // Stagger calls to avoid rate limiting, with retry wrapper
         (async () => {

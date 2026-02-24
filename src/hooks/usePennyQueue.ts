@@ -42,7 +42,14 @@ export function usePennyQueue() {
         .select("*")
         .order("created_at", { ascending: false });
       if (error) throw error;
-      setItems((data as unknown as PennyQueueItem[]) || []);
+      // Recalculate days_overdue dynamically based on time since creation
+      const now = new Date();
+      const recalculated = ((data as unknown as PennyQueueItem[]) || []).map(item => {
+        const createdAt = new Date(item.created_at);
+        const daysSinceCreation = Math.floor((now.getTime() - createdAt.getTime()) / 86400000);
+        return { ...item, days_overdue: item.days_overdue + daysSinceCreation };
+      });
+      setItems(recalculated);
     } catch (err) {
       console.error("Failed to load penny queue:", err);
     } finally {
