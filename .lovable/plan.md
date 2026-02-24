@@ -1,16 +1,24 @@
 
 
-## Fix: Enlarge Microphone Icon in Screenshot Feedback Modal
+## Remove Floating Microphone Button from `/shop-floor`
 
-### Problem
-The microphone button for speech-to-text in the screenshot feedback modal (`AnnotationOverlay`) uses `size="icon"` (40x40px) with a `w-4 h-4` icon (16x16px), making it too small and hard to tap.
+### Investigation Result
+The floating red microphone button ("TAP TO SPEAK") comes from `src/components/shopfloor/VoiceRecorderWidget.tsx`. This component renders a `fixed bottom-6 right-6 z-50` button with a large red mic icon.
+
+After thorough search, this component is **not imported or used anywhere** in the codebase -- not in `ShopFloor.tsx`, not in `AppLayout.tsx`, and not in any other file. What you're seeing is likely a stale build artifact or cached version.
 
 ### Change
-**File: `src/components/feedback/AnnotationOverlay.tsx`**
+**Delete file: `src/components/shopfloor/VoiceRecorderWidget.tsx`**
 
-Increase the voice button and icon size:
-- Button: Change from `size="icon"` + `className="shrink-0"` to `size="icon"` + `className="shrink-0 !w-14 !h-14"` (56x56px)
-- Mic icon (line 400): Change `w-4 h-4` to `w-7 h-7`
-- MicOff icon (line 398): Change `w-4 h-4` to `w-7 h-7`
+Remove this unused component entirely to:
+- Eliminate the dead code from the build
+- Prevent accidental future re-import
+- Ensure the floating mic button never appears again
 
-This only affects the microphone button in the feedback annotation modal. No other elements are touched.
+No other files need modification since nothing imports this component.
+
+### What is NOT touched
+- ShopFloor page layout and cards
+- AppLayout and its floating buttons (Vizzy, Screenshot Feedback)
+- Any other UI, logic, or database components
+- Speech-to-text functionality in other parts of the app (e.g., feedback modal mic)
