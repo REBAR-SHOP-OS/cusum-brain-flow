@@ -1,13 +1,14 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { callAI } from "../_shared/aiRouter.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-widget-key, x-visitor-token",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-widget-key, x-visitor-token, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 };
 
-Deno.serve(async (req) => {
+serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -57,7 +58,7 @@ async function resolveGeo(ip: string): Promise<{ city: string; country: string }
     if (!res.ok) return null;
     const data = await res.json();
     return data.city ? { city: data.city, country: data.countryCode || data.country } : null;
-  } catch {
+  } catch (_e) {
     return null;
   }
 }
@@ -112,7 +113,6 @@ async function handleStart(req: Request, supabase: any) {
     });
   }
 
-  // Resolve geolocation from IP
   const ip = getClientIp(req);
   const geo = await resolveGeo(ip);
 
@@ -147,13 +147,11 @@ async function handleStart(req: Request, supabase: any) {
     content_type: "system",
   });
 
-  // Fire-and-forget: proactive AI greeting
-  triggerProactiveGreeting(supabase, convo.id, config.company_id, config.id, metadata).catch((e) =>
+  triggerProactiveGreeting(supabase, convo.id, config.company_id, config.id, metadata).catch((e: any) =>
     console.error("Proactive greeting error:", e)
   );
 
-  // Fire-and-forget: notify all team members
-  notifySalesTeam(supabase, config.company_id, visitor_name || "Visitor", metadata).catch((e) =>
+  notifySalesTeam(supabase, config.company_id, visitor_name || "Visitor", metadata).catch((e: any) =>
     console.error("Sales notification error:", e)
   );
 
@@ -162,7 +160,7 @@ async function handleStart(req: Request, supabase: any) {
   });
 }
 
-// ── Heartbeat (presence + page tracking) ──
+// ── Heartbeat ──
 async function handleHeartbeat(req: Request, supabase: any) {
   const { conversation_id, visitor_token, current_page } = await req.json();
 
@@ -173,7 +171,6 @@ async function handleHeartbeat(req: Request, supabase: any) {
     });
   }
 
-  // Verify visitor owns this conversation
   const { data: convo } = await supabase
     .from("support_conversations")
     .select("id, metadata")
@@ -250,7 +247,6 @@ async function handleSend(req: Request, supabase: any) {
 
   if (error) throw error;
 
-  // Update last_message_at + metadata (page + presence)
   const existingMeta = (convo.metadata && typeof convo.metadata === "object") ? convo.metadata : {};
   const updatedMeta = {
     ...existingMeta,
@@ -263,8 +259,7 @@ async function handleSend(req: Request, supabase: any) {
     .update({ last_message_at: new Date().toISOString(), metadata: updatedMeta })
     .eq("id", conversation_id);
 
-  // Fire-and-forget AI auto-reply
-  triggerAiReply(supabase, convo, sanitizedContent, updatedMeta).catch((e) =>
+  triggerAiReply(supabase, convo, sanitizedContent, updatedMeta).catch((e: any) =>
     console.error("AI reply error:", e)
   );
 
@@ -314,13 +309,13 @@ async function handlePoll(url: URL, supabase: any) {
   });
 }
 
-// ── Tool Definitions for Estimation & Quoting ──
+// ── Tool Definitions ──
 const WIDGET_TOOLS = [
   {
-    type: "function",
+    type: "function" as const,
     function: {
       name: "create_estimation_task",
-      description: "Create an estimation task when a customer wants to submit drawings/blueprints for review. Use when visitor mentions: drawing, blueprint, structural plan, engineering plan, shop drawing, PDF.",
+      description: "Create an estimation task when a customer wants to submit drawings/blueprints for review.",
       parameters: {
         type: "object",
         properties: {
@@ -333,17 +328,17 @@ const WIDGET_TOOLS = [
     },
   },
   {
-    type: "function",
+    type: "function" as const,
     function: {
       name: "submit_barlist_for_quote",
-      description: "Submit a barlist/BBS for automated quoting when customer has ready data. Use when visitor mentions: barlist, bar bending schedule, BBS, quantities with bar sizes and lengths.",
+      description: "Submit a barlist/BBS for automated quoting when customer has ready data.",
       parameters: {
         type: "object",
         properties: {
           customer_name: { type: "string", description: "Customer's name" },
           customer_email: { type: "string", description: "Customer's email address" },
           project_name: { type: "string", description: "Project name" },
-          bar_details: { type: "string", description: "The barlist/BBS details including bar sizes, quantities, lengths, shapes" },
+          bar_details: { type: "string", description: "The barlist/BBS details" },
         },
         required: ["customer_name", "customer_email", "bar_details"],
       },
@@ -357,8 +352,7 @@ async function executeWidgetTool(supabase: any, toolName: string, args: any, com
 
   try {
     if (toolName === "create_estimation_task") {
-      // 1. Create quote_request
-      const quoteNumber = `QR-EST-${Date.now().toString(36).toUpperCase()}`;
+      const quoteNumber = "QR-EST-" + Date.now().toString(36).toUpperCase();
       const { data: qr, error: qrErr } = await supabase.from("quote_requests").insert({
         quote_number: quoteNumber,
         customer_name: args.customer_name,
@@ -372,10 +366,9 @@ async function executeWidgetTool(supabase: any, toolName: string, args: any, com
 
       if (qrErr) throw qrErr;
 
-      // 2. Create estimation task assigned to Saurabh
-      const { error: taskErr } = await supabase.from("tasks").insert({
-        title: `Estimation: ${args.customer_name} - ${args.project_name || "New Project"}`,
-        description: `Customer wants to submit drawings for estimation.\nEmail: ${args.customer_email}\nProject: ${args.project_name || "N/A"}\nQuote Request: ${quoteNumber}`,
+      await supabase.from("tasks").insert({
+        title: "Estimation: " + args.customer_name + " - " + (args.project_name || "New Project"),
+        description: "Customer wants to submit drawings.\nEmail: " + args.customer_email + "\nQuote: " + quoteNumber,
         status: "open",
         priority: "high",
         assigned_to: SAURABH_PROFILE_ID,
@@ -385,34 +378,25 @@ async function executeWidgetTool(supabase: any, toolName: string, args: any, com
         company_id: companyId,
       });
 
-      if (taskErr) console.error("Task creation error:", taskErr);
-
-      // 3. Send notification to Saurabh
       const { data: saurabh } = await supabase.from("profiles").select("user_id").eq("id", SAURABH_PROFILE_ID).single();
       if (saurabh?.user_id) {
         await supabase.from("notifications").insert({
           user_id: saurabh.user_id,
           type: "todo",
-          title: `📐 New Estimation Request: ${args.customer_name}`,
-          description: `Customer ${args.customer_name} (${args.customer_email}) wants to submit drawings for estimation. Project: ${args.project_name || "N/A"}`,
+          title: "New Estimation: " + args.customer_name,
+          description: "Customer " + args.customer_name + " wants to submit drawings. Email: " + args.customer_email,
           link_to: "/pipeline",
           agent_name: "JARVIS",
           status: "unread",
           priority: "high",
-          metadata: { quote_request_id: qr.id, quote_number: quoteNumber },
         });
       }
 
-      return JSON.stringify({
-        success: true,
-        quote_number: quoteNumber,
-        message: `Estimation task created (${quoteNumber}). Assigned to sales team. Customer should email drawings to sales@rebar.shop.`,
-      });
+      return JSON.stringify({ success: true, quote_number: quoteNumber, message: "Estimation task created. Customer should email drawings to sales@rebar.shop." });
     }
 
     if (toolName === "submit_barlist_for_quote") {
-      // 1. Create quote_request
-      const quoteNumber = `QR-BL-${Date.now().toString(36).toUpperCase()}`;
+      const quoteNumber = "QR-BL-" + Date.now().toString(36).toUpperCase();
       const { data: qr, error: qrErr } = await supabase.from("quote_requests").insert({
         quote_number: quoteNumber,
         customer_name: args.customer_name,
@@ -421,41 +405,15 @@ async function executeWidgetTool(supabase: any, toolName: string, args: any, com
         status: "new",
         source: "website_chat",
         company_id: companyId,
-        notes: `Barlist details from website chat:\n${args.bar_details}`,
+        notes: "Barlist from chat:\n" + args.bar_details,
         items: [{ type: "barlist_raw", details: args.bar_details }],
       }).select("id, quote_number").single();
 
       if (qrErr) throw qrErr;
 
-      // 2. Call Blitz (sales agent) to generate quote via ai-agent
-      let blitzResult: string | null = null;
-      try {
-        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-        const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-        const agentResp = await fetch(`${supabaseUrl}/functions/v1/ai-agent`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${serviceKey}`,
-          },
-          body: JSON.stringify({
-            agent: "sales",
-            message: `Generate a sales quote for customer ${args.customer_name} (${args.customer_email}). Barlist details:\n${args.bar_details}\n\nPlease prepare a detailed quotation and email it to ${args.customer_email}. Quote number: ${quoteNumber}.`,
-            context: { quote_request_id: qr.id, quote_number: quoteNumber },
-          }),
-        });
-        if (agentResp.ok) {
-          const agentData = await agentResp.json();
-          blitzResult = agentData?.reply || agentData?.content || "Quote generation initiated.";
-        }
-      } catch (blitzErr) {
-        console.error("Blitz agent error:", blitzErr);
-      }
-
-      // 3. Create follow-up task for Saurabh
-      const { error: taskErr } = await supabase.from("tasks").insert({
-        title: `Follow-up: Quote ${quoteNumber} sent to ${args.customer_name}`,
-        description: `Quote ${quoteNumber} prepared for ${args.customer_name} (${args.customer_email}).\nBarlist: ${args.bar_details.slice(0, 500)}\nFollow up to confirm receipt and close the deal.`,
+      await supabase.from("tasks").insert({
+        title: "Follow-up: Quote " + quoteNumber + " for " + args.customer_name,
+        description: "Quote " + quoteNumber + " prepared. Follow up to close the deal.",
         status: "open",
         priority: "medium",
         assigned_to: SAURABH_PROFILE_ID,
@@ -465,40 +423,17 @@ async function executeWidgetTool(supabase: any, toolName: string, args: any, com
         company_id: companyId,
       });
 
-      if (taskErr) console.error("Follow-up task error:", taskErr);
-
-      // 4. Notify Saurabh
-      const { data: saurabh } = await supabase.from("profiles").select("user_id").eq("id", SAURABH_PROFILE_ID).single();
-      if (saurabh?.user_id) {
-        await supabase.from("notifications").insert({
-          user_id: saurabh.user_id,
-          type: "todo",
-          title: `💰 Barlist Quote: ${args.customer_name}`,
-          description: `Quote ${quoteNumber} being prepared for ${args.customer_name} (${args.customer_email}). Blitz is generating the quotation.`,
-          link_to: "/pipeline",
-          agent_name: "JARVIS",
-          status: "unread",
-          priority: "high",
-          metadata: { quote_request_id: qr.id, quote_number: quoteNumber },
-        });
-      }
-
-      return JSON.stringify({
-        success: true,
-        quote_number: quoteNumber,
-        blitz_response: blitzResult,
-        message: `Quote ${quoteNumber} is being prepared by our sales team and will be emailed to ${args.customer_email}.`,
-      });
+      return JSON.stringify({ success: true, quote_number: quoteNumber, message: "Quote is being prepared and will be emailed." });
     }
 
-    return JSON.stringify({ error: `Unknown tool: ${toolName}` });
+    return JSON.stringify({ error: "Unknown tool: " + toolName });
   } catch (err: any) {
-    console.error(`Tool ${toolName} error:`, err);
+    console.error("Tool " + toolName + " error:", err);
     return JSON.stringify({ error: err.message || "Tool execution failed" });
   }
 }
 
-// ── AI Auto-Reply (with Tool Calling) ──
+// ── AI Auto-Reply ──
 async function triggerAiReply(supabase: any, convo: any, visitorMessage: string, metadata?: any) {
   const { data: widgetConfig } = await supabase
     .from("support_widget_configs")
@@ -508,7 +443,6 @@ async function triggerAiReply(supabase: any, convo: any, visitorMessage: string,
 
   if (!widgetConfig?.ai_enabled) return;
 
-  // Fetch KB articles
   const { data: articles } = await supabase
     .from("kb_articles")
     .select("title, content, excerpt")
@@ -516,7 +450,6 @@ async function triggerAiReply(supabase: any, convo: any, visitorMessage: string,
     .eq("is_published", true)
     .limit(20);
 
-  // Fetch knowledge base (public-safe categories only)
   const allowedKbCategories = ["webpage", "company-playbook", "document", "research"];
   const { data: knowledgeEntries } = await supabase
     .from("knowledge")
@@ -527,11 +460,11 @@ async function triggerAiReply(supabase: any, convo: any, visitorMessage: string,
     .limit(10);
 
   const kbContext = (articles || [])
-    .map((a: any) => `## ${a.title}\n${a.excerpt || ""}\n${a.content}`)
+    .map((a: any) => "## " + a.title + "\n" + (a.excerpt || "") + "\n" + a.content)
     .join("\n\n---\n\n");
 
   const knowledgeContext = (knowledgeEntries || [])
-    .map((k: any) => `## ${k.title} [${k.category}]\n${(k.content || "").slice(0, 500)}`)
+    .map((k: any) => "## " + k.title + " [" + k.category + "]\n" + ((k.content || "").slice(0, 500)))
     .join("\n\n---\n\n");
 
   const { data: history } = await supabase
@@ -543,11 +476,16 @@ async function triggerAiReply(supabase: any, convo: any, visitorMessage: string,
     .order("created_at", { ascending: true })
     .limit(20);
 
-  // Build page context
   const currentPage = metadata?.current_page;
-  const pageContext = currentPage ? `\n\n[Visitor is currently viewing: ${currentPage}]` : "";
+  const pageContext = currentPage ? "\n\n[Visitor is currently viewing: " + currentPage + "]" : "";
 
-  const systemPrompt = `${widgetConfig.ai_system_prompt || "You are a helpful support assistant."}\n\nDATA FIREWALL: NEVER share financial data, invoices, bills, bank balances, AR/AP, profit margins, employee salaries, internal meeting notes, or strategic plans.\n\nIMPORTANT: If the visitor asks to speak with a real person or a human agent, respond warmly: "Let me connect you with one of our team members — they'll be with you shortly! Our sales team has been notified." The team can jump in at any time.\n\nCRITICAL - CONTACT INFO COLLECTION:\n- Do NOT ask for the visitor's name or contact details upfront. Help them first with their questions about rebar, pricing, stock, and delivery.\n- When the visitor expresses intent to get a quote, place an order, or arrange delivery, THEN naturally ask for their name and email so the team can follow up.\n- Keep it conversational -- e.g. "Happy to put that quote together! Could I grab your name and the best email to send it to?"\n- Never pressure for contact info. Build trust first by being helpful.\n\n## ESTIMATION & QUOTING WORKFLOW:\n\n1. DRAWING/BLUEPRINT DETECTION:\n   - When visitor mentions: drawing, blueprint, structural plan, engineering plan, shop drawing, PDF, plans\n   - Collect: name, email, project name\n   - Then call create_estimation_task tool\n   - Tell visitor to email drawings to sales@rebar.shop\n   - Confirm: "Our estimation team will review your drawings and prepare a detailed quote!"\n\n2. BARLIST/QUOTE DETECTION:\n   - When visitor mentions: barlist, bar bending schedule, BBS, quantities, bar sizes with lengths, rebar schedule\n   - Collect: name, email, bar details (sizes, quantities, lengths)\n   - Call submit_barlist_for_quote tool with the structured data\n   - Confirm: "A detailed quote is being prepared and will be emailed to you shortly!"\n\n3. IMPORTANT RULES:\n   - Always collect name and email BEFORE calling any tool\n   - If visitor provides partial info, ask for the missing pieces conversationally\n   - After tool execution, confirm the action and provide next steps\n   - Both workflows automatically notify the sales team\n\n## Knowledge Base Articles:\n${kbContext || "No articles available."}\n\n## Company Knowledge:\n${knowledgeContext || "No entries."}${pageContext}`;
+  const systemPrompt = (widgetConfig.ai_system_prompt || "You are a helpful support assistant.") +
+    "\n\nDATA FIREWALL: NEVER share financial data, invoices, bills, bank balances, AR/AP, profit margins, employee salaries, internal meeting notes, or strategic plans." +
+    "\n\nIMPORTANT: If the visitor asks to speak with a real person, respond warmly and let them know a team member will be with them shortly." +
+    "\n\nCRITICAL - CONTACT INFO: Do NOT ask for contact details upfront. Help them first. When they want a quote or order, then ask for name and email." +
+    "\n\n## Knowledge Base:\n" + (kbContext || "No articles.") +
+    "\n\n## Company Knowledge:\n" + (knowledgeContext || "No entries.") +
+    pageContext;
 
   const messages: any[] = [
     { role: "system", content: systemPrompt },
@@ -557,8 +495,8 @@ async function triggerAiReply(supabase: any, convo: any, visitorMessage: string,
     })),
   ];
 
+  let reply: string | undefined;
   try {
-    // First AI call with tools
     let result = await callAI({
       provider: "gemini",
       model: "gemini-2.5-flash",
@@ -567,25 +505,22 @@ async function triggerAiReply(supabase: any, convo: any, visitorMessage: string,
       fallback: { provider: "gemini", model: "gemini-2.5-flash" },
     });
 
-    // Tool call loop (max 3 iterations)
     let iterations = 0;
-    while (result.toolCalls?.length > 0 && iterations < 3) {
+    while (result.toolCalls && result.toolCalls.length > 0 && iterations < 3) {
       iterations++;
 
-      // Append assistant message with tool_calls
       messages.push({
         role: "assistant",
         content: result.content || "",
         tool_calls: result.toolCalls,
       });
 
-      // Execute each tool call
       for (const tc of result.toolCalls) {
         const fnName = tc.function?.name;
         let fnArgs: any = {};
         try {
           fnArgs = JSON.parse(tc.function?.arguments || "{}");
-        } catch { /* ignore parse error */ }
+        } catch (_e) { /* ignore */ }
 
         const toolResult = await executeWidgetTool(supabase, fnName, fnArgs, widgetConfig.company_id);
 
@@ -596,7 +531,6 @@ async function triggerAiReply(supabase: any, convo: any, visitorMessage: string,
         });
       }
 
-      // Call AI again for final response
       result = await callAI({
         provider: "gemini",
         model: "gemini-2.5-flash",
@@ -606,7 +540,7 @@ async function triggerAiReply(supabase: any, convo: any, visitorMessage: string,
       });
     }
 
-    var reply: string | undefined = result.content;
+    reply = result.content;
   } catch (aiErr) {
     console.error("AI reply error:", aiErr);
     return;
@@ -634,12 +568,12 @@ async function triggerProactiveGreeting(supabase: any, conversationId: string, c
   const currentPage = metadata?.current_page || "";
   const city = metadata?.city || "";
 
-  const greetingPrompt = `You are a friendly support assistant. A new visitor just opened the chat widget.${currentPage ? ` They are currently viewing: ${currentPage}` : ""}${city ? ` They appear to be from ${city}.` : ""}
+  const greetingPrompt = "You are a friendly support assistant. A new visitor just opened the chat widget." +
+    (currentPage ? " They are currently viewing: " + currentPage : "") +
+    (city ? " They appear to be from " + city + "." : "") +
+    "\n\nGenerate a warm, contextual welcome message (2-3 sentences max). Be specific based on their page context.";
 
-Generate a warm, contextual welcome message (2-3 sentences max). If they're on a product page, reference that product and offer to help with pricing or a quote. If they're on the homepage, welcome them and ask how you can help. Be natural and conversational, not robotic. Do NOT use generic greetings like "How can I help you today?" — be specific based on their page context.
-
-If the visitor asks to speak to a real person at any point, let them know a team member will be with them shortly and that the sales team has been notified.`;
-
+  let reply: string | undefined;
   try {
     const result = await callAI({
       provider: "gemini",
@@ -647,8 +581,8 @@ If the visitor asks to speak to a real person at any point, let them know a team
       messages: [{ role: "user", content: greetingPrompt }],
       fallback: { provider: "gemini", model: "gemini-2.5-flash" },
     });
-    var reply: string | undefined = result.content;
-  } catch {
+    reply = result.content;
+  } catch (_e) {
     return;
   }
   if (!reply) return;
@@ -676,8 +610,8 @@ async function notifySalesTeam(supabase: any, companyId: string, visitorName: st
   const notifications = profiles.map((p: any) => ({
     user_id: p.user_id,
     type: "notification",
-    title: "🟢 New Website Visitor",
-    description: `${visitorName} from ${city} viewing ${pageName}`,
+    title: "New Website Visitor",
+    description: visitorName + " from " + city + " viewing " + pageName,
     link_to: "/support-inbox",
     agent_name: "Support",
     status: "unread",
@@ -690,140 +624,122 @@ async function notifySalesTeam(supabase: any, companyId: string, visitorName: st
 
 // ── Widget JS Generator ──
 function generateWidgetJs(config: any, supabaseUrl: string): string {
-  const chatUrl = `${supabaseUrl}/functions/v1/support-chat`;
-  return `
-(function(){
-  if(window.__support_widget_loaded) return;
-  window.__support_widget_loaded = true;
-
-  var cfg = ${JSON.stringify({
+  const chatUrl = supabaseUrl + "/functions/v1/support-chat";
+  const cfgJson = JSON.stringify({
     brandName: config.brand_name,
     brandColor: config.brand_color,
     welcomeMessage: config.welcome_message,
     widgetKey: config.widget_key,
     chatUrl,
-  })};
+  });
 
-  var state = { open: false, convoId: null, visitorToken: null, messages: [], lastTs: null, polling: null, heartbeat: null, currentPage: window.location.href };
-
-  // Track page changes
-  function getCurrentPage() { return window.location.href; }
-  setInterval(function(){ state.currentPage = getCurrentPage(); }, 2000);
-  window.addEventListener('popstate', function(){ state.currentPage = getCurrentPage(); });
-
-  // Create styles
-  var style = document.createElement('style');
-  style.textContent = \`
-    #sw-bubble { position:fixed; bottom:20px; right:20px; z-index:99999; width:56px; height:56px; border-radius:50%; background:\${cfg.brandColor}; color:#fff; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px rgba(0,0,0,0.2); transition:transform 0.2s; }
-    #sw-bubble:hover { transform:scale(1.1); }
-    #sw-bubble svg { width:24px; height:24px; fill:currentColor; }
-    #sw-panel { position:fixed; bottom:84px; right:20px; z-index:99999; width:360px; max-height:500px; background:#fff; border-radius:16px; box-shadow:0 8px 32px rgba(0,0,0,0.15); display:none; flex-direction:column; overflow:hidden; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; }
-    #sw-panel.open { display:flex; animation:sw-slide-in 0.2s ease-out; }
-    @keyframes sw-slide-in { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
-    #sw-header { padding:14px 16px; background:\${cfg.brandColor}; color:#fff; display:flex; align-items:center; justify-content:space-between; }
-    #sw-header h3 { margin:0; font-size:15px; font-weight:600; }
-    #sw-header button { background:none; border:none; color:#fff; cursor:pointer; font-size:20px; line-height:1; }
-    #sw-messages { flex:1; overflow-y:auto; padding:12px; max-height:320px; min-height:200px; }
-    .sw-msg { margin-bottom:8px; max-width:85%; padding:8px 12px; border-radius:12px; font-size:13px; line-height:1.4; word-wrap:break-word; }
-    .sw-msg.visitor { margin-left:auto; background:\${cfg.brandColor}; color:#fff; border-bottom-right-radius:4px; }
-    .sw-msg.agent,.sw-msg.bot,.sw-msg.system { background:#f0f0f0; color:#333; border-bottom-left-radius:4px; }
-    #sw-input-area { padding:10px; border-top:1px solid #eee; display:flex; gap:6px; }
-    #sw-input { flex:1; border:1px solid #ddd; border-radius:8px; padding:8px 12px; font-size:13px; outline:none; resize:none; font-family:inherit; }
-    #sw-input:focus { border-color:\${cfg.brandColor}; }
-    #sw-send { background:\${cfg.brandColor}; color:#fff; border:none; border-radius:8px; padding:8px 14px; cursor:pointer; font-size:13px; font-weight:500; }
-    #sw-send:disabled { opacity:0.5; cursor:not-allowed; }
-    
-    @media(max-width:420px){ #sw-panel{ width:calc(100vw - 24px); right:12px; bottom:80px; } }
-  \`;
-  document.head.appendChild(style);
-
-  // Create bubble
-  var bubble = document.createElement('button');
-  bubble.id = 'sw-bubble';
-  bubble.setAttribute('aria-label','Open chat');
-  bubble.innerHTML = '<svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>';
-  document.body.appendChild(bubble);
-
-  // Create panel
-  var panel = document.createElement('div');
-  panel.id = 'sw-panel';
-  panel.innerHTML = '<div id="sw-header"><h3>'+esc(cfg.brandName)+'</h3><button onclick="document.getElementById(\\'sw-panel\\').classList.remove(\\'open\\')">&times;</button></div>'
-    + '<div id="sw-messages"></div>'
-    + '<div id="sw-input-area"><textarea id="sw-input" rows="1" placeholder="Type a message..."></textarea><button id="sw-send" disabled>Send</button></div>';
-  document.body.appendChild(panel);
-
-  var started = false;
-  bubble.onclick = async function(){
-    var wasOpen = panel.classList.contains('open');
-    panel.classList.toggle('open');
-    if(!wasOpen && !started){
-      started = true;
-      try {
-        var r = await fetch(cfg.chatUrl+'?action=start', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({widget_key:cfg.widgetKey, visitor_name:'Visitor', visitor_email:null, current_page:state.currentPage}) });
-        var d = await r.json();
-        if(d.conversation_id) {
-          state.convoId = d.conversation_id;
-          state.visitorToken = d.visitor_token;
-          startPolling();
-          startHeartbeat();
-        }
-      } catch(e){ started=false; }
-    }
-  };
-
-  document.getElementById('sw-send').onclick = sendMsg;
-  document.getElementById('sw-input').oninput = function(){ document.getElementById('sw-send').disabled = !this.value.trim(); };
-  document.getElementById('sw-input').onkeydown = function(e){ if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();} };
-
-  async function sendMsg(){
-    var inp = document.getElementById('sw-input');
-    var txt = inp.value.trim();
-    if(!txt||!state.convoId) return;
-    inp.value=''; document.getElementById('sw-send').disabled=true;
-    addMsg('visitor', txt);
-    try {
-      await fetch(cfg.chatUrl+'?action=send', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({conversation_id:state.convoId, visitor_token:state.visitorToken, content:txt, current_page:state.currentPage}) });
-    } catch(e){}
-  }
-
-  function addMsg(type, text){
-    var el = document.createElement('div');
-    el.className = 'sw-msg ' + type;
-    el.textContent = text;
-    var container = document.getElementById('sw-messages');
-    container.appendChild(el);
-    container.scrollTop = container.scrollHeight;
-  }
-
-  function startPolling(){
-    state.polling = setInterval(async function(){
-      try {
-        var url = cfg.chatUrl+'?action=poll&conversation_id='+state.convoId+'&visitor_token='+state.visitorToken;
-        if(state.lastTs) url += '&after='+encodeURIComponent(state.lastTs);
-        var r = await fetch(url);
-        var d = await r.json();
-        if(d.messages && d.messages.length){
-          d.messages.forEach(function(m){
-            if(m.sender_type !== 'visitor'){
-              addMsg(m.sender_type, m.content);
-            }
-            state.lastTs = m.created_at;
-          });
-        }
-      } catch(e){}
-    }, 3000);
-  }
-
-  function startHeartbeat(){
-    state.heartbeat = setInterval(async function(){
-      if(!state.convoId) return;
-      try {
-        await fetch(cfg.chatUrl+'?action=heartbeat', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({conversation_id:state.convoId, visitor_token:state.visitorToken, current_page:getCurrentPage()}) });
-      } catch(e){}
-    }, 30000);
-  }
-
-  function esc(s){ var d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
-})();
-`;
+  return "(function(){\n" +
+    "if(window.__support_widget_loaded) return;\n" +
+    "window.__support_widget_loaded = true;\n" +
+    "var cfg = " + cfgJson + ";\n" +
+    "var state = { open: false, convoId: null, visitorToken: null, messages: [], lastTs: null, polling: null, heartbeat: null, currentPage: window.location.href };\n" +
+    "function getCurrentPage() { return window.location.href; }\n" +
+    "setInterval(function(){ state.currentPage = getCurrentPage(); }, 2000);\n" +
+    "window.addEventListener('popstate', function(){ state.currentPage = getCurrentPage(); });\n" +
+    "var style = document.createElement('style');\n" +
+    "style.textContent = '" +
+      "#sw-bubble { position:fixed; bottom:20px; right:20px; z-index:99999; width:56px; height:56px; border-radius:50%; background:'+cfg.brandColor+'; color:#fff; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px rgba(0,0,0,0.2); transition:transform 0.2s; } " +
+      "#sw-bubble:hover { transform:scale(1.1); } " +
+      "#sw-bubble svg { width:24px; height:24px; fill:currentColor; } " +
+      "#sw-panel { position:fixed; bottom:84px; right:20px; z-index:99999; width:360px; max-height:500px; background:#fff; border-radius:16px; box-shadow:0 8px 32px rgba(0,0,0,0.15); display:none; flex-direction:column; overflow:hidden; font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif; } " +
+      "#sw-panel.open { display:flex; animation:sw-slide-in 0.2s ease-out; } " +
+      "@keyframes sw-slide-in { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} } " +
+      "#sw-header { padding:14px 16px; background:'+cfg.brandColor+'; color:#fff; display:flex; align-items:center; justify-content:space-between; } " +
+      "#sw-header h3 { margin:0; font-size:15px; font-weight:600; } " +
+      "#sw-header button { background:none; border:none; color:#fff; cursor:pointer; font-size:20px; line-height:1; } " +
+      "#sw-messages { flex:1; overflow-y:auto; padding:12px; max-height:320px; min-height:200px; } " +
+      ".sw-msg { margin-bottom:8px; max-width:85%; padding:8px 12px; border-radius:12px; font-size:13px; line-height:1.4; word-wrap:break-word; } " +
+      ".sw-msg.visitor { margin-left:auto; background:'+cfg.brandColor+'; color:#fff; border-bottom-right-radius:4px; } " +
+      ".sw-msg.agent,.sw-msg.bot,.sw-msg.system { background:#f0f0f0; color:#333; border-bottom-left-radius:4px; } " +
+      "#sw-input-area { padding:10px; border-top:1px solid #eee; display:flex; gap:6px; } " +
+      "#sw-input { flex:1; border:1px solid #ddd; border-radius:8px; padding:8px 12px; font-size:13px; outline:none; resize:none; font-family:inherit; } " +
+      "#sw-input:focus { border-color:'+cfg.brandColor+'; } " +
+      "#sw-send { background:'+cfg.brandColor+'; color:#fff; border:none; border-radius:8px; padding:8px 14px; cursor:pointer; font-size:13px; font-weight:500; } " +
+      "#sw-send:disabled { opacity:0.5; cursor:not-allowed; } " +
+      "@media(max-width:420px){ #sw-panel{ width:calc(100vw - 24px); right:12px; bottom:80px; } } " +
+    "';\n" +
+    "document.head.appendChild(style);\n" +
+    "var bubble = document.createElement('button');\n" +
+    "bubble.id = 'sw-bubble';\n" +
+    "bubble.setAttribute('aria-label','Open chat');\n" +
+    "bubble.innerHTML = '<svg viewBox=\"0 0 24 24\"><path d=\"M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z\"/></svg>';\n" +
+    "document.body.appendChild(bubble);\n" +
+    "var panel = document.createElement('div');\n" +
+    "panel.id = 'sw-panel';\n" +
+    "panel.innerHTML = '<div id=\"sw-header\"><h3>'+esc(cfg.brandName)+'</h3><button onclick=\"document.getElementById(\\'sw-panel\\').classList.remove(\\'open\\')\">&times;</button></div>'\n" +
+    "  + '<div id=\"sw-messages\"></div>'\n" +
+    "  + '<div id=\"sw-input-area\"><textarea id=\"sw-input\" rows=\"1\" placeholder=\"Type a message...\"></textarea><button id=\"sw-send\" disabled>Send</button></div>';\n" +
+    "document.body.appendChild(panel);\n" +
+    "var started = false;\n" +
+    "bubble.onclick = async function(){\n" +
+    "  var wasOpen = panel.classList.contains('open');\n" +
+    "  panel.classList.toggle('open');\n" +
+    "  if(!wasOpen && !started){\n" +
+    "    started = true;\n" +
+    "    try {\n" +
+    "      var r = await fetch(cfg.chatUrl+'?action=start', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({widget_key:cfg.widgetKey, visitor_name:'Visitor', visitor_email:null, current_page:state.currentPage}) });\n" +
+    "      var d = await r.json();\n" +
+    "      if(d.conversation_id) {\n" +
+    "        state.convoId = d.conversation_id;\n" +
+    "        state.visitorToken = d.visitor_token;\n" +
+    "        startPolling();\n" +
+    "        startHeartbeat();\n" +
+    "      }\n" +
+    "    } catch(e){ started=false; }\n" +
+    "  }\n" +
+    "};\n" +
+    "document.getElementById('sw-send').onclick = sendMsg;\n" +
+    "document.getElementById('sw-input').oninput = function(){ document.getElementById('sw-send').disabled = !this.value.trim(); };\n" +
+    "document.getElementById('sw-input').onkeydown = function(e){ if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();} };\n" +
+    "async function sendMsg(){\n" +
+    "  var inp = document.getElementById('sw-input');\n" +
+    "  var txt = inp.value.trim();\n" +
+    "  if(!txt||!state.convoId) return;\n" +
+    "  inp.value=''; document.getElementById('sw-send').disabled=true;\n" +
+    "  addMsg('visitor', txt);\n" +
+    "  try {\n" +
+    "    await fetch(cfg.chatUrl+'?action=send', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({conversation_id:state.convoId, visitor_token:state.visitorToken, content:txt, current_page:state.currentPage}) });\n" +
+    "  } catch(e){}\n" +
+    "}\n" +
+    "function addMsg(type, text){\n" +
+    "  var el = document.createElement('div');\n" +
+    "  el.className = 'sw-msg ' + type;\n" +
+    "  el.textContent = text;\n" +
+    "  var container = document.getElementById('sw-messages');\n" +
+    "  container.appendChild(el);\n" +
+    "  container.scrollTop = container.scrollHeight;\n" +
+    "}\n" +
+    "function startPolling(){\n" +
+    "  state.polling = setInterval(async function(){\n" +
+    "    try {\n" +
+    "      var url = cfg.chatUrl+'?action=poll&conversation_id='+state.convoId+'&visitor_token='+state.visitorToken;\n" +
+    "      if(state.lastTs) url += '&after='+encodeURIComponent(state.lastTs);\n" +
+    "      var r = await fetch(url);\n" +
+    "      var d = await r.json();\n" +
+    "      if(d.messages && d.messages.length){\n" +
+    "        d.messages.forEach(function(m){\n" +
+    "          if(m.sender_type !== 'visitor'){\n" +
+    "            addMsg(m.sender_type, m.content);\n" +
+    "          }\n" +
+    "          state.lastTs = m.created_at;\n" +
+    "        });\n" +
+    "      }\n" +
+    "    } catch(e){}\n" +
+    "  }, 3000);\n" +
+    "}\n" +
+    "function startHeartbeat(){\n" +
+    "  state.heartbeat = setInterval(async function(){\n" +
+    "    if(!state.convoId) return;\n" +
+    "    try {\n" +
+    "      await fetch(cfg.chatUrl+'?action=heartbeat', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({conversation_id:state.convoId, visitor_token:state.visitorToken, current_page:getCurrentPage()}) });\n" +
+    "    } catch(e){}\n" +
+    "  }, 30000);\n" +
+    "}\n" +
+    "function esc(s){ var d=document.createElement('div'); d.textContent=s; return d.innerHTML; }\n" +
+    "})();\n";
 }
