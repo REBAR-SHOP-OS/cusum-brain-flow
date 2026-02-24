@@ -314,7 +314,191 @@ async function handlePoll(url: URL, supabase: any) {
   });
 }
 
-// ── AI Auto-Reply ──
+// ── Tool Definitions for Estimation & Quoting ──
+const WIDGET_TOOLS = [
+  {
+    type: "function",
+    function: {
+      name: "create_estimation_task",
+      description: "Create an estimation task when a customer wants to submit drawings/blueprints for review. Use when visitor mentions: drawing, blueprint, structural plan, engineering plan, shop drawing, PDF.",
+      parameters: {
+        type: "object",
+        properties: {
+          customer_name: { type: "string", description: "Customer's name" },
+          customer_email: { type: "string", description: "Customer's email address" },
+          project_name: { type: "string", description: "Name or description of the project" },
+        },
+        required: ["customer_name", "customer_email"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "submit_barlist_for_quote",
+      description: "Submit a barlist/BBS for automated quoting when customer has ready data. Use when visitor mentions: barlist, bar bending schedule, BBS, quantities with bar sizes and lengths.",
+      parameters: {
+        type: "object",
+        properties: {
+          customer_name: { type: "string", description: "Customer's name" },
+          customer_email: { type: "string", description: "Customer's email address" },
+          project_name: { type: "string", description: "Project name" },
+          bar_details: { type: "string", description: "The barlist/BBS details including bar sizes, quantities, lengths, shapes" },
+        },
+        required: ["customer_name", "customer_email", "bar_details"],
+      },
+    },
+  },
+];
+
+// ── Execute Widget Tools ──
+async function executeWidgetTool(supabase: any, toolName: string, args: any, companyId: string): Promise<string> {
+  const SAURABH_PROFILE_ID = "f919e8fa-4981-42f9-88c9-e1e425687522";
+
+  try {
+    if (toolName === "create_estimation_task") {
+      // 1. Create quote_request
+      const quoteNumber = `QR-EST-${Date.now().toString(36).toUpperCase()}`;
+      const { data: qr, error: qrErr } = await supabase.from("quote_requests").insert({
+        quote_number: quoteNumber,
+        customer_name: args.customer_name,
+        customer_email: args.customer_email,
+        project_name: args.project_name || "Estimation Request",
+        status: "estimation_pending",
+        source: "website_chat",
+        company_id: companyId,
+        notes: "Customer wants to submit drawings for estimation via website chat.",
+      }).select("id, quote_number").single();
+
+      if (qrErr) throw qrErr;
+
+      // 2. Create estimation task assigned to Saurabh
+      const { error: taskErr } = await supabase.from("tasks").insert({
+        title: `Estimation: ${args.customer_name} - ${args.project_name || "New Project"}`,
+        description: `Customer wants to submit drawings for estimation.\nEmail: ${args.customer_email}\nProject: ${args.project_name || "N/A"}\nQuote Request: ${quoteNumber}`,
+        status: "open",
+        priority: "high",
+        assigned_to: SAURABH_PROFILE_ID,
+        agent_type: "estimation",
+        source: "website_chat",
+        source_ref: qr.id,
+        company_id: companyId,
+      });
+
+      if (taskErr) console.error("Task creation error:", taskErr);
+
+      // 3. Send notification to Saurabh
+      const { data: saurabh } = await supabase.from("profiles").select("user_id").eq("id", SAURABH_PROFILE_ID).single();
+      if (saurabh?.user_id) {
+        await supabase.from("notifications").insert({
+          user_id: saurabh.user_id,
+          type: "todo",
+          title: `📐 New Estimation Request: ${args.customer_name}`,
+          description: `Customer ${args.customer_name} (${args.customer_email}) wants to submit drawings for estimation. Project: ${args.project_name || "N/A"}`,
+          link_to: "/pipeline",
+          agent_name: "JARVIS",
+          status: "unread",
+          priority: "high",
+          metadata: { quote_request_id: qr.id, quote_number: quoteNumber },
+        });
+      }
+
+      return JSON.stringify({
+        success: true,
+        quote_number: quoteNumber,
+        message: `Estimation task created (${quoteNumber}). Assigned to sales team. Customer should email drawings to sales@rebar.shop.`,
+      });
+    }
+
+    if (toolName === "submit_barlist_for_quote") {
+      // 1. Create quote_request
+      const quoteNumber = `QR-BL-${Date.now().toString(36).toUpperCase()}`;
+      const { data: qr, error: qrErr } = await supabase.from("quote_requests").insert({
+        quote_number: quoteNumber,
+        customer_name: args.customer_name,
+        customer_email: args.customer_email,
+        project_name: args.project_name || "Barlist Quote",
+        status: "new",
+        source: "website_chat",
+        company_id: companyId,
+        notes: `Barlist details from website chat:\n${args.bar_details}`,
+        items: [{ type: "barlist_raw", details: args.bar_details }],
+      }).select("id, quote_number").single();
+
+      if (qrErr) throw qrErr;
+
+      // 2. Call Blitz (sales agent) to generate quote via ai-agent
+      let blitzResult: string | null = null;
+      try {
+        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+        const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+        const agentResp = await fetch(`${supabaseUrl}/functions/v1/ai-agent`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${serviceKey}`,
+          },
+          body: JSON.stringify({
+            agent: "sales",
+            message: `Generate a sales quote for customer ${args.customer_name} (${args.customer_email}). Barlist details:\n${args.bar_details}\n\nPlease prepare a detailed quotation and email it to ${args.customer_email}. Quote number: ${quoteNumber}.`,
+            context: { quote_request_id: qr.id, quote_number: quoteNumber },
+          }),
+        });
+        if (agentResp.ok) {
+          const agentData = await agentResp.json();
+          blitzResult = agentData?.reply || agentData?.content || "Quote generation initiated.";
+        }
+      } catch (blitzErr) {
+        console.error("Blitz agent error:", blitzErr);
+      }
+
+      // 3. Create follow-up task for Saurabh
+      const { error: taskErr } = await supabase.from("tasks").insert({
+        title: `Follow-up: Quote ${quoteNumber} sent to ${args.customer_name}`,
+        description: `Quote ${quoteNumber} prepared for ${args.customer_name} (${args.customer_email}).\nBarlist: ${args.bar_details.slice(0, 500)}\nFollow up to confirm receipt and close the deal.`,
+        status: "open",
+        priority: "medium",
+        assigned_to: SAURABH_PROFILE_ID,
+        agent_type: "sales",
+        source: "website_chat",
+        source_ref: qr.id,
+        company_id: companyId,
+      });
+
+      if (taskErr) console.error("Follow-up task error:", taskErr);
+
+      // 4. Notify Saurabh
+      const { data: saurabh } = await supabase.from("profiles").select("user_id").eq("id", SAURABH_PROFILE_ID).single();
+      if (saurabh?.user_id) {
+        await supabase.from("notifications").insert({
+          user_id: saurabh.user_id,
+          type: "todo",
+          title: `💰 Barlist Quote: ${args.customer_name}`,
+          description: `Quote ${quoteNumber} being prepared for ${args.customer_name} (${args.customer_email}). Blitz is generating the quotation.`,
+          link_to: "/pipeline",
+          agent_name: "JARVIS",
+          status: "unread",
+          priority: "high",
+          metadata: { quote_request_id: qr.id, quote_number: quoteNumber },
+        });
+      }
+
+      return JSON.stringify({
+        success: true,
+        quote_number: quoteNumber,
+        blitz_response: blitzResult,
+        message: `Quote ${quoteNumber} is being prepared by our sales team and will be emailed to ${args.customer_email}.`,
+      });
+    }
+
+    return JSON.stringify({ error: `Unknown tool: ${toolName}` });
+  } catch (err: any) {
+    console.error(`Tool ${toolName} error:`, err);
+    return JSON.stringify({ error: err.message || "Tool execution failed" });
+  }
+}
+
+// ── AI Auto-Reply (with Tool Calling) ──
 async function triggerAiReply(supabase: any, convo: any, visitorMessage: string, metadata?: any) {
   const { data: widgetConfig } = await supabase
     .from("support_widget_configs")
@@ -363,11 +547,10 @@ async function triggerAiReply(supabase: any, convo: any, visitorMessage: string,
   const currentPage = metadata?.current_page;
   const pageContext = currentPage ? `\n\n[Visitor is currently viewing: ${currentPage}]` : "";
 
-  const messages = [
-    {
-      role: "system",
-      content: `${widgetConfig.ai_system_prompt || "You are a helpful support assistant."}\n\nDATA FIREWALL: NEVER share financial data, invoices, bills, bank balances, AR/AP, profit margins, employee salaries, internal meeting notes, or strategic plans.\n\nIMPORTANT: If the visitor asks to speak with a real person or a human agent, respond warmly: "Let me connect you with one of our team members — they'll be with you shortly! Our sales team has been notified." The team can jump in at any time.\n\nCRITICAL - CONTACT INFO COLLECTION:\n- Do NOT ask for the visitor's name or contact details upfront. Help them first with their questions about rebar, pricing, stock, and delivery.\n- When the visitor expresses intent to get a quote, place an order, or arrange delivery, THEN naturally ask for their name and email so the team can follow up.\n- Keep it conversational -- e.g. "Happy to put that quote together! Could I grab your name and the best email to send it to?"\n- Never pressure for contact info. Build trust first by being helpful.\n\nFILE UPLOAD HANDLING:\n- If a visitor mentions uploading a drawing (structural plans, engineering drawings), let them know the estimating team will review it and prepare a detailed quote. Ask for their name and email to follow up.\n- If a visitor mentions uploading a barlist / bar bending schedule / BBS, let them know we can provide instant rough pricing estimates. Ask them to share the details (bar sizes, quantities, lengths) and we'll quote it.\n- Guide visitors to email drawings/barlists to sales@rebar.shop for the fastest processing, or they can share details in the chat.\n\n## Knowledge Base Articles:\n${kbContext || "No articles available."}\n\n## Company Knowledge:\n${knowledgeContext || "No entries."}${pageContext}`,
-    },
+  const systemPrompt = `${widgetConfig.ai_system_prompt || "You are a helpful support assistant."}\n\nDATA FIREWALL: NEVER share financial data, invoices, bills, bank balances, AR/AP, profit margins, employee salaries, internal meeting notes, or strategic plans.\n\nIMPORTANT: If the visitor asks to speak with a real person or a human agent, respond warmly: "Let me connect you with one of our team members — they'll be with you shortly! Our sales team has been notified." The team can jump in at any time.\n\nCRITICAL - CONTACT INFO COLLECTION:\n- Do NOT ask for the visitor's name or contact details upfront. Help them first with their questions about rebar, pricing, stock, and delivery.\n- When the visitor expresses intent to get a quote, place an order, or arrange delivery, THEN naturally ask for their name and email so the team can follow up.\n- Keep it conversational -- e.g. "Happy to put that quote together! Could I grab your name and the best email to send it to?"\n- Never pressure for contact info. Build trust first by being helpful.\n\n## ESTIMATION & QUOTING WORKFLOW:\n\n1. DRAWING/BLUEPRINT DETECTION:\n   - When visitor mentions: drawing, blueprint, structural plan, engineering plan, shop drawing, PDF, plans\n   - Collect: name, email, project name\n   - Then call create_estimation_task tool\n   - Tell visitor to email drawings to sales@rebar.shop\n   - Confirm: "Our estimation team will review your drawings and prepare a detailed quote!"\n\n2. BARLIST/QUOTE DETECTION:\n   - When visitor mentions: barlist, bar bending schedule, BBS, quantities, bar sizes with lengths, rebar schedule\n   - Collect: name, email, bar details (sizes, quantities, lengths)\n   - Call submit_barlist_for_quote tool with the structured data\n   - Confirm: "A detailed quote is being prepared and will be emailed to you shortly!"\n\n3. IMPORTANT RULES:\n   - Always collect name and email BEFORE calling any tool\n   - If visitor provides partial info, ask for the missing pieces conversationally\n   - After tool execution, confirm the action and provide next steps\n   - Both workflows automatically notify the sales team\n\n## Knowledge Base Articles:\n${kbContext || "No articles available."}\n\n## Company Knowledge:\n${knowledgeContext || "No entries."}${pageContext}`;
+
+  const messages: any[] = [
+    { role: "system", content: systemPrompt },
     ...(history || []).map((m: any) => ({
       role: m.sender_type === "visitor" ? "user" : "assistant",
       content: m.content,
@@ -375,11 +558,54 @@ async function triggerAiReply(supabase: any, convo: any, visitorMessage: string,
   ];
 
   try {
-    const result = await callAI({
-      provider: "gpt",
-      model: "gpt-4o-mini",
+    // First AI call with tools
+    let result = await callAI({
+      provider: "gemini",
+      model: "gemini-2.5-flash",
       messages,
+      tools: WIDGET_TOOLS,
+      fallback: { provider: "gemini", model: "gemini-2.5-flash" },
     });
+
+    // Tool call loop (max 3 iterations)
+    let iterations = 0;
+    while (result.toolCalls?.length > 0 && iterations < 3) {
+      iterations++;
+
+      // Append assistant message with tool_calls
+      messages.push({
+        role: "assistant",
+        content: result.content || "",
+        tool_calls: result.toolCalls,
+      });
+
+      // Execute each tool call
+      for (const tc of result.toolCalls) {
+        const fnName = tc.function?.name;
+        let fnArgs: any = {};
+        try {
+          fnArgs = JSON.parse(tc.function?.arguments || "{}");
+        } catch { /* ignore parse error */ }
+
+        const toolResult = await executeWidgetTool(supabase, fnName, fnArgs, widgetConfig.company_id);
+
+        messages.push({
+          role: "tool",
+          tool_call_id: tc.id,
+          content: toolResult,
+        });
+      }
+
+      // Call AI again for final response
+      result = await callAI({
+        provider: "gemini",
+        model: "gemini-2.5-flash",
+        messages,
+        tools: WIDGET_TOOLS,
+        fallback: { provider: "gemini", model: "gemini-2.5-flash" },
+      });
+    }
+
     var reply: string | undefined = result.content;
   } catch (aiErr) {
     console.error("AI reply error:", aiErr);
@@ -416,9 +642,10 @@ If the visitor asks to speak to a real person at any point, let them know a team
 
   try {
     const result = await callAI({
-      provider: "gpt",
-      model: "gpt-4o-mini",
+      provider: "gemini",
+      model: "gemini-2.5-flash",
       messages: [{ role: "user", content: greetingPrompt }],
+      fallback: { provider: "gemini", model: "gemini-2.5-flash" },
     });
     var reply: string | undefined = result.content;
   } catch {

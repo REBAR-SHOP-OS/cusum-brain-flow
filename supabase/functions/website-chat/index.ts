@@ -93,10 +93,10 @@ serve(async (req) => {
 
     const trimmed = messages.slice(-MAX_CONVERSATION_MESSAGES);
 
-    // GPT-4o-mini: public chatbot, fast + cheap
+    // Gemini 2.5 Flash: public chatbot, fast + stable
     const response = await callAIStream({
-      provider: "gpt",
-      model: "gpt-4o-mini",
+      provider: "gemini",
+      model: "gemini-2.5-flash",
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         ...trimmed,
