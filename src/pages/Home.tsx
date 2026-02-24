@@ -20,7 +20,6 @@ import {
   PackageCheck,
   ArrowLeft,
   ClipboardList,
-  Calculator,
 } from "lucide-react";
 import logoCoin from "@/assets/logo-coin.png";
 import { useAuth } from "@/lib/auth";
@@ -143,7 +142,7 @@ export default function Home() {
       { label: "DELIVERY", subtitle: "DISPATCH & LOADING", icon: <Send className="w-7 h-7" />, to: "/deliveries" },
       { label: "PICKUP ST.", subtitle: "CUSTOMER COLLECTION", icon: <PackageCheck className="w-7 h-7" />, to: "/shopfloor/pickup" },
       { label: "INVENTORY", subtitle: "COUNTS & ADJUSTMENTS", icon: <ClipboardList className="w-7 h-7" />, to: "/shopfloor/inventory" },
-      { label: "ESTIMATION", subtitle: "AI TAKEOFF & BIDS", icon: <Calculator className="w-7 h-7" />, to: "/estimation" },
+      
     ];
 
     return (
