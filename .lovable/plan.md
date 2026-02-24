@@ -1,99 +1,32 @@
 
 
-## Fix: Station Dashboard -- Machine Isolation and Company/Scope Sorting
+## Fix: "All Deliveries" Count Mismatch
 
 ### Problem
 
-The Station Dashboard (`/shopfloor/station`) displays all running and queued plans in flat lists without separating them by machine. This prevents operators from seeing which jobs belong to which machine, blocking independent simultaneous work across stations. Additionally, plans are not sorted by company name and then scope name.
+The "All" tab header shows a count (e.g., 8) that doesn't match the number of deliveries visually rendered below. Items are being clipped/hidden because of a CSS overflow issue in the scroll container.
 
 ### Root Cause
 
-In `StationDashboard.tsx`, lines 29-30 create two flat arrays:
-- `runningPlans` = all plans with status "running"
-- `queuedPlans` = all plans with status draft/ready/queued
-
-These are rendered as single flat lists with no machine grouping or company/scope sorting.
+In `src/pages/Deliveries.tsx`, the "All" tab uses `overflow-hidden` on the `TabsContent` container (line 383) combined with `ScrollArea` using `h-full`. When the flex layout doesn't propagate a concrete pixel height down to the scroll area, the scrollable region gets truncated, hiding some delivery cards while the count badge still shows the full array length.
 
 ### Solution
 
-#### File: `src/pages/StationDashboard.tsx`
+**File: `src/pages/Deliveries.tsx`**
 
-**Change 1: Group plans by machine**
+Change the "All" tab's `TabsContent` wrapper to use `overflow-auto` instead of `overflow-hidden`, and ensure the `DeliveryList` scroll area has a max-height fallback so all items are scrollable. Also apply the same fix to the "Today" and "Upcoming" tabs for consistency.
 
-Replace the flat `runningPlans`/`queuedPlans` rendering with a per-machine grouping:
+Specifically:
 
-```text
-Before:
-  Live Queue: [Plan A, Plan B, Plan C]  (all machines mixed)
-  Queued:     [Plan D, Plan E]          (all machines mixed)
-
-After:
-  Machine "GENSCO DTX-400"
-    Live Queue: [Plan A]
-    Queued:     [Plan D]
-  
-  Machine "MEP FALCON 20"
-    Live Queue: [Plan B, Plan C]
-    Queued:     [Plan E]
-  
-  Unassigned
-    Queued:     [Plan F]
-```
-
-Each machine gets its own collapsible section with its own Live Queue and Queued sub-lists, enabling operators to focus on their station independently.
-
-**Change 2: Sort by Company name, then Scope name**
-
-Within each machine section, plans are sorted by:
-1. `customer_name` (alphabetically, nulls last)
-2. `name` (scope/manifest name, alphabetically)
-
-#### File: `src/hooks/useCutPlans.ts`
-
-No changes needed -- the hook already fetches `customer_name` via the projects/customers join. The sorting will be applied in the component.
-
-### Technical Details
-
-**New data flow in StationDashboard.tsx:**
-
-```text
-plans (from useCutPlans)
-  |
-  +-- Group by machine_id
-  |     |
-  |     +-- For each machine:
-  |           +-- running plans (status = "running")
-  |           +-- queued plans (status = draft/ready/queued)
-  |           +-- Sort both lists by: customer_name ASC NULLS LAST, name ASC
-  |
-  +-- "Unassigned" group (machine_id = null)
-        +-- Same sorting logic
-```
-
-**UI structure per machine group:**
-
-```text
-+-------------------------------------------------------+
-| [Chevron] [Machine Icon] GENSCO DTX-400    3 JOBS     |
-+-------------------------------------------------------+
-|   LIVE (1)                                             |
-|   [green dot] ACTIVE  Plan A  | Customer X | Pause/Complete |
-|                                                        |
-|   QUEUED (2)                                           |
-|   [dot] DRAFT  Plan D  | Customer Y | Start           |
-|   [dot] READY  Plan E  | Customer Z | Start           |
-+-------------------------------------------------------+
-```
+1. **Lines 359, 371, 383**: Change `overflow-hidden` to `overflow-auto` on all three `TabsContent` containers
+2. **Line 637 (DeliveryList component)**: Change the `ScrollArea` from `h-full` to a calculated height using `max-h-[calc(100vh-300px)]` so it always has a concrete scrollable boundary regardless of flex layout
 
 ### Summary of Changes
 
-| File | Change |
-|---|---|
-| `src/pages/StationDashboard.tsx` | Group Live Queue and Queued lists by `machine_id`; sort within each group by `customer_name` then `name`; render each machine as a collapsible section |
+| File | Line(s) | Change |
+|---|---|---|
+| `src/pages/Deliveries.tsx` | 359, 371, 383 | `overflow-hidden` to `overflow-auto` |
+| `src/pages/Deliveries.tsx` | 637 | `ScrollArea` from `h-full` to `max-h-[calc(100vh-300px)] h-full` |
 
-### What This Enables
+This ensures all delivery cards in the array are scrollable/visible, making the count always match the rendered items.
 
-- Each machine station operates its own independent queue
-- Operators see only the jobs assigned to their machine
-- Jobs are clearly organized by company and scope name
-- Multiple stations can work simultaneously without confusion
