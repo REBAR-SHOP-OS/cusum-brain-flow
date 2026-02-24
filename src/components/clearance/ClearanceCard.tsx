@@ -19,6 +19,7 @@ import {
   ShieldCheck,
   Loader2,
   AlertTriangle,
+  XCircle,
 } from "lucide-react";
 import type { ClearanceItem } from "@/hooks/useClearanceData";
 
@@ -30,6 +31,16 @@ interface ClearanceCardProps {
   userId?: string;
 }
 
+interface ValidationResult {
+  valid: boolean;
+  confidence: string;
+  reason: string;
+  detected_mark?: string | null;
+  detected_drawing?: string | null;
+  mark_match?: boolean | null;
+  drawing_match?: boolean | null;
+}
+
 export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -37,6 +48,8 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
   const [verifying, setVerifying] = useState(false);
   const [signedUrls, setSignedUrls] = useState<{ material?: string; tag?: string }>({});
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
+  const [validating, setValidating] = useState(false);
   const materialRef = useRef<HTMLInputElement>(null);
   const tagRef = useRef<HTMLInputElement>(null);
 
@@ -70,10 +83,64 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
   const isFlagged = item.evidence_status === "flagged";
   const hasEvidence = !!signedUrls.material;
 
+  const validatePhoto = async (storagePath: string, photoType: "material" | "tag") => {
+    setValidating(true);
+    setValidationResult(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("validate-clearance-photo", {
+        body: {
+          photo_storage_path: storagePath,
+          expected_mark_number: item.mark_number,
+          expected_drawing_ref: item.drawing_ref,
+          photo_type: photoType,
+        },
+      });
+
+      if (error) {
+        console.error("Validation error:", error);
+        setValidationResult({ valid: true, confidence: "unreadable", reason: "Validation service unavailable" });
+        return true;
+      }
+
+      setValidationResult(data);
+
+      if (!data.valid) {
+        toast({
+          title: "⚠️ Mark mismatch detected",
+          description: `Expected "${item.mark_number}" but detected "${data.detected_mark || "unreadable"}". Photo rejected.`,
+          variant: "destructive",
+          duration: 8000,
+        });
+        return false;
+      }
+
+      if (data.confidence === "unreadable") {
+        toast({
+          title: "⚠️ Could not verify",
+          description: "No readable text found in photo. Photo accepted — verify manually.",
+          duration: 6000,
+        });
+      } else if (data.confidence === "low") {
+        toast({
+          title: "Low confidence match",
+          description: data.reason || "Photo accepted but please double-check.",
+          duration: 5000,
+        });
+      }
+
+      return true;
+    } catch (err) {
+      console.error("Validation failed:", err);
+      setValidationResult({ valid: true, confidence: "unreadable", reason: "Validation unavailable" });
+      return true; // Don't block on validation failure
+    } finally {
+      setValidating(false);
+    }
+  };
+
   const handleUpload = async (type: "material" | "tag", file: File) => {
     if (!canWrite) return;
 
-    // Fix 2: File size validation
     if (file.size > MAX_FILE_SIZE) {
       toast({ title: "File too large", description: "Max 10MB per photo.", variant: "destructive" });
       return;
@@ -88,6 +155,15 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
         .from("clearance-photos")
         .upload(path, file, { upsert: true });
       if (uploadErr) throw uploadErr;
+
+      // Run AI validation on the uploaded photo
+      const isValid = await validatePhoto(path, type);
+
+      if (!isValid) {
+        // Delete the rejected photo
+        await supabase.storage.from("clearance-photos").remove([path]);
+        return;
+      }
 
       const photoUrl = path;
       const field = type === "material" ? "material_photo_url" : "tag_scan_url";
@@ -150,7 +226,6 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
     }
   };
 
-  // Fix 1: Persist flag action
   const handleFlag = async () => {
     if (!canWrite) return;
     try {
@@ -209,7 +284,7 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
           <PhotoSlot
             label="Material"
             url={signedUrls.material || null}
-            loading={uploading === "material"}
+            loading={uploading === "material" || (validating && uploading === null)}
             disabled={!canWrite || isCleared}
             inputRef={materialRef}
             onFileSelect={(f) => handleUpload("material", f)}
@@ -226,6 +301,11 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
           />
         </div>
 
+        {/* Validation result banner */}
+        {validationResult && !isCleared && (
+          <ValidationBanner result={validationResult} />
+        )}
+
         {/* Actions */}
         <div className="flex gap-2 mt-1">
           <Tooltip>
@@ -234,7 +314,7 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
                 <Button
                   className="w-full gap-1.5"
                   variant={isCleared ? "secondary" : "default"}
-                  disabled={!canWrite || isCleared || verifying || !hasEvidence}
+                  disabled={!canWrite || isCleared || verifying || !hasEvidence || validating}
                   onClick={handleVerify}
                 >
                   {verifying ? (
@@ -270,7 +350,7 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
           )}
         </div>
 
-        {/* Fix 7: Fullscreen photo preview */}
+        {/* Fullscreen photo preview */}
         <Dialog open={!!previewUrl} onOpenChange={() => setPreviewUrl(null)}>
           <DialogContent className="max-w-[90vw] max-h-[90vh] p-2">
             {previewUrl && (
@@ -284,6 +364,48 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
 }
 
 ClearanceCard.displayName = "ClearanceCard";
+
+// ─── Validation Banner ─────────────────────────────────────
+function ValidationBanner({ result }: { result: ValidationResult }) {
+  if (result.valid && result.confidence !== "unreadable" && result.confidence !== "low") {
+    return (
+      <div className="flex items-center gap-2 rounded-lg bg-primary/10 border border-primary/20 px-3 py-2">
+        <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />
+        <div className="min-w-0">
+          <p className="text-[10px] font-semibold text-primary">AI Verified ✓</p>
+          <p className="text-[9px] text-muted-foreground truncate">{result.reason}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!result.valid) {
+    return (
+      <div className="flex items-center gap-2 rounded-lg bg-destructive/10 border border-destructive/20 px-3 py-2">
+        <XCircle className="w-4 h-4 text-destructive shrink-0" />
+        <div className="min-w-0">
+          <p className="text-[10px] font-semibold text-destructive">Mark Mismatch — Photo Rejected</p>
+          <p className="text-[9px] text-muted-foreground">
+            Detected: "{result.detected_mark || "?"}" vs Expected: tag on card. {result.reason}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Unreadable or low confidence
+  return (
+    <div className="flex items-center gap-2 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2">
+      <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+      <div className="min-w-0">
+        <p className="text-[10px] font-semibold text-amber-600">Manual Check Required</p>
+        <p className="text-[9px] text-muted-foreground truncate">{result.reason}</p>
+      </div>
+    </div>
+  );
+}
+
+ValidationBanner.displayName = "ValidationBanner";
 
 // ─── Photo Upload Slot ─────────────────────────────────────
 interface PhotoSlotProps {
@@ -311,7 +433,10 @@ function PhotoSlot({ label, url, loading, disabled, inputRef, onFileSelect, onPr
       {url ? (
         <img src={url} alt={label} className="w-full h-full object-cover" />
       ) : loading ? (
-        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        <div className="flex flex-col items-center gap-1 text-muted-foreground">
+          <Loader2 className="w-6 h-6 animate-spin" />
+          <span className="text-[8px] tracking-wider uppercase">Validating…</span>
+        </div>
       ) : (
         <div className="flex flex-col items-center gap-1 text-muted-foreground">
           <Camera className="w-6 h-6" />

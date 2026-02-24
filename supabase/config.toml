@@ -1,1 +1,4 @@
 project_id = "rzqonxnowjrtbueauziu"
+
+[functions.validate-clearance-photo]
+verify_jwt = false
