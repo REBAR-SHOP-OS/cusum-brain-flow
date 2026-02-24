@@ -12,25 +12,40 @@ export function DetailedListView() {
 
   const selectedPlan = plans.find(p => p.id === selectedPlanId);
 
-  // Group plans by customer_name, sorted alphabetically
-  const groupedPlans = useMemo(() => {
-    const groups: Record<string, typeof plans> = {};
+  // Separate plans into active (running/draft/ready/queued) and completed
+  const { activePlans, completedPlans } = useMemo(() => {
+    const active: typeof plans = [];
+    const completed: typeof plans = [];
     for (const plan of plans) {
+      if (plan.status === "completed") {
+        completed.push(plan);
+      } else {
+        active.push(plan);
+      }
+    }
+    return { activePlans: active, completedPlans: completed };
+  }, [plans]);
+
+  // Group plans by customer_name, sorted alphabetically
+  const groupByCustomer = (list: typeof plans) => {
+    const groups: Record<string, typeof plans> = {};
+    for (const plan of list) {
       const key = plan.customer_name || "Ungrouped";
       if (!groups[key]) groups[key] = [];
       groups[key].push(plan);
     }
-    // Sort manifests within each group alphabetically
     for (const key of Object.keys(groups)) {
       groups[key].sort((a, b) => a.name.localeCompare(b.name));
     }
-    // Return sorted group entries
     return Object.entries(groups).sort(([a], [b]) => {
       if (a === "Ungrouped") return 1;
       if (b === "Ungrouped") return -1;
       return a.localeCompare(b);
     });
-  }, [plans]);
+  };
+
+  const activeGrouped = useMemo(() => groupByCustomer(activePlans), [activePlans]);
+  const completedGrouped = useMemo(() => groupByCustomer(completedPlans), [completedPlans]);
 
   // Dimension columns
   const dimCols = ["A", "B", "C", "D", "E", "F", "G", "H", "J", "K", "O", "R"];
@@ -45,37 +60,59 @@ export function DetailedListView() {
         ) : plans.length === 0 ? (
           <p className="text-sm text-muted-foreground">No manifests found.</p>
         ) : (
-          <div className="space-y-3">
-            {groupedPlans.map(([companyName, companyPlans]) => (
-              <Collapsible key={companyName} defaultOpen>
-                <CollapsibleTrigger className="w-full flex items-center gap-2 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors text-left group">
-                  <ChevronDown className="w-4 h-4 text-muted-foreground group-data-[state=closed]:hidden" />
-                  <ChevronRight className="w-4 h-4 text-muted-foreground group-data-[state=open]:hidden" />
-                  <span className="font-bold text-foreground uppercase text-sm tracking-wide">{companyName}</span>
-                  <Badge variant="secondary" className="ml-auto text-[10px]">
-                    {companyPlans.length}
-                  </Badge>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <div className="ml-4 border-l-2 border-border/50 space-y-1 mt-1">
-                    {companyPlans.map(plan => (
-                      <button
-                        key={plan.id}
-                        onClick={() => setSelectedPlanId(plan.id)}
-                        className="w-full text-left pl-4 pr-3 py-2.5 rounded-r-lg hover:bg-muted/30 transition-colors flex items-center justify-between"
-                      >
-                        <span className="font-medium text-sm text-foreground">{plan.name}</span>
-                        <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{plan.status}</span>
-                      </button>
-                    ))}
-                  </div>
-                </CollapsibleContent>
-              </Collapsible>
-            ))}
+          <div className="space-y-6">
+            {/* Active / Running section */}
+            {activePlans.length > 0 && (
+              <div className="space-y-3">
+                <h2 className="text-xs font-bold uppercase tracking-widest text-primary">
+                  Active ({activePlans.length})
+                </h2>
+                {renderPlanGroups(activeGrouped)}
+              </div>
+            )}
+
+            {/* Completed section */}
+            {completedPlans.length > 0 && (
+              <div className="space-y-3">
+                <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                  Completed ({completedPlans.length})
+                </h2>
+                {renderPlanGroups(completedGrouped)}
+              </div>
+            )}
           </div>
         )}
       </div>
     );
+  }
+
+  function renderPlanGroups(groups: [string, typeof plans][]) {
+    return groups.map(([companyName, companyPlans]) => (
+      <Collapsible key={companyName} defaultOpen>
+        <CollapsibleTrigger className="w-full flex items-center gap-2 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors text-left group">
+          <ChevronDown className="w-4 h-4 text-muted-foreground group-data-[state=closed]:hidden" />
+          <ChevronRight className="w-4 h-4 text-muted-foreground group-data-[state=open]:hidden" />
+          <span className="font-bold text-foreground uppercase text-sm tracking-wide">{companyName}</span>
+          <Badge variant="secondary" className="ml-auto text-[10px]">
+            {companyPlans.length}
+          </Badge>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="ml-4 border-l-2 border-border/50 space-y-1 mt-1">
+            {companyPlans.map(plan => (
+              <button
+                key={plan.id}
+                onClick={() => setSelectedPlanId(plan.id)}
+                className="w-full text-left pl-4 pr-3 py-2.5 rounded-r-lg hover:bg-muted/30 transition-colors flex items-center justify-between"
+              >
+                <span className="font-medium text-sm text-foreground">{plan.name}</span>
+                <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{plan.status}</span>
+              </button>
+            ))}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+    ));
   }
 
   return (

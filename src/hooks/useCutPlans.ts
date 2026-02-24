@@ -76,7 +76,7 @@ export function useCutPlans() {
       .from("cut_plans")
       .select("*, projects(name, customer_id, customers(name))")
       .eq("company_id", companyId)
-      .order("created_at", { ascending: false });
+      .order("name", { ascending: true });
 
     if (error) {
       toast({ title: "Error loading cut plans", description: error.message, variant: "destructive" });
