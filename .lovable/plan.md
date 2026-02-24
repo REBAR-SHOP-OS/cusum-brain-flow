@@ -1,58 +1,71 @@
 
-## Tablet-to-Machine Assignment for Shop Floor Stations
+
+## Fix: Make "Assigned To" Editable on Task Detail
 
 ### Problem
-The `/shopfloor/station` page shows all machines and all jobs. On the shop floor, each tablet is dedicated to a specific machine, so operators should see only their assigned machine's jobs -- not the full dashboard.
+The "Assigned To" field in the task detail panel is plain read-only text. Users cannot reassign a task to a different employee.
 
-### Solution: "Pin Machine to This Device" Using localStorage
+### Root Cause
+In `src/pages/Tasks.tsx` (lines 978-981), the "Assigned To" field renders the employee name as static text with no interactive element:
+```tsx
+<span className="text-xs text-muted-foreground">Assigned To</span>
+<p className="mt-0.5 text-sm">{employees.find(...)?.full_name || "Unassigned"}</p>
+```
 
-Add a "pin" mechanism so a tablet can be locked to a specific machine. Once pinned:
-- Visiting `/shopfloor/station` auto-redirects to `/shopfloor/station/{machineId}`
-- The operator sees only their machine's jobs
-- A small "unpin" button (supervisor-only or behind a long-press) allows resetting
-
-This approach uses `localStorage` (no database changes needed) because the assignment is per-physical-device, not per-user.
+### Solution
+Replace the static text with a `Select` dropdown (same component already imported and used elsewhere in this file). On change, update the task's `assigned_to` in the database, write an audit log entry, and refresh the UI.
 
 ### Changes
 
-**1. New hook: `src/hooks/useTabletPin.ts`**
-- Reads/writes `pinned-machine-id` from localStorage
-- Exposes `pinnedMachineId`, `pinMachine(id)`, `unpinMachine()`
+**File: `src/pages/Tasks.tsx` (lines 978-981)**
 
-**2. Modified: `src/pages/StationDashboard.tsx`**
-- On mount, check if a machine is pinned via `useTabletPin`
-- If pinned, auto-redirect to `/shopfloor/station/{pinnedMachineId}` using `<Navigate>`
-- If not pinned, show the current full dashboard (machine selector grid)
+Replace the static "Assigned To" display with:
 
-**3. Modified: `src/components/shopfloor/MachineSelector.tsx`**
-- Add a "Pin to This Tablet" button (small lock icon) on each machine card
-- Clicking it saves the machine ID to localStorage and navigates to the station view
-- Visual confirmation via toast
-
-**4. Modified: `src/components/shopfloor/StationHeader.tsx` or `src/pages/StationView.tsx`**
-- Show a small "pinned" indicator when viewing a pinned machine
-- Add an "Unpin" option in the supervisor toggle area (only visible when `isSupervisor` is true) so regular operators cannot accidentally unpin
-
-### User Flow
-
-```text
-Tablet Setup (one-time):
-  /shopfloor/station --> See all machines --> Tap "Pin" on CUTTER-01 --> Saved to localStorage
-
-Daily Use:
-  /shopfloor/station --> Auto-redirect to /shopfloor/station/[cutter-01-id] --> See only CUTTER-01 jobs
-
-Supervisor Override:
-  Toggle supervisor mode --> "Unpin Device" button appears --> Tap to reset --> Back to machine selector
+```tsx
+<div>
+  <span className="text-xs text-muted-foreground">Assigned To</span>
+  <Select
+    value={selectedTask.assigned_to || ""}
+    onValueChange={async (newAssignee) => {
+      const oldAssignee = selectedTask.assigned_to;
+      if (newAssignee === oldAssignee) return;
+      const { error } = await supabase
+        .from("tasks")
+        .update({ assigned_to: newAssignee, updated_at: new Date().toISOString() })
+        .eq("id", selectedTask.id);
+      if (error) { toast.error(error.message); return; }
+      const oldName = employees.find(e => e.id === oldAssignee)?.full_name || "Unassigned";
+      const newName = employees.find(e => e.id === newAssignee)?.full_name || "Unassigned";
+      await writeAudit(selectedTask.id, "reassign", "assigned_to", oldName, newName);
+      setSelectedTask({ ...selectedTask, assigned_to: newAssignee });
+      loadData();
+      toast.success("Task reassigned");
+    }}
+  >
+    <SelectTrigger className="mt-0.5 h-8 text-sm">
+      <SelectValue />
+    </SelectTrigger>
+    <SelectContent>
+      {employees.map(emp => (
+        <SelectItem key={emp.id} value={emp.id}>
+          {emp.full_name}
+        </SelectItem>
+      ))}
+    </SelectContent>
+  </Select>
+</div>
 ```
 
-### Technical Details
+This follows the exact same pattern used for the "Due Date" field directly below it (inline update, audit log, state refresh).
 
-| File | Change |
-|------|--------|
-| `src/hooks/useTabletPin.ts` | New file: localStorage-based hook for pinned machine ID |
-| `src/pages/StationDashboard.tsx` | Add auto-redirect when pinned machine exists |
-| `src/components/shopfloor/MachineSelector.tsx` | Add "Pin to Tablet" button on each machine card |
-| `src/pages/StationView.tsx` | Show pinned indicator; add "Unpin" button in supervisor mode |
+### What This Does
+- Renders a dropdown listing all employees (same `employees` array used throughout the page)
+- On selection: updates `assigned_to` in the database, writes an audit trail entry, updates local state, and refreshes the task list
+- The task card moves to the new employee's column automatically after reassignment
 
-No database migrations, no edge function changes, no schema changes required.
+### What This Does NOT Touch
+- No database changes needed
+- No new components or hooks
+- No edge function changes
+- RLS policies already permit updates by admins and creators (per existing `canMarkComplete` logic)
+
