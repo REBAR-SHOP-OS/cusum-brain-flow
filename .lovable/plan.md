@@ -2,64 +2,34 @@
 
 ## Fix Remaining Security Findings
 
-### Finding 1: wwm_standards Anonymous Access Policy (warn)
+### 1. Fix: Contacts "Admins can read all contacts" Policy (database change)
 
-**Problem:** The "Admins can manage wwm standards" policy is granted to the `public` role instead of `authenticated`. This technically allows anonymous users to hit the policy (though the USING clause checks `user_roles` which requires auth.uid(), so exploitation risk is low).
-
-**Fix:** Drop and recreate the policy targeting `authenticated` only.
-
-```sql
-DROP POLICY IF EXISTS "Admins can manage wwm standards" ON public.wwm_standards;
-CREATE POLICY "Admins can manage wwm standards"
-  ON public.wwm_standards
-  FOR ALL
-  TO authenticated
-  USING (EXISTS (
-    SELECT 1 FROM user_roles
-    WHERE user_roles.user_id = auth.uid()
-      AND user_roles.role = 'admin'::app_role
-  ));
-```
-
----
-
-### Finding 2: SQL Injection via Empire Agent (error)
-
-**Problem:** `execute_readonly_query(text)` and `execute_write_fix(text)` are SECURITY DEFINER functions that accept raw SQL strings. Even though they're restricted to `service_role`, the AI agent could be manipulated via prompt injection to query sensitive tables (e.g., `user_gmail_tokens`, `user_ringcentral_tokens`).
-
-**Fix:** Add a sensitive-table blocklist inside both functions to prevent access to OAuth token tables and auth schema, regardless of what SQL the AI generates.
-
-**For `execute_readonly_query`:**
-- Block queries referencing sensitive tables: `user_gmail_tokens`, `user_ringcentral_tokens`, `user_meta_tokens`, `auth.`
-- Block DDL commands: `DROP`, `ALTER`, `TRUNCATE`, `CREATE`, `GRANT`, `REVOKE`
-- Enforce SELECT-only
-
-**For `execute_write_fix`:**
-- Same sensitive-table blocklist
-- Block DDL commands
-- Keep existing single-statement and 4000-char guards
+The SELECT policy "Admins can read all contacts" targets the `public` role instead of `authenticated`. This will be dropped and recreated targeting `authenticated` only.
 
 ```text
-Validation pseudocode (added to both functions):
-
-IF sql_query matches (user_gmail_tokens|user_ringcentral_tokens|user_meta_tokens|auth\.) THEN
-  RAISE EXCEPTION 'Access to sensitive tables denied';
-END IF;
-
-IF sql_query matches (DROP|ALTER|TRUNCATE|CREATE|GRANT|REVOKE) THEN
-  RAISE EXCEPTION 'DDL commands not allowed';
-END IF;
+DROP POLICY "Admins can read all contacts" ON public.contacts;
+CREATE POLICY "Admins can read all contacts" ON public.contacts
+  FOR SELECT TO authenticated
+  USING (has_role(auth.uid(), 'admin'::app_role) AND company_id = get_user_company_id(auth.uid()));
 ```
 
----
+After fixing, mark `contacts_table_public_exposure` as resolved/ignored -- RLS enforces company-scoped, role-based access with no public exposure.
 
-### Files Changed
+### 2. Acknowledge: Employee Salaries (no database change needed)
 
-| File | Change |
-|------|--------|
-| New migration SQL | Fix wwm_standards policy + harden both SQL execution functions |
+RLS is correctly implemented: admin-only, company-scoped for all CRUD operations. The finding suggests MFA and field-level encryption which are infrastructure-level concerns beyond what can be implemented here. Mark as ignored with documentation.
 
-### No Other Changes
+### 3. Acknowledge: Gmail Tokens (no database change needed)
 
-Per the surgical execution law, no UI, logic, or other database objects will be modified.
+RLS denies ALL client access (SELECT/INSERT/UPDATE/DELETE all return `false` for authenticated users). Only service_role can access. The finding suggests encryption at rest which requires Vault (unavailable in this environment). Mark as ignored with documentation.
+
+### Technical Summary
+
+| Finding | Action |
+|---------|--------|
+| contacts_table_public_exposure | Fix policy role public->authenticated, then ignore |
+| employee_salaries_inadequate_protection | Ignore (RLS already admin+company scoped) |
+| user_gmail_tokens_token_exposure | Ignore (RLS denies all client access) |
+
+Only one migration is needed (contacts policy fix). No UI, logic, or other changes.
 
