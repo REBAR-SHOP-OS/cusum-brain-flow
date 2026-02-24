@@ -1,53 +1,40 @@
 
 
-## Fix: Stale Invoice Data Causes False Overdue Alerts
+## Fix: Empty Balance Sheet Report on /accounting Page
 
 ### Problem
-The AI Actions Queue shows invoices as overdue and unpaid when they have already been paid in QuickBooks. For example, ZACK DURHAM's Invoice #2219-1 ($236.40) appears as 10 days overdue in Penny's queue, but it's already paid in QuickBooks. The `accounting_mirror` table was last synced on Feb 11 -- over 13 days ago -- so the balance is stale.
+The Balance Sheet report on the `/accounting` page returns no data when "Run Report" is clicked. The table renders empty.
 
 ### Root Cause
-The `penny-auto-actions` edge function reads invoice balances from the `accounting_mirror` table **without triggering a QuickBooks sync first**. If the mirror data is stale (which it is -- many records haven't synced since Feb 13), invoices that have been paid in QuickBooks still show `balance > 0`, causing Penny to generate false collection actions.
+In `supabase/functions/quickbooks-oauth/index.ts` (line 1069), the Balance Sheet API call uses:
+```
+reports/BalanceSheet?date_macro=Custom&end_date=${asOfDate}
+```
+
+The `date_macro=Custom` parameter requires **both** `start_date` and `end_date` to be provided. The `start_date` is missing, which causes QuickBooks to return an empty or malformed report response.
+
+For comparison, the Profit and Loss handler correctly passes both `start_date` and `end_date`.
 
 ### Solution
-Force a QuickBooks incremental sync **before** scanning for overdue invoices. This ensures the `accounting_mirror` has up-to-date balance data before Penny makes decisions.
 
-### Changes
-
-**File: `supabase/functions/penny-auto-actions/index.ts`**
-- After obtaining the `companyId`, trigger a QB sync by calling the `qb-sync-engine` edge function with `action: "incremental"` and wait for it to complete
-- Add a short timeout (15s) so the scan doesn't hang if the sync is slow
-- If the sync fails, log a warning but proceed with existing mirror data (graceful degradation)
-- This ensures every "Scan Now" click first refreshes QB data, then analyzes invoices
+**File: `supabase/functions/quickbooks-oauth/index.ts`** (line 1066-1071)
+- Remove `date_macro=Custom` and use only `end_date` for the Balance Sheet report, which is QB's standard way to request a point-in-time balance sheet. The correct parameter for a Balance Sheet "as of" date is:
+  ```
+  reports/BalanceSheet?end_date=${asOfDate}
+  ```
+  This tells QuickBooks to compute balances as of that date without needing a start date.
 
 ### Technical Detail
 
-Add a sync step before the overdue invoice query (after line 19):
-
 ```typescript
-// Force QB sync before scanning to ensure fresh balance data
-try {
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const svcKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const syncController = new AbortController();
-  const syncTimeout = setTimeout(() => syncController.abort(), 15000);
-  
-  await fetch(`${supabaseUrl}/functions/v1/qb-sync-engine`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${svcKey}`,
-    },
-    body: JSON.stringify({ action: "incremental", company_id: companyId }),
-    signal: syncController.signal,
-  });
-  clearTimeout(syncTimeout);
-  console.log("[penny-auto-actions] QB sync completed before scan");
-} catch (syncErr) {
-  console.warn("[penny-auto-actions] QB sync failed, proceeding with cached data:", syncErr);
-}
+// Before (line 1069):
+const data = await qbFetch(config, `reports/BalanceSheet?date_macro=Custom&end_date=${asOfDate}`);
+
+// After:
+const data = await qbFetch(config, `reports/BalanceSheet?end_date=${asOfDate}`);
 ```
 
-This is inserted before the `accounting_mirror` query so the mirror table has fresh balances when Penny analyzes invoices. The 15-second timeout prevents the scan from hanging if QuickBooks API is slow.
+Then redeploy the `quickbooks-oauth` edge function.
 
-**Files to edit:** `supabase/functions/penny-auto-actions/index.ts`
+**Files to edit:** `supabase/functions/quickbooks-oauth/index.ts`
 
