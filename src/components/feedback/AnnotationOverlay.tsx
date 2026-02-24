@@ -312,7 +312,7 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-[95vw] w-[95vw] max-h-[95vh] h-[95vh] flex flex-col p-3 gap-2">
+      <DialogContent className="max-w-[95vw] w-[95vw] max-h-[95vh] h-[95vh] flex flex-col p-3 gap-2 overflow-hidden">
         <DialogTitle className="text-sm font-semibold">
           Annotate & Describe the Change
         </DialogTitle>
@@ -347,7 +347,7 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl }: Props) {
         </div>
 
         {/* Canvas */}
-        <div className="flex-1 overflow-auto border rounded-md bg-muted/30">
+        <div className="flex-1 min-h-0 overflow-auto border rounded-md bg-muted/30">
           <canvas
             ref={canvasRef}
             className="w-full cursor-crosshair touch-none"
