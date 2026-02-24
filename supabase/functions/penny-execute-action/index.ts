@@ -134,31 +134,41 @@ serve(async (req) => {
 
     // Auto-queue next follow-up if executed successfully
     if (finalStatus === "executed" && action.action_type !== "escalate") {
-      const nextFollowupDays = action.action_type === "email_reminder" ? 7 : 14;
-      const nextDate = new Date();
-      nextDate.setDate(nextDate.getDate() + nextFollowupDays);
+      // Dedup check: skip if a pending_approval item already exists for same customer
+      const { data: existing } = await supabase
+        .from("penny_collection_queue")
+        .select("id")
+        .eq("customer_name", action.customer_name)
+        .eq("company_id", action.company_id)
+        .eq("status", "pending_approval")
+        .limit(1);
 
-      // Determine next action type escalation
-      const nextActionType = action.action_type === "email_reminder" ? "call_collection"
-        : action.action_type === "call_collection" ? "send_invoice"
-        : "escalate";
+      if (!existing || existing.length === 0) {
+        const nextFollowupDays = action.action_type === "email_reminder" ? 7 : 14;
+        const nextDate = new Date();
+        nextDate.setDate(nextDate.getDate() + nextFollowupDays);
 
-      await supabase.from("penny_collection_queue").insert({
-        company_id: action.company_id,
-        invoice_id: action.invoice_id,
-        customer_name: action.customer_name,
-        customer_email: action.customer_email,
-        customer_phone: action.customer_phone,
-        amount: action.amount,
-        days_overdue: (action.days_overdue || 0) + nextFollowupDays,
-        action_type: nextActionType,
-        action_payload: {},
-        status: "pending_approval",
-        priority: nextActionType === "escalate" ? "critical" : "high",
-        ai_reasoning: `Auto-follow-up after ${action.action_type} on ${new Date().toLocaleDateString()}. Previous action was executed successfully.`,
-        followup_date: nextDate.toISOString().split("T")[0],
-        followup_count: (action.followup_count || 0) + 1,
-      });
+        const nextActionType = action.action_type === "email_reminder" ? "call_collection"
+          : action.action_type === "call_collection" ? "send_invoice"
+          : "escalate";
+
+        await supabase.from("penny_collection_queue").insert({
+          company_id: action.company_id,
+          invoice_id: action.invoice_id,
+          customer_name: action.customer_name,
+          customer_email: action.customer_email,
+          customer_phone: action.customer_phone,
+          amount: action.amount,
+          days_overdue: (action.days_overdue || 0) + nextFollowupDays,
+          action_type: nextActionType,
+          action_payload: action.action_payload || {},
+          status: "pending_approval",
+          priority: nextActionType === "escalate" ? "critical" : "high",
+          ai_reasoning: `Auto-follow-up after ${action.action_type} on ${new Date().toLocaleDateString()}. Previous action was executed successfully.`,
+          followup_date: nextDate.toISOString().split("T")[0],
+          followup_count: (action.followup_count || 0) + 1,
+        });
+      }
     }
 
     return json({ executed: true, result, status: finalStatus });
