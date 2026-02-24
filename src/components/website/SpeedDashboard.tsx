@@ -115,7 +115,7 @@ export function SpeedDashboard() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const optimizerMutation = useMutation<OptimizerResult, Error, boolean>({
+  const optimizerMutation = useMutation<OptimizerResult | { accepted: true; job_id: string; message: string }, Error, boolean>({
     mutationFn: async (dryRun: boolean) => {
       const { data, error } = await supabase.functions.invoke("wp-speed-optimizer", {
         body: { dry_run: dryRun },
@@ -123,14 +123,22 @@ export function SpeedDashboard() {
       if (error) throw error;
       return data;
     },
-    onSuccess: (data) => {
-      if (data.dry_run) {
+    onSuccess: (data: any) => {
+      if (data.accepted) {
+        toast.success("بهینه‌سازی شروع شد! نتایج و تسک‌ها به صورت خودکار ایجاد می‌شوند.", { duration: 6000 });
+      } else if (data.dry_run) {
         toast.success(`Scan complete: ${data.images_fixed} images can be optimized across ${data.items_modified} items`);
       } else {
         toast.success(`Optimized ${data.images_fixed} images across ${data.items_modified} items`);
       }
     },
-    onError: (err) => toast.error(`Optimizer failed: ${err.message}`),
+    onError: (err) => {
+      if (err.message?.includes("timed out") || err.message?.includes("Failed to fetch") || err.message?.includes("network")) {
+        toast.info("بهینه‌سازی در پس‌زمینه در حال اجراست. نتایج در صفحه Tasks قابل مشاهده خواهد بود.", { duration: 6000 });
+      } else {
+        toast.error(`Optimizer failed: ${err.message}`);
+      }
+    },
   });
 
   const audit = auditQuery.data;
@@ -217,18 +225,24 @@ export function SpeedDashboard() {
                 </div>
 
                 {/* Optimizer Results */}
-                {optimizerMutation.data && (
+                {optimizerMutation.data && 'accepted' in optimizerMutation.data && (
+                  <div className="mt-2 p-2 bg-muted rounded text-xs flex items-center gap-1.5">
+                    <CheckCircle className="w-3.5 h-3.5 text-green-500 shrink-0" />
+                    <span>بهینه‌سازی در پس‌زمینه شروع شد. تسک‌ها به صورت خودکار برای مشکلات سرور ایجاد می‌شوند.</span>
+                  </div>
+                )}
+                {optimizerMutation.data && 'dry_run' in optimizerMutation.data && (
                   <div className="mt-2 space-y-1.5">
                     <div className="flex items-center gap-1.5 text-xs">
                       <CheckCircle className="w-3.5 h-3.5 text-green-500" />
                       <span>
-                        {optimizerMutation.data.dry_run ? "Would fix" : "Fixed"}{" "}
-                        <strong>{optimizerMutation.data.images_fixed}</strong> images across{" "}
-                        <strong>{optimizerMutation.data.items_modified}</strong> items
-                        (scanned {optimizerMutation.data.items_scanned})
+                        {(optimizerMutation.data as OptimizerResult).dry_run ? "Would fix" : "Fixed"}{" "}
+                        <strong>{(optimizerMutation.data as OptimizerResult).images_fixed}</strong> images across{" "}
+                        <strong>{(optimizerMutation.data as OptimizerResult).items_modified}</strong> items
+                        (scanned {(optimizerMutation.data as OptimizerResult).items_scanned})
                       </span>
                     </div>
-                    {optimizerMutation.data.results.slice(0, 5).map((r) => (
+                    {(optimizerMutation.data as OptimizerResult).results.slice(0, 5).map((r) => (
                       <div key={`${r.type}-${r.id}`} className="text-xs bg-muted rounded p-1.5">
                         <span className="font-medium">{r.title}</span>
                         <span className="text-muted-foreground ml-1">({r.type})</span>
@@ -242,17 +256,19 @@ export function SpeedDashboard() {
               </Card>
 
               {/* Media Library Audit Results */}
-              {optimizerMutation.data?.media_audit && optimizerMutation.data.media_audit.length > 0 && (
+              {optimizerMutation.data && 'media_audit' in optimizerMutation.data && (optimizerMutation.data as OptimizerResult).media_audit?.length > 0 && (() => {
+                const optData = optimizerMutation.data as OptimizerResult;
+                return (
                 <Card className="p-3 space-y-2">
                   <div className="flex items-center gap-2">
                     <AlertTriangle className="w-4 h-4 text-yellow-500" />
-                    <h3 className="text-sm font-semibold">Media Library: {optimizerMutation.data.media_audit_count} Oversized Images</h3>
+                    <h3 className="text-sm font-semibold">Media Library: {optData.media_audit_count} Oversized Images</h3>
                   </div>
                   <p className="text-xs text-muted-foreground">
                     These images need server-side compression (ShortPixel/Imagify plugin required).
                   </p>
                   <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                    {optimizerMutation.data.media_audit.slice(0, 20).map((item) => (
+                    {optData.media_audit.slice(0, 20).map((item) => (
                       <div key={item.id} className="text-xs bg-muted rounded p-1.5">
                         <span className="font-medium">{item.title}</span>
                         <span className="text-muted-foreground ml-1">({item.mime_type})</span>
@@ -269,7 +285,8 @@ export function SpeedDashboard() {
                     ))}
                   </div>
                 </Card>
-              )}
+                );
+              })()}
 
               {audit.issues.length > 0 && (
                 <div className="space-y-1.5">
