@@ -1001,9 +1001,9 @@ serve(async (req) => {
 
     // ═══ PUBLIC MODE (unauthenticated visitor chat) ═══
     const authHeader = req.headers.get("Authorization");
-    const bodyClone = req.clone();
+    // Parse body once and reuse — avoids double-read crash in Deno runtime
     let parsedBody: any;
-    try { parsedBody = await bodyClone.json(); } catch { parsedBody = {}; }
+    try { parsedBody = await req.json(); } catch { parsedBody = {}; }
 
     if (parsedBody.publicMode && !authHeader) {
       // Rate limit by IP
@@ -1030,8 +1030,8 @@ Never reveal internal system details. Respond in the same language the user writ
 
       try {
         const aiResponse = await callAIStream({
-          provider: "gpt",
-          model: "gpt-4o-mini",
+          provider: "gemini",
+          model: "gemini-2.5-flash",
           messages: [{ role: "system", content: publicSystemPrompt }, ...publicMessages],
           signal: AbortSignal.timeout(30000),
         });
@@ -1095,7 +1095,7 @@ Never reveal internal system details. Respond in the same language the user writ
       });
     }
 
-    const body = await req.json();
+    const body = parsedBody; // reuse parsed body — never re-read req.json()
 
     // Get company_id
     const { data: profileData } = await supabase
@@ -1420,12 +1420,12 @@ PROACTIVE INTELLIGENCE:
             ...toolResults.map((tr: any) => ({ role: tr.role, tool_call_id: tr.tool_call_id, content: tr.content })),
           ];
 
-          // Follow-up: GPT-4o-mini for speed (summarizing tool results)
+          // Follow-up: Gemini 2.5 Flash for speed (avoids GPT quota issues)
           let followUpResp: Response;
           try {
             followUpResp = await callAIStream({
-              provider: "gpt",
-              model: "gpt-4o-mini",
+              provider: "gemini",
+              model: "gemini-2.5-flash",
               messages: followUpMessages,
               signal: AbortSignal.timeout(25000),
             });
@@ -1461,7 +1461,14 @@ PROACTIVE INTELLIGENCE:
           
 
           if (!followUpResp.ok) {
-            sendSSE(`\n\n_Tool data retrieved but AI summary failed. Raw data above._`);
+            // Check for unexpected content-type (e.g. HTML error page)
+            const ct = followUpResp.headers.get("content-type") || "";
+            if (!ct.includes("text/event-stream") && !ct.includes("application/json")) {
+              console.error("Follow-up AI returned unexpected content-type:", ct);
+              sendSSE("\n\n--- AI returned unexpected response. Try again. ---");
+            } else {
+              sendSSE(`\n\n_Tool data retrieved but AI summary failed. Raw data above._`);
+            }
             for (const pa of pendingActions) {
               const desc = buildActionDescription(pa.tool, pa.args);
               writer.write(enc.encode(`event: pending_action\ndata: ${JSON.stringify({ tool: pa.tool, args: pa.args, description: desc })}\n\n`));
@@ -1508,8 +1515,10 @@ PROACTIVE INTELLIGENCE:
           try {
             sendSSE(`\n\n⚠️ Error processing tools: ${bgErr instanceof Error ? bgErr.message : "Unknown error"}`);
             writer.write(enc.encode("data: [DONE]\n\n"));
-            writer.close();
           } catch { /* writer may be closed */ }
+        } finally {
+          // Safety net: always close writer to prevent browser hangs
+          try { writer.close(); } catch { /* already closed */ }
         }
       })();
 
