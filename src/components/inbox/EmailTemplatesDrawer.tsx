@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { X, Plus, Trash2, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { SmartTextarea } from "@/components/ui/SmartTextarea";
+import { Textarea } from "@/components/ui/textarea";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
 
@@ -102,7 +102,7 @@ export function EmailTemplatesDrawer({ onInsert, currentDraft }: EmailTemplatesD
                 placeholder="Template name..."
                 className="h-8 text-xs"
               />
-              <SmartTextarea
+              <Textarea
                 value={newBody}
                 onChange={(e) => setNewBody(e.target.value)}
                 placeholder="Template body..."

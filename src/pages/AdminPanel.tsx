@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { SmartTextarea } from "@/components/ui/SmartTextarea";
+import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -437,7 +437,7 @@ function EmployeeDialog({ open, profile, salary, onClose, onSave }: EmployeeDial
           </div>
           <div className="space-y-1.5">
             <Label>Duties (comma separated)</Label>
-            <SmartTextarea value={duties} onChange={(e) => setDuties(e.target.value)} placeholder="Sales management, Project management..." className="resize-none min-h-[80px]" />
+            <Textarea value={duties} onChange={(e) => setDuties(e.target.value)} placeholder="Sales management, Project management..." className="resize-none min-h-[80px]" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
