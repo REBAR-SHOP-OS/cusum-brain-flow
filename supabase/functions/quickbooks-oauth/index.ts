@@ -1160,10 +1160,10 @@ async function handleCreateInvoice(supabase: ReturnType<typeof createClient>, us
 
 async function handleCreatePayment(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
   const config = await getQBConfig(supabase, userId);
-  const { customerId, customerName, totalAmount, invoiceId, invoiceLines, paymentMethod, memo } = body as {
+  const { customerId, customerName, totalAmount, invoiceId, invoiceLines, paymentMethod, memo, txnDate } = body as {
     customerId: string; customerName: string; totalAmount: number;
     invoiceId?: string; invoiceLines?: { invoiceId: string; amount: number }[];
-    paymentMethod?: string; memo?: string;
+    paymentMethod?: string; memo?: string; txnDate?: string;
   };
 
   if (!customerId || !totalAmount) throw new Error("Customer ID and total amount required");
@@ -1171,6 +1171,7 @@ async function handleCreatePayment(supabase: ReturnType<typeof createClient>, us
   const payload: Record<string, unknown> = {
     CustomerRef: { value: customerId, name: customerName },
     TotalAmt: totalAmount,
+    ...(txnDate && { TxnDate: txnDate }),
     ...(memo && { PrivateNote: memo }),
     ...(paymentMethod && { PaymentMethodRef: { value: paymentMethod } }),
   };
