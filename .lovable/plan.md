@@ -1,71 +1,30 @@
 
 
-## Fix: Make "Assigned To" Editable on Task Detail
+## Add "Schedule Next Activity" to Task Detail Panel
 
 ### Problem
-The "Assigned To" field in the task detail panel is plain read-only text. Users cannot reassign a task to a different employee.
-
-### Root Cause
-In `src/pages/Tasks.tsx` (lines 978-981), the "Assigned To" field renders the employee name as static text with no interactive element:
-```tsx
-<span className="text-xs text-muted-foreground">Assigned To</span>
-<p className="mt-0.5 text-sm">{employees.find(...)?.full_name || "Unassigned"}</p>
-```
+The task detail drawer on `/tasks` has no way to schedule follow-up activities. Users need to be able to schedule calls, emails, meetings, or follow-ups directly from a task.
 
 ### Solution
-Replace the static text with a `Select` dropdown (same component already imported and used elsewhere in this file). On change, update the task's `assigned_to` in the database, write an audit log entry, and refresh the UI.
+Embed the existing `ScheduledActivities` component into the task detail drawer in `src/pages/Tasks.tsx`. This component already provides a full UI for scheduling activities (call, email, meeting, to-do, follow-up) with planned/completed lists -- it just needs to be wired into the task detail panel.
 
 ### Changes
 
-**File: `src/pages/Tasks.tsx` (lines 978-981)**
+**File: `src/pages/Tasks.tsx`**
 
-Replace the static "Assigned To" display with:
+1. Import the `ScheduledActivities` component at the top of the file
+2. Add a "Next Activity" section in the task detail drawer, placed between the action buttons and the audit log
+3. Pass `entityType="task"` and `entityId={selectedTask.id}` to the component
 
-```tsx
-<div>
-  <span className="text-xs text-muted-foreground">Assigned To</span>
-  <Select
-    value={selectedTask.assigned_to || ""}
-    onValueChange={async (newAssignee) => {
-      const oldAssignee = selectedTask.assigned_to;
-      if (newAssignee === oldAssignee) return;
-      const { error } = await supabase
-        .from("tasks")
-        .update({ assigned_to: newAssignee, updated_at: new Date().toISOString() })
-        .eq("id", selectedTask.id);
-      if (error) { toast.error(error.message); return; }
-      const oldName = employees.find(e => e.id === oldAssignee)?.full_name || "Unassigned";
-      const newName = employees.find(e => e.id === newAssignee)?.full_name || "Unassigned";
-      await writeAudit(selectedTask.id, "reassign", "assigned_to", oldName, newName);
-      setSelectedTask({ ...selectedTask, assigned_to: newAssignee });
-      loadData();
-      toast.success("Task reassigned");
-    }}
-  >
-    <SelectTrigger className="mt-0.5 h-8 text-sm">
-      <SelectValue />
-    </SelectTrigger>
-    <SelectContent>
-      {employees.map(emp => (
-        <SelectItem key={emp.id} value={emp.id}>
-          {emp.full_name}
-        </SelectItem>
-      ))}
-    </SelectContent>
-  </Select>
-</div>
-```
+The section will include:
+- A "Schedule Activity" button that expands into an inline form (activity type, date, note)
+- A list of planned activities with "Done" and "Cancel" actions
+- A list of completed activities
+- All powered by the existing `useScheduledActivities` hook and `scheduled_activities` database table
 
-This follows the exact same pattern used for the "Due Date" field directly below it (inline update, audit log, state refresh).
+### What This Reuses
+- `ScheduledActivities` component (already built for pipeline/CRM entities)
+- `useScheduledActivities` hook (handles CRUD against `scheduled_activities` table)
+- `scheduled_activities` table (already exists with `entity_type` + `entity_id` design)
 
-### What This Does
-- Renders a dropdown listing all employees (same `employees` array used throughout the page)
-- On selection: updates `assigned_to` in the database, writes an audit trail entry, updates local state, and refreshes the task list
-- The task card moves to the new employee's column automatically after reassignment
-
-### What This Does NOT Touch
-- No database changes needed
-- No new components or hooks
-- No edge function changes
-- RLS policies already permit updates by admins and creators (per existing `canMarkComplete` logic)
-
+No database changes, no new components, no edge function changes needed.
