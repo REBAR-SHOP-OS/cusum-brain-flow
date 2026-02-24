@@ -283,6 +283,10 @@ export default function Tasks() {
   const canApproveTask = (task: TaskRow) =>
     isAdmin || currentProfileId === task.created_by_profile_id;
 
+  // Only task creator or admin can delete or generate fix
+  const canDeleteOrFix = (task: TaskRow) =>
+    isAdmin || currentProfileId === task.created_by_profile_id;
+
   const canToggleTask = (task: TaskRow) => {
     if (task.status === "completed") return canUncomplete(task);
     return canMarkComplete(task);
@@ -1114,7 +1118,7 @@ export default function Tasks() {
                 <Button
                   size="sm"
                   className="bg-gradient-to-r from-orange-500 to-red-500 text-white hover:opacity-90"
-                  disabled={fixLoading}
+                  disabled={fixLoading || !canDeleteOrFix(selectedTask)}
                   onClick={async () => {
                     setFixLoading(true);
                     try {
@@ -1169,7 +1173,7 @@ export default function Tasks() {
                   {fixLoading ? "Generating..." : "Generate Fix"}
                 </Button>
 
-                <Button size="sm" variant="destructive" onClick={() => { if (window.confirm("Delete this task?")) { supabase.from("tasks").delete().eq("id", selectedTask.id).then(({ error }) => { if (error) toast.error(error.message); else { toast.success("Task deleted"); setDrawerOpen(false); loadData(); } }); } }}>Delete</Button>
+                <Button size="sm" variant="destructive" disabled={!canDeleteOrFix(selectedTask)} onClick={() => { if (window.confirm("Delete this task?")) { supabase.from("tasks").delete().eq("id", selectedTask.id).then(({ error }) => { if (error) toast.error(error.message); else { toast.success("Task deleted"); setDrawerOpen(false); loadData(); } }); } }}>Delete</Button>
               </div>
 
               {/* Reopen with Issue Dialog */}
