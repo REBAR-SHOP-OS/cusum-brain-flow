@@ -1,38 +1,20 @@
 
 
-## Fix: Live Queue Should Only Show Active (Running) Jobs
+## Remove "ESTIMATION" from Shopfloor Hub Screens
 
 ### Problem
-The "Live Queue" section on `/shopfloor/station` (StationDashboard) displays ALL cut plans with statuses `draft`, `ready`, `queued`, and `running`. Users expect this section to only show jobs that have been started (status = `running`), not unstarted/queued ones.
-
-### Root Cause
-In `src/pages/StationDashboard.tsx`, line 29-31:
-```tsx
-const activePlans = plans.filter(p =>
-  ["draft", "ready", "queued", "running"].includes(p.status)
-);
-```
-This filter is too broad -- it includes drafts and queued plans that haven't been started yet.
+The "ESTIMATION" card appears on the shopfloor "SELECT INTERFACE" screen, but Estimation is an office/admin tool (AI Takeoff and Bids), not a production floor interface. Shopfloor workers should not see it alongside Material Pool, Clearance, Loading, etc.
 
 ### Solution
-Split the plans into two categories:
-
-1. **Running plans** (status = `running`) -- shown in the "Live Queue" section as active jobs
-2. **Queued plans** (status = `draft`, `ready`, `queued`) -- shown in a separate "Queued" section below, where operators can start them
+Remove the ESTIMATION entry from the hub cards array in both places where the shopfloor hub is rendered.
 
 ### Changes
 
-**File: `src/pages/StationDashboard.tsx`**
+**File: `src/pages/ShopFloor.tsx`**
+- Remove the ESTIMATION object from the `hubCards` array (the last entry with `label: "ESTIMATION"`, linking to `/estimation`)
 
-1. Create two filtered lists instead of one:
-   - `runningPlans` = plans with status `running`
-   - `queuedPlans` = plans with status `draft`, `ready`, or `queued`
+**File: `src/pages/Home.tsx`**
+- Remove the ESTIMATION object from the `shopfloorCards` array (the entry with `label: "ESTIMATION"`, linking to `/estimation`)
 
-2. Update the "Live Queue" section to only render `runningPlans` -- these are the actively started jobs with Pause/Complete actions
-
-3. Add a separate "Queued" section below that renders `queuedPlans` -- these show the Start button to begin work
-
-4. Update the counter badge next to "Live Queue" to reflect only running plans count
-
-This way the Live Queue accurately represents only work in progress, and queued/unstarted jobs are visually separated.
+This leaves 7 hub cards (Material Pool, Shop Floor, Clearance, Loading, Delivery, Pickup, Inventory) which is a cleaner fit for the grid layout.
 
