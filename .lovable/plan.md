@@ -1,32 +1,36 @@
 
 
-## Fix: "All Deliveries" Count Mismatch
+## Fix: Deliveries List Clipped by Parent Container
 
 ### Problem
-
-The "All" tab header shows a count (e.g., 8) that doesn't match the number of deliveries visually rendered below. Items are being clipped/hidden because of a CSS overflow issue in the scroll container.
+The "All" tab on the `/deliveries` page shows the correct count in the tab header (matching `filteredDeliveries.length`) but not all delivery cards are visible because a parent container clips them.
 
 ### Root Cause
+On line 345 of `src/pages/Deliveries.tsx`, the content wrapper uses `overflow-hidden`:
 
-In `src/pages/Deliveries.tsx`, the "All" tab uses `overflow-hidden` on the `TabsContent` container (line 383) combined with `ScrollArea` using `h-full`. When the flex layout doesn't propagate a concrete pixel height down to the scroll area, the scrollable region gets truncated, hiding some delivery cards while the count badge still shows the full array length.
+```
+<div className="flex-1 overflow-hidden">
+```
+
+This parent container clips the scrollable area inside, preventing users from seeing or scrolling to all delivery cards -- even though the `TabsContent` was recently changed to `overflow-auto`.
 
 ### Solution
 
-**File: `src/pages/Deliveries.tsx`**
+**File: `src/pages/Deliveries.tsx`, line 345**
 
-Change the "All" tab's `TabsContent` wrapper to use `overflow-auto` instead of `overflow-hidden`, and ensure the `DeliveryList` scroll area has a max-height fallback so all items are scrollable. Also apply the same fix to the "Today" and "Upcoming" tabs for consistency.
+Change the parent content wrapper from `overflow-hidden` to `overflow-auto`:
 
-Specifically:
+```
+Before: <div className="flex-1 overflow-hidden">
+After:  <div className="flex-1 overflow-auto">
+```
 
-1. **Lines 359, 371, 383**: Change `overflow-hidden` to `overflow-auto` on all three `TabsContent` containers
-2. **Line 637 (DeliveryList component)**: Change the `ScrollArea` from `h-full` to a calculated height using `max-h-[calc(100vh-300px)]` so it always has a concrete scrollable boundary regardless of flex layout
+This single-line change removes the clipping constraint, allowing the `ScrollArea` inside `DeliveryList` to function correctly and display all delivery cards.
 
-### Summary of Changes
+### Summary
 
-| File | Line(s) | Change |
+| File | Line | Change |
 |---|---|---|
-| `src/pages/Deliveries.tsx` | 359, 371, 383 | `overflow-hidden` to `overflow-auto` |
-| `src/pages/Deliveries.tsx` | 637 | `ScrollArea` from `h-full` to `max-h-[calc(100vh-300px)] h-full` |
+| `src/pages/Deliveries.tsx` | 345 | `overflow-hidden` to `overflow-auto` |
 
-This ensures all delivery cards in the array are scrollable/visible, making the count always match the rendered items.
-
+No other files, components, or database changes are affected.
