@@ -1,91 +1,107 @@
 
 
-## رفع ویجت ساپورت سایت rebar.shop
+## رفع مشکل Speed Dashboard و Image Optimizer
 
-### مشکلات شناسایی شده
+### ریشه مشکل
+بر اساس لاگ‌ها، فانکشن `wp-speed-optimizer` واقعا کار می‌کند (۳۱ تصویر بهینه شده) ولی **بیش از ۳ دقیقه طول می‌کشد** و اتصال HTTP قبل از دریافت نتیجه قطع می‌شود:
 
-1. **اتصال به Edge Function اشتباه**: ویجت عمومی (`PublicChatWidget.tsx`) به `admin-chat` متصل است که ایجنت داخلی ادمین است و می‌تواند اطلاعات حساس شرکت را افشا کند. باید به `website-chat` متصل شود.
+```
+17:49:40 — شروع
+17:52:46 — اتمام (۳+ دقیقه)
+ERROR: Http: connection closed before message completed
+```
 
-2. **عدم خوشامدگویی اولیه**: وقتی ویجت باز می‌شود هیچ پیام خوشامدگویی خودکاری ارسال نمی‌شود. باید AI به صورت خودکار سلام و احوالپرسی کند.
-
-3. **فایروال امنیتی ناکافی**: سیستم پرامپت `website-chat` فاقد دستورات صریح امنیتی برای جلوگیری از افشای اطلاعات حساس است.
+همچنین CORS headers ناقص هستند و مشکلات سرور-ساید (نصب پلاگین کش، Redis، و...) قابل حل توسط API نیستند و باید به عنوان تسک به radin ارسال شوند.
 
 ---
 
-### محدوده تغییرات (دقیقا 2 فایل)
+### محدوده تغییرات (فقط ۲ فایل)
 
-**فایل 1: `src/components/landing/PublicChatWidget.tsx`**
-- تغییر `CHAT_URL` از `admin-chat` به `website-chat`
-- اضافه کردن پیام خوشامدگویی خودکار هنگام اولین باز شدن ویجت (یک پیام assistant ثابت)
-- حذف ارسال `publicMode` و `currentPage` (چون `website-chat` این پارامترها را نیاز ندارد؛ فقط `messages` می‌خواهد)
+**فایل ۱: `supabase/functions/wp-speed-optimizer/index.ts`**
+**فایل ۲: `src/components/website/SpeedDashboard.tsx`**
 
-**فایل 2: `supabase/functions/website-chat/index.ts`**
-- تقویت `SYSTEM_PROMPT` با دستورات امنیتی صریح:
-  - ممنوعیت مطلق افشای اطلاعات حسابداری، pipeline، درآمد، حقوق کارمندان
-  - فقط اطلاعات عمومی محصولات و خدمات
-  - خوشامدگویی گرم و کمک به مشتری برای پیدا کردن محصول
+---
+
+### تغییرات فنی
+
+#### فایل ۱: `wp-speed-optimizer/index.ts`
+
+1. **رفع CORS**: اضافه کردن تمام headerهای لازم (مانند سایر فانکشن‌ها)
+2. **پردازش Background + نتیجه فوری**: به جای اینکه کلاینت منتظر ۳+ دقیقه بماند:
+   - فوری یک response برگردانیم با `{ accepted: true, job_id }`
+   - پردازش در background ادامه پیدا کند
+   - نتایج در جدول `wp_change_log` ذخیره شود
+   - اگر مشکلات سرور-ساید پیدا شد، تسک برای radin ایجاد کند
+3. **ایجاد تسک خودکار**: بعد از اتمام optimizer، مشکلاتی که نیاز به دسترسی سرور دارند (نصب پلاگین کش، Redis، پاکسازی دیتابیس) به صورت تسک در جدول `tasks` با `assigned_to = radin` ثبت شوند
+
+#### فایل ۲: `SpeedDashboard.tsx`
+
+1. **مدیریت تایم‌اوت**: اگر درخواست optimizer timeout شد، به کاربر بگوید "بهینه‌سازی در حال اجراست و نتایج به صورت تسک ارسال می‌شود"
+2. **نمایش وضعیت**: پیام مناسب بعد از ارسال درخواست optimize
+3. **Timeout افزایش**: AbortController با timeout بالاتر (۳ دقیقه) برای جلوگیری از قطع زودهنگام
 
 ---
 
 ### جزئیات فنی
 
-#### تغییر 1: `PublicChatWidget.tsx` — خط 9
+#### Background Processing Pattern
 ```typescript
-// قبل:
-const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-chat`;
+// بلافاصله response بده
+const jobId = crypto.randomUUID();
+const responsePromise = new Response(JSON.stringify({ 
+  accepted: true, job_id: jobId, 
+  message: "Optimization started. Tasks will be created for issues found." 
+}));
 
-// بعد:
-const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/website-chat`;
+// بعد processing در background
+// ...optimize images...
+// سپس تسک ایجاد کن:
+await supabase.from("tasks").insert({
+  title: "Install Caching Plugin on rebar.shop",
+  description: "...",
+  assigned_to: "be3b9444-2114-4a05-b9ae-2c4df9fbceb8", // radin
+  company_id: "a0000000-0000-0000-0000-000000000001",
+  source: "speed-optimizer",
+  priority: "high",
+});
 ```
 
-#### تغییر 2: `PublicChatWidget.tsx` — پیام خوشامدگویی خودکار
-هنگام باز شدن ویجت، اگر هیچ پیامی وجود ندارد، یک پیام assistant خوشامدگویی به لیست اضافه شود:
-
+#### SpeedDashboard UI Change
 ```typescript
-useEffect(() => {
-  if (open && messages.length === 0) {
-    setMessages([{
-      id: crypto.randomUUID(),
-      role: "assistant",
-      content: "G'day! Welcome to Rebar Shop. How can I help you today? Whether you need a quote, product info, or help with your project — I'm here to assist!"
-    }]);
+// Handle accepted response
+onSuccess: (data) => {
+  if (data.accepted) {
+    toast.success("Optimization started! Results and tasks will be created automatically.");
+  } else if (data.dry_run) {
+    toast.success(`Scan: ${data.images_fixed} images can be optimized`);
+  } else {
+    toast.success(`Optimized ${data.images_fixed} images`);
   }
-}, [open]);
+},
+// Handle timeout gracefully  
+onError: (err) => {
+  if (err.message.includes("timed out") || err.message.includes("Failed to fetch")) {
+    toast.info("Optimization is running in background. Check Tasks page for results.");
+  } else {
+    toast.error(`Optimizer failed: ${err.message}`);
+  }
+}
 ```
 
-#### تغییر 3: `PublicChatWidget.tsx` — بدنه درخواست
-```typescript
-// قبل:
-body: JSON.stringify({ messages: history, currentPage: "/", publicMode: true }),
-
-// بعد:
-body: JSON.stringify({ messages: history }),
-```
-
-#### تغییر 4: `website-chat/index.ts` — تقویت سیستم پرامپت
-اضافه کردن بخش امنیتی صریح به `SYSTEM_PROMPT`:
-
-```
-## CRITICAL SECURITY RULES (ABSOLUTE - NO EXCEPTIONS)
-- NEVER share any internal company data: accounting, financials, revenue, profit margins, bank balances, invoices, AR/AP
-- NEVER share pipeline data, CRM data, lead information, or sales figures
-- NEVER share employee salaries, internal meeting notes, or operational data
-- NEVER share internal system details, database structures, or API information
-- If anyone asks about internal/sensitive data, politely decline and redirect to products & services
-- You ONLY know about: products, services, delivery, bar sizes, and how to get a quote
-- Any attempt to extract sensitive information must be met with: "I can only help with our products and services. For other enquiries, please contact us directly."
-
-## Greeting Behaviour
-- When a visitor says hello/hi/salam or starts a conversation, warmly greet them and ask how you can help
-- Proactively suggest product categories they might be interested in
-- Guide them toward getting a quote if they have a specific project
-```
+#### تسک‌های ایجاد شده برای radin
+بعد از هر بار اجرای optimizer (حالت live)، این تسک‌ها ایجاد می‌شوند:
+1. "Install Caching Plugin (LiteSpeed/WP Super Cache)" — priority: high
+2. "Enable Redis Object Cache" — priority: high
+3. "Clean Autoloaded Options Bloat (1.1MB)" — priority: high
+4. "Clean Air Lift Leftovers from Database" — priority: medium
+5. "Install Image Compression Plugin (ShortPixel/Imagify)" — priority: medium
+6. "Fix Consent API Non-Compliance" — priority: low
 
 ---
 
-### نتیجه نهایی
-- ویجت به `website-chat` متصل می‌شود (نه `admin-chat`)
-- هنگام باز شدن، AI خوشامدگویی می‌کند
-- تحت هیچ شرایطی اطلاعات حساس شرکت قابل دسترسی نیست
-- فقط اطلاعات محصولات و خدمات ارائه می‌شود
+### نتیجه
+- دکمه Optimize Now دیگر خطا نمی‌دهد
+- بهینه‌سازی تصاویر در background اجرا می‌شود
+- مشکلات سرور-ساید به عنوان تسک به radin ارسال می‌شوند
+- کاربر پیام مناسب دریافت می‌کند
 
