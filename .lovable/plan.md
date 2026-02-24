@@ -1,96 +1,32 @@
 
 
-## Fix: Stale QuickBooks Data on Accounting Page
+## Add Reschedule (Due Date) Functionality to Task Detail Drawer
 
 ### Problem
-When the accounting page loads, `loadAll()` reads from local mirror tables (`qb_transactions`, `qb_customers`, etc.). If mirror data exists, it returns immediately **without syncing from QuickBooks**. The mirror data was last synced on Feb 13 -- 11 days ago -- so all displayed data (invoices, customer details, balances) is stale.
-
-Additionally, the Penny AI Action Queue stores `days_overdue` as a static value at creation time, so it drifts further from reality each day.
-
-### Root Cause
-In `useQuickBooksData.ts`, the `loadAll` function (line 354-474):
-1. Calls `loadFromMirror()` which reads cached data from DB tables
-2. If mirror has data, it returns `true` and `loadAll` exits early (line 369-389)
-3. No background incremental sync is triggered to refresh the mirror
+The task detail drawer on `/tasks` shows the due date as static text with no way to change it. Users need to reschedule follow-up tasks directly from the drawer.
 
 ### Solution
+Make the "Due Date" field in the task detail drawer clickable, opening a date picker (Popover + Calendar) that allows the user to select a new date. On selection, update the task's `due_date` in the database and log the change in the audit trail.
 
-#### 1. Trigger background incremental sync after loading from mirror
-**File:** `src/hooks/useQuickBooksData.ts`
+### Technical Details
 
-After `loadFromMirror()` succeeds and fast-loads cached data for the UI, trigger an incremental sync **in the background** to refresh the mirror. Once the sync completes, re-read from mirror to update the UI with fresh data.
+**File:** `src/pages/Tasks.tsx`
 
-```text
-if (mirrorLoaded) {
-  setLoading(false);
-  // Background: trigger incremental sync to refresh mirror data
-  (async () => {
-    try {
-      await qbAction("incremental-sync");
-      // Re-load from mirror after sync completes
-      await loadFromMirror();
-    } catch (e) {
-      console.warn("[QB] Background incremental sync failed:", e);
-    }
-  })();
-  // ... existing employee/time-activity loading
-  return;
-}
-```
+1. **Add imports** for `Calendar`, `Popover`, `PopoverTrigger`, `PopoverContent`, and `CalendarDays` icon at the top of the file.
 
-This gives users instant cached data while silently refreshing in the background.
+2. **Replace the static Due Date display** (lines 984-987) with an interactive Popover containing a Calendar component:
+   - Clicking the due date text opens a calendar popover
+   - Selecting a date calls `supabase.from("tasks").update({ due_date, updated_at })` 
+   - Writes an audit log entry: `writeAudit(task.id, "reschedule", "due_date", oldDate, newDate)`
+   - Updates the local `selectedTask` state and refreshes the task list
+   - A small "clear" button allows removing the due date entirely
 
-#### 2. Recalculate days_overdue dynamically in the Penny Queue
-**File:** `src/hooks/usePennyQueue.ts`
+3. **Permission**: Only the assigned user, creator, or admin can reschedule (reuse the existing `canMarkComplete` check).
 
-After loading queue items, recalculate `days_overdue` based on `created_at` + original `days_overdue` so the displayed value stays current:
+The calendar picker will use the existing `Calendar` component from `src/components/ui/calendar.tsx` and `Popover` from `src/components/ui/popover.tsx` -- both already in the project.
 
-```text
-// After fetching items, recalculate days_overdue dynamically
-const now = new Date();
-const recalculated = (data || []).map(item => {
-  const createdAt = new Date(item.created_at);
-  const daysSinceCreation = Math.floor((now.getTime() - createdAt.getTime()) / 86400000);
-  return {
-    ...item,
-    days_overdue: item.days_overdue + daysSinceCreation,
-  };
-});
-```
-
-#### 3. Auto-clean resolved queue items after sync
-**File:** `supabase/functions/penny-auto-actions/index.ts`
-
-Before creating new queue items, check if any existing pending items reference invoices that have been paid (balance = 0 in `accounting_mirror`) and auto-reject them with a note:
-
-```text
-// Clean up stale items where invoice balance is now 0
-const { data: staleItems } = await supabase
-  .from("penny_collection_queue")
-  .select("id, invoice_id")
-  .eq("company_id", companyId)
-  .eq("status", "pending_approval");
-
-for (const item of staleItems || []) {
-  const { data: mirror } = await supabase
-    .from("accounting_mirror")
-    .select("balance")
-    .eq("quickbooks_id", item.invoice_id)
-    .maybeSingle();
-  if (mirror && mirror.balance <= 0) {
-    await supabase
-      .from("penny_collection_queue")
-      .update({ status: "rejected", execution_result: { reject_reason: "Invoice paid - auto-resolved" } })
-      .eq("id", item.id);
-  }
-}
-```
-
-### Summary
-
-| Change | File | Purpose |
-|--------|------|---------|
-| Background incremental sync | `src/hooks/useQuickBooksData.ts` | Refresh mirror data silently after showing cached data |
-| Dynamic days_overdue | `src/hooks/usePennyQueue.ts` | Keep overdue day counts accurate |
-| Auto-resolve paid items | `supabase/functions/penny-auto-actions/index.ts` | Remove queue items for paid invoices |
-
+### UI Behavior
+- The due date cell shows the formatted date (or a "Set date" placeholder) with a small calendar icon
+- Clicking opens a popover with the month calendar
+- Selecting a date immediately saves and closes the popover
+- The audit log records the reschedule action
