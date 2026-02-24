@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { Shield, RefreshCw, CheckCircle2, AlertTriangle, XCircle, HelpCircle, ExternalLink } from "lucide-react";
+import { getErrorMessage } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useUserRole } from "@/hooks/useUserRole";
 import { Button } from "@/components/ui/button";
@@ -132,7 +133,7 @@ export default function ConnectionsAudit() {
             healthResult: s === "connected" ? `OK${data?.email ? ` — ${data.email}` : ""}${data?.profileName ? ` — ${data.profileName}` : ""}${data?.displayName ? ` — ${data.displayName}` : ""}` : (data?.error || "Check failed"),
           };
         } catch (err) {
-          return { id: check.id, status: "disconnected" as AuditStatus, error: String(err), healthResult: "Request failed" };
+          return { id: check.id, status: "disconnected" as AuditStatus, error: getErrorMessage(err), healthResult: "Request failed" };
         }
       })
     );

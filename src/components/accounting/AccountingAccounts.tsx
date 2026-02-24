@@ -12,6 +12,7 @@ import { AccountQuickReportDrawer } from "./AccountQuickReportDrawer";
 import { NewAccountDrawer } from "./NewAccountDrawer";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { getErrorMessage } from "@/lib/utils";
 import { useBankFeedBalances } from "@/hooks/useBankFeedBalances";
 import { formatDistanceToNow } from "date-fns";
 import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
@@ -191,7 +192,7 @@ export function AccountingAccounts({ data }: Props) {
       toast({ title: "Accounts synced", description: `${result?.upserted ?? 0} records updated from QuickBooks` });
       data.loadAll();
     } catch (err) {
-      toast({ title: "Sync failed", description: String(err), variant: "destructive" });
+      toast({ title: "Sync failed", description: getErrorMessage(err), variant: "destructive" });
     } finally {
       setSyncing(false);
     }

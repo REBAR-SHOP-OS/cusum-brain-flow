@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { getErrorMessage } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 
 const ACCOUNT_TYPES: Record<string, string[]> = {
@@ -65,7 +66,7 @@ export function NewAccountDrawer({ open, onOpenChange, onSuccess }: Props) {
       onOpenChange(false);
       onSuccess?.();
     } catch (err) {
-      toast({ title: "Failed to create account", description: String(err), variant: "destructive" });
+      toast({ title: "Failed to create account", description: getErrorMessage(err), variant: "destructive" });
     } finally {
       setSaving(false);
     }

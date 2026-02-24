@@ -18,6 +18,7 @@ import { format } from "date-fns";
 import { CreateVendorTransactionDialog, type VendorTransactionType } from "./CreateVendorTransactionDialog";
 import { BillPaymentDialog } from "./BillPaymentDialog";
 import { useToast } from "@/hooks/use-toast";
+import { getErrorMessage } from "@/lib/utils";
 import type { QBVendor } from "@/hooks/useQuickBooksData";
 
 const fmt = (n: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
@@ -93,7 +94,7 @@ export function VendorDetail({ vendor }: VendorDetailProps) {
       toast({ title: "Transaction deleted" });
       queryClient.invalidateQueries({ queryKey: ["qb_vendor_transactions", vendor.Id] });
     } catch (err) {
-      toast({ title: "Delete failed", description: String(err), variant: "destructive" });
+      toast({ title: "Delete failed", description: getErrorMessage(err), variant: "destructive" });
     }
   };
 
@@ -107,7 +108,7 @@ export function VendorDetail({ vendor }: VendorDetailProps) {
       toast({ title: "Transaction voided" });
       queryClient.invalidateQueries({ queryKey: ["qb_vendor_transactions", vendor.Id] });
     } catch (err) {
-      toast({ title: "Void failed", description: String(err), variant: "destructive" });
+      toast({ title: "Void failed", description: getErrorMessage(err), variant: "destructive" });
     }
   };
 
@@ -153,7 +154,7 @@ export function VendorDetail({ vendor }: VendorDetailProps) {
       await queryClient.invalidateQueries({ queryKey: ["qb_vendor_transactions", vendor.Id] });
       toast({ title: "Sync complete", description: `${totalSynced} records synced` });
     } catch (err) {
-      toast({ title: "Sync failed", description: String(err), variant: "destructive" });
+      toast({ title: "Sync failed", description: getErrorMessage(err), variant: "destructive" });
     } finally {
       setSyncing(false);
     }
