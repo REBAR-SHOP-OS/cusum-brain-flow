@@ -1,57 +1,53 @@
 
 
-## Fix: Prevent Duplicate AI Scans on Accounting Page
+## Fix: Stale Invoice Data Causes False Overdue Alerts
 
 ### Problem
-The "Scan Now" button in the AI Actions Queue can be clicked multiple times while a scan is already in progress. The button's `disabled` prop checks `loading`, but the `triggerAutoActions` function never sets `loading` to `true`, so the guard has no effect.
+The AI Actions Queue shows invoices as overdue and unpaid when they have already been paid in QuickBooks. For example, ZACK DURHAM's Invoice #2219-1 ($236.40) appears as 10 days overdue in Penny's queue, but it's already paid in QuickBooks. The `accounting_mirror` table was last synced on Feb 11 -- over 13 days ago -- so the balance is stale.
 
 ### Root Cause
-In `src/hooks/usePennyQueue.ts`, the `triggerAutoActions` function (line 144-152) invokes the edge function but does not toggle any loading state. The `loading` state is only managed by the `load` function (which fetches queue items), not by the scan trigger.
+The `penny-auto-actions` edge function reads invoice balances from the `accounting_mirror` table **without triggering a QuickBooks sync first**. If the mirror data is stale (which it is -- many records haven't synced since Feb 13), invoices that have been paid in QuickBooks still show `balance > 0`, causing Penny to generate false collection actions.
 
 ### Solution
-Add a dedicated `scanning` state to `usePennyQueue` that is set to `true` before invoking the edge function and `false` after completion. Expose it from the hook and use it to disable the "Scan Now" button.
+Force a QuickBooks incremental sync **before** scanning for overdue invoices. This ensures the `accounting_mirror` has up-to-date balance data before Penny makes decisions.
 
 ### Changes
 
-**File: `src/hooks/usePennyQueue.ts`**
-- Add `const [scanning, setScanning] = useState(false);` state
-- Wrap `triggerAutoActions` with `setScanning(true)` before the invoke and `setScanning(false)` in a `finally` block
-- Add early return if `scanning` is already `true` (prevents race conditions)
-- Export `scanning` from the hook return
-
-**File: `src/components/accounting/AccountingActionQueue.tsx`**
-- Destructure `scanning` from `usePennyQueue()`
-- Change the "Scan Now" button: `disabled={scanning}` (instead of `loading`)
-- Change the spinner/icon: show `Loader2` when `scanning` is true (instead of `loading`)
+**File: `supabase/functions/penny-auto-actions/index.ts`**
+- After obtaining the `companyId`, trigger a QB sync by calling the `qb-sync-engine` edge function with `action: "incremental"` and wait for it to complete
+- Add a short timeout (15s) so the scan doesn't hang if the sync is slow
+- If the sync fails, log a warning but proceed with existing mirror data (graceful degradation)
+- This ensures every "Scan Now" click first refreshes QB data, then analyzes invoices
 
 ### Technical Detail
 
-In `usePennyQueue.ts`:
-```typescript
-const [scanning, setScanning] = useState(false);
+Add a sync step before the overdue invoice query (after line 19):
 
-const triggerAutoActions = useCallback(async () => {
-  if (scanning) return; // guard against concurrent scans
-  setScanning(true);
-  try {
-    const { data, error } = await supabase.functions.invoke("penny-auto-actions");
-    if (error) throw error;
-    toast({ title: "Penny scanned invoices", description: `${data?.queued || 0} new actions queued` });
-  } catch (err) {
-    toast({ title: "Auto-scan failed", description: String(err), variant: "destructive" });
-  } finally {
-    setScanning(false);
-  }
-}, [scanning, toast]);
+```typescript
+// Force QB sync before scanning to ensure fresh balance data
+try {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const svcKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const syncController = new AbortController();
+  const syncTimeout = setTimeout(() => syncController.abort(), 15000);
+  
+  await fetch(`${supabaseUrl}/functions/v1/qb-sync-engine`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${svcKey}`,
+    },
+    body: JSON.stringify({ action: "incremental", company_id: companyId }),
+    signal: syncController.signal,
+  });
+  clearTimeout(syncTimeout);
+  console.log("[penny-auto-actions] QB sync completed before scan");
+} catch (syncErr) {
+  console.warn("[penny-auto-actions] QB sync failed, proceeding with cached data:", syncErr);
+}
 ```
 
-In `AccountingActionQueue.tsx`:
-```typescript
-const { ..., scanning, triggerAutoActions } = usePennyQueue();
+This is inserted before the `accounting_mirror` query so the mirror table has fresh balances when Penny analyzes invoices. The 15-second timeout prevents the scan from hanging if QuickBooks API is slow.
 
-<Button ... onClick={triggerAutoActions} disabled={scanning}>
-  {scanning ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-  {scanning ? "Scanning..." : "Scan Now"}
-</Button>
-```
+**Files to edit:** `supabase/functions/penny-auto-actions/index.ts`
 
