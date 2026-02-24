@@ -1,137 +1,96 @@
 
 
-## ارتقای ایجنت ساپورت: ایجاد تسک استیمیشن + ارسال کوتیشن خودکار
+## Fix: JARVIS Mode "Error: Failed to fetch"
 
-### خلاصه
-ایجنت ساپورت (JARVIS) در ویجت وبسایت هم‌اکنون فقط چت ساده انجام می‌دهد. این ارتقا دو ورک‌فلوی جدید اضافه می‌کند:
+### Problem
+When a user sends a message in JARVIS Mode (LiveChat), the chat returns "Error: Failed to fetch" -- a browser-level network failure indicating the edge function either crashed, timed out, or never returned a proper response.
 
-**ورک‌فلو ۱ - نقشه/Drawing:**
-مشتری می‌خواهد نقشه ارسال کند → ایجنت یک تسک Estimation در pipeline ایجاد می‌کند و به saurabh@rebar.shop اساین می‌شود + نوتیفیکیشن ارسال می‌شود.
+### Root Causes Found
 
-**ورک‌فلو ۲ - بارلیست/Quote:**
-مشتری بارلیست یا اطلاعات آماده دارد → ایجنت به Blitz (سیستم Sales) دایورت می‌کند → Blitz کوتیشن تهیه می‌کند → PDF با برندینگ rebar.shop ساخته شده و به ایمیل مشتری ارسال می‌شود → تسک فالوآپ برای saurabh@rebar.shop ایجاد می‌شود + نوتیفیکیشن.
+**1. Request Body Double-Read (Critical)**
+In `admin-chat/index.ts`, the handler clones and reads the request body at lines 1004-1006 for ALL requests (to check `publicMode`), then reads it again at line 1098 for authenticated requests. In some Deno edge runtime versions, `req.json()` can fail after `req.clone()` was used, causing a silent crash before any response is sent.
 
-### تغییرات فنی
+**2. Follow-Up AI Call Uses GPT (Quota Issue)**
+The follow-up call at line 1428 uses `gpt-4o-mini`. If the GPT API key has exhausted its quota (which is documented in code comments as a known issue), this call fails inside a background async closure. The error is caught but the writer may not close cleanly, causing the client to see "Failed to fetch".
 
-#### 1. فایل: `supabase/functions/support-chat/index.ts`
+**3. Insufficient Error Handling in TransformStream**
+The background async tool processing (lines 1335-1514) runs in a fire-and-forget async closure. If it throws before writing anything, the readable stream hangs indefinitely -- the browser never receives a response and reports "Failed to fetch".
 
-**A. اضافه کردن Tool Calling به AI Reply**
+### Solution
 
-تابع `triggerAiReply` را ارتقا می‌دهیم تا از tool calling پشتیبانی کند. سه ابزار جدید اضافه می‌شود:
+All changes are in one file: `supabase/functions/admin-chat/index.ts`
 
-```text
-Tools:
-+-- create_estimation_task     (مشتری نقشه دارد → تسک estimation)
-+-- submit_barlist_for_quote   (مشتری بارلیست دارد → ارسال به Blitz)
-+-- create_quote_request       (جمع‌آوری اطلاعات مشتری برای کوتیشن)
-```
-
-**B. ابزار `create_estimation_task`**
-- وقتی مشتری می‌خواهد نقشه ارسال کند، AI این ابزار را صدا می‌زند
-- یک `quote_request` با status `estimation_pending` ایجاد می‌کند
-- یک تسک در جدول `tasks` با `agent_type: estimation` و اساین به Saurabh ایجاد می‌کند
-- نوتیفیکیشن برای Saurabh ارسال می‌شود
-- به مشتری ایمیل sales@rebar.shop را برای ارسال نقشه می‌دهد
-
-**C. ابزار `submit_barlist_for_quote`**
-- وقتی مشتری بارلیست یا اطلاعات آماده دارد
-- یک `quote_request` ایجاد می‌کند
-- از edge function `ai-agent` با agent=sales (Blitz) استفاده می‌کند تا کوتیشن تهیه شود
-- تسک فالوآپ برای Saurabh ایجاد می‌کند
-- نوتیفیکیشن ارسال می‌شود
-
-**D. به‌روزرسانی System Prompt**
-
-دستورالعمل‌های جدید به system prompt اضافه می‌شود:
+**A. Fix Body Double-Read**
+Replace the `req.clone()` approach with a single body read. Parse the body once at the top and reuse the parsed object:
 
 ```text
-## ESTIMATION & QUOTING WORKFLOW:
+// Before (lines 1004-1006):
+const bodyClone = req.clone();
+let parsedBody: any;
+try { parsedBody = await bodyClone.json(); } catch { parsedBody = {}; }
+...
+const body = await req.json();  // line 1098 -- may fail!
 
-1. DRAWING/BLUEPRINT DETECTION:
-   - When visitor mentions: drawing, blueprint, structural plan, engineering plan, shop drawing, PDF
-   - Ask for: name, email, project name
-   - Then call create_estimation_task
-   - Tell visitor to email drawings to sales@rebar.shop
-   - Confirm: "Our estimation team will review and prepare a detailed quote"
-
-2. BARLIST/QUOTE DETECTION:
-   - When visitor mentions: barlist, bar bending schedule, BBS, quantities, bar sizes with lengths
-   - Collect: name, email, bar details (sizes, quantities, lengths)
-   - Call submit_barlist_for_quote with the structured data
-   - Confirm: "A detailed quote is being prepared and will be emailed to you shortly"
-
-3. FOLLOW-UP:
-   - Both workflows create a follow-up task for the sales team
-   - Both send notifications to sales reps
+// After:
+let parsedBody: any;
+try { parsedBody = await req.json(); } catch { parsedBody = {}; }
+...
+const body = parsedBody;  // reuse the same object
 ```
 
-**E. تغییر مدل به Gemini 2.5 Flash**
-- مدل `gpt-4o-mini` به `gemini-2.5-flash` تغییر می‌کند برای پایداری و قابلیت tool calling بهتر
-
-#### 2. فایل: `supabase/functions/support-chat/index.ts` - Tool Execution Logic
-
-تابع جدید `executeWidgetTools` اضافه می‌شود که:
+**B. Switch Follow-Up Call from GPT to Gemini**
+Change line 1426-1428 from `gpt-4o-mini` to `gemini-2.5-flash` to avoid GPT quota exhaustion:
 
 ```text
-create_estimation_task:
-  1. Insert into quote_requests (status: estimation_pending, source: website_chat)
-  2. Find Saurabh's profile_id from profiles table (email: saurabh@rebar.shop)
-  3. Insert into tasks (title, agent_type: estimation, assigned_to: saurabh_profile_id)
-  4. Insert notification for Saurabh
-  5. Return confirmation with quote_number
+// Before:
+followUpResp = await callAIStream({
+  provider: "gpt",
+  model: "gpt-4o-mini",
+  ...
+});
 
-submit_barlist_for_quote:
-  1. Insert into quote_requests (status: new, source: website_chat)
-  2. Call generate_sales_quote via ai-agent edge function (Blitz)
-  3. Insert into tasks (title: "Follow-up quote for [customer]", agent_type: sales)
-  4. Insert notification for Saurabh
-  5. Return quote details + confirmation
+// After:
+followUpResp = await callAIStream({
+  provider: "gemini",
+  model: "gemini-2.5-flash",
+  ...
+});
 ```
 
-#### 3. لاجیک Tool Call Loop
+**C. Add Safety Net for TransformStream**
+Wrap the entire background async closure in a try/catch that ensures the writer always closes, even on unexpected errors. This prevents the browser from hanging:
 
 ```text
-AI Reply Flow (updated):
-  1. Build messages array with system prompt + history
-  2. Call AI with tools defined
-  3. If AI returns tool_calls:
-     a. Execute each tool
-     b. Append tool results to messages
-     c. Call AI again for final response
-  4. Save final AI response as bot message
+// Ensure writer.close() is always called:
+(async () => {
+  try {
+    // ... existing tool processing ...
+  } catch (bgErr) {
+    // ... existing catch ...
+  } finally {
+    try { writer.close(); } catch { /* already closed */ }
+  }
+})();
 ```
 
-### ساختار داده
+**D. Add Content-Type Check for AI Response**
+Before parsing the AI response as SSE, verify the Content-Type header. If the AI returns HTML (e.g., an error page), catch it early and show a meaningful error:
 
-**تسک Estimation (جدول tasks):**
-```json
-{
-  "title": "Estimation: [customer_name] - [project_name]",
-  "description": "Customer wants to submit drawings for estimation. Email: [email]",
-  "agent_type": "estimation",
-  "priority": "high",
-  "source": "website_chat",
-  "status": "open"
+```text
+if (!followUpResp.ok) {
+  const ct = followUpResp.headers.get("content-type") || "";
+  if (!ct.includes("text/event-stream") && !ct.includes("application/json")) {
+    sendSSE("\n\n--- AI returned unexpected response. Try again. ---");
+    // close and return
+  }
 }
 ```
 
-**تسک Follow-up (جدول tasks):**
-```json
-{
-  "title": "Follow-up: Quote sent to [customer_name]",
-  "description": "Quote [QR-XXXX] sent to [email]. Follow up to confirm receipt.",
-  "agent_type": "sales",
-  "priority": "medium",
-  "source": "website_chat",
-  "status": "open"
-}
-```
+### Files to Edit
+1. `supabase/functions/admin-chat/index.ts` -- Fix body double-read, switch follow-up to Gemini, add TransformStream safety net
 
-### فایل‌های تغییر
-1. `supabase/functions/support-chat/index.ts` -- اضافه کردن tools، system prompt، و tool execution logic
-
-### نتیجه
-- مشتری نقشه دارد → تسک استیمیشن + نوتیفیکیشن برای Saurabh
-- مشتری بارلیست دارد → کوتیشن توسط Blitz + ایمیل + تسک فالوآپ + نوتیفیکیشن
-- همه چیز اتوماتیک و بدون نیاز به دخالت دستی
-
+### Impact
+- Eliminates "Failed to fetch" caused by body stream exhaustion
+- Removes dependency on GPT quota for follow-up calls
+- Prevents browser hangs from unclosed streams
+- No feature or behavior changes -- same JARVIS functionality
