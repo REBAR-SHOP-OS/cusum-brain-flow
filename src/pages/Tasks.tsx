@@ -3,8 +3,10 @@ import { useUserRole } from "@/hooks/useUserRole";
 import { useNavigate } from "react-router-dom";
 import {
   CheckSquare, Plus, RefreshCw, Copy, Check, Maximize2, Minus, Sparkles,
-  MessageSquare, Paperclip, Send, Trash2, ExternalLink, X, Upload,
+  MessageSquare, Paperclip, Send, Trash2, ExternalLink, X, Upload, CalendarDays,
 } from "lucide-react";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { AISuggestButton } from "@/components/ui/AISuggestButton";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -983,7 +985,54 @@ export default function Tasks() {
                 </div>
                 <div>
                   <span className="text-xs text-muted-foreground">Due Date</span>
-                  <p className={cn("mt-0.5 text-sm", isOverdue(selectedTask) && "text-destructive font-medium")}>{selectedTask.due_date ? format(new Date(selectedTask.due_date), "MMM d, yyyy") : "—"}</p>
+                  {canMarkComplete(selectedTask) ? (
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <button className={cn(
+                          "mt-0.5 text-sm flex items-center gap-1.5 hover:bg-accent rounded px-1.5 py-0.5 -ml-1.5 transition-colors",
+                          isOverdue(selectedTask) && "text-destructive font-medium"
+                        )}>
+                          <CalendarDays className="h-3.5 w-3.5 opacity-60" />
+                          {selectedTask.due_date ? format(new Date(selectedTask.due_date), "MMM d, yyyy") : <span className="text-muted-foreground">Set date</span>}
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={selectedTask.due_date ? new Date(selectedTask.due_date) : undefined}
+                          onSelect={async (date) => {
+                            const oldDate = selectedTask.due_date;
+                            const newDate = date ? format(date, "yyyy-MM-dd") : null;
+                            const { error } = await supabase.from("tasks").update({ due_date: newDate, updated_at: new Date().toISOString() }).eq("id", selectedTask.id);
+                            if (error) { toast.error(error.message); return; }
+                            await writeAudit(selectedTask.id, "reschedule", "due_date", oldDate || null, newDate);
+                            setSelectedTask({ ...selectedTask, due_date: newDate });
+                            loadData();
+                            toast.success(newDate ? "Due date updated" : "Due date cleared");
+                          }}
+                          className="p-3 pointer-events-auto"
+                          initialFocus
+                        />
+                        {selectedTask.due_date && (
+                          <div className="border-t px-3 py-2">
+                            <Button variant="ghost" size="sm" className="w-full text-xs text-muted-foreground" onClick={async () => {
+                              const oldDate = selectedTask.due_date;
+                              const { error } = await supabase.from("tasks").update({ due_date: null, updated_at: new Date().toISOString() }).eq("id", selectedTask.id);
+                              if (error) { toast.error(error.message); return; }
+                              await writeAudit(selectedTask.id, "reschedule", "due_date", oldDate, null);
+                              setSelectedTask({ ...selectedTask, due_date: null });
+                              loadData();
+                              toast.success("Due date cleared");
+                            }}>
+                              <X className="h-3 w-3 mr-1" /> Clear date
+                            </Button>
+                          </div>
+                        )}
+                      </PopoverContent>
+                    </Popover>
+                  ) : (
+                    <p className={cn("mt-0.5 text-sm", isOverdue(selectedTask) && "text-destructive font-medium")}>{selectedTask.due_date ? format(new Date(selectedTask.due_date), "MMM d, yyyy") : "—"}</p>
+                  )}
                 </div>
                 <div>
                   <span className="text-xs text-muted-foreground">Created</span>
