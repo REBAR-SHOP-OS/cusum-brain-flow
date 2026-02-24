@@ -1,35 +1,36 @@
 
 
-## Fix Remaining Security Findings
+## Fix: Auto-load accounting data on every page visit
 
-### 1. Fix: Contacts "Admins can read all contacts" Policy (database change)
+### Problem
+The accounting page only loads QuickBooks data once per calendar day. It stores the last load date in `localStorage` and skips loading if the date matches today. Additionally, a `useRef(hasLoadedToday)` flag prevents reloading even within the same session. This means:
+- Revisiting the `/accounting` page later in the day shows stale or empty data
+- Users must manually click "Refresh All" to see current data
 
-The SELECT policy "Admins can read all contacts" targets the `public` role instead of `authenticated`. This will be dropped and recreated targeting `authenticated` only.
+### Solution
+Remove the once-per-day guard so `loadAll()` is called every time the accounting page mounts (when the user has access). Keep the `hasLoadedToday` ref to prevent double-loading within the same component lifecycle (e.g., React strict mode), but allow it to fire on every fresh mount.
 
-```text
-DROP POLICY "Admins can read all contacts" ON public.contacts;
-CREATE POLICY "Admins can read all contacts" ON public.contacts
-  FOR SELECT TO authenticated
-  USING (has_role(auth.uid(), 'admin'::app_role) AND company_id = get_user_company_id(auth.uid()));
+### Technical Details
+
+**File:** `src/pages/AccountingWorkspace.tsx`
+
+**Change:** Modify the `useEffect` (lines 194-210) to always call `loadAll()` on mount, removing the date-based skip logic:
+
+```typescript
+useEffect(() => {
+  if (!hasAccess || hasLoadedToday.current) return;
+  hasLoadedToday.current = true;
+
+  loadAllRef.current();
+  updateRefreshTimestamp();
+
+  if (webPhoneStatusRef.current === "idle") {
+    webPhoneActionsRef.current.initialize();
+  }
+}, [hasAccess]);
 ```
 
-After fixing, mark `contacts_table_public_exposure` as resolved/ignored -- RLS enforces company-scoped, role-based access with no public exposure.
+This removes the `localStorage` date check (`lastLoad !== today`) so data loads on every page visit. The `hasLoadedToday` ref still prevents duplicate loads within the same mount cycle. The refresh timestamp is updated so the UI shows when data was last loaded.
 
-### 2. Acknowledge: Employee Salaries (no database change needed)
-
-RLS is correctly implemented: admin-only, company-scoped for all CRUD operations. The finding suggests MFA and field-level encryption which are infrastructure-level concerns beyond what can be implemented here. Mark as ignored with documentation.
-
-### 3. Acknowledge: Gmail Tokens (no database change needed)
-
-RLS denies ALL client access (SELECT/INSERT/UPDATE/DELETE all return `false` for authenticated users). Only service_role can access. The finding suggests encryption at rest which requires Vault (unavailable in this environment). Mark as ignored with documentation.
-
-### Technical Summary
-
-| Finding | Action |
-|---------|--------|
-| contacts_table_public_exposure | Fix policy role public->authenticated, then ignore |
-| employee_salaries_inadequate_protection | Ignore (RLS already admin+company scoped) |
-| user_gmail_tokens_token_exposure | Ignore (RLS denies all client access) |
-
-Only one migration is needed (contacts policy fix). No UI, logic, or other changes.
+No other files need to change.
 
