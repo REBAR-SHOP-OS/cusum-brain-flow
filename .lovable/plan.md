@@ -1,79 +1,62 @@
 
 
-## ارسال PDF کوتیشن به ایمیل مشتری و ایجاد تسک فالوآپ از ساپورت چت
+## Fix Call Analytics + Add Email Analytics Page
 
-### مشکل فعلی
-وقتی مشتری در ساپورت چت سایت rebar.shop درخواست قیمت می‌کند:
-- ابزار `submit_barlist_for_quote` فقط یک رکورد در `quote_requests` ذخیره می‌کند و پیام "Quote is being prepared and will be emailed" را برمی‌گرداند، اما **هیچ ایمیلی ارسال نمی‌شود**
-- تسک فالوآپ ایجاد می‌شود ولی **کوتیشن PDF نمی‌سازد و ایمیل نمی‌زند**
-- ابزار `generate_quotation` در `website-agent` هم HTML تولید می‌کند ولی ایمیل نمی‌فرستد
+### Problem 1: Call Analytics Shows 0
 
-### راه‌حل
+**Root Cause**: The database has **446 calls** in the last 30 days, but the dashboard shows 0. The `useCallAnalytics` hook queries the `communications` table directly from the frontend, where RLS restricts results to `user_id = auth.uid()` (only admin users see all company calls). If the logged-in user isn't an admin or doesn't have call records under their user_id, they see nothing.
 
-دو تغییر اصلی در فایل `supabase/functions/support-chat/index.ts`:
+**Fix**: Create a backend function `ringcentral-call-analytics` that queries with the service role key (bypassing per-user RLS) and returns aggregated analytics for the entire company. The frontend hook will call this function instead of querying the table directly.
 
-#### 1. اضافه کردن ابزار جدید `generate_and_email_quote`
-یک ابزار جدید به `WIDGET_TOOLS` اضافه می‌شود که:
-- اطلاعات مشتری و آیتم‌های قیمت را دریافت می‌کند
-- HTML کوتیشن برندشده (مشابه الگوی موجود در `website-agent`) تولید می‌کند
-- از طریق `gmail-send` edge function ایمیل با HTML کوتیشن را به مشتری ارسال می‌کند
-- یک تسک فالوآپ برای `sourabh@rebar.shop` ایجاد می‌کند
-- نوتیفیکیشن به Saurabh ارسال می‌کند
+### Problem 2: Email Analytics Page Missing
 
-#### 2. به‌روزرسانی `submit_barlist_for_quote` 
-تابع موجود نیز بعد از ذخیره quote request، HTML کوتیشن تولید و ایمیل ارسال می‌کند.
+**Solution**: Build an `EmailAnalyticsDashboard` component (similar structure to `CallAnalyticsDashboard`) and a corresponding `useEmailAnalytics` hook, showing:
+- Total emails received (last 30 days)
+- Daily volume chart
+- Top senders
+- AI category distribution (once AI categorization populates)
+- Response rate metrics
 
-### جزئیات فنی
+---
 
-**فایل: `supabase/functions/support-chat/index.ts`**
+### Technical Details
 
-| تغییر | شرح |
-|---|---|
-| ابزار جدید `generate_and_email_quote` در `WIDGET_TOOLS` | پارامترها: `customer_name`, `customer_email`, `project_name`, `items[]` (description, quantity, unit_price), `notes` |
-| تابع `sendQuoteEmail()` | HTML کوتیشن می‌سازد، سپس از `gmail-send` برای ارسال ایمیل استفاده می‌کند (با service role key) |
-| تابع `createFollowUpTask()` | تسک با `assigned_to: SAURABH_PROFILE_ID` و نوتیفیکیشن ایجاد می‌کند |
-| به‌روزرسانی `executeWidgetTool` | هندلر جدید برای `generate_and_email_quote` و به‌روزرسانی `submit_barlist_for_quote` |
+#### Files to Create
 
-```text
-جریان کار:
+1. **`supabase/functions/ringcentral-call-analytics/index.ts`**
+   - Accepts authenticated requests, verifies user belongs to a company
+   - Queries `communications` table with service role (all company calls, type=call, last N days)
+   - Returns pre-aggregated analytics: daily volume, totals, outcomes, top contacts, avg duration
 
-مشتری در چت درخواست قیمت می‌دهد
-  |
-  v
-AI اطلاعات مشتری و آیتم‌ها را جمع می‌کند
-  |
-  v
-ابزار generate_and_email_quote فراخوانی می‌شود
-  |
-  +-- quote_requests در DB ذخیره می‌شود
-  |
-  +-- HTML کوتیشن برندشده تولید می‌شود
-  |
-  +-- ایمیل با کوتیشن HTML از طریق gmail-send ارسال می‌شود
-  |
-  +-- تسک فالوآپ برای sourabh@rebar.shop ایجاد می‌شود
-  |
-  +-- نوتیفیکیشن به Saurabh ارسال می‌شود
-  |
-  v
-AI به مشتری تایید ارسال کوتیشن را اعلام می‌کند
-```
+2. **`src/hooks/useEmailAnalytics.ts`**
+   - Similar pattern to `useCallAnalytics` but for `source = 'gmail'`
+   - Also uses a backend function for company-wide data
+   - Computes: daily email volume, top senders, category distribution
 
-**روش ارسال ایمیل:**
-- از همان Gmail OAuth flow موجود استفاده می‌شود (shared `GMAIL_REFRESH_TOKEN`)
-- مستقیماً Gmail API فراخوانی می‌شود (بدون نیاز به auth کاربر چون service-level است)
-- ایمیل از آدرس `sales@rebar.shop` ارسال می‌شود
+3. **`supabase/functions/email-analytics/index.ts`**
+   - Backend function for email analytics (same pattern as call analytics)
+   - Aggregates gmail communications for the company
 
-**فرمت HTML کوتیشن:**
-- همان الگوی برندشده موجود در `website-agent` (لوگوی Rebar.Shop, آدرس, شماره تماس)
-- جدول آیتم‌ها با قیمت واحد و مبلغ کل
-- محاسبه HST 13% و جمع نهایی
-- تاریخ اعتبار 30 روزه
+4. **`src/components/inbox/EmailAnalyticsDashboard.tsx`**
+   - Dialog-based dashboard (same pattern as `CallAnalyticsDashboard`)
+   - KPI cards: Total Emails, Inbound, Action Required %, Avg Response Time
+   - Daily volume bar chart
+   - Top senders list
+   - Category pie chart
 
-### چه چیزهایی تغییر نمی‌کند
-- `website-agent` بدون تغییر باقی می‌ماند
-- `gmail-send` بدون تغییر باقی می‌ماند
-- دیتابیس و اسکیما بدون تغییر
-- ویجت چت (frontend) بدون تغییر
-- سایر کامپوننت‌ها و صفحات بدون تغییر
+#### Files to Modify
+
+5. **`src/hooks/useCallAnalytics.ts`**
+   - Replace direct Supabase query with `supabase.functions.invoke("ringcentral-call-analytics")`
+   - Keep the same `CallAnalyticsData` interface
+
+6. **`src/components/inbox/InboxView.tsx`**
+   - Add "Email Analytics" button next to "Analytics" button in the toolbar
+   - Import and render `EmailAnalyticsDashboard` dialog
+
+### What Stays the Same
+- `CallAnalyticsDashboard.tsx` UI component (unchanged -- only the data source changes via the hook)
+- Database schema (no migrations needed)
+- RLS policies (unchanged)
+- All other components
 
