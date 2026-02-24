@@ -3,7 +3,7 @@ import { callAI } from "../_shared/aiRouter.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
@@ -58,8 +58,9 @@ Output ONLY the email body text, no meta-commentary.`,
     ].filter(Boolean).join("\n\n");
 
     const result = await callAI({
-      provider: "gpt",
-      model: "gpt-4o-mini",
+      provider: "gemini",
+      model: "gemini-2.5-flash-lite",
+      fallback: { provider: "gemini", model: "gemini-2.5-flash" },
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userMessage },
