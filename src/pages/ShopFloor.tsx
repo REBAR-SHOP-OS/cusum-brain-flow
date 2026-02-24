@@ -103,28 +103,36 @@ export default function ShopFloor() {
 
         {/* Cards Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 w-full">
-          {hubCards.map((card) => (
-            <Link
-              key={card.label}
-              to={card.to}
-              state={card.state}
-              className="group relative flex flex-col items-center justify-center gap-3 p-6 sm:p-8 rounded-xl border border-border/60 bg-card/50 backdrop-blur-sm hover:bg-card/80 hover:border-primary/40 transition-all duration-200 hover:shadow-[0_0_30px_-10px_hsl(var(--primary)/0.3)]"
-            >
-              <div className="text-muted-foreground group-hover:text-foreground transition-colors">
-                {card.icon}
-              </div>
-              <div className="text-center">
-                <span className="text-xs sm:text-sm font-bold tracking-wider text-foreground/90 group-hover:text-foreground uppercase">
-                  {card.label}
-                </span>
-                {card.subtitle && (
-                  <p className="text-[9px] tracking-widest text-primary/60 uppercase mt-0.5">
-                    {card.subtitle}
-                  </p>
-                )}
-              </div>
-            </Link>
-          ))}
+          {hubCards.map((card) => {
+            const cardContent = (
+              <>
+                <div className="text-muted-foreground group-hover:text-foreground transition-colors">
+                  {card.icon}
+                </div>
+                <div className="text-center">
+                  <span className="text-xs sm:text-sm font-bold tracking-wider text-foreground/90 group-hover:text-foreground uppercase">
+                    {card.label}
+                  </span>
+                  {card.subtitle && (
+                    <p className="text-[9px] tracking-widest text-primary/60 uppercase mt-0.5">
+                      {card.subtitle}
+                    </p>
+                  )}
+                </div>
+              </>
+            );
+            const cardClass = "group relative flex flex-col items-center justify-center gap-3 p-6 sm:p-8 rounded-xl border border-border/60 bg-card/50 backdrop-blur-sm hover:bg-card/80 hover:border-primary/40 transition-all duration-200 hover:shadow-[0_0_30px_-10px_hsl(var(--primary)/0.3)]";
+
+            return card.to.startsWith("/shopfloor/") ? (
+              <Link key={card.label} to={card.to} state={card.state} className={cardClass}>
+                {cardContent}
+              </Link>
+            ) : (
+              <a key={card.label} href={card.to} className={cardClass}>
+                {cardContent}
+              </a>
+            );
+          })}
         </div>
 
         {/* Back link */}
