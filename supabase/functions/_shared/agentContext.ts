@@ -169,7 +169,7 @@ ENFORCEMENT RULES:
     try {
       const { data: brainDocs } = await svc
         .from("knowledge")
-        .select("title, content, category")
+        .select("title, content, category, metadata, source_url")
         .in("category", ["company-playbook", "agent-strategy"])
         .eq("company_id", companyId)
         .order("created_at", { ascending: false });
@@ -215,6 +215,42 @@ ENFORCEMENT RULES:
           }
         }
       }
+
+      // Pixel-specific: fetch knowledge items tagged with metadata.agent = "social"
+      if (agent === "social") {
+        try {
+          const { data: pixelItems } = await svc
+            .from("knowledge")
+            .select("title, content, category, metadata, source_url")
+            .eq("company_id", companyId)
+            .order("created_at", { ascending: false })
+            .limit(30);
+
+          if (pixelItems) {
+            const socialItems = pixelItems.filter((d: any) => d.metadata?.agent === "social");
+            
+            // Separate instructions from resources
+            const instrItem = socialItems.find((d: any) => d.metadata?.type === "instructions");
+            const resourceItems = socialItems.filter((d: any) => d.metadata?.type !== "instructions");
+
+            if (instrItem?.content) {
+              brainBlock += `\n\n## 📋 USER CUSTOM INSTRUCTIONS (ALWAYS FOLLOW THESE):\n${instrItem.content}`;
+            }
+
+            if (resourceItems.length > 0) {
+              brainBlock += `\n\n## 📁 PIXEL BRAIN RESOURCES (${resourceItems.length} items):`;
+              for (const item of resourceItems) {
+                brainBlock += `\n- **${item.title}** [${item.category}]`;
+                if (item.content) brainBlock += `: ${item.content.slice(0, 300)}`;
+                if (item.source_url) brainBlock += ` (URL: ${item.source_url})`;
+              }
+            }
+          }
+        } catch (_pixelErr) {
+          console.warn("[agentContext] Failed to fetch Pixel brain items:", _pixelErr);
+        }
+      }
+
       context.brainKnowledgeBlock = brainBlock;
     } catch (_) {}
 
