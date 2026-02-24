@@ -467,6 +467,28 @@ export default function Tasks() {
     } as any);
   };
 
+  const dismissTaskNotifications = async (taskId: string) => {
+    try {
+      const { data: humanTasks } = await supabase
+        .from("human_tasks" as any)
+        .select("id")
+        .eq("entity_type", "task")
+        .eq("entity_id", taskId);
+
+      if (humanTasks && humanTasks.length > 0) {
+        const htIds = (humanTasks as any[]).map((ht: any) => ht.id);
+        for (const htId of htIds) {
+          await supabase
+            .from("notifications")
+            .update({ status: "dismissed" })
+            .eq("metadata->>human_task_id", htId);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to dismiss task notifications", e);
+    }
+  };
+
   const toggleComplete = async (task: TaskRow) => {
     const isCompleted = task.status === "completed";
     if (!isCompleted && !canMarkComplete(task)) {
@@ -517,6 +539,11 @@ export default function Tasks() {
       }
     }
 
+    // Dismiss related notifications when reopening
+    if (isCompleted) {
+      await dismissTaskNotifications(task.id);
+    }
+
     toast.success(isCompleted ? "Task reopened" : "Task completed");
     loadData();
   };
@@ -532,6 +559,7 @@ export default function Tasks() {
         .eq("category", "task_approval")
         .eq("status", "open");
 
+      await dismissTaskNotifications(task.id);
       await writeAudit(task.id, "approved_and_closed", "status", "completed", "completed");
       toast.success("Task approved & closed");
       loadData();
@@ -569,6 +597,7 @@ export default function Tasks() {
         .eq("category", "task_approval")
         .eq("status", "open");
 
+      await dismissTaskNotifications(task.id);
       await writeAudit(task.id, "reopened_with_issue", "status", "completed", "open");
       toast.success("Task reopened with issue — assignee notified");
       setReopenDialogOpen(false);
