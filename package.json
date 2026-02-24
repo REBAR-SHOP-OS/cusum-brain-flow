@@ -13,6 +13,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@e965/xlsx": "^0.20.3",
     "@elevenlabs/react": "^0.14.0",
     "@hookform/resolvers": "^3.10.0",
     "@lovable.dev/cloud-auth-js": "^0.0.2",
@@ -78,7 +79,6 @@
     "vaul": "^0.9.9",
     "vite-plugin-image-optimizer": "^2.0.3",
     "vite-plugin-pwa": "^1.2.0",
-    "xlsx": "^0.18.5",
     "zod": "^3.25.76"
   },
   "devDependencies": {
