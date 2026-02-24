@@ -1,40 +1,61 @@
 
 
-## Make Delete Button Visible and Add Confirmation Dialog
+## Fix: Prevent Duplicate QuickBooks Invoices
 
-### Problem
-The delete button already exists in code but has two issues:
-1. It's nearly invisible -- uses `ghost` variant with tiny 3px icons on a dark card, making it unnoticeable
-2. No confirmation dialog -- deletion happens immediately on click, which is risky for a destructive action
+### Root Cause
 
-### Changes (1 file: `src/pages/Deliveries.tsx`)
+There are two layers where duplicate prevention is missing:
 
-#### 1. Make the trash button more visible
-- Increase button size from `h-6 w-6` to `h-7 w-7`
-- Increase icon size from `w-3 h-3` to `w-4 h-4`
-- Change variant to `outline` with destructive styling so it stands out on the dark card background
+1. **Client-side (`useOrders.ts` -- `sendToQuickBooks`)**: The function does not check if `order.quickbooks_invoice_id` already exists before calling the edge function. Clicking "Send to QuickBooks" multiple times (or on an already-invoiced order) creates a new invoice each time.
 
-#### 2. Add confirmation dialog before deletion
-- Add `pendingDeleteId` state to track which delivery the user wants to delete (separate from `deletingDeliveryId` which tracks the async operation)
-- When trash button is clicked, set `pendingDeleteId` instead of immediately deleting
-- Show `ConfirmActionDialog` (already exists in the project at `src/components/accounting/ConfirmActionDialog.tsx`) with destructive variant
-- On confirm, execute the existing `deleteDelivery` logic
-- On cancel, clear `pendingDeleteId`
+2. **Server-side (`quickbooks-oauth/index.ts` -- `handleCreateInvoice`)**: The edge function blindly POSTs to the QuickBooks Invoice API without checking if an invoice for that order/memo already exists. There is no idempotency guard.
 
-#### Visual Result
-```text
-+---------------------------------------------------+
-| CHIMNEY FOUNDATION...  [pending] [trash-button]    |
-| Feb 23, 2026                                       |
-+---------------------------------------------------+
+### Fix (2 files)
+
+#### 1. Client-side guard -- `src/hooks/useOrders.ts`
+
+Add an early check in `sendToQuickBooks`: if the order already has a `quickbooks_invoice_id`, throw an error instead of creating a duplicate.
+
+```typescript
+// Before fetching items:
+if (order.quickbooks_invoice_id) {
+  throw new Error(`Order already invoiced (Invoice #${order.quickbooks_invoice_id})`);
+}
 ```
 
-The trash button will be clearly visible with an outline/destructive style, and clicking it opens a confirmation dialog before proceeding with deletion.
+#### 2. Server-side idempotency -- `supabase/functions/quickbooks-oauth/index.ts`
 
-### Technical Details
+Add an optional `orderId` parameter to `handleCreateInvoice`. When provided:
+- Query the `orders` table for that order's `quickbooks_invoice_id`
+- If one already exists, return the existing invoice info instead of creating a new one
+- If not, proceed with creation as normal
 
-- Reuse the existing `ConfirmActionDialog` component (destructive variant with "Delete Delivery" confirm label)
-- The `deleteDelivery` function signature changes slightly: instead of receiving `React.MouseEvent`, it just takes `deliveryId` string since it's now called from the dialog confirm handler
-- The click handler on the trash button calls `e.stopPropagation()` and sets `pendingDeleteId`
-- Dialog text: "Are you sure you want to delete this delivery? This will also remove all associated packing slips and delivery stops."
+```text
+handleCreateInvoice receives body.orderId (optional)
+  |
+  +-- orderId provided?
+       |
+       Yes --> Query orders table for quickbooks_invoice_id
+       |       |
+       |       +-- Already has QB ID? --> Return existing (skip creation)
+       |       +-- No QB ID? --> Create invoice, update orders row
+       |
+       No --> Create invoice as before (backwards compatible)
+```
+
+#### 3. Pass `orderId` from client -- `src/hooks/useOrders.ts`
+
+Update the `sendToQuickBooks` call to include `orderId` in the request body so the edge function can perform the server-side check.
+
+### Summary of Changes
+
+| File | Change |
+|---|---|
+| `src/hooks/useOrders.ts` | Add client-side guard checking `quickbooks_invoice_id` before calling edge function; pass `orderId` in request body |
+| `supabase/functions/quickbooks-oauth/index.ts` | Add idempotency check in `handleCreateInvoice` -- query `orders` table for existing QB invoice ID before creating |
+
+### Why Both Layers?
+
+- **Client guard** provides instant feedback (no network round-trip) and prevents accidental re-clicks
+- **Server guard** prevents race conditions where two concurrent requests could both pass the client check before either writes back the invoice ID
 
