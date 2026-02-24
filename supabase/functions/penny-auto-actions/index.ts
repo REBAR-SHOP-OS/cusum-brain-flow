@@ -43,8 +43,33 @@ serve(async (req) => {
       .eq("company_id", companyId)
       .gt("balance", 0);
 
+    // Auto-clean: reject pending items whose invoices have been paid
+    const { data: staleItems } = await supabase
+      .from("penny_collection_queue")
+      .select("id, invoice_id")
+      .eq("company_id", companyId)
+      .eq("status", "pending_approval");
+
+    let autoResolved = 0;
+    for (const item of staleItems || []) {
+      if (!item.invoice_id) continue;
+      const { data: mirror } = await supabase
+        .from("accounting_mirror")
+        .select("balance")
+        .eq("quickbooks_id", item.invoice_id)
+        .eq("company_id", companyId)
+        .maybeSingle();
+      if (mirror && (mirror.balance ?? 0) <= 0) {
+        await supabase
+          .from("penny_collection_queue")
+          .update({ status: "rejected", execution_result: { reject_reason: "Invoice paid - auto-resolved" } })
+          .eq("id", item.id);
+        autoResolved++;
+      }
+    }
+
     if (!overdueInvoices || overdueInvoices.length === 0) {
-      return json({ queued: 0, message: "No overdue invoices found" });
+      return json({ queued: 0, auto_resolved: autoResolved, message: "No overdue invoices found" });
     }
 
     // Batch-load customer names from customers table
