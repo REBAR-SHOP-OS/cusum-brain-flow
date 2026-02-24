@@ -5,3 +5,9 @@ verify_jwt = false
 
 [functions.support-chat]
 verify_jwt = false
+
+[functions.ringcentral-call-analytics]
+verify_jwt = false
+
+[functions.email-analytics]
+verify_jwt = false

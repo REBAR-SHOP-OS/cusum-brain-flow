@@ -17,6 +17,7 @@ import { SendFaxDialog } from "./SendFaxDialog";
 import { BulkSMSDialog } from "./BulkSMSDialog";
 import { SMSTemplateManager } from "./SMSTemplateManager";
 import { CallAnalyticsDashboard } from "./CallAnalyticsDashboard";
+import { EmailAnalyticsDashboard } from "./EmailAnalyticsDashboard";
 import { useCommunications } from "@/hooks/useCommunications";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
@@ -159,6 +160,7 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
   const [showBulkSMS, setShowBulkSMS] = useState(false);
   const [showSMSTemplates, setShowSMSTemplates] = useState(false);
   const [showCallAnalytics, setShowCallAnalytics] = useState(false);
+  const [showEmailAnalytics, setShowEmailAnalytics] = useState(false);
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -745,10 +747,21 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
             <TooltipTrigger asChild>
               <Button variant="ghost" size="sm" className="h-6 gap-1 text-[11px] px-2" onClick={() => setShowCallAnalytics(true)}>
                 <BarChart3 className="w-3 h-3" />
-                Analytics
+                Call Analytics
               </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom" className="text-xs">Call Analytics</TooltipContent>
+          </Tooltip>
+
+          {/* Email Analytics */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-6 gap-1 text-[11px] px-2" onClick={() => setShowEmailAnalytics(true)}>
+                <Mail className="w-3 h-3" />
+                Email Analytics
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-xs">Email Analytics</TooltipContent>
           </Tooltip>
 
           {/* Divider */}
@@ -1063,6 +1076,7 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
 
         {/* Call Analytics */}
         <CallAnalyticsDashboard open={showCallAnalytics} onOpenChange={setShowCallAnalytics} />
+        <EmailAnalyticsDashboard open={showEmailAnalytics} onOpenChange={setShowEmailAnalytics} />
       </div>
     </TooltipProvider>
   );
