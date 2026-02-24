@@ -178,15 +178,7 @@ export default function Deliveries() {
 
   const today = new Date().toISOString().split("T")[0];
   
-  const todayDeliveries = filteredDeliveries.filter(d => 
-    d.scheduled_date?.startsWith(today)
-  );
-  
-  const upcomingDeliveries = filteredDeliveries.filter(d => {
-    const dateOnly = d.scheduled_date?.split("T")[0];
-    return dateOnly && dateOnly > today;
-  });
-  
+  // Mutually exclusive categories so counts add up to total
   const completedDeliveries = filteredDeliveries.filter(d => 
     d.status === "completed" || d.status === "delivered"
   );
@@ -194,6 +186,19 @@ export default function Deliveries() {
   const activeDeliveries = filteredDeliveries.filter(d => 
     d.status === "in-transit"
   );
+
+  const pendingDeliveries = filteredDeliveries.filter(d => 
+    d.status !== "completed" && d.status !== "delivered" && d.status !== "in-transit"
+  );
+
+  const todayDeliveries = pendingDeliveries.filter(d => 
+    d.scheduled_date?.startsWith(today)
+  );
+  
+  const upcomingDeliveries = pendingDeliveries.filter(d => {
+    const dateOnly = d.scheduled_date?.split("T")[0];
+    return dateOnly && dateOnly > today;
+  });
 
   const refreshStops = () => {
     queryClient.invalidateQueries({ queryKey: ["delivery-stops", selectedDelivery?.id, companyId] });
