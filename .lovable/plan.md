@@ -1,29 +1,90 @@
 
-## Fix Feedback RLS Error and Restrict to @rebar.shop Users
 
-### Problem 1: RLS Violation on Task Insert
-The error "new row violates row-level security policy" occurs because `companyId` from `useCompanyId()` may still be loading (null) when the user clicks Send. The code falls back to a hardcoded UUID (`a0000000-...`), which doesn't match the user's actual company in the RLS policy `company_id = get_user_company_id(auth.uid())`.
+### هدف
+دو مشکل همزمان باید حل شود، با رعایت قانون شما که تغییرات فقط در بخش‌های مشخص‌شده انجام شود:
 
-### Problem 2: Domain Restriction
-Only users with `@rebar.shop` email domain should be able to submit feedback.
+1) **Build/Publish الان fail می‌شود** چون سیستم مهاجرت دیتابیس تلاش می‌کند `vector` extension را Drop کند و به‌خاطر وابستگی‌های `document_embeddings` و `match_documents` خطا می‌گیرد.  
+2) **اسکرین‌شات روی مسیر /website و بعضی صفحات** به خطا می‌خورد (طبق اسکرین‌شات: `Failed to capture screen on /website`) و باید برای همه کاربران با دامنه `@rebar.shop` در تمام اپ کار کند.
 
-### Solution
-**File: `src/components/feedback/AnnotationOverlay.tsx`**
+---
 
-1. Add domain check at the start of `handleSend`: fetch the current user's email, verify it ends with `@rebar.shop`, and show a toast error + return early if not.
+## بخش A) رفع خطای Build (فقط در مهاجرت‌های دیتابیس)
 
-2. Fix RLS violation: before inserting, ensure `companyId` is available. If it's still null, fetch it directly from the user's profile instead of using a hardcoded fallback. If still unavailable, show an error and abort.
+### وضعیت فعلی (ریشه مشکل)
+در `supabase/migrations/20260220145815_9de6871d-260c-4c3a-b02c-22328f9dd204.sql` یک مهاجرت وجود دارد که شامل این دستور است:
+- `DROP EXTENSION IF EXISTS vector ...`
 
-### Technical Details
+این باعث می‌شود در مرحله Diff/Apply، سیستم قبل از اینکه وابستگی‌ها را درست حذف کند، به Drop extension گیر کند و کل Build/Publish متوقف شود.
 
-Changes in `handleSend` function (~line 167):
+### تغییرات پیشنهادی (حداقل و امن)
+**فایل هدف:**  
+- `supabase/migrations/20260220145815_9de6871d-260c-4c3a-b02c-22328f9dd204.sql`
 
-- After getting the user (line 199), check `user.email?.endsWith('@rebar.shop')`. If not, toast error and return.
-- Replace the fallback `companyId ?? "a0000000-..."` with a guaranteed value: if `companyId` from the hook is null, query `profiles` to get it (we already query profiles at line 206, so we can grab `company_id` in the same query).
-- Add `company_id` to the `.select("id, full_name")` call, making it `.select("id, full_name, company_id")`.
-- Use `prof.company_id` as fallback when hook's `companyId` is null.
-- If still no company ID is found, throw an error instead of using a hardcoded UUID.
+**کار:**
+- تمام بخش‌های destructive داخل این migration که `DROP EXTENSION vector` (و drop table/function) دارند حذف/خنثی شوند.
+- این migration به یک مهاجرت “ایمن” تبدیل شود که فقط مطمئن می‌شود extension وجود دارد:
 
-### Scope
-- Only `src/components/feedback/AnnotationOverlay.tsx` is modified
-- No database, UI, or other file changes
+```sql
+-- Keep vector enabled; avoid destructive drop/recreate steps
+CREATE EXTENSION IF NOT EXISTS vector;
+```
+
+### نتیجه
+- Build/Publish دیگر به خاطر Drop extension گیر نمی‌کند.
+- هیچ دیتایی حذف نمی‌شود.
+- هیچ تغییری در سایر جداول/پالیسی‌ها/منطق اپلیکیشن انجام نمی‌شود.
+
+---
+
+## بخش B) رفع قطعی خطای Screenshot در کل اپ (فقط در کامپوننت Screenshot)
+
+### وضعیت فعلی (ریشه مشکل)
+در `src/components/feedback/ScreenshotFeedbackButton.tsx`:
+- Retry “بدون تصویر” فقط در حد پیام لاگ است؛ ولی عملاً `skipImages` در تنظیمات `html2canvas` اعمال نمی‌شود.
+- در مسیر `/website` یک iframe خارجی (`rebar.shop`) وجود دارد؛ html2canvas معمولاً با **iframe و منابع cross-origin** مشکل دارد و می‌تواند کل capture را fail کند.
+
+### تغییرات پیشنهادی
+**فایل هدف:**  
+- `src/components/feedback/ScreenshotFeedbackButton.tsx`
+
+**کارهای دقیق:**
+
+1) **حذف عامل اصلی خطا: iframe**
+   - در `ignoreElements` از ابتدا، همه `iframe`, `embed`, `object` را ignore کنیم (برای جلوگیری از crash/taint).
+   - این باعث می‌شود حتی اگر محتوای iframe قابل کپچر نباشد، خود اسکرین‌شات از UI اپ گرفته شود و ابزار fail نکند.
+
+2) **واقعی کردن Retry “بدون تصاویر”**
+   - `captureOnce(skipImages)` باید واقعاً وقتی `skipImages=true` است این موارد را ignore کند:
+     - `img`, `video`, `picture`, `source`, `svg`, `canvas` (به‌عنوان fallback برای صفحاتی که منابع CORS ندارند)
+
+3) **پاکسازی DOM clone برای ثبات بیشتر**
+   - در `onclone` علاوه بر خاموش‌کردن animation/transition:
+     - iframeها را از DOM clone حذف/replace کنیم تا html2canvas وارد clone iframe نشود.
+     - در حالت `skipImages=true` تصاویر را هم remove/replace کنیم.
+
+4) **بهبود پایداری تایم‌اوت**
+   - تایم‌اوت capture را کمی افزایش دهیم (مثلاً برای صفحات غیر-heavy از 5s به 8s) تا روی صفحات سنگین کمتر fail شود.
+   - Heavy-page logic فعلی حفظ می‌شود.
+
+### نتیجه
+- کلیک روی آیکون اسکرین‌شات در `/website` دیگر ارور نمی‌دهد و overlay باز می‌شود.
+- روی سایر صفحات هم اگر به دلیل CORS تصاویر fail شوند، Retry واقعاً بدون تصاویر انجام می‌شود و capture موفق می‌شود.
+- این تغییر فقط در همین کامپوننت انجام می‌شود و روی سایر بخش‌ها/ایجنت‌ها اثری ندارد.
+
+---
+
+## تست‌های لازم (حتماً End-to-End)
+1) با یک یوزر `@rebar.shop`:
+   - روی چند صفحه داخلی اپ اسکرین‌شات بگیرید → باید overlay باز شود.
+2) روی مسیر `/website`:
+   - اسکرین‌شات بگیرید → باید overlay باز شود (حتی اگر محتوای iframe در تصویر نیاید).
+3) یک صفحه سنگین (لیست/کانبان/جدول):
+   - اسکرین‌شات بگیرید → اگر تلاش اول fail شد، تلاش دوم باید موفق شود.
+
+---
+
+## محدوده تغییرات (مطابق قانون شما)
+فقط این دو فایل تغییر می‌کنند و هیچ جای دیگری دست نمی‌خورد:
+- `supabase/migrations/20260220145815_9de6871d-260c-4c3a-b02c-22328f9dd204.sql`
+- `src/components/feedback/ScreenshotFeedbackButton.tsx`
+
