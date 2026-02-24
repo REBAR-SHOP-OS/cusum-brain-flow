@@ -1,36 +1,71 @@
 
 
-## Fix: "Apply Mapping" Edge Function Non-2xx Errors
+## Fix Grammar Check and Apply It to All Text Boxes
 
 ### Root Cause
 
-The `manage-extract` edge function has **incomplete CORS headers** (line 7). It only allows `authorization, x-client-info, apikey, content-type` but the current Supabase JS SDK sends additional headers (`x-supabase-client-platform`, `x-supabase-client-platform-version`, etc.). This causes the browser's CORS preflight `OPTIONS` check to reject the request before it even reaches the function logic -- which also explains why there are **zero logs** for this function.
+The grammar check error **"Could not reach grammar checker"** is caused by an **exhausted OpenAI quota**. The `grammar-check` edge function calls OpenAI's `gpt-4o-mini` via `GPT_API_KEY`, which returns a `429 insufficient_quota` error.
 
-### Fix (1 file: `supabase/functions/manage-extract/index.ts`)
+### Solution Overview
 
-#### 1. Update CORS headers to match the standard
+Two changes:
 
-Replace the current incomplete headers:
-```typescript
-// BEFORE (line 6-8)
-"Access-Control-Allow-Headers":
-  "authorization, x-client-info, apikey, content-type",
+1. **Fix the grammar-check function** -- switch from OpenAI (broken quota) to Lovable AI gateway (free, no API key needed)
+2. **Apply grammar check to ALL text boxes** -- merge the SmartTextarea check button into the base `Textarea` component so all 64+ files get it automatically
+
+### Changes
+
+#### 1. Edge function: switch to Lovable AI gateway (`supabase/functions/grammar-check/index.ts`)
+
+Replace the `callAI` import and OpenAI call with a direct fetch to the Lovable AI gateway (`https://ai.gateway.lovable.dev/v1/chat/completions`) using `LOVABLE_API_KEY` (already configured). This eliminates the dependency on the exhausted OpenAI quota.
+
+- Remove the import of `callAI` from `_shared/aiRouter.ts`
+- Call the Lovable AI gateway directly with `google/gemini-2.5-flash-lite` (fast, cheap, perfect for grammar fixes)
+- Handle 429/402 rate limit errors gracefully
+
+#### 2. Merge grammar check into base Textarea (`src/components/ui/textarea.tsx`)
+
+Move the grammar-check button logic from `SmartTextarea` directly into the base `Textarea` component:
+
+- Wrap the textarea in a `relative` div
+- Add the "Check" button (same as SmartTextarea) that appears when text length > 2 characters
+- The button calls the `grammar-check` edge function and fires a synthetic change event
+- This automatically gives grammar check to ALL 64+ files that use `<Textarea>`
+
+#### 3. Remove SmartTextarea (`src/components/ui/SmartTextarea.tsx`)
+
+Since the base Textarea now has grammar check built in, SmartTextarea becomes redundant.
+
+#### 4. Update all SmartTextarea imports (13 files)
+
+Replace `SmartTextarea` imports with plain `Textarea` imports in all 13 files that currently use it:
+- `src/components/pipeline/LeadTimeline.tsx`
+- `src/components/teamhub/MessageThread.tsx`
+- `src/components/inbox/EmailTemplatesDrawer.tsx`
+- `src/components/inbox/InboxManagerSettings.tsx`
+- `src/components/inbox/ComposeEmailDialog.tsx`
+- `src/components/inbox/EmailReplyComposer.tsx`
+- `src/components/social/ImageGeneratorDialog.tsx`
+- `src/pages/Tasks.tsx`
+- And remaining files using SmartTextarea
+
+### Technical Details
+
+**Grammar-check edge function (new implementation):**
+```text
+Request flow:
+  Client -> grammar-check edge function -> Lovable AI Gateway (gemini-2.5-flash-lite) -> Response
+                                           Uses LOVABLE_API_KEY (auto-provisioned)
 ```
 
-With the full set used by all other edge functions in the project:
-```typescript
-// AFTER
-"Access-Control-Allow-Headers":
-  "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+**Base Textarea component (enhanced):**
+```text
++----------------------------------+
+| [textarea content area]          |
+|                                  |
+|                     [Check btn]  |
++----------------------------------+
 ```
 
-This single change aligns the function with the CORS configuration used in every other edge function (e.g., `diagnostic-logs`, `quickbooks-oauth`, `_shared/auth.ts`).
-
-### Why This Fixes It
-
-The Supabase JS SDK (`@supabase/supabase-js@2.95`) now sends platform-identifying headers on every request. When the `OPTIONS` preflight response doesn't list them in `Access-Control-Allow-Headers`, the browser blocks the actual `POST` request entirely -- resulting in a network-level failure that appears as a non-2xx status code to the calling code.
-
-### Verification
-
-After deploying, the "Apply Mapping" button should successfully invoke the function and return the mapping results.
+The check button only appears when the textarea has a controlled `value` prop with 3+ characters. Uncontrolled textareas (no `value` prop) won't show the button, keeping backward compatibility.
 
