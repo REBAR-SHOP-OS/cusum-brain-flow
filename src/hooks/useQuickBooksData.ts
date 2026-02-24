@@ -146,6 +146,24 @@ async function retryQBAction(
 
 // ─── ERP Mirror helpers ────────────────────────────────────────────
 
+async function loadMirrorEntity(table: string, selectCols: string, filterCol: string, filterVal: boolean | string): Promise<unknown[]> {
+  const all: unknown[] = [];
+  let page = 0;
+  const PAGE_SIZE = 1000;
+  while (true) {
+    const { data } = await supabase
+      .from(table as any)
+      .select(selectCols)
+      .eq(filterCol, filterVal as any)
+      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+    const rows = (data as unknown[]) || [];
+    all.push(...rows);
+    if (rows.length < PAGE_SIZE) break;
+    page++;
+  }
+  return all;
+}
+
 async function loadMirrorTransactions(entityType: string): Promise<unknown[]> {
   const all: unknown[] = [];
   let page = 0;
@@ -292,10 +310,10 @@ export function useQuickBooksData() {
         loadMirrorTransactions("Estimate"),
         loadMirrorTransactions("PurchaseOrder"),
         loadMirrorTransactions("CreditMemo"),
-        supabase.from("qb_accounts").select("*").eq("is_deleted", false).limit(5000),
-        supabase.from("qb_customers").select("*").eq("is_deleted", false).limit(5000),
-        supabase.from("qb_vendors").select("*").eq("is_deleted", false).limit(5000),
-        supabase.from("qb_items").select("*").eq("is_deleted", false).limit(5000),
+        loadMirrorEntity("qb_accounts", "*", "is_deleted", false),
+        loadMirrorEntity("qb_customers", "*", "is_deleted", false),
+        loadMirrorEntity("qb_vendors", "*", "is_deleted", false),
+        loadMirrorEntity("qb_items", "*", "is_deleted", false),
       ]);
 
       setInvoices((mirrorInvoices as Record<string, unknown>[]).map(r => mirrorTxnToQBFormat(r) as unknown as QBInvoice));
@@ -305,8 +323,8 @@ export function useQuickBooksData() {
       setPurchaseOrders((mirrorPOs as Record<string, unknown>[]).map(r => mirrorTxnToQBFormat(r) as unknown as QBPurchaseOrder));
       setCreditMemos((mirrorCMs as Record<string, unknown>[]).map(r => mirrorTxnToQBFormat(r) as unknown as QBCreditMemo));
 
-      if (mirrorAccountsData.data) {
-        setAccounts(mirrorAccountsData.data.map((a: Record<string, unknown>) => {
+      if (mirrorAccountsData.length) {
+        setAccounts((mirrorAccountsData as Record<string, unknown>[]).map((a) => {
           const raw = a.raw_json as Record<string, unknown> | null;
           return (raw && Object.keys(raw).length > 2 ? raw : {
             Id: a.qb_id, Name: a.name, AccountType: a.account_type,
@@ -315,16 +333,16 @@ export function useQuickBooksData() {
         }));
       }
 
-      if (mirrorCustomersData.data) {
-        setCustomers(mirrorCustomersData.data.map((c: Record<string, unknown>) => ({
+      if (mirrorCustomersData.length) {
+        setCustomers((mirrorCustomersData as Record<string, unknown>[]).map((c) => ({
           Id: c.qb_id as string, DisplayName: c.display_name as string,
           CompanyName: (c.company_name as string) || "", Balance: (c.balance as number) || 0,
           Active: c.is_active as boolean,
         })));
       }
 
-      if (mirrorVendorsData.data) {
-        setVendors(mirrorVendorsData.data.map((v: Record<string, unknown>) => {
+      if (mirrorVendorsData.length) {
+        setVendors((mirrorVendorsData as Record<string, unknown>[]).map((v) => {
           const raw = v.raw_json as Record<string, unknown> | null;
           return (raw && Object.keys(raw).length > 2 ? raw : {
             Id: v.qb_id, DisplayName: v.display_name, CompanyName: v.company_name,
@@ -333,8 +351,8 @@ export function useQuickBooksData() {
         }));
       }
 
-      if (mirrorItemsData.data) {
-        setItems(mirrorItemsData.data.map((it: Record<string, unknown>) => {
+      if (mirrorItemsData.length) {
+        setItems((mirrorItemsData as Record<string, unknown>[]).map((it) => {
           const raw = it.raw_json as Record<string, unknown> | null;
           return (raw && Object.keys(raw).length > 2 ? raw : {
             Id: it.qb_id, Name: it.name, Type: it.type,
