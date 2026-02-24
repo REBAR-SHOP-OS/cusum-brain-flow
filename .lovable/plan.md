@@ -1,30 +1,38 @@
 
 
-## Add "Schedule Next Activity" to Task Detail Panel
+## Fix: Live Queue Should Only Show Active (Running) Jobs
 
 ### Problem
-The task detail drawer on `/tasks` has no way to schedule follow-up activities. Users need to be able to schedule calls, emails, meetings, or follow-ups directly from a task.
+The "Live Queue" section on `/shopfloor/station` (StationDashboard) displays ALL cut plans with statuses `draft`, `ready`, `queued`, and `running`. Users expect this section to only show jobs that have been started (status = `running`), not unstarted/queued ones.
+
+### Root Cause
+In `src/pages/StationDashboard.tsx`, line 29-31:
+```tsx
+const activePlans = plans.filter(p =>
+  ["draft", "ready", "queued", "running"].includes(p.status)
+);
+```
+This filter is too broad -- it includes drafts and queued plans that haven't been started yet.
 
 ### Solution
-Embed the existing `ScheduledActivities` component into the task detail drawer in `src/pages/Tasks.tsx`. This component already provides a full UI for scheduling activities (call, email, meeting, to-do, follow-up) with planned/completed lists -- it just needs to be wired into the task detail panel.
+Split the plans into two categories:
+
+1. **Running plans** (status = `running`) -- shown in the "Live Queue" section as active jobs
+2. **Queued plans** (status = `draft`, `ready`, `queued`) -- shown in a separate "Queued" section below, where operators can start them
 
 ### Changes
 
-**File: `src/pages/Tasks.tsx`**
+**File: `src/pages/StationDashboard.tsx`**
 
-1. Import the `ScheduledActivities` component at the top of the file
-2. Add a "Next Activity" section in the task detail drawer, placed between the action buttons and the audit log
-3. Pass `entityType="task"` and `entityId={selectedTask.id}` to the component
+1. Create two filtered lists instead of one:
+   - `runningPlans` = plans with status `running`
+   - `queuedPlans` = plans with status `draft`, `ready`, or `queued`
 
-The section will include:
-- A "Schedule Activity" button that expands into an inline form (activity type, date, note)
-- A list of planned activities with "Done" and "Cancel" actions
-- A list of completed activities
-- All powered by the existing `useScheduledActivities` hook and `scheduled_activities` database table
+2. Update the "Live Queue" section to only render `runningPlans` -- these are the actively started jobs with Pause/Complete actions
 
-### What This Reuses
-- `ScheduledActivities` component (already built for pipeline/CRM entities)
-- `useScheduledActivities` hook (handles CRUD against `scheduled_activities` table)
-- `scheduled_activities` table (already exists with `entity_type` + `entity_id` design)
+3. Add a separate "Queued" section below that renders `queuedPlans` -- these show the Start button to begin work
 
-No database changes, no new components, no edge function changes needed.
+4. Update the counter badge next to "Live Queue" to reflect only running plans count
+
+This way the Live Queue accurately represents only work in progress, and queued/unstarted jobs are visually separated.
+
