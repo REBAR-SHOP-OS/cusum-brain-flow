@@ -392,12 +392,12 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl }: Props) {
                 ? "Stop voice input"
                 : "Start voice input (supports Farsi & English)"
             }
-            className="shrink-0"
+            className="shrink-0 !w-14 !h-14"
           >
             {speech.isListening ? (
-              <MicOff className="w-4 h-4 animate-pulse" />
+              <MicOff className="w-7 h-7 animate-pulse" />
             ) : (
-              <Mic className="w-4 h-4" />
+              <Mic className="w-7 h-7" />
             )}
           </Button>
 
